@@ -180,6 +180,3 @@ For issues or questions, refer to the documentation:
 - [Supabase Docs](https://supabase.com/docs)
 - [shadcn/ui](https://ui.shadcn.com/)
 
----
-
-Built with ❤️ using Next.js, Supabase, and modern web technologies.
