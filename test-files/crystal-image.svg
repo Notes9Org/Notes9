@@ -1,0 +1,40 @@
+<svg width="400" height="400" xmlns="http://www.w3.org/2000/svg">
+  <!-- Background -->
+  <rect width="400" height="400" fill="#f0f0f0"/>
+  
+  <!-- Title -->
+  <text x="200" y="30" text-anchor="middle" font-size="20" font-weight="bold" fill="#333">
+    Protein Crystal - Well C4
+  </text>
+  
+  <!-- Hexagonal Crystal -->
+  <polygon points="200,100 260,130 260,190 200,220 140,190 140,130" 
+           fill="#e3f2fd" stroke="#1976d2" stroke-width="3"/>
+  
+  <!-- Crystal details -->
+  <line x1="200" y1="100" x2="200" y2="220" stroke="#90caf9" stroke-width="1"/>
+  <line x1="140" y1="130" x2="260" y2="190" stroke="#90caf9" stroke-width="1"/>
+  <line x1="140" y1="190" x2="260" y2="130" stroke="#90caf9" stroke-width="1"/>
+  
+  <!-- Measurements -->
+  <text x="280" y="160" font-size="14" fill="#666">
+    Size: 150 μm
+  </text>
+  <text x="280" y="180" font-size="14" fill="#666">
+    Shape: Hexagonal
+  </text>
+  <text x="280" y="200" font-size="14" fill="#666">
+    Quality: Excellent
+  </text>
+  
+  <!-- Scale bar -->
+  <line x1="50" y1="350" x2="150" y2="350" stroke="#333" stroke-width="2"/>
+  <text x="100" y="370" text-anchor="middle" font-size="12" fill="#333">
+    100 μm
+  </text>
+  
+  <!-- Footer -->
+  <text x="200" y="390" text-anchor="middle" font-size="12" fill="#999">
+    Captured: 2025-01-15 | Microscope: 20x
+  </text>
+</svg>

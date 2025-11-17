@@ -1,0 +1,260 @@
+"use client"
+
+import { useState, useEffect } from "react"
+import { createClient } from "@/lib/supabase/client"
+import { Button } from "@/components/ui/button"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { Textarea } from "@/components/ui/textarea"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
+import { useToast } from "@/hooks/use-toast"
+import { useRouter } from "next/navigation"
+import { Pencil, Loader2 } from "lucide-react"
+import { DatePicker } from "@/components/ui/date-picker"
+
+interface Project {
+  id: string
+  name: string
+  description: string | null
+  status: string
+  priority: string | null
+  start_date: string | null
+  end_date: string | null
+}
+
+interface EditProjectDialogProps {
+  project: Project
+  asMenuItem?: boolean
+}
+
+export function EditProjectDialog({ project, asMenuItem = false }: EditProjectDialogProps) {
+  const { toast } = useToast()
+  const router = useRouter()
+  const supabase = createClient()
+
+  const [open, setOpen] = useState(false)
+  const [isSaving, setIsSaving] = useState(false)
+
+  // Form state
+  const [name, setName] = useState(project.name)
+  const [description, setDescription] = useState(project.description || "")
+  const [status, setStatus] = useState(project.status)
+  const [priority, setPriority] = useState(project.priority || "medium")
+  const [startDate, setStartDate] = useState<Date | undefined>(
+    project.start_date ? new Date(project.start_date) : undefined
+  )
+  const [endDate, setEndDate] = useState<Date | undefined>(
+    project.end_date ? new Date(project.end_date) : undefined
+  )
+
+  // Reset form when dialog opens
+  useEffect(() => {
+    if (open) {
+      setName(project.name)
+      setDescription(project.description || "")
+      setStatus(project.status)
+      setPriority(project.priority || "medium")
+      setStartDate(project.start_date ? new Date(project.start_date) : undefined)
+      setEndDate(project.end_date ? new Date(project.end_date) : undefined)
+    }
+  }, [open, project])
+
+  const handleSave = async () => {
+    if (!name.trim()) {
+      toast({
+        title: "Validation Error",
+        description: "Project name is required.",
+        variant: "destructive",
+      })
+      return
+    }
+
+    setIsSaving(true)
+
+    try {
+      const { error } = await supabase
+        .from("projects")
+        .update({
+          name: name.trim(),
+          description: description.trim() || null,
+          status,
+          priority,
+          start_date: startDate ? startDate.toISOString().split('T')[0] : null,
+          end_date: endDate ? endDate.toISOString().split('T')[0] : null,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", project.id)
+
+      if (error) throw error
+
+      toast({
+        title: "Project Updated",
+        description: `"${name}" has been updated successfully.`,
+      })
+
+      setOpen(false)
+      router.refresh()
+    } catch (error: any) {
+      console.error("Update error:", error)
+      toast({
+        title: "Update Failed",
+        description: error.message || "Failed to update project",
+        variant: "destructive",
+      })
+    } finally {
+      setIsSaving(false)
+    }
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      {asMenuItem ? (
+        <DialogTrigger className="flex items-center w-full px-2 py-1.5 hover:bg-accent rounded-sm cursor-pointer text-left">
+          <Pencil className="h-4 w-4 mr-2" />
+          <span>Edit Project</span>
+        </DialogTrigger>
+      ) : (
+        <DialogTrigger asChild>
+          <Button variant="outline" size="sm">
+            <Pencil className="h-4 w-4 mr-2" />
+            Edit
+          </Button>
+        </DialogTrigger>
+      )}
+      <DialogContent className="sm:max-w-[600px] max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>Edit Project</DialogTitle>
+          <DialogDescription>
+            Update project details and settings
+          </DialogDescription>
+        </DialogHeader>
+
+        <form onSubmit={(e) => {
+          e.preventDefault()
+          handleSave()
+        }} className="space-y-4 py-4">
+          {/* Name */}
+          <div className="space-y-2">
+            <Label htmlFor="name">
+              Project Name <span className="text-destructive">*</span>
+            </Label>
+            <Input
+              id="name"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="e.g., Cancer Drug Discovery Initiative"
+              disabled={isSaving}
+              required
+            />
+          </div>
+
+          {/* Status */}
+          <div className="space-y-2">
+            <Label htmlFor="status">Status</Label>
+            <Select value={status} onValueChange={setStatus} disabled={isSaving}>
+              <SelectTrigger id="status">
+                <SelectValue placeholder="Select status" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="planning">Planning</SelectItem>
+                <SelectItem value="active">Active</SelectItem>
+                <SelectItem value="on_hold">On Hold</SelectItem>
+                <SelectItem value="completed">Completed</SelectItem>
+                <SelectItem value="archived">Archived</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          {/* Priority */}
+          <div className="space-y-2">
+            <Label htmlFor="priority">Priority</Label>
+            <Select value={priority} onValueChange={setPriority} disabled={isSaving}>
+              <SelectTrigger id="priority">
+                <SelectValue placeholder="Select priority" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="low">Low</SelectItem>
+                <SelectItem value="medium">Medium</SelectItem>
+                <SelectItem value="high">High</SelectItem>
+                <SelectItem value="critical">Critical</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          {/* Dates */}
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="start_date">Start Date</Label>
+              <DatePicker
+                date={startDate}
+                onDateChange={setStartDate}
+                placeholder="Pick start date"
+                disabled={isSaving}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="end_date">Target End Date</Label>
+              <DatePicker
+                date={endDate}
+                onDateChange={setEndDate}
+                placeholder="Pick end date"
+                disabled={isSaving}
+              />
+            </div>
+          </div>
+
+          {/* Description */}
+          <div className="space-y-2">
+            <Label htmlFor="description">Description</Label>
+            <Textarea
+              id="description"
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              placeholder="Detailed description of the project goals and objectives..."
+              rows={4}
+              disabled={isSaving}
+            />
+        </div>
+
+          {/* Actions */}
+          <div className="flex justify-end gap-2 pt-4">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setOpen(false)}
+              disabled={isSaving}
+            >
+            Cancel
+          </Button>
+            <Button type="submit" disabled={isSaving}>
+            {isSaving ? (
+              <>
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                Saving...
+              </>
+            ) : (
+              "Save Changes"
+            )}
+          </Button>
+          </div>
+        </form>
+      </DialogContent>
+    </Dialog>
+  )
+}
+

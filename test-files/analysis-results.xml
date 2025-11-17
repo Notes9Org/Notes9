@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ExperimentResults>
+  <Metadata>
+    <ExperimentID>EXP-2025-001</ExperimentID>
+    <Date>2025-01-16</Date>
+    <Researcher>Dr. Sarah Chen</Researcher>
+    <Institution>Structural Biology Lab</Institution>
+  </Metadata>
+  
+  <Samples>
+    <Sample id="S001">
+      <Concentration unit="uM">10.5</Concentration>
+      <Absorbance>0.524</Absorbance>
+      <Result>Pass</Result>
+    </Sample>
+    <Sample id="S002">
+      <Concentration unit="uM">15.2</Concentration>
+      <Absorbance>0.789</Absorbance>
+      <Result>Pass</Result>
+    </Sample>
+    <Sample id="S003">
+      <Concentration unit="uM">20.1</Concentration>
+      <Absorbance>1.045</Absorbance>
+      <Result>Pass</Result>
+    </Sample>
+  </Samples>
+  
+  <Analysis>
+    <Method>Spectrophotometry</Method>
+    <Wavelength unit="nm">280</Wavelength>
+    <Temperature unit="celsius">25</Temperature>
+    <QualityControl>Passed</QualityControl>
+  </Analysis>
+  
+  <Conclusions>
+    <Finding>Linear correlation between concentration and absorbance</Finding>
+    <Recommendation>Proceed to next phase</Recommendation>
+  </Conclusions>
+</ExperimentResults>

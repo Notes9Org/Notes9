@@ -1,0 +1,47 @@
+{
+  "experiment": {
+    "id": "EXP-2025-001",
+    "name": "Protein Crystallization - Batch #47",
+    "type": "crystallography",
+    "status": "in_progress",
+    "start_date": "2025-01-10",
+    "researcher": "Dr. Sarah Chen"
+  },
+  "conditions": [
+    {
+      "well_id": "A1",
+      "protein_concentration": 10.0,
+      "precipitant": "PEG 3350",
+      "precipitant_concentration": 20.0,
+      "pH": 7.0,
+      "temperature": 20,
+      "crystal_count": 0
+    },
+    {
+      "well_id": "C4",
+      "protein_concentration": 10.0,
+      "precipitant": "PEG 3350",
+      "precipitant_concentration": 25.0,
+      "pH": 7.8,
+      "temperature": 20,
+      "crystal_count": 15
+    },
+    {
+      "well_id": "D3",
+      "protein_concentration": 10.0,
+      "precipitant": "PEG 3350",
+      "precipitant_concentration": 25.0,
+      "pH": 8.0,
+      "temperature": 20,
+      "crystal_count": 12
+    }
+  ],
+  "measurements": {
+    "crystal_size_range_um": [20, 300],
+    "growth_time_days": 14,
+    "success_rate_percent": 40.5,
+    "diffraction_quality": "excellent"
+  },
+  "notes": "Optimal crystallization achieved with 25% PEG 3350 at pH 7.8"
+}
+
