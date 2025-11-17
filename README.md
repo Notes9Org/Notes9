@@ -10,7 +10,7 @@ A comprehensive, full-stack Laboratory Inventory Management System built with Ne
 - **Sample Inventory** - Track laboratory samples with detailed metadata
 - **Equipment Management** - Monitor equipment status and maintenance schedules
 - **Protocol Library** - Store and manage Standard Operating Procedures (SOPs)
-- **Lab Notes** - Rich text editor (Affine Block) for documenting observations
+- **Lab Notes** - Rich text editor (Text Block) for documenting observations
 - **Reports & Analytics** - Generate comprehensive project and experiment reports
 - **User Management** - Role-based access control with Supabase Auth
 
@@ -124,7 +124,7 @@ Open [http://localhost:3000](http://localhost:3000)
 - `AppLayout` - Three-panel layout wrapper
 - `LeftSidebar` - Navigation and projects
 - `RightSidebar` - AI assistant and tools
-- `AffineBlock` - Rich text editor for lab notes
+- `Text Block` - Rich text editor for lab notes
 - shadcn/ui components (Button, Card, Input, Select, etc.)
 
 ## Authentication Flow
