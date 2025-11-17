@@ -1,6 +1,5 @@
 import { redirect } from 'next/navigation'
 import { createClient } from "@/lib/supabase/server"
-import { AppLayout } from "@/components/layout/app-layout"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -37,7 +36,6 @@ export default async function ProtocolsPage() {
     .order("name")
 
   return (
-    <AppLayout>
       <div className="space-y-6">
         {/* Header */}
         <div className="flex items-center justify-between">
@@ -139,6 +137,5 @@ export default async function ProtocolsPage() {
           </CardContent>
         </Card>
       </div>
-    </AppLayout>
-  )
+    )
 }

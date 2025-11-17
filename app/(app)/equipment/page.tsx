@@ -1,6 +1,5 @@
 import { redirect } from 'next/navigation'
 import { createClient } from "@/lib/supabase/server"
-import { AppLayout } from "@/components/layout/app-layout"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Wrench, Plus } from 'lucide-react'
@@ -31,7 +30,6 @@ export default async function EquipmentPage() {
   }
 
   return (
-    <AppLayout>
       <div className="space-y-6">
         {/* Header */}
         <div className="flex items-center justify-between">
@@ -111,6 +109,5 @@ export default async function EquipmentPage() {
           </Card>
         )}
       </div>
-    </AppLayout>
-  )
+    )
 }

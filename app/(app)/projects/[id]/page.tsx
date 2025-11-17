@@ -1,6 +1,5 @@
 import { redirect, notFound } from 'next/navigation'
 import { createClient } from "@/lib/supabase/server"
-import { AppLayout } from "@/components/layout/app-layout"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -57,7 +56,6 @@ export default async function ProjectDetailPage({
   }
 
   return (
-    <AppLayout>
       <div className="space-y-6">
         {/* Breadcrumb */}
         <Breadcrumb>
@@ -339,6 +337,5 @@ export default async function ProjectDetailPage({
           </TabsContent>
         </Tabs>
       </div>
-    </AppLayout>
-  )
+    )
 }

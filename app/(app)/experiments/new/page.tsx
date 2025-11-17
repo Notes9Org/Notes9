@@ -3,7 +3,6 @@
 import { useState, useEffect, Suspense } from "react"
 import { useRouter, useSearchParams } from 'next/navigation'
 import { createClient } from "@/lib/supabase/client"
-import { AppLayout } from "@/components/layout/app-layout"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -115,7 +114,6 @@ function NewExperimentForm() {
   }
 
   return (
-    <AppLayout>
       <div className="max-w-3xl mx-auto space-y-6">
         <div className="flex items-center gap-4">
           <Button variant="ghost" size="icon" asChild>
@@ -276,8 +274,7 @@ function NewExperimentForm() {
           </CardContent>
         </Card>
       </div>
-    </AppLayout>
-  )
+    )
 }
 
 export default function NewExperimentPage() {
