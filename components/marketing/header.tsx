@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button"
 import { Menu, X, ChevronDown } from "lucide-react"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import Image from "next/image"
+import Link from "next/link"
 
 export function Header() {
   const [isMenuOpen, setIsMenuOpen] = useState(false)
@@ -13,7 +14,7 @@ export function Header() {
     <header className="sticky top-0 z-50 w-full glass border-b border-white/20">
       <div className="container mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex h-16 items-center justify-between">
-          <div className="flex items-center space-x-4">
+          <Link href="/" className="flex items-center space-x-4">
             <div className="flex items-center space-x-3">
               <div className="flex items-center justify-center">
                 <div className="w-8 h-8 bg-white/10 rounded-lg flex items-center justify-center backdrop-blur-sm">
@@ -31,7 +32,7 @@ export function Header() {
             <span className="hidden lg:inline text-sm text-solid font-light opacity-90 whitespace-nowrap">
               Agentic AI for Scientific Research
             </span>
-          </div>
+          </Link>
 
           {/* Desktop Navigation */}
           <nav className="hidden lg:flex items-center space-x-6">
@@ -84,12 +85,14 @@ export function Header() {
 
           {/* Desktop CTAs */}
           <div className="hidden lg:flex items-center space-x-3">
-            <Button variant="ghost" size="sm" className="glass text-solid hover:bg-white/20 border-white/20 whitespace-nowrap">
-              Sign In
+            <Button variant="ghost" size="sm" className="glass text-solid hover:bg-white/20 border-white/20 whitespace-nowrap" asChild>
+              <Link href="/auth/login">Sign In</Link>
             </Button>
-            <Button size="sm" className="glass-card text-solid hover:bg-white/30 border-white/30 whitespace-nowrap">
-              <span className="hidden xl:inline">Experience Agentic Intelligence</span>
-              <span className="xl:hidden">Try Now</span>
+            <Button size="sm" className="glass-card text-solid hover:bg-white/30 border-white/30 whitespace-nowrap" asChild>
+              <Link href="/auth/sign-up">
+                <span className="hidden xl:inline">Get Started Free</span>
+                <span className="xl:hidden">Try Now</span>
+              </Link>
             </Button>
           </div>
 
@@ -121,11 +124,11 @@ export function Header() {
                 </a>
               </div>
               <div className="flex flex-col space-y-3 pt-4 border-t border-white/20">
-                <Button variant="ghost" size="sm" className="glass text-solid hover:bg-white/20 border-white/20 w-full justify-center">
-                  Sign In
+                <Button variant="ghost" size="sm" className="glass text-solid hover:bg-white/20 border-white/20 w-full justify-center" asChild>
+                  <Link href="/auth/login">Sign In</Link>
                 </Button>
-                <Button size="sm" className="glass-card text-solid hover:bg-white/30 border-white/30 w-full justify-center">
-                  Try Now
+                <Button size="sm" className="glass-card text-solid hover:bg-white/30 border-white/30 w-full justify-center" asChild>
+                  <Link href="/auth/sign-up">Get Started Free</Link>
                 </Button>
               </div>
             </nav>

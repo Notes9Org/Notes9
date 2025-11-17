@@ -10,6 +10,7 @@ import { PricingSection } from "@/components/marketing/pricing-section"
 import { CTASection } from "@/components/marketing/cta-section"
 import { Header } from "@/components/marketing/header"
 import { Footer } from "@/components/marketing/footer"
+import "@/styles/marketing.css"
 
 export default async function HomePage() {
   const supabase = await createClient()
@@ -20,9 +21,9 @@ export default async function HomePage() {
     redirect("/dashboard")
   }
   
-  // If not authenticated, show landing page
+  // If not authenticated, show landing page with marketing theme
   return (
-    <div className="min-h-screen flex flex-col">
+    <div className="marketing-theme">
       <Header />
       <main className="flex-1">
         <HeroSection />
