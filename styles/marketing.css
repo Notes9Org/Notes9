@@ -1,12 +1,51 @@
 /* Marketing Pages Glassmorphism Theme */
 
-/* Override body background for marketing pages only */
+/* Override CSS variables for marketing pages */
 .marketing-theme {
+  /* Override Tailwind background variables */
+  --background: #2A2F5B;
+  --foreground: rgb(255, 255, 255);
+  --card: rgba(0, 0, 0, 0.4);
+  --card-foreground: rgb(255, 255, 255);
+  --muted-foreground: rgb(255, 255, 255);
+  --popover: rgba(0, 0, 0, 0.4);
+  --popover-foreground: rgb(255, 255, 255);
+  
   /* Solid dark navy background matching the original landing page */
-  background: #2A2F5B;
+  background: #2A2F5B !important;
+  background-color: #2A2F5B !important;
   color: rgb(255, 255, 255) !important;
   overflow-x: hidden;
   min-height: 100vh;
+}
+
+/* Ensure body inside marketing theme also gets the background */
+.marketing-theme body {
+  background: #2A2F5B !important;
+  background-color: #2A2F5B !important;
+}
+
+/* Override bg-background class */
+.marketing-theme .bg-background {
+  background: #2A2F5B !important;
+  background-color: #2A2F5B !important;
+}
+
+/* Override Tailwind's default background */
+.marketing-theme * {
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+.marketing-theme h1,
+.marketing-theme h2,
+.marketing-theme h3,
+.marketing-theme h4,
+.marketing-theme h5,
+.marketing-theme h6,
+.marketing-theme p,
+.marketing-theme span,
+.marketing-theme div {
+  color: rgb(255, 255, 255) !important;
 }
 
 /* Added keyframes for animated background panning */
