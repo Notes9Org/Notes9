@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, Suspense } from "react"
 import { useRouter, useSearchParams } from 'next/navigation'
 import { createClient } from "@/lib/supabase/client"
 import { AppLayout } from "@/components/layout/app-layout"
@@ -19,7 +19,7 @@ import {
 import { ArrowLeft } from 'lucide-react'
 import Link from 'next/link'
 
-export default function NewExperimentPage() {
+function NewExperimentForm() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const projectId = searchParams.get('project')
@@ -277,5 +277,36 @@ export default function NewExperimentPage() {
         </Card>
       </div>
     </AppLayout>
+  )
+}
+
+export default function NewExperimentPage() {
+  return (
+    <Suspense fallback={
+      <AppLayout>
+        <div className="max-w-3xl mx-auto space-y-6">
+          <div className="flex items-center gap-4">
+            <div className="h-10 w-10 rounded-md bg-muted animate-pulse" />
+            <div className="space-y-2 flex-1">
+              <div className="h-8 w-64 bg-muted animate-pulse rounded" />
+              <div className="h-4 w-96 bg-muted animate-pulse rounded" />
+            </div>
+          </div>
+          <Card>
+            <CardHeader>
+              <div className="h-6 w-48 bg-muted animate-pulse rounded" />
+              <div className="h-4 w-72 bg-muted animate-pulse rounded mt-2" />
+            </CardHeader>
+            <CardContent className="space-y-6">
+              <div className="h-20 w-full bg-muted animate-pulse rounded" />
+              <div className="h-20 w-full bg-muted animate-pulse rounded" />
+              <div className="h-32 w-full bg-muted animate-pulse rounded" />
+            </CardContent>
+          </Card>
+        </div>
+      </AppLayout>
+    }>
+      <NewExperimentForm />
+    </Suspense>
   )
 }
