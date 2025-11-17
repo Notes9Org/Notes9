@@ -1,0 +1,152 @@
+/* Marketing Pages Glassmorphism Theme */
+
+/* Override body background for marketing pages only */
+.marketing-theme {
+  /* Enhanced animated gradient background with panning effect */
+  background: linear-gradient(-45deg, #1e3a8a, #312e81, #1e1b4b, #0f172a, #1e40af);
+  background-size: 400% 400%;
+  animation: gradientPan 15s ease infinite;
+  color: rgb(255, 255, 255) !important;
+  overflow-x: hidden;
+  min-height: 100vh;
+}
+
+/* Added keyframes for animated background panning */
+@keyframes gradientPan {
+  0% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: 0% 50%;
+  }
+}
+
+/* Added floating particles animation for hero background */
+@keyframes floatParticles {
+  0%,
+  100% {
+    transform: translateY(0px) scale(1);
+    opacity: 0.7;
+  }
+  50% {
+    transform: translateY(-20px) scale(1.1);
+    opacity: 1;
+  }
+}
+
+/* Updated glassmorphism utility classes with better contrast */
+.glass {
+  background: rgba(0, 0, 0, 0.3);
+  backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+}
+
+.glass-dark {
+  background: rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+}
+
+.glass-card {
+  background: rgba(0, 0, 0, 0.4);
+  backdrop-filter: blur(25px);
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.3);
+}
+
+/* Updated text classes for perfect contrast and no bleeding */
+.text-solid {
+  color: rgb(255, 255, 255) !important;
+  opacity: 1 !important;
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.8);
+  font-weight: 500;
+}
+
+.text-solid-dark {
+  color: rgb(255, 255, 255) !important;
+  opacity: 1 !important;
+  text-shadow: 0 2px 6px rgba(0, 0, 0, 0.9);
+  font-weight: 600;
+}
+
+/* Override all text opacity classes to ensure visibility */
+.marketing-theme .text-foreground {
+  color: rgb(255, 255, 255) !important;
+  opacity: 1 !important;
+}
+
+.marketing-theme .text-muted-foreground {
+  color: rgb(255, 255, 255) !important;
+  opacity: 1 !important;
+}
+
+/* Added special styling for ELN+LIMS text with lower contrast */
+.text-eln-lims {
+  color: rgba(255, 255, 255, 0.6) !important;
+  font-family: "JetBrains Mono", monospace !important;
+  font-weight: 300 !important;
+  letter-spacing: 0.1em;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+}
+
+/* Added animated particles for hero background */
+.hero-particles {
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  z-index: 0;
+}
+
+.hero-particles::before,
+.hero-particles::after {
+  content: "";
+  position: absolute;
+  width: 200px;
+  height: 200px;
+  background: radial-gradient(circle, rgba(59, 130, 246, 0.3) 0%, transparent 70%);
+  border-radius: 50%;
+  animation: floatParticles 8s ease-in-out infinite;
+}
+
+.hero-particles::before {
+  top: 20%;
+  left: 10%;
+  animation-delay: 0s;
+}
+
+.hero-particles::after {
+  top: 60%;
+  right: 15%;
+  animation-delay: 4s;
+  background: radial-gradient(circle, rgba(147, 51, 234, 0.3) 0%, transparent 70%);
+}
+
+/* Fluid gradient backgrounds for glass elements */
+.bg-glass-gradient {
+  background: linear-gradient(135deg, rgba(0, 0, 0, 0.3) 0%, rgba(0, 0, 0, 0.2) 100%);
+}
+
+.bg-glass-gradient-dark {
+  background: linear-gradient(135deg, rgba(0, 0, 0, 0.5) 0%, rgba(0, 0, 0, 0.3) 100%);
+}
+
+/* Gentle float animation for logo */
+@keyframes float-gentle {
+  0%, 100% {
+    transform: translateY(0px);
+  }
+  50% {
+    transform: translateY(-5px);
+  }
+}
+
+.animate-float-gentle {
+  animation: float-gentle 3s ease-in-out infinite;
+}
+
