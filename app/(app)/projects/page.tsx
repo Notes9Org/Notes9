@@ -1,6 +1,5 @@
 import { redirect } from 'next/navigation'
 import { createClient } from "@/lib/supabase/server"
-import { AppLayout } from "@/components/layout/app-layout"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Plus } from 'lucide-react'
@@ -29,7 +28,6 @@ export default async function ProjectsPage() {
     .order("created_at", { ascending: false })
 
   return (
-    <AppLayout>
       <div className="space-y-6">
         {/* Header */}
         <div className="flex items-center justify-between">
@@ -64,6 +62,5 @@ export default async function ProjectsPage() {
           </Card>
         )}
       </div>
-    </AppLayout>
-  )
+    )
 }

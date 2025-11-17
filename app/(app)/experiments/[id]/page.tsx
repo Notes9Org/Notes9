@@ -1,6 +1,5 @@
 import { redirect } from 'next/navigation'
 import { createClient } from "@/lib/supabase/server"
-import { AppLayout } from "@/components/layout/app-layout"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -91,7 +90,6 @@ export default async function ExperimentDetailPage({ params }: { params: Promise
   }
 
   return (
-    <AppLayout>
       <div className="space-y-6">
         {/* Breadcrumb */}
         <Breadcrumb>
@@ -358,6 +356,5 @@ export default async function ExperimentDetailPage({ params }: { params: Promise
           </TabsContent>
         </Tabs>
       </div>
-    </AppLayout>
-  )
+    )
 }
