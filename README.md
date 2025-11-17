@@ -1,4 +1,4 @@
-# LIMS - Laboratory Inventory Management System
+# Notes9
 
 A comprehensive, full-stack Laboratory Inventory Management System built with Next.js 16, Supabase, and modern web technologies.
 
