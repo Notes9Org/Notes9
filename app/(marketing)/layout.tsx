@@ -21,7 +21,7 @@ export default function MarketingLayout({
   children: React.ReactNode
 }) {
   return (
-    <div className={`marketing-theme font-sans ${rajdhani.variable} ${jetbrainsMono.variable} antialiased`}>
+    <div className={`marketing-theme ${rajdhani.variable} ${jetbrainsMono.variable} antialiased min-h-screen flex flex-col`}>
       <Header />
       <main className="flex-1">
         {children}

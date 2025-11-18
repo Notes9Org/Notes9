@@ -1,4 +1,4 @@
-/* EXACT COPY from notes9-landing-page/app/globals.css */
+/* EXACT COPY from notes9-landing-page - Apply background directly to marketing-theme */
 
 /* Override CSS variables for marketing pages to match landing page EXACTLY */
 .marketing-theme {
@@ -23,17 +23,25 @@
   --input: oklch(0.269 0 0);
   --ring: oklch(0.439 0 0);
 
-  /* Font variables */
+  /* Font variables - Override with Rajdhani */
   --font-sans: var(--font-rajdhani);
   --font-mono: var(--font-jetbrains-mono);
 
-  /* Enhanced animated gradient background with panning effect (EXACT MATCH) */
+  /* CRITICAL: Apply bright animated gradient background directly */
   min-height: 100vh;
-  background: linear-gradient(-45deg, #1e3a8a, #312e81, #1e1b4b, #0f172a, #1e40af) !important;
-  background-size: 400% 400% !important;
-  animation: gradientPan 15s ease infinite !important;
-  color: rgb(255, 255, 255) !important;
+  background: linear-gradient(-45deg, #1e3a8a, #312e81, #1e1b4b, #0f172a, #1e40af);
+  background-size: 400% 400%;
+  animation: gradientPan 15s ease infinite;
+  color: rgb(255, 255, 255);
   overflow-x: hidden;
+  
+  /* Apply Rajdhani font family directly - Override body font */
+  font-family: var(--font-rajdhani), 'Rajdhani', sans-serif !important;
+}
+
+/* Ensure all child elements inherit the Rajdhani font */
+.marketing-theme * {
+  font-family: inherit;
 }
 
 /* Keyframes for animated background panning */
