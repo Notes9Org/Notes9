@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react"
 import Link from "next/link"
 import { usePathname } from 'next/navigation'
+import Image from "next/image"
 import {
   Home,
   Folder,
@@ -218,8 +219,14 @@ export function AppSidebar() {
         <SidebarMenu>
           <SidebarMenuItem>
             <SidebarMenuButton size="lg" className="group-data-[collapsible=icon]:size-8 group-data-[collapsible=icon]:p-2">
-              <div className="flex aspect-square size-8 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground group-data-[collapsible=icon]:size-4 group-data-[collapsible=icon]:bg-transparent">
-                <Package className="size-4" />
+              <div className="flex aspect-square size-8 items-center justify-center rounded-lg group-data-[collapsible=icon]:size-8">
+                <Image
+                  src="/notes9-logo.png"
+                  alt="Notes9"
+                  width={32}
+                  height={32}
+                  className="size-8"
+                />
               </div>
               <div className="grid flex-1 text-left text-sm leading-tight group-data-[collapsible=icon]:hidden">
                 <span className="truncate font-semibold">Notes9</span>

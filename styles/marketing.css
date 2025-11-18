@@ -1,54 +1,42 @@
-/* Marketing Pages Glassmorphism Theme */
+/* EXACT COPY from notes9-landing-page/app/globals.css */
 
-/* Override CSS variables for marketing pages */
+/* Override CSS variables for marketing pages to match landing page EXACTLY */
 .marketing-theme {
-  /* Override Tailwind background variables */
-  --background: #2A2F5B;
-  --foreground: rgb(255, 255, 255);
-  --card: rgba(0, 0, 0, 0.4);
-  --card-foreground: rgb(255, 255, 255);
-  --muted-foreground: rgb(255, 255, 255);
-  --popover: rgba(0, 0, 0, 0.4);
-  --popover-foreground: rgb(255, 255, 255);
-  
-  /* Solid dark navy background matching the original landing page */
-  background: #2A2F5B !important;
-  background-color: #2A2F5B !important;
+  /* Dark theme variables matching landing page EXACTLY */
+  --background: oklch(0.145 0 0);
+  --foreground: oklch(0.985 0 0);
+  --card: oklch(0.145 0 0);
+  --card-foreground: oklch(0.985 0 0);
+  --popover: oklch(0.145 0 0);
+  --popover-foreground: oklch(0.985 0 0);
+  --primary: oklch(0.985 0 0);
+  --primary-foreground: oklch(0.205 0 0);
+  --secondary: oklch(0.269 0 0);
+  --secondary-foreground: oklch(0.985 0 0);
+  --muted: oklch(0.269 0 0);
+  --muted-foreground: oklch(0.708 0 0);
+  --accent: oklch(0.269 0 0);
+  --accent-foreground: oklch(0.985 0 0);
+  --destructive: oklch(0.396 0.141 25.723);
+  --destructive-foreground: oklch(0.637 0.237 25.331);
+  --border: oklch(0.269 0 0);
+  --input: oklch(0.269 0 0);
+  --ring: oklch(0.439 0 0);
+
+  /* Font variables */
+  --font-sans: var(--font-rajdhani);
+  --font-mono: var(--font-jetbrains-mono);
+
+  /* Enhanced animated gradient background with panning effect (EXACT MATCH) */
+  min-height: 100vh;
+  background: linear-gradient(-45deg, #1e3a8a, #312e81, #1e1b4b, #0f172a, #1e40af) !important;
+  background-size: 400% 400% !important;
+  animation: gradientPan 15s ease infinite !important;
   color: rgb(255, 255, 255) !important;
   overflow-x: hidden;
-  min-height: 100vh;
 }
 
-/* Ensure body inside marketing theme also gets the background */
-.marketing-theme body {
-  background: #2A2F5B !important;
-  background-color: #2A2F5B !important;
-}
-
-/* Override bg-background class */
-.marketing-theme .bg-background {
-  background: #2A2F5B !important;
-  background-color: #2A2F5B !important;
-}
-
-/* Override Tailwind's default background */
-.marketing-theme * {
-  border-color: rgba(255, 255, 255, 0.2);
-}
-
-.marketing-theme h1,
-.marketing-theme h2,
-.marketing-theme h3,
-.marketing-theme h4,
-.marketing-theme h5,
-.marketing-theme h6,
-.marketing-theme p,
-.marketing-theme span,
-.marketing-theme div {
-  color: rgb(255, 255, 255) !important;
-}
-
-/* Added keyframes for animated background panning */
+/* Keyframes for animated background panning */
 @keyframes gradientPan {
   0% {
     background-position: 0% 50%;
@@ -61,7 +49,7 @@
   }
 }
 
-/* Added floating particles animation for hero background */
+/* Floating particles animation for hero background */
 @keyframes floatParticles {
   0%,
   100% {
@@ -74,7 +62,7 @@
   }
 }
 
-/* Updated glassmorphism utility classes with better contrast */
+/* Glassmorphism utility classes (EXACT MATCH from landing page) */
 .glass {
   background: rgba(0, 0, 0, 0.3);
   backdrop-filter: blur(20px);
@@ -96,7 +84,7 @@
   box-shadow: 0 12px 40px rgba(0, 0, 0, 0.3);
 }
 
-/* Updated text classes for perfect contrast and no bleeding */
+/* Text classes for perfect contrast (EXACT MATCH) */
 .text-solid {
   color: rgb(255, 255, 255) !important;
   opacity: 1 !important;
@@ -122,16 +110,16 @@
   opacity: 1 !important;
 }
 
-/* Added special styling for ELN+LIMS text with lower contrast */
+/* Special styling for ELN+LIMS text with lower contrast */
 .text-eln-lims {
   color: rgba(255, 255, 255, 0.6) !important;
-  font-family: "JetBrains Mono", monospace !important;
+  font-family: var(--font-jetbrains-mono), "JetBrains Mono", monospace !important;
   font-weight: 300 !important;
   letter-spacing: 0.1em;
   text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
 }
 
-/* Added animated particles for hero background */
+/* Animated particles for hero background */
 .hero-particles {
   position: absolute;
   width: 100%;
@@ -172,18 +160,3 @@
 .bg-glass-gradient-dark {
   background: linear-gradient(135deg, rgba(0, 0, 0, 0.5) 0%, rgba(0, 0, 0, 0.3) 100%);
 }
-
-/* Gentle float animation for logo */
-@keyframes float-gentle {
-  0%, 100% {
-    transform: translateY(0px);
-  }
-  50% {
-    transform: translateY(-5px);
-  }
-}
-
-.animate-float-gentle {
-  animation: float-gentle 3s ease-in-out infinite;
-}
-

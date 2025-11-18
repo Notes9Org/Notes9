@@ -1,6 +1,7 @@
 "use client"
 
 import { ReactNode, useState } from "react"
+import Image from "next/image"
 import { AppSidebar } from "./app-sidebar"
 import { RightSidebar } from "./right-sidebar"
 import { Button } from "@/components/ui/button"
@@ -26,6 +27,7 @@ export function AppLayout({ children }: AppLayoutProps) {
           <header className="h-14 border-b border-border flex items-center justify-between px-4 shrink-0">
             <div className="flex items-center gap-2">
               <SidebarTrigger />
+              <Image src="/notes9-logo.png" alt="Notes9" width={24} height={24} />
               <h1 className="text-lg font-semibold">Notes9</h1>
             </div>
           
