@@ -21,7 +21,7 @@ import {
 import Link from "next/link"
 import { useRouter } from 'next/navigation'
 import { useState } from "react"
-import { FlaskConical } from 'lucide-react'
+import Image from "next/image"
 
 export default function SignUpPage() {
   const [email, setEmail] = useState("")
@@ -68,9 +68,12 @@ export default function SignUpPage() {
       <div className="w-full max-w-md">
         <div className="flex flex-col gap-6">
           <div className="flex flex-col items-center gap-2 text-center">
-            <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-primary">
-              <FlaskConical className="h-6 w-6 text-primary-foreground" />
-            </div>
+            <Image 
+              src="/notes9-logo.png" 
+              alt="Notes9 Logo" 
+              width={60} 
+              height={60}
+            />
             <h1 className="text-2xl font-bold">Join Notes9</h1>
             <p className="text-sm text-muted-foreground">
               Create your research lab account
