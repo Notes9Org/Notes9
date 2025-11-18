@@ -102,7 +102,13 @@ export function AppSidebar() {
   const [user, setUser] = useState<User | null>(null)
   const [counts, setCounts] = useState<Counts>({ projects: 0, experiments: 0, samples: 0, literature: 0 })
   const [loading, setLoading] = useState(true)
+  const [mounted, setMounted] = useState(false)
   const supabase = createClient()
+
+  // Prevent hydration mismatch by only activating after mount
+  useEffect(() => {
+    setMounted(true)
+  }, [])
 
   useEffect(() => {
     async function fetchData() {
@@ -258,7 +264,7 @@ export function AppSidebar() {
             <SidebarMenu>
               {navigation.map((item) => {
                 const Icon = item.icon
-                const isActive = pathname === item.href || pathname.startsWith(item.href + "/")
+                const isActive = mounted && (pathname === item.href || pathname.startsWith(item.href + "/"))
                 
                 // Only show badge for these items and only if count > 0
                 let badge: number | null = null
@@ -334,7 +340,7 @@ export function AppSidebar() {
                   ) : (
                     projects.map((project) => (
                       <SidebarMenuItem key={project.id}>
-                        <SidebarMenuButton asChild isActive={pathname === `/projects/${project.id}`} tooltip={project.name}>
+                        <SidebarMenuButton asChild isActive={mounted && pathname === `/projects/${project.id}`} tooltip={project.name}>
                           <Link href={`/projects/${project.id}`}>
                             <div
                               className={cn(
