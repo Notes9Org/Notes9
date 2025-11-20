@@ -5,7 +5,8 @@ node_modules/
 
 # Testing
 coverage/
-
+scripts/000_complete_migration.sql
+scripts/017_fix_oauth_name_extraction.sql
 # Next.js
 .next/
 out/
@@ -47,3 +48,5 @@ next-env.d.ts
 
 # Misc
 .turbo
+scripts/000_*.sql
+scripts/017_*.sql
