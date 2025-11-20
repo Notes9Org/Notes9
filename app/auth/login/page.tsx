@@ -13,7 +13,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import Link from "next/link"
 import { useRouter } from 'next/navigation'
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import Image from "next/image"
 
 export default function LoginPage() {
@@ -22,6 +22,25 @@ export default function LoginPage() {
   const [error, setError] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(false)
   const router = useRouter()
+
+  // Handle auth errors from URL (e.g., expired reset links)
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    const errorDescription = params.get('error_description')
+    const errorCode = params.get('error_code')
+    
+    if (errorDescription) {
+      const decodedError = decodeURIComponent(errorDescription)
+      if (errorCode === 'otp_expired') {
+        setError('Password reset link has expired. Please request a new one.')
+      } else {
+        setError(decodedError)
+      }
+      
+      // Clean up URL
+      window.history.replaceState({}, '', '/auth/login')
+    }
+  }, [])
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -82,7 +101,15 @@ export default function LoginPage() {
                     />
                   </div>
                   <div className="grid gap-2">
-                    <Label htmlFor="password">Password</Label>
+                    <div className="flex items-center justify-between">
+                      <Label htmlFor="password">Password</Label>
+                      <Link
+                        href="/auth/forgot-password"
+                        className="text-xs text-muted-foreground hover:text-primary underline underline-offset-4"
+                      >
+                        Forgot password?
+                      </Link>
+                    </div>
                     <Input
                       id="password"
                       type="password"
