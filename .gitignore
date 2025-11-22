@@ -47,3 +47,5 @@ next-env.d.ts
 
 # Misc
 .turbo
+
+pnpm-lock.yaml
