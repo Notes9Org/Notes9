@@ -50,3 +50,4 @@ next-env.d.ts
 .turbo
 scripts/000_*.sql
 scripts/017_*.sql
+lib/supabase/admin.ts

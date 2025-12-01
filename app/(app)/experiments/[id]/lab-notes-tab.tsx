@@ -14,9 +14,18 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+  DropdownMenuSeparator,
+  DropdownMenuLabel,
+} from "@/components/ui/dropdown-menu"
 import { AffineBlock } from "@/components/text-editor/affine-block"
+import { TiptapEditor } from "@/components/text-editor/tiptap-editor"
 import { useToast } from "@/hooks/use-toast"
-import { Save, Plus, FileText } from "lucide-react"
+import { Save, Plus, FileText, Download, FileCode } from "lucide-react"
 import {
   Table,
   TableBody,
@@ -79,6 +88,159 @@ export function LabNotesTab({ experimentId }: { experimentId: string }) {
       }
     } catch (error: any) {
       console.error("Error fetching notes:", error)
+    }
+  }
+
+  // Download functions
+  const downloadAsMarkdown = () => {
+    const text = formData.content.replace(/<[^>]*>/g, '') // Strip HTML tags
+    const blob = new Blob([text], { type: "text/markdown" })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement("a")
+    a.href = url
+    a.download = `${formData.title || "lab-note"}.md`
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    URL.revokeObjectURL(url)
+  }
+
+  const downloadAsHTML = () => {
+    const fullHTML = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>${formData.title}</title>
+  <style>
+    body {
+      font-family: system-ui, -apple-system, sans-serif;
+      max-width: 800px;
+      margin: 40px auto;
+      padding: 20px;
+      line-height: 1.6;
+    }
+    h1, h2, h3 { margin-top: 1.5em; }
+    code { background: #f4f4f4; padding: 2px 6px; border-radius: 3px; }
+    pre { background: #f4f4f4; padding: 15px; border-radius: 5px; overflow-x: auto; }
+    blockquote { border-left: 4px solid #ddd; margin: 0; padding-left: 20px; color: #666; }
+    table { border-collapse: collapse; width: 100%; margin: 20px 0; }
+    th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+    th { background: #f4f4f4; }
+  </style>
+</head>
+<body>
+  <h1>${formData.title}</h1>
+  ${formData.content}
+</body>
+</html>`
+    const blob = new Blob([fullHTML], { type: "text/html" })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement("a")
+    a.href = url
+    a.download = `${formData.title || "lab-note"}.html`
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    URL.revokeObjectURL(url)
+  }
+
+  const downloadAsText = () => {
+    const text = formData.content.replace(/<[^>]*>/g, '') // Strip HTML tags
+    const blob = new Blob([text], { type: "text/plain" })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement("a")
+    a.href = url
+    a.download = `${formData.title || "lab-note"}.txt`
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    URL.revokeObjectURL(url)
+  }
+
+  const downloadAsPDF = async () => {
+    try {
+      const jsPDF = (await import('jspdf')).default
+      const html2canvas = (await import('html2canvas')).default
+      
+      const tempDiv = document.createElement('div')
+      tempDiv.innerHTML = `<h1>${formData.title}</h1>${formData.content}`
+      tempDiv.style.cssText = `
+        position: absolute;
+        left: -9999px;
+        width: 800px;
+        padding: 40px;
+        font-family: system-ui, -apple-system, sans-serif;
+        line-height: 1.6;
+        color: #000;
+        background: #fff;
+      `
+      document.body.appendChild(tempDiv)
+
+      const canvas = await html2canvas(tempDiv, {
+        scale: 2,
+        useCORS: true,
+        logging: false,
+      })
+
+      document.body.removeChild(tempDiv)
+
+      const imgData = canvas.toDataURL('image/png')
+      const pdf = new jsPDF({
+        orientation: 'portrait',
+        unit: 'mm',
+        format: 'a4',
+      })
+
+      const imgWidth = 210
+      const imgHeight = (canvas.height * imgWidth) / canvas.width
+
+      pdf.addImage(imgData, 'PNG', 0, 0, imgWidth, imgHeight)
+      pdf.save(`${formData.title || "lab-note"}.pdf`)
+    } catch (error) {
+      console.error('PDF export error:', error)
+      toast({
+        title: "Export failed",
+        description: "Failed to export as PDF. Please try another format.",
+        variant: "destructive",
+      })
+    }
+  }
+
+  const downloadAsDOCX = async () => {
+    try {
+      const htmlDocx = await import('html-docx-js/dist/html-docx')
+      
+      const html = `
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <meta charset="UTF-8">
+          <title>${formData.title}</title>
+        </head>
+        <body>
+          <h1>${formData.title}</h1>
+          ${formData.content}
+        </body>
+        </html>
+      `
+      
+      const converted = htmlDocx.asBlob(html)
+      const url = URL.createObjectURL(converted)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `${formData.title || "lab-note"}.docx`
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      URL.revokeObjectURL(url)
+    } catch (error) {
+      console.error('DOCX export error:', error)
+      toast({
+        title: "Export failed",
+        description: "Failed to export as DOCX. Please try another format.",
+        variant: "destructive",
+      })
     }
   }
 
@@ -228,12 +390,51 @@ export function LabNotesTab({ experimentId }: { experimentId: string }) {
       {/* Note Editor */}
       <Card>
         <CardHeader>
-          <CardTitle className="text-foreground">
-            {isCreating ? "New Lab Note" : "Edit Lab Note"}
-          </CardTitle>
-          <CardDescription>
-            Document your observations, analysis, and findings
-          </CardDescription>
+          <div className="flex items-start justify-between">
+            <div>
+              <CardTitle className="text-foreground">
+                {isCreating ? "New Lab Note" : "Edit Lab Note"}
+              </CardTitle>
+              <CardDescription>
+                Document your observations, analysis, and findings
+              </CardDescription>
+            </div>
+            {!isCreating && (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline" size="sm">
+                    <Download className="h-4 w-4 mr-2" />
+                    Export
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuLabel>Download as...</DropdownMenuLabel>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem onClick={downloadAsMarkdown}>
+                    <FileCode className="h-4 w-4 mr-2" />
+                    Markdown (.md)
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={downloadAsHTML}>
+                    <FileText className="h-4 w-4 mr-2" />
+                    HTML (.html)
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={downloadAsText}>
+                    <FileText className="h-4 w-4 mr-2" />
+                    Plain Text (.txt)
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem onClick={downloadAsPDF}>
+                    <FileText className="h-4 w-4 mr-2" />
+                    PDF (.pdf)
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={downloadAsDOCX}>
+                    <FileText className="h-4 w-4 mr-2" />
+                    Word (.docx)
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            )}
+          </div>
         </CardHeader>
         <CardContent className="space-y-4">
           {/* Title & Type */}
@@ -275,13 +476,15 @@ export function LabNotesTab({ experimentId }: { experimentId: string }) {
           {/* Rich Text Editor */}
           <div className="space-y-2">
             <Label>Content</Label>
-            <AffineBlock
-              initialContent={formData.content}
+            <TiptapEditor
+              content={formData.content}
               onChange={(content) =>
                 setFormData({ ...formData, content })
               }
               placeholder="Write your lab notes here..."
-              className="min-h-[400px]"
+              title={formData.title || "lab-note"}
+              minHeight="400px"
+              showAITools={true}
             />
           </div>
 
