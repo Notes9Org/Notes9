@@ -25,6 +25,8 @@ import {
 import { AffineBlock } from "@/components/text-editor/affine-block"
 import { TiptapEditor } from "@/components/text-editor/tiptap-editor"
 import { useToast } from "@/hooks/use-toast"
+import { useAutoSave } from "@/hooks/use-auto-save"
+import { SaveStatusIndicator } from "@/components/ui/save-status"
 import { Save, Plus, FileText, Download, FileCode } from "lucide-react"
 import {
   Table,
@@ -58,6 +60,72 @@ export function LabNotesTab({ experimentId }: { experimentId: string }) {
     title: "",
     content: "",
     note_type: "general",
+  })
+
+  // Auto-save functionality
+  const handleAutoSave = async (content: string) => {
+    // Don't auto-save if title is empty
+    if (!formData.title.trim()) return
+    
+    try {
+      const supabase = createClient()
+      const { data: { user } } = await supabase.auth.getUser()
+      
+      if (!user) throw new Error("Not authenticated")
+
+      // If creating a new note, insert it first
+      if (isCreating || !selectedNote) {
+        const { data, error } = await supabase
+          .from("lab_notes")
+          .insert({
+            experiment_id: experimentId,
+            title: formData.title,
+            content,
+            note_type: formData.note_type,
+            created_by: user.id,
+          })
+          .select()
+          .single()
+
+        if (error) throw error
+        
+        // Switch to editing mode
+        setIsCreating(false)
+        setSelectedNote(data)
+        
+        // Refresh notes list
+        await fetchNotes()
+      } else {
+        // Update existing note
+        const { error } = await supabase
+          .from("lab_notes")
+          .update({
+            content,
+            title: formData.title,
+            note_type: formData.note_type,
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", selectedNote.id)
+
+        if (error) throw error
+        
+        // Update local state
+        setNotes(notes.map(note => 
+          note.id === selectedNote.id 
+            ? { ...note, content, title: formData.title, note_type: formData.note_type, updated_at: new Date().toISOString() }
+            : note
+        ))
+      }
+    } catch (error: any) {
+      console.error("Auto-save error:", error)
+      throw error // Re-throw to trigger error status in auto-save hook
+    }
+  }
+
+  const { status: autoSaveStatus, lastSaved, debouncedSave } = useAutoSave({
+    onSave: handleAutoSave,
+    delay: 2000, // Save 2 seconds after user stops typing
+    enabled: true, // Always enabled, even during creation
   })
 
   // Fetch existing lab notes
@@ -160,48 +228,91 @@ export function LabNotesTab({ experimentId }: { experimentId: string }) {
 
   const downloadAsPDF = async () => {
     try {
-      const jsPDF = (await import('jspdf')).default
-      const html2canvas = (await import('html2canvas')).default
+      // Show loading toast
+      toast({
+        title: "Generating PDF",
+        description: "Please wait...",
+      })
+
+      // Dynamic import - using html2pdf for much smaller file sizes
+      const html2pdf = (await import('html2pdf.js')).default
       
-      const tempDiv = document.createElement('div')
-      tempDiv.innerHTML = `<h1>${formData.title}</h1>${formData.content}`
-      tempDiv.style.cssText = `
-        position: absolute;
-        left: -9999px;
-        width: 800px;
-        padding: 40px;
-        font-family: system-ui, -apple-system, sans-serif;
-        line-height: 1.6;
-        color: #000;
-        background: #fff;
+      // Create clean HTML content
+      const element = document.createElement('div')
+      element.innerHTML = `
+        <div style="padding: 20px; font-family: Arial, sans-serif; color: #000000; background: #ffffff;">
+          <h1 style="font-size: 24px; margin-bottom: 20px; font-weight: bold; color: #000000;">${formData.title}</h1>
+          <div style="line-height: 1.6; font-size: 12px; color: #000000;">${formData.content}</div>
+        </div>
       `
-      document.body.appendChild(tempDiv)
-
-      const canvas = await html2canvas(tempDiv, {
-        scale: 2,
-        useCORS: true,
-        logging: false,
+      
+      // Remove any CSS variables or lab() colors from inline styles
+      const allElements = element.querySelectorAll('*')
+      allElements.forEach((el: any) => {
+        if (el.style) {
+          // Remove or replace problematic color values
+          for (let i = 0; i < el.style.length; i++) {
+            const prop = el.style[i]
+            const value = el.style.getPropertyValue(prop)
+            
+            // Check if value contains var() or lab() or other unsupported functions
+            if (value && (value.includes('var(') || value.includes('lab(') || value.includes('oklch(') || value.includes('color('))) {
+              // Get computed style as fallback
+              const computedStyle = window.getComputedStyle(el)
+              const computedValue = computedStyle.getPropertyValue(prop)
+              
+              // If computed value is valid and doesn't contain problematic functions, use it
+              if (computedValue && !computedValue.includes('var(') && !computedValue.includes('lab(') && !computedValue.includes('oklch(')) {
+                el.style.setProperty(prop, computedValue)
+              } else {
+                // Fallback to safe defaults for color properties
+                if (prop.includes('color') || prop === 'background' || prop === 'border') {
+                  if (prop === 'background-color' || prop === 'background') {
+                    el.style.setProperty(prop, '#ffffff')
+                  } else if (prop.includes('color')) {
+                    el.style.setProperty(prop, '#000000')
+                  } else if (prop.includes('border')) {
+                    el.style.setProperty(prop, '#cccccc')
+                  }
+                }
+              }
+            }
+          }
+        }
       })
+      
+      // Configure html2pdf options for optimal size/quality balance
+      const options = {
+        margin: [10, 10, 10, 10] as [number, number, number, number],
+        filename: `${formData.title || "lab-note"}.pdf`,
+        image: { type: 'jpeg' as const, quality: 0.95 },
+        html2canvas: { 
+          scale: 2,
+          useCORS: true,
+          letterRendering: true,
+          logging: false
+        },
+        jsPDF: { 
+          unit: 'mm', 
+          format: 'a4', 
+          orientation: 'portrait' as const,
+          compress: true // Enable PDF compression
+        },
+        pagebreak: { mode: ['avoid-all', 'css', 'legacy'] }
+      }
 
-      document.body.removeChild(tempDiv)
+      // Generate and download PDF
+      await html2pdf().set(options).from(element).save()
 
-      const imgData = canvas.toDataURL('image/png')
-      const pdf = new jsPDF({
-        orientation: 'portrait',
-        unit: 'mm',
-        format: 'a4',
+      toast({
+        title: "PDF exported",
+        description: "Your note has been exported as PDF.",
       })
-
-      const imgWidth = 210
-      const imgHeight = (canvas.height * imgWidth) / canvas.width
-
-      pdf.addImage(imgData, 'PNG', 0, 0, imgWidth, imgHeight)
-      pdf.save(`${formData.title || "lab-note"}.pdf`)
-    } catch (error) {
+    } catch (error: any) {
       console.error('PDF export error:', error)
       toast({
         title: "Export failed",
-        description: "Failed to export as PDF. Please try another format.",
+        description: error.message || "Failed to export as PDF. Please try HTML or DOCX format instead.",
         variant: "destructive",
       })
     }
@@ -209,24 +320,58 @@ export function LabNotesTab({ experimentId }: { experimentId: string }) {
 
   const downloadAsDOCX = async () => {
     try {
-      const htmlDocx = await import('html-docx-js/dist/html-docx')
+      toast({
+        title: "Generating DOCX",
+        description: "Please wait...",
+      })
+
+      // Clean and format HTML content
+      const cleanContent = formData.content || '<p>No content</p>'
       
-      const html = `
-        <!DOCTYPE html>
-        <html>
-        <head>
-          <meta charset="UTF-8">
-          <title>${formData.title}</title>
-        </head>
-        <body>
-          <h1>${formData.title}</h1>
-          ${formData.content}
-        </body>
-        </html>
-      `
+      const html = `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset='utf-8'>
+  <title>${formData.title || 'Lab Note'}</title>
+</head>
+<body>
+  <h1>${formData.title || 'Lab Note'}</h1>
+  ${cleanContent}
+</body>
+</html>`
       
-      const converted = htmlDocx.asBlob(html)
-      const url = URL.createObjectURL(converted)
+      // Call server-side API to convert HTML to DOCX
+      const response = await fetch('/api/export-docx', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          html,
+          title: formData.title || 'lab-note',
+        }),
+      })
+
+      console.log('Response status:', response.status)
+      console.log('Response headers:', response.headers.get('content-type'))
+
+      if (!response.ok) {
+        const error = await response.json()
+        console.error('Server error:', error)
+        throw new Error(error.error || 'Failed to generate DOCX')
+      }
+
+      // Get the blob from response
+      const blob = await response.blob()
+      console.log('Received blob size:', blob.size)
+      
+      // Check if blob has content
+      if (!blob || blob.size === 0) {
+        throw new Error('Generated document is empty - received 0 bytes from server')
+      }
+
+      // Download
+      const url = URL.createObjectURL(blob)
       const a = document.createElement('a')
       a.href = url
       a.download = `${formData.title || "lab-note"}.docx`
@@ -234,11 +379,16 @@ export function LabNotesTab({ experimentId }: { experimentId: string }) {
       a.click()
       document.body.removeChild(a)
       URL.revokeObjectURL(url)
-    } catch (error) {
+
+      toast({
+        title: "DOCX exported",
+        description: "Your note has been exported as DOCX.",
+      })
+    } catch (error: any) {
       console.error('DOCX export error:', error)
       toast({
         title: "Export failed",
-        description: "Failed to export as DOCX. Please try another format.",
+        description: error.message || "Failed to export as DOCX. Please try HTML or PDF format instead.",
         variant: "destructive",
       })
     }
@@ -399,41 +549,48 @@ export function LabNotesTab({ experimentId }: { experimentId: string }) {
                 Document your observations, analysis, and findings
               </CardDescription>
             </div>
-            {!isCreating && (
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button variant="outline" size="sm">
-                    <Download className="h-4 w-4 mr-2" />
-                    Export
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end">
-                  <DropdownMenuLabel>Download as...</DropdownMenuLabel>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem onClick={downloadAsMarkdown}>
-                    <FileCode className="h-4 w-4 mr-2" />
-                    Markdown (.md)
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={downloadAsHTML}>
-                    <FileText className="h-4 w-4 mr-2" />
-                    HTML (.html)
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={downloadAsText}>
-                    <FileText className="h-4 w-4 mr-2" />
-                    Plain Text (.txt)
-                  </DropdownMenuItem>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem onClick={downloadAsPDF}>
-                    <FileText className="h-4 w-4 mr-2" />
-                    PDF (.pdf)
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={downloadAsDOCX}>
-                    <FileText className="h-4 w-4 mr-2" />
-                    Word (.docx)
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-            )}
+            <div className="flex items-center gap-3">
+              {/* Save Status Button - Google Drive Style */}
+              <SaveStatusIndicator 
+                status={autoSaveStatus} 
+                lastSaved={lastSaved}
+              />
+              {!isCreating && selectedNote && (
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="outline" size="sm">
+                      <Download className="h-4 w-4 mr-2" />
+                      Export
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    <DropdownMenuLabel>Download as...</DropdownMenuLabel>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem onClick={downloadAsMarkdown}>
+                      <FileCode className="h-4 w-4 mr-2" />
+                      Markdown (.md)
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={downloadAsHTML}>
+                      <FileText className="h-4 w-4 mr-2" />
+                      HTML (.html)
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={downloadAsText}>
+                      <FileText className="h-4 w-4 mr-2" />
+                      Plain Text (.txt)
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem onClick={downloadAsPDF}>
+                      <FileText className="h-4 w-4 mr-2" />
+                      PDF (.pdf)
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={downloadAsDOCX}>
+                      <FileText className="h-4 w-4 mr-2" />
+                      Word (.docx)
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              )}
+            </div>
           </div>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -478,9 +635,11 @@ export function LabNotesTab({ experimentId }: { experimentId: string }) {
             <Label>Content</Label>
             <TiptapEditor
               content={formData.content}
-              onChange={(content) =>
+              onChange={(content) => {
                 setFormData({ ...formData, content })
-              }
+                // Trigger auto-save (works for both creation and editing)
+                debouncedSave(content)
+              }}
               placeholder="Write your lab notes here..."
               title={formData.title || "lab-note"}
               minHeight="400px"
