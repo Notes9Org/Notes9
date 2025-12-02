@@ -1,19 +1,20 @@
 "use client"
 
 import { useEditor, EditorContent } from "@tiptap/react"
-import StarterKit from "@tiptap/starter-kit"
-import Placeholder from "@tiptap/extension-placeholder"
-import Link from "@tiptap/extension-link"
-import Image from "@tiptap/extension-image"
-import Highlight from "@tiptap/extension-highlight"
-import TextStyle from "@tiptap/extension-text-style"
-import Color from "@tiptap/extension-color"
-import TaskList from "@tiptap/extension-task-list"
-import TaskItem from "@tiptap/extension-task-item"
-import Table from "@tiptap/extension-table"
-import TableRow from "@tiptap/extension-table-row"
-import TableCell from "@tiptap/extension-table-cell"
-import TableHeader from "@tiptap/extension-table-header"
+import { StarterKit } from "@tiptap/starter-kit"
+import { Placeholder } from "@tiptap/extension-placeholder"
+import { Link } from "@tiptap/extension-link"
+import { Image } from "@tiptap/extension-image"
+import { Highlight } from "@tiptap/extension-highlight"
+import { TextStyle } from "@tiptap/extension-text-style"
+import { Color } from "@tiptap/extension-color"
+import { TaskList } from "@tiptap/extension-task-list"
+import { TaskItem } from "@tiptap/extension-task-item"
+import { Table } from "@tiptap/extension-table"
+import { TableRow } from "@tiptap/extension-table-row"
+import { TableCell } from "@tiptap/extension-table-cell"
+import { TableHeader } from "@tiptap/extension-table-header"
+import { Mathematics } from "@tiptap/extension-mathematics"
 import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
 import {
@@ -34,17 +35,13 @@ import {
   Image as ImageIcon,
   Highlighter,
   Table as TableIcon,
-  AlignLeft,
-  AlignCenter,
-  AlignRight,
   Sparkles,
   WandSparkles,
-  Download,
-  FileText,
-  FileCode,
+  Loader2,
+  FlaskConical,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
-import { useCallback, useEffect } from "react"
+import { useCallback, useEffect, useState } from "react"
 import {
   Tooltip,
   TooltipContent,
@@ -59,6 +56,9 @@ import {
   DropdownMenuSeparator,
   DropdownMenuLabel,
 } from "@/components/ui/dropdown-menu"
+import { ChemicalFormula, formatChemicalFormula } from "./extensions/chemical-formula"
+import { ChemistryHighlight } from "./extensions/chemistry-highlight"
+import "katex/dist/katex.min.css"
 
 interface TiptapEditorProps {
   content?: string
@@ -69,19 +69,25 @@ interface TiptapEditorProps {
   minHeight?: string
   showAITools?: boolean
   title?: string
+  autoSave?: boolean
+  onAutoSave?: (content: string) => Promise<void>
 }
 
 export function TiptapEditor({
   content = "",
   onChange,
-  placeholder = "Start typing...",
+  placeholder = "Start typing your scientific notes...",
   className,
   editable = true,
   minHeight = "400px",
   showAITools = true,
   title = "document",
 }: TiptapEditorProps) {
+  const [isAIProcessing, setIsAIProcessing] = useState(false)
+  const [aiDropdownOpen, setAiDropdownOpen] = useState(false)
+
   const editor = useEditor({
+    immediatelyRender: false,
     extensions: [
       StarterKit.configure({
         heading: {
@@ -99,7 +105,7 @@ export function TiptapEditor({
       }),
       Image.configure({
         HTMLAttributes: {
-          class: "rounded-lg max-w-full h-auto",
+          class: "max-w-full h-auto rounded-lg",
         },
       }),
       Highlight.configure({
@@ -107,50 +113,33 @@ export function TiptapEditor({
       }),
       TextStyle,
       Color,
-      TaskList.configure({
-        HTMLAttributes: {
-          class: "not-prose",
-        },
-      }),
+      TaskList,
       TaskItem.configure({
         nested: true,
-        HTMLAttributes: {
-          class: "flex items-start gap-2",
-        },
       }),
       Table.configure({
         resizable: true,
+      }),
+      TableRow,
+      TableHeader,
+      TableCell,
+      Mathematics.configure({
         HTMLAttributes: {
-          class: "border-collapse table-auto w-full",
+          class: "math-inline",
         },
       }),
-      TableRow.configure({
-        HTMLAttributes: {
-          class: "border border-border",
-        },
-      }),
-      TableCell.configure({
-        HTMLAttributes: {
-          class: "border border-border p-2",
-        },
-      }),
-      TableHeader.configure({
-        HTMLAttributes: {
-          class: "border border-border p-2 bg-muted font-semibold",
-        },
-      }),
+      ChemicalFormula,
+      ChemistryHighlight,
     ],
     content,
     editable,
+    onUpdate: ({ editor }) => {
+      onChange?.(editor.getHTML())
+    },
     editorProps: {
       attributes: {
-        class:
-          "prose prose-sm dark:prose-invert max-w-none focus:outline-none px-4 py-3",
+        class: "prose prose-sm sm:prose lg:prose-lg xl:prose-2xl focus:outline-none p-4",
       },
-    },
-    onUpdate: ({ editor }) => {
-      const html = editor.getHTML()
-      onChange?.(html)
     },
   })
 
@@ -160,58 +149,155 @@ export function TiptapEditor({
     }
   }, [content, editor])
 
-  const setLink = useCallback(() => {
-    if (!editor) return
-    const previousUrl = editor.getAttributes("link").href
-    const url = window.prompt("URL", previousUrl)
+  // AI Functions using Gemini API
+  const callGeminiAPI = useCallback(
+    async (action: string, selectedText: string) => {
+      setIsAIProcessing(true)
+      try {
+        const response = await fetch("/api/ai/gemini", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            action,
+            selectedText,
+          }),
+        })
 
-    if (url === null) return
-    if (url === "") {
-      editor.chain().focus().extendMarkRange("link").unsetLink().run()
-      return
-    }
-    editor.chain().focus().extendMarkRange("link").setLink({ href: url }).run()
-  }, [editor])
+        if (!response.ok) {
+          const error = await response.json()
+          throw new Error(error.error || "AI request failed")
+        }
 
-  const addImage = useCallback(() => {
-    if (!editor) return
-    const url = window.prompt("Image URL")
-    if (url) {
-      editor.chain().focus().setImage({ src: url }).run()
-    }
-  }, [editor])
+        const data = await response.json()
+        return data.text
+      } catch (error: any) {
+        console.error("AI API error:", error)
+        // Fallback to demo mode if API fails
+        return `⚠️ AI API unavailable. ${error.message || "Please check your API key configuration."}`
+      } finally {
+        setIsAIProcessing(false)
+      }
+    },
+    []
+  )
 
-  const addTable = useCallback(() => {
-    if (!editor) return
-    editor
-      .chain()
-      .focus()
-      .insertTable({ rows: 3, cols: 3, withHeaderRow: true })
-      .run()
-  }, [editor])
-
-  const aiImprove = useCallback(() => {
+  const aiImprove = useCallback(async () => {
     if (!editor) return
     const { from, to } = editor.state.selection
     const selectedText = editor.state.doc.textBetween(from, to, " ")
-    
+
     if (selectedText) {
-      console.log("AI Improve text:", selectedText)
-      // Simulate AI improvement with better text
-      const improved = `${selectedText} (✨ AI-enhanced with better clarity and style)`
+      const improved = await callGeminiAPI("improve", selectedText)
       editor.chain().focus().deleteRange({ from, to }).insertContent(improved).run()
     } else {
-      // If no selection, show a message
-      editor.chain().focus().insertContent("✨ Please select some text to improve").run()
+      editor
+        .chain()
+        .focus()
+        .insertContent("⚠️ Please select some text to improve")
+        .run()
     }
-  }, [editor])
+    setAiDropdownOpen(false)
+  }, [editor, callGeminiAPI])
 
-  const aiComplete = useCallback(() => {
+  const aiContinue = useCallback(async () => {
     if (!editor) return
-    console.log("AI Complete from cursor position")
-    const demoText = " This is AI-generated continuation text. In production, this would call an actual AI API like OpenAI to continue your writing based on context."
-    editor.chain().focus().insertContent(demoText).run()
-  }, [editor])
+    const text = editor.getText()
+    const continuation = await callGeminiAPI("continue", text)
+    editor.chain().focus().insertContent(" " + continuation).run()
+    setAiDropdownOpen(false)
+  }, [editor, callGeminiAPI])
+
+  const aiShorter = useCallback(async () => {
+    if (!editor) return
+    const { from, to } = editor.state.selection
+    const selectedText = editor.state.doc.textBetween(from, to, " ")
+
+    if (selectedText) {
+      const shorter = await callGeminiAPI("shorter", selectedText)
+      editor.chain().focus().deleteRange({ from, to }).insertContent(shorter).run()
+    } else {
+      editor
+        .chain()
+        .focus()
+        .insertContent("⚠️ Please select some text to make shorter")
+        .run()
+    }
+    setAiDropdownOpen(false)
+  }, [editor, callGeminiAPI])
+
+  const aiLonger = useCallback(async () => {
+    if (!editor) return
+    const { from, to } = editor.state.selection
+    const selectedText = editor.state.doc.textBetween(from, to, " ")
+
+    if (selectedText) {
+      const longer = await callGeminiAPI("longer", selectedText)
+      editor.chain().focus().deleteRange({ from, to }).insertContent(longer).run()
+    } else {
+      editor
+        .chain()
+        .focus()
+        .insertContent("⚠️ Please select some text to expand")
+        .run()
+    }
+    setAiDropdownOpen(false)
+  }, [editor, callGeminiAPI])
+
+  const aiSimplify = useCallback(async () => {
+    if (!editor) return
+    const { from, to } = editor.state.selection
+    const selectedText = editor.state.doc.textBetween(from, to, " ")
+
+    if (selectedText) {
+      const simplified = await callGeminiAPI("simplify", selectedText)
+      editor.chain().focus().deleteRange({ from, to }).insertContent(simplified).run()
+    } else {
+      editor
+        .chain()
+        .focus()
+        .insertContent("⚠️ Please select some text to simplify")
+        .run()
+    }
+    setAiDropdownOpen(false)
+  }, [editor, callGeminiAPI])
+
+  const aiGrammar = useCallback(async () => {
+    if (!editor) return
+    const { from, to } = editor.state.selection
+    const selectedText = editor.state.doc.textBetween(from, to, " ")
+
+    if (selectedText) {
+      const corrected = await callGeminiAPI("grammar", selectedText)
+      editor.chain().focus().deleteRange({ from, to }).insertContent(corrected).run()
+    } else {
+      editor
+        .chain()
+        .focus()
+        .insertContent("⚠️ Please select some text to fix grammar")
+        .run()
+    }
+    setAiDropdownOpen(false)
+  }, [editor, callGeminiAPI])
+
+  const aiStructure = useCallback(async () => {
+    if (!editor) return
+    const { from, to } = editor.state.selection
+    const selectedText = editor.state.doc.textBetween(from, to, " ")
+
+    if (selectedText) {
+      const structured = await callGeminiAPI("structure", selectedText)
+      editor.chain().focus().deleteRange({ from, to }).insertContent(structured).run()
+    } else {
+      editor
+        .chain()
+        .focus()
+        .insertContent("⚠️ Please select chemical text to structure properly")
+        .run()
+    }
+    setAiDropdownOpen(false)
+  }, [editor, callGeminiAPI])
 
   // Download functions
   const downloadAsMarkdown = useCallback(() => {
@@ -252,6 +338,8 @@ export function TiptapEditor({
     table { border-collapse: collapse; width: 100%; margin: 20px 0; }
     th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
     th { background: #f4f4f4; }
+    .chemical-formula { font-family: monospace; font-weight: 500; }
+    .chemistry-term { color: #0066cc; font-weight: 500; }
   </style>
 </head>
 <body>
@@ -301,11 +389,11 @@ export function TiptapEditor({
     if (!editor) return
     try {
       // Dynamic import to avoid SSR issues
-      const jsPDF = (await import('jspdf')).default
-      const html2canvas = (await import('html2canvas')).default
-      
+      const jsPDF = (await import("jspdf")).default
+      const html2canvas = (await import("html2canvas")).default
+
       // Create a temporary div with the content
-      const tempDiv = document.createElement('div')
+      const tempDiv = document.createElement("div")
       tempDiv.innerHTML = editor.getHTML()
       tempDiv.style.cssText = `
         position: absolute;
@@ -330,21 +418,21 @@ export function TiptapEditor({
       document.body.removeChild(tempDiv)
 
       // Create PDF
-      const imgData = canvas.toDataURL('image/png')
+      const imgData = canvas.toDataURL("image/png")
       const pdf = new jsPDF({
-        orientation: 'portrait',
-        unit: 'mm',
-        format: 'a4',
+        orientation: "portrait",
+        unit: "mm",
+        format: "a4",
       })
 
       const imgWidth = 210 // A4 width in mm
       const imgHeight = (canvas.height * imgWidth) / canvas.width
 
-      pdf.addImage(imgData, 'PNG', 0, 0, imgWidth, imgHeight)
+      pdf.addImage(imgData, "PNG", 0, 0, imgWidth, imgHeight)
       pdf.save(`${title}.pdf`)
     } catch (error) {
-      console.error('PDF export error:', error)
-      alert('Failed to export PDF. Please try another format.')
+      console.error("PDF export error:", error)
+      alert("Failed to export PDF. Please try another format.")
     }
   }, [editor, title])
 
@@ -352,8 +440,8 @@ export function TiptapEditor({
     if (!editor) return
     try {
       // Dynamic import to avoid SSR issues
-      const htmlDocx = await import('html-docx-js/dist/html-docx')
-      
+      const htmlDocx = await import("html-docx-js/dist/html-docx")
+
       const html = `
         <!DOCTYPE html>
         <html>
@@ -367,10 +455,10 @@ export function TiptapEditor({
         </body>
         </html>
       `
-      
+
       const converted = htmlDocx.asBlob(html)
       const url = URL.createObjectURL(converted)
-      const a = document.createElement('a')
+      const a = document.createElement("a")
       a.href = url
       a.download = `${title}.docx`
       document.body.appendChild(a)
@@ -378,8 +466,8 @@ export function TiptapEditor({
       document.body.removeChild(a)
       URL.revokeObjectURL(url)
     } catch (error) {
-      console.error('DOCX export error:', error)
-      alert('Failed to export DOCX. Please try another format.')
+      console.error("DOCX export error:", error)
+      alert("Failed to export DOCX. Please try another format.")
     }
   }, [editor, title])
 
@@ -403,9 +491,9 @@ export function TiptapEditor({
               <Button
                 variant="ghost"
                 size="sm"
-                className="h-8 w-8 p-0"
                 onClick={() => editor.chain().focus().undo().run()}
                 disabled={!editor.can().undo()}
+                className="h-8 w-8 p-0"
               >
                 <Undo className="h-4 w-4" />
               </Button>
@@ -418,9 +506,9 @@ export function TiptapEditor({
               <Button
                 variant="ghost"
                 size="sm"
-                className="h-8 w-8 p-0"
                 onClick={() => editor.chain().focus().redo().run()}
                 disabled={!editor.can().redo()}
+                className="h-8 w-8 p-0"
               >
                 <Redo className="h-4 w-4" />
               </Button>
@@ -436,11 +524,11 @@ export function TiptapEditor({
               <Button
                 variant="ghost"
                 size="sm"
+                onClick={() => editor.chain().focus().toggleBold().run()}
                 className={cn(
                   "h-8 w-8 p-0",
                   editor.isActive("bold") && "bg-accent"
                 )}
-                onClick={() => editor.chain().focus().toggleBold().run()}
               >
                 <Bold className="h-4 w-4" />
               </Button>
@@ -453,11 +541,11 @@ export function TiptapEditor({
               <Button
                 variant="ghost"
                 size="sm"
+                onClick={() => editor.chain().focus().toggleItalic().run()}
                 className={cn(
                   "h-8 w-8 p-0",
                   editor.isActive("italic") && "bg-accent"
                 )}
-                onClick={() => editor.chain().focus().toggleItalic().run()}
               >
                 <Italic className="h-4 w-4" />
               </Button>
@@ -470,11 +558,11 @@ export function TiptapEditor({
               <Button
                 variant="ghost"
                 size="sm"
+                onClick={() => editor.chain().focus().toggleStrike().run()}
                 className={cn(
                   "h-8 w-8 p-0",
                   editor.isActive("strike") && "bg-accent"
                 )}
-                onClick={() => editor.chain().focus().toggleStrike().run()}
               >
                 <Strikethrough className="h-4 w-4" />
               </Button>
@@ -487,16 +575,33 @@ export function TiptapEditor({
               <Button
                 variant="ghost"
                 size="sm"
+                onClick={() => editor.chain().focus().toggleCode().run()}
                 className={cn(
                   "h-8 w-8 p-0",
                   editor.isActive("code") && "bg-accent"
                 )}
-                onClick={() => editor.chain().focus().toggleCode().run()}
               >
                 <Code className="h-4 w-4" />
               </Button>
             </TooltipTrigger>
             <TooltipContent>Inline Code</TooltipContent>
+          </Tooltip>
+
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => editor.chain().focus().toggleHighlight().run()}
+                className={cn(
+                  "h-8 w-8 p-0",
+                  editor.isActive("highlight") && "bg-accent"
+                )}
+              >
+                <Highlighter className="h-4 w-4" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>Highlight</TooltipContent>
           </Tooltip>
 
           <Separator orientation="vertical" className="h-6 mx-1" />
@@ -507,13 +612,13 @@ export function TiptapEditor({
               <Button
                 variant="ghost"
                 size="sm"
+                onClick={() =>
+                  editor.chain().focus().toggleHeading({ level: 1 }).run()
+                }
                 className={cn(
                   "h-8 w-8 p-0",
                   editor.isActive("heading", { level: 1 }) && "bg-accent"
                 )}
-                onClick={() =>
-                  editor.chain().focus().toggleHeading({ level: 1 }).run()
-                }
               >
                 <Heading1 className="h-4 w-4" />
               </Button>
@@ -526,13 +631,13 @@ export function TiptapEditor({
               <Button
                 variant="ghost"
                 size="sm"
+                onClick={() =>
+                  editor.chain().focus().toggleHeading({ level: 2 }).run()
+                }
                 className={cn(
                   "h-8 w-8 p-0",
                   editor.isActive("heading", { level: 2 }) && "bg-accent"
                 )}
-                onClick={() =>
-                  editor.chain().focus().toggleHeading({ level: 2 }).run()
-                }
               >
                 <Heading2 className="h-4 w-4" />
               </Button>
@@ -545,13 +650,13 @@ export function TiptapEditor({
               <Button
                 variant="ghost"
                 size="sm"
+                onClick={() =>
+                  editor.chain().focus().toggleHeading({ level: 3 }).run()
+                }
                 className={cn(
                   "h-8 w-8 p-0",
                   editor.isActive("heading", { level: 3 }) && "bg-accent"
                 )}
-                onClick={() =>
-                  editor.chain().focus().toggleHeading({ level: 3 }).run()
-                }
               >
                 <Heading3 className="h-4 w-4" />
               </Button>
@@ -567,11 +672,11 @@ export function TiptapEditor({
               <Button
                 variant="ghost"
                 size="sm"
+                onClick={() => editor.chain().focus().toggleBulletList().run()}
                 className={cn(
                   "h-8 w-8 p-0",
                   editor.isActive("bulletList") && "bg-accent"
                 )}
-                onClick={() => editor.chain().focus().toggleBulletList().run()}
               >
                 <List className="h-4 w-4" />
               </Button>
@@ -584,11 +689,11 @@ export function TiptapEditor({
               <Button
                 variant="ghost"
                 size="sm"
+                onClick={() => editor.chain().focus().toggleOrderedList().run()}
                 className={cn(
                   "h-8 w-8 p-0",
                   editor.isActive("orderedList") && "bg-accent"
                 )}
-                onClick={() => editor.chain().focus().toggleOrderedList().run()}
               >
                 <ListOrdered className="h-4 w-4" />
               </Button>
@@ -601,11 +706,11 @@ export function TiptapEditor({
               <Button
                 variant="ghost"
                 size="sm"
+                onClick={() => editor.chain().focus().toggleTaskList().run()}
                 className={cn(
                   "h-8 w-8 p-0",
                   editor.isActive("taskList") && "bg-accent"
                 )}
-                onClick={() => editor.chain().focus().toggleTaskList().run()}
               >
                 <ListChecks className="h-4 w-4" />
               </Button>
@@ -615,22 +720,22 @@ export function TiptapEditor({
 
           <Separator orientation="vertical" className="h-6 mx-1" />
 
-          {/* Additional Formatting */}
+          {/* Block Elements */}
           <Tooltip>
             <TooltipTrigger asChild>
               <Button
                 variant="ghost"
                 size="sm"
+                onClick={() => editor.chain().focus().toggleBlockquote().run()}
                 className={cn(
                   "h-8 w-8 p-0",
                   editor.isActive("blockquote") && "bg-accent"
                 )}
-                onClick={() => editor.chain().focus().toggleBlockquote().run()}
               >
                 <Quote className="h-4 w-4" />
               </Button>
             </TooltipTrigger>
-            <TooltipContent>Quote</TooltipContent>
+            <TooltipContent>Blockquote</TooltipContent>
           </Tooltip>
 
           <Tooltip>
@@ -638,56 +743,14 @@ export function TiptapEditor({
               <Button
                 variant="ghost"
                 size="sm"
-                className={cn(
-                  "h-8 w-8 p-0",
-                  editor.isActive("highlight") && "bg-accent"
-                )}
-                onClick={() => editor.chain().focus().toggleHighlight().run()}
-              >
-                <Highlighter className="h-4 w-4" />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>Highlight</TooltipContent>
-          </Tooltip>
-
-          <Separator orientation="vertical" className="h-6 mx-1" />
-
-          {/* Insert Elements */}
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                variant="ghost"
-                size="sm"
+                onClick={() =>
+                  editor
+                    .chain()
+                    .focus()
+                    .insertTable({ rows: 3, cols: 3, withHeaderRow: true })
+                    .run()
+                }
                 className="h-8 w-8 p-0"
-                onClick={setLink}
-              >
-                <Link2 className="h-4 w-4" />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>Insert Link</TooltipContent>
-          </Tooltip>
-
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-8 w-8 p-0"
-                onClick={addImage}
-              >
-                <ImageIcon className="h-4 w-4" />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>Insert Image</TooltipContent>
-          </Tooltip>
-
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-8 w-8 p-0"
-                onClick={addTable}
               >
                 <TableIcon className="h-4 w-4" />
               </Button>
@@ -695,90 +758,90 @@ export function TiptapEditor({
             <TooltipContent>Insert Table</TooltipContent>
           </Tooltip>
 
+          <Separator orientation="vertical" className="h-6 mx-1" />
+
+          {/* Chemistry Tools */}
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  const { from, to } = editor.state.selection
+                  const selectedText = editor.state.doc.textBetween(from, to, " ")
+                  if (selectedText) {
+                    const formatted = formatChemicalFormula(selectedText)
+                    editor
+                      .chain()
+                      .focus()
+                      .deleteRange({ from, to })
+                      .insertContent(formatted)
+                      .run()
+                  }
+                }}
+                className="h-8 w-8 p-0"
+              >
+                <FlaskConical className="h-4 w-4" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>Format Chemical Formula</TooltipContent>
+          </Tooltip>
+
           {/* AI Tools */}
           {showAITools && (
             <>
               <Separator orientation="vertical" className="h-6 mx-1" />
-
-              <DropdownMenu>
+              <DropdownMenu open={aiDropdownOpen} onOpenChange={setAiDropdownOpen}>
                 <DropdownMenuTrigger asChild>
                   <Button
                     variant="ghost"
                     size="sm"
-                    className="h-8 px-2 gap-1 text-primary"
+                    className="h-8 gap-1 px-2"
+                    disabled={isAIProcessing}
                   >
-                    <Sparkles className="h-4 w-4" />
-                    <span className="text-xs font-medium">AI</span>
+                    {isAIProcessing ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <Sparkles className="h-4 w-4" />
+                    )}
+                    <span className="text-xs">AI</span>
                   </Button>
                 </DropdownMenuTrigger>
-                <DropdownMenuContent align="start">
-                  <DropdownMenuItem onClick={aiImprove}>
-                    <WandSparkles className="h-4 w-4 mr-2" />
+                <DropdownMenuContent align="start" className="w-56">
+                  <DropdownMenuLabel className="flex items-center gap-2">
+                    <WandSparkles className="h-4 w-4" />
+                    AI Writing Tools
+                  </DropdownMenuLabel>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem onClick={aiImprove} disabled={isAIProcessing}>
+                    <Sparkles className="mr-2 h-4 w-4" />
                     Improve Writing
                   </DropdownMenuItem>
-                  <DropdownMenuItem onClick={aiComplete}>
-                    <Sparkles className="h-4 w-4 mr-2" />
+                  <DropdownMenuItem onClick={aiContinue} disabled={isAIProcessing}>
+                    <WandSparkles className="mr-2 h-4 w-4" />
                     Continue Writing
                   </DropdownMenuItem>
-                  <DropdownMenuItem
-                    onClick={() => {
-                      const { from, to } = editor.state.selection
-                      const text = editor.state.doc.textBetween(from, to, " ")
-                      if (text) {
-                        console.log("Make it shorter:", text)
-                        const shortened = text.substring(0, Math.floor(text.length / 2)) + "... (📉 AI-shortened)"
-                        editor.chain().focus().deleteRange({ from, to }).insertContent(shortened).run()
-                      } else {
-                        editor.chain().focus().insertContent("📉 Please select text to shorten").run()
-                      }
-                    }}
-                  >
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem onClick={aiShorter} disabled={isAIProcessing}>
                     Make Shorter
                   </DropdownMenuItem>
-                  <DropdownMenuItem
-                    onClick={() => {
-                      const { from, to } = editor.state.selection
-                      const text = editor.state.doc.textBetween(from, to, " ")
-                      if (text) {
-                        console.log("Make it longer:", text)
-                        const expanded = `${text} (📈 AI-expanded with additional context, details, and explanations)`
-                        editor.chain().focus().deleteRange({ from, to }).insertContent(expanded).run()
-                      } else {
-                        editor.chain().focus().insertContent("📈 Please select text to expand").run()
-                      }
-                    }}
-                  >
+                  <DropdownMenuItem onClick={aiLonger} disabled={isAIProcessing}>
                     Make Longer
                   </DropdownMenuItem>
-                  <DropdownMenuItem
-                    onClick={() => {
-                      const { from, to } = editor.state.selection
-                      const text = editor.state.doc.textBetween(from, to, " ")
-                      if (text) {
-                        console.log("Simplify:", text)
-                        const simplified = `${text} (🔤 AI-simplified to use simpler language)`
-                        editor.chain().focus().deleteRange({ from, to }).insertContent(simplified).run()
-                      } else {
-                        editor.chain().focus().insertContent("🔤 Please select text to simplify").run()
-                      }
-                    }}
-                  >
+                  <DropdownMenuItem onClick={aiSimplify} disabled={isAIProcessing}>
                     Simplify Language
                   </DropdownMenuItem>
-                  <DropdownMenuItem
-                    onClick={() => {
-                      const { from, to } = editor.state.selection
-                      const text = editor.state.doc.textBetween(from, to, " ")
-                      if (text) {
-                        console.log("Fix grammar:", text)
-                        const fixed = `${text} (✅ AI-corrected for grammar and spelling)`
-                        editor.chain().focus().deleteRange({ from, to }).insertContent(fixed).run()
-                      } else {
-                        editor.chain().focus().insertContent("✅ Please select text to fix").run()
-                      }
-                    }}
-                  >
+                  <DropdownMenuItem onClick={aiGrammar} disabled={isAIProcessing}>
                     Fix Grammar
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuLabel className="flex items-center gap-2">
+                    <FlaskConical className="h-4 w-4" />
+                    Chemistry Tools
+                  </DropdownMenuLabel>
+                  <DropdownMenuItem onClick={aiStructure} disabled={isAIProcessing}>
+                    <FlaskConical className="mr-2 h-4 w-4" />
+                    Structure Properly
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
@@ -788,10 +851,22 @@ export function TiptapEditor({
       </div>
 
       {/* Editor Content */}
-      <div style={{ minHeight }}>
+      <div
+        className="overflow-y-auto"
+        style={{ minHeight, maxHeight: "calc(100vh - 300px)" }}
+      >
         <EditorContent editor={editor} />
       </div>
+
+      {/* AI Processing Indicator */}
+      {isAIProcessing && (
+        <div className="border-t border-border p-2 bg-muted/50">
+          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+            <Loader2 className="h-4 w-4 animate-spin" />
+            <span>AI is processing your request...</span>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
-

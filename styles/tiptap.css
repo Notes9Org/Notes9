@@ -248,6 +248,86 @@
   pointer-events: none;
 }
 
+/* Chemistry-specific styles */
+.ProseMirror .chemistry-term {
+  color: hsl(var(--primary));
+  font-weight: 500;
+  cursor: help;
+  position: relative;
+}
+
+.ProseMirror .chemistry-term:hover {
+  background-color: hsl(var(--primary) / 0.1);
+  border-radius: 0.125rem;
+}
+
+.ProseMirror .chemical-formula-highlight {
+  font-family: var(--font-mono, "Monaco", "Courier New", monospace);
+  background-color: hsl(var(--chart-1) / 0.15);
+  padding: 0.125rem 0.25rem;
+  border-radius: 0.25rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.ProseMirror .chemical-formula-highlight:hover {
+  background-color: hsl(var(--chart-1) / 0.25);
+  transform: translateY(-1px);
+}
+
+.ProseMirror .chemical-equation {
+  font-family: var(--font-mono, "Monaco", "Courier New", monospace);
+  background-color: hsl(var(--chart-2) / 0.15);
+  padding: 0.25rem 0.5rem;
+  border-radius: 0.25rem;
+  border-left: 3px solid hsl(var(--chart-2));
+  display: inline-block;
+  margin: 0.25rem 0;
+}
+
+.ProseMirror .chemical-formula {
+  font-family: var(--font-mono, "Monaco", "Courier New", monospace);
+  font-weight: 500;
+  color: hsl(var(--chart-1));
+}
+
+/* Structure button tooltip */
+.structure-tooltip {
+  position: absolute;
+  background-color: hsl(var(--popover));
+  border: 1px solid hsl(var(--border));
+  border-radius: 0.5rem;
+  padding: 0.5rem;
+  box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1);
+  z-index: 50;
+  font-size: 0.875rem;
+  color: hsl(var(--popover-foreground));
+  max-width: 300px;
+}
+
+/* AI processing indicator */
+.ai-processing {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 1rem;
+  background-color: hsl(var(--primary) / 0.1);
+  border-radius: 0.5rem;
+  font-size: 0.875rem;
+  color: hsl(var(--primary));
+  animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}
+
 /* Responsive adjustments */
 @media (max-width: 640px) {
   .ProseMirror {
