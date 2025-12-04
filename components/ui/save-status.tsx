@@ -35,7 +35,7 @@ export function SaveStatusIndicator({
       case 'saving':
         return {
           icon: Loader2,
-          text: 'Saving...',
+          // text: 'Saving...',
           detail: 'Saving changes to cloud',
           className: 'text-blue-600 dark:text-blue-400',
           bgClassName: 'bg-blue-50 dark:bg-blue-950/30',
