@@ -200,20 +200,6 @@ export default function NewProtocolPage() {
                   }
                   placeholder="Write the detailed protocol steps here..."
                   title={formData.name || "protocol"}
-
-Example:
-# Materials Required
-- List all materials needed
-
-# Procedure
-1. First step...
-2. Second step...
-
-# Safety Notes
-- Important safety information
-
-# Expected Results
-- What to expect..."
                   minHeight="400px"
                   showAITools={true}
                 />
