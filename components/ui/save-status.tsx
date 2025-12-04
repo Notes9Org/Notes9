@@ -100,7 +100,7 @@ export function SaveStatusIndicator({
             <Icon
               className={cn('h-4 w-4', config.animate && 'animate-spin')}
             />
-            <span className="text-xs font-medium">{config.text}</span>
+            {/* <span className="text-xs font-medium">{config.text}</span> */}
           </Button>
         </TooltipTrigger>
         <TooltipContent side="bottom" className="max-w-xs">
