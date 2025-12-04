@@ -73,7 +73,7 @@ export function SaveStatusIndicator({
         )}
       >
         <Icon
-          className={cn('h-3.5 w-3.5', config.animate && 'animate-spin')}
+          className={cn('h-3.5 w-2.5', config.animate && 'animate-spin')}
         />
         <span>{config.text}</span>
       </div>
@@ -89,7 +89,7 @@ export function SaveStatusIndicator({
             variant="ghost"
             size="sm"
             className={cn(
-              'flex items-center gap-2 px-3 h-9 transition-all',
+              'flex items-center px-2 h-9 transition-all',
               config.bgClassName,
               config.className,
               'border border-transparent hover:border-current/20',
@@ -98,7 +98,7 @@ export function SaveStatusIndicator({
             disabled={status === 'saving'}
           >
             <Icon
-              className={cn('h-4 w-4', config.animate && 'animate-spin')}
+              className={cn('h-4 w-1', config.animate && 'animate-spin')}
             />
             <span className="text-xs font-medium">{config.text}</span>
           </Button>
