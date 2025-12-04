@@ -27,7 +27,7 @@ export function SaveStatusIndicator({
       case 'saved':
         return {
           icon: Check,
-          text: 'Saved to cloud',
+          // text: 'Saved',
           detail: lastSaved ? `Last saved ${formatTimeAgo(lastSaved)}` : 'All changes saved',
           className: 'text-green-600 dark:text-green-400',
           bgClassName: 'bg-green-50 dark:bg-green-950/30 hover:bg-green-100 dark:hover:bg-green-950/50',
@@ -44,7 +44,7 @@ export function SaveStatusIndicator({
       case 'unsaved':
         return {
           icon: Cloud,
-          text: 'Unsaved',
+          // text: 'Unsaved',
           detail: 'Changes will be saved automatically',
           className: 'text-yellow-600 dark:text-yellow-400',
           bgClassName: 'bg-yellow-50 dark:bg-yellow-950/30 hover:bg-yellow-100 dark:hover:bg-yellow-950/50',
@@ -52,7 +52,7 @@ export function SaveStatusIndicator({
       case 'error':
         return {
           icon: CloudOff,
-          text: 'Not saved',
+          // text: 'Not saved',
           detail: 'Unable to save. Will retry automatically.',
           className: 'text-red-600 dark:text-red-400',
           bgClassName: 'bg-red-50 dark:bg-red-950/30 hover:bg-red-100 dark:hover:bg-red-950/50',
