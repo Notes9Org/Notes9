@@ -31,8 +31,8 @@ export async function GET(request: NextRequest) {
       
       if (user && user.email) {
         // Log user metadata to debug OAuth data
-        console.log("OAuth user metadata:", JSON.stringify(user.user_metadata, null, 2))
-        console.log("OAuth raw app metadata:", JSON.stringify(user.app_metadata, null, 2))
+        // console.log("OAuth user metadata:", JSON.stringify(user.user_metadata, null, 2))
+        // console.log("OAuth raw app metadata:", JSON.stringify(user.app_metadata, null, 2))
         
         // Supabase automatically links OAuth accounts to existing email/password accounts
         // when the email matches. The user.id will be the original account ID if linked.
@@ -89,7 +89,7 @@ export async function GET(request: NextRequest) {
           if (existingOrg) {
             // Use existing organization (account was linked)
             orgId = existingOrg.id
-            console.log("Using existing organization for linked account:", orgId)
+            // console.log("Using existing organization for linked account:", orgId)
           } else {
             // Create new organization for new OAuth sign-up
             const userFullName = `${firstName} ${lastName}`.trim() || firstName
@@ -125,7 +125,7 @@ export async function GET(request: NextRequest) {
           }
         } else {
           // Profile exists - account was successfully linked or user already had profile
-          console.log("Profile exists - account linked or user already registered")
+          // console.log("Profile exists - account linked or user already registered")
         }
       }
       
