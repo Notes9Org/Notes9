@@ -11,8 +11,8 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    console.log('Converting HTML to DOCX, title:', title)
-    console.log('HTML length:', html.length)
+    // console.log('Converting HTML to DOCX, title:', title)
+    // console.log('HTML length:', html.length)
 
     // Dynamic import to ensure it works in Node.js environment
     const HTMLtoDOCX = (await import('html-to-docx')).default
@@ -26,30 +26,30 @@ export async function POST(request: NextRequest) {
       fontSize: 11,
     })
 
-    console.log('DOCX result type:', typeof docxResult)
-    console.log('DOCX result constructor:', docxResult?.constructor?.name)
+    // console.log('DOCX result type:', typeof docxResult)
+    // console.log('DOCX result constructor:', docxResult?.constructor?.name)
 
     // Handle both Blob (browser) and Buffer (Node.js) responses
     let buffer: Buffer
 
     if (Buffer.isBuffer(docxResult)) {
-      console.log('Result is Buffer, size:', docxResult.length)
+      // console.log('Result is Buffer, size:', docxResult.length)
       buffer = docxResult
     } else if (docxResult && typeof (docxResult as any).arrayBuffer === 'function') {
-      console.log('Result is Blob-like, size:', (docxResult as any).size)
+      // console.log('Result is Blob-like, size:', (docxResult as any).size)
       const arrayBuffer = await (docxResult as any).arrayBuffer()
       buffer = Buffer.from(arrayBuffer)
     } else if (docxResult instanceof ArrayBuffer) {
-      console.log('Result is ArrayBuffer, size:', docxResult.byteLength)
+      // console.log('Result is ArrayBuffer, size:', docxResult.byteLength)
       buffer = Buffer.from(docxResult)
     } else if (ArrayBuffer.isView(docxResult)) {
-      console.log('Result is ArrayBufferView')
+      // console.log('Result is ArrayBufferView')
       buffer = Buffer.from(docxResult.buffer)
     } else {
       throw new Error(`Unexpected result type: ${typeof docxResult}, constructor: ${docxResult?.constructor?.name}`)
     }
 
-    console.log('Final buffer size:', buffer.length)
+    // console.log('Final buffer size:', buffer.length)
 
     // Check if buffer has content
     if (!buffer || buffer.length === 0) {
