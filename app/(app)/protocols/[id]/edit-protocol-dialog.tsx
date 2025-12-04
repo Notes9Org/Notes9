@@ -181,7 +181,7 @@ export function EditProtocolDialog({ protocol }: { protocol: any }) {
                 setFormData({ ...formData, content })
               }
               placeholder="Update protocol content..."
-              title={formData.name || "protocol"}"
+              title={formData.name || "protocol"}
               minHeight="300px"
               showAITools={true}
             />
