@@ -25,7 +25,7 @@ import {
 import { Switch } from "@/components/ui/switch"
 import { Edit } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
-import { AffineBlock } from "@/components/text-editor/affine-block"
+import { TiptapEditor } from "@/components/text-editor/tiptap-editor"
 
 const PROTOCOL_CATEGORIES = [
   "Sample Preparation",
@@ -175,13 +175,15 @@ export function EditProtocolDialog({ protocol }: { protocol: any }) {
           {/* Content */}
           <div className="space-y-2">
             <Label htmlFor="content">Protocol Content</Label>
-            <AffineBlock
-              initialContent={formData.content}
+            <TiptapEditor
+              content={formData.content}
               onChange={(content) =>
                 setFormData({ ...formData, content })
               }
               placeholder="Update protocol content..."
-              className="min-h-[300px]"
+              title={formData.name || "protocol"}"
+              minHeight="300px"
+              showAITools={true}
             />
           </div>
 

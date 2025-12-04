@@ -18,7 +18,7 @@ import {
 import { Switch } from "@/components/ui/switch"
 import { ArrowLeft, FileText } from "lucide-react"
 import Link from "next/link"
-import { AffineBlock } from "@/components/text-editor/affine-block"
+import { TiptapEditor } from "@/components/text-editor/tiptap-editor"
 
 const PROTOCOL_CATEGORIES = [
   "Sample Preparation",
@@ -193,12 +193,13 @@ export default function NewProtocolPage() {
                 <Label htmlFor="content">
                   Protocol Content <span className="text-destructive">*</span>
                 </Label>
-                <AffineBlock
-                  initialContent={formData.content}
+                <TiptapEditor
+                  content={formData.content}
                   onChange={(content) =>
                     setFormData({ ...formData, content })
                   }
-                  placeholder="Write the detailed protocol steps here...
+                  placeholder="Write the detailed protocol steps here..."
+                  title={formData.name || "protocol"}
 
 Example:
 # Materials Required
@@ -213,7 +214,8 @@ Example:
 
 # Expected Results
 - What to expect..."
-                  className="min-h-[400px]"
+                  minHeight="400px"
+                  showAITools={true}
                 />
               </div>
 
