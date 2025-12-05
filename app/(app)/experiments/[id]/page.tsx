@@ -20,8 +20,18 @@ import { DataFilesTab } from './data-files-tab'
 import { ExperimentActions } from './experiment-actions'
 import { StatusUpdateButtons } from './status-update-buttons'
 
-export default async function ExperimentDetailPage({ params }: { params: Promise<{ id: string }> }) {
+type SearchParams = { tab?: string; noteId?: string }
+
+export default async function ExperimentDetailPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>
+  searchParams?: Promise<SearchParams>
+}) {
   const { id } = await params
+  const resolvedSearch = searchParams ? await searchParams : {}
+  const initialTab = resolvedSearch.tab || (resolvedSearch.noteId ? "notes" : "overview")
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   
@@ -223,7 +233,7 @@ export default async function ExperimentDetailPage({ params }: { params: Promise
         </div>
 
         {/* Main Content Tabs */}
-        <Tabs defaultValue="overview" className="space-y-4">
+        <Tabs defaultValue={initialTab} className="space-y-4">
           <TabsList>
             <TabsTrigger value="overview">Overview</TabsTrigger>
             <TabsTrigger value="protocol">Protocol & Assays</TabsTrigger>
