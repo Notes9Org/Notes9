@@ -65,6 +65,7 @@ const navigation = [
   { name: "Dashboard", href: "/dashboard", icon: Home },
   { name: "Projects", href: "/projects", icon: Folder },
   { name: "Experiments", href: "/experiments", icon: FlaskConical },
+  { name: "Lab Notes", href: "/lab-notes", icon: FileText },
   { name: "Samples", href: "/samples", icon: TestTube },
   { name: "Equipment", href: "/equipment", icon: Wrench },
   { name: "Protocols", href: "/protocols", icon: FileText },

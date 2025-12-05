@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { useRouter } from "next/navigation"
+import { useRouter, useSearchParams } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -49,6 +49,7 @@ interface LabNote {
 
 export function LabNotesTab({ experimentId }: { experimentId: string }) {
   const router = useRouter()
+  const searchParams = useSearchParams()
   const { toast } = useToast()
   
   const [notes, setNotes] = useState<LabNote[]>([])
@@ -129,11 +130,13 @@ export function LabNotesTab({ experimentId }: { experimentId: string }) {
   })
 
   // Fetch existing lab notes
-  useEffect(() => {
-    fetchNotes()
-  }, [experimentId])
+  const noteIdFromQuery = searchParams.get("noteId")
 
-  const fetchNotes = async () => {
+  useEffect(() => {
+    fetchNotes(noteIdFromQuery)
+  }, [experimentId, noteIdFromQuery])
+
+  const fetchNotes = async (preferredNoteId?: string | null) => {
     try {
       const supabase = createClient()
       const { data, error } = await supabase
@@ -145,14 +148,21 @@ export function LabNotesTab({ experimentId }: { experimentId: string }) {
       if (error) throw error
       setNotes(data || [])
       
-      // Auto-select first note if available
-      if (data && data.length > 0 && !selectedNote && !isCreating) {
-        setSelectedNote(data[0])
-        setFormData({
-          title: data[0].title,
-          content: data[0].content,
-          note_type: data[0].note_type || "general",
-        })
+      // Auto-select preferred note (from query) or first available when not creating
+      if (data && data.length > 0 && !isCreating) {
+        const next =
+          (preferredNoteId && data.find((n) => n.id === preferredNoteId)) ||
+          data.find((n) => n.id === selectedNote?.id) ||
+          data[0]
+
+        if (next) {
+          setSelectedNote(next)
+          setFormData({
+            title: next.title,
+            content: next.content,
+            note_type: next.note_type || "general",
+          })
+        }
       }
     } catch (error: any) {
       console.error("Error fetching notes:", error)
@@ -486,59 +496,9 @@ export function LabNotesTab({ experimentId }: { experimentId: string }) {
   }
 
   return (
-    <div className="grid gap-6 md:grid-cols-[300px_1fr]">
-      {/* Notes List */}
-      <Card className="h-fit">
-        <CardHeader>
-          <div className="flex items-center justify-between">
-            <CardTitle className="text-base">Lab Notes</CardTitle>
-            <Button size="sm" onClick={handleNewNote}>
-              <Plus className="h-4 w-4" />
-            </Button>
-          </div>
-        </CardHeader>
-        <CardContent>
-          {notes.length > 0 ? (
-            <div className="space-y-2">
-              {notes.map((note) => (
-                <button
-                  key={note.id}
-                  onClick={() => handleSelectNote(note)}
-                  className={`w-full text-left p-3 rounded-lg border transition-colors ${
-                    selectedNote?.id === note.id && !isCreating
-                      ? "border-primary bg-primary/5"
-                      : "border-border hover:border-primary/50"
-                  }`}
-                >
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="min-w-0 flex-1">
-                      <p className="font-medium text-sm text-foreground truncate">
-                        {note.title}
-                      </p>
-                      <p className="text-xs text-muted-foreground">
-                        {new Date(note.created_at).toLocaleDateString()}
-                      </p>
-                    </div>
-                    {note.note_type && (
-                      <Badge variant="outline" className="shrink-0 text-xs">
-                        {note.note_type}
-                      </Badge>
-                    )}
-                  </div>
-                </button>
-              ))}
-            </div>
-          ) : (
-            <div className="text-center py-8 text-muted-foreground">
-              <FileText className="h-8 w-8 mx-auto mb-2 opacity-50" />
-              <p className="text-sm">No notes yet</p>
-            </div>
-          )}
-        </CardContent>
-      </Card>
-
+    <div className="w-full">
       {/* Note Editor */}
-      <Card>
+      <Card className="w-full">
         <CardHeader>
           <div className="flex items-start justify-between">
             <div>
