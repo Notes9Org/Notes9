@@ -609,12 +609,13 @@ export function LabNotesTab({ experimentId }: { experimentId: string }) {
 
           {/* Actions */}
           <div className="flex justify-end gap-2 pt-4">
-            {(selectedNote || isCreating) && (
-              <Button onClick={handleSave} disabled={isSaving}>
-                <Save className="h-4 w-4 mr-2" />
-                {isSaving ? "Saving..." : "Save Note"}
-              </Button>
-            )}
+            <Button
+              onClick={handleSave}
+              disabled={isSaving || !formData.title.trim()}
+            >
+              <Save className="h-4 w-4 mr-2" />
+              {isSaving ? "Saving..." : "Save Note"}
+            </Button>
           </div>
         </CardContent>
       </Card>
