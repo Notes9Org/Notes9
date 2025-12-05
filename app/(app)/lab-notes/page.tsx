@@ -13,6 +13,8 @@ type LabNote = {
   created_at: string
   note_type?: string | null
   experiment_id?: string | null
+  project_name?: string | null
+  experiment_name?: string | null
 }
 
 export default function LabNotesPage() {
@@ -30,12 +32,33 @@ export default function LabNotesPage() {
         setIsLoading(true)
         const { data, error } = await supabase
           .from("lab_notes")
-          .select("id, title, created_at, note_type, experiment_id")
+          .select(`
+            id,
+            title,
+            created_at,
+            note_type,
+            experiment_id,
+            experiment:experiments (
+              name,
+              project:projects ( name )
+            )
+          `)
           .order("created_at", { ascending: false })
 
         if (error) throw error
-        setNotes(data || [])
-        setSelectedNote(data?.[0] || null)
+        const normalized =
+          data?.map((note: any) => ({
+            id: note.id,
+            title: note.title,
+            created_at: note.created_at,
+            note_type: note.note_type,
+            experiment_id: note.experiment_id,
+            project_name: note.experiment?.project?.name ?? null,
+            experiment_name: note.experiment?.name ?? null,
+          })) || []
+
+        setNotes(normalized)
+        setSelectedNote(normalized[0] || null)
       } catch (err: any) {
         setError(err.message || "Failed to load lab notes.")
       } finally {
