@@ -543,7 +543,7 @@ export function LabNotesTab({ experimentId }: { experimentId: string }) {
           <div className="flex items-start justify-between">
             <div>
               <CardTitle className="text-foreground">
-                {isCreating ? "New Lab Note" : "Edit Lab Note"}
+                {isCreating ? "New Lab Note" : (formData.title || "Untitled Lab Note")}
               </CardTitle>
               <CardDescription>
                 Document your observations, analysis, and findings
