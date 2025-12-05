@@ -10,6 +10,8 @@ type LabNote = {
   title: string
   created_at: string
   note_type?: string | null
+  project_name?: string | null
+  experiment_name?: string | null
 }
 
 type LabNotesListProps = {
@@ -67,11 +69,29 @@ export default function LabNotesList({
                       {new Date(note.created_at).toLocaleDateString()}
                     </p>
                   </div>
-                  {note.note_type && (
-                    <Badge variant="outline" className="shrink-0 text-xs">
-                      {note.note_type}
-                    </Badge>
-                  )}
+                  <div className="flex flex-col items-end gap-1">
+                    {note.note_type && (
+                      <Badge variant="outline" className="shrink-0 text-xs">
+                        {note.note_type}
+                      </Badge>
+                    )}
+                    {(note.project_name || note.experiment_name) && (
+                      <div className="text-right text-xs leading-tight text-muted-foreground space-y-0.5">
+                        {note.project_name && (
+                          <div className="truncate">
+                            <span className="font-semibold text-[11px] text-foreground/80">Project: </span>
+                            <span>{note.project_name}</span>
+                          </div>
+                        )}
+                        {note.experiment_name && (
+                          <div className="truncate">
+                            <span className="font-semibold text-[11px] text-foreground/80">Experiment: </span>
+                            <span>{note.experiment_name}</span>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
                 </div>
               </button>
             ))}
