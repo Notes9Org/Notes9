@@ -8,7 +8,7 @@ export default function AboutPage() {
   const founders = [
     {
       name: "Nitheesh Yanamandala",
-      role: "CPO (Product)",
+      role: "CFO (Product)",
       background:
         "Summer Research Intern at Ionis Pharmaceuticals with expertise in PBPK modeling and pharmaceutical sciences. Registered Patent Agent in India.",
       education: "MA Pharmaceutical Sciences - University at Buffalo, BA Pharmacy - BITS Pilani",
@@ -29,14 +29,14 @@ export default function AboutPage() {
     },
     {
       name: "Bhaskar Kandregula",
-      role: "CSO (Strategy)",
+      role: "CEO (Strategy)",
       background:
         "Formulation Scientist with expertise in nanoparticle formulation and pharmaceutical forecasting. Former analyst at PharmaACE.",
       education: "MS Pharmaceutical Sciences - University of Maryland Baltimore, BA Pharmacy - BITS Pilani",
     },
     {
       name: "Hari Hara Nithin Reddy Manupati",
-      role: "CEO",
+      role: "CTO",
       background:
         "AI Developer with expertise in document processing systems and brain-computer interfaces. Published researcher with experience at Equifax and multiple AI startups.",
       education: "Master of International Business - Hult International Business School, BA Pharmacy - BITS Pilani",
