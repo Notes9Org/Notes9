@@ -157,11 +157,11 @@ export function LabNotesTab({ experimentId }: { experimentId: string }) {
 
         if (next) {
           setSelectedNote(next)
-          setFormData({
+        setFormData({
             title: next.title,
             content: next.content,
             note_type: next.note_type || "general",
-          })
+        })
         }
       }
     } catch (error: any) {
@@ -613,9 +613,9 @@ export function LabNotesTab({ experimentId }: { experimentId: string }) {
               onClick={handleSave}
               disabled={isSaving || !formData.title.trim()}
             >
-              <Save className="h-4 w-4 mr-2" />
-              {isSaving ? "Saving..." : "Save Note"}
-            </Button>
+                <Save className="h-4 w-4 mr-2" />
+                {isSaving ? "Saving..." : "Save Note"}
+              </Button>
           </div>
         </CardContent>
       </Card>
