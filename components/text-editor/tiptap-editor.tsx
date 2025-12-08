@@ -17,6 +17,7 @@ import { TableHeader } from "@tiptap/extension-table-header"
 import { Mathematics } from "@tiptap/extension-mathematics"
 import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
+import { Input } from "@/components/ui/input"
 import {
   Bold,
   Italic,
@@ -34,6 +35,7 @@ import {
   Link2,
   Image as ImageIcon,
   Highlighter,
+  Palette,
   Table as TableIcon,
   Sparkles,
   WandSparkles,
@@ -85,6 +87,9 @@ export function TiptapEditor({
 }: TiptapEditorProps) {
   const [isAIProcessing, setIsAIProcessing] = useState(false)
   const [aiDropdownOpen, setAiDropdownOpen] = useState(false)
+  const [tableMenuOpen, setTableMenuOpen] = useState(false)
+  const [tableRows, setTableRows] = useState(3)
+  const [tableCols, setTableCols] = useState(3)
 
   const editor = useEditor({
     immediatelyRender: false,
@@ -475,6 +480,93 @@ export function TiptapEditor({
     return null
   }
 
+  const getSelectedTable = () => {
+    const { $from } = editor.state.selection
+    for (let depth = $from.depth; depth > 0; depth--) {
+      const node = $from.node(depth)
+      if (node.type.name === "table") {
+        const pos = $from.before(depth)
+        return { node, pos }
+      }
+    }
+    return null
+  }
+
+  const growTable = (rows: number, cols: number) => {
+    const selTable = getSelectedTable()
+    if (!selTable) {
+      // Insert new table at cursor
+      editor
+        .chain()
+        .focus()
+        .insertTable({ rows, cols, withHeaderRow: true })
+        .run()
+      return
+    }
+
+    const { node: tableNode, pos } = selTable
+    const currentRows = tableNode.childCount
+    const currentCols = tableNode.child(0)?.childCount || 0
+
+    const targetRows = Math.max(rows, 1)
+    const targetCols = Math.max(cols, 1)
+
+    // Extract existing cell text
+    const data: string[][] = []
+    tableNode.forEach((row, rowIndex) => {
+      data[rowIndex] = []
+      row.forEach((cell, cellIndex) => {
+        data[rowIndex][cellIndex] = cell.textContent
+      })
+    })
+
+    // Build HTML for new table, preserving existing data
+    let html = "<table><tbody>"
+    for (let r = 0; r < targetRows; r++) {
+      html += "<tr>"
+      for (let c = 0; c < targetCols; c++) {
+        const text = data[r]?.[c] ?? ""
+        html += `<td>${text || "<br>"}</td>`
+      }
+      html += "</tr>"
+    }
+    html += "</tbody></table>"
+
+    editor
+      .chain()
+      .focus()
+      .deleteRange({ from: pos, to: pos + tableNode.nodeSize })
+      .insertContentAt(pos, html)
+      .run()
+  }
+
+  const handleTable = () => {
+    const selTable = getSelectedTable()
+    const currentRows = selTable ? selTable.node.childCount : 3
+    const currentCols = selTable ? selTable.node.child(0)?.childCount || 3 : 3
+
+    const rows = Math.max(tableRows || currentRows, 1)
+    const cols = Math.max(tableCols || currentCols, 1)
+
+    growTable(rows, cols)
+    setTableMenuOpen(false)
+  }
+
+  const removeTable = () => {
+    const selTable = getSelectedTable()
+    if (!selTable) {
+      setTableMenuOpen(false)
+      return
+    }
+    const { pos, node } = selTable
+    editor
+      .chain()
+      .focus()
+      .deleteRange({ from: pos, to: pos + node.nodeSize })
+      .run()
+    setTableMenuOpen(false)
+  }
+
   return (
     <div
       className={cn(
@@ -517,6 +609,51 @@ export function TiptapEditor({
           </Tooltip>
 
           <Separator orientation="vertical" className="h-6 mx-1" />
+
+          {/* Colors */}
+          <DropdownMenu>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-8 w-8 p-0"
+                  >
+                    <Palette className="h-4 w-4" />
+                  </Button>
+                </DropdownMenuTrigger>
+              </TooltipTrigger>
+              <TooltipContent>Text Color</TooltipContent>
+            </Tooltip>
+            <DropdownMenuContent className="w-40">
+              <DropdownMenuLabel>Colors</DropdownMenuLabel>
+              <div className="grid grid-cols-4 gap-1 p-2">
+                {[
+                  "#e53935",
+                  "#fb8c00",
+                  "#fdd835",
+                  "#43a047",
+                  "#1e88e5",
+                  "#8e24aa",
+                  "#ffffff",
+                  "#000000",
+                ].map((color) => (
+                  <button
+                    key={color}
+                    onClick={() => editor.chain().focus().setColor(color).run()}
+                    className="h-6 w-6 rounded border border-border"
+                    style={{ backgroundColor: color }}
+                    aria-label={`Set color ${color}`}
+                  />
+                ))}
+              </div>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={() => editor.chain().focus().unsetColor().run()}>
+                Clear color
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
 
           {/* Text Formatting */}
           <Tooltip>
@@ -726,7 +863,12 @@ export function TiptapEditor({
               <Button
                 variant="ghost"
                 size="sm"
-                onClick={() => editor.chain().focus().toggleBlockquote().run()}
+                onClick={() => {
+                  editor.chain().focus().toggleBlockquote().run()
+                  const { from, to } = editor.state.selection
+                  // wrap current line/selection in quotes
+                  editor.chain().focus().insertContentAt({ from, to }, `"${editor.state.doc.textBetween(from, to, " ")}"`).run()
+                }}
                 className={cn(
                   "h-8 w-8 p-0",
                   editor.isActive("blockquote") && "bg-accent"
@@ -738,25 +880,69 @@ export function TiptapEditor({
             <TooltipContent>Blockquote</TooltipContent>
           </Tooltip>
 
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() =>
-                  editor
-                    .chain()
-                    .focus()
-                    .insertTable({ rows: 3, cols: 3, withHeaderRow: true })
-                    .run()
-                }
-                className="h-8 w-8 p-0"
+          <DropdownMenu open={tableMenuOpen} onOpenChange={(open) => {
+            setTableMenuOpen(open)
+            if (open) {
+              const selTable = getSelectedTable()
+              const currentRows = selTable ? selTable.node.childCount : 3
+              const currentCols = selTable ? selTable.node.child(0)?.childCount || 3 : 3
+              setTableRows(currentRows)
+              setTableCols(currentCols)
+            }
+          }}>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-8 w-8 p-0"
+                  >
+                    <TableIcon className="h-4 w-4" />
+                  </Button>
+                </DropdownMenuTrigger>
+              </TooltipTrigger>
+              <TooltipContent>Insert / Resize Table</TooltipContent>
+            </Tooltip>
+            <DropdownMenuContent side="bottom" align="start" className="w-48">
+              <DropdownMenuLabel className="text-xs">Rows & Columns</DropdownMenuLabel>
+              <div className="grid grid-cols-2 gap-2 px-2 py-2">
+                <div className="space-y-1">
+                  <span className="text-xs text-muted-foreground">Rows</span>
+                  <Input
+                    type="number"
+                    min={1}
+                    value={tableRows}
+                    onChange={(e) => setTableRows(Math.max(parseInt(e.target.value || "1"), 1))}
+                    className="h-8"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <span className="text-xs text-muted-foreground">Columns</span>
+                  <Input
+                    type="number"
+                    min={1}
+                    value={tableCols}
+                    onChange={(e) => setTableCols(Math.max(parseInt(e.target.value || "1"), 1))}
+                    className="h-8"
+                  />
+                </div>
+              </div>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                onClick={handleTable}
+                className="justify-center font-medium"
               >
-                <TableIcon className="h-4 w-4" />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>Insert Table</TooltipContent>
-          </Tooltip>
+                Apply
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={removeTable}
+                className="justify-center text-destructive"
+              >
+                Delete Table
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
 
           <Separator orientation="vertical" className="h-6 mx-1" />
 
@@ -856,6 +1042,47 @@ export function TiptapEditor({
         style={{ minHeight, maxHeight: "calc(100vh - 300px)" }}
       >
         <EditorContent editor={editor} />
+        <style jsx global>{`
+          .ProseMirror ul {
+            list-style-type: disc;
+            padding-left: 1.5rem;
+            margin: 0.5rem 0;
+          }
+          .ProseMirror ol {
+            list-style-type: decimal;
+            padding-left: 1.5rem;
+            margin: 0.5rem 0;
+          }
+          .ProseMirror li {
+            list-style-position: outside;
+          }
+          .ProseMirror blockquote {
+            border-left: 3px solid hsl(var(--border));
+            padding-left: 0.75rem;
+            margin: 0.5rem 0;
+            color: hsl(var(--muted-foreground));
+            font-style: italic;
+          }
+          .ProseMirror table {
+            border-collapse: collapse;
+            width: auto;
+            color: hsl(var(--foreground));
+            background: hsl(var(--card));
+            border: 1.5px solid rgba(255, 255, 255, 0.7);
+            box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.2);
+          }
+          .ProseMirror table td,
+          .ProseMirror table th {
+            border: 1.5px solid rgba(255, 255, 255, 0.7);
+            padding: 0.35rem 0.5rem;
+            vertical-align: top;
+          }
+          .ProseMirror table th {
+            background: hsl(var(--muted));
+            color: hsl(var(--foreground));
+            font-weight: 600;
+          }
+        `}</style>
       </div>
 
       {/* AI Processing Indicator */}
