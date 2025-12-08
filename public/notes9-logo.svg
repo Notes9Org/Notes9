@@ -1,0 +1,24 @@
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg" aria-labelledby="title desc" role="img">
+  <title id="title">Notes9 Spiral Logo</title>
+  <desc id="desc">A bold spiral mark forming a continuous line that curls inward.</desc>
+  <rect width="1024" height="1024" fill="#ffffff" />
+  <path
+    d="
+      M512 130
+      C 830 130 900 430 900 520
+      C 900 750 720 900 520 900
+      C 300 900 180 720 200 560
+      C 220 400 360 340 470 360
+      C 640 390 700 530 660 620
+      C 620 710 510 730 450 680
+      C 390 630 400 560 450 540
+      C 500 520 550 560 550 610
+      C 550 660 500 700 460 700"
+    fill="none"
+    stroke="#0a0a0a"
+    stroke-width="120"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+  />
+</svg>
+
