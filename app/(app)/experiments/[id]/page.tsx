@@ -186,7 +186,7 @@ export default async function ExperimentDetailPage({
             </summary>
             <div className="px-3 pb-2 pt-1 text-[13px] text-foreground truncate">
               {experiment.researcher}
-            </div>
+              </div>
           </details>
 
           <details className="group rounded-md border border-border bg-muted/10">
@@ -199,7 +199,7 @@ export default async function ExperimentDetailPage({
             </summary>
             <div className="px-3 pb-2 pt-1 text-[13px] text-foreground truncate">
               {experiment.startDate || "Not set"}
-            </div>
+              </div>
           </details>
 
           <details className="group rounded-md border border-border bg-muted/10">
@@ -212,7 +212,7 @@ export default async function ExperimentDetailPage({
             </summary>
             <div className="px-3 pb-2 pt-1 text-[13px] text-foreground truncate">
               {experiment.protocol}
-            </div>
+              </div>
           </details>
 
           <details className="group rounded-md border border-border bg-muted/10">
@@ -225,7 +225,7 @@ export default async function ExperimentDetailPage({
             </summary>
             <div className="px-3 pb-2 pt-1 text-[13px] text-foreground">
               {experiment.progress}%
-            </div>
+              </div>
           </details>
         </div>
 
