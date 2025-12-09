@@ -174,7 +174,7 @@ export function TiptapEditor({
             ev.preventDefault()
             return false
           },
-        },
+      },
     },
   })
 
@@ -1027,20 +1027,20 @@ export function TiptapEditor({
               setTableCols(currentCols)
             }
           }}>
-            <Tooltip>
-              <TooltipTrigger asChild>
+          <Tooltip>
+            <TooltipTrigger asChild>
                 <DropdownMenuTrigger asChild>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-8 w-8 p-0"
-                  >
-                    <TableIcon className="h-4 w-4" />
-                  </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-8 w-8 p-0"
+              >
+                <TableIcon className="h-4 w-4" />
+              </Button>
                 </DropdownMenuTrigger>
-              </TooltipTrigger>
+            </TooltipTrigger>
               <TooltipContent>Insert / Resize Table</TooltipContent>
-            </Tooltip>
+          </Tooltip>
             <DropdownMenuContent side="bottom" align="start" className="w-48">
               <DropdownMenuLabel className="text-xs">Rows & Columns</DropdownMenuLabel>
               <div className="grid grid-cols-2 gap-2 px-2 py-2">
