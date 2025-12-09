@@ -33,6 +33,7 @@ import {
   Undo,
   Redo,
   Link2,
+  Mic,
   Image as ImageIcon,
   Highlighter,
   Palette,
@@ -43,7 +44,7 @@ import {
   FlaskConical,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import {
   Tooltip,
   TooltipContent,
@@ -90,6 +91,8 @@ export function TiptapEditor({
   const [tableMenuOpen, setTableMenuOpen] = useState(false)
   const [tableRows, setTableRows] = useState(3)
   const [tableCols, setTableCols] = useState(3)
+  const [isListening, setIsListening] = useState(false)
+  const recognitionRef = useRef<any>(null)
 
   const editor = useEditor({
     immediatelyRender: false,
@@ -145,6 +148,33 @@ export function TiptapEditor({
       attributes: {
         class: "prose prose-sm sm:prose lg:prose-lg xl:prose-2xl focus:outline-none p-4",
       },
+        handleDrop: (view, event, _slice, _moved) => {
+          const dt = event.dataTransfer
+          if (!dt?.files?.length) return false
+          const files = Array.from(dt.files).filter((f) => f.type.startsWith("image/"))
+          if (files.length === 0) return false
+          event.preventDefault()
+          insertImagesFromFileList(files)
+          return true
+        },
+        handlePaste: (_view, event) => {
+          const files = event.clipboardData?.files
+          if (files && files.length) {
+            const imgs = Array.from(files).filter((f) => f.type.startsWith("image/"))
+            if (imgs.length) {
+              event.preventDefault()
+              insertImagesFromFileList(imgs)
+              return true
+            }
+          }
+          return false
+        },
+        handleDOMEvents: {
+          dragover: (_view, ev) => {
+            ev.preventDefault()
+            return false
+          },
+        },
     },
   })
 
@@ -552,6 +582,82 @@ export function TiptapEditor({
     setTableMenuOpen(false)
   }
 
+  const handleSetLink = () => {
+    if (!editor) return
+    const previousUrl = editor.getAttributes("link").href || ""
+    const url = window.prompt("Enter URL", previousUrl)
+    if (url === null) return
+    if (url === "") {
+      editor.chain().focus().unsetLink().run()
+      return
+    }
+    editor.chain().focus().extendMarkRange("link").setLink({ href: url }).run()
+  }
+
+  const handleInsertImage = () => {
+    if (!editor) return
+    const url = window.prompt("Image URL")
+    if (!url) return
+    const alt = window.prompt("Alt text (optional)") || ""
+    editor.chain().focus().setImage({ src: url, alt }).run()
+  }
+
+  const insertImagesFromFileList = (files: FileList | File[]) => {
+    const images = Array.from(files).filter((f) => f.type.startsWith("image/"))
+    if (images.length === 0) return
+    images.forEach((file) => {
+      const reader = new FileReader()
+      reader.onload = () => {
+        const src = reader.result as string
+        editor?.chain().focus().setImage({ src, alt: file.name }).run()
+      }
+      reader.readAsDataURL(file)
+    })
+  }
+
+  const startSpeechToText = () => {
+    const SpeechRecognition =
+      typeof window !== "undefined" &&
+      ((window as any).SpeechRecognition || (window as any).webkitSpeechRecognition)
+
+    if (!SpeechRecognition) {
+      alert("Speech recognition is not supported in this browser.")
+      return
+    }
+
+    const recognition = new SpeechRecognition()
+    recognition.lang = "en-US"
+    recognition.interimResults = true
+    recognition.continuous = true
+
+    recognition.onresult = (event: any) => {
+      let transcript = ""
+      for (let i = event.resultIndex; i < event.results.length; ++i) {
+        transcript += event.results[i][0].transcript
+      }
+      if (transcript) {
+        editor?.chain().focus().insertContent(transcript + " ").run()
+      }
+    }
+
+    recognition.onerror = () => {
+      setIsListening(false)
+    }
+
+    recognition.onend = () => {
+      setIsListening(false)
+    }
+
+    recognition.start()
+    recognitionRef.current = recognition
+    setIsListening(true)
+  }
+
+  const stopSpeechToText = () => {
+    recognitionRef.current?.stop()
+    setIsListening(false)
+  }
+
   const removeTable = () => {
     const selTable = getSelectedTable()
     if (!selTable) {
@@ -739,6 +845,37 @@ export function TiptapEditor({
               </Button>
             </TooltipTrigger>
             <TooltipContent>Highlight</TooltipContent>
+          </Tooltip>
+
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={handleSetLink}
+                className={cn(
+                  "h-8 w-8 p-0",
+                  editor.isActive("link") && "bg-accent"
+                )}
+              >
+                <Link2 className="h-4 w-4" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>Insert Link</TooltipContent>
+          </Tooltip>
+
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={handleInsertImage}
+                className="h-8 w-8 p-0"
+              >
+                <ImageIcon className="h-4 w-4" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>Insert Image</TooltipContent>
           </Tooltip>
 
           <Separator orientation="vertical" className="h-6 mx-1" />
@@ -977,6 +1114,22 @@ export function TiptapEditor({
           {showAITools && (
             <>
               <Separator orientation="vertical" className="h-6 mx-1" />
+
+              {/* Speech to text */}
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant={isListening ? "secondary" : "ghost"}
+                    size="sm"
+                    className="h-8 w-8 p-0"
+                    onClick={isListening ? stopSpeechToText : startSpeechToText}
+                  >
+                    <Mic className="h-4 w-4" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>{isListening ? "Stop dictation" : "Start dictation"}</TooltipContent>
+              </Tooltip>
+
               <DropdownMenu open={aiDropdownOpen} onOpenChange={setAiDropdownOpen}>
                 <DropdownMenuTrigger asChild>
                   <Button
