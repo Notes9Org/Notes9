@@ -362,10 +362,10 @@ export function AppSidebar() {
           let experimentsData: ExperimentSummary[] = []
           if (projectIds.length > 0) {
             const { data: exps, error: expsError } = await supabase
-              .from("experiments")
+            .from("experiments")
               .select("id, name, project_id")
-              .in("project_id", projectIds)
-
+            .in("project_id", projectIds)
+          
             if (expsError) throw expsError
             experimentsData = exps || []
           }
@@ -638,7 +638,7 @@ export function AppSidebar() {
                     projects.map((project) => {
                       const isProjectOpen = openProjects[project.id] ?? false
                       return (
-                        <SidebarMenuItem key={project.id}>
+                      <SidebarMenuItem key={project.id}>
                           <div className="flex items-start">
                             <button
                               className="mr-2 mt-0.5 text-muted-foreground hover:text-foreground"
@@ -656,19 +656,19 @@ export function AppSidebar() {
                                 <Folder className="size-4" />
                               )}
                             </button>
-                            <SidebarMenuButton asChild isActive={mounted && pathname === `/projects/${project.id}`} tooltip={project.name}>
-                              <Link href={`/projects/${project.id}`}>
-                                <div
-                                  className={cn(
-                                    "size-2 rounded-full shrink-0",
-                                    project.status === "active" ? "bg-green-500" : "bg-yellow-500"
-                                  )}
-                                />
-                                <span className="truncate">{project.name}</span>
-                              </Link>
-                            </SidebarMenuButton>
-                            {project.experiment_count && project.experiment_count > 0 && (
-                              <SidebarMenuBadge>{project.experiment_count}</SidebarMenuBadge>
+                        <SidebarMenuButton asChild isActive={mounted && pathname === `/projects/${project.id}`} tooltip={project.name}>
+                          <Link href={`/projects/${project.id}`}>
+                            <div
+                              className={cn(
+                                "size-2 rounded-full shrink-0",
+                                project.status === "active" ? "bg-green-500" : "bg-yellow-500"
+                              )}
+                            />
+                            <span className="truncate">{project.name}</span>
+                          </Link>
+                        </SidebarMenuButton>
+                        {project.experiment_count && project.experiment_count > 0 && (
+                          <SidebarMenuBadge>{project.experiment_count}</SidebarMenuBadge>
                             )}
                           </div>
 
@@ -730,8 +730,8 @@ export function AppSidebar() {
                                 )
                               })}
                             </div>
-                          )}
-                        </SidebarMenuItem>
+                        )}
+                      </SidebarMenuItem>
                       )
                     })
                   )}
