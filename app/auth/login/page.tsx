@@ -22,8 +22,6 @@ function LoginForm() {
   const [password, setPassword] = useState("")
   const [error, setError] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(false)
-  const [emailExists, setEmailExists] = useState<boolean | null>(null)
-  const [checkingEmail, setCheckingEmail] = useState(false)
   const router = useRouter()
   const searchParams = useSearchParams()
 
@@ -34,43 +32,6 @@ function LoginForm() {
       setEmail(emailParam)
     }
   }, [searchParams])
-
-  // Check if email exists when user stops typing
-  useEffect(() => {
-    if (!email || !email.includes('@')) {
-      setEmailExists(null)
-      return
-    }
-
-    const checkEmail = async () => {
-      setCheckingEmail(true)
-      const supabase = createClient()
-      
-      try {
-        const { data: existingProfile } = await supabase
-          .from("profiles")
-          .select("email")
-          .eq("email", email)
-          .single()
-
-        setEmailExists(!!existingProfile)
-      } catch (error: any) {
-        // If error is "no rows returned", email doesn't exist
-        if (error?.code === 'PGRST116') {
-          setEmailExists(false)
-        } else {
-          // Other errors, don't set state (might be network issue)
-          setEmailExists(null)
-        }
-      } finally {
-        setCheckingEmail(false)
-      }
-    }
-
-    // Debounce email check
-    const timeoutId = setTimeout(checkEmail, 500)
-    return () => clearTimeout(timeoutId)
-  }, [email])
 
   // Handle OAuth errors in URL (route handler handles code exchange)
   useEffect(() => {
@@ -92,21 +53,18 @@ function LoginForm() {
     setError(null)
 
     try {
+      // Single attempt; if Supabase says invalid credentials, show wrong password/email
       const { error } = await supabase.auth.signInWithPassword({
         email,
         password,
       })
       
       if (error) {
-        // Check if it's because email doesn't exist
-        if (error.message.includes('Invalid login credentials') && emailExists === false) {
-          setError("No account found with this email. Please sign up instead.")
-        } else if (error.message.includes('Invalid login credentials')) {
-          setError("Invalid email or password. Please try again.")
-        } else {
-          throw error
+        if (error.message.includes('Invalid login credentials')) {
+          setError("Wrong email or password. Please try again.")
+          return
         }
-        return
+        throw error
       }
       
       router.push("/dashboard")
@@ -250,9 +208,6 @@ function LoginForm() {
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
                     />
-                    {checkingEmail && (
-                      <p className="text-xs text-muted-foreground">Checking email...</p>
-                    )}
                   </div>
                   <div className="grid gap-2">
                     <Label htmlFor="password">Password</Label>
@@ -269,23 +224,10 @@ function LoginForm() {
                       {error}
                     </div>
                   )}
-                  {emailExists === false && !checkingEmail && !error && (
-                    <div className="rounded-md bg-muted p-3 text-sm">
-                      <p className="text-muted-foreground mb-2">
-                        No account found with this email.
-                      </p>
-                      <Link
-                        href={`/auth/sign-up?email=${encodeURIComponent(email)}`}
-                        className="text-primary underline underline-offset-4 hover:text-primary/80"
-                      >
-                        Sign up with this email instead
-                      </Link>
-                    </div>
-                  )}
                   <Button 
                     type="submit" 
                     className="w-full" 
-                    disabled={isLoading || checkingEmail}
+                    disabled={isLoading}
                   >
                     {isLoading ? "Signing in..." : "Sign In"}
                   </Button>
