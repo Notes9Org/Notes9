@@ -337,7 +337,9 @@ export function AppSidebar() {
 
         if (!userProfileData?.organization_id) {
           console.error("User profile missing organization_id")
-          toast.error("Organization not set up. Please contact support.")
+          toast.error("Organization not set up. Showing empty workspace.")
+          setProjects([])
+          setCounts({ projects: 0, experiments: 0, samples: 0, literature: 0 })
           setLoading(false)
           return
         }
