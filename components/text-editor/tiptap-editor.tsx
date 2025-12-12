@@ -38,6 +38,7 @@ import {
   Highlighter,
   Palette,
   Table as TableIcon,
+  FileText,
   Sparkles,
   WandSparkles,
   Loader2,
@@ -45,6 +46,8 @@ import {
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useCallback, useEffect, useRef, useState } from "react"
+// @ts-ignore
+import * as mammoth from "mammoth"
 import {
   Tooltip,
   TooltipContent,
@@ -151,16 +154,30 @@ export function TiptapEditor({
         handleDrop: (view, event, _slice, _moved) => {
           const dt = event.dataTransfer
           if (!dt?.files?.length) return false
-          const files = Array.from(dt.files).filter((f) => f.type.startsWith("image/"))
-          if (files.length === 0) return false
+          const files = Array.from(dt.files)
+          const docx = files.find((f) => f.name.toLowerCase().endsWith(".docx"))
+          if (docx) {
+            event.preventDefault()
+            insertDocxFromFile(docx)
+            return true
+          }
+          const images = files.filter((f) => f.type.startsWith("image/"))
+          if (images.length === 0) return false
           event.preventDefault()
-          insertImagesFromFileList(files)
+          insertImagesFromFileList(images)
           return true
         },
         handlePaste: (_view, event) => {
           const files = event.clipboardData?.files
           if (files && files.length) {
-            const imgs = Array.from(files).filter((f) => f.type.startsWith("image/"))
+            const arr = Array.from(files)
+            const docx = arr.find((f) => f.name.toLowerCase().endsWith(".docx"))
+            if (docx) {
+              event.preventDefault()
+              insertDocxFromFile(docx)
+              return true
+            }
+            const imgs = arr.filter((f) => f.type.startsWith("image/"))
             if (imgs.length) {
               event.preventDefault()
               insertImagesFromFileList(imgs)
@@ -615,6 +632,26 @@ export function TiptapEditor({
     })
   }
 
+  const insertDocxFromFile = async (file: File) => {
+    if (!editor || !file.name.toLowerCase().endsWith(".docx")) return
+    const arrayBuffer = await file.arrayBuffer()
+    const { value: html } = await mammoth.convertToHtml({ arrayBuffer })
+    editor.chain().focus().insertContent(html).run()
+  }
+
+  const handleDocxPicker = () => {
+    const input = document.createElement("input")
+    input.type = "file"
+    input.accept = ".docx"
+    input.onchange = async () => {
+      const file = input.files?.[0]
+      if (file) {
+        await insertDocxFromFile(file)
+      }
+    }
+    input.click()
+  }
+
   const startSpeechToText = () => {
     const SpeechRecognition =
       typeof window !== "undefined" &&
@@ -876,6 +913,20 @@ export function TiptapEditor({
               </Button>
             </TooltipTrigger>
             <TooltipContent>Insert Image</TooltipContent>
+          </Tooltip>
+
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={handleDocxPicker}
+                className="h-8 w-8 p-0"
+              >
+                <FileText className="h-4 w-4" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>Import DOCX</TooltipContent>
           </Tooltip>
 
           <Separator orientation="vertical" className="h-6 mx-1" />
