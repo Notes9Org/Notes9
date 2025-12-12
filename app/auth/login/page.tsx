@@ -64,7 +64,7 @@ function LoginForm() {
           setError("Wrong email or password. Please try again.")
           return
         }
-        throw error
+          throw error
       }
       
       router.push("/dashboard")
