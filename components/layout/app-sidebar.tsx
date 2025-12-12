@@ -2,11 +2,12 @@
 
 import { useState, useEffect } from "react"
 import Link from "next/link"
-import { usePathname } from 'next/navigation'
+import { usePathname, useRouter } from 'next/navigation'
 import Image from "next/image"
 import {
   Home,
   Folder,
+  FolderOpen,
   FlaskConical,
   TestTube,
   Wrench,
@@ -73,11 +74,25 @@ const navigation = [
   { name: "Reports", href: "/reports", icon: BarChart3 },
 ]
 
+interface LabNoteSummary {
+  id: string
+  title: string
+  experiment_id: string | null
+}
+
+interface ExperimentSummary {
+  id: string
+  name: string
+  project_id: string
+  lab_notes?: LabNoteSummary[]
+}
+
 interface Project {
   id: string
   name: string
   status: string
   experiment_count?: number
+  experiments?: ExperimentSummary[]
 }
 
 interface User {
@@ -98,12 +113,15 @@ interface Counts {
 
 export function AppSidebar() {
   const pathname = usePathname()
+  const router = useRouter()
   const [searchQuery, setSearchQuery] = useState("")
   const [projects, setProjects] = useState<Project[]>([])
   const [user, setUser] = useState<User | null>(null)
   const [counts, setCounts] = useState<Counts>({ projects: 0, experiments: 0, samples: 0, literature: 0 })
   const [loading, setLoading] = useState(true)
   const [mounted, setMounted] = useState(false)
+  const [openProjects, setOpenProjects] = useState<Record<string, boolean>>({})
+  const [openExperiments, setOpenExperiments] = useState<Record<string, boolean>>({})
   const supabase = createClient()
 
   // Prevent hydration mismatch by only activating after mount
@@ -319,55 +337,81 @@ export function AppSidebar() {
 
         if (!userProfileData?.organization_id) {
           console.error("User profile missing organization_id")
-          toast.error("Organization not set up. Please contact support.")
+          toast.error("Organization not set up. Showing empty workspace.")
+          setProjects([])
+          setCounts({ projects: 0, experiments: 0, samples: 0, literature: 0 })
           setLoading(false)
           return
         }
 
-        // Fetch active projects
+        // Fetch projects for this organization (all statuses)
         const { data: projectsData, error: projectsError } = await supabase
           .from("projects")
           .select("id, name, status")
-          .eq("status", "active")
+          .eq("organization_id", userProfileData.organization_id)
           .order("updated_at", { ascending: false })
-          .limit(10)
 
         if (projectsError) {
-          const errorDetails = {
-            message: projectsError.message,
-            details: projectsError.details,
-            hint: projectsError.hint,
-            code: projectsError.code,
-          }
-          console.error("Error fetching projects:", errorDetails)
-          console.error("Full error object:", projectsError)
+          console.error("Error fetching projects:", projectsError)
           toast.error(`Failed to load projects: ${projectsError.message || 'Unknown error'}`)
           setProjects([])
-        } else if (projectsData && projectsData.length > 0) {
-          // Fetch all experiments for these projects in one query
-          const projectIds = projectsData.map(p => p.id)
-          const { data: experimentsData } = await supabase
+        } else {
+          const projectIds = (projectsData || []).map((p) => p.id)
+
+          // Fetch experiments for these projects
+          let experimentsData: ExperimentSummary[] = []
+          if (projectIds.length > 0) {
+            const { data: exps, error: expsError } = await supabase
             .from("experiments")
-            .select("project_id")
+              .select("id, name, project_id")
             .in("project_id", projectIds)
           
-          // Count experiments per project
-          const experimentCounts = (experimentsData || []).reduce((acc, exp) => {
-            acc[exp.project_id] = (acc[exp.project_id] || 0) + 1
-            return acc
-          }, {} as Record<string, number>)
-          
-          // Combine projects with their experiment counts
-          const projectsWithCounts = projectsData.map(project => ({
-            id: project.id,
-            name: project.name,
-            status: project.status,
-            experiment_count: experimentCounts[project.id] || 0
-          }))
-          
-          setProjects(projectsWithCounts)
-        } else {
-          setProjects([])
+            if (expsError) throw expsError
+            experimentsData = exps || []
+          }
+
+          // Fetch lab notes for these experiments
+          const experimentIds = experimentsData.map((e) => e.id)
+          let labNotesData: LabNoteSummary[] = []
+          if (experimentIds.length > 0) {
+            const { data: notes, error: notesError } = await supabase
+              .from("lab_notes")
+              .select("id, title, experiment_id")
+              .in("experiment_id", experimentIds)
+              .order("created_at", { ascending: false })
+
+            if (notesError) throw notesError
+            labNotesData = notes || []
+          }
+
+          // Group lab notes into experiments
+          const expMap: Record<string, ExperimentSummary> = {}
+          experimentsData.forEach((exp) => {
+            expMap[exp.id] = { ...exp, lab_notes: [] }
+          })
+          labNotesData.forEach((note) => {
+            const exp = note.experiment_id ? expMap[note.experiment_id] : null
+            if (exp) {
+              exp.lab_notes = exp.lab_notes || []
+              exp.lab_notes.push(note)
+            }
+          })
+
+          // Group experiments into projects
+          const projMap: Record<string, Project> = {}
+          projectsData?.forEach((proj) => {
+            projMap[proj.id] = { ...proj, experiment_count: 0, experiments: [] }
+          })
+          Object.values(expMap).forEach((exp) => {
+            const proj = projMap[exp.project_id]
+            if (proj) {
+              proj.experiments = proj.experiments || []
+              proj.experiments.push(exp)
+              proj.experiment_count = (proj.experiment_count || 0) + 1
+            }
+          })
+
+          setProjects(Object.values(projMap))
         }
 
         // Fetch counts for badges
@@ -579,7 +623,6 @@ export function AppSidebar() {
               <SidebarGroupContent>
                 <SidebarMenu>
                   {loading ? (
-                    // Loading skeleton
                     Array.from({ length: 3 }).map((_, index) => (
                       <SidebarMenuItem key={index}>
                         <SidebarMenuSkeleton showIcon />
@@ -592,8 +635,27 @@ export function AppSidebar() {
                       </div>
                     </SidebarMenuItem>
                   ) : (
-                    projects.map((project) => (
+                    projects.map((project) => {
+                      const isProjectOpen = openProjects[project.id] ?? false
+                      return (
                       <SidebarMenuItem key={project.id}>
+                          <div className="flex items-start">
+                            <button
+                              className="mr-2 mt-0.5 text-muted-foreground hover:text-foreground"
+                              onClick={() =>
+                                setOpenProjects((prev) => ({
+                                  ...prev,
+                                  [project.id]: !isProjectOpen,
+                                }))
+                              }
+                              aria-label={isProjectOpen ? "Collapse project" : "Expand project"}
+                            >
+                              {isProjectOpen ? (
+                                <FolderOpen className="size-4" />
+                              ) : (
+                                <Folder className="size-4" />
+                              )}
+                            </button>
                         <SidebarMenuButton asChild isActive={mounted && pathname === `/projects/${project.id}`} tooltip={project.name}>
                           <Link href={`/projects/${project.id}`}>
                             <div
@@ -605,59 +667,73 @@ export function AppSidebar() {
                             <span className="truncate">{project.name}</span>
                           </Link>
                         </SidebarMenuButton>
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <SidebarMenuAction showOnHover>
-                              <MoreHorizontal />
-                              <span className="sr-only">More</span>
-                            </SidebarMenuAction>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent
-                            className="w-48 rounded-lg"
-                            side="right"
-                            align="start"
-                          >
-                            <DropdownMenuItem onClick={() => window.location.href = `/projects/${project.id}`}>
-                              View Project
-                            </DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => window.location.href = `/experiments/new?project=${project.id}`}>
-                              New Experiment
-                            </DropdownMenuItem>
-                            <DropdownMenuSeparator />
-                            <DropdownMenuItem 
-                              className="text-destructive"
-                              onClick={async (e) => {
-                                e.preventDefault()
-                                if (confirm(`Are you sure you want to delete "${project.name}"?`)) {
-                                  try {
-                                    const { error } = await supabase
-                                      .from("projects")
-                                      .delete()
-                                      .eq("id", project.id)
-                                    
-                                    if (error) {
-                                      toast.error("Failed to delete project")
-                                      console.error(error)
-                                    } else {
-                                      toast.success("Project deleted successfully")
-                                      // Refresh will happen via real-time subscription
-                                    }
-                                  } catch (err) {
-                                    toast.error("Error deleting project")
-                                    console.error(err)
-                                  }
-                                }
-                              }}
-                            >
-                              Delete Project
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
                         {project.experiment_count && project.experiment_count > 0 && (
                           <SidebarMenuBadge>{project.experiment_count}</SidebarMenuBadge>
+                            )}
+                          </div>
+
+                          {isProjectOpen && project.experiments && project.experiments.length > 0 && (
+                            <div className="ml-6 mt-2 space-y-1 border-l border-border/50 pl-3">
+                              {project.experiments.map((exp) => {
+                                const isExpOpen = openExperiments[exp.id] ?? false
+                                return (
+                                  <div key={exp.id}>
+                                    <div className="flex items-start">
+                                      <button
+                                        className="mr-2 mt-0.5 text-muted-foreground hover:text-foreground"
+                                        onClick={() =>
+                                          setOpenExperiments((prev) => ({
+                                            ...prev,
+                                            [exp.id]: !isExpOpen,
+                                          }))
+                                        }
+                                        aria-label={isExpOpen ? "Collapse experiment" : "Expand experiment"}
+                                      >
+                                        <FlaskConical
+                                          className={cn(
+                                            "size-4 transition-transform",
+                                            isExpOpen ? "rotate-12 text-foreground" : "-rotate-12 text-muted-foreground"
+                                          )}
+                                        />
+                                      </button>
+                                      <button
+                                        onClick={() => router.push(`/experiments/${exp.id}`)}
+                                        className={cn(
+                                          "flex-1 text-left text-sm truncate hover:text-foreground",
+                                          pathname === `/experiments/${exp.id}` ? "font-semibold text-foreground" : "text-muted-foreground"
+                                        )}
+                                      >
+                                        {exp.name}
+                                      </button>
+                                    </div>
+
+                                    {isExpOpen && exp.lab_notes && exp.lab_notes.length > 0 && (
+                                      <div className="ml-6 mt-1 space-y-1">
+                                        {exp.lab_notes.map((note) => (
+                                          <button
+                                            key={note.id}
+                                            onClick={() => router.push(`/experiments/${exp.id}?tab=notes&noteId=${note.id}`)}
+                                            className={cn(
+                                              "block w-full text-left text-xs truncate px-2 py-1 rounded hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
+                                              pathname.startsWith(`/experiments/${exp.id}`) ? "text-foreground" : "text-muted-foreground"
+                                            )}
+                                          >
+                                            <span className="inline-flex items-center gap-1">
+                                              <FileText className="h-3 w-3" />
+                                              {note.title || "Untitled note"}
+                                            </span>
+                                          </button>
+                                        ))}
+                                      </div>
+                                    )}
+                                  </div>
+                                )
+                              })}
+                            </div>
                         )}
                       </SidebarMenuItem>
-                    ))
+                      )
+                    })
                   )}
                 </SidebarMenu>
               </SidebarGroupContent>

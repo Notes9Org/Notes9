@@ -19,7 +19,8 @@ export default function DocsPage() {
           </h1>
 
           <p className="mt-6 text-xl max-w-3xl mx-auto text-muted-foreground">
-            Everything you need to get started with Notes9 and maximize your research productivity.
+            Conceptual overviews, user guides, and integration notes for using Notes9 as an AI-enabled electronic
+            lab notebook and research assistant. This space will grow as we expand our early-access deployments.
           </p>
         </div>
 
@@ -28,36 +29,52 @@ export default function DocsPage() {
             <FileText className="h-8 w-8 text-blue-500 mb-4" />
             <h3 className="text-xl font-bold mb-2">Getting Started</h3>
             <p className="text-muted-foreground mb-4">
-              Learn the basics of Notes9 and set up your first project in minutes.
+              Learn the core concepts behind Notes9—projects, experiments, literature workspaces, and agentic
+              assistants—and see how to set up your first study, whether you are digitising a single notebook or an
+              entire lab.
             </p>
-            <a href="#" className="text-blue-500 hover:underline">Read guides →</a>
+            <a href="#" className="text-blue-500 hover:underline">
+              Read guides →
+            </a>
           </Card>
 
           <Card className="p-6 hover:shadow-lg transition-shadow">
             <Code className="h-8 w-8 text-purple-500 mb-4" />
-            <h3 className="text-xl font-bold mb-2">API Reference</h3>
+            <h3 className="text-xl font-bold mb-2">API & Integrations</h3>
             <p className="text-muted-foreground mb-4">
-              Integrate Notes9 with your existing tools and workflows.
+              Explore how Notes9 connects with existing systems, instruments, and data warehouses. Designed for
+              research-IT teams who want to integrate ELN records, LIMS entities, or analytical data into existing
+              infrastructure.
             </p>
-            <a href="#" className="text-purple-500 hover:underline">View API docs →</a>
+            <a href="#" className="text-purple-500 hover:underline">
+              View API docs →
+            </a>
           </Card>
 
           <Card className="p-6 hover:shadow-lg transition-shadow">
             <Zap className="h-8 w-8 text-yellow-500 mb-4" />
-            <h3 className="text-xl font-bold mb-2">Best Practices</h3>
+            <h3 className="text-xl font-bold mb-2">AI Workflows & Good Practice</h3>
             <p className="text-muted-foreground mb-4">
-              Discover tips and workflows from leading research teams.
+              Guidance on using agentic AI responsibly in the lab—from literature triage and protocol drafting to data
+              summarisation and report generation—with attention to provenance, human-in-the-loop checks, and
+              reproducible analysis.
             </p>
-            <a href="#" className="text-yellow-500 hover:underline">Learn more →</a>
+            <a href="#" className="text-yellow-500 hover:underline">
+              Learn more →
+            </a>
           </Card>
 
           <Card className="p-6 hover:shadow-lg transition-shadow">
             <BookOpen className="h-8 w-8 text-green-500 mb-4" />
             <h3 className="text-xl font-bold mb-2">Tutorials</h3>
             <p className="text-muted-foreground mb-4">
-              Step-by-step guides for common research workflows.
+              Step-by-step examples of common research scenarios—for example, linking literature to an experiment,
+              analysing a dataset, preparing figures for a group meeting, or drafting a structured report directly from
+              your notebook entries.
             </p>
-            <a href="#" className="text-green-500 hover:underline">Browse tutorials →</a>
+            <a href="#" className="text-green-500 hover:underline">
+              Browse tutorials →
+            </a>
           </Card>
         </div>
 
@@ -65,7 +82,9 @@ export default function DocsPage() {
           <Card className="p-8 max-w-2xl mx-auto">
             <h2 className="text-2xl font-bold mb-4">Need Help?</h2>
             <p className="text-muted-foreground mb-6">
-              Our team is here to help you get the most out of Notes9.
+              During the early-access phase, our team works closely with collaborators to refine both the product and
+              its documentation. If you have questions about using Notes9 in your lab or integrating it with existing
+              systems, please contact us.
             </p>
             <a
               href="mailto:support@notes9.com"
@@ -79,4 +98,3 @@ export default function DocsPage() {
     </div>
   )
 }
-
