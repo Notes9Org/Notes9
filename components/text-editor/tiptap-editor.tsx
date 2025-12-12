@@ -17,6 +17,7 @@ import { TableHeader } from "@tiptap/extension-table-header"
 import { Mathematics } from "@tiptap/extension-mathematics"
 import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
+import { Input } from "@/components/ui/input"
 import {
   Bold,
   Italic,
@@ -32,16 +33,22 @@ import {
   Undo,
   Redo,
   Link2,
+  Mic,
   Image as ImageIcon,
   Highlighter,
+  Palette,
   Table as TableIcon,
+  FileText,
+  FileInput,
   Sparkles,
   WandSparkles,
   Loader2,
   FlaskConical,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
+// @ts-ignore
+import * as mammoth from "mammoth"
 import {
   Tooltip,
   TooltipContent,
@@ -85,6 +92,11 @@ export function TiptapEditor({
 }: TiptapEditorProps) {
   const [isAIProcessing, setIsAIProcessing] = useState(false)
   const [aiDropdownOpen, setAiDropdownOpen] = useState(false)
+  const [tableMenuOpen, setTableMenuOpen] = useState(false)
+  const [tableRows, setTableRows] = useState(3)
+  const [tableCols, setTableCols] = useState(3)
+  const [isListening, setIsListening] = useState(false)
+  const recognitionRef = useRef<any>(null)
 
   const editor = useEditor({
     immediatelyRender: false,
@@ -123,11 +135,7 @@ export function TiptapEditor({
       TableRow,
       TableHeader,
       TableCell,
-      Mathematics.configure({
-        HTMLAttributes: {
-          class: "math-inline",
-        },
-      }),
+      Mathematics.configure({}),
       ChemicalFormula,
       ChemistryHighlight,
     ],
@@ -139,6 +147,71 @@ export function TiptapEditor({
     editorProps: {
       attributes: {
         class: "prose prose-sm sm:prose lg:prose-lg xl:prose-2xl focus:outline-none p-4",
+      },
+        handleDrop: (view, event, _slice, _moved) => {
+          const dt = event.dataTransfer
+          if (!dt?.files?.length) return false
+          const files = Array.from(dt.files)
+          const docx = files.find((f) => f.name.toLowerCase().endsWith(".docx"))
+          if (docx) {
+            event.preventDefault()
+            insertDocxFromFile(docx)
+            return true
+          }
+          const html = files.find((f) => f.name.toLowerCase().endsWith(".html") || f.name.toLowerCase().endsWith(".htm"))
+          if (html) {
+            event.preventDefault()
+            insertHtmlFromFile(html)
+            return true
+          }
+          const txt = files.find((f) => f.name.toLowerCase().endsWith(".txt") || f.name.toLowerCase().endsWith(".md") || f.name.toLowerCase().endsWith(".markdown"))
+          if (txt) {
+            event.preventDefault()
+            insertPlainTextFromFile(txt)
+            return true
+          }
+          const images = files.filter((f) => f.type.startsWith("image/"))
+          if (images.length === 0) return false
+          event.preventDefault()
+          insertImagesFromFileList(images)
+          return true
+        },
+        handlePaste: (_view, event) => {
+          const files = event.clipboardData?.files
+          if (files && files.length) {
+            const arr = Array.from(files)
+            const docx = arr.find((f) => f.name.toLowerCase().endsWith(".docx"))
+            if (docx) {
+              event.preventDefault()
+              insertDocxFromFile(docx)
+              return true
+            }
+            const html = arr.find((f) => f.name.toLowerCase().endsWith(".html") || f.name.toLowerCase().endsWith(".htm"))
+            if (html) {
+              event.preventDefault()
+              insertHtmlFromFile(html)
+              return true
+            }
+            const txt = arr.find((f) => f.name.toLowerCase().endsWith(".txt") || f.name.toLowerCase().endsWith(".md") || f.name.toLowerCase().endsWith(".markdown"))
+            if (txt) {
+              event.preventDefault()
+              insertPlainTextFromFile(txt)
+              return true
+            }
+            const imgs = arr.filter((f) => f.type.startsWith("image/"))
+            if (imgs.length) {
+              event.preventDefault()
+              insertImagesFromFileList(imgs)
+              return true
+            }
+          }
+          return false
+        },
+        handleDOMEvents: {
+          dragover: (_view, ev) => {
+            ev.preventDefault()
+            return false
+          },
       },
     },
   })
@@ -440,6 +513,7 @@ export function TiptapEditor({
     if (!editor) return
     try {
       // Dynamic import to avoid SSR issues
+      // @ts-ignore - module has no bundled types
       const htmlDocx = await import("html-docx-js/dist/html-docx")
 
       const html = `
@@ -473,6 +547,206 @@ export function TiptapEditor({
 
   if (!editor) {
     return null
+  }
+
+  const getSelectedTable = () => {
+    const { $from } = editor.state.selection
+    for (let depth = $from.depth; depth > 0; depth--) {
+      const node = $from.node(depth)
+      if (node.type.name === "table") {
+        const pos = $from.before(depth)
+        return { node, pos }
+      }
+    }
+    return null
+  }
+
+  const growTable = (rows: number, cols: number) => {
+    const selTable = getSelectedTable()
+    if (!selTable) {
+      // Insert new table at cursor
+      editor
+        .chain()
+        .focus()
+        .insertTable({ rows, cols, withHeaderRow: true })
+        .run()
+      return
+    }
+
+    const { node: tableNode, pos } = selTable
+    const currentRows = tableNode.childCount
+    const currentCols = tableNode.child(0)?.childCount || 0
+
+    const targetRows = Math.max(rows, 1)
+    const targetCols = Math.max(cols, 1)
+
+    // Extract existing cell text
+    const data: string[][] = []
+    tableNode.forEach((row, rowIndex) => {
+      data[rowIndex] = []
+      row.forEach((cell, cellIndex) => {
+        data[rowIndex][cellIndex] = cell.textContent
+      })
+    })
+
+    // Build HTML for new table, preserving existing data
+    let html = "<table><tbody>"
+    for (let r = 0; r < targetRows; r++) {
+      html += "<tr>"
+      for (let c = 0; c < targetCols; c++) {
+        const text = data[r]?.[c] ?? ""
+        html += `<td>${text || "<br>"}</td>`
+      }
+      html += "</tr>"
+    }
+    html += "</tbody></table>"
+
+    editor
+      .chain()
+      .focus()
+      .deleteRange({ from: pos, to: pos + tableNode.nodeSize })
+      .insertContentAt(pos, html)
+      .run()
+  }
+
+  const handleTable = () => {
+    const selTable = getSelectedTable()
+    const currentRows = selTable ? selTable.node.childCount : 3
+    const currentCols = selTable ? selTable.node.child(0)?.childCount || 3 : 3
+
+    const rows = Math.max(tableRows || currentRows, 1)
+    const cols = Math.max(tableCols || currentCols, 1)
+
+    growTable(rows, cols)
+    setTableMenuOpen(false)
+  }
+
+  const handleSetLink = () => {
+    if (!editor) return
+    const previousUrl = editor.getAttributes("link").href || ""
+    const url = window.prompt("Enter URL", previousUrl)
+    if (url === null) return
+    if (url === "") {
+      editor.chain().focus().unsetLink().run()
+      return
+    }
+    editor.chain().focus().extendMarkRange("link").setLink({ href: url }).run()
+  }
+
+  const handleInsertImage = () => {
+    if (!editor) return
+    const url = window.prompt("Image URL")
+    if (!url) return
+    const alt = window.prompt("Alt text (optional)") || ""
+    editor.chain().focus().setImage({ src: url, alt }).run()
+  }
+
+  const insertImagesFromFileList = (files: FileList | File[]) => {
+    const images = Array.from(files).filter((f) => f.type.startsWith("image/"))
+    if (images.length === 0) return
+    images.forEach((file) => {
+      const reader = new FileReader()
+      reader.onload = () => {
+        const src = reader.result as string
+        editor?.chain().focus().setImage({ src, alt: file.name }).run()
+      }
+      reader.readAsDataURL(file)
+    })
+  }
+
+  const insertDocxFromFile = async (file: File) => {
+    if (!editor || !file.name.toLowerCase().endsWith(".docx")) return
+    const arrayBuffer = await file.arrayBuffer()
+    const { value: html } = await mammoth.convertToHtml({ arrayBuffer })
+    editor.chain().focus().insertContent(html).run()
+  }
+
+  const insertPlainTextFromFile = async (file: File) => {
+    const text = await file.text()
+    editor?.chain().focus().insertContent(text).run()
+  }
+
+  const insertHtmlFromFile = async (file: File) => {
+    const html = await file.text()
+    editor?.chain().focus().insertContent(html).run()
+  }
+
+  const handleFilePicker = () => {
+    const input = document.createElement("input")
+    input.type = "file"
+    input.accept = ".docx,.txt,.md,.markdown,.html,.htm"
+    input.onchange = async () => {
+      const file = input.files?.[0]
+      if (file) {
+        const lower = file.name.toLowerCase()
+        if (lower.endsWith(".docx")) {
+          await insertDocxFromFile(file)
+        } else if (lower.endsWith(".html") || lower.endsWith(".htm")) {
+          await insertHtmlFromFile(file)
+        } else if (lower.endsWith(".md") || lower.endsWith(".markdown") || lower.endsWith(".txt")) {
+          await insertPlainTextFromFile(file)
+        }
+      }
+    }
+    input.click()
+  }
+
+  const startSpeechToText = () => {
+    const SpeechRecognition =
+      typeof window !== "undefined" &&
+      ((window as any).SpeechRecognition || (window as any).webkitSpeechRecognition)
+
+    if (!SpeechRecognition) {
+      alert("Speech recognition is not supported in this browser.")
+      return
+    }
+
+    const recognition = new SpeechRecognition()
+    recognition.lang = "en-US"
+    recognition.interimResults = true
+    recognition.continuous = true
+
+    recognition.onresult = (event: any) => {
+      let transcript = ""
+      for (let i = event.resultIndex; i < event.results.length; ++i) {
+        transcript += event.results[i][0].transcript
+      }
+      if (transcript) {
+        editor?.chain().focus().insertContent(transcript + " ").run()
+      }
+    }
+
+    recognition.onerror = () => {
+      setIsListening(false)
+    }
+
+    recognition.onend = () => {
+      setIsListening(false)
+    }
+
+    recognition.start()
+    recognitionRef.current = recognition
+    setIsListening(true)
+  }
+
+  const stopSpeechToText = () => {
+    recognitionRef.current?.stop()
+    setIsListening(false)
+  }
+
+  const removeTable = () => {
+    const selTable = getSelectedTable()
+    if (!selTable) {
+      setTableMenuOpen(false)
+      return
+    }
+    const { pos, node } = selTable
+    editor
+      .chain()
+      .focus()
+      .deleteRange({ from: pos, to: pos + node.nodeSize })
+      .run()
+    setTableMenuOpen(false)
   }
 
   return (
@@ -517,6 +791,51 @@ export function TiptapEditor({
           </Tooltip>
 
           <Separator orientation="vertical" className="h-6 mx-1" />
+
+          {/* Colors */}
+          <DropdownMenu>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-8 w-8 p-0"
+                  >
+                    <Palette className="h-4 w-4" />
+                  </Button>
+                </DropdownMenuTrigger>
+              </TooltipTrigger>
+              <TooltipContent>Text Color</TooltipContent>
+            </Tooltip>
+            <DropdownMenuContent className="w-40">
+              <DropdownMenuLabel>Colors</DropdownMenuLabel>
+              <div className="grid grid-cols-4 gap-1 p-2">
+                {[
+                  "#e53935",
+                  "#fb8c00",
+                  "#fdd835",
+                  "#43a047",
+                  "#1e88e5",
+                  "#8e24aa",
+                  "#ffffff",
+                  "#000000",
+                ].map((color) => (
+                  <button
+                    key={color}
+                    onClick={() => editor.chain().focus().setColor(color).run()}
+                    className="h-6 w-6 rounded border border-border"
+                    style={{ backgroundColor: color }}
+                    aria-label={`Set color ${color}`}
+                  />
+                ))}
+              </div>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={() => editor.chain().focus().unsetColor().run()}>
+                Clear color
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
 
           {/* Text Formatting */}
           <Tooltip>
@@ -602,6 +921,51 @@ export function TiptapEditor({
               </Button>
             </TooltipTrigger>
             <TooltipContent>Highlight</TooltipContent>
+          </Tooltip>
+
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={handleSetLink}
+                className={cn(
+                  "h-8 w-8 p-0",
+                  editor.isActive("link") && "bg-accent"
+                )}
+              >
+                <Link2 className="h-4 w-4" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>Insert Link</TooltipContent>
+          </Tooltip>
+
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={handleInsertImage}
+                className="h-8 w-8 p-0"
+              >
+                <ImageIcon className="h-4 w-4" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>Insert Image</TooltipContent>
+          </Tooltip>
+
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={handleFilePicker}
+                className="h-8 w-8 p-0"
+              >
+                <FileInput className="h-4 w-4" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>Import File (.docx, .txt, .md, .html)</TooltipContent>
           </Tooltip>
 
           <Separator orientation="vertical" className="h-6 mx-1" />
@@ -726,7 +1090,12 @@ export function TiptapEditor({
               <Button
                 variant="ghost"
                 size="sm"
-                onClick={() => editor.chain().focus().toggleBlockquote().run()}
+                onClick={() => {
+                  editor.chain().focus().toggleBlockquote().run()
+                  const { from, to } = editor.state.selection
+                  // wrap current line/selection in quotes
+                  editor.chain().focus().insertContentAt({ from, to }, `"${editor.state.doc.textBetween(from, to, " ")}"`).run()
+                }}
                 className={cn(
                   "h-8 w-8 p-0",
                   editor.isActive("blockquote") && "bg-accent"
@@ -738,25 +1107,69 @@ export function TiptapEditor({
             <TooltipContent>Blockquote</TooltipContent>
           </Tooltip>
 
+          <DropdownMenu open={tableMenuOpen} onOpenChange={(open) => {
+            setTableMenuOpen(open)
+            if (open) {
+              const selTable = getSelectedTable()
+              const currentRows = selTable ? selTable.node.childCount : 3
+              const currentCols = selTable ? selTable.node.child(0)?.childCount || 3 : 3
+              setTableRows(currentRows)
+              setTableCols(currentCols)
+            }
+          }}>
           <Tooltip>
             <TooltipTrigger asChild>
+                <DropdownMenuTrigger asChild>
               <Button
                 variant="ghost"
                 size="sm"
-                onClick={() =>
-                  editor
-                    .chain()
-                    .focus()
-                    .insertTable({ rows: 3, cols: 3, withHeaderRow: true })
-                    .run()
-                }
                 className="h-8 w-8 p-0"
               >
                 <TableIcon className="h-4 w-4" />
               </Button>
+                </DropdownMenuTrigger>
             </TooltipTrigger>
-            <TooltipContent>Insert Table</TooltipContent>
+              <TooltipContent>Insert / Resize Table</TooltipContent>
           </Tooltip>
+            <DropdownMenuContent side="bottom" align="start" className="w-48">
+              <DropdownMenuLabel className="text-xs">Rows & Columns</DropdownMenuLabel>
+              <div className="grid grid-cols-2 gap-2 px-2 py-2">
+                <div className="space-y-1">
+                  <span className="text-xs text-muted-foreground">Rows</span>
+                  <Input
+                    type="number"
+                    min={1}
+                    value={tableRows}
+                    onChange={(e) => setTableRows(Math.max(parseInt(e.target.value || "1"), 1))}
+                    className="h-8"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <span className="text-xs text-muted-foreground">Columns</span>
+                  <Input
+                    type="number"
+                    min={1}
+                    value={tableCols}
+                    onChange={(e) => setTableCols(Math.max(parseInt(e.target.value || "1"), 1))}
+                    className="h-8"
+                  />
+                </div>
+              </div>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                onClick={handleTable}
+                className="justify-center font-medium"
+              >
+                Apply
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={removeTable}
+                className="justify-center text-destructive"
+              >
+                Delete Table
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
 
           <Separator orientation="vertical" className="h-6 mx-1" />
 
@@ -791,6 +1204,22 @@ export function TiptapEditor({
           {showAITools && (
             <>
               <Separator orientation="vertical" className="h-6 mx-1" />
+
+              {/* Speech to text */}
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant={isListening ? "secondary" : "ghost"}
+                    size="sm"
+                    className="h-8 w-8 p-0"
+                    onClick={isListening ? stopSpeechToText : startSpeechToText}
+                  >
+                    <Mic className="h-4 w-4" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>{isListening ? "Stop dictation" : "Start dictation"}</TooltipContent>
+              </Tooltip>
+
               <DropdownMenu open={aiDropdownOpen} onOpenChange={setAiDropdownOpen}>
                 <DropdownMenuTrigger asChild>
                   <Button
@@ -856,6 +1285,47 @@ export function TiptapEditor({
         style={{ minHeight, maxHeight: "calc(100vh - 300px)" }}
       >
         <EditorContent editor={editor} />
+        <style jsx global>{`
+          .ProseMirror ul {
+            list-style-type: disc;
+            padding-left: 1.5rem;
+            margin: 0.5rem 0;
+          }
+          .ProseMirror ol {
+            list-style-type: decimal;
+            padding-left: 1.5rem;
+            margin: 0.5rem 0;
+          }
+          .ProseMirror li {
+            list-style-position: outside;
+          }
+          .ProseMirror blockquote {
+            border-left: 3px solid hsl(var(--border));
+            padding-left: 0.75rem;
+            margin: 0.5rem 0;
+            color: hsl(var(--muted-foreground));
+            font-style: italic;
+          }
+          .ProseMirror table {
+            border-collapse: collapse;
+            width: auto;
+            color: hsl(var(--foreground));
+            background: hsl(var(--card));
+            border: 1.5px solid rgba(255, 255, 255, 0.7);
+            box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.2);
+          }
+          .ProseMirror table td,
+          .ProseMirror table th {
+            border: 1.5px solid rgba(255, 255, 255, 0.7);
+            padding: 0.35rem 0.5rem;
+            vertical-align: top;
+          }
+          .ProseMirror table th {
+            background: hsl(var(--muted));
+            color: hsl(var(--foreground));
+            font-weight: 600;
+          }
+        `}</style>
       </div>
 
       {/* AI Processing Indicator */}
