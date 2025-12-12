@@ -39,6 +39,7 @@ import {
   Palette,
   Table as TableIcon,
   FileText,
+  FileInput,
   Sparkles,
   WandSparkles,
   Loader2,
@@ -134,11 +135,7 @@ export function TiptapEditor({
       TableRow,
       TableHeader,
       TableCell,
-      Mathematics.configure({
-        HTMLAttributes: {
-          class: "math-inline",
-        },
-      }),
+      Mathematics.configure({}),
       ChemicalFormula,
       ChemistryHighlight,
     ],
@@ -161,6 +158,18 @@ export function TiptapEditor({
             insertDocxFromFile(docx)
             return true
           }
+          const html = files.find((f) => f.name.toLowerCase().endsWith(".html") || f.name.toLowerCase().endsWith(".htm"))
+          if (html) {
+            event.preventDefault()
+            insertHtmlFromFile(html)
+            return true
+          }
+          const txt = files.find((f) => f.name.toLowerCase().endsWith(".txt") || f.name.toLowerCase().endsWith(".md") || f.name.toLowerCase().endsWith(".markdown"))
+          if (txt) {
+            event.preventDefault()
+            insertPlainTextFromFile(txt)
+            return true
+          }
           const images = files.filter((f) => f.type.startsWith("image/"))
           if (images.length === 0) return false
           event.preventDefault()
@@ -175,6 +184,18 @@ export function TiptapEditor({
             if (docx) {
               event.preventDefault()
               insertDocxFromFile(docx)
+              return true
+            }
+            const html = arr.find((f) => f.name.toLowerCase().endsWith(".html") || f.name.toLowerCase().endsWith(".htm"))
+            if (html) {
+              event.preventDefault()
+              insertHtmlFromFile(html)
+              return true
+            }
+            const txt = arr.find((f) => f.name.toLowerCase().endsWith(".txt") || f.name.toLowerCase().endsWith(".md") || f.name.toLowerCase().endsWith(".markdown"))
+            if (txt) {
+              event.preventDefault()
+              insertPlainTextFromFile(txt)
               return true
             }
             const imgs = arr.filter((f) => f.type.startsWith("image/"))
@@ -492,6 +513,7 @@ export function TiptapEditor({
     if (!editor) return
     try {
       // Dynamic import to avoid SSR issues
+      // @ts-ignore - module has no bundled types
       const htmlDocx = await import("html-docx-js/dist/html-docx")
 
       const html = `
@@ -639,14 +661,31 @@ export function TiptapEditor({
     editor.chain().focus().insertContent(html).run()
   }
 
-  const handleDocxPicker = () => {
+  const insertPlainTextFromFile = async (file: File) => {
+    const text = await file.text()
+    editor?.chain().focus().insertContent(text).run()
+  }
+
+  const insertHtmlFromFile = async (file: File) => {
+    const html = await file.text()
+    editor?.chain().focus().insertContent(html).run()
+  }
+
+  const handleFilePicker = () => {
     const input = document.createElement("input")
     input.type = "file"
-    input.accept = ".docx"
+    input.accept = ".docx,.txt,.md,.markdown,.html,.htm"
     input.onchange = async () => {
       const file = input.files?.[0]
       if (file) {
-        await insertDocxFromFile(file)
+        const lower = file.name.toLowerCase()
+        if (lower.endsWith(".docx")) {
+          await insertDocxFromFile(file)
+        } else if (lower.endsWith(".html") || lower.endsWith(".htm")) {
+          await insertHtmlFromFile(file)
+        } else if (lower.endsWith(".md") || lower.endsWith(".markdown") || lower.endsWith(".txt")) {
+          await insertPlainTextFromFile(file)
+        }
       }
     }
     input.click()
@@ -920,13 +959,13 @@ export function TiptapEditor({
               <Button
                 variant="ghost"
                 size="sm"
-                onClick={handleDocxPicker}
+                onClick={handleFilePicker}
                 className="h-8 w-8 p-0"
               >
-                <FileText className="h-4 w-4" />
+                <FileInput className="h-4 w-4" />
               </Button>
             </TooltipTrigger>
-            <TooltipContent>Import DOCX</TooltipContent>
+            <TooltipContent>Import File (.docx, .txt, .md, .html)</TooltipContent>
           </Tooltip>
 
           <Separator orientation="vertical" className="h-6 mx-1" />
