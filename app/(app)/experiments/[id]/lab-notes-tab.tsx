@@ -246,50 +246,31 @@ export function LabNotesTab({ experimentId }: { experimentId: string }) {
 
       // Dynamic import - using html2pdf for much smaller file sizes
       const html2pdf = (await import('html2pdf.js')).default
+      // Sanitize content and strip problematic colors/styles
+      const parser = new DOMParser()
+      const parsed = parser.parseFromString(formData.content || "", "text/html")
+      parsed.querySelectorAll('[style]').forEach((n) => n.removeAttribute('style'))
+      parsed.querySelectorAll('*').forEach((el) => {
+        if (el instanceof HTMLElement) {
+          el.style.color = '#000000'
+          el.style.backgroundColor = 'transparent'
+          el.style.borderColor = '#000000'
+        }
+      })
+      const cleanBody = parsed.body.innerHTML
       
       // Create clean HTML content
       const element = document.createElement('div')
       element.innerHTML = `
+        <style>
+          * { color: #000 !important; background: transparent !important; border-color: #000 !important; }
+          a { color: #0000ee !important; }
+        </style>
         <div style="padding: 20px; font-family: Arial, sans-serif; color: #000000; background: #ffffff;">
           <h1 style="font-size: 24px; margin-bottom: 20px; font-weight: bold; color: #000000;">${formData.title}</h1>
-          <div style="line-height: 1.6; font-size: 12px; color: #000000;">${formData.content}</div>
+          <div style="line-height: 1.6; font-size: 12px; color: #000000;">${cleanBody}</div>
         </div>
       `
-      
-      // Remove any CSS variables or lab() colors from inline styles
-      const allElements = element.querySelectorAll('*')
-      allElements.forEach((el: any) => {
-        if (el.style) {
-          // Remove or replace problematic color values
-          for (let i = 0; i < el.style.length; i++) {
-            const prop = el.style[i]
-            const value = el.style.getPropertyValue(prop)
-            
-            // Check if value contains var() or lab() or other unsupported functions
-            if (value && (value.includes('var(') || value.includes('lab(') || value.includes('oklch(') || value.includes('color('))) {
-              // Get computed style as fallback
-              const computedStyle = window.getComputedStyle(el)
-              const computedValue = computedStyle.getPropertyValue(prop)
-              
-              // If computed value is valid and doesn't contain problematic functions, use it
-              if (computedValue && !computedValue.includes('var(') && !computedValue.includes('lab(') && !computedValue.includes('oklch(')) {
-                el.style.setProperty(prop, computedValue)
-              } else {
-                // Fallback to safe defaults for color properties
-                if (prop.includes('color') || prop === 'background' || prop === 'border') {
-                  if (prop === 'background-color' || prop === 'background') {
-                    el.style.setProperty(prop, '#ffffff')
-                  } else if (prop.includes('color')) {
-                    el.style.setProperty(prop, '#000000')
-                  } else if (prop.includes('border')) {
-                    el.style.setProperty(prop, '#cccccc')
-                  }
-                }
-              }
-            }
-          }
-        }
-      })
       
       // Configure html2pdf options for optimal size/quality balance
       const options = {
