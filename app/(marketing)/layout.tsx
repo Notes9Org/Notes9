@@ -1,18 +1,16 @@
 import { Header } from "@/components/marketing/header"
 import { Footer } from "@/components/marketing/footer"
-import "@/styles/marketing.css"
-import { Rajdhani, JetBrains_Mono } from "next/font/google"
+// Removed marketing.css to avoid conflicting "startup/glass" styles
+import { Inter, JetBrains_Mono } from "next/font/google"
 
-const rajdhani = Rajdhani({
+const inter = Inter({
   subsets: ["latin"],
-  variable: "--font-rajdhani",
-  weight: ["300", "400", "500", "600", "700"],
+  variable: "--font-inter",
 })
 
 const jetbrainsMono = JetBrains_Mono({
   subsets: ["latin"],
   variable: "--font-jetbrains-mono",
-  weight: ["300", "400", "500", "600", "700"],
 })
 
 export default function MarketingLayout({
@@ -21,7 +19,7 @@ export default function MarketingLayout({
   children: React.ReactNode
 }) {
   return (
-    <div className={`marketing-theme ${rajdhani.variable} ${jetbrainsMono.variable} antialiased min-h-screen flex flex-col`}>
+    <div className={`${inter.variable} ${jetbrainsMono.variable} font-sans antialiased min-h-screen flex flex-col bg-background text-foreground`}>
       <Header />
       <main className="flex-1">
         {children}
@@ -30,4 +28,3 @@ export default function MarketingLayout({
     </div>
   )
 }
-

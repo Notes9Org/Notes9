@@ -1,202 +1,126 @@
 "use client"
 
 import { Badge } from "@/components/ui/badge"
-import { Card } from "@/components/ui/card"
-import { Sparkles, Users, Crosshair, Trophy, MapPin, Send } from "lucide-react"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Users, Crosshair, Trophy, MapPin, Send, School, FlaskConical, Target } from "lucide-react"
 
 export default function AboutPage() {
-  const founders = [
-    {
-      name: "Nitheesh Yanamandala",
-      role: "CPO (Product)",
-      background:
-        "Pharmaceutical science Phd Scholar focusing on PBPK modeling, translational pharmacokinetics, and dose projection. Industry and academic experience bridging quantitative modelling with drug development strategy. Registered Patent Agent in India.",
-      education: "MS Pharmaceutical Sciences – University at Buffalo; BA Pharmacy – BITS Pilani",
-    },
-    {
-      name: "Naga Sai Praneeth Nalajala",
-      role: "CTO",
-      background:
-        "Full-stack engineer currently working at Asanify, where he builds and maintains production SaaS platforms for HR and payroll. Experienced in designing scalable web architectures, setting up robust developer tooling, and translating product requirements into reliable, ship-ready features.",
-      education: "BE Electrical and Electronics Engineering – BITS Pilani",
-    },
-    {
-      name: "Venkata Ramana Reddy Duggempudi",
-      role: "AI Engineer",
-      background:
-        "Machine learning engineer specialising in agentic AI systems and clinical-trial data extraction. Research experience in healthcare AI applications, model evaluation, and deployment in regulated environments.",
-      education: "MS Artificial Intelligence – University at Buffalo",
-    },
-    {
-      name: "Vaishnav Pavan Kumar Achalla",
-      role: "CSO (Science)",
-      background:
-        "Research Assistant at the Jenner Institute, University of Oxford, working on malaria vaccine development and protein engineering. Experienced in end-to-end experimental design, biophysical characterisation, and collaborative translational research.",
-      education: "MRes Pharmaceutical Research – UCL; Bachelor of Pharmacy – BITS Pilani",
-    },
-    {
-      name: "Bhaskar Kandregula",
-      role: "CSO (Strategy)",
-      background:
-        "Formulation scientist with experience in nanoparticle-based drug delivery, and forecasting for pharmaceutical portfolios. Former analyst at PharmaACE working at the interface of science, strategy, and health economics.",
-      education: "MS Pharmaceutical Sciences – University of Maryland, Baltimore; BA Pharmacy – BITS Pilani",
-    },
-    {
-      name: "Hari Hara Nithin Reddy Manupati",
-      role: "CEO",
-      background:
-        "Applied AI developer with expertise in document-processing pipelines, information retrieval, and human–computer interaction. Has contributed to production AI systems at Equifax and multiple early-stage technology startups.",
-      education: "Master of International Business – Hult International Business School; BA Pharmacy – BITS Pilani",
-    },
-  ]
-
   return (
-    <div className="relative overflow-hidden">
-      {/* Animated background */}
-      <div className="hero-particles"></div>
+    <div className="bg-background min-h-screen">
+      {/* Subtle Grid Background */}
+      <div className="absolute inset-0 bg-[linear-gradient(to_right,#80808012_1px,transparent_1px),linear-gradient(to_bottom,#80808012_1px,transparent_1px)] bg-[size:14px_24px] pointer-events-none h-[500px] mask-gradient-to-b from-black to-transparent"></div>
 
-      <div className="absolute inset-0 overflow-hidden">
-        <div className="absolute -top-40 -right-32 w-80 h-80 bg-blue-500/20 rounded-full blur-3xl animate-pulse"></div>
-        <div
-          className="absolute -bottom-40 -left-32 w-80 h-80 bg-purple-500/20 rounded-full blur-3xl animate-pulse"
-          style={{ animationDelay: "2s" }}
-        ></div>
-      </div>
-
-      <div className="container mx-auto px-4 sm:px-6 lg:px-8 relative z-10 py-20">
+      <div className="container mx-auto px-4 sm:px-6 lg:px-8 relative z-10 py-16 sm:py-24">
         {/* Hero Section */}
-        <div className="mx-auto max-w-4xl text-center mb-16">
-          <Badge variant="secondary" className="mb-6 text-sm font-medium glass text-solid">
+        <div className="mx-auto max-w-4xl text-center mb-20">
+          <Badge variant="outline" className="mb-6 text-sm font-medium border-primary/20 bg-primary/5 text-primary">
             <Users className="mr-2 h-4 w-4" />
             About Notes9
           </Badge>
 
-          <h1 className="text-4xl font-bold tracking-tight text-solid sm:text-6xl text-balance">
-            An Agentic AI Workspace for Experimental Scientific Research
+          <h1 className="text-4xl font-bold tracking-tight text-foreground sm:text-5xl lg:text-6xl text-balance mb-6">
+            Agentic AI for <span className="text-primary">Scientific Research</span>
           </h1>
 
-          <p className="mt-6 text-xl text-solid max-w-3xl mx-auto text-pretty font-light">
-            Notes9 is an AI-native electronic lab notebook and laboratory information platform that unifies
-            experimental records, Inventory management, literature, data analysis, and reporting in a single, structured workspace for
-            research teams.
+          <p className="text-xl text-muted-foreground max-w-3xl mx-auto text-pretty font-light leading-relaxed">
+            Notes9 is an AI-native electronic lab notebook that unifies experimental records, inventory management, literature, and analysis in a single, structured workspace.
           </p>
         </div>
 
         {/* Mission & Vision */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-16">
-          <Card className="p-8 glass border-2 border-white/20">
-            <div className="flex items-center mb-4">
-              <Crosshair className="h-8 w-8 text-blue-400 mr-3" />
-              <h2 className="text-2xl font-bold text-solid">Our Mission</h2>
-            </div>
-            <p className="text-solid font-light leading-relaxed">
-              To design an AI-augmented research environment that reduces manual overhead, strengthens
-              reproducibility, and helps scientists move from hypothesis to robust, well-documented results with
-              fewer fragmented tools and fewer avoidable errors.
-            </p>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-20">
+          <Card className="border-border/60 bg-card shadow-sm hover:shadow-md transition-shadow">
+            <CardHeader className="flex flex-row items-center gap-4">
+              <div className="p-2 bg-blue-100 dark:bg-blue-900 rounded-lg">
+                <Target className="h-6 w-6 text-blue-600 dark:text-blue-400" />
+              </div>
+              <CardTitle>Our Mission</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="text-muted-foreground leading-relaxed">
+                To design an AI-augmented research environment that reduces manual overhead, strengthens reproducibility, and helps scientists move from hypothesis to robust results with fewer fragmented tools.
+              </p>
+            </CardContent>
           </Card>
 
-          <Card className="p-8 glass border-2 border-white/20">
-            <div className="flex items-center mb-4">
-              <Sparkles className="h-8 w-8 text-blue-400 mr-3" />
-              <h2 className="text-2xl font-bold text-solid">Our Vision</h2>
-            </div>
-            <p className="text-solid font-light leading-relaxed">
-              We envision every research group working alongside an AI assistant that understands their projects,
-              preserves institutional knowledge, and provides transparent, auditable support across literature
-              review, inventory management, experiment planning, data analysis, and scientific reporting and communication.
-            </p>
+          <Card className="border-border/60 bg-card shadow-sm hover:shadow-md transition-shadow">
+            <CardHeader className="flex flex-row items-center gap-4">
+              <div className="p-2 bg-purple-100 dark:bg-purple-900 rounded-lg">
+                <FlaskConical className="h-6 w-6 text-purple-600 dark:text-purple-400" />
+              </div>
+              <CardTitle>Our Vision</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="text-muted-foreground leading-relaxed">
+                We envision every research group working alongside an AI assistant that understands their projects, preserves institutional knowledge, and provides transparent support across the entire discovery lifecycle.
+              </p>
+            </CardContent>
           </Card>
-        </div>
-
-        {/* Founding Team */}
-        <div className="mb-16">
-          <div className="text-center mb-12">
-            <h2 className="text-3xl font-bold text-solid mb-4">Founding Team</h2>
-            <p className="text-solid font-light max-w-2xl mx-auto">
-              Notes9 is led by a multidisciplinary group of scientists and engineers with backgrounds in
-              pharmaceutical sciences, AI, and software development. The team has collaborated for many years
-              across academic and industry settings and now focuses on building rigorous, researcher-centric tools.
-            </p>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {founders.map((founder, index) => (
-              <Card
-                key={index}
-                className="p-6 glass border-2 border-white/20 hover:border-white/30 transition-all"
-              >
-                <div className="mb-4">
-                  <h3 className="text-lg font-bold text-solid mb-1">{founder.name}</h3>
-                  <Badge variant="secondary" className="text-xs glass text-solid">
-                    {founder.role}
-                  </Badge>
-                </div>
-                <p className="text-sm text-solid font-light mb-4 leading-relaxed">
-                  {founder.background}
-                </p>
-                <div className="text-xs text-solid">
-                  <strong>Education:</strong> {founder.education}
-                </div>
-              </Card>
-            ))}
-          </div>
         </div>
 
         {/* Company Story */}
-        <Card className="p-8 glass border-2 border-white/20 mb-16">
-          <div className="flex items-center mb-6">
-            <Trophy className="h-8 w-8 text-blue-400 mr-3" />
-            <h2 className="text-2xl font-bold text-solid">Our Story</h2>
+        <div className="mb-20 max-w-4xl mx-auto">
+          <div className="text-center mb-8">
+            <h2 className="text-3xl font-bold text-foreground">Our Story</h2>
           </div>
-          <div className="space-y-4 text-solid font-light leading-relaxed">
-            <p>
-              Notes9 emerged directly from the day-to-day experience of working in academic and industrial
-              laboratories. As bench scientists and data scientists, we repeatedly encountered the same pattern:
-              project-critical knowledge was scattered across paper notebooks, PDFs, slide decks, and ad-hoc
-              spreadsheets, making it difficult to compare experiments, reproduce results, or hand projects over to
-              new team members.
+          <div className="prose prose-lg dark:prose-invert mx-auto text-muted-foreground">
+            <p className="mb-4">
+              Notes9 emerged directly from the day-to-day experience of working in academic and industrial laboratories. As bench scientists and data scientists, we repeatedly encountered the same pattern: project-critical knowledge scattered across paper notebooks, PDFs, and ad-hoc spreadsheets.
+            </p>
+            <p className="mb-4">
+              Conventional ELNs improved record-keeping but did little to help researchers reason with their data. Generic LLMs showed promise but lacked the domain awareness required for serious rigor.
             </p>
             <p>
-              Conventional ELNs improved record-keeping but did little to help researchers reason with their data or
-              integrate literature, protocols, and analyses into a coherent, queryable whole. In parallel, modern
-              language models showed promise, but generic chat interfaces lacked the structure, traceability, and
-              domain awareness required for serious laboratory work.
-            </p>
-            <p>
-              Notes9 is our response to this gap: an agentic AI layer built on top of a structured research workspace.
-              The platform is being developed to assist with literature triage, experiment design, data curation and
-              analysis, and preparation of reports and manuscripts—while preserving clear provenance, versioning,
-              and human oversight.
-            </p>
-            <p>
-              We are currently refining the platform in collaboration with early research partners and iterating on the
-              product with feedback from scientists, lab managers, and research-IT teams across diverse domains.
+              Notes9 is our response: an agentic AI layer built on top of a structured research workspace, designed to assist with literature triage, experiment design, data curation, and analysis—while preserving clear provenance and oversight.
             </p>
           </div>
-        </Card>
+        </div>
+
+        {/* Team Summary for Investors */}
+        <div className="mb-20">
+          <div className="text-center mb-8">
+            <h2 className="text-3xl font-bold text-foreground mb-4">Our Team</h2>
+          </div>
+          <Card className="border-border/60 bg-card/50 max-w-4xl mx-auto">
+            <CardContent className="p-8 sm:p-12">
+              <p className="text-lg text-muted-foreground leading-relaxed text-center">
+                We are a multidisciplinary team of scientists and engineers with deep expertise bridging pharmaceutical sciences, artificial intelligence, and enterprise software development.
+              </p>
+              <div className="mt-8 grid grid-cols-1 md:grid-cols-3 gap-8 text-center border-t border-border pt-8">
+                <div>
+                  <h3 className="font-semibold text-foreground mb-2">Scientific Rigor</h3>
+                  <p className="text-sm text-muted-foreground">Backgrounds in PBPK modeling, vaccine development, and translational research from institutions like Oxford, UCL, and University at Buffalo.</p>
+                </div>
+                <div>
+                  <h3 className="font-semibold text-foreground mb-2">Technical Excellence</h3>
+                  <p className="text-sm text-muted-foreground">Experience building scalable SaaS platforms, agentic AI systems, and secure data infrastructure for regulated industries.</p>
+                </div>
+                <div>
+                  <h3 className="font-semibold text-foreground mb-2">Domain Focus</h3>
+                  <p className="text-sm text-muted-foreground">Combined experience in formulation science, clinical data extraction, and health economics strategy.</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
 
         {/* Contact */}
         <div className="text-center">
-          <Card className="p-8 glass border-2 border-white/20 max-w-2xl mx-auto">
+          <div className="p-8 border border-border rounded-xl bg-muted/30 max-w-2xl mx-auto">
             <div className="flex items-center justify-center mb-4">
-              <Send className="h-8 w-8 text-blue-400 mr-3" />
-              <h2 className="text-2xl font-bold text-solid">Get in Touch</h2>
+              <Send className="h-6 w-6 text-primary mr-3" />
+              <h2 className="text-2xl font-semibold text-foreground">Get in Touch</h2>
             </div>
-            <p className="text-solid font-light mb-6">
-              Notes9 is currently in an early-access phase. If you are interested in collaborating as a design partner
-              lab, providing feedback on the platform, or learning more about our roadmap, we would be glad to
-              hear from you.
+            <p className="text-muted-foreground mb-6">
+              Notes9 is currently in an early-access phase. We are actively seeking design partner labs and investment opportunities.
             </p>
-            <div className="flex items-center justify-center space-x-2 text-solid">
+            <div className="flex items-center justify-center space-x-2 text-muted-foreground">
               <MapPin className="h-4 w-4" />
               <span className="text-sm">Distributed team · United States & United Kingdom</span>
             </div>
-          </Card>
+          </div>
         </div>
       </div>
     </div>
   )
 }
-
-
