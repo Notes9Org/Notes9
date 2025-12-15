@@ -7,6 +7,8 @@ import { StatusSection } from "@/components/marketing/status-section"
 import { FeaturesSection } from "@/components/marketing/features-section"
 import { DifferentiationSection } from "@/components/marketing/differentiation-section"
 
+import { InteractiveParticles } from "@/components/ui/interactive-particles"
+
 import "@/styles/marketing.css"
 import { Inter, JetBrains_Mono } from "next/font/google"
 
@@ -32,15 +34,18 @@ export default async function HomePage() {
 
   // If not authenticated, show landing page with marketing theme
   return (
-    <div className={`marketing-theme ${inter.variable} ${jetbrainsMono.variable} font-sans min-h-screen flex flex-col bg-background text-foreground`}>
-      <Header />
-      <main className="flex-1">
-        <AcademicHero />
-        <StatusSection />
-        <FeaturesSection />
-        <DifferentiationSection />
-      </main>
-      <Footer />
+    <div className={`marketing-theme ${inter.variable} ${jetbrainsMono.variable} font-sans min-h-screen flex flex-col bg-background text-foreground relative overflow-hidden`}>
+      <InteractiveParticles />
+      <div className="relative z-10 flex flex-col min-h-screen">
+        <Header />
+        <main className="flex-1">
+          <AcademicHero />
+          <StatusSection />
+          <FeaturesSection />
+          <DifferentiationSection />
+        </main>
+        <Footer />
+      </div>
     </div>
   )
 }
