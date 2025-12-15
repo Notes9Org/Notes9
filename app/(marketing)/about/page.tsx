@@ -76,32 +76,102 @@ export default function AboutPage() {
           </div>
         </div>
 
-        {/* Team Summary for Investors */}
+        {/* Team Section */}
         <div className="mb-20">
-          <div className="text-center mb-8">
+          <div className="text-center mb-12">
             <h2 className="text-3xl font-bold text-foreground mb-4">Our Team</h2>
+            <p className="text-muted-foreground max-w-2xl mx-auto">
+              A multidisciplinary team bridging pharmaceutical sciences, artificial intelligence, and enterprise software.
+            </p>
           </div>
-          <Card className="border-border/60 bg-card/50 max-w-4xl mx-auto">
-            <CardContent className="p-8 sm:p-12">
-              <p className="text-lg text-muted-foreground leading-relaxed text-center">
-                We are a multidisciplinary team of scientists and engineers with deep expertise bridging pharmaceutical sciences, artificial intelligence, and enterprise software development.
-              </p>
-              <div className="mt-8 grid grid-cols-1 md:grid-cols-3 gap-8 text-center border-t border-border pt-8">
-                <div>
-                  <h3 className="font-semibold text-foreground mb-2">Scientific Rigor</h3>
-                  <p className="text-sm text-muted-foreground">Backgrounds in PBPK modeling, vaccine development, and translational research from institutions like Oxford, UCL, and University at Buffalo.</p>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 max-w-7xl mx-auto">
+            {/* 1. Hari - CEO */}
+            <Card className="border-border/60 bg-card/50 hover:bg-card hover:shadow-md transition-all">
+              <CardHeader>
+                <CardTitle className="text-xl">Hari Hara Nithin Reddy Manupati</CardTitle>
+                <Badge variant="secondary" className="w-fit mt-2">CEO</Badge>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <p className="text-sm text-muted-foreground leading-relaxed">
+                  Applied AI developer with expertise in document-processing pipelines, information retrieval, and human–computer interaction. Has contributed to production AI systems at Equifax and multiple early-stage technology startups.
+                </p>
+                <div className="flex items-start gap-2 text-xs text-muted-foreground/80 border-t border-border/40 pt-4">
+                  <School className="h-3.5 w-3.5 mt-0.5 flex-shrink-0" />
+                  <span>Master of International Business – Hult International Business School; Bachelor of Pharmacy – BITS Pilani</span>
                 </div>
-                <div>
-                  <h3 className="font-semibold text-foreground mb-2">Technical Excellence</h3>
-                  <p className="text-sm text-muted-foreground">Experience building scalable SaaS platforms, agentic AI systems, and secure data infrastructure for regulated industries.</p>
+              </CardContent>
+            </Card>
+
+            {/* 2. Nitheesh - CPO */}
+            <Card className="border-border/60 bg-card/50 hover:bg-card hover:shadow-md transition-all">
+              <CardHeader>
+                <CardTitle className="text-xl">Nitheesh Yanamandala</CardTitle>
+                <Badge variant="secondary" className="w-fit mt-2">CPO (Product)</Badge>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <p className="text-sm text-muted-foreground leading-relaxed">
+                  Summer Research Intern at Ionis Pharmaceuticals with expertise in PBPK modeling and pharmaceutical sciences. Registered Patent Agent in India.
+                </p>
+                <div className="flex items-start gap-2 text-xs text-muted-foreground/80 border-t border-border/40 pt-4">
+                  <School className="h-3.5 w-3.5 mt-0.5 flex-shrink-0" />
+                  <span>MA Pharmaceutical Sciences – University at Buffalo; BA Pharmacy – BITS Pilani</span>
                 </div>
-                <div>
-                  <h3 className="font-semibold text-foreground mb-2">Domain Focus</h3>
-                  <p className="text-sm text-muted-foreground">Combined experience in formulation science, clinical data extraction, and health economics strategy.</p>
+              </CardContent>
+            </Card>
+
+            {/* 3. Vaishnav - CSO (Science) */}
+            <Card className="border-border/60 bg-card/50 hover:bg-card hover:shadow-md transition-all">
+              <CardHeader>
+                <CardTitle className="text-xl">Vaishnav Pavan Kumar Achalla</CardTitle>
+                <Badge variant="secondary" className="w-fit mt-2">CSO (Science)</Badge>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <p className="text-sm text-muted-foreground leading-relaxed">
+                  Research Assistant at the Jenner Institute, University of Oxford. Expert in malaria vaccine development, protein engineering, and biophysical characterisation.
+                </p>
+                <div className="flex items-start gap-2 text-xs text-muted-foreground/80 border-t border-border/40 pt-4">
+                  <School className="h-3.5 w-3.5 mt-0.5 flex-shrink-0" />
+                  <span>MRes Pharmaceutical Research – UCL; Bachelor of Pharmacy – BITS Pilani</span>
                 </div>
-              </div>
-            </CardContent>
-          </Card>
+              </CardContent>
+            </Card>
+
+            {/* 4. Praneeth - CTO */}
+            <Card className="border-border/60 bg-card/50 hover:bg-card hover:shadow-md transition-all">
+              <CardHeader>
+                <CardTitle className="text-xl">Naga Sai Praneeth Nalajala</CardTitle>
+                <Badge variant="secondary" className="w-fit mt-2">CTO</Badge>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <p className="text-sm text-muted-foreground leading-relaxed">
+                  Full-stack engineer currently working at Asanify. Experienced in designing scalable web architectures, developer tooling, and shipping production SaaS features.
+                </p>
+                <div className="flex items-start gap-2 text-xs text-muted-foreground/80 border-t border-border/40 pt-4">
+                  <School className="h-3.5 w-3.5 mt-0.5 flex-shrink-0" />
+                  <span>BE Electrical and Electronics Engineering – BITS Pilani</span>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* 5. Hemanth - Founding Engineer */}
+            <Card className="border-border/60 bg-card/50 hover:bg-card hover:shadow-md transition-all">
+              <CardHeader>
+                <CardTitle className="text-xl">Hemanth Rao Paidipally</CardTitle>
+                <Badge variant="secondary" className="w-fit mt-2">Founding Engineer</Badge>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <p className="text-sm text-muted-foreground leading-relaxed">
+                  Software Engineer at Amazon India with deep expertise in large-scale distributed systems and cloud infrastructure.
+                </p>
+                <div className="flex items-start gap-2 text-xs text-muted-foreground/80 border-t border-border/40 pt-4">
+                  <School className="h-3.5 w-3.5 mt-0.5 flex-shrink-0" />
+                  <span>BE Computer Science – BITS Pilani</span>
+                </div>
+              </CardContent>
+            </Card>
+
+          </div>
         </div>
 
         {/* Contact */}

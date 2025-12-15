@@ -27,12 +27,12 @@ export function Header() {
 
           {/* Desktop Navigation */}
           <nav className="hidden lg:flex items-center space-x-8">
-            <a href="/platform" className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">
+            <Link href="/platform" className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">
               Platform Features
-            </a>
-            <a href="/about" className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">
+            </Link>
+            <Link href="/about" className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">
               About
-            </a>
+            </Link>
           </nav>
 
           {/* Desktop CTAs */}
@@ -57,20 +57,20 @@ export function Header() {
         {isMenuOpen && (
           <div className="lg:hidden py-4 border-t border-border">
             <nav className="flex flex-col space-y-4">
-              <a
-                href="#features"
+              <Link
+                href="/platform"
                 className="text-base font-medium text-foreground px-4 py-2 hover:bg-muted rounded-md"
                 onClick={() => setIsMenuOpen(false)}
               >
                 Platform Features
-              </a>
-              <a
+              </Link>
+              <Link
                 href="/about"
                 className="text-base font-medium text-foreground px-4 py-2 hover:bg-muted rounded-md"
                 onClick={() => setIsMenuOpen(false)}
               >
                 About
-              </a>
+              </Link>
               <div className="flex flex-col space-y-3 pt-4 px-4">
                 <Button variant="outline" size="sm" className="w-full justify-center" asChild>
                   <Link href="/auth/login">Sign In</Link>
