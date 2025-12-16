@@ -2,7 +2,8 @@
 
 import { Badge } from "@/components/ui/badge"
 import { Search, Database, Brain, BookOpen, GitBranch, Share2, Sparkles, FileText, BarChart, FlaskConical, FolderKanban, Network } from "lucide-react"
-import { PlatformFeature } from "@/components/marketing/platform-feature"
+import { ScrollFeature } from "@/components/marketing/scroll-feature"
+import { BentoGrid, BentoGridItem } from "@/components/marketing/bento-grid"
 
 export default function PlatformPage() {
     return (
@@ -23,99 +24,50 @@ export default function PlatformPage() {
                 </div>
             </div>
 
-            {/* 1. Literature Search */}
-            <PlatformFeature
-                index={0}
+            {/* 1. Literature Search - Full Width Hero Feature */}
+            <ScrollFeature
                 title="Agentic Literature Review"
                 description="Stop drowning in PDFs. Our agent proactively scans major databases to find papers relevant to your ongoing experiments, understanding concepts rather than just keywords."
                 icon={Search}
+                image="literature-review-search.png"
                 align="left"
-                images={["literature-review-search.png"]}
-                features={[
-                    {
-                        icon: Sparkles,
-                        title: "Semantic Search & Ranking",
-                        description: "Finds papers based on scientific concepts and experimental context, filtering out irrelevant noise."
-                    },
-                    {
-                        icon: BookOpen,
-                        title: "Automated Summaries",
-                        description: "Get concise, structured summaries focused on methods, results, and key findings instantly."
-                    }
-                ]}
             />
 
             {/* 2. Project Ecosystem */}
-            <PlatformFeature
-                index={1}
+            <ScrollFeature
                 title="Project Ecosystem"
                 description="Manage your research with a flexible hierarchy. Organize experiments into projects and track progress from hypothesis to publication throughout the lifecycle."
                 icon={FolderKanban}
+                image="project-details.png"
                 align="right"
-                images={["project-details.png", "projects-page.png"]}
-                features={[
-                    {
-                        icon: Network,
-                        title: "Connected Workflow",
-                        description: "Seamlessly link literature reviews, experiments, and notes within a unified project context."
-                    },
-                    {
-                        icon: Share2,
-                        title: "Collaborative Workspace",
-                        description: "Share projects with your lab members and track contributions in real-time."
-                    }
-                ]}
             />
 
-            {/* 3. Experimentation */}
-            <PlatformFeature
-                index={2}
-                title="Experiment Management"
-                description="Design and track experiments with precision. Define variables, samples, and protocols in a structured environment that ensures reproducibility."
-                icon={FlaskConical}
-                align="left"
-                images={["experiment-details.png"]}
-                features={[
-                    {
-                        icon: GitBranch,
-                        title: "Protocol Versioning",
-                        description: "Track changes to methods over time. maintain a complete history of protocol optimizations."
-                    },
-                    {
-                        icon: Database,
-                        title: "Structured Data Capture",
-                        description: "Standardize how data is collected across the lab to enable better downstream analysis."
-                    }
-                ]}
-            />
 
-            {/* 4. Lab Notebook */}
-            <PlatformFeature
-                index={3}
-                title="Digital Lab Notebook"
-                description="A modern ELN that writes itself. Capture observations, link results, and maintain a chronological record of your daily research activities."
-                icon={FileText}
-                align="right"
-                images={["lab_notes-details.png", "lab-notes.png"]}
-                features={[
-                    {
-                        icon: Sparkles, // Or Edit3
-                        title: "Rich Text & Media",
-                        description: "Embed images, charts, and chemical structures directly into your daily notes."
-                    },
-                    {
-                        icon: Brain,
-                        title: "Context-Aware Linking",
-                        description: "Automatically link note entries to specific experiments and literature sources."
-                    }
-                ]}
-            />
+            {/* 3. Lab Notebook & Experiments - Alternating Scroll Features with tighter spacing */}
+            <div className="space-y-0">
+                <ScrollFeature
+                    title="Design & Execute"
+                    description="Define variables, samples, and protocols in a structured environment that ensures reproducibility."
+                    icon={FlaskConical}
+                    image="experiment-details.png"
+                    align="right"
+                />
 
-            {/* Analysis Section (Optional - kept if needed for completeness, or maybe merged into others?) 
-                Reviewing the request, it asked for Literature, Projects, Experiment, and Lab Notes.
-                I will stop here to strictly follow the "images provided" guidance, 
-                as I don't have a specific analysis image other than re-using placeholders.
-            */}
+                <ScrollFeature
+                    title="The Notebook that Writes Itself"
+                    description="Capture observations, link results, and maintain a chronological record of your daily research activities automatically."
+                    icon={FileText}
+                    image="lab_notes-details.png"
+                    align="left"
+                />
+            </div>
+
+            {/* CTA Section */}
+            <div className="py-24 text-center">
+                <h3 className="text-2xl font-bold mb-4">Ready to modernize your lab?</h3>
+                <p className="text-muted-foreground mb-8">Join the researchers already using Notes9.</p>
+                {/* CTA buttons would go here */}
+            </div>
         </div>
     )
 }

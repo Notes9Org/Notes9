@@ -23,6 +23,8 @@ export default function MarketingLayout({
   return (
     <div className={`${inter.variable} ${jetbrainsMono.variable} font-sans antialiased min-h-screen flex flex-col bg-background text-foreground relative overflow-hidden`}>
       <InteractiveParticles />
+      {/* Radial gradient to improve text legibility in the center, similar to login page */}
+
       <div className="relative z-10 flex flex-col min-h-screen">
         <Header />
         <main className="flex-1">

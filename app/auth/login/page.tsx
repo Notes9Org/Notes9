@@ -144,7 +144,6 @@ function LoginForm() {
       setIsLoading(false)
     }
   }
-
   return (
     <div className="flex min-h-screen w-full items-center justify-center p-6 bg-background relative overflow-hidden">
       <InteractiveParticles />
