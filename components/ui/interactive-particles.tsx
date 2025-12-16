@@ -1,11 +1,13 @@
 "use client"
 
 import { useEffect, useRef } from "react"
+import { useTheme } from "next-themes"
 import { cn } from "@/lib/utils"
 
 export function InteractiveParticles({ className }: { className?: string }) {
     const canvasRef = useRef<HTMLCanvasElement>(null)
     const mouseRef = useRef({ x: -1000, y: -1000 })
+    const { resolvedTheme } = useTheme() // Use resolvedTheme for better accuracy
 
     useEffect(() => {
         const canvas = canvasRef.current
@@ -14,8 +16,33 @@ export function InteractiveParticles({ className }: { className?: string }) {
         const ctx = canvas.getContext("2d")
         if (!ctx) return
 
+        const isDarkMode = resolvedTheme === 'dark'
+
         let animationFrameId: number
         let particles: Particle[] = []
+
+        // Theme-dependent colors - Professional Scientific Palette
+        const particleColors = isDarkMode
+            ? [
+                "rgba(60, 180, 255, 0.8)",  // Bright Blue
+                "rgba(50, 220, 200, 0.8)",  // Teal/Cyan
+                "rgba(180, 100, 255, 0.8)", // Soft Purple
+                "rgba(220, 220, 255, 0.8)", // White-ish Blue
+                "rgba(100, 150, 255, 0.8)", // Azure
+            ]
+            : [
+                "rgba(30, 58, 138, 0.8)",   // Navy Blue
+                "rgba(13, 148, 136, 0.8)",  // Teal
+                "rgba(88, 28, 135, 0.8)",   // Deep Purple
+                "rgba(71, 85, 105, 0.8)",   // Slate
+                "rgba(37, 99, 235, 0.8)",   // Royal Blue
+            ]
+
+        const connectionColor = isDarkMode
+            ? "150, 150, 170" // Muted cool gray
+            : "100, 116, 139" // Slate gray
+
+
 
         class Particle {
             x: number
@@ -32,43 +59,35 @@ export function InteractiveParticles({ className }: { className?: string }) {
                 this.originY = Math.random() * h
                 this.x = this.originX
                 this.y = this.originY
-                this.vx = (Math.random() - 0.5) * 0.5 // Initial velocity
+                this.vx = (Math.random() - 0.5) * 0.5
                 this.vy = (Math.random() - 0.5) * 0.5
-                this.size = Math.random() * 3 + 2 // Bigger atoms (2-5px)
-                // Brighter chemical colors
-                const colors = ["rgba(100, 200, 255, 0.9)", "rgba(255, 255, 255, 0.7)", "rgba(160, 100, 255, 0.9)"]
-                this.color = colors[Math.floor(Math.random() * colors.length)]
+                this.size = Math.random() * 3 + 2
+                this.color = particleColors[Math.floor(Math.random() * particleColors.length)]
             }
 
             update(mouse: { x: number; y: number }, w: number, h: number) {
-                // 1. Spring force back to Origin (Home)
                 const dxHome = this.originX - this.x
                 const dyHome = this.originY - this.y
 
-                // Spring stiffness (returns to home)
                 this.vx += dxHome * 0.01
                 this.vy += dyHome * 0.01
 
-                // 2. Mouse Attraction (Subtle)
                 const dxMouse = mouse.x - this.x
                 const dyMouse = mouse.y - this.y
                 const distMouse = Math.sqrt(dxMouse * dxMouse + dyMouse * dyMouse)
-                const mouseRange = 300 // Interaction radius
+                const mouseRange = 300
 
                 if (distMouse < mouseRange) {
                     const force = (mouseRange - distMouse) / mouseRange
                     const angle = Math.atan2(dyMouse, dxMouse)
-                    // Very subtle pull (0.05 instead of 0.3)
                     this.vx += Math.cos(angle) * force * 0.08
                     this.vy += Math.sin(angle) * force * 0.08
                 }
 
-                // 3. Natural Drift / Noise
                 this.vx += (Math.random() - 0.5) * 0.02
                 this.vy += (Math.random() - 0.5) * 0.02
 
-                // Physics
-                this.vx *= 0.92 // Damping/Friction
+                this.vx *= 0.92
                 this.vy *= 0.92
 
                 this.x += this.vx
@@ -94,7 +113,7 @@ export function InteractiveParticles({ className }: { className?: string }) {
 
         const initParticles = () => {
             particles = []
-            // Much higher density: divide by 4000 instead of 6000
+            // Reduce count slightly as clusters are larger visually
             const particleCount = Math.floor((canvas.width * canvas.height) / 4000)
             for (let i = 0; i < particleCount; i++) {
                 particles.push(new Particle(canvas.width, canvas.height))
@@ -104,25 +123,22 @@ export function InteractiveParticles({ className }: { className?: string }) {
         const animate = () => {
             ctx.clearRect(0, 0, canvas.width, canvas.height)
 
-            // Draw Particles
             particles.forEach(p => {
                 p.update(mouseRef.current, canvas.width, canvas.height)
                 p.draw(ctx)
             })
 
-            // Draw Bonds (Lines)
-            ctx.lineWidth = 1 // Thicker lines
+            ctx.lineWidth = 1
             for (let i = 0; i < particles.length; i++) {
                 for (let j = i + 1; j < particles.length; j++) {
                     const dx = particles[i].x - particles[j].x
                     const dy = particles[i].y - particles[j].y
                     const distance = Math.sqrt(dx * dx + dy * dy)
-                    const connectDist = 160 // Longer connection range
+                    const connectDist = 160
 
                     if (distance < connectDist) {
-                        // Opacity based on distance
-                        const opacity = 1 - (distance / connectDist)
-                        ctx.strokeStyle = `rgba(100, 180, 255, ${opacity * 0.6})`
+                        const opacity = (1 - (distance / connectDist)) * 0.6
+                        ctx.strokeStyle = `rgba(${connectionColor}, ${opacity})`
                         ctx.beginPath()
                         ctx.moveTo(particles[i].x, particles[i].y)
                         ctx.lineTo(particles[j].x, particles[j].y)
@@ -152,7 +168,7 @@ export function InteractiveParticles({ className }: { className?: string }) {
             window.removeEventListener("mousemove", handleMouseMove)
             cancelAnimationFrame(animationFrameId)
         }
-    }, [])
+    }, [resolvedTheme])
 
     return (
         <canvas
@@ -161,3 +177,4 @@ export function InteractiveParticles({ className }: { className?: string }) {
         />
     )
 }
+

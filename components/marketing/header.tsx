@@ -2,6 +2,7 @@
 
 import { useState } from "react"
 import { Button } from "@/components/ui/button"
+import { ModeToggle } from "@/components/mode-toggle"
 import { Menu, X } from "lucide-react"
 import Image from "next/image"
 import Link from "next/link"
@@ -45,6 +46,7 @@ export function Header() {
                 Request Access
               </Link>
             </Button>
+            <ModeToggle />
           </div>
 
           {/* Mobile menu button */}
@@ -78,6 +80,9 @@ export function Header() {
                 <Button size="sm" className="w-full justify-center" asChild>
                   <Link href="/auth/sign-up">Request Access</Link>
                 </Button>
+                <div className="flex justify-center pt-2">
+                  <ModeToggle />
+                </div>
               </div>
             </nav>
           </div>

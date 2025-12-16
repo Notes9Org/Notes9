@@ -35,20 +35,15 @@ export function AcademicHero() {
             initial="hidden"
             animate="show"
           >
-            <motion.div variants={item}>
-              <Badge variant="outline" className="mb-6 text-sm font-medium border-primary/20 bg-primary/5 text-primary">
-                <Brain className="mr-2 h-4 w-4" />
-                Agentic Electronic Lab Notebook
-              </Badge>
-            </motion.div>
+
 
             <motion.h1 variants={item} className="text-4xl font-bold tracking-tight text-foreground sm:text-5xl lg:text-6xl text-balance">
               The Next Evolution of <br className="hidden sm:block" />
               <span className="text-primary">Scientific Intelligence</span>
             </motion.h1>
 
-            <motion.p variants={item} className="mt-6 text-xl text-muted-foreground sm:text-xl text-balance font-light leading-relaxed max-w-2xl mx-auto">
-              An agentic ELN platform designed to proactively assist researchers with literature reviews, lab note organization, and AI-driven data analysis.
+            <motion.p variants={item} className="mt-6 text-xl text-foreground/80 sm:text-xl text-balance font-normal leading-relaxed max-w-2xl mx-auto">
+              An agentic ELN platform designed to proactively assist researchers with literature reviews, lab note organization, and AI-driven data analysis
             </motion.p>
 
             <motion.div
