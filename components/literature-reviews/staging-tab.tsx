@@ -2,8 +2,7 @@
 
 import { SearchPaper } from '@/types/paper-search';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Layers, X, Database, Loader2 } from 'lucide-react';
+import { Layers } from 'lucide-react';
 import { PaperSearchCard } from './paper-search-card';
 import { useState } from 'react';
 
@@ -55,39 +54,13 @@ export function StagingTab({ stagedPapers, onRemoveFromStage, onSavePaper }: Sta
           ) : (
             <div className="space-y-4">
               {stagedPapers.map((paper) => (
-                <div key={paper.id} className="relative group">
-                  <PaperSearchCard paper={paper} hideActions />
-                  <div className="absolute top-4 right-4 flex gap-2">
-                    <Button
-                      variant="default"
-                      size="sm"
-                      onClick={() => handleSave(paper)}
-                      disabled={savingPaperId === paper.id}
-                      className="opacity-0 group-hover:opacity-100 transition-opacity"
-                    >
-                      {savingPaperId === paper.id ? (
-                        <>
-                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                          Saving...
-                        </>
-                      ) : (
-                        <>
-                          <Database className="h-4 w-4 mr-2" />
-                          Save to Repo
-                        </>
-                      )}
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => onRemoveFromStage(paper.id)}
-                      className="opacity-0 group-hover:opacity-100 transition-opacity hover:bg-destructive hover:text-destructive-foreground"
-                      title="Remove from staging"
-                    >
-                      <X className="h-4 w-4" />
-                    </Button>
-                  </div>
-                </div>
+                <PaperSearchCard
+                  key={paper.id}
+                  paper={paper}
+                  onSave={handleSave}
+                  onRemove={onRemoveFromStage}
+                  isSaving={savingPaperId === paper.id}
+                />
               ))}
             </div>
           )}

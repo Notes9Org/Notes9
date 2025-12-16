@@ -4,17 +4,20 @@ import { SearchPaper } from '@/types/paper-search';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
-import { ExternalLink, FileText, Lock, Unlock, ChevronDown, ChevronUp, Plus, Check } from 'lucide-react';
+import { ExternalLink, FileText, Lock, Unlock, ChevronDown, ChevronUp, Plus, Check, Database, X, Loader2 } from 'lucide-react';
 import { useState } from 'react';
 
 interface PaperSearchCardProps {
   paper: SearchPaper;
   onStage?: (paper: SearchPaper) => void;
+  onSave?: (paper: SearchPaper) => Promise<void>;
+  onRemove?: (paperId: string) => void;
   isStaged?: boolean;
+  isSaving?: boolean;
   hideActions?: boolean;
 }
 
-export function PaperSearchCard({ paper, onStage, isStaged = false, hideActions = false }: PaperSearchCardProps) {
+export function PaperSearchCard({ paper, onStage, onSave, onRemove, isStaged = false, isSaving = false, hideActions = false }: PaperSearchCardProps) {
   const [isExpanded, setIsExpanded] = useState(false);
 
   const getSourceColor = (source: string) => {
@@ -138,6 +141,40 @@ export function PaperSearchCard({ paper, onStage, isStaged = false, hideActions 
             
             <div className="flex-1"></div>
             
+            {/* Staging mode actions */}
+            {onSave && onRemove && (
+              <>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => onRemove(paper.id)}
+                  className="hover:bg-destructive hover:text-destructive-foreground"
+                >
+                  <X size={14} className="mr-2" />
+                  Remove from Staging
+                </Button>
+                <Button
+                  variant="default"
+                  size="sm"
+                  onClick={() => onSave(paper)}
+                  disabled={isSaving}
+                >
+                  {isSaving ? (
+                    <>
+                      <Loader2 size={14} className="mr-2 animate-spin" />
+                      Saving...
+                    </>
+                  ) : (
+                    <>
+                      <Database size={14} className="mr-2" />
+                      Save to Repository
+                    </>
+                  )}
+                </Button>
+              </>
+            )}
+            
+            {/* Search mode actions */}
             {onStage && (
               <Button
                 variant={isStaged ? "secondary" : "default"}
