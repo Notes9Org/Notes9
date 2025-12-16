@@ -1,3 +1,6 @@
+'use client'
+
+import { useState } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -12,6 +15,7 @@ import {
 } from "@/components/ui/table"
 import { BookOpen, Plus, Search, Star } from 'lucide-react'
 import Link from 'next/link'
+import { LiteratureDetailModal } from './literature-detail-modal'
 
 interface LiteratureReview {
   id: string
@@ -32,6 +36,14 @@ interface RepoTabProps {
 }
 
 export function RepoTab({ literatureReviews }: RepoTabProps) {
+  const [selectedLiteratureId, setSelectedLiteratureId] = useState<string | null>(null)
+  const [modalOpen, setModalOpen] = useState(false)
+
+  const handleOpenModal = (id: string) => {
+    setSelectedLiteratureId(id)
+    setModalOpen(true)
+  }
+
   const getStatusBadge = (status: string) => {
     const variants: Record<string, "default" | "secondary" | "outline"> = {
       saved: "outline",
@@ -92,12 +104,12 @@ export function RepoTab({ literatureReviews }: RepoTabProps) {
                 {literatureReviews.map((lit) => (
                   <TableRow key={lit.id}>
                     <TableCell>
-                      <Link 
-                        href={`/literature-reviews/${lit.id}`}
-                        className="font-medium text-foreground hover:underline"
+                      <button
+                        onClick={() => handleOpenModal(lit.id)}
+                        className="font-medium text-foreground hover:underline text-left"
                       >
                         {lit.title}
-                      </Link>
+                      </button>
                       {lit.doi && (
                         <p className="text-xs text-muted-foreground mt-0.5">
                           DOI: {lit.doi}
@@ -149,10 +161,12 @@ export function RepoTab({ literatureReviews }: RepoTabProps) {
                       )}
                     </TableCell>
                     <TableCell className="text-right">
-                      <Button variant="ghost" size="sm" asChild>
-                        <Link href={`/literature-reviews/${lit.id}`}>
-                          View
-                        </Link>
+                      <Button 
+                        variant="ghost" 
+                        size="sm"
+                        onClick={() => handleOpenModal(lit.id)}
+                      >
+                        View
                       </Button>
                     </TableCell>
                   </TableRow>
@@ -173,9 +187,13 @@ export function RepoTab({ literatureReviews }: RepoTabProps) {
           )}
         </CardContent>
       </Card>
+
+      {/* Literature Detail Modal */}
+      <LiteratureDetailModal
+        literatureId={selectedLiteratureId}
+        open={modalOpen}
+        onOpenChange={setModalOpen}
+      />
     </div>
   )
 }
-
-
-
