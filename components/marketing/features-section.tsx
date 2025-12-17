@@ -2,144 +2,129 @@
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { Brain, Search, Package, BarChart3, GitBranch, Plug, ArrowRight, CheckCircle } from "lucide-react"
+import { Brain, Search, Database, BarChart3, Package, Users, FlaskConical, Clock } from "lucide-react"
 import { motion } from "framer-motion"
 
-const features = [
-  {
-    icon: Brain,
-    title: "Proactive Research Guidance",
-    description:
-      "Your AI assistant doesn't just store data—it understands your research context, suggests next steps, identifies patterns, and proactively connects related experiments across your lab's knowledge base.",
-    benefits: [
-      "Intelligent protocol suggestions",
-      "Automated literature connections",
-      "Context-aware next-step recommendations",
-      "Cross-experiment pattern recognition",
-    ],
-  },
+const activeFeatures = [
   {
     icon: Search,
-    title: "Instant Research Intelligence",
+    title: "Agentic Literature Review",
     description:
-      "Cut literature review time by 80%. Our AI scans multiple databases, ranks papers by relevance, generates concise summaries, and automatically formats citations—letting you focus on science, not search.",
-    benefits: [
-      "Multi-database semantic search",
-      "Automated relevance ranking",
-      "Bullet-point summaries",
-      "Perfect citation formatting",
-    ],
+      "Automated semantic search across multiple databases. The agent ranks papers, generates summaries, and identifies key experimental protocols relevant to your work.",
+    status: "active"
   },
+  {
+    icon: Database,
+    title: "Structured Data Entry",
+    description:
+      "Context-aware lab notebook that organizes your experimental data. Automatically links finding to protocols and enables structured retrieval.",
+    status: "active"
+  },
+  {
+    icon: Brain,
+    title: "AI-Powered Analysis",
+    description:
+      "RAG-enabled insights into your own data. Ask questions in natural language to uncover patterns and generate publication-ready figures.",
+    status: "active"
+  }
+]
+
+const devFeatures = [
   {
     icon: Package,
-    title: "Predictive Supply Intelligence",
-    description:
-      "Never run out of critical reagents again. Our agent tracks real-time consumption, predicts usage patterns, flags expiry risks, and intelligently sources vetted suppliers with regulatory compliance verification.",
-    benefits: [
-      "Real-time consumption tracking",
-      "Expiry risk prediction",
-      "Intelligent supplier sourcing",
-      "Regulatory compliance verification",
-    ],
+    title: "Smart Inventory",
+    description: "Reagent tracking and supply chain prediction.",
+    status: "dev"
   },
   {
-    icon: BarChart3,
-    title: "Conversational Analytics",
-    description:
-      "Ask questions in natural language and get publication-ready results. Our AI fetches relevant datasets, runs statistical analysis, generates visualizations, and drafts plain-language summaries of your findings.",
-    benefits: [
-      "Natural language queries",
-      "Automated statistical analysis",
-      "Publication-ready visualizations",
-      "Plain-language insights",
-    ],
+    icon: FlaskConical,
+    title: "Regulatory Compliance",
+    description: "Automated compliance checks and audit trails.",
+    status: "dev"
   },
   {
-    icon: GitBranch,
-    title: "Intelligent Research Workflows",
-    description:
-      "Transform final deliverables with automated reporting. Our AI assembles tables, figures, and citations into live drafts that update with new data, requiring only your approval for key decisions.",
-    benefits: [
-      "Automated report generation",
-      "Live-updating drafts",
-      "Multi-format export (papers, slides, reports)",
-      "Template management",
-    ],
-  },
-  {
-    icon: Plug,
-    title: "Universal Lab Connectivity",
-    description:
-      "Seamlessly connect with 200+ pre-built integrations. Our platform unifies disparate lab tools into a cohesive agentic ecosystem that learns and adapts to your unique research workflows.",
-    benefits: [
-      "200+ pre-built integrations",
-      "Custom API endpoints",
-      "Real-time data synchronization",
-      "Workflow automation",
-    ],
-  },
+    icon: Users,
+    title: "Team Collaboration",
+    description: "Real-time sharing of protocols and results.",
+    status: "dev"
+  }
 ]
 
 export function FeaturesSection() {
   return (
-    <section className="py-24 bg-background">
+    <section id="features" className="py-24 bg-background">
       <div className="container mx-auto px-4 sm:px-6 lg:px-8">
         <div className="text-center mb-16">
-          <Badge variant="secondary" className="mb-4">
-            Core Features
-          </Badge>
-          <h2 className="text-3xl font-bold tracking-tight text-solid sm:text-4xl text-balance">
-            Beyond Traditional ELN - Meet Your{" "}
-            <span className="text-solid font-semibold">
-              Agentic Research Assistant
-            </span>
+          <h2 className="text-3xl font-bold tracking-tight text-foreground sm:text-4xl text-balance">
+            Core Capabilities
           </h2>
+          <p className="mt-4 text-lg text-muted-foreground whitespace-pre-wrap">Empowering researchers with next-generation tools.</p>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-          {features.map((feature, index) => (
+        {/* Active Features */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mb-20">
+          {activeFeatures.map((feature, index) => (
             <motion.div
               key={feature.title}
               initial={{ opacity: 0, y: 20 }}
               whileInView={{ opacity: 1, y: 0 }}
-              transition={{ delay: index * 0.1, duration: 0.6 }}
+              transition={{ delay: index * 0.1, duration: 0.5 }}
               viewport={{ once: true }}
-              whileHover={{ y: -5 }}
-              className="group"
             >
-              <Card className="h-full transition-all duration-300 hover:shadow-xl border-2 hover:border-primary/20">
+              <Card className="h-full border border-border/60 bg-card/50 hover:bg-card hover:shadow-sm transition-all">
                 <CardHeader>
-                  <div className="w-12 h-12 bg-primary/10 rounded-lg flex items-center justify-center mb-4 group-hover:bg-primary/20 transition-colors">
+                  <div className="w-12 h-12 bg-primary/10 rounded-lg flex items-center justify-center mb-4">
                     <feature.icon className="h-6 w-6 text-primary" />
                   </div>
-                  <CardTitle className="text-xl font-bold text-foreground group-hover:text-primary transition-colors">
+                  <CardTitle className="text-xl font-bold text-foreground">
                     {feature.title}
                   </CardTitle>
                 </CardHeader>
-                <CardContent className="space-y-4">
+                <CardContent>
                   <p className="text-muted-foreground leading-relaxed">{feature.description}</p>
-
-                  <div className="space-y-2">
-                    <h4 className="font-semibold text-sm text-foreground">Key Benefits:</h4>
-                    <ul className="space-y-1">
-                      {feature.benefits.map((benefit, i) => (
-                        <li key={i} className="flex items-start space-x-2 text-sm text-muted-foreground">
-                          <CheckCircle className="h-4 w-4 text-accent mt-0.5 flex-shrink-0" />
-                          <span>{benefit}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-
-                  <div className="pt-2">
-                    <div className="flex items-center text-primary text-sm font-medium group-hover:text-accent transition-colors">
-                      Learn more <ArrowRight className="ml-1 h-4 w-4" />
-                    </div>
-                  </div>
                 </CardContent>
               </Card>
             </motion.div>
           ))}
+        </div>
+
+        {/* Development Features */}
+        <div className="border-t border-border pt-16">
+          <div className="text-center mb-12">
+            <Badge variant="secondary" className="mb-2">Roadmap</Badge>
+            <h3 className="text-2xl font-semibold text-foreground">Under Active Development</h3>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+            {devFeatures.map((feature, index) => (
+              <motion.div
+                key={feature.title}
+                initial={{ opacity: 0 }}
+                whileInView={{ opacity: 1 }}
+                transition={{ delay: index * 0.1, duration: 0.5 }}
+                viewport={{ once: true }}
+              >
+                <Card className="h-full border border-border/40 bg-muted/20 opacity-80">
+                  <CardHeader className="flex flex-row items-center gap-4 space-y-0 pb-2">
+                    <div className="p-2 bg-muted rounded-md">
+                      <feature.icon className="h-5 w-5 text-muted-foreground" />
+                    </div>
+                    <div className="flex flex-col">
+                      <CardTitle className="text-lg font-semibold text-foreground/80">
+                        {feature.title}
+                      </CardTitle>
+                      <span className="text-xs font-medium text-amber-500 flex items-center mt-1">
+                        <Clock className="w-3 h-3 mr-1" />
+                        Coming Soon
+                      </span>
+                    </div>
+                  </CardHeader>
+                  <CardContent className="pt-2">
+                    <p className="text-sm text-muted-foreground">{feature.description}</p>
+                  </CardContent>
+                </Card>
+              </motion.div>
+            ))}
+          </div>
         </div>
       </div>
     </section>
