@@ -1,155 +1,88 @@
 "use client"
 
-import { Card, CardContent } from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
-import { CheckCircle, X } from "lucide-react"
-import { motion } from "framer-motion"
-
-const comparisons = [
-  {
-    category: "Proactive vs. Reactive",
-    traditional: "Store data when you remember to enter it",
-    notes9: "Understands your research context and suggests next steps before you ask",
-  },
-  {
-    category: "Intelligent vs. Static",
-    traditional: "Digital filing cabinets with search functions",
-    notes9: "AI that connects experiments, literature, and insights across your entire research program",
-  },
-  {
-    category: "Predictive vs. Historical",
-    traditional: "Show you what happened",
-    notes9: "Predict what should happen next and help you get there faster",
-  },
-]
-
-const proofPoints = [
-  {
-    metric: "3x faster",
-    description: "hypothesis generation",
-    detail: "Early adopters report 3x faster hypothesis generation",
-  },
-  {
-    metric: "40% increase",
-    description: "meaningful connections",
-    detail: "40% increase in meaningful cross-experiment connections",
-  },
-  {
-    metric: "60% reduction",
-    description: "manual tasks",
-    detail: "60% reduction in manual data management tasks",
-  },
-  {
-    metric: "90% fewer",
-    description: "compliance issues",
-    detail: "90% fewer citation errors and regulatory compliance issues",
-  },
-]
+import { Check, X } from "lucide-react"
 
 export function DifferentiationSection() {
   return (
-    <section className="py-24 bg-secondary/30">
+    <section className="py-24 bg-muted/30">
       <div className="container mx-auto px-4 sm:px-6 lg:px-8">
         <div className="text-center mb-16">
-          <Badge variant="secondary" className="mb-4">
-            Why Choose Notes9
-          </Badge>
-          <h2 className="text-3xl font-bold tracking-tight text-solid sm:text-4xl text-balance mb-6">
-            Why Researchers Choose{" "}
-            <span className="text-solid font-semibold">
-              Agentic Intelligence
-            </span>{" "}
-            Over Traditional ELN
+          <h2 className="text-3xl font-bold tracking-tight text-foreground sm:text-4xl">
+            Why Upgrade to Agentic?
           </h2>
-
-          <div className="max-w-3xl mx-auto space-y-4">
-            <div className="bg-destructive/10 border border-destructive/20 rounded-lg p-6">
-              <h3 className="font-semibold text-solid mb-2">The Problem with Traditional ELNs</h3>
-              <p className="text-solid">
-                Current ELN platforms are glorified digital notebooks—they store data but don't understand it.
-                Researchers waste 60% of their time on manual tasks: searching through notebooks, formatting citations,
-                tracking inventory, and analyzing data.
-              </p>
-            </div>
-
-            <div className="bg-primary/10 border border-primary/20 rounded-lg p-6">
-              <h3 className="font-semibold text-solid mb-2">Our Unique Solution: True Agentic Intelligence</h3>
-              <p className="text-solid">
-                Notes9 doesn't just digitize your notebook—it becomes your intelligent research partner. Our AI agents
-                proactively assist, predict needs, and accelerate discoveries by understanding the science behind your
-                work.
-              </p>
-            </div>
-          </div>
+          <p className="mt-4 text-lg text-muted-foreground max-w-2xl mx-auto">
+            Traditional ELNs are passive repositories. Notes9 is an active research partner.
+          </p>
         </div>
 
-        {/* Comparison Table */}
-        <div className="mb-16">
-          <h3 className="text-2xl font-bold text-center text-foreground mb-8">Competitive Advantages</h3>
-          <div className="space-y-6">
-            {comparisons.map((comparison, index) => (
-              <motion.div
-                key={comparison.category}
-                initial={{ opacity: 0, x: -20 }}
-                whileInView={{ opacity: 1, x: 0 }}
-                transition={{ delay: index * 0.1, duration: 0.6 }}
-                viewport={{ once: true }}
-              >
-                <Card className="overflow-hidden">
-                  <CardContent className="p-0">
-                    <div className="grid grid-cols-1 md:grid-cols-3 divide-y md:divide-y-0 md:divide-x">
-                      <div className="p-6 bg-muted/50">
-                        <h4 className="font-semibold text-foreground mb-2">{comparison.category}</h4>
-                      </div>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 items-start">
 
-                      <div className="p-6 bg-destructive/5">
-                        <div className="flex items-start space-x-3">
-                          <X className="h-5 w-5 text-destructive mt-0.5 flex-shrink-0" />
-                          <div>
-                            <h5 className="font-medium text-foreground mb-1">Traditional ELNs</h5>
-                            <p className="text-sm text-muted-foreground">{comparison.traditional}</p>
-                          </div>
-                        </div>
-                      </div>
+          {/* Technological Differentiation */}
+          <div className="space-y-8">
+            <h3 className="text-2xl font-semibold mb-6 border-l-4 border-primary pl-4">Technological Architecture</h3>
 
-                      <div className="p-6 bg-primary/5">
-                        <div className="flex items-start space-x-3">
-                          <CheckCircle className="h-5 w-5 text-primary mt-0.5 flex-shrink-0" />
-                          <div>
-                            <h5 className="font-medium text-foreground mb-1">Notes9</h5>
-                            <p className="text-sm text-muted-foreground">{comparison.notes9}</p>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              </motion.div>
-            ))}
+            <div className="bg-background rounded-xl border border-border p-6 shadow-sm">
+              <div className="flex items-center justify-between mb-4 pb-4 border-b border-border">
+                <span className="font-semibold text-muted-foreground">Standard ELN</span>
+                <span className="font-bold text-primary">Notes9 Agentic ELN</span>
+              </div>
+              <ul className="space-y-4">
+                <li className="grid grid-cols-2 gap-4 items-center">
+                  <div className="flex items-center text-sm text-muted-foreground">
+                    <X className="w-4 h-4 mr-2 text-red-400 flex-shrink-0" />
+                    Passive data storage
+                  </div>
+                  <div className="flex items-center text-sm font-medium">
+                    <Check className="w-4 h-4 mr-2 text-primary flex-shrink-0" />
+                    Proactive recommendations
+                  </div>
+                </li>
+                <li className="grid grid-cols-2 gap-4 items-center">
+                  <div className="flex items-center text-sm text-muted-foreground">
+                    <X className="w-4 h-4 mr-2 text-red-400 flex-shrink-0" />
+                    Manual data entry
+                  </div>
+                  <div className="flex items-center text-sm font-medium">
+                    <Check className="w-4 h-4 mr-2 text-primary flex-shrink-0" />
+                    Automated Contextual Entry
+                  </div>
+                </li>
+                <li className="grid grid-cols-2 gap-4 items-center">
+                  <div className="flex items-center text-sm text-muted-foreground">
+                    <X className="w-4 h-4 mr-2 text-red-400 flex-shrink-0" />
+                    Siloed from literature
+                  </div>
+                  <div className="flex items-center text-sm font-medium">
+                    <Check className="w-4 h-4 mr-2 text-primary flex-shrink-0" />
+                    Integrated RAG Literature Search
+                  </div>
+                </li>
+              </ul>
+            </div>
           </div>
-        </div>
 
-        {/* Proof Points */}
-        <div>
-          <h3 className="text-2xl font-bold text-center text-foreground mb-8">Proven Results</h3>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-            {proofPoints.map((point, index) => (
-              <motion.div
-                key={point.metric}
-                initial={{ opacity: 0, y: 20 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                transition={{ delay: index * 0.1, duration: 0.6 }}
-                viewport={{ once: true }}
-                whileHover={{ scale: 1.05 }}
-              >
-                <Card className="text-center p-6 h-full bg-card/50 backdrop-blur border-2 hover:border-primary/20 transition-all duration-300">
-                  <div className="text-3xl font-bold text-primary mb-2">{point.metric}</div>
-                  <div className="text-sm font-medium text-foreground mb-2">{point.description}</div>
-                  <div className="text-xs text-muted-foreground">{point.detail}</div>
-                </Card>
-              </motion.div>
-            ))}
+          {/* User Feature Differentiation */}
+          <div className="space-y-8">
+            <h3 className="text-2xl font-semibold mb-6 border-l-4 border-primary pl-4">Unified Research Cycle</h3>
+            <div className="bg-background rounded-xl border border-border p-8 shadow-sm">
+              <p className="text-lg text-muted-foreground leading-relaxed mb-6">
+                Most labs rely on a fragmented stack: one tool for literature (e.g., Zotero), one for notes (e.g., Benchling/LabArchives), and another for analysis (Prism/R/Python).
+              </p>
+              <p className="text-lg font-medium text-foreground">
+                Notes9 unifies these into a single workflow.
+              </p>
+              <div className="mt-6 flex flex-wrap gap-2">
+                <span className="px-3 py-1 rounded-full bg-blue-100 text-blue-800 text-sm font-medium dark:bg-blue-900 dark:text-blue-100">Literature Review</span>
+                <span className="text-muted-foreground">→</span>
+                <span className="px-3 py-1 rounded-full bg-purple-100 text-purple-800 text-sm font-medium dark:bg-purple-900 dark:text-purple-100">Experiment Design</span>
+                <span className="text-muted-foreground">→</span>
+                <span className="px-3 py-1 rounded-full bg-green-100 text-green-800 text-sm font-medium dark:bg-green-900 dark:text-green-100">Data Capture</span>
+                <span className="text-muted-foreground">→</span>
+                <span className="px-3 py-1 rounded-full bg-orange-100 text-orange-800 text-sm font-medium dark:bg-orange-900 dark:text-orange-100">AI Analysis</span>
+              </div>
+            </div>
           </div>
+
         </div>
       </div>
     </section>
