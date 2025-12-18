@@ -1,6 +1,13 @@
 import { createBrowserClient } from "@supabase/ssr"
+import { createMockClient } from "./mock-client"
+import { USE_MOCK_DEPENDENCIES } from "../config"
 
 export function createClient() {
+  if (USE_MOCK_DEPENDENCIES) {
+    console.warn("🔧 Using mock Supabase client")
+    return createMockClient() as any
+  }
+
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
   const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 

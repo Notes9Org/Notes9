@@ -1,8 +1,13 @@
 import { createServerClient } from "@supabase/ssr"
 import { cookies } from "next/headers"
+import { createMockClient } from "./mock-client"
+import { USE_MOCK_DEPENDENCIES } from "../config"
 
 export async function createClient() {
-  const cookieStore = await cookies()
+  if (USE_MOCK_DEPENDENCIES) {
+    console.warn("🔧 Using mock Supabase client for local testing")
+    return createMockClient() as any
+  }
 
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
   const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
@@ -14,6 +19,8 @@ export async function createClient() {
       "https://supabase.com/dashboard/project/_/settings/api"
     )
   }
+
+  const cookieStore = await cookies()
 
   return createServerClient(
     supabaseUrl,
