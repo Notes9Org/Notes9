@@ -173,7 +173,7 @@ export default function AboutPage() {
               },
               {
                 name: "Hemanth Rao Paidipally",
-                role: "Founding Engineer",
+                role: "Full Stack Developer",
                 desc: "Software Engineer at Amazon India with deep expertise in large-scale distributed systems and cloud infrastructure.",
                 education: "BE Computer Science – BITS Pilani"
               }
@@ -183,7 +183,7 @@ export default function AboutPage() {
                 <Card className="h-full border-border/60 bg-card/60 backdrop-blur-sm hover:bg-card/90 shadow-sm hover:shadow-2xl transition-all duration-300 hover:-translate-y-2 group">
                   <CardHeader>
                     <CardTitle className="text-xl group-hover:text-primary transition-colors">{member.name}</CardTitle>
-                    <Badge variant="secondary" className="w-fit mt-2 border-primary/10 bg-primary/5">{member.role}</Badge>
+                    <Badge variant="secondary" className="w-fit mt-2 border-primary/20 bg-primary/10 text-primary font-medium">{member.role}</Badge>
                   </CardHeader>
                   <CardContent className="space-y-4">
                     <p className="text-sm text-muted-foreground leading-relaxed">
