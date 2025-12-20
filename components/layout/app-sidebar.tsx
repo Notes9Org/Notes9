@@ -43,7 +43,7 @@ import {
   SidebarMenuSubButton,
   SidebarMenuSubItem,
   SidebarSeparator,
-  SidebarRail,
+
   SidebarMenuSkeleton,
 } from "@/components/ui/sidebar"
 import {
@@ -144,7 +144,7 @@ export function AppSidebar() {
 
         // Get current user
         const { data: { user: currentUser }, error: userError } = await supabase.auth.getUser()
-        
+
         if (userError) {
           console.error("Error fetching user:", userError)
           toast.error("Authentication error. Please try logging in again.")
@@ -167,7 +167,7 @@ export function AppSidebar() {
           .single()
 
         let userProfileData = userProfile
-        
+
         if (profileCheckError || !userProfileData) {
           // Log detailed error information
           const errorInfo = profileCheckError ? {
@@ -176,48 +176,48 @@ export function AppSidebar() {
             hint: profileCheckError.hint,
             code: profileCheckError.code,
           } : { message: 'Profile not found', code: 'PGRST116' }
-          
+
           console.error("User profile not found or error:", errorInfo)
           console.error("User ID:", currentUser.id)
           console.error("User email:", currentUser.email)
           console.error("Full error object:", profileCheckError)
-          
+
           // Try to create profile if it doesn't exist (error code PGRST116 = no rows returned)
           const errorCode = profileCheckError?.code || (userProfileData ? null : 'PGRST116')
           if (!userProfileData || errorCode === 'PGRST116') {
             // Profile doesn't exist, try to create it
             console.log("Profile not found, attempting to create...")
-            
+
             // Extract name from user metadata
-            let firstName = currentUser.user_metadata?.first_name || 
-                           currentUser.user_metadata?.given_name || 
-                           currentUser.user_metadata?.name?.split(' ')[0] || 
-                           ''
-            let lastName = currentUser.user_metadata?.last_name || 
-                          currentUser.user_metadata?.family_name || 
-                          currentUser.user_metadata?.name?.split(' ').slice(1).join(' ') || 
-                          ''
-            
+            let firstName = currentUser.user_metadata?.first_name ||
+              currentUser.user_metadata?.given_name ||
+              currentUser.user_metadata?.name?.split(' ')[0] ||
+              ''
+            let lastName = currentUser.user_metadata?.last_name ||
+              currentUser.user_metadata?.family_name ||
+              currentUser.user_metadata?.name?.split(' ').slice(1).join(' ') ||
+              ''
+
             if (!firstName && !lastName && currentUser.user_metadata?.full_name) {
               const nameParts = currentUser.user_metadata.full_name.split(' ')
               firstName = nameParts[0] || ''
               lastName = nameParts.slice(1).join(' ') || ''
             }
-            
+
             if (!firstName) {
               firstName = currentUser.email?.split('@')[0] || 'User'
             }
-            
+
             // Create organization first (or find existing one)
             let orgId: string | null = null
-            
+
             // Try to find existing organization by email
             const { data: existingOrg } = await supabase
               .from("organizations")
               .select("id")
               .eq("email", currentUser.email || '')
               .single()
-            
+
             if (existingOrg) {
               orgId = existingOrg.id
               console.log("Found existing organization:", orgId)
@@ -232,7 +232,7 @@ export function AppSidebar() {
                 })
                 .select()
                 .single()
-              
+
               if (orgError) {
                 console.error("Error creating organization:", {
                   message: orgError.message,
@@ -258,14 +258,14 @@ export function AppSidebar() {
                 console.log("Created new organization:", orgId)
               }
             }
-            
+
             if (!orgId) {
               console.error("Could not get or create organization")
               toast.error("Failed to set up account. Please try signing out and back in.")
               setLoading(false)
               return
             }
-            
+
             // Create profile
             const { error: createProfileError } = await supabase
               .from("profiles")
@@ -277,7 +277,7 @@ export function AppSidebar() {
                 role: currentUser.user_metadata?.role || 'researcher',
                 organization_id: orgId
               })
-            
+
             if (createProfileError) {
               console.error("Error creating profile:", {
                 message: createProfileError.message,
@@ -285,7 +285,7 @@ export function AppSidebar() {
                 hint: createProfileError.hint,
                 code: createProfileError.code
               })
-              
+
               // If profile already exists (race condition), fetch it
               if (createProfileError.message?.includes('duplicate') || createProfileError.code === '23505') {
                 const { data: existingProfile } = await supabase
@@ -293,7 +293,7 @@ export function AppSidebar() {
                   .select("id, organization_id")
                   .eq("id", currentUser.id)
                   .single()
-                
+
                 if (existingProfile?.organization_id) {
                   // Profile exists, continue
                   console.log("Profile already exists, continuing...")
@@ -310,21 +310,21 @@ export function AppSidebar() {
             } else {
               console.log("Profile created successfully")
             }
-            
+
             // Retry fetching profile
             const { data: retryProfile } = await supabase
               .from("profiles")
               .select("id, organization_id")
               .eq("id", currentUser.id)
               .single()
-            
+
             if (!retryProfile || !retryProfile.organization_id) {
               console.error("Profile still missing after creation attempt")
               toast.error("Account setup incomplete. Please contact support.")
               setLoading(false)
               return
             }
-            
+
             // Update userProfileData for rest of function
             userProfileData = retryProfile
           } else {
@@ -362,10 +362,10 @@ export function AppSidebar() {
           let experimentsData: ExperimentSummary[] = []
           if (projectIds.length > 0) {
             const { data: exps, error: expsError } = await supabase
-            .from("experiments")
+              .from("experiments")
               .select("id, name, project_id")
-            .in("project_id", projectIds)
-          
+              .in("project_id", projectIds)
+
             if (expsError) throw expsError
             experimentsData = exps || []
           }
@@ -480,7 +480,7 @@ export function AppSidebar() {
     // Subscribe to real-time updates for projects
     const channel = supabase
       .channel('sidebar-projects')
-      .on('postgres_changes', 
+      .on('postgres_changes',
         { event: '*', schema: 'public', table: 'projects' },
         () => {
           fetchData()
@@ -510,14 +510,14 @@ export function AppSidebar() {
 
   const getUserDisplayName = () => {
     if (!user) return "User"
-    return user.user_metadata?.full_name || 
-           (user.user_metadata?.first_name && user.user_metadata?.last_name 
-             ? `${user.user_metadata.first_name} ${user.user_metadata.last_name}`
-             : user.email?.split("@")[0] || "User")
+    return user.user_metadata?.full_name ||
+      (user.user_metadata?.first_name && user.user_metadata?.last_name
+        ? `${user.user_metadata.first_name} ${user.user_metadata.last_name}`
+        : user.email?.split("@")[0] || "User")
   }
 
   return (
-    <Sidebar collapsible="icon" variant="sidebar">
+    <Sidebar variant="sidebar">
       {/* Header with Workspace Dropdown */}
       <SidebarHeader>
         <SidebarMenu>
@@ -563,7 +563,7 @@ export function AppSidebar() {
               {navigation.map((item) => {
                 const Icon = item.icon
                 const isActive = mounted && (pathname === item.href || pathname.startsWith(item.href + "/"))
-                
+
                 // Only show badge for these items and only if count > 0
                 let badge: number | null = null
                 if (item.name === "Projects" && counts.projects > 0) {
@@ -575,7 +575,7 @@ export function AppSidebar() {
                 } else if (item.name === "Literature" && counts.literature > 0) {
                   badge = counts.literature
                 }
-                
+
                 return (
                   <SidebarMenuItem key={item.name}>
                     <SidebarMenuButton asChild isActive={isActive} tooltip={item.name}>
@@ -638,7 +638,7 @@ export function AppSidebar() {
                     projects.map((project) => {
                       const isProjectOpen = openProjects[project.id] ?? false
                       return (
-                      <SidebarMenuItem key={project.id}>
+                        <SidebarMenuItem key={project.id}>
                           <div className="flex items-start">
                             <button
                               className="mr-2 mt-0.5 text-muted-foreground hover:text-foreground"
@@ -656,19 +656,19 @@ export function AppSidebar() {
                                 <Folder className="size-4" />
                               )}
                             </button>
-                        <SidebarMenuButton asChild isActive={mounted && pathname === `/projects/${project.id}`} tooltip={project.name}>
-                          <Link href={`/projects/${project.id}`}>
-                            <div
-                              className={cn(
-                                "size-2 rounded-full shrink-0",
-                                project.status === "active" ? "bg-green-500" : "bg-yellow-500"
-                              )}
-                            />
-                            <span className="truncate">{project.name}</span>
-                          </Link>
-                        </SidebarMenuButton>
-                        {project.experiment_count && project.experiment_count > 0 && (
-                          <SidebarMenuBadge>{project.experiment_count}</SidebarMenuBadge>
+                            <SidebarMenuButton asChild isActive={mounted && pathname === `/projects/${project.id}`} tooltip={project.name}>
+                              <Link href={`/projects/${project.id}`}>
+                                <div
+                                  className={cn(
+                                    "size-2 rounded-full shrink-0",
+                                    project.status === "active" ? "bg-green-500" : "bg-yellow-500"
+                                  )}
+                                />
+                                <span className="truncate">{project.name}</span>
+                              </Link>
+                            </SidebarMenuButton>
+                            {project.experiment_count && project.experiment_count > 0 && (
+                              <SidebarMenuBadge>{project.experiment_count}</SidebarMenuBadge>
                             )}
                           </div>
 
@@ -730,8 +730,8 @@ export function AppSidebar() {
                                 )
                               })}
                             </div>
-                        )}
-                      </SidebarMenuItem>
+                          )}
+                        </SidebarMenuItem>
                       )
                     })
                   )}
@@ -819,8 +819,6 @@ export function AppSidebar() {
           </SidebarMenuItem>
         </SidebarMenu>
       </SidebarFooter>
-
-      <SidebarRail />
     </Sidebar>
   )
 }
