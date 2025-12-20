@@ -90,12 +90,12 @@ export function ExperimentList({ experiments }: ExperimentListProps) {
                       experiment.status === "in_progress"
                         ? "default"
                         : experiment.status === "completed"
-                        ? "secondary"
-                        : "outline"
+                          ? "secondary"
+                          : "outline"
                     }
                     className="shrink-0"
                   >
-                    {experiment.status.replace("_", " ")}
+                    {(experiment.status || "unknown").replace("_", " ")}
                   </Badge>
                 </div>
               </CardHeader>
@@ -179,11 +179,11 @@ export function ExperimentList({ experiments }: ExperimentListProps) {
                             experiment.status === "in_progress"
                               ? "default"
                               : experiment.status === "completed"
-                              ? "secondary"
-                              : "outline"
+                                ? "secondary"
+                                : "outline"
                           }
                         >
-                          {experiment.status.replace("_", " ")}
+                          {(experiment.status || "unknown").replace("_", " ")}
                         </Badge>
                       </TableCell>
                       <TableCell className="text-muted-foreground">
