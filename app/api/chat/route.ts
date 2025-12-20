@@ -1,13 +1,22 @@
 import { streamText, convertToCoreMessages } from 'ai';
 import { google } from '@ai-sdk/google';
+import { DEFAULT_MODEL_ID, getModelById } from '@/lib/ai/models';
 
 export const maxDuration = 30;
 
 export async function POST(req: Request) {
-  const { messages } = await req.json();
+  const { messages, modelId } = await req.json();
+
+  // Get selected model or default
+  const selectedModelId = modelId || DEFAULT_MODEL_ID;
+  const modelConfig = getModelById(selectedModelId);
+  
+  // For now, only Google models are supported
+  // Add more providers when API keys are configured
+  const model = google(modelConfig?.id || DEFAULT_MODEL_ID);
 
   const result = streamText({
-    model: google('gemini-2.0-flash'),
+    model,
     system: `You are Catalyst, an AI research assistant for Notes9 - a scientific lab documentation platform.
 You help scientists with their experiments, protocols, and research documentation.
 

@@ -8,18 +8,32 @@ import { PanelLeftClose, PanelLeft } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useChatSessions } from '@/hooks/use-chat-sessions';
 import { createClient } from '@/lib/supabase/client';
+import { DEFAULT_MODEL_ID } from '@/lib/ai/models';
 import { CatalystGreeting } from './catalyst-greeting';
 import { CatalystMessages } from './catalyst-messages';
 import { CatalystInput } from './catalyst-input';
 import type { Attachment } from './preview-attachment';
 import { CatalystSidebar } from './catalyst-sidebar';
+import type { Vote } from '@/lib/db/schema';
+
+// Helper to get cookie value
+function getCookie(name: string): string | null {
+  if (typeof document === 'undefined') return null;
+  const match = document.cookie.match(new RegExp('(^| )' + name + '=([^;]+)'));
+  return match ? decodeURIComponent(match[2]) : null;
+}
 
 interface CatalystChatProps {
   sessionId?: string;
 }
 
-// Stable chat transport
-const chatTransport = new DefaultChatTransport({ api: '/api/chat' });
+// Create transport factory that includes modelId
+function createChatTransport(modelId: string) {
+  return new DefaultChatTransport({ 
+    api: '/api/chat',
+    body: { modelId },
+  });
+}
 
 export function CatalystChat({ sessionId }: CatalystChatProps) {
   const router = useRouter();
@@ -27,6 +41,16 @@ export function CatalystChat({ sessionId }: CatalystChatProps) {
   const [userName, setUserName] = useState<string>('');
   const [savedMessageIds, setSavedMessageIds] = useState<Set<string>>(new Set());
   const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [selectedModelId, setSelectedModelId] = useState(DEFAULT_MODEL_ID);
+  const [votes, setVotes] = useState<Vote[]>([]);
+
+  // Load model from cookie on mount
+  useEffect(() => {
+    const savedModel = getCookie('catalyst-model');
+    if (savedModel) {
+      setSelectedModelId(savedModel);
+    }
+  }, []);
 
   const prevStatusRef = useRef<string>('ready');
   const currentSessionRef = useRef<string | null>(sessionId || null);
@@ -47,16 +71,29 @@ export function CatalystChat({ sessionId }: CatalystChatProps) {
     loadSessions,
   } = useChatSessions();
 
-  // Create chat instance
-  const chatInstance = useRef(
-    new Chat({
-      id: sessionId || 'catalyst-new',
-      transport: chatTransport,
-    })
-  ).current;
+  // Create chat instance with current model
+  const chatInstanceRef = useRef<InstanceType<typeof Chat> | null>(null);
+  const currentModelRef = useRef(selectedModelId);
+
+  // Update chat instance when model changes
+  useEffect(() => {
+    currentModelRef.current = selectedModelId;
+    chatInstanceRef.current = new Chat({
+      id: `catalyst-${sessionId || 'new'}-${selectedModelId}`,
+      transport: createChatTransport(selectedModelId),
+    });
+  }, [selectedModelId, sessionId]);
+
+  // Initialize chat instance
+  if (!chatInstanceRef.current) {
+    chatInstanceRef.current = new Chat({
+      id: `catalyst-${sessionId || 'new'}-${selectedModelId}`,
+      transport: createChatTransport(selectedModelId),
+    });
+  }
 
   const { messages, sendMessage, status, stop, setMessages } = useChat({
-    chat: chatInstance,
+    chat: chatInstanceRef.current,
   });
 
   const isLoading = status === 'streaming' || status === 'submitted';
@@ -121,6 +158,28 @@ export function CatalystChat({ sessionId }: CatalystChatProps) {
       loadSessionMessages(currentSessionId);
     }
   }, [currentSessionId, loadSessionMessages]);
+
+  // Load votes for current session
+  useEffect(() => {
+    const loadVotes = async () => {
+      if (!currentSessionId) {
+        setVotes([]);
+        return;
+      }
+
+      try {
+        const response = await fetch(`/api/vote?chatId=${currentSessionId}`);
+        if (response.ok) {
+          const data = await response.json();
+          setVotes(data);
+        }
+      } catch (error) {
+        console.error('Failed to load votes:', error);
+      }
+    };
+
+    loadVotes();
+  }, [currentSessionId]);
 
   // Save messages when streaming completes
   useEffect(() => {
@@ -262,6 +321,47 @@ export function CatalystChat({ sessionId }: CatalystChatProps) {
     return 'content' in message ? String(message.content) : '';
   };
 
+  // Handle editing a message (deletes trailing messages and regenerates)
+  const handleEditMessage = useCallback(
+    async (messageId: string, newContent: string) => {
+      const messageIndex = messages.findIndex((m) => m.id === messageId);
+      if (messageIndex === -1) return;
+
+      // Remove this message and all following messages
+      const updatedMessages = messages.slice(0, messageIndex);
+      
+      // Add the edited message
+      const editedMessage = {
+        ...messages[messageIndex],
+        parts: [{ type: 'text' as const, text: newContent }],
+      };
+      
+      setMessages([...updatedMessages, editedMessage]);
+
+      // Send the new message to regenerate response
+      await sendMessage({ parts: [{ type: 'text', text: newContent }] });
+    },
+    [messages, setMessages, sendMessage]
+  );
+
+  // Handle regenerating the last response
+  const handleRegenerate = useCallback(async () => {
+    if (messages.length < 2) return;
+
+    // Find the last user message
+    const lastUserMessageIndex = messages.findLastIndex((m) => m.role === 'user');
+    if (lastUserMessageIndex === -1) return;
+
+    const lastUserMessage = messages[lastUserMessageIndex];
+    const userContent = getMessageContent(lastUserMessage);
+
+    // Remove assistant response(s) after the last user message
+    setMessages(messages.slice(0, lastUserMessageIndex + 1));
+
+    // Regenerate
+    await sendMessage({ parts: [{ type: 'text', text: userContent }] });
+  }, [messages, setMessages, sendMessage, getMessageContent]);
+
   return (
     <div className="flex h-full">
       {/* Chat History Sidebar */}
@@ -306,6 +406,10 @@ export function CatalystChat({ sessionId }: CatalystChatProps) {
               messages={messages}
               getMessageContent={getMessageContent}
               isLoading={isLoading}
+              sessionId={currentSessionRef.current}
+              votes={votes}
+              onEditMessage={handleEditMessage}
+              onRegenerate={handleRegenerate}
             />
           )}
         </div>
@@ -318,6 +422,8 @@ export function CatalystChat({ sessionId }: CatalystChatProps) {
           isLoading={isLoading}
           stop={stop}
           hasMessages={messages.length > 0}
+          selectedModelId={selectedModelId}
+          onModelChange={setSelectedModelId}
         />
       </div>
     </div>
