@@ -23,6 +23,7 @@ import {
   Package,
   Users,
   BookOpen,
+  Sparkles,
 } from 'lucide-react'
 import {
   Sidebar,
@@ -778,9 +779,24 @@ export function AppSidebar() {
         </Collapsible>
       </SidebarContent>
 
-      {/* Footer with User Dropdown */}
+      {/* Footer with Catalyst and User Dropdown */}
       <SidebarFooter>
         <SidebarMenu>
+          {/* Catalyst AI Button */}
+          <SidebarMenuItem>
+            <SidebarMenuButton
+              asChild
+              tooltip="Catalyst AI"
+              className="bg-primary/10 hover:bg-primary/20 text-primary"
+            >
+              <Link href="/catalyst">
+                <Sparkles className="size-4" />
+                <span>Catalyst</span>
+              </Link>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+
+          {/* User Dropdown */}
           <SidebarMenuItem>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
