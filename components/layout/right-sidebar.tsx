@@ -21,14 +21,25 @@ import { cn } from '@/lib/utils';
 import { useChatSessions } from '@/hooks/use-chat-sessions';
 import { MarkdownRenderer } from '@/components/catalyst/markdown-renderer';
 import { PreviewAttachment, type Attachment } from '@/components/catalyst/preview-attachment';
+import { ModelSelector } from '@/components/catalyst/model-selector';
+import { MessageActions } from '@/components/catalyst/message-actions';
+import { DEFAULT_MODEL_ID } from '@/lib/ai/models';
 import { toast } from 'sonner';
 
-// Stable chat transport for sidebar
-const sidebarChatTransport = new DefaultChatTransport({ api: '/api/chat' });
-const sidebarChatInstance = new Chat({
-  id: 'sidebar-chat',
-  transport: sidebarChatTransport,
-});
+// Helper to get cookie value
+function getCookie(name: string): string | null {
+  if (typeof document === 'undefined') return null;
+  const match = document.cookie.match(new RegExp('(^| )' + name + '=([^;]+)'));
+  return match ? decodeURIComponent(match[2]) : null;
+}
+
+// Create transport factory that includes modelId
+function createSidebarTransport(modelId: string) {
+  return new DefaultChatTransport({ 
+    api: '/api/chat',
+    body: { modelId },
+  });
+}
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024;
 const ALLOWED_TYPES = [
@@ -42,14 +53,42 @@ const ALLOWED_TYPES = [
 
 export function RightSidebar() {
   const [input, setInput] = useState('');
+  const [selectedModelId, setSelectedModelId] = useState(DEFAULT_MODEL_ID);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [uploadQueue, setUploadQueue] = useState<string[]>([]);
 
+  // Load model from cookie on mount
+  useEffect(() => {
+    const savedModel = getCookie('catalyst-model');
+    if (savedModel) {
+      setSelectedModelId(savedModel);
+    }
+  }, []);
+
+  // Create chat instance with current model
+  const chatInstanceRef = useRef<InstanceType<typeof Chat> | null>(null);
+
+  // Update chat instance when model changes
+  useEffect(() => {
+    chatInstanceRef.current = new Chat({
+      id: `sidebar-${selectedModelId}`,
+      transport: createSidebarTransport(selectedModelId),
+    });
+  }, [selectedModelId]);
+
+  // Initialize chat instance
+  if (!chatInstanceRef.current) {
+    chatInstanceRef.current = new Chat({
+      id: `sidebar-${selectedModelId}`,
+      transport: createSidebarTransport(selectedModelId),
+    });
+  }
+
   const { messages, sendMessage, status, stop, setMessages } = useChat({
-    chat: sidebarChatInstance,
+    chat: chatInstanceRef.current,
   });
 
   const {
@@ -313,42 +352,77 @@ export function RightSidebar() {
             /* Messages */
             <ScrollArea className="flex-1 min-h-0">
               <div className="p-2 sm:p-3 space-y-2 sm:space-y-3">
-                {messages.map((message) => (
-                  <div
-                    key={message.id}
-                    className={cn(
-                      'flex gap-1.5 sm:gap-2',
-                      message.role === 'user' ? 'justify-end' : 'justify-start'
-                    )}
-                  >
-                    {message.role === 'assistant' && (
-                      <div className="flex size-5 sm:size-6 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-orange-400 to-pink-500 text-white">
-                        <Sparkles className="size-2.5 sm:size-3" />
-                      </div>
-                    )}
+                {messages.map((message, index) => {
+                  const content = getMessageContent(message);
+                  const isLastAssistant =
+                    message.role === 'assistant' && index === messages.length - 1;
+
+                  return (
                     <div
+                      key={message.id}
                       className={cn(
-                        'rounded-xl px-2.5 sm:px-3 py-1.5 sm:py-2 text-[11px] sm:text-xs max-w-[88%] sm:max-w-[85%]',
-                        message.role === 'user'
-                          ? 'bg-primary text-primary-foreground'
-                          : 'bg-muted'
+                        'group/message flex gap-1.5 sm:gap-2',
+                        message.role === 'user' ? 'justify-end' : 'justify-start'
                       )}
                     >
-                      {message.role === 'user' ? (
-                        <span className="whitespace-pre-wrap break-words">
-                          {getMessageContent(message)}
-                        </span>
-                      ) : (
-                        <div className="prose prose-xs dark:prose-invert max-w-none [&_p]:my-0.5 sm:[&_p]:my-1 [&_pre]:my-0.5 sm:[&_pre]:my-1 [&_ul]:my-0.5 sm:[&_ul]:my-1">
-                          <MarkdownRenderer
-                            content={getMessageContent(message)}
-                            className="text-[11px] sm:text-xs"
-                          />
+                      {message.role === 'assistant' && (
+                        <div className="flex size-5 sm:size-6 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-orange-400 to-pink-500 text-white">
+                          <Sparkles className="size-2.5 sm:size-3" />
                         </div>
                       )}
+                      <div className="flex flex-col max-w-[88%] sm:max-w-[85%]">
+                        <div
+                          className={cn(
+                            'rounded-xl px-2.5 sm:px-3 py-1.5 sm:py-2 text-[11px] sm:text-xs',
+                            message.role === 'user'
+                              ? 'bg-primary text-primary-foreground'
+                              : 'bg-muted'
+                          )}
+                        >
+                          {message.role === 'user' ? (
+                            <span className="whitespace-pre-wrap break-words">
+                              {content}
+                            </span>
+                          ) : (
+                            <div className="prose prose-xs dark:prose-invert max-w-none [&_p]:my-0.5 sm:[&_p]:my-1 [&_pre]:my-0.5 sm:[&_pre]:my-1 [&_ul]:my-0.5 sm:[&_ul]:my-1">
+                              <MarkdownRenderer
+                                content={content}
+                                className="text-[11px] sm:text-xs"
+                              />
+                            </div>
+                          )}
+                        </div>
+                        {/* Message Actions */}
+                        <MessageActions
+                          sessionId={currentSessionRef.current}
+                          messageId={message.id}
+                          messageRole={message.role as 'user' | 'assistant'}
+                          messageContent={content}
+                          isLoading={isLoading}
+                          onRegenerate={
+                            isLastAssistant
+                              ? async () => {
+                                  // Find last user message and regenerate
+                                  const lastUserMsgIndex = messages.findLastIndex(
+                                    (m) => m.role === 'user'
+                                  );
+                                  if (lastUserMsgIndex === -1) return;
+                                  const userContent = getMessageContent(
+                                    messages[lastUserMsgIndex]
+                                  );
+                                  setMessages(messages.slice(0, lastUserMsgIndex + 1));
+                                  await sendMessage({
+                                    parts: [{ type: 'text', text: userContent }],
+                                  });
+                                }
+                              : undefined
+                          }
+                          compact
+                        />
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
 
                 {isLoading && messages.at(-1)?.role === 'user' && (
                   <div className="flex gap-1.5 sm:gap-2 justify-start">
@@ -441,9 +515,9 @@ export function RightSidebar() {
                     </Button>
                   )}
                 </div>
-              </div>
+      </div>
 
-              {/* Toolbar - New chat + Attach */}
+              {/* Toolbar - New chat + Model + Attach */}
               <div className="flex items-center gap-0.5 sm:gap-1 mt-1 sm:mt-1.5">
                 {messages.length > 0 && (
                   <Button
@@ -457,6 +531,12 @@ export function RightSidebar() {
                     New
                   </Button>
                 )}
+                <ModelSelector
+                  selectedModelId={selectedModelId}
+                  onModelChange={setSelectedModelId}
+                  compact
+                  disabled={isLoading}
+                />
                 <Button
                   type="button"
                   size="icon"
@@ -466,7 +546,7 @@ export function RightSidebar() {
                   disabled={isLoading || isUploading}
                 >
                   <Paperclip className="size-2.5 sm:size-3" />
-                </Button>
+              </Button>
               </div>
             </form>
           </div>
@@ -500,8 +580,8 @@ export function RightSidebar() {
                   </div>
                 </div>
               ))}
-            </div>
-          </ScrollArea>
+        </div>
+      </ScrollArea>
         </TabsContent>
       </Tabs>
     </div>
