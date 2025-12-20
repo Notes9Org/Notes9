@@ -1,7 +1,7 @@
 'use client';
 
-import { useState, useRef, useEffect, useCallback, type ChangeEvent } from 'react';
-import { useChat, Chat } from '@ai-sdk/react';
+import { useState, useRef, useEffect, useCallback, useMemo, type ChangeEvent } from 'react';
+import { useChat } from '@ai-sdk/react';
 import { DefaultChatTransport } from 'ai';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -33,14 +33,6 @@ function getCookie(name: string): string | null {
   return match ? decodeURIComponent(match[2]) : null;
 }
 
-// Create transport factory that includes modelId
-function createSidebarTransport(modelId: string) {
-  return new DefaultChatTransport({ 
-    api: '/api/chat',
-    body: { modelId },
-  });
-}
-
 const MAX_FILE_SIZE = 10 * 1024 * 1024;
 const ALLOWED_TYPES = [
   'image/jpeg',
@@ -59,6 +51,9 @@ export function RightSidebar() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [uploadQueue, setUploadQueue] = useState<string[]>([]);
+  
+  // Use ref for model so transport can access current value without recreating
+  const currentModelRef = useRef(selectedModelId);
 
   // Load model from cookie on mount
   useEffect(() => {
@@ -68,27 +63,32 @@ export function RightSidebar() {
     }
   }, []);
 
-  // Create chat instance with current model
-  const chatInstanceRef = useRef<InstanceType<typeof Chat> | null>(null);
-
-  // Update chat instance when model changes
+  // Keep ref in sync with state
   useEffect(() => {
-    chatInstanceRef.current = new Chat({
-      id: `sidebar-${selectedModelId}`,
-      transport: createSidebarTransport(selectedModelId),
-    });
+    currentModelRef.current = selectedModelId;
   }, [selectedModelId]);
 
-  // Initialize chat instance
-  if (!chatInstanceRef.current) {
-    chatInstanceRef.current = new Chat({
-      id: `sidebar-${selectedModelId}`,
-      transport: createSidebarTransport(selectedModelId),
-    });
-  }
+  // Create transport with prepareSendMessagesRequest to include modelId dynamically
+  // This follows the Vercel Chat SDK pattern
+  const transport = useMemo(() => new DefaultChatTransport({
+    api: '/api/chat',
+    prepareSendMessagesRequest(request) {
+      return {
+        body: {
+          messages: request.messages,  // Include messages from request
+          modelId: currentModelRef.current,
+          ...request.body,
+        },
+      };
+    },
+  }), []);
 
-  const { messages, sendMessage, status, stop, setMessages } = useChat({
-    chat: chatInstanceRef.current,
+  const { messages, sendMessage, status, stop, setMessages, regenerate } = useChat({
+    id: 'sidebar-chat',
+    transport,
+    // Throttle UI updates during streaming - updates every 100ms
+    // Without this, React batches updates and shows everything at once!
+    experimental_throttle: 100,
   });
 
   const {
@@ -401,19 +401,9 @@ export function RightSidebar() {
                           isLoading={isLoading}
                           onRegenerate={
                             isLastAssistant
-                              ? async () => {
-                                  // Find last user message and regenerate
-                                  const lastUserMsgIndex = messages.findLastIndex(
-                                    (m) => m.role === 'user'
-                                  );
-                                  if (lastUserMsgIndex === -1) return;
-                                  const userContent = getMessageContent(
-                                    messages[lastUserMsgIndex]
-                                  );
-                                  setMessages(messages.slice(0, lastUserMsgIndex + 1));
-                                  await sendMessage({
-                                    parts: [{ type: 'text', text: userContent }],
-                                  });
+                              ? () => {
+                                  // Use the AI SDK's regenerate function
+                                  regenerate();
                                 }
                               : undefined
                           }

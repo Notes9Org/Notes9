@@ -1,8 +1,8 @@
-import { streamText, convertToCoreMessages } from 'ai';
+import { streamText, convertToCoreMessages, smoothStream } from 'ai';
 import { google } from '@ai-sdk/google';
 import { DEFAULT_MODEL_ID, getModelById } from '@/lib/ai/models';
 
-export const maxDuration = 30;
+export const maxDuration = 60;
 
 export async function POST(req: Request) {
   const { messages, modelId } = await req.json();
@@ -33,6 +33,8 @@ Guidelines:
 - When unsure, acknowledge limitations
 - Keep responses clear and helpful`,
     messages: convertToCoreMessages(messages),
+    // Smooth streaming for better UX - chunks by word instead of token
+    experimental_transform: smoothStream({ chunking: 'word' }),
   });
 
   return result.toUIMessageStreamResponse();

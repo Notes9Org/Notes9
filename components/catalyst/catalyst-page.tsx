@@ -1,14 +1,15 @@
 'use client';
 
-import { useChat, Chat } from '@ai-sdk/react';
+import { useChat } from '@ai-sdk/react';
 import { DefaultChatTransport } from 'ai';
 import { useRouter } from 'next/navigation';
-import { useRef, useEffect, useState, useCallback } from 'react';
+import { useRef, useEffect, useState, useCallback, useMemo } from 'react';
 import { PanelLeftClose, PanelLeft } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useChatSessions } from '@/hooks/use-chat-sessions';
 import { createClient } from '@/lib/supabase/client';
 import { DEFAULT_MODEL_ID } from '@/lib/ai/models';
+import { deleteTrailingMessages } from '@/app/(app)/catalyst/actions';
 import { CatalystGreeting } from './catalyst-greeting';
 import { CatalystMessages } from './catalyst-messages';
 import { CatalystInput } from './catalyst-input';
@@ -25,14 +26,6 @@ function getCookie(name: string): string | null {
 
 interface CatalystChatProps {
   sessionId?: string;
-}
-
-// Create transport factory that includes modelId
-function createChatTransport(modelId: string) {
-  return new DefaultChatTransport({ 
-    api: '/api/chat',
-    body: { modelId },
-  });
 }
 
 export function CatalystChat({ sessionId }: CatalystChatProps) {
@@ -55,6 +48,13 @@ export function CatalystChat({ sessionId }: CatalystChatProps) {
   const prevStatusRef = useRef<string>('ready');
   const currentSessionRef = useRef<string | null>(sessionId || null);
   const hasLoadedSessionRef = useRef<string | null>(null);
+  // Use ref for model so transport can access current value without recreating
+  const currentModelRef = useRef(selectedModelId);
+  
+  // Keep ref in sync with state
+  useEffect(() => {
+    currentModelRef.current = selectedModelId;
+  }, [selectedModelId]);
 
   const supabase = createClient();
 
@@ -71,29 +71,27 @@ export function CatalystChat({ sessionId }: CatalystChatProps) {
     loadSessions,
   } = useChatSessions();
 
-  // Create chat instance with current model
-  const chatInstanceRef = useRef<InstanceType<typeof Chat> | null>(null);
-  const currentModelRef = useRef(selectedModelId);
+  // Create transport with prepareSendMessagesRequest to include modelId dynamically
+  // This follows the Vercel Chat SDK pattern
+  const transport = useMemo(() => new DefaultChatTransport({
+    api: '/api/chat',
+    prepareSendMessagesRequest(request) {
+      return {
+        body: {
+          messages: request.messages,  // Include messages from request
+          modelId: currentModelRef.current,
+          ...request.body,
+        },
+      };
+    },
+  }), []);
 
-  // Update chat instance when model changes
-  useEffect(() => {
-    currentModelRef.current = selectedModelId;
-    chatInstanceRef.current = new Chat({
-      id: `catalyst-${sessionId || 'new'}-${selectedModelId}`,
-      transport: createChatTransport(selectedModelId),
-    });
-  }, [selectedModelId, sessionId]);
-
-  // Initialize chat instance
-  if (!chatInstanceRef.current) {
-    chatInstanceRef.current = new Chat({
-      id: `catalyst-${sessionId || 'new'}-${selectedModelId}`,
-      transport: createChatTransport(selectedModelId),
-    });
-  }
-
-  const { messages, sendMessage, status, stop, setMessages } = useChat({
-    chat: chatInstanceRef.current,
+  const { messages, sendMessage, status, stop, setMessages, regenerate } = useChat({
+    id: `catalyst-${sessionId || 'new'}`,
+    transport,
+    // Throttle UI updates during streaming - updates every 100ms
+    // Without this, React batches updates and shows everything at once!
+    experimental_throttle: 100,
   });
 
   const isLoading = status === 'streaming' || status === 'submitted';
@@ -322,45 +320,74 @@ export function CatalystChat({ sessionId }: CatalystChatProps) {
   };
 
   // Handle editing a message (deletes trailing messages and regenerates)
+  // Following exact Vercel Chat SDK pattern:
+  // 1. Delete trailing messages from DB (at and after this message's timestamp)
+  // 2. Update UI to keep messages up to the edited one (with new content)
+  // 3. Call regenerate() to re-send the last user message
   const handleEditMessage = useCallback(
     async (messageId: string, newContent: string) => {
       const messageIndex = messages.findIndex((m) => m.id === messageId);
       if (messageIndex === -1) return;
 
-      // Remove this message and all following messages
-      const updatedMessages = messages.slice(0, messageIndex);
-      
-      // Add the edited message
-      const editedMessage = {
-        ...messages[messageIndex],
-        parts: [{ type: 'text' as const, text: newContent }],
-      };
-      
-      setMessages([...updatedMessages, editedMessage]);
+      // Only delete from DB if this message was saved (has a valid UUID from DB)
+      if (savedMessageIds.has(messageId)) {
+        // Step 1: Delete trailing messages from DB (this message and all after it)
+        await deleteTrailingMessages({ id: messageId });
+        
+        // Remove deleted IDs from savedMessageIds
+        const newSavedIds = new Set<string>();
+        for (let i = 0; i < messageIndex; i++) {
+          const msg = messages[i];
+          if (savedMessageIds.has(msg.id)) {
+            newSavedIds.add(msg.id);
+          }
+        }
+        setSavedMessageIds(newSavedIds);
+      }
 
-      // Send the new message to regenerate response
-      await sendMessage({ parts: [{ type: 'text', text: newContent }] });
+      // Step 2: Update UI - keep messages before this one, add edited message
+      setMessages((currentMessages) => {
+        const index = currentMessages.findIndex((m) => m.id === messageId);
+        if (index !== -1) {
+          const updatedMessage = {
+            ...currentMessages[index],
+            parts: [{ type: 'text' as const, text: newContent }],
+          };
+          return [...currentMessages.slice(0, index), updatedMessage];
+        }
+        return currentMessages;
+      });
+
+      // Step 3: Regenerate - re-send the last user message to get new AI response
+      regenerate();
     },
-    [messages, setMessages, sendMessage]
+    [messages, savedMessageIds, setMessages, regenerate]
   );
 
   // Handle regenerating the last response
+  // Following Vercel Chat SDK pattern - just calls regenerate()
   const handleRegenerate = useCallback(async () => {
     if (messages.length < 2) return;
 
-    // Find the last user message
-    const lastUserMessageIndex = messages.findLastIndex((m) => m.role === 'user');
-    if (lastUserMessageIndex === -1) return;
+    // Find the last assistant message to delete from DB
+    const lastAssistantIndex = messages.findLastIndex((m) => m.role === 'assistant');
+    if (lastAssistantIndex === -1) return;
 
-    const lastUserMessage = messages[lastUserMessageIndex];
-    const userContent = getMessageContent(lastUserMessage);
+    const lastAssistantMessage = messages[lastAssistantIndex];
 
-    // Remove assistant response(s) after the last user message
-    setMessages(messages.slice(0, lastUserMessageIndex + 1));
+    // Delete from DB if it was saved
+    if (savedMessageIds.has(lastAssistantMessage.id)) {
+      await deleteTrailingMessages({ id: lastAssistantMessage.id });
+      
+      // Update savedMessageIds - remove the assistant message
+      const newSavedIds = new Set(savedMessageIds);
+      newSavedIds.delete(lastAssistantMessage.id);
+      setSavedMessageIds(newSavedIds);
+    }
 
-    // Regenerate
-    await sendMessage({ parts: [{ type: 'text', text: userContent }] });
-  }, [messages, setMessages, sendMessage, getMessageContent]);
+    // Call regenerate - this removes the last assistant response and re-sends the user message
+    regenerate();
+  }, [messages, savedMessageIds, regenerate]);
 
   return (
     <div className="flex h-full">
