@@ -118,21 +118,6 @@ export function LabNotesTab({ experimentId }: { experimentId: string }) {
             ? { ...note, content, title: formData.title, note_type: formData.note_type, updated_at: new Date().toISOString() }
             : note
         ))
-
-        // If published, update the public file too
-        if (publicUrl) {
-          const { error: storageError } = await supabase.storage
-            .from('lab_notes_public')
-            .upload(`${selectedNote.id}.json`, JSON.stringify({
-              title: formData.title,
-              content,
-              updatedAt: new Date().toISOString()
-            }), {
-              upsert: true
-            })
-
-          if (storageError) console.error("Failed to update public note:", storageError)
-        }
       }
     } catch (error: any) {
       console.error("Auto-save error:", error)
@@ -181,14 +166,17 @@ export function LabNotesTab({ experimentId }: { experimentId: string }) {
       setIsPublishing(true)
       const supabase = createClient()
 
+      const jsonBlob = new Blob([JSON.stringify({
+        title: formData.title,
+        content: formData.content,
+        updatedAt: new Date().toISOString()
+      })], { type: 'application/json' })
+
       const { error } = await supabase.storage
         .from('lab_notes_public')
-        .upload(`${selectedNote.id}.json`, JSON.stringify({
-          title: formData.title,
-          content: formData.content,
-          updatedAt: new Date().toISOString()
-        }), {
-          upsert: true
+        .upload(`${selectedNote.id}.json`, jsonBlob, {
+          upsert: true,
+          contentType: 'application/json'
         })
 
       if (error) throw error
@@ -652,14 +640,21 @@ export function LabNotesTab({ experimentId }: { experimentId: string }) {
                         Published
                       </Button>
                       <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={handlePublish}
+                        disabled={isPublishing}
+                      >
+                        {isPublishing ? <Loader2 className="h-4 w-4 animate-spin" /> : "Republish"}
+                      </Button>
+                      <Button
                         variant="ghost"
-                        size="icon"
-                        className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                        size="sm"
+                        className="text-muted-foreground hover:text-destructive"
                         disabled={isPublishing}
                         onClick={handleUnpublish}
-                        title="Unpublish"
                       >
-                        {isPublishing ? <Loader2 className="h-4 w-4 animate-spin" /> : <div className="h-4 w-4 text-xs font-bold">×</div>}
+                        Unpublish
                       </Button>
                     </div>
                   ) : (
