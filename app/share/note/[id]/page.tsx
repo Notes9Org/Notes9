@@ -25,22 +25,25 @@ export default function PublicNotePage() {
         const fetchNote = async () => {
             try {
                 setLoading(true)
+                // Fetch JSON directly from public storage bucket with cache-busting
                 const supabase = createClient()
-
-                // Fetch JSON directly from public storage bucket
-                const { data, error } = await supabase.storage
+                const { data: urlData } = supabase.storage
                     .from('lab_notes_public')
-                    .download(`${id}.json`)
+                    .getPublicUrl(`${id}.json`)
 
-                if (error) {
-                    if (error.message.includes("Object not found")) {
+                // Add timestamp to bypass browser/CDN cache
+                const response = await fetch(`${urlData.publicUrl}?t=${Date.now()}`, {
+                    cache: 'no-store'
+                })
+
+                if (!response.ok) {
+                    if (response.status === 404) {
                         throw new Error("This note has not been published or does not exist.")
                     }
-                    throw error
+                    throw new Error("Failed to fetch note")
                 }
 
-                const text = await data.text()
-                const noteData = JSON.parse(text)
+                const noteData = await response.json()
                 setNote(noteData)
             } catch (err: any) {
                 console.error("Error fetching note:", err)
@@ -79,9 +82,9 @@ export default function PublicNotePage() {
 
     return (
         <div className="min-h-screen bg-background">
-            {/* Top Navigation Bar */}
-            <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-                <div className="container mx-auto max-w-5xl px-4 h-14 flex items-center justify-between relative">
+            {/* Top Navigation Bar - Scrolls with content */}
+            <header className="w-full border-b bg-background">
+                <div className="w-full px-4 md:px-8 h-14 flex items-center justify-between">
                     <div className="flex items-center gap-2">
                         <div className="h-6 w-6 rounded-md bg-primary/10 flex items-center justify-center">
                             <Globe className="h-4 w-4 text-primary" />
@@ -90,16 +93,16 @@ export default function PublicNotePage() {
                     </div>
 
                     <div className="flex items-center gap-2">
-
                         <span className="h-2 w-2 rounded-full bg-green-500 animate-pulse" title="Live Updates Active"></span>
                         <p className="text-[10px] font-medium text-muted-foreground leading-none">
-                            Powered by <span className="flex items-center gap-2">Notes9</span>
+                            Powered by <span className="font-bold text-foreground">Notes9</span>
                         </p>
                     </div>
                 </div>
             </header>
 
-            <main className="container mx-auto max-w-4xl px-4 py-8 md:py-12 animate-in fade-in duration-500 slide-in-from-bottom-4">
+            {/* Main content - Full width */}
+            <main className="w-full px-4 md:px-8 py-8 md:py-12">
                 {/* Header Section */}
                 <div className="mb-8 space-y-4">
                     <h1 className="text-4xl md:text-5xl font-bold tracking-tight text-foreground">{note.title}</h1>
@@ -125,13 +128,13 @@ export default function PublicNotePage() {
 
                 <Separator className="my-8" />
 
-                {/* Content Section */}
-                <div className="prose prose-lg dark:prose-invert max-w-none pb-24">
+                {/* Content Section - Full width */}
+                <div className="w-full">
                     <TiptapEditor
                         content={note.content}
                         editable={false}
                         hideToolbar={true}
-                        className="min-h-[60vh] border-none shadow-none bg-transparent px-0"
+                        className="min-h-[70vh] border-none shadow-none bg-transparent"
                     />
                 </div>
             </main>

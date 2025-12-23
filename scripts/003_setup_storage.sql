@@ -24,18 +24,20 @@ WITH CHECK (
   auth.role() = 'authenticated'
 );
 
--- Allow users to update their own files (UPDATE)
+-- Allow authenticated users to update files (UPDATE)
+-- Using authenticated role instead of owner check for simpler upsert support
 CREATE POLICY "Update lab_notes_public"
 ON storage.objects FOR UPDATE
 USING (
   bucket_id = 'lab_notes_public' AND
-  auth.uid() = owner
+  auth.role() = 'authenticated'
 );
 
--- Allow users to delete their own files (DELETE)
+-- Allow authenticated users to delete files (DELETE)
+-- Using authenticated role instead of owner check for simpler management
 CREATE POLICY "Delete lab_notes_public"
 ON storage.objects FOR DELETE
 USING (
   bucket_id = 'lab_notes_public' AND
-  auth.uid() = owner
+  auth.role() = 'authenticated'
 );
