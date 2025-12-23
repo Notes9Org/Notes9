@@ -89,7 +89,8 @@ export function TiptapEditor({
   minHeight = "400px",
   showAITools = true,
   title = "document",
-}: TiptapEditorProps) {
+  hideToolbar = false,
+}: TiptapEditorProps & { hideToolbar?: boolean }) {
   const [isAIProcessing, setIsAIProcessing] = useState(false)
   const [aiDropdownOpen, setAiDropdownOpen] = useState(false)
   const [tableMenuOpen, setTableMenuOpen] = useState(false)
@@ -757,6 +758,7 @@ export function TiptapEditor({
       )}
     >
       {/* Toolbar */}
+      {!hideToolbar && (
       <div className="flex items-center gap-1 p-2 border-b border-border flex-wrap bg-muted/30">
         <TooltipProvider delayDuration={300}>
           {/* Undo/Redo */}
@@ -1278,6 +1280,7 @@ export function TiptapEditor({
           )}
         </TooltipProvider>
       </div>
+      )}
 
       {/* Editor Content */}
       <div
