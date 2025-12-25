@@ -13,31 +13,33 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
-import { BookOpen, Plus, Search, Star } from 'lucide-react'
-import Link from 'next/link'
-import { LiteratureDetailModal } from './literature-detail-modal'
+import { BookOpen, ExternalLink, Plus, Search, Star } from "lucide-react";
+import Link from "next/link";
+import { LiteratureDetailModal } from "./literature-detail-modal";
 
 interface LiteratureReview {
-  id: string
-  title: string
-  authors: string | null
-  journal: string | null
-  publication_year: number | null
-  doi: string | null
-  status: string
-  relevance_rating: number | null
-  project: { id: string; name: string } | null
-  experiment: { id: string; name: string } | null
-  created_by_profile: { first_name: string; last_name: string } | null
+  id: string;
+  title: string;
+  authors: string | null;
+  journal: string | null;
+  publication_year: number | null;
+  doi: string | null;
+  status: string;
+  relevance_rating: number | null;
+  project: { id: string; name: string } | null;
+  experiment: { id: string; name: string } | null;
+  created_by_profile: { first_name: string; last_name: string } | null;
 }
 
 interface RepoTabProps {
-  literatureReviews: LiteratureReview[] | null
+  literatureReviews: LiteratureReview[] | null;
 }
 
 export function RepoTab({ literatureReviews }: RepoTabProps) {
-  const [selectedLiteratureId, setSelectedLiteratureId] = useState<string | null>(null)
-  const [modalOpen, setModalOpen] = useState(false)
+  const [selectedLiteratureId, setSelectedLiteratureId] = useState<
+    string | null
+  >(null);
+  const [modalOpen, setModalOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
 
   const handleOpenModal = (id: string) => {
@@ -143,9 +145,21 @@ export function RepoTab({ literatureReviews }: RepoTabProps) {
                         {lit.title}
                       </button>
                       {lit.doi && (
-                        <p className="text-xs text-muted-foreground mt-0.5">
-                          DOI: {lit.doi}
-                        </p>
+                        <div className="flex items-center gap-1.5 mt-0.5">
+                          <span className="text-xs text-muted-foreground">
+                            DOI: {lit.doi}
+                          </span>
+                          <a
+                            href={`https://doi.org/${lit.doi}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-muted-foreground hover:text-foreground transition-colors"
+                            title="Open DOI in new tab"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            <ExternalLink className="h-3 w-3" />
+                          </a>
+                        </div>
                       )}
                     </TableCell>
                     <TableCell className="text-sm text-foreground">
