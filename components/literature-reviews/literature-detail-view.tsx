@@ -1,105 +1,126 @@
-'use client'
+"use client";
 
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { BookOpen, Calendar, Star, ExternalLink, Link as LinkIcon } from 'lucide-react'
-import Link from 'next/link'
-import { LiteratureReviewActions } from '@/app/(app)/literature-reviews/[id]/literature-review-actions'
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  BookOpen,
+  Calendar,
+  Star,
+  ExternalLink,
+  Link as LinkIcon,
+} from "lucide-react";
+import Link from "next/link";
+import { LiteratureReviewActions } from "@/app/(app)/literature-reviews/[id]/literature-review-actions";
 
 interface LiteratureData {
-  id: string
-  title: string
-  authors: string | null
-  journal: string | null
-  publication_year: number | null
-  doi: string | null
-  pmid: string | null
-  status: string
-  relevance_rating: number | null
-  abstract: string | null
-  keywords: string[] | null
-  personal_notes: string | null
-  url: string | null
-  volume: string | null
-  issue: string | null
-  pages: string | null
-  created_at: string
-  project: { id: string; name: string } | null
-  experiment: { id: string; name: string } | null
-  created_by_profile: { first_name: string; last_name: string; email: string } | null
+  id: string;
+  title: string;
+  authors: string | null;
+  journal: string | null;
+  publication_year: number | null;
+  doi: string | null;
+  pmid: string | null;
+  status: string;
+  relevance_rating: number | null;
+  abstract: string | null;
+  keywords: string[] | null;
+  personal_notes: string | null;
+  url: string | null;
+  volume: string | null;
+  issue: string | null;
+  pages: string | null;
+  created_at: string;
+  project: { id: string; name: string } | null;
+  experiment: { id: string; name: string } | null;
+  created_by_profile: {
+    first_name: string;
+    last_name: string;
+    email: string;
+  } | null;
 }
 
 interface LiteratureDetailViewProps {
-  literature: LiteratureData
-  showBreadcrumb?: boolean
-  showActions?: boolean
+  literature: LiteratureData;
+  showBreadcrumb?: boolean;
+  showActions?: boolean;
+  onRefresh?: () => void;
 }
 
-export function LiteratureDetailView({ 
-  literature, 
+export function LiteratureDetailView({
+  literature,
   showBreadcrumb = true,
-  showActions = true 
+  showActions = true,
+  onRefresh,
 }: LiteratureDetailViewProps) {
   const formatDate = (date: string | null) => {
-    if (!date) return "—"
-    return new Date(date).toLocaleDateString()
-  }
+    if (!date) return "—";
+    return new Date(date).toLocaleDateString();
+  };
 
   const getStatusBadge = (status: string) => {
     const variants: Record<string, "default" | "secondary" | "outline"> = {
       saved: "outline",
       reading: "secondary",
       completed: "default",
-      archived: "outline"
-    }
-    return variants[status] || "outline"
-  }
+      archived: "outline",
+    };
+    return variants[status] || "outline";
+  };
 
   const renderStars = (rating: number | null) => {
-    if (!rating) return <span className="text-sm text-muted-foreground">Not rated</span>
+    if (!rating)
+      return <span className="text-sm text-muted-foreground">Not rated</span>;
     return (
       <div className="flex items-center gap-0.5">
         {[...Array(5)].map((_, i) => (
           <Star
             key={i}
             className={`h-4 w-4 ${
-              i < rating ? "fill-yellow-400 text-yellow-400" : "text-muted-foreground"
+              i < rating
+                ? "fill-yellow-400 text-yellow-400"
+                : "text-muted-foreground"
             }`}
           />
         ))}
       </div>
-    )
-  }
+    );
+  };
 
-  const formatCitation = (format: 'apa' | 'mla' | 'bibtex') => {
-    const authors = literature.authors || 'Unknown'
-    const year = literature.publication_year || 'n.d.'
-    const title = literature.title
-    const journal = literature.journal || ''
-    const volume = literature.volume || ''
-    const issue = literature.issue || ''
-    const pages = literature.pages || ''
-    const doi = literature.doi || ''
+  const formatCitation = (format: "apa" | "mla" | "bibtex") => {
+    const authors = literature.authors || "Unknown";
+    const year = literature.publication_year || "n.d.";
+    const title = literature.title;
+    const journal = literature.journal || "";
+    const volume = literature.volume || "";
+    const issue = literature.issue || "";
+    const pages = literature.pages || "";
+    const doi = literature.doi || "";
 
-    if (format === 'apa') {
-      let citation = `${authors} (${year}). ${title}.`
-      if (journal) citation += ` ${journal}`
-      if (volume) citation += `, ${volume}`
-      if (issue) citation += `(${issue})`
-      if (pages) citation += `, ${pages}`
-      if (doi) citation += `. https://doi.org/${doi}`
-      return citation
-    } else if (format === 'mla') {
-      let citation = `${authors}. "${title}."`
-      if (journal) citation += ` ${journal}`
-      if (volume) citation += `, vol. ${volume}`
-      if (issue) citation += `, no. ${issue}`
-      if (year) citation += `, ${year}`
-      if (pages) citation += `, pp. ${pages}`
-      return citation + '.'
-    } else if (format === 'bibtex') {
-      const bibKey = authors.split(',')[0].toLowerCase() + year
+    if (format === "apa") {
+      let citation = `${authors} (${year}). ${title}.`;
+      if (journal) citation += ` ${journal}`;
+      if (volume) citation += `, ${volume}`;
+      if (issue) citation += `(${issue})`;
+      if (pages) citation += `, ${pages}`;
+      if (doi) citation += `. https://doi.org/${doi}`;
+      return citation;
+    } else if (format === "mla") {
+      let citation = `${authors}. "${title}."`;
+      if (journal) citation += ` ${journal}`;
+      if (volume) citation += `, vol. ${volume}`;
+      if (issue) citation += `, no. ${issue}`;
+      if (year) citation += `, ${year}`;
+      if (pages) citation += `, pp. ${pages}`;
+      return citation + ".";
+    } else if (format === "bibtex") {
+      const bibKey = authors.split(",")[0].toLowerCase() + year;
       return `@article{${bibKey},
   author = {${authors}},
   title = {${title}},
@@ -109,10 +130,10 @@ export function LiteratureDetailView({
   number = {${issue}},
   pages = {${pages}},
   doi = {${doi}}
-}`
+}`;
     }
-    return ''
-  }
+    return "";
+  };
 
   return (
     <div className="space-y-6">
@@ -126,14 +147,22 @@ export function LiteratureDetailView({
               </h1>
             </div>
             <div className="flex items-center gap-2 mt-2">
-              <Badge variant={getStatusBadge(literature.status)} className="capitalize">
+              <Badge
+                variant={getStatusBadge(literature.status)}
+                className="capitalize"
+              >
                 {literature.status}
               </Badge>
               {renderStars(literature.relevance_rating)}
             </div>
           </div>
         </div>
-        {showActions && <LiteratureReviewActions literature={literature} />}
+        {showActions && (
+          <LiteratureReviewActions
+            literature={literature}
+            onRefresh={onRefresh}
+          />
+        )}
       </div>
 
       {/* Quick Info Cards */}
@@ -148,7 +177,9 @@ export function LiteratureDetailView({
             <div className="flex items-center gap-2">
               <BookOpen className="h-3.5 w-3.5 text-muted-foreground" />
               <span className="text-sm font-medium text-foreground line-clamp-1">
-                {literature.authors ? literature.authors.split(',')[0] + ' et al.' : '—'}
+                {literature.authors
+                  ? literature.authors.split(",")[0] + " et al."
+                  : "—"}
               </span>
             </div>
           </CardContent>
@@ -164,7 +195,8 @@ export function LiteratureDetailView({
             <div className="flex items-center gap-2">
               <Calendar className="h-3.5 w-3.5 text-muted-foreground" />
               <span className="text-sm font-medium text-foreground">
-                {literature.journal || '—'} ({literature.publication_year || '—'})
+                {literature.journal || "—"} (
+                {literature.publication_year || "—"})
               </span>
             </div>
           </CardContent>
@@ -180,7 +212,11 @@ export function LiteratureDetailView({
             <div className="flex items-center gap-2">
               <LinkIcon className="h-3.5 w-3.5 text-muted-foreground" />
               <span className="text-sm font-medium text-foreground">
-                {literature.doi ? `DOI: ${literature.doi.substring(0, 20)}...` : literature.pmid ? `PMID: ${literature.pmid}` : '—'}
+                {literature.doi
+                  ? `DOI: ${literature.doi.substring(0, 20)}...`
+                  : literature.pmid
+                  ? `PMID: ${literature.pmid}`
+                  : "—"}
               </span>
             </div>
           </CardContent>
@@ -220,31 +256,53 @@ export function LiteratureDetailView({
             <CardContent className="space-y-3">
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <p className="text-sm font-medium text-muted-foreground">Authors</p>
-                  <p className="text-sm text-foreground">{literature.authors || '—'}</p>
-                </div>
-                <div>
-                  <p className="text-sm font-medium text-muted-foreground">Journal</p>
-                  <p className="text-sm text-foreground">{literature.journal || '—'}</p>
-                </div>
-                <div>
-                  <p className="text-sm font-medium text-muted-foreground">Year</p>
-                  <p className="text-sm text-foreground">{literature.publication_year || '—'}</p>
-                </div>
-                <div>
-                  <p className="text-sm font-medium text-muted-foreground">Volume/Issue</p>
+                  <p className="text-sm font-medium text-muted-foreground">
+                    Authors
+                  </p>
                   <p className="text-sm text-foreground">
-                    {literature.volume && literature.issue ? `${literature.volume}(${literature.issue})` : literature.volume || literature.issue || '—'}
+                    {literature.authors || "—"}
                   </p>
                 </div>
                 <div>
-                  <p className="text-sm font-medium text-muted-foreground">Pages</p>
-                  <p className="text-sm text-foreground">{literature.pages || '—'}</p>
+                  <p className="text-sm font-medium text-muted-foreground">
+                    Journal
+                  </p>
+                  <p className="text-sm text-foreground">
+                    {literature.journal || "—"}
+                  </p>
                 </div>
                 <div>
-                  <p className="text-sm font-medium text-muted-foreground">DOI</p>
+                  <p className="text-sm font-medium text-muted-foreground">
+                    Year
+                  </p>
+                  <p className="text-sm text-foreground">
+                    {literature.publication_year || "—"}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-muted-foreground">
+                    Volume/Issue
+                  </p>
+                  <p className="text-sm text-foreground">
+                    {literature.volume && literature.issue
+                      ? `${literature.volume}(${literature.issue})`
+                      : literature.volume || literature.issue || "—"}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-muted-foreground">
+                    Pages
+                  </p>
+                  <p className="text-sm text-foreground">
+                    {literature.pages || "—"}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-muted-foreground">
+                    DOI
+                  </p>
                   {literature.doi ? (
-                    <a 
+                    <a
                       href={`https://doi.org/${literature.doi}`}
                       target="_blank"
                       rel="noopener noreferrer"
@@ -260,8 +318,10 @@ export function LiteratureDetailView({
               </div>
               {literature.url && (
                 <div>
-                  <p className="text-sm font-medium text-muted-foreground">URL</p>
-                  <a 
+                  <p className="text-sm font-medium text-muted-foreground">
+                    URL
+                  </p>
+                  <a
                     href={literature.url}
                     target="_blank"
                     rel="noopener noreferrer"
@@ -282,7 +342,9 @@ export function LiteratureDetailView({
                 <CardTitle>Abstract</CardTitle>
               </CardHeader>
               <CardContent>
-                <p className="text-sm text-foreground whitespace-pre-wrap">{literature.abstract}</p>
+                <p className="text-sm text-foreground whitespace-pre-wrap">
+                  {literature.abstract}
+                </p>
               </CardContent>
             </Card>
           )}
@@ -312,7 +374,9 @@ export function LiteratureDetailView({
                 <CardTitle>Personal Notes</CardTitle>
               </CardHeader>
               <CardContent>
-                <p className="text-sm text-foreground whitespace-pre-wrap">{literature.personal_notes}</p>
+                <p className="text-sm text-foreground whitespace-pre-wrap">
+                  {literature.personal_notes}
+                </p>
               </CardContent>
             </Card>
           )}
@@ -325,7 +389,7 @@ export function LiteratureDetailView({
             </CardHeader>
             <CardContent>
               <code className="text-sm text-foreground block bg-muted p-4 rounded">
-                {formatCitation('apa')}
+                {formatCitation("apa")}
               </code>
             </CardContent>
           </Card>
@@ -336,7 +400,7 @@ export function LiteratureDetailView({
             </CardHeader>
             <CardContent>
               <code className="text-sm text-foreground block bg-muted p-4 rounded">
-                {formatCitation('mla')}
+                {formatCitation("mla")}
               </code>
             </CardContent>
           </Card>
@@ -347,7 +411,7 @@ export function LiteratureDetailView({
             </CardHeader>
             <CardContent>
               <pre className="text-sm text-foreground block bg-muted p-4 rounded overflow-x-auto">
-                {formatCitation('bibtex')}
+                {formatCitation("bibtex")}
               </pre>
             </CardContent>
           </Card>
@@ -364,7 +428,9 @@ export function LiteratureDetailView({
             <CardContent className="space-y-4">
               {literature.project ? (
                 <div>
-                  <p className="text-sm font-medium text-muted-foreground mb-2">Project</p>
+                  <p className="text-sm font-medium text-muted-foreground mb-2">
+                    Project
+                  </p>
                   <Link
                     href={`/projects/${literature.project.id}`}
                     className="text-sm text-blue-600 hover:underline"
@@ -376,7 +442,9 @@ export function LiteratureDetailView({
 
               {literature.experiment ? (
                 <div>
-                  <p className="text-sm font-medium text-muted-foreground mb-2">Experiment</p>
+                  <p className="text-sm font-medium text-muted-foreground mb-2">
+                    Experiment
+                  </p>
                   <Link
                     href={`/experiments/${literature.experiment.id}`}
                     className="text-sm text-blue-600 hover:underline"
@@ -388,7 +456,8 @@ export function LiteratureDetailView({
 
               {!literature.project && !literature.experiment && (
                 <p className="text-sm text-muted-foreground">
-                  This reference is not linked to any projects or experiments yet.
+                  This reference is not linked to any projects or experiments
+                  yet.
                 </p>
               )}
             </CardContent>
@@ -396,5 +465,5 @@ export function LiteratureDetailView({
         </TabsContent>
       </Tabs>
     </div>
-  )
+  );
 }

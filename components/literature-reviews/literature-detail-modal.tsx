@@ -1,48 +1,53 @@
-'use client'
+"use client";
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect } from "react";
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
-} from "@/components/ui/dialog"
-import { LiteratureDetailView } from './literature-detail-view'
-import { Loader2 } from 'lucide-react'
-import { createClient } from "@/lib/supabase/client"
+} from "@/components/ui/dialog";
+import { LiteratureDetailView } from "./literature-detail-view";
+import { Loader2 } from "lucide-react";
+import { createClient } from "@/lib/supabase/client";
 
 interface LiteratureDetailModalProps {
-  literatureId: string | null
-  open: boolean
-  onOpenChange: (open: boolean) => void
+  literatureId: string | null;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
 }
 
-export function LiteratureDetailModal({ literatureId, open, onOpenChange }: LiteratureDetailModalProps) {
-  const [literature, setLiterature] = useState<any>(null)
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+export function LiteratureDetailModal({
+  literatureId,
+  open,
+  onOpenChange,
+}: LiteratureDetailModalProps) {
+  const [literature, setLiterature] = useState<any>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (open && literatureId) {
-      fetchLiterature()
+      fetchLiterature();
     } else {
       // Reset state when modal closes
-      setLiterature(null)
-      setError(null)
+      setLiterature(null);
+      setError(null);
     }
-  }, [open, literatureId])
+  }, [open, literatureId]);
 
   const fetchLiterature = async () => {
-    if (!literatureId) return
+    if (!literatureId) return;
 
-    setLoading(true)
-    setError(null)
+    setLoading(true);
+    setError(null);
 
     try {
-      const supabase = createClient()
+      const supabase = createClient();
       const { data, error } = await supabase
         .from("literature_reviews")
-        .select(`
+        .select(
+          `
           *,
           created_by_profile:profiles!literature_reviews_created_by_fkey(
             first_name,
@@ -51,23 +56,24 @@ export function LiteratureDetailModal({ literatureId, open, onOpenChange }: Lite
           ),
           project:projects(id, name),
           experiment:experiments(id, name)
-        `)
+        `
+        )
         .eq("id", literatureId)
-        .single()
+        .single();
 
       if (error) {
-        setError('Failed to load literature details')
-        console.error('Error fetching literature:', error)
+        setError("Failed to load literature details");
+        console.error("Error fetching literature:", error);
       } else {
-        setLiterature(data)
+        setLiterature(data);
       }
     } catch (err) {
-      setError('Failed to load literature details')
-      console.error('Error:', err)
+      setError("Failed to load literature details");
+      console.error("Error:", err);
     } finally {
-      setLoading(false)
+      setLoading(false);
     }
-  }
+  };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -85,13 +91,14 @@ export function LiteratureDetailModal({ literatureId, open, onOpenChange }: Lite
         )}
 
         {literature && !loading && (
-          <LiteratureDetailView 
-            literature={literature} 
+          <LiteratureDetailView
+            literature={literature}
             showBreadcrumb={false}
             showActions={true}
+            onRefresh={fetchLiterature}
           />
         )}
       </DialogContent>
     </Dialog>
-  )
+  );
 }
