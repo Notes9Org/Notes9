@@ -38,56 +38,87 @@ interface RepoTabProps {
 export function RepoTab({ literatureReviews }: RepoTabProps) {
   const [selectedLiteratureId, setSelectedLiteratureId] = useState<string | null>(null)
   const [modalOpen, setModalOpen] = useState(false)
+  const [searchQuery, setSearchQuery] = useState("");
 
   const handleOpenModal = (id: string) => {
-    setSelectedLiteratureId(id)
-    setModalOpen(true)
-  }
+    setSelectedLiteratureId(id);
+    setModalOpen(true);
+  };
 
   const getStatusBadge = (status: string) => {
     const variants: Record<string, "default" | "secondary" | "outline"> = {
       saved: "outline",
       reading: "secondary",
       completed: "default",
-      archived: "outline"
-    }
-    return variants[status] || "outline"
-  }
+      archived: "outline",
+    };
+    return variants[status] || "outline";
+  };
 
   const renderStars = (rating: number | null) => {
-    if (!rating) return <span className="text-xs text-muted-foreground">Not rated</span>
+    if (!rating)
+      return <span className="text-xs text-muted-foreground">Not rated</span>;
     return (
       <div className="flex items-center gap-0.5">
         {[...Array(5)].map((_, i) => (
           <Star
             key={i}
             className={`h-3 w-3 ${
-              i < rating ? "fill-yellow-400 text-yellow-400" : "text-muted-foreground"
+              i < rating
+                ? "fill-yellow-400 text-yellow-400"
+                : "text-muted-foreground"
             }`}
           />
         ))}
       </div>
-    )
-  }
+    );
+  };
+
+  // Filter literature reviews based on search query
+  const filteredLiteratureReviews = literatureReviews?.filter((lit) => {
+    if (!searchQuery.trim()) return true;
+
+    const query = searchQuery.toLowerCase();
+    const title = lit.title?.toLowerCase() || "";
+    const authors = lit.authors?.toLowerCase() || "";
+    const journal = lit.journal?.toLowerCase() || "";
+    const doi = lit.doi?.toLowerCase() || "";
+    const status = lit.status?.toLowerCase() || "";
+    const projectName = lit.project?.name?.toLowerCase() || "";
+    const experimentName = lit.experiment?.name?.toLowerCase() || "";
+
+    return (
+      title.includes(query) ||
+      authors.includes(query) ||
+      journal.includes(query) ||
+      doi.includes(query) ||
+      status.includes(query) ||
+      projectName.includes(query) ||
+      experimentName.includes(query)
+    );
+  });
 
   return (
     <div className="space-y-6">
       {/* Search */}
       <div className="relative max-w-md">
         <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
-        <Input placeholder="Search literature..." className="pl-9 text-foreground" />
+        <Input
+          placeholder="Search literature..."
+          className="pl-9 text-foreground"
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+        />
       </div>
 
       {/* Literature Table */}
       <Card>
         <CardHeader>
           <CardTitle className="text-foreground">All References</CardTitle>
-          <CardDescription>
-            Saved research papers and citations
-          </CardDescription>
+          <CardDescription>Saved research papers and citations</CardDescription>
         </CardHeader>
         <CardContent>
-          {literatureReviews && literatureReviews.length > 0 ? (
+          {filteredLiteratureReviews && filteredLiteratureReviews.length > 0 ? (
             <Table>
               <TableHeader>
                 <TableRow>
@@ -101,12 +132,13 @@ export function RepoTab({ literatureReviews }: RepoTabProps) {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {literatureReviews.map((lit) => (
+                {filteredLiteratureReviews.map((lit) => (
                   <TableRow key={lit.id}>
                     <TableCell>
                       <button
                         onClick={() => handleOpenModal(lit.id)}
-                        className="font-medium text-foreground hover:underline text-left"
+                        className="font-medium text-foreground hover:underline text-left truncate block max-w-[350px]"
+                        title={lit.title}
                       >
                         {lit.title}
                       </button>
@@ -118,7 +150,8 @@ export function RepoTab({ literatureReviews }: RepoTabProps) {
                     </TableCell>
                     <TableCell className="text-sm text-foreground">
                       {lit.authors ? (
-                        lit.authors.split(',')[0] + (lit.authors.split(',').length > 1 ? ' et al.' : '')
+                        lit.authors.split(",")[0] +
+                        (lit.authors.split(",").length > 1 ? " et al." : "")
                       ) : (
                         <span className="text-muted-foreground">—</span>
                       )}
@@ -127,20 +160,23 @@ export function RepoTab({ literatureReviews }: RepoTabProps) {
                       {lit.journal && lit.publication_year ? (
                         <>
                           <div className="font-medium">{lit.journal}</div>
-                          <div className="text-xs text-muted-foreground">{lit.publication_year}</div>
+                          <div className="text-xs text-muted-foreground">
+                            {lit.publication_year}
+                          </div>
                         </>
                       ) : (
                         <span className="text-muted-foreground">—</span>
                       )}
                     </TableCell>
                     <TableCell>
-                      <Badge variant={getStatusBadge(lit.status)} className="text-xs capitalize">
+                      <Badge
+                        variant={getStatusBadge(lit.status)}
+                        className="text-xs capitalize"
+                      >
                         {lit.status}
                       </Badge>
                     </TableCell>
-                    <TableCell>
-                      {renderStars(lit.relevance_rating)}
-                    </TableCell>
+                    <TableCell>{renderStars(lit.relevance_rating)}</TableCell>
                     <TableCell>
                       {lit.project ? (
                         <Link
@@ -161,8 +197,8 @@ export function RepoTab({ literatureReviews }: RepoTabProps) {
                       )}
                     </TableCell>
                     <TableCell className="text-right">
-                      <Button 
-                        variant="ghost" 
+                      <Button
+                        variant="ghost"
                         size="sm"
                         onClick={() => handleOpenModal(lit.id)}
                       >
@@ -173,10 +209,20 @@ export function RepoTab({ literatureReviews }: RepoTabProps) {
                 ))}
               </TableBody>
             </Table>
+          ) : literatureReviews && literatureReviews.length > 0 ? (
+            <div className="flex flex-col items-center justify-center py-12 text-center">
+              <Search className="h-12 w-12 text-muted-foreground mb-4" />
+              <p className="text-muted-foreground mb-2">No results found</p>
+              <p className="text-sm text-muted-foreground">
+                Try adjusting your search query
+              </p>
+            </div>
           ) : (
             <div className="flex flex-col items-center justify-center py-12 text-center">
               <BookOpen className="h-12 w-12 text-muted-foreground mb-4" />
-              <p className="text-muted-foreground mb-4">No literature references yet</p>
+              <p className="text-muted-foreground mb-4">
+                No literature references yet
+              </p>
               <Button asChild>
                 <Link href="/literature-reviews/new">
                   <Plus className="h-4 w-4 mr-2" />
@@ -195,5 +241,5 @@ export function RepoTab({ literatureReviews }: RepoTabProps) {
         onOpenChange={setModalOpen}
       />
     </div>
-  )
+  );
 }
