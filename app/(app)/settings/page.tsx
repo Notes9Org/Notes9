@@ -11,6 +11,7 @@ import { Label } from "@/components/ui/label"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { LogOut, Sun, Moon, Monitor } from 'lucide-react'
+import { ChangePasswordDialog } from "@/components/change-password-dialog"
 
 export default function SettingsPage() {
   const router = useRouter()
@@ -142,8 +143,9 @@ export default function SettingsPage() {
               </CardHeader>
               <CardContent className="space-y-6">
                 <div className="space-y-2">
-                  <Label>Password</Label>
-                  <Button variant="outline">Change Password</Button>
+                  <ChangePasswordDialog>
+                    <Button variant="outline">Change Password</Button>
+                  </ChangePasswordDialog>
                 </div>
 
                 <div className="pt-6 border-t">
