@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { FlaskConical, Calendar, User, Eye, Grid3x3, List } from 'lucide-react'
+import { HtmlContentTruncated } from '@/components/html-content'
 
 interface Experiment {
   id: string
@@ -138,17 +139,17 @@ export function ExperimentList({ experiments }: ExperimentListProps) {
                       </span>
                     </div>
                   )}
-                  {experiment.description && (
-                    <p className="text-sm text-muted-foreground min-w-0 overflow-hidden text-ellipsis" style={{ 
+                  <HtmlContentTruncated 
+                    content={experiment.description}
+                    className="text-sm text-muted-foreground min-w-0 overflow-hidden text-ellipsis"
+                    style={{ 
                       display: '-webkit-box',
                       WebkitLineClamp: 2,
                       WebkitBoxOrient: 'vertical',
                       wordBreak: 'break-all',
                       overflowWrap: 'break-word'
-                    }}>
-                      {experiment.description}
-                    </p>
-                  )}
+                    } as React.CSSProperties}
+                  />
                 </div>
                 <Button variant="outline" size="sm" className="w-full mt-auto shrink-0" asChild>
                   <Link href={`/experiments/${experiment.id}`}>
@@ -191,11 +192,10 @@ export function ExperimentList({ experiments }: ExperimentListProps) {
                           <FlaskConical className="h-4 w-4 text-primary shrink-0" />
                           <div className="max-w-[280px]">
                             <div className="font-semibold truncate">{experiment.name}</div>
-                            {experiment.description && (
-                              <div className="text-sm text-muted-foreground truncate">
-                                {experiment.description}
-                              </div>
-                            )}
+                            <HtmlContentTruncated 
+                              content={experiment.description}
+                              className="text-sm text-muted-foreground truncate"
+                            />
                           </div>
                         </div>
                       </TableCell>

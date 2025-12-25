@@ -15,6 +15,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import { RichTextEditor } from "@/components/rich-text-editor"
 import { ArrowLeft } from 'lucide-react'
 import Link from 'next/link'
 
@@ -176,14 +177,10 @@ function NewExperimentForm() {
 
               <div className="space-y-2">
                 <Label htmlFor="description" className="text-foreground">Description</Label>
-                <Textarea
-                  id="description"
+                <RichTextEditor
+                  content={formData.description}
+                  onChange={(content) => setFormData({ ...formData, description: content })}
                   placeholder="Describe the experiment methodology, objectives, and expected outcomes..."
-                  rows={4}
-                  value={formData.description}
-                  onChange={(e) =>
-                    setFormData({ ...formData, description: e.target.value })
-                  }
                   className="text-foreground"
                 />
               </div>

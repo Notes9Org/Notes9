@@ -26,11 +26,6 @@ function ResetPasswordForm() {
   const router = useRouter()
   const searchParams = useSearchParams()
 
-  // useEffect(() => {
-  //   // Check if we have the necessary tokens in the URL
-  //   const token = searchParams.get('token')
-  // }, [searchParams])
-
   const handleResetPassword = async (e: React.FormEvent) => {
     e.preventDefault()
     setIsLoading(true)
@@ -58,7 +53,7 @@ function ResetPasswordForm() {
       if (error) throw error
 
       setIsSuccess(true)
-      
+
       // Redirect to login after 3 seconds
       setTimeout(() => {
         router.push("/auth/login")
@@ -76,15 +71,15 @@ function ResetPasswordForm() {
         <div className="w-full max-w-md">
           <div className="flex flex-col gap-6">
             <div className="flex flex-col items-center gap-2 text-center">
-              <Image 
-                src="/notes9-logo.png" 
-                alt="Notes9 Logo" 
-                width={60} 
+              <Image
+                src="/notes9-logo.png"
+                alt="Notes9 Logo"
+                width={60}
                 height={60}
               />
               <h1 className="text-2xl font-bold">Password Updated</h1>
             </div>
-            
+
             <Card>
               <CardHeader>
                 <div className="flex justify-center mb-4">
@@ -124,10 +119,10 @@ function ResetPasswordForm() {
       <div className="w-full max-w-md">
         <div className="flex flex-col gap-6">
           <div className="flex flex-col items-center gap-2 text-center">
-            <Image 
-              src="/notes9-logo.png" 
-              alt="Notes9 Logo" 
-              width={60} 
+            <Image
+              src="/notes9-logo.png"
+              alt="Notes9 Logo"
+              width={60}
               height={60}
             />
             <h1 className="text-2xl font-bold">Set New Password</h1>
@@ -135,7 +130,7 @@ function ResetPasswordForm() {
               Enter your new password below
             </p>
           </div>
-          
+
           <Card>
             <CardHeader>
               <CardTitle className="text-xl">Reset Password</CardTitle>
@@ -175,9 +170,9 @@ function ResetPasswordForm() {
                       {error}
                     </div>
                   )}
-                  <Button 
-                    type="submit" 
-                    className="w-full" 
+                  <Button
+                    type="submit"
+                    className="w-full"
                     disabled={isLoading}
                   >
                     {isLoading ? "Updating..." : "Update Password"}
