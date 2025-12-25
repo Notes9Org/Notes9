@@ -1,0 +1,88 @@
+/* HTML Content Display Styles */
+.html-content table {
+  border-collapse: collapse !important;
+  table-layout: fixed !important;
+  width: 100% !important;
+  margin: 1rem 0 !important;
+  overflow: hidden !important;
+}
+
+.html-content td,
+.html-content th {
+  min-width: 1em !important;
+  border: 1px solid #d1d5db !important;
+  padding: 8px 12px !important;
+  vertical-align: top !important;
+  box-sizing: border-box !important;
+  position: relative !important;
+  background: transparent !important;
+}
+
+.html-content th {
+  font-weight: bold !important;
+  text-align: left !important;
+  background-color: #f3f4f6 !important;
+}
+
+/* Dark mode styles */
+.dark .html-content td,
+.dark .html-content th {
+  border: 1px solid #374151 !important;
+}
+
+.dark .html-content th {
+  background-color: #1f2937 !important;
+}
+
+/* List styles */
+.html-content ul,
+.html-content ol {
+  padding-left: 1.5rem !important;
+  margin: 0.5rem 0 !important;
+}
+
+.html-content li {
+  margin: 0.25rem 0 !important;
+  list-style-position: outside !important;
+  padding-left: 0.25rem !important;
+}
+
+.html-content ul li {
+  list-style-type: disc !important;
+}
+
+.html-content ol li {
+  list-style-type: decimal !important;
+}
+
+/* Ensure list markers are visible in both themes */
+.html-content ul li::marker,
+.html-content ol li::marker {
+  color: #6b7280 !important;
+}
+
+.dark .html-content ul li::marker,
+.dark .html-content ol li::marker {
+  color: #9ca3af !important;
+}
+
+/* Basic text formatting */
+.html-content strong {
+  font-weight: bold !important;
+}
+
+.html-content em {
+  font-style: italic !important;
+}
+
+.html-content p {
+  margin: 0.5rem 0 !important;
+}
+
+.html-content p:first-child {
+  margin-top: 0 !important;
+}
+
+.html-content p:last-child {
+  margin-bottom: 0 !important;
+}

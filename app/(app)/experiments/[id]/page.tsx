@@ -20,6 +20,7 @@ import { LabNotesTab } from './lab-notes-tab'
 import { DataFilesTab } from './data-files-tab'
 import { ExperimentActions } from './experiment-actions'
 import { StatusUpdateButtons } from './status-update-buttons'
+import { HtmlContent } from '@/components/html-content'
 
 type SearchParams = { tab?: string; noteId?: string }
 
@@ -270,7 +271,7 @@ export default async function ExperimentDetailPage({
                 <CardTitle className="text-foreground">Experiment Description</CardTitle>
               </CardHeader>
               <CardContent>
-                <p className="text-foreground">{experiment.description}</p>
+                <HtmlContent content={experiment.description} />
               </CardContent>
             </Card>
 
