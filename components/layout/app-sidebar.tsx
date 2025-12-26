@@ -24,6 +24,8 @@ import {
   Users,
   BookOpen,
   Sparkles,
+  ChevronLeft,
+  PanelLeftClose,
 } from 'lucide-react'
 import {
   Sidebar,
@@ -44,8 +46,8 @@ import {
   SidebarMenuSubButton,
   SidebarMenuSubItem,
   SidebarSeparator,
-
   SidebarMenuSkeleton,
+  useSidebar,
 } from "@/components/ui/sidebar"
 import {
   DropdownMenu,
@@ -115,7 +117,9 @@ interface Counts {
 export function AppSidebar() {
   const pathname = usePathname()
   const router = useRouter()
+  const { setOpenMobile, isMobile, state, openMobile } = useSidebar()
   const [searchQuery, setSearchQuery] = useState("")
+  const [isIconMode, setIsIconMode] = useState(false)
   const [projects, setProjects] = useState<Project[]>([])
   const [user, setUser] = useState<User | null>(null)
   const [counts, setCounts] = useState<Counts>({ projects: 0, experiments: 0, samples: 0, literature: 0 })
@@ -124,6 +128,41 @@ export function AppSidebar() {
   const [openProjects, setOpenProjects] = useState<Record<string, boolean>>({})
   const [openExperiments, setOpenExperiments] = useState<Record<string, boolean>>({})
   const supabase = createClient()
+
+  const toggleIconMode = () => {
+    setIsIconMode(!isIconMode)
+  }
+
+  // Update parent width when icon mode changes
+  useEffect(() => {
+    const sidebarContainer = document.querySelector('[data-slot="sidebar-container"]') as HTMLElement
+    if (sidebarContainer) {
+      if (isIconMode) {
+        sidebarContainer.style.width = '64px'
+        sidebarContainer.style.setProperty('--sidebar-width', '64px')
+      } else {
+        sidebarContainer.style.width = '280px'
+        sidebarContainer.style.setProperty('--sidebar-width', '280px')
+      }
+    }
+
+    // Also update the custom layout width variable
+    const customSidebarContainer = document.querySelector('[data-sidebar-container]') as HTMLElement
+    if (customSidebarContainer) {
+      if (isIconMode) {
+        customSidebarContainer.style.width = '64px'
+        customSidebarContainer.style.setProperty('--sidebar-width', '64px')
+      } else {
+        customSidebarContainer.style.width = '280px'
+        customSidebarContainer.style.setProperty('--sidebar-width', '280px')
+      }
+    }
+
+    // Dispatch custom event to notify layout of width change
+    window.dispatchEvent(new CustomEvent('sidebar-width-change', {
+      detail: { width: isIconMode ? 64 : 280, isIconMode }
+    }))
+  }, [isIconMode])
 
   // Prevent hydration mismatch by only activating after mount
   useEffect(() => {
@@ -518,33 +557,82 @@ export function AppSidebar() {
   }
 
   return (
-    <Sidebar variant="sidebar">
+    <Sidebar
+      variant="sidebar"
+      className={cn(
+        "transition-all duration-200 ease-in-out",
+        isIconMode && "!w-16"
+      )}
+      style={{
+        ...(isIconMode && {
+          '--sidebar-width': '64px',
+        })
+      } as React.CSSProperties}
+    >
       {/* Header with Workspace Dropdown */}
-      <SidebarHeader>
+      <SidebarHeader className="p-2">
         <SidebarMenu>
           <SidebarMenuItem>
-            <SidebarMenuButton size="lg" className="group-data-[collapsible=icon]:size-8 group-data-[collapsible=icon]:p-2">
-              <div className="flex aspect-square size-8 items-center justify-center rounded-lg group-data-[collapsible=icon]:size-8">
-                <Image
-                  src="/notes9-logo.png"
-                  alt="Notes9"
-                  width={32}
-                  height={32}
-                  className="size-8"
-                />
+            {isIconMode ? (
+              // Icon mode: Logo centered, expand button below or as overlay
+              <div className="flex flex-col items-center space-y-2">
+                <SidebarMenuButton size="lg" className="h-10 w-10 p-0">
+                  <div className="flex aspect-square size-8 items-center justify-center rounded-lg">
+                    <Image
+                      src="/notes9-logo.png"
+                      alt="Notes9"
+                      width={32}
+                      height={32}
+                      className="size-8"
+                    />
+                  </div>
+                </SidebarMenuButton>
+
+                {/* Expand Button - Below logo in icon mode */}
+                <button
+                  onClick={toggleIconMode}
+                  className="flex h-6 w-6 items-center justify-center rounded-md text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground transition-colors"
+                  title="Expand sidebar"
+                >
+                  <ChevronDown className="h-3 w-3 -rotate-90" />
+                </button>
               </div>
-              <div className="grid flex-1 text-left text-sm leading-tight group-data-[collapsible=icon]:hidden">
-                <span className="truncate font-semibold">Notes9</span>
-                <span className="truncate text-xs">Research Lab</span>
+            ) : (
+              // Normal mode: Logo and text with collapse button on the right
+              <div className="flex items-center gap-2">
+                <SidebarMenuButton size="lg" className="flex-1 min-w-0">
+                  <div className="flex aspect-square size-8 items-center justify-center rounded-lg">
+                    <Image
+                      src="/notes9-logo.png"
+                      alt="Notes9"
+                      width={32}
+                      height={32}
+                      className="size-8"
+                    />
+                  </div>
+                  <div className="grid flex-1 text-left text-sm leading-tight min-w-0">
+                    <span className="truncate font-semibold">Notes9</span>
+                    <span className="truncate text-xs">Research Lab</span>
+                  </div>
+                </SidebarMenuButton>
+
+                {/* Collapse Button */}
+                <button
+                  onClick={toggleIconMode}
+                  className="flex h-8 w-8 items-center justify-center rounded-md text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground transition-colors flex-shrink-0"
+                  title="Collapse sidebar"
+                >
+                  <PanelLeftClose className="h-4 w-4" />
+                </button>
               </div>
-            </SidebarMenuButton>
+            )}
           </SidebarMenuItem>
         </SidebarMenu>
       </SidebarHeader>
 
       <SidebarContent>
         {/* Search - Hidden in icon mode */}
-        <SidebarGroup className="group-data-[collapsible=icon]:hidden">
+        <SidebarGroup className={cn(isIconMode && "hidden")}>
           <SidebarGroupContent className="relative px-2">
             <Search className="pointer-events-none absolute left-4 top-1/2 size-4 -translate-y-1/2 select-none opacity-50" />
             <SidebarInput
@@ -558,7 +646,7 @@ export function AppSidebar() {
 
         {/* Main Navigation */}
         <SidebarGroup>
-          <SidebarGroupLabel>Platform</SidebarGroupLabel>
+          {/* <SidebarGroupLabel>Platform</SidebarGroupLabel> */}
           <SidebarGroupContent>
             <SidebarMenu>
               {navigation.map((item) => {
@@ -579,13 +667,13 @@ export function AppSidebar() {
 
                 return (
                   <SidebarMenuItem key={item.name}>
-                    <SidebarMenuButton asChild isActive={isActive} tooltip={item.name}>
+                    <SidebarMenuButton asChild isActive={isActive} tooltip={isIconMode ? item.name : undefined}>
                       <Link href={item.href}>
                         <Icon />
-                        <span>{item.name}</span>
+                        <span className={cn(isIconMode && "hidden")}>{item.name}</span>
                       </Link>
                     </SidebarMenuButton>
-                    {badge !== null && (
+                    {badge !== null && !isIconMode && (
                       <SidebarMenuBadge>{badge}</SidebarMenuBadge>
                     )}
                   </SidebarMenuItem>
@@ -598,7 +686,7 @@ export function AppSidebar() {
         <SidebarSeparator className="group-data-[collapsible=icon]:hidden" />
 
         {/* Projects Section with Collapsible - Hidden in icon mode */}
-        <Collapsible defaultOpen={true} className="group/collapsible group-data-[collapsible=icon]:hidden">
+        <Collapsible defaultOpen={true} className={cn("group/collapsible", isIconMode && "hidden")}>
           <SidebarGroup>
             <div className="flex items-center justify-between px-2 py-1">
               <CollapsibleTrigger
@@ -640,9 +728,9 @@ export function AppSidebar() {
                       const isProjectOpen = openProjects[project.id] ?? false
                       return (
                         <SidebarMenuItem key={project.id}>
-                          <div className="flex items-start">
+                          <div className="flex items-center gap-2">
                             <button
-                              className="mr-2 mt-0.5 text-muted-foreground hover:text-foreground"
+                              className="flex-shrink-0 text-muted-foreground hover:text-foreground"
                               onClick={() =>
                                 setOpenProjects((prev) => ({
                                   ...prev,
@@ -657,19 +745,29 @@ export function AppSidebar() {
                                 <Folder className="size-4" />
                               )}
                             </button>
-                            <SidebarMenuButton asChild isActive={mounted && pathname === `/projects/${project.id}`} tooltip={project.name}>
-                              <Link href={`/projects/${project.id}`}>
-                                <div
-                                  className={cn(
-                                    "size-2 rounded-full shrink-0",
-                                    project.status === "active" ? "bg-green-500" : "bg-yellow-500"
-                                  )}
-                                />
-                                <span className="truncate">{project.name}</span>
-                              </Link>
-                            </SidebarMenuButton>
+
+                            <Link
+                              href={`/projects/${project.id}`}
+                              className={cn(
+                                "flex items-center gap-2 flex-1 min-w-0 px-2 py-1.5 rounded-md text-sm transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
+                                mounted && pathname === `/projects/${project.id}`
+                                  ? "bg-sidebar-accent font-medium text-sidebar-accent-foreground"
+                                  : "text-sidebar-foreground"
+                              )}
+                            >
+                              <div
+                                className={cn(
+                                  "size-2 rounded-full shrink-0",
+                                  project.status === "active" ? "bg-green-500" : "bg-yellow-500"
+                                )}
+                              />
+                              <span className="truncate">{project.name}</span>
+                            </Link>
+
                             {project.experiment_count && project.experiment_count > 0 && (
-                              <SidebarMenuBadge>{project.experiment_count}</SidebarMenuBadge>
+                              <div className="flex h-5 min-w-5 items-center justify-center rounded-md bg-sidebar-primary px-1 text-xs font-medium text-sidebar-primary-foreground tabular-nums flex-shrink-0">
+                                {project.experiment_count}
+                              </div>
                             )}
                           </div>
 
@@ -745,7 +843,7 @@ export function AppSidebar() {
         <SidebarSeparator className="group-data-[collapsible=icon]:hidden" />
 
         {/* Settings Group - Hidden in icon mode */}
-        <Collapsible defaultOpen={false} className="group/collapsible group-data-[collapsible=icon]:hidden">
+        <Collapsible defaultOpen={false} className={cn("group/collapsible", isIconMode && "hidden")}>
           <SidebarGroup>
             <SidebarGroupLabel asChild>
               <CollapsibleTrigger className="w-full">
@@ -786,12 +884,15 @@ export function AppSidebar() {
           <SidebarMenuItem>
             <SidebarMenuButton
               asChild
-              tooltip="Catalyst AI"
-              className="bg-primary/10 hover:bg-primary/20 text-primary"
+              tooltip={isIconMode ? "Catalyst AI" : undefined}
+              className={cn(
+                "bg-primary/10 hover:bg-primary/20 text-primary",
+                isIconMode && "justify-center"
+              )}
             >
               <Link href="/catalyst">
                 <Sparkles className="size-4" />
-                <span>Catalyst</span>
+                <span className={cn(isIconMode && "hidden")}>Catalyst</span>
               </Link>
             </SidebarMenuButton>
           </SidebarMenuItem>
@@ -803,15 +904,16 @@ export function AppSidebar() {
                 <SidebarMenuButton
                   size="lg"
                   className="data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground"
+                  tooltip={isIconMode ? getUserDisplayName() : undefined}
                 >
                   <div className="flex aspect-square size-8 items-center justify-center rounded-lg bg-sidebar-accent text-sidebar-accent-foreground">
                     <span className="text-xs font-semibold">{getUserInitials()}</span>
                   </div>
-                  <div className="grid flex-1 text-left text-sm leading-tight">
+                  <div className={cn("grid flex-1 text-left text-sm leading-tight", isIconMode && "hidden")}>
                     <span className="truncate font-semibold">{getUserDisplayName()}</span>
                     <span className="truncate text-xs">{user?.email || "Loading..."}</span>
                   </div>
-                  <ChevronUp className="ml-auto size-4" />
+                  <ChevronUp className={cn("ml-auto size-4", isIconMode && "hidden")} />
                 </SidebarMenuButton>
               </DropdownMenuTrigger>
               <DropdownMenuContent
