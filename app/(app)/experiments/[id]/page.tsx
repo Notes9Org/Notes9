@@ -12,7 +12,8 @@ import {
   BreadcrumbPage,
   BreadcrumbSeparator,
 } from "@/components/ui/breadcrumb"
-import { FlaskConical, Calendar, User, FileText } from 'lucide-react'
+import { FlaskConical, Calendar, User, FileText, ChevronDown } from 'lucide-react'
+import { cn } from "@/lib/utils"
 import { notFound } from 'next/navigation'
 import Link from 'next/link'
 import { LabNotesTab } from './lab-notes-tab'
@@ -173,73 +174,94 @@ export default async function ExperimentDetailPage({
           </div>
         </div>
 
-        {/* Overview Cards - Compact Status */}
-        <div className="grid gap-3 md:grid-cols-4">
-          <Card className="py-2">
-            <CardHeader className="pb-1 pt-2 px-4">
-              <CardTitle className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+        {/* Slim pills with toggleable details (matched to tab styling) */}
+        <div className="grid gap-2 md:grid-cols-4">
+          <details className="group rounded-md border border-border bg-muted/10">
+            <summary className="flex items-center justify-between px-3 py-2 cursor-pointer text-[12px] font-medium text-muted-foreground hover:bg-muted/20 rounded-md">
+              <span className="flex items-center gap-2">
+                <User className="h-3 w-3 text-muted-foreground" />
                 Researcher
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="px-4 pb-2">
-              <div className="flex items-center gap-2">
-                <User className="h-3.5 w-3.5 text-muted-foreground" />
-                <span className="text-sm font-medium text-foreground">{experiment.researcher}</span>
+              </span>
+              <ChevronDown className="h-3 w-3 text-muted-foreground transition-transform duration-150 group-open:rotate-180" />
+            </summary>
+            <div className="px-3 pb-2 pt-1 text-[13px] text-foreground truncate">
+              {experiment.researcher}
               </div>
-            </CardContent>
-          </Card>
+          </details>
 
-          <Card className="py-2">
-            <CardHeader className="pb-1 pt-2 px-4">
-              <CardTitle className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+          <details className="group rounded-md border border-border bg-muted/10">
+            <summary className="flex items-center justify-between px-3 py-2 cursor-pointer text-[12px] font-medium text-muted-foreground hover:bg-muted/20 rounded-md">
+              <span className="flex items-center gap-2">
+                <Calendar className="h-3 w-3 text-muted-foreground" />
                 Start Date
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="px-4 pb-2">
-              <div className="flex items-center gap-2">
-                <Calendar className="h-3.5 w-3.5 text-muted-foreground" />
-                <span className="text-sm font-medium text-foreground">{experiment.startDate}</span>
+              </span>
+              <ChevronDown className="h-3 w-3 text-muted-foreground transition-transform duration-150 group-open:rotate-180" />
+            </summary>
+            <div className="px-3 pb-2 pt-1 text-[13px] text-foreground truncate">
+              {experiment.startDate || "Not set"}
               </div>
-            </CardContent>
-          </Card>
+          </details>
 
-          <Card className="py-2">
-            <CardHeader className="pb-1 pt-2 px-4">
-              <CardTitle className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+          <details className="group rounded-md border border-border bg-muted/10">
+            <summary className="flex items-center justify-between px-3 py-2 cursor-pointer text-[12px] font-medium text-muted-foreground hover:bg-muted/20 rounded-md">
+              <span className="flex items-center gap-2">
+                <FileText className="h-3 w-3 text-muted-foreground" />
                 Protocol
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="px-4 pb-2">
-              <div className="flex items-center gap-2">
-                <FileText className="h-3.5 w-3.5 text-muted-foreground" />
-                <span className="text-sm font-medium text-foreground truncate">{experiment.protocol}</span>
+              </span>
+              <ChevronDown className="h-3 w-3 text-muted-foreground transition-transform duration-150 group-open:rotate-180" />
+            </summary>
+            <div className="px-3 pb-2 pt-1 text-[13px] text-foreground truncate">
+              {experiment.protocol}
               </div>
-            </CardContent>
-          </Card>
+          </details>
 
-          <Card className="py-2">
-            <CardHeader className="pb-1 pt-2 px-4">
-              <CardTitle className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+          <details className="group rounded-md border border-border bg-muted/10">
+            <summary className="flex items-center justify-between px-3 py-2 cursor-pointer text-[12px] font-medium text-muted-foreground hover:bg-muted/20 rounded-md">
+              <span className="flex items-center gap-2">
+                <FlaskConical className="h-3 w-3 text-muted-foreground" />
                 Progress
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="px-4 pb-2">
-              <div className="flex items-center gap-2">
-                <FlaskConical className="h-3.5 w-3.5 text-muted-foreground" />
-                <span className="text-sm font-medium text-foreground">{experiment.progress}%</span>
+              </span>
+              <ChevronDown className="h-3 w-3 text-muted-foreground transition-transform duration-150 group-open:rotate-180" />
+            </summary>
+            <div className="px-3 pb-2 pt-1 text-[13px] text-foreground">
+              {experiment.progress}%
               </div>
-            </CardContent>
-          </Card>
+          </details>
         </div>
 
         {/* Main Content Tabs */}
-        <Tabs defaultValue={initialTab} className="space-y-4">
-          <TabsList>
-            <TabsTrigger value="overview">Overview</TabsTrigger>
-            <TabsTrigger value="protocol">Protocol & Assays</TabsTrigger>
-            <TabsTrigger value="samples">Samples</TabsTrigger>
-            <TabsTrigger value="data">Data & Files</TabsTrigger>
-            <TabsTrigger value="notes">Lab Notes</TabsTrigger>
+        <Tabs defaultValue={initialTab} className="space-y-3">
+          <TabsList className="flex flex-wrap gap-1 bg-muted/10 p-1 rounded-md">
+            <TabsTrigger
+              value="overview"
+              className="px-2.5 py-1.25 rounded-md text-[12px] font-medium text-muted-foreground data-[state=active]:bg-foreground data-[state=active]:text-background transition-colors"
+            >
+              Overview
+            </TabsTrigger>
+            <TabsTrigger
+              value="protocol"
+              className="px-2.5 py-1.25 rounded-md text-[12px] font-medium text-muted-foreground data-[state=active]:bg-foreground data-[state=active]:text-background transition-colors"
+            >
+              Protocol & Assays
+            </TabsTrigger>
+            <TabsTrigger
+              value="samples"
+              className="px-2.5 py-1.25 rounded-md text-[12px] font-medium text-muted-foreground data-[state=active]:bg-foreground data-[state=active]:text-background transition-colors"
+            >
+              Samples
+            </TabsTrigger>
+            <TabsTrigger
+              value="data"
+              className="px-2.5 py-1.25 rounded-md text-[12px] font-medium text-muted-foreground data-[state=active]:bg-foreground data-[state=active]:text-background transition-colors"
+            >
+              Data & Files
+            </TabsTrigger>
+            <TabsTrigger
+              value="notes"
+              className="px-2.5 py-1.25 rounded-md text-[12px] font-medium text-muted-foreground data-[state=active]:bg-foreground data-[state=active]:text-background transition-colors"
+            >
+              Lab Notes
+            </TabsTrigger>
           </TabsList>
 
           <TabsContent value="overview" className="space-y-4">

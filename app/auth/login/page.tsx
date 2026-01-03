@@ -93,21 +93,18 @@ function LoginForm() {
     setError(null)
 
     try {
+      // Single attempt; if Supabase says invalid credentials, show wrong password/email
       const { error } = await supabase.auth.signInWithPassword({
         email,
         password,
       })
 
       if (error) {
-        // Check if it's because email doesn't exist
-        if (error.message.includes('Invalid login credentials') && emailExists === false) {
-          setError("No account found with this email. Please sign up instead.")
-        } else if (error.message.includes('Invalid login credentials')) {
-          setError("Invalid email or password. Please try again.")
-        } else {
-          throw error
+        if (error.message.includes('Invalid login credentials')) {
+          setError("Wrong email or password. Please try again.")
+          return
         }
-        return
+        throw error
       }
 
       router.push("/dashboard")
@@ -255,9 +252,6 @@ function LoginForm() {
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
                     />
-                    {checkingEmail && (
-                      <p className="text-xs text-muted-foreground">Checking email...</p>
-                    )}
                   </div>
                   <div className="grid gap-2">
                     <Label htmlFor="password">Password</Label>
