@@ -2,6 +2,7 @@
 
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { ContactForm } from "@/components/marketing/contact-form"
 import { Users, Crosshair, Trophy, MapPin, Send, School, FlaskConical, Target } from "lucide-react"
 import { motion } from "framer-motion"
 
@@ -209,24 +210,17 @@ export default function AboutPage() {
           transition={{ duration: 0.5 }}
           className="text-center pb-20"
         >
-          <motion.div
-            whileHover={{ scale: 1.02, y: -5 }}
-            className="p-8 border border-border rounded-2xl bg-gradient-to-b from-muted/50 to-background max-w-2xl mx-auto shadow-lg"
-          >
-            <div className="flex items-center justify-center mb-4">
-              <div className="p-3 bg-primary/10 rounded-full mr-3">
-                <Send className="h-6 w-6 text-primary" />
-              </div>
-              <h2 className="text-2xl font-semibold text-foreground">Get in Touch</h2>
-            </div>
-            <p className="text-muted-foreground mb-6">
+          <div className="mb-12">
+            <h2 className="text-3xl font-bold text-foreground mb-4">Get in Touch</h2>
+            <p className="text-muted-foreground max-w-2xl mx-auto text-lg mb-8">
               Notes9 is currently in an early-access phase. We are actively seeking design partner labs and investment opportunities.
             </p>
-            <div className="flex items-center justify-center space-x-2 text-muted-foreground bg-muted/50 py-2 px-4 rounded-full w-fit mx-auto">
-              <MapPin className="h-4 w-4" />
-              <span className="text-sm">Distributed team · United States & United Kingdom</span>
-            </div>
-          </motion.div>
+          </div>
+          <ContactForm />
+          <div className="flex items-center justify-center space-x-2 text-muted-foreground bg-muted/50 py-2 px-4 rounded-full w-fit mx-auto mt-12">
+            <MapPin className="h-4 w-4" />
+            <span className="text-sm">Distributed team · United States & United Kingdom</span>
+          </div>
         </motion.div>
       </div>
     </div>
