@@ -6,6 +6,7 @@ import { AcademicHero } from "@/components/marketing/academic-hero"
 import { StatusSection } from "@/components/marketing/status-section"
 import { FeaturesSection } from "@/components/marketing/features-section"
 import { DifferentiationSection } from "@/components/marketing/differentiation-section"
+import { ContactForm } from "@/components/marketing/contact-form"
 
 import { InteractiveParticles } from "@/components/ui/interactive-particles"
 
@@ -43,6 +44,15 @@ export default async function HomePage() {
           <StatusSection />
           <FeaturesSection />
           <DifferentiationSection />
+          <section className="container mx-auto px-4 py-24">
+            <div className="max-w-4xl mx-auto text-center mb-12">
+              <h2 className="text-3xl font-bold tracking-tight mb-4">Ready to Transform Your Research?</h2>
+              <p className="text-muted-foreground text-lg">
+                Join leading labs in automating data workflows and accelerating discovery.
+              </p>
+            </div>
+            <ContactForm />
+          </section>
         </main>
         <Footer />
       </div>
