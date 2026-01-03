@@ -27,7 +27,7 @@ import { TiptapEditor } from "@/components/text-editor/tiptap-editor"
 import { useToast } from "@/hooks/use-toast"
 import { useAutoSave } from "@/hooks/use-auto-save"
 import { SaveStatusIndicator } from "@/components/ui/save-status"
-import { Save, Plus, FileText, Download, FileCode } from "lucide-react"
+import { Save, Plus, FileText, Download, FileCode, Globe, Loader2 } from "lucide-react"
 import {
   Table,
   TableBody,
@@ -51,12 +51,14 @@ export function LabNotesTab({ experimentId }: { experimentId: string }) {
   const router = useRouter()
   const searchParams = useSearchParams()
   const { toast } = useToast()
-  
+
   const [notes, setNotes] = useState<LabNote[]>([])
   const [selectedNote, setSelectedNote] = useState<LabNote | null>(null)
   const [isCreating, setIsCreating] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
-  
+  const [isPublishing, setIsPublishing] = useState(false)
+  const [publicUrl, setPublicUrl] = useState<string | null>(null)
+
   const [formData, setFormData] = useState({
     title: "",
     content: "",
@@ -67,11 +69,11 @@ export function LabNotesTab({ experimentId }: { experimentId: string }) {
   const handleAutoSave = async (content: string) => {
     // Don't auto-save if title is empty
     if (!formData.title.trim()) return
-    
+
     try {
       const supabase = createClient()
       const { data: { user } } = await supabase.auth.getUser()
-      
+
       if (!user) throw new Error("Not authenticated")
 
       // If creating a new note, insert it first
@@ -89,11 +91,11 @@ export function LabNotesTab({ experimentId }: { experimentId: string }) {
           .single()
 
         if (error) throw error
-        
+
         // Switch to editing mode
         setIsCreating(false)
         setSelectedNote(data)
-        
+
         // Refresh notes list
         await fetchNotes()
       } else {
@@ -109,10 +111,10 @@ export function LabNotesTab({ experimentId }: { experimentId: string }) {
           .eq("id", selectedNote.id)
 
         if (error) throw error
-        
+
         // Update local state
-        setNotes(notes.map(note => 
-          note.id === selectedNote.id 
+        setNotes(notes.map(note =>
+          note.id === selectedNote.id
             ? { ...note, content, title: formData.title, note_type: formData.note_type, updated_at: new Date().toISOString() }
             : note
         ))
@@ -136,6 +138,96 @@ export function LabNotesTab({ experimentId }: { experimentId: string }) {
     fetchNotes(noteIdFromQuery)
   }, [experimentId, noteIdFromQuery])
 
+  // Check if note is published when selected
+  useEffect(() => {
+    const checkPublicStatus = async () => {
+      setPublicUrl(null)
+      if (!selectedNote) return
+
+      const supabase = createClient()
+      const { data } = await supabase.storage
+        .from('lab_notes_public')
+        .list('', {
+          search: `${selectedNote.id}.json`
+        })
+
+      if (data && data.length > 0) {
+        setPublicUrl(`${window.location.origin}/share/note/${selectedNote.id}`)
+      }
+    }
+
+    checkPublicStatus()
+  }, [selectedNote])
+
+  const handlePublish = async () => {
+    if (!selectedNote) return
+
+    try {
+      setIsPublishing(true)
+      const supabase = createClient()
+
+      const jsonBlob = new Blob([JSON.stringify({
+        title: formData.title,
+        content: formData.content,
+        updatedAt: new Date().toISOString()
+      })], { type: 'application/json' })
+
+      const { error } = await supabase.storage
+        .from('lab_notes_public')
+        .upload(`${selectedNote.id}.json`, jsonBlob, {
+          upsert: true,
+          contentType: 'application/json'
+        })
+
+      if (error) throw error
+
+      setPublicUrl(`${window.location.origin}/share/note/${selectedNote.id}`)
+      toast({
+        title: "Note Published",
+        description: "Your note is now publicly available.",
+      })
+    } catch (error: any) {
+      console.error("Publish error:", error)
+      toast({
+        title: "Publish Failed",
+        description: error.message || "Failed to publish note.",
+        variant: "destructive"
+      })
+    } finally {
+      setIsPublishing(false)
+    }
+  }
+
+  const handleUnpublish = async () => {
+    if (!selectedNote) return
+
+    try {
+      setIsPublishing(true)
+      const supabase = createClient()
+
+      const { error } = await supabase.storage
+        .from('lab_notes_public')
+        .remove([`${selectedNote.id}.json`])
+
+      if (error) throw error
+
+      setPublicUrl(null)
+      toast({
+        title: "Note Unpublished",
+        description: "Your note is no longer public.",
+      })
+    } catch (error: any) {
+      toast({
+        title: "Unpublish Failed",
+        description: error.message,
+        variant: "destructive"
+      })
+    } finally {
+      setIsPublishing(false)
+    }
+  }
+
+
   const fetchNotes = async (preferredNoteId?: string | null) => {
     try {
       const supabase = createClient()
@@ -147,7 +239,7 @@ export function LabNotesTab({ experimentId }: { experimentId: string }) {
 
       if (error) throw error
       setNotes(data || [])
-      
+
       // Auto-select preferred note (from query) or first available when not creating
       if (data && data.length > 0 && !isCreating) {
         const next =
@@ -246,65 +338,46 @@ export function LabNotesTab({ experimentId }: { experimentId: string }) {
 
       // Dynamic import - using html2pdf for much smaller file sizes
       const html2pdf = (await import('html2pdf.js')).default
-      
+      // Sanitize content and strip problematic colors/styles
+      const parser = new DOMParser()
+      const parsed = parser.parseFromString(formData.content || "", "text/html")
+      parsed.querySelectorAll('[style]').forEach((n) => n.removeAttribute('style'))
+      parsed.querySelectorAll('*').forEach((el) => {
+        if (el instanceof HTMLElement) {
+          el.style.color = '#000000'
+          el.style.backgroundColor = 'transparent'
+          el.style.borderColor = '#000000'
+        }
+      })
+      const cleanBody = parsed.body.innerHTML
+
       // Create clean HTML content
       const element = document.createElement('div')
       element.innerHTML = `
+        <style>
+          * { color: #000 !important; background: transparent !important; border-color: #000 !important; }
+          a { color: #0000ee !important; }
+        </style>
         <div style="padding: 20px; font-family: Arial, sans-serif; color: #000000; background: #ffffff;">
           <h1 style="font-size: 24px; margin-bottom: 20px; font-weight: bold; color: #000000;">${formData.title}</h1>
-          <div style="line-height: 1.6; font-size: 12px; color: #000000;">${formData.content}</div>
+          <div style="line-height: 1.6; font-size: 12px; color: #000000;">${cleanBody}</div>
         </div>
       `
-      
-      // Remove any CSS variables or lab() colors from inline styles
-      const allElements = element.querySelectorAll('*')
-      allElements.forEach((el: any) => {
-        if (el.style) {
-          // Remove or replace problematic color values
-          for (let i = 0; i < el.style.length; i++) {
-            const prop = el.style[i]
-            const value = el.style.getPropertyValue(prop)
-            
-            // Check if value contains var() or lab() or other unsupported functions
-            if (value && (value.includes('var(') || value.includes('lab(') || value.includes('oklch(') || value.includes('color('))) {
-              // Get computed style as fallback
-              const computedStyle = window.getComputedStyle(el)
-              const computedValue = computedStyle.getPropertyValue(prop)
-              
-              // If computed value is valid and doesn't contain problematic functions, use it
-              if (computedValue && !computedValue.includes('var(') && !computedValue.includes('lab(') && !computedValue.includes('oklch(')) {
-                el.style.setProperty(prop, computedValue)
-              } else {
-                // Fallback to safe defaults for color properties
-                if (prop.includes('color') || prop === 'background' || prop === 'border') {
-                  if (prop === 'background-color' || prop === 'background') {
-                    el.style.setProperty(prop, '#ffffff')
-                  } else if (prop.includes('color')) {
-                    el.style.setProperty(prop, '#000000')
-                  } else if (prop.includes('border')) {
-                    el.style.setProperty(prop, '#cccccc')
-                  }
-                }
-              }
-            }
-          }
-        }
-      })
-      
+
       // Configure html2pdf options for optimal size/quality balance
       const options = {
         margin: [10, 10, 10, 10] as [number, number, number, number],
         filename: `${formData.title || "lab-note"}.pdf`,
         image: { type: 'jpeg' as const, quality: 0.95 },
-        html2canvas: { 
+        html2canvas: {
           scale: 2,
           useCORS: true,
           letterRendering: true,
           logging: false
         },
-        jsPDF: { 
-          unit: 'mm', 
-          format: 'a4', 
+        jsPDF: {
+          unit: 'mm',
+          format: 'a4',
           orientation: 'portrait' as const,
           compress: true // Enable PDF compression
         },
@@ -337,7 +410,7 @@ export function LabNotesTab({ experimentId }: { experimentId: string }) {
 
       // Clean and format HTML content
       const cleanContent = formData.content || '<p>No content</p>'
-      
+
       const html = `<!DOCTYPE html>
 <html>
 <head>
@@ -349,7 +422,7 @@ export function LabNotesTab({ experimentId }: { experimentId: string }) {
   ${cleanContent}
 </body>
 </html>`
-      
+
       // Call server-side API to convert HTML to DOCX
       const response = await fetch('/api/export-docx', {
         method: 'POST',
@@ -374,7 +447,7 @@ export function LabNotesTab({ experimentId }: { experimentId: string }) {
       // Get the blob from response
       const blob = await response.blob()
       console.log('Received blob size:', blob.size)
-      
+
       // Check if blob has content
       if (!blob || blob.size === 0) {
         throw new Error('Generated document is empty - received 0 bytes from server')
@@ -419,7 +492,7 @@ export function LabNotesTab({ experimentId }: { experimentId: string }) {
     try {
       const supabase = createClient()
       const { data: { user } } = await supabase.auth.getUser()
-      
+
       if (!user) throw new Error("Not authenticated")
 
       if (selectedNote && !isCreating) {
@@ -511,8 +584,8 @@ export function LabNotesTab({ experimentId }: { experimentId: string }) {
             </div>
             <div className="flex items-center gap-3">
               {/* Save Status Button - Google Drive Style */}
-              <SaveStatusIndicator 
-                status={autoSaveStatus} 
+              <SaveStatusIndicator
+                status={autoSaveStatus}
                 lastSaved={lastSaved}
               />
               {!isCreating && selectedNote && (
@@ -550,7 +623,64 @@ export function LabNotesTab({ experimentId }: { experimentId: string }) {
                   </DropdownMenuContent>
                 </DropdownMenu>
               )}
+              {!isCreating && selectedNote && (
+                <div className="flex items-center gap-2">
+                  {publicUrl ? (
+                    <div className="flex items-center gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="text-green-600 border-green-200 hover:bg-green-50 hover:text-green-700"
+                        onClick={() => {
+                          navigator.clipboard.writeText(publicUrl)
+                          toast({ title: "Copied!", description: "Public link copied to clipboard." })
+                        }}
+                      >
+                        <Globe className="h-4 w-4 mr-2" />
+                        Published
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={handlePublish}
+                        disabled={isPublishing}
+                      >
+                        {isPublishing ? <Loader2 className="h-4 w-4 animate-spin" /> : "Republish"}
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="text-muted-foreground hover:text-destructive"
+                        disabled={isPublishing}
+                        onClick={handleUnpublish}
+                      >
+                        Unpublish
+                      </Button>
+                    </div>
+                  ) : (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={handlePublish}
+                      disabled={isPublishing}
+                    >
+                      {isPublishing ? (
+                        <>
+                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                          Publishing...
+                        </>
+                      ) : (
+                        <>
+                          <Globe className="h-4 w-4 mr-2" />
+                          Publish
+                        </>
+                      )}
+                    </Button>
+                  )}
+                </div>
+              )}
             </div>
+
           </div>
         </CardHeader>
         <CardContent className="space-y-4">

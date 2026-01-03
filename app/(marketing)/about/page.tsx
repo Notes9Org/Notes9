@@ -3,7 +3,7 @@
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { ContactForm } from "@/components/marketing/contact-form"
-import { Users, Crosshair, Trophy, MapPin, Send, School, FlaskConical, Target } from "lucide-react"
+import { Users, Crosshair, Trophy, MapPin, Send, School, FlaskConical, Target, GraduationCap } from "lucide-react"
 import { motion } from "framer-motion"
 
 const fadeInUp = {
@@ -16,6 +16,51 @@ const stagger = {
 }
 
 export default function AboutPage() {
+  const founders = [
+    {
+      name: "Nitheesh Yanamandala",
+      role: "CPO (Product)",
+      background:
+        "Pharmaceutical science Phd Scholar focusing on PBPK modeling, translational pharmacokinetics, and dose projection. Industry and academic experience bridging quantitative modelling with drug development strategy. Registered Patent Agent in India.",
+      education: "MS Pharmaceutical Sciences – University at Buffalo; BA Pharmacy – BITS Pilani",
+    },
+    {
+      name: "Naga Sai Praneeth Nalajala",
+      role: "CTO",
+      background:
+        "Full-stack engineer currently working at Asanify, where he builds and maintains production SaaS platforms for HR and payroll. Experienced in designing scalable web architectures, setting up robust developer tooling, and translating product requirements into reliable, ship-ready features.",
+      education: "BE Electrical and Electronics Engineering – BITS Pilani",
+    },
+    {
+      name: "Venkata Ramana Reddy Duggempudi",
+      role: "AI Engineer",
+      background:
+        "Machine learning engineer specialising in agentic AI systems and clinical-trial data extraction. Research experience in healthcare AI applications, model evaluation, and deployment in regulated environments.",
+      education: "MS Artificial Intelligence – University at Buffalo",
+    },
+    {
+      name: "Vaishnav Pavan Kumar Achalla",
+      role: "CSO (Science)",
+      background:
+        "Research Assistant at the Jenner Institute, University of Oxford, working on malaria vaccine development and protein engineering. Experienced in end-to-end experimental design, biophysical characterisation, and collaborative translational research.",
+      education: "MRes Pharmaceutical Research – UCL; Bachelor of Pharmacy – BITS Pilani",
+    },
+    {
+      name: "Bhaskar Kandregula",
+      role: "CSO (Strategy)",
+      background:
+        "Formulation scientist with experience in nanoparticle-based drug delivery, and forecasting for pharmaceutical portfolios. Former analyst at PharmaACE working at the interface of science, strategy, and health economics.",
+      education: "MS Pharmaceutical Sciences – University of Maryland, Baltimore; BA Pharmacy – BITS Pilani",
+    },
+    {
+      name: "Hari Hara Nithin Reddy Manupati",
+      role: "CEO",
+      background:
+        "Applied AI developer with expertise in document-processing pipelines, information retrieval, and human–computer interaction. Has contributed to production AI systems at Equifax and multiple early-stage technology startups.",
+      education: "Master of International Business – Hult International Business School; BA Pharmacy – BITS Pilani",
+    },
+  ]
+
   return (
     <div className="bg-background min-h-screen overflow-hidden">
       {/* Subtle Grid Background - Animated */}
@@ -125,81 +170,42 @@ export default function AboutPage() {
           </div>
         </motion.div>
 
-        {/* Team Section */}
-        <div className="mb-24">
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }}
-            className="text-center mb-12"
-          >
+        {/* Team Summary */}
+        <div className="mb-12">
+          <div className="text-center mb-8">
             <h2 className="text-3xl font-bold text-foreground mb-4">Our Team</h2>
-            <p className="text-muted-foreground max-w-2xl mx-auto text-lg">
-              A multidisciplinary team bridging pharmaceutical sciences, artificial intelligence, and enterprise software.
+            <p className="text-lg text-muted-foreground max-w-3xl mx-auto">
+              Notes9 is led by a multidisciplinary group of scientists and engineers with backgrounds in pharmaceutical sciences, AI, and software development.
             </p>
-          </motion.div>
+          </div>
+        </div>
 
-          <motion.div
-            initial="hidden"
-            whileInView="visible"
-            viewport={{ once: true, margin: "-50px" }}
-            variants={stagger}
-            className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 max-w-7xl mx-auto"
-          >
-            {/* Team Members Loop */}
-            {[
-              {
-                name: "Hari Hara Nithin Reddy Manupati",
-                role: "CEO",
-                desc: "Applied AI developer with expertise in document-processing pipelines, information retrieval, and human–computer interaction. Has contributed to production AI systems at Equifax and multiple early-stage technology startups.",
-                education: "Master of International Business – Hult International Business School; Bachelor of Pharmacy – BITS Pilani"
-              },
-              {
-                name: "Nitheesh Yanamandala",
-                role: "CPO (Product)",
-                desc: "Summer Research Intern at Ionis Pharmaceuticals with expertise in PBPK modeling and pharmaceutical sciences. Registered Patent Agent in India.",
-                education: "MA Pharmaceutical Sciences – University at Buffalo; BA Pharmacy – BITS Pilani"
-              },
-              {
-                name: "Vaishnav Pavan Kumar Achalla",
-                role: "CSO (Science)",
-                desc: "Research Assistant at the Jenner Institute, University of Oxford. Expert in malaria vaccine development, protein engineering, and biophysical characterisation.",
-                education: "MRes Pharmaceutical Research – UCL; Bachelor of Pharmacy – BITS Pilani"
-              },
-              {
-                name: "Naga Sai Praneeth Nalajala",
-                role: "CTO",
-                desc: "Full-stack engineer currently working at Asanify. Experienced in designing scalable web architectures, developer tooling, and shipping production SaaS features.",
-                education: "BE Electrical and Electronics Engineering – BITS Pilani"
-              },
-              {
-                name: "Hemanth Rao Paidipally",
-                role: "Full Stack Developer",
-                desc: "Software Engineer at Amazon India with deep expertise in large-scale distributed systems and cloud infrastructure.",
-                education: "BE Computer Science – BITS Pilani"
-              }
-
-            ].map((member, i) => (
-              <motion.div key={i} variants={fadeInUp} className="h-full">
-                <Card className="h-full border-border/60 bg-card/60 backdrop-blur-sm hover:bg-card/90 shadow-sm hover:shadow-2xl transition-all duration-300 hover:-translate-y-2 group">
-                  <CardHeader>
-                    <CardTitle className="text-xl group-hover:text-primary transition-colors">{member.name}</CardTitle>
-                    <Badge variant="secondary" className="w-fit mt-2 border-primary/20 bg-primary/10 text-primary font-medium">{member.role}</Badge>
-                  </CardHeader>
-                  <CardContent className="space-y-4">
-                    <p className="text-sm text-muted-foreground leading-relaxed">
-                      {member.desc}
-                    </p>
-                    <div className="flex items-start gap-2 text-xs text-muted-foreground/80 border-t border-border/40 pt-4">
-                      <School className="h-3.5 w-3.5 mt-0.5 flex-shrink-0 text-primary/70" />
-                      <span>{member.education}</span>
-                    </div>
-                  </CardContent>
-                </Card>
-              </motion.div>
+        {/* Founding Team Cards */}
+        <div className="mb-20">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {founders.map((founder, index) => (
+              <Card
+                key={index}
+                className="border-border/60 bg-card shadow-sm hover:shadow-md transition-shadow"
+              >
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-lg">{founder.name}</CardTitle>
+                  <Badge variant="outline" className="w-fit text-xs border-primary/30 bg-primary/5 text-primary">
+                    {founder.role}
+                  </Badge>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  <p className="text-sm text-muted-foreground leading-relaxed">
+                    {founder.background}
+                  </p>
+                  <div className="flex items-start gap-2 text-xs text-muted-foreground pt-2 border-t border-border">
+                    <GraduationCap className="h-4 w-4 mt-0.5 shrink-0" />
+                    <span>{founder.education}</span>
+                  </div>
+                </CardContent>
+              </Card>
             ))}
-
-          </motion.div>
+          </div>
         </div>
 
         {/* Contact */}
@@ -226,4 +232,3 @@ export default function AboutPage() {
     </div>
   )
 }
-
