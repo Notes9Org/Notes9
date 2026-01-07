@@ -1,7 +1,7 @@
 // AI Models Configuration for Catalyst
 // Using Google AI models via @ai-sdk/google
 
-export const DEFAULT_MODEL_ID = 'gemini-2.0-flash';
+export const DEFAULT_MODEL_ID = 'gemini-2.5-flash-lite';
 
 export interface ChatModel {
   id: string;
@@ -14,20 +14,20 @@ export interface ChatModel {
 export const chatModels: ChatModel[] = [
   // Google Models (Primary - using your API key)
   {
-    id: 'gemini-2.0-flash',
-    name: 'Gemini 2.0 Flash',
+    id: 'gemini-2.5-flash-lite',
+    name: 'Gemini 2.5 Flash Lite',
     provider: 'google',
     description: 'Fast and efficient for most tasks',
   },
   {
-    id: 'gemini-1.5-flash',
-    name: 'Gemini 1.5 Flash',
+    id: 'gemini-2.5-flash',
+    name: 'Gemini 2.5 Flash',
     provider: 'google',
     description: 'Quick responses, good for simple queries',
   },
   {
-    id: 'gemini-1.5-pro',
-    name: 'Gemini 1.5 Pro',
+    id: 'gemini-3-flash-preview',
+    name: 'Gemini 3 Flash Preview',
     provider: 'google',
     description: 'Most capable, best for complex tasks',
   },

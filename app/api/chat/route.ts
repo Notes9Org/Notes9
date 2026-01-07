@@ -1,5 +1,5 @@
 import { streamText, convertToCoreMessages, smoothStream } from 'ai';
-import { google } from '@ai-sdk/google';
+import { createGoogleGenerativeAI } from '@ai-sdk/google';
 import { DEFAULT_MODEL_ID, getModelById } from '@/lib/ai/models';
 
 export const maxDuration = 60;
@@ -10,9 +10,11 @@ export async function POST(req: Request) {
   // Get selected model or default
   const selectedModelId = modelId || DEFAULT_MODEL_ID;
   const modelConfig = getModelById(selectedModelId);
-  
-  // For now, only Google models are supported
-  // Add more providers when API keys are configured
+
+  // Create Google provider with GEMINI_API_KEY
+  const google = createGoogleGenerativeAI({
+    apiKey: process.env.GEMINI_API_KEY,
+  });
   const model = google(modelConfig?.id || DEFAULT_MODEL_ID);
 
   const result = streamText({
