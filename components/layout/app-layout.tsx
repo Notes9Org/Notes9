@@ -20,21 +20,21 @@ export function AppLayout({ children }: AppLayoutProps) {
   const [rightSidebarOpen, setRightSidebarOpen] = useState(true)
   const isMobile = useMediaQuery("(max-width: 768px)")
   const isTablet = useMediaQuery("(max-width: 1024px)")
-  
+
   // Close right sidebar on mobile by default
   useEffect(() => {
     if (isMobile) {
       setRightSidebarOpen(false)
     }
   }, [isMobile])
-  
+
   // Left sidebar resizing
   const leftSidebar = useResizable({
     initialWidth: isMobile ? 0 : isTablet ? 240 : 280,
     minWidth: 200,
     maxWidth: 400,
   })
-  
+
   // Right sidebar resizing
   const rightSidebar = useResizable({
     initialWidth: isTablet ? 280 : 320,
@@ -49,10 +49,10 @@ export function AppLayout({ children }: AppLayoutProps) {
         {/* Left Sidebar - Hidden on mobile, shown via SidebarProvider */}
         {!isMobile && (
           <div className="flex shrink-0">
-            <div 
-              style={{ 
+            <div
+              style={{
                 '--sidebar-width': `${leftSidebar.width}px`,
-                width: leftSidebar.width 
+                width: leftSidebar.width
               } as React.CSSProperties}
             >
               <AppSidebar />
@@ -73,7 +73,7 @@ export function AppLayout({ children }: AppLayoutProps) {
               <Image src="/notes9-logo.png" alt="Notes9" width={24} height={24} />
               <h1 className="text-base sm:text-lg font-semibold">Notes9</h1>
             </div>
-          
+
             <div className="flex items-center gap-1 sm:gap-2">
               {/* Mobile: Show AI button with icon */}
               <Button
@@ -91,9 +91,11 @@ export function AppLayout({ children }: AppLayoutProps) {
             </div>
           </header>
 
-          {/* Main Content */}
+          {/* Main Content - fixed width to match layout with sidebar open */}
           <main className="flex-1 overflow-auto p-3 sm:p-4 md:p-6">
-            {children}
+            <div style={{ maxWidth: '900px' }}>
+              {children}
+            </div>
           </main>
         </SidebarInset>
 

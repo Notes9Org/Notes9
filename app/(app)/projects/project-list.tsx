@@ -9,6 +9,13 @@ import { Progress } from "@/components/ui/progress"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Users, Calendar, TrendingUp, Eye, Grid3x3, List } from 'lucide-react'
 
+// Format date consistently to avoid hydration mismatch between server/client locales
+const formatDate = (dateStr: string): string => {
+  const date = new Date(dateStr)
+  // Use ISO format parts for consistency: YYYY-MM-DD
+  return date.toISOString().split('T')[0]
+}
+
 interface Project {
   id: string
   name: string
@@ -63,9 +70,9 @@ export function ProjectList({ projects }: ProjectListProps) {
         </div>
       </div>
 
-      {/* Grid View */}
+      {/* Grid View - Use auto-fill with fixed card sizes to prevent expansion */}
       {viewMode === "grid" && (
-        <div className="grid gap-4 sm:grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
+        <div className="grid gap-4" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 320px))' }}>
           {projects.map((project) => (
             <Card key={project.id} className="hover:border-primary transition-colors flex flex-col">
               <CardHeader>
@@ -78,8 +85,8 @@ export function ProjectList({ projects }: ProjectListProps) {
                       project.status === "active"
                         ? "default"
                         : project.status === "completed"
-                        ? "secondary"
-                        : "outline"
+                          ? "secondary"
+                          : "outline"
                     }
                     className="shrink-0"
                   >
@@ -107,7 +114,7 @@ export function ProjectList({ projects }: ProjectListProps) {
                   {project.start_date && (
                     <div className="flex items-center gap-1 text-sm text-muted-foreground">
                       <Calendar className="h-3 w-3" />
-                      <span>Started: {new Date(project.start_date).toLocaleDateString()}</span>
+                      <span>Started: {formatDate(project.start_date)}</span>
                     </div>
                   )}
                   {project.priority && (
@@ -175,8 +182,8 @@ export function ProjectList({ projects }: ProjectListProps) {
                             project.status === "active"
                               ? "default"
                               : project.status === "completed"
-                              ? "secondary"
-                              : "outline"
+                                ? "secondary"
+                                : "outline"
                           }
                         >
                           {project.status}
@@ -211,7 +218,7 @@ export function ProjectList({ projects }: ProjectListProps) {
                       </TableCell>
                       <TableCell className="text-muted-foreground">
                         {project.start_date
-                          ? new Date(project.start_date).toLocaleDateString()
+                          ? formatDate(project.start_date)
                           : "—"}
                       </TableCell>
                       <TableCell className="text-muted-foreground">

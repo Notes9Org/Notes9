@@ -9,6 +9,13 @@ import { Progress } from "@/components/ui/progress"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { FlaskConical, Calendar, User, Eye, Grid3x3, List } from 'lucide-react'
 
+// Format date consistently to avoid hydration mismatch between server/client locales
+const formatDate = (dateStr: string): string => {
+  const date = new Date(dateStr)
+  // Use ISO format parts for consistency: YYYY-MM-DD
+  return date.toISOString().split('T')[0]
+}
+
 interface Experiment {
   id: string
   name: string
@@ -63,9 +70,9 @@ export function ExperimentList({ experiments }: ExperimentListProps) {
         </div>
       </div>
 
-      {/* Grid View */}
+      {/* Grid View - Use auto-fill with fixed card sizes to prevent expansion */}
       {viewMode === "grid" && (
-        <div className="grid gap-4 sm:grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
+        <div className="grid gap-4" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 320px))' }}>
           {experiments.map((experiment) => (
             <Card key={experiment.id} className="hover:border-primary transition-colors flex flex-col">
               <CardHeader>
@@ -112,7 +119,7 @@ export function ExperimentList({ experiments }: ExperimentListProps) {
                   {experiment.start_date && (
                     <div className="flex items-center gap-1 text-sm text-muted-foreground">
                       <Calendar className="h-3 w-3" />
-                      <span>Started: {new Date(experiment.start_date).toLocaleDateString()}</span>
+                      <span>Started: {formatDate(experiment.start_date)}</span>
                     </div>
                   )}
                   {experiment.description && (
@@ -193,12 +200,12 @@ export function ExperimentList({ experiments }: ExperimentListProps) {
                       </TableCell>
                       <TableCell className="text-muted-foreground">
                         {experiment.start_date
-                          ? new Date(experiment.start_date).toLocaleDateString()
+                          ? formatDate(experiment.start_date)
                           : "—"}
                       </TableCell>
                       <TableCell className="text-muted-foreground">
                         {experiment.completion_date
-                          ? new Date(experiment.completion_date).toLocaleDateString()
+                          ? formatDate(experiment.completion_date)
                           : "—"}
                       </TableCell>
                       <TableCell className="text-right">
