@@ -95,6 +95,58 @@ BEGIN
     RETURN COALESCE(NEW, OLD);
   END IF;
   
+  -- Handle DELETE operation FIRST (before content extraction)
+  IF TG_OP = 'DELETE' THEN
+    -- Extract scope information for DELETE (we only need IDs, not content)
+    IF TG_TABLE_NAME = 'lab_notes' THEN
+      -- Get organization from creator's profile (use OLD since NEW is NULL for DELETE)
+      SELECT organization_id INTO org_id
+      FROM profiles
+      WHERE id = OLD.created_by;
+      
+      proj_id := OLD.project_id;
+      exp_id := OLD.experiment_id;
+      
+    ELSIF TG_TABLE_NAME = 'reports' THEN
+      -- Get organization from generator's profile
+      SELECT organization_id INTO org_id
+      FROM profiles
+      WHERE id = OLD.generated_by;
+      
+      proj_id := OLD.project_id;
+      exp_id := OLD.experiment_id;
+      
+    ELSIF TG_TABLE_NAME = 'protocols' THEN
+      org_id := OLD.organization_id;
+      proj_id := NULL;
+      exp_id := NULL;
+      
+    ELSIF TG_TABLE_NAME = 'literature_reviews' THEN
+      org_id := OLD.organization_id;
+      proj_id := OLD.project_id;
+      exp_id := OLD.experiment_id;
+    END IF;
+    
+    -- Insert delete job (always create, even if org_id is NULL)
+    -- Use INSERT ... ON CONFLICT to handle duplicate pending jobs gracefully
+    INSERT INTO chunk_jobs (source_type, source_id, operation, payload)
+    VALUES (
+      source_type_value,
+      OLD.id,
+      'delete',
+      jsonb_build_object(
+        'organization_id', org_id,
+        'project_id', proj_id,
+        'experiment_id', exp_id
+      )
+    )
+    ON CONFLICT (source_type, source_id, operation) 
+    WHERE status = 'pending'
+    DO NOTHING;
+    
+    RETURN OLD;
+  END IF;
+  
   -- Skip UPDATE if content hasn't changed (handle different fields per table)
   IF TG_OP = 'UPDATE' THEN
     IF TG_TABLE_NAME = 'literature_reviews' THEN
@@ -110,81 +162,59 @@ BEGIN
     END IF;
   END IF;
   
-  -- Extract scope and content based on source type
+  -- Extract scope and content based on source type (for INSERT/UPDATE only)
   IF TG_TABLE_NAME = 'lab_notes' THEN
     -- Get organization from creator's profile
     SELECT organization_id INTO org_id
     FROM profiles
-    WHERE id = COALESCE(NEW.created_by, OLD.created_by);
+    WHERE id = NEW.created_by;
     
-    proj_id := COALESCE(NEW.project_id, OLD.project_id);
-    exp_id := COALESCE(NEW.experiment_id, OLD.experiment_id);
-    content_text := COALESCE(NEW.content, OLD.content);
-    title_text := COALESCE(NEW.title, OLD.title);
+    proj_id := NEW.project_id;
+    exp_id := NEW.experiment_id;
+    content_text := NEW.content;
+    title_text := NEW.title;
     
   ELSIF TG_TABLE_NAME = 'reports' THEN
     -- Get organization from generator's profile
     SELECT organization_id INTO org_id
     FROM profiles
-    WHERE id = COALESCE(NEW.generated_by, OLD.generated_by);
+    WHERE id = NEW.generated_by;
     
-    proj_id := COALESCE(NEW.project_id, OLD.project_id);
-    exp_id := COALESCE(NEW.experiment_id, OLD.experiment_id);
-    content_text := COALESCE(NEW.content, OLD.content);
-    title_text := COALESCE(NEW.title, OLD.title);
+    proj_id := NEW.project_id;
+    exp_id := NEW.experiment_id;
+    content_text := NEW.content;
+    title_text := NEW.title;
     
   ELSIF TG_TABLE_NAME = 'protocols' THEN
-    org_id := COALESCE(NEW.organization_id, OLD.organization_id);
+    org_id := NEW.organization_id;
     proj_id := NULL;
     exp_id := NULL;
-    content_text := COALESCE(NEW.content, OLD.content);
-    title_text := COALESCE(NEW.name, OLD.name);
+    content_text := NEW.content;
+    title_text := NEW.name;
     
   ELSIF TG_TABLE_NAME = 'literature_reviews' THEN
-    org_id := COALESCE(NEW.organization_id, OLD.organization_id);
-    proj_id := COALESCE(NEW.project_id, OLD.project_id);
-    exp_id := COALESCE(NEW.experiment_id, OLD.experiment_id);
+    org_id := NEW.organization_id;
+    proj_id := NEW.project_id;
+    exp_id := NEW.experiment_id;
     -- Combine abstract and personal_notes for literature reviews
-    content_text := COALESCE(
-      CONCAT_WS(E'\n\n', NEW.abstract, NEW.personal_notes),
-      CONCAT_WS(E'\n\n', OLD.abstract, OLD.personal_notes)
-    );
-    title_text := COALESCE(NEW.title, OLD.title);
-  END IF;
-
-  -- Handle DELETE operation
-  IF TG_OP = 'DELETE' THEN
-    -- Only insert if no pending job exists for this source
-    INSERT INTO chunk_jobs (source_type, source_id, operation, payload)
-    SELECT 
-      source_type_value,
-      OLD.id,
-      'delete',
-      jsonb_build_object(
-        'organization_id', org_id,
-        'project_id', proj_id,
-        'experiment_id', exp_id
-      )
-    WHERE NOT EXISTS (
-      SELECT 1 FROM chunk_jobs
-      WHERE source_type = source_type_value
-        AND source_id = OLD.id
-        AND operation = 'delete'
-        AND status = 'pending'
-    );
-    
-    RETURN OLD;
+    content_text := CONCAT_WS(E'\n\n', NEW.abstract, NEW.personal_notes);
+    title_text := NEW.title;
   END IF;
 
   -- Handle INSERT/UPDATE operations
   -- Only process if content exists and is meaningful (at least 50 chars)
   IF content_text IS NOT NULL AND length(trim(content_text)) > 50 THEN
-    -- Only insert if no pending job exists for this source
+    -- Insert job using ON CONFLICT to handle duplicates gracefully
+    -- Update payload if a pending job already exists (for UPDATE operations)
     INSERT INTO chunk_jobs (source_type, source_id, operation, payload)
-    SELECT 
+    VALUES (
       source_type_value,
       NEW.id,
-      LOWER(TG_OP),
+      CASE TG_OP
+        WHEN 'INSERT' THEN 'create'
+        WHEN 'UPDATE' THEN 'update'
+        ELSE 'create'
+      END,
       jsonb_build_object(
         'content', content_text,
         'title', COALESCE(title_text, ''),
@@ -192,13 +222,12 @@ BEGIN
         'project_id', proj_id,
         'experiment_id', exp_id
       )
-    WHERE NOT EXISTS (
-      SELECT 1 FROM chunk_jobs
-      WHERE source_type = source_type_value
-        AND source_id = NEW.id
-        AND operation = LOWER(TG_OP)
-        AND status = 'pending'
-    );
+    )
+    ON CONFLICT (source_type, source_id, operation) 
+    WHERE status = 'pending'
+    DO UPDATE SET
+      payload = EXCLUDED.payload,
+      created_at = NOW();
   END IF;
 
   RETURN NEW;
