@@ -98,6 +98,8 @@ export function TiptapEditor({
   const [tableCols, setTableCols] = useState(3)
   const [isListening, setIsListening] = useState(false)
   const recognitionRef = useRef<any>(null)
+  const lastFinalIndexRef = useRef<number>(0)
+  const lastInterimTextRef = useRef<string>("")
 
   const editor = useEditor({
     immediatelyRender: false,
@@ -702,27 +704,126 @@ export function TiptapEditor({
       return
     }
 
+    // Reset tracking variables
+    lastFinalIndexRef.current = 0
+    lastInterimTextRef.current = ""
+
     const recognition = new SpeechRecognition()
     recognition.lang = "en-US"
     recognition.interimResults = true
     recognition.continuous = true
 
     recognition.onresult = (event: any) => {
-      let transcript = ""
-      for (let i = event.resultIndex; i < event.results.length; ++i) {
-        transcript += event.results[i][0].transcript
+      if (!editor) return
+
+      let newFinalText = ""
+      let latestInterimText = ""
+
+      // Process all results to find new final results and latest interim
+      for (let i = 0; i < event.results.length; ++i) {
+        const result = event.results[i]
+        const transcript = result[0].transcript
+        
+        if (result.isFinal) {
+          // Only process final results we haven't processed yet
+          if (i >= lastFinalIndexRef.current) {
+            newFinalText += transcript + " "
+            // Update index as we go
+            lastFinalIndexRef.current = i + 1
+          }
+        } else {
+          // Track the latest interim result (last one in the array)
+          latestInterimText = transcript
+        }
       }
-      if (transcript) {
-        editor?.chain().focus().insertContent(transcript + " ").run()
+
+      // Insert new final results first (permanent)
+      if (newFinalText) {
+        // Remove interim text before inserting final
+        if (lastInterimTextRef.current) {
+          const currentPos = editor.state.selection.anchor
+          const interimLength = lastInterimTextRef.current.length
+          const deleteFrom = Math.max(0, currentPos - interimLength)
+          const deleteTo = currentPos
+          
+          if (deleteFrom < deleteTo) {
+            editor.chain()
+              .focus()
+              .setTextSelection({ from: deleteFrom, to: deleteTo })
+              .deleteSelection()
+              .run()
+          }
+          lastInterimTextRef.current = ""
+        }
+        
+        editor.chain().focus().insertContent(newFinalText).run()
+      }
+
+      // Update interim text only if it changed (for streaming effect)
+      if (latestInterimText && latestInterimText !== lastInterimTextRef.current) {
+        // Remove previous interim text if it exists
+        if (lastInterimTextRef.current) {
+          const currentPos = editor.state.selection.anchor
+          const interimLength = lastInterimTextRef.current.length
+          const deleteFrom = Math.max(0, currentPos - interimLength)
+          const deleteTo = currentPos
+          
+          if (deleteFrom < deleteTo) {
+            editor.chain()
+              .focus()
+              .setTextSelection({ from: deleteFrom, to: deleteTo })
+              .deleteSelection()
+              .run()
+          }
+        }
+        
+        // Insert new interim text
+        editor.chain().focus().insertContent(latestInterimText).run()
+        lastInterimTextRef.current = latestInterimText
       }
     }
 
-    recognition.onerror = () => {
+    recognition.onerror = (event: any) => {
+      console.error("Speech recognition error:", event.error)
       setIsListening(false)
+      // Clean up interim text on error
+      if (lastInterimTextRef.current && editor) {
+        const currentPos = editor.state.selection.anchor
+        const interimLength = lastInterimTextRef.current.length
+        const deleteFrom = Math.max(0, currentPos - interimLength)
+        const deleteTo = currentPos
+        
+        if (deleteFrom < deleteTo) {
+          editor.chain()
+            .focus()
+            .setTextSelection({ from: deleteFrom, to: deleteTo })
+            .deleteSelection()
+            .run()
+        }
+        lastInterimTextRef.current = ""
+      }
     }
 
     recognition.onend = () => {
       setIsListening(false)
+      // Clean up any remaining interim text
+      if (lastInterimTextRef.current && editor) {
+        const currentPos = editor.state.selection.anchor
+        const interimLength = lastInterimTextRef.current.length
+        const deleteFrom = Math.max(0, currentPos - interimLength)
+        const deleteTo = currentPos
+        
+        if (deleteFrom < deleteTo) {
+          editor.chain()
+            .focus()
+            .setTextSelection({ from: deleteFrom, to: deleteTo })
+            .deleteSelection()
+            .run()
+        }
+        lastInterimTextRef.current = ""
+      }
+      // Reset for next session
+      lastFinalIndexRef.current = 0
     }
 
     recognition.start()
@@ -731,8 +832,28 @@ export function TiptapEditor({
   }
 
   const stopSpeechToText = () => {
-    recognitionRef.current?.stop()
+    if (recognitionRef.current) {
+      recognitionRef.current.stop()
+    }
     setIsListening(false)
+    // Clean up any remaining interim text
+    if (lastInterimTextRef.current && editor) {
+      const currentPos = editor.state.selection.anchor
+      const interimLength = lastInterimTextRef.current.length
+      const deleteFrom = Math.max(0, currentPos - interimLength)
+      const deleteTo = currentPos
+      
+      if (deleteFrom < deleteTo) {
+        editor.chain()
+          .focus()
+          .setTextSelection({ from: deleteFrom, to: deleteTo })
+          .deleteSelection()
+          .run()
+      }
+      lastInterimTextRef.current = ""
+    }
+    // Reset for next session
+    lastFinalIndexRef.current = 0
   }
 
   const removeTable = () => {
