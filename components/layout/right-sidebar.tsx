@@ -289,14 +289,20 @@ export function RightSidebar() {
     <div className="h-full flex flex-col bg-background">
       <Tabs defaultValue="assistant" className="flex flex-col h-full">
         {/* Tab Headers */}
-        <div className="border-b px-2 sm:px-2 pt-2 shrink-0">
+        <div className="h-12 sm:h-14 border-b px-2 sm:px-2 pt-2 shrink-0">
           <TabsList className="w-full grid grid-cols-2 h-8 sm:h-9">
-            <TabsTrigger value="assistant" className="text-[11px] sm:text-xs gap-1 sm:gap-1.5">
+            <TabsTrigger
+              value="assistant"
+              className="text-[11px] sm:text-xs gap-1 sm:gap-1.5"
+            >
               <Sparkles className="size-3" />
               <span className="hidden xs:inline">Assistant</span>
               <span className="xs:hidden">AI</span>
             </TabsTrigger>
-            <TabsTrigger value="activity" className="text-[11px] sm:text-xs gap-1 sm:gap-1.5">
+            <TabsTrigger
+              value="activity"
+              className="text-[11px] sm:text-xs gap-1 sm:gap-1.5"
+            >
               <Activity className="size-3" />
               Activity
             </TabsTrigger>
@@ -304,7 +310,10 @@ export function RightSidebar() {
         </div>
 
         {/* AI Assistant Tab */}
-        <TabsContent value="assistant" className="flex-1 flex flex-col m-0 overflow-hidden min-h-0">
+        <TabsContent
+          value="assistant"
+          className="flex-1 flex flex-col m-0 overflow-hidden min-h-0"
+        >
           {messages.length === 0 ? (
             /* Empty State */
             <div className="flex-1 flex flex-col items-center justify-center p-3 sm:p-4 text-center">
@@ -319,7 +328,9 @@ export function RightSidebar() {
 
               {sessions.length > 0 && (
                 <div className="w-full mt-4 sm:mt-6">
-                  <p className="text-[11px] sm:text-xs text-muted-foreground mb-2">Recent</p>
+                  <p className="text-[11px] sm:text-xs text-muted-foreground mb-2">
+                    Recent
+                  </p>
                   <div className="space-y-1">
                     {sessions.slice(0, 3).map((session) => (
                       <button
@@ -331,9 +342,11 @@ export function RightSidebar() {
                           loadMessages(session.id).then((msgs) => {
                             const chatMessages = msgs.map((m) => ({
                               id: m.id,
-                              role: m.role as 'user' | 'assistant',
+                              role: m.role as "user" | "assistant",
                               content: m.content,
-                              parts: [{ type: 'text' as const, text: m.content }],
+                              parts: [
+                                { type: "text" as const, text: m.content },
+                              ],
                               createdAt: new Date(m.created_at),
                             }));
                             setMessages(chatMessages);
@@ -341,7 +354,9 @@ export function RightSidebar() {
                         }}
                       >
                         <MessageSquare className="size-3 opacity-50 shrink-0" />
-                        <span className="truncate">{session.title || 'New conversation'}</span>
+                        <span className="truncate">
+                          {session.title || "New conversation"}
+                        </span>
                       </button>
                     ))}
                   </div>
@@ -355,17 +370,20 @@ export function RightSidebar() {
                 {messages.map((message, index) => {
                   const content = getMessageContent(message);
                   const isLastAssistant =
-                    message.role === 'assistant' && index === messages.length - 1;
+                    message.role === "assistant" &&
+                    index === messages.length - 1;
 
                   return (
                     <div
                       key={message.id}
                       className={cn(
-                        'group/message flex gap-1.5 sm:gap-2',
-                        message.role === 'user' ? 'justify-end' : 'justify-start'
+                        "group/message flex gap-1.5 sm:gap-2",
+                        message.role === "user"
+                          ? "justify-end"
+                          : "justify-start"
                       )}
                     >
-                      {message.role === 'assistant' && (
+                      {message.role === "assistant" && (
                         <div className="flex size-5 sm:size-6 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-orange-400 to-pink-500 text-white">
                           <Sparkles className="size-2.5 sm:size-3" />
                         </div>
@@ -373,13 +391,13 @@ export function RightSidebar() {
                       <div className="flex flex-col max-w-[88%] sm:max-w-[85%]">
                         <div
                           className={cn(
-                            'rounded-xl px-2.5 sm:px-3 py-1.5 sm:py-2 text-[11px] sm:text-xs',
-                            message.role === 'user'
-                              ? 'bg-primary text-primary-foreground'
-                              : 'bg-muted'
+                            "rounded-xl px-2.5 sm:px-3 py-1.5 sm:py-2 text-[11px] sm:text-xs",
+                            message.role === "user"
+                              ? "bg-primary text-primary-foreground"
+                              : "bg-muted"
                           )}
                         >
-                          {message.role === 'user' ? (
+                          {message.role === "user" ? (
                             <span className="whitespace-pre-wrap break-words">
                               {content}
                             </span>
@@ -396,7 +414,7 @@ export function RightSidebar() {
                         <MessageActions
                           sessionId={currentSessionRef.current}
                           messageId={message.id}
-                          messageRole={message.role as 'user' | 'assistant'}
+                          messageRole={message.role as "user" | "assistant"}
                           messageContent={content}
                           isLoading={isLoading}
                           onRegenerate={
@@ -414,16 +432,22 @@ export function RightSidebar() {
                   );
                 })}
 
-                {isLoading && messages.at(-1)?.role === 'user' && (
+                {isLoading && messages.at(-1)?.role === "user" && (
                   <div className="flex gap-1.5 sm:gap-2 justify-start">
                     <div className="flex size-5 sm:size-6 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-orange-400 to-pink-500 text-white">
                       <Sparkles className="size-2.5 sm:size-3 animate-pulse" />
                     </div>
                     <div className="bg-muted rounded-xl px-2.5 sm:px-3 py-1.5 sm:py-2 text-[11px] sm:text-xs">
                       <span className="inline-flex gap-0.5">
-                        <span className="animate-bounce [animation-delay:0ms]">.</span>
-                        <span className="animate-bounce [animation-delay:150ms]">.</span>
-                        <span className="animate-bounce [animation-delay:300ms]">.</span>
+                        <span className="animate-bounce [animation-delay:0ms]">
+                          .
+                        </span>
+                        <span className="animate-bounce [animation-delay:150ms]">
+                          .
+                        </span>
+                        <span className="animate-bounce [animation-delay:300ms]">
+                          .
+                        </span>
                       </span>
                     </div>
                   </div>
@@ -450,7 +474,7 @@ export function RightSidebar() {
                 {uploadQueue.map((name) => (
                   <PreviewAttachment
                     key={name}
-                    attachment={{ url: '', name, contentType: '' }}
+                    attachment={{ url: "", name, contentType: "" }}
                     isUploading
                     compact
                   />
@@ -463,7 +487,7 @@ export function RightSidebar() {
               ref={fileInputRef}
               type="file"
               multiple
-              accept={ALLOWED_TYPES.join(',')}
+              accept={ALLOWED_TYPES.join(",")}
               className="hidden"
               onChange={handleFileSelect}
               disabled={isLoading || isUploading}
@@ -499,13 +523,16 @@ export function RightSidebar() {
                       type="submit"
                       size="icon"
                       className="size-5 sm:size-6 rounded-full"
-                      disabled={(!input.trim() && attachments.length === 0) || isUploading}
+                      disabled={
+                        (!input.trim() && attachments.length === 0) ||
+                        isUploading
+                      }
                     >
                       <ArrowUp className="size-2.5 sm:size-3" />
                     </Button>
                   )}
                 </div>
-      </div>
+              </div>
 
               {/* Toolbar - New chat + Model + Attach */}
               <div className="flex items-center gap-0.5 sm:gap-1 mt-1 sm:mt-1.5">
@@ -536,14 +563,17 @@ export function RightSidebar() {
                   disabled={isLoading || isUploading}
                 >
                   <Paperclip className="size-2.5 sm:size-3" />
-              </Button>
+                </Button>
               </div>
             </form>
           </div>
         </TabsContent>
 
         {/* Recent Activity Tab */}
-        <TabsContent value="activity" className="flex-1 m-0 overflow-hidden min-h-0">
+        <TabsContent
+          value="activity"
+          className="flex-1 m-0 overflow-hidden min-h-0"
+        >
           <ScrollArea className="h-full">
             <div className="p-2 sm:p-3 space-y-2 sm:space-y-3">
               <p className="text-[11px] sm:text-xs font-medium text-muted-foreground">
@@ -560,7 +590,9 @@ export function RightSidebar() {
                     </AvatarFallback>
                   </Avatar>
                   <div className="flex-1 min-w-0">
-                    <p className="text-[11px] sm:text-xs font-medium truncate">{activity.user}</p>
+                    <p className="text-[11px] sm:text-xs font-medium truncate">
+                      {activity.user}
+                    </p>
                     <p className="text-[10px] sm:text-xs text-muted-foreground line-clamp-2">
                       {activity.action}
                     </p>
@@ -570,8 +602,8 @@ export function RightSidebar() {
                   </div>
                 </div>
               ))}
-        </div>
-      </ScrollArea>
+            </div>
+          </ScrollArea>
         </TabsContent>
       </Tabs>
     </div>
