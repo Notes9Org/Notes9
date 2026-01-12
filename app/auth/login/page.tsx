@@ -298,6 +298,14 @@ function LoginForm() {
                     Sign up
                   </Link>
                 </div>
+                <div className="mt-2 text-center text-sm">
+                  <Link
+                    href="/auth/forgot-password"
+                    className="underline underline-offset-4 hover:text-primary text-muted-foreground"
+                  >
+                    Forgot your password?
+                  </Link>
+                </div>
               </form>
             </CardContent>
           </Card>
