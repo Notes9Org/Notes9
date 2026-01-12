@@ -40,7 +40,7 @@ export function useChatSessions() {
       if (error) throw error;
       setSessions(data || []);
     } catch (error) {
-      console.error('Error loading sessions:', error);
+      console.error('Error loading sessions:', error instanceof Error ? error.message : JSON.stringify(error));
     } finally {
       setLoading(false);
     }
@@ -62,7 +62,7 @@ export function useChatSessions() {
         .single();
 
       if (error) throw error;
-      
+
       setSessions((prev) => [data, ...prev]);
       setCurrentSessionId(data.id);
       return data.id;
@@ -81,7 +81,7 @@ export function useChatSessions() {
         .eq('id', sessionId);
 
       if (error) throw error;
-      
+
       setSessions((prev) =>
         prev.map((s) => (s.id === sessionId ? { ...s, title } : s))
       );
@@ -99,7 +99,7 @@ export function useChatSessions() {
         .eq('id', sessionId);
 
       if (error) throw error;
-      
+
       setSessions((prev) => prev.filter((s) => s.id !== sessionId));
       if (currentSessionId === sessionId) {
         setCurrentSessionId(null);
