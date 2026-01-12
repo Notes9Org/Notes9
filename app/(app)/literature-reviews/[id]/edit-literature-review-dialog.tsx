@@ -1,9 +1,9 @@
-"use client"
+"use client";
 
-import { useState, useEffect } from "react"
-import { useRouter } from "next/navigation"
-import { createClient } from "@/lib/supabase/client"
-import { Button } from "@/components/ui/button"
+import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
+import { createClient } from "@/lib/supabase/client";
+import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
@@ -11,29 +11,35 @@ import {
   DialogHeader,
   DialogTitle,
   DialogTrigger,
-} from "@/components/ui/dialog"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { Textarea } from "@/components/ui/textarea"
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select"
-import { Edit, Star, Loader2 } from "lucide-react"
-import { useToast } from "@/hooks/use-toast"
+} from "@/components/ui/select";
+import { Edit, Star, Loader2 } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
 
-export function EditLiteratureReviewDialog({ literature }: { literature: any }) {
-  const router = useRouter()
-  const { toast } = useToast()
-  const [open, setOpen] = useState(false)
-  const [isLoading, setIsLoading] = useState(false)
-  const [projects, setProjects] = useState<any[]>([])
-  const [experiments, setExperiments] = useState<any[]>([])
-  const [filteredExperiments, setFilteredExperiments] = useState<any[]>([])
-  
+export function EditLiteratureReviewDialog({
+  literature,
+  onSuccess,
+}: {
+  literature: any;
+  onSuccess?: () => void;
+}) {
+  const router = useRouter();
+  const { toast } = useToast();
+  const [open, setOpen] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const [projects, setProjects] = useState<any[]>([]);
+  const [experiments, setExperiments] = useState<any[]>([]);
+  const [filteredExperiments, setFilteredExperiments] = useState<any[]>([]);
+
   const [formData, setFormData] = useState({
     title: literature.title,
     authors: literature.authors || "",
@@ -46,64 +52,73 @@ export function EditLiteratureReviewDialog({ literature }: { literature: any }) 
     pmid: literature.pmid || "",
     url: literature.url || "",
     abstract: literature.abstract || "",
-    keywords: literature.keywords?.join(', ') || "",
+    keywords: literature.keywords?.join(", ") || "",
     personal_notes: literature.personal_notes || "",
     relevance_rating: literature.relevance_rating || 0,
-    project_id: literature.project_id || undefined as string | undefined,
-    experiment_id: literature.experiment_id || undefined as string | undefined,
+    project_id: literature.project_id || (undefined as string | undefined),
+    experiment_id:
+      literature.experiment_id || (undefined as string | undefined),
     status: literature.status,
-  })
+  });
 
   useEffect(() => {
     if (open) {
-      fetchProjects()
-      fetchExperiments()
+      fetchProjects();
+      fetchExperiments();
     }
-  }, [open])
+  }, [open]);
 
   useEffect(() => {
     if (formData.project_id) {
-      const filtered = experiments.filter(exp => exp.project_id === formData.project_id)
-      setFilteredExperiments(filtered)
-      if (formData.experiment_id && !filtered.find(e => e.id === formData.experiment_id)) {
-        setFormData({ ...formData, experiment_id: undefined })
+      const filtered = experiments.filter(
+        (exp) => exp.project_id === formData.project_id
+      );
+      setFilteredExperiments(filtered);
+      if (
+        formData.experiment_id &&
+        !filtered.find((e) => e.id === formData.experiment_id)
+      ) {
+        setFormData({ ...formData, experiment_id: undefined });
       }
     } else {
-      setFilteredExperiments([])
+      setFilteredExperiments([]);
       if (formData.experiment_id) {
-        setFormData({ ...formData, experiment_id: undefined })
+        setFormData({ ...formData, experiment_id: undefined });
       }
     }
-  }, [formData.project_id, experiments])
+  }, [formData.project_id, experiments]);
 
   const fetchProjects = async () => {
-    const supabase = createClient()
+    const supabase = createClient();
     const { data } = await supabase
       .from("projects")
       .select("id, name")
-      .order("name")
-    if (data) setProjects(data)
-  }
+      .order("name");
+    if (data) setProjects(data);
+  };
 
   const fetchExperiments = async () => {
-    const supabase = createClient()
+    const supabase = createClient();
     const { data } = await supabase
       .from("experiments")
       .select("id, name, project_id")
-      .order("name")
-    if (data) setExperiments(data)
-  }
+      .order("name");
+    if (data) setExperiments(data);
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setIsLoading(true)
+    e.preventDefault();
+    setIsLoading(true);
 
     try {
-      const supabase = createClient()
+      const supabase = createClient();
 
       const keywordsArray = formData.keywords
-        ? formData.keywords.split(',').map(k => k.trim()).filter(k => k)
-        : null
+        ? formData.keywords
+            .split(",")
+            .map((k: string) => k.trim())
+            .filter((k: string) => k)
+        : null;
 
       const { error } = await supabase
         .from("literature_reviews")
@@ -111,7 +126,9 @@ export function EditLiteratureReviewDialog({ literature }: { literature: any }) 
           title: formData.title,
           authors: formData.authors || null,
           journal: formData.journal || null,
-          publication_year: formData.publication_year ? parseInt(formData.publication_year) : null,
+          publication_year: formData.publication_year
+            ? parseInt(formData.publication_year)
+            : null,
           volume: formData.volume || null,
           issue: formData.issue || null,
           pages: formData.pages || null,
@@ -126,31 +143,29 @@ export function EditLiteratureReviewDialog({ literature }: { literature: any }) 
           experiment_id: formData.experiment_id || null,
           status: formData.status,
         })
-        .eq("id", literature.id)
+        .eq("id", literature.id);
 
-      if (error) throw error
+      if (error) throw error;
 
       toast({
         title: "Literature reference updated",
         description: "Reference has been updated successfully.",
-      })
+      });
 
-      setOpen(false)
-      router.refresh()
-      
-      setTimeout(() => {
-        window.location.reload()
-      }, 1000)
+      setOpen(false);
+      router.refresh();
+
+      onSuccess?.();
     } catch (error: any) {
       toast({
         title: "Error",
         description: error.message,
         variant: "destructive",
-      })
+      });
     } finally {
-      setIsLoading(false)
+      setIsLoading(false);
     }
-  }
+  };
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
@@ -214,7 +229,10 @@ export function EditLiteratureReviewDialog({ literature }: { literature: any }) 
                   type="number"
                   value={formData.publication_year}
                   onChange={(e) =>
-                    setFormData({ ...formData, publication_year: e.target.value })
+                    setFormData({
+                      ...formData,
+                      publication_year: e.target.value,
+                    })
                   }
                   disabled={isLoading}
                 />
@@ -345,7 +363,9 @@ export function EditLiteratureReviewDialog({ literature }: { literature: any }) 
                   <button
                     key={rating}
                     type="button"
-                    onClick={() => setFormData({ ...formData, relevance_rating: rating })}
+                    onClick={() =>
+                      setFormData({ ...formData, relevance_rating: rating })
+                    }
                     className="focus:outline-none"
                     disabled={isLoading}
                   >
@@ -363,7 +383,9 @@ export function EditLiteratureReviewDialog({ literature }: { literature: any }) 
                     type="button"
                     variant="ghost"
                     size="sm"
-                    onClick={() => setFormData({ ...formData, relevance_rating: 0 })}
+                    onClick={() =>
+                      setFormData({ ...formData, relevance_rating: 0 })
+                    }
                     disabled={isLoading}
                   >
                     Clear
@@ -410,7 +432,13 @@ export function EditLiteratureReviewDialog({ literature }: { literature: any }) 
                   disabled={!formData.project_id || isLoading}
                 >
                   <SelectTrigger id="experiment_id">
-                    <SelectValue placeholder={formData.project_id ? "Select experiment (optional)" : "Select project first"} />
+                    <SelectValue
+                      placeholder={
+                        formData.project_id
+                          ? "Select experiment (optional)"
+                          : "Select project first"
+                      }
+                    />
                   </SelectTrigger>
                   <SelectContent>
                     {filteredExperiments.map((experiment) => (
@@ -447,7 +475,12 @@ export function EditLiteratureReviewDialog({ literature }: { literature: any }) 
 
           {/* Actions */}
           <div className="flex justify-end gap-4 pt-4">
-            <Button type="button" variant="outline" onClick={() => setOpen(false)} disabled={isLoading}>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setOpen(false)}
+              disabled={isLoading}
+            >
               Cancel
             </Button>
             <Button type="submit" disabled={isLoading}>
@@ -464,8 +497,7 @@ export function EditLiteratureReviewDialog({ literature }: { literature: any }) 
         </form>
       </DialogContent>
     </Dialog>
-  )
+  );
 }
 
-const Separator = () => <div className="border-t my-4" />
-
+const Separator = () => <div className="border-t my-4" />;
