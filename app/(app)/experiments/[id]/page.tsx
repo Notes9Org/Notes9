@@ -12,7 +12,7 @@ import {
   BreadcrumbPage,
   BreadcrumbSeparator,
 } from "@/components/ui/breadcrumb"
-import { FlaskConical, Calendar, User, FileText, ChevronDown } from 'lucide-react'
+import { FlaskConical, Calendar, User, FileText, ChevronDown, Plus } from 'lucide-react'
 import { cn } from "@/lib/utils"
 import { notFound } from 'next/navigation'
 import Link from 'next/link'
@@ -20,6 +20,9 @@ import { LabNotesTab } from './lab-notes-tab'
 import { DataFilesTab } from './data-files-tab'
 import { ExperimentActions } from './experiment-actions'
 import { StatusUpdateButtons } from './status-update-buttons'
+import { HtmlContent } from '@/components/html-content'
+import { LinkProtocolDialog } from './link-protocol-dialog'
+import { ProtocolCard } from './protocol-card'
 
 type SearchParams = { tab?: string; noteId?: string }
 
@@ -40,7 +43,7 @@ export default async function ExperimentDetailPage({
     redirect("/auth/login")
   }
 
-  // Fetch experiment data
+  // Fetch experiment data with linked protocols
   const { data: experimentData, error: experimentError } = await supabase
     .from("experiments")
     .select(`
@@ -55,6 +58,30 @@ export default async function ExperimentDetailPage({
   if (experimentError || !experimentData) {
     notFound()
   }
+
+  // Fetch linked protocols for this experiment
+  const { data: linkedProtocols } = await supabase
+    .from("experiment_protocols")
+    .select(`
+      id,
+      added_at,
+      protocol:protocols(
+        id,
+        name,
+        description,
+        version,
+        created_at
+      )
+    `)
+    .eq("experiment_id", id)
+    .order("added_at", { ascending: false })
+
+  // Fetch samples linked to this experiment
+  const { data: experimentSamples } = await supabase
+    .from("samples")
+    .select("*")
+    .eq("experiment_id", id)
+    .order("created_at", { ascending: false })
 
   // Fetch all projects for dropdown
   const { data: projects } = await supabase
@@ -82,22 +109,9 @@ export default async function ExperimentDetailPage({
     researcher: experimentData.assigned_to_user 
       ? `${experimentData.assigned_to_user.first_name} ${experimentData.assigned_to_user.last_name}` 
       : "Unassigned",
-    protocol: "Standard Protocol", // TODO: Link to actual protocol
-    progress: 65, // TODO: Calculate from actual data
-    assays: [
-      { name: "Cell Viability Assay", status: "completed", results: "95% viability" },
-      { name: "IC50 Determination", status: "in_progress", results: "Pending" },
-      { name: "Western Blot Analysis", status: "planned", results: "Not started" },
-    ],
-    samples: [
-      { id: "S001", name: "Compound A-47", quantity: "250μg", location: "Freezer B-12" },
-      { id: "S002", name: "Compound B-23", quantity: "180μg", location: "Freezer B-12" },
-      { id: "S003", name: "Control Sample", quantity: "500μg", location: "Freezer A-05" },
-    ],
-    equipment: [
-      { name: "LC-MS/MS System", status: "reserved", duration: "4 hours" },
-      { name: "Plate Reader", status: "available", duration: "2 hours" },
-    ],
+    progress: experimentData.progress || 0,
+    protocols: linkedProtocols || [],
+    samples: experimentSamples || [],
   }
 
   return (
@@ -270,7 +284,7 @@ export default async function ExperimentDetailPage({
                 <CardTitle className="text-foreground">Experiment Description</CardTitle>
               </CardHeader>
               <CardContent>
-                <p className="text-foreground">{experiment.description}</p>
+                <HtmlContent content={experiment.description} />
               </CardContent>
             </Card>
 
@@ -280,18 +294,14 @@ export default async function ExperimentDetailPage({
                   <CardTitle className="text-foreground">Equipment Reserved</CardTitle>
                   <CardDescription>Laboratory equipment for this experiment</CardDescription>
                 </CardHeader>
-                <CardContent className="space-y-3">
-                  {experiment.equipment.map((eq, i) => (
-                    <div key={i} className="flex items-center justify-between">
-                      <div>
-                        <p className="text-sm font-medium text-foreground">{eq.name}</p>
-                        <p className="text-xs text-muted-foreground">{eq.duration}</p>
-                      </div>
-                      <Badge variant={eq.status === "reserved" ? "secondary" : "outline"}>
-                        {eq.status}
-                      </Badge>
-                    </div>
-                  ))}
+                <CardContent>
+                  <div className="text-center py-8">
+                    <p className="text-sm text-muted-foreground mb-4">No equipment reservations yet</p>
+                    <Button variant="outline" size="sm" disabled>
+                      <Plus className="h-4 w-4 mr-2" />
+                      Reserve Equipment
+                    </Button>
+                  </div>
                 </CardContent>
               </Card>
 
@@ -319,42 +329,41 @@ export default async function ExperimentDetailPage({
           </TabsContent>
 
           <TabsContent value="protocol" className="space-y-4">
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-foreground">Protocol Details</CardTitle>
-                <CardDescription>{experiment.protocol}</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <Button variant="outline" size="sm">
-                  <FileText className="h-4 w-4 mr-2" />
-                  View Full Protocol
-                </Button>
-              </CardContent>
-            </Card>
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="text-lg font-semibold">Linked Protocols</h3>
+                <p className="text-sm text-muted-foreground">
+                  Protocols provide detailed procedures and methods for this experiment
+                </p>
+              </div>
+              <LinkProtocolDialog 
+                experimentId={experiment.id}
+                linkedProtocolIds={experiment.protocols.map((p: any) => p.protocol.id)}
+              />
+            </div>
 
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-foreground">Assays</CardTitle>
-                <CardDescription>Planned and completed assays</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                {experiment.assays.map((assay, i) => (
-                  <div key={i} className="flex items-center justify-between p-3 border border-border rounded-lg">
-                    <div>
-                      <p className="text-sm font-medium text-foreground">{assay.name}</p>
-                      <p className="text-xs text-muted-foreground">Results: {assay.results}</p>
-                    </div>
-                    <Badge variant={
-                      assay.status === "completed" ? "secondary" :
-                      assay.status === "in_progress" ? "default" :
-                      "outline"
-                    }>
-                      {assay.status.replace("_", " ")}
-                    </Badge>
-                  </div>
+            {experiment.protocols && experiment.protocols.length > 0 ? (
+              <div className="space-y-4">
+                {experiment.protocols.map((protocolLink: any) => (
+                  <ProtocolCard key={protocolLink.id} protocolLink={protocolLink} />
                 ))}
-              </CardContent>
-            </Card>
+              </div>
+            ) : (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-foreground">No Protocols Linked</CardTitle>
+                  <CardDescription>
+                    Link existing protocols to this experiment to provide detailed procedures and methods.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <LinkProtocolDialog 
+                    experimentId={experiment.id}
+                    linkedProtocolIds={[]}
+                  />
+                </CardContent>
+              </Card>
+            )}
           </TabsContent>
 
           <TabsContent value="samples" className="space-y-4">
@@ -364,17 +373,41 @@ export default async function ExperimentDetailPage({
                 <CardDescription>Samples used in this experiment</CardDescription>
               </CardHeader>
               <CardContent>
-                <div className="space-y-3">
-                  {experiment.samples.map((sample) => (
-                    <div key={sample.id} className="flex items-center justify-between p-3 border border-border rounded-lg">
-                      <div>
-                        <p className="text-sm font-medium text-foreground">{sample.name}</p>
-                        <p className="text-xs text-muted-foreground">ID: {sample.id} | Location: {sample.location}</p>
+                {experiment.samples && experiment.samples.length > 0 ? (
+                  <div className="space-y-3">
+                    {experiment.samples.map((sample: any) => (
+                      <div key={sample.id} className="flex items-center justify-between p-3 border border-border rounded-lg">
+                        <div>
+                          <p className="text-sm font-medium text-foreground">{sample.sample_type}</p>
+                          <p className="text-xs text-muted-foreground">
+                            ID: {sample.id.slice(0, 8)} | Location: {sample.storage_location || "Not specified"}
+                          </p>
+                          {sample.description && (
+                            <p className="text-xs text-muted-foreground mt-1">{sample.description}</p>
+                          )}
+                        </div>
+                        <div className="text-right">
+                          <span className="text-sm font-medium text-foreground">
+                            {sample.quantity || "N/A"} {sample.unit || ""}
+                          </span>
+                          <p className="text-xs text-muted-foreground">
+                            {new Date(sample.created_at).toLocaleDateString()}
+                          </p>
+                        </div>
                       </div>
-                      <span className="text-sm font-medium text-foreground">{sample.quantity}</span>
-                    </div>
-                  ))}
-                </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-center py-8">
+                    <p className="text-sm text-muted-foreground mb-4">No samples linked to this experiment</p>
+                    <Button variant="outline" size="sm" asChild>
+                      <Link href={`/samples/new?experiment=${experiment.id}`}>
+                        <Plus className="h-4 w-4 mr-2" />
+                        Add Sample
+                      </Link>
+                    </Button>
+                  </div>
+                )}
               </CardContent>
             </Card>
           </TabsContent>
