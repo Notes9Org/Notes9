@@ -797,6 +797,7 @@ export function AppSidebar() {
                                       </button>
                                       <button
                                         onClick={() => router.push(`/experiments/${exp.id}`)}
+                                        data-navigate
                                         className={cn(
                                           "flex-1 text-left text-sm truncate hover:text-foreground",
                                           pathname === `/experiments/${exp.id}` ? "font-semibold text-foreground" : "text-muted-foreground"
@@ -812,6 +813,7 @@ export function AppSidebar() {
                                           <button
                                             key={note.id}
                                             onClick={() => router.push(`/experiments/${exp.id}?tab=notes&noteId=${note.id}`)}
+                                            data-navigate
                                             className={cn(
                                               "block w-full text-left text-xs truncate px-2 py-1 rounded hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
                                               pathname.startsWith(`/experiments/${exp.id}`) ? "text-foreground" : "text-muted-foreground"
