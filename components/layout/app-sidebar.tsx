@@ -563,11 +563,13 @@ export function AppSidebar() {
         "transition-all duration-200 ease-in-out",
         isIconMode && "!w-16"
       )}
-      style={{
-        ...(isIconMode && {
-          '--sidebar-width': '64px',
-        })
-      } as React.CSSProperties}
+      style={
+        {
+          ...(isIconMode && {
+            "--sidebar-width": "64px",
+          }),
+        } as React.CSSProperties
+      }
     >
       {/* Header with Workspace Dropdown */}
       <SidebarHeader className="p-2">
@@ -650,34 +652,49 @@ export function AppSidebar() {
           <SidebarGroupContent>
             <SidebarMenu>
               {navigation.map((item) => {
-                const Icon = item.icon
-                const isActive = mounted && (pathname === item.href || pathname.startsWith(item.href + "/"))
+                const Icon = item.icon;
+                const isActive =
+                  mounted &&
+                  (pathname === item.href ||
+                    pathname.startsWith(item.href + "/"));
 
                 // Only show badge for these items and only if count > 0
-                let badge: number | null = null
+                let badge: number | null = null;
                 if (item.name === "Projects" && counts.projects > 0) {
-                  badge = counts.projects
-                } else if (item.name === "Experiments" && counts.experiments > 0) {
-                  badge = counts.experiments
+                  badge = counts.projects;
+                } else if (
+                  item.name === "Experiments" &&
+                  counts.experiments > 0
+                ) {
+                  badge = counts.experiments;
                 } else if (item.name === "Samples" && counts.samples > 0) {
-                  badge = counts.samples
-                } else if (item.name === "Literature" && counts.literature > 0) {
-                  badge = counts.literature
+                  badge = counts.samples;
+                } else if (
+                  item.name === "Literature" &&
+                  counts.literature > 0
+                ) {
+                  badge = counts.literature;
                 }
 
                 return (
                   <SidebarMenuItem key={item.name}>
-                    <SidebarMenuButton asChild isActive={isActive} tooltip={isIconMode ? item.name : undefined}>
+                    <SidebarMenuButton
+                      asChild
+                      isActive={isActive}
+                      tooltip={isIconMode ? item.name : undefined}
+                    >
                       <Link href={item.href}>
                         <Icon />
-                        <span className={cn(isIconMode && "hidden")}>{item.name}</span>
+                        <span className={cn(isIconMode && "hidden")}>
+                          {item.name}
+                        </span>
                       </Link>
                     </SidebarMenuButton>
                     {badge !== null && !isIconMode && (
                       <SidebarMenuBadge>{badge}</SidebarMenuBadge>
                     )}
                   </SidebarMenuItem>
-                )
+                );
               })}
             </SidebarMenu>
           </SidebarGroupContent>
@@ -686,21 +703,22 @@ export function AppSidebar() {
         <SidebarSeparator className="group-data-[collapsible=icon]:hidden" />
 
         {/* Projects Section with Collapsible - Hidden in icon mode */}
-        <Collapsible defaultOpen={true} className={cn("group/collapsible", isIconMode && "hidden")}>
+        <Collapsible
+          defaultOpen={true}
+          className={cn("group/collapsible", isIconMode && "hidden")}
+        >
           <SidebarGroup>
             <div className="flex items-center justify-between px-2 py-1">
-              <CollapsibleTrigger
-                className="flex flex-1 items-center gap-2 text-xs font-medium text-sidebar-foreground/70 hover:text-sidebar-foreground"
-              >
+              <CollapsibleTrigger className="flex flex-1 items-center gap-2 text-xs font-medium text-sidebar-foreground/70 hover:text-sidebar-foreground">
                 <span>Active Projects</span>
                 <ChevronDown className="size-4 transition-transform duration-200 group-data-[state=open]/collapsible:rotate-180" />
               </CollapsibleTrigger>
               <button
                 title="Add Project"
                 onClick={(e) => {
-                  e.preventDefault()
-                  e.stopPropagation()
-                  window.location.href = "/projects/new"
+                  e.preventDefault();
+                  e.stopPropagation();
+                  window.location.href = "/projects/new";
                 }}
                 className="flex size-5 items-center justify-center rounded-md hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
               >
@@ -725,7 +743,7 @@ export function AppSidebar() {
                     </SidebarMenuItem>
                   ) : (
                     projects.map((project) => {
-                      const isProjectOpen = openProjects[project.id] ?? false
+                      const isProjectOpen = openProjects[project.id] ?? false;
                       return (
                         <SidebarMenuItem key={project.id}>
                           <div className="flex items-center gap-2 px-2">
@@ -877,7 +895,10 @@ export function AppSidebar() {
         <SidebarSeparator className="group-data-[collapsible=icon]:hidden" />
 
         {/* Settings Group - Hidden in icon mode */}
-        <Collapsible defaultOpen={false} className={cn("group/collapsible", isIconMode && "hidden")}>
+        <Collapsible
+          defaultOpen={true}
+          className={cn("group/collapsible", isIconMode && "hidden")}
+        >
           <SidebarGroup>
             <SidebarGroupLabel asChild>
               <CollapsibleTrigger className="w-full">
@@ -941,13 +962,26 @@ export function AppSidebar() {
                   tooltip={isIconMode ? getUserDisplayName() : undefined}
                 >
                   <div className="flex aspect-square size-8 items-center justify-center rounded-lg bg-sidebar-accent text-sidebar-accent-foreground">
-                    <span className="text-xs font-semibold">{getUserInitials()}</span>
+                    <span className="text-xs font-semibold">
+                      {getUserInitials()}
+                    </span>
                   </div>
-                  <div className={cn("grid flex-1 text-left text-sm leading-tight", isIconMode && "hidden")}>
-                    <span className="truncate font-semibold">{getUserDisplayName()}</span>
-                    <span className="truncate text-xs">{user?.email || "Loading..."}</span>
+                  <div
+                    className={cn(
+                      "grid flex-1 text-left text-sm leading-tight",
+                      isIconMode && "hidden"
+                    )}
+                  >
+                    <span className="truncate font-semibold">
+                      {getUserDisplayName()}
+                    </span>
+                    <span className="truncate text-xs">
+                      {user?.email || "Loading..."}
+                    </span>
                   </div>
-                  <ChevronUp className={cn("ml-auto size-4", isIconMode && "hidden")} />
+                  <ChevronUp
+                    className={cn("ml-auto size-4", isIconMode && "hidden")}
+                  />
                 </SidebarMenuButton>
               </DropdownMenuTrigger>
               <DropdownMenuContent
@@ -972,5 +1006,5 @@ export function AppSidebar() {
         </SidebarMenu>
       </SidebarFooter>
     </Sidebar>
-  )
+  );
 }

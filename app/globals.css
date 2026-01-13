@@ -192,6 +192,24 @@
   button {
     font-size: 0.875rem;
     /* 14px */
+    cursor: pointer;
+    }
+    
+    /* Ensure interactive elements have pointer cursor */
+    a,
+    button,
+    [role="button"],
+    [type="button"],
+    [type="submit"],
+    [type="reset"],
+    select {
+      cursor: pointer;
+    }
+    
+    /* Disabled state should show not-allowed */
+    button:disabled,
+    [disabled] {
+      cursor: not-allowed;
   }
 }
 
