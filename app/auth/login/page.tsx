@@ -16,12 +16,15 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import { useState, useEffect, Suspense } from "react"
 import Image from "next/image"
 import { Separator } from "@/components/ui/separator"
+import { InteractiveParticles } from "@/components/ui/interactive-particles"
 
 function LoginForm() {
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [error, setError] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(false)
+  const [emailExists, setEmailExists] = useState<boolean | null>(null)
+  const [checkingEmail, setCheckingEmail] = useState(false)
   const router = useRouter()
   const searchParams = useSearchParams()
 
@@ -33,10 +36,47 @@ function LoginForm() {
     }
   }, [searchParams])
 
+  // Check if email exists when user stops typing
+  useEffect(() => {
+    if (!email || !email.includes('@')) {
+      setEmailExists(null)
+      return
+    }
+
+    const checkEmail = async () => {
+      setCheckingEmail(true)
+      const supabase = createClient()
+
+      try {
+        const { data: existingProfile } = await supabase
+          .from("profiles")
+          .select("email")
+          .eq("email", email)
+          .single()
+
+        setEmailExists(!!existingProfile)
+      } catch (error: any) {
+        // If error is "no rows returned", email doesn't exist
+        if (error?.code === 'PGRST116') {
+          setEmailExists(false)
+        } else {
+          // Other errors, don't set state (might be network issue)
+          setEmailExists(null)
+        }
+      } finally {
+        setCheckingEmail(false)
+      }
+    }
+
+    // Debounce email check
+    const timeoutId = setTimeout(checkEmail, 500)
+    return () => clearTimeout(timeoutId)
+  }, [email])
+
   // Handle OAuth errors in URL (route handler handles code exchange)
   useEffect(() => {
     const errorParam = searchParams.get('error')
-    
+
     if (errorParam) {
       setError(`OAuth error: ${errorParam}`)
       // Clean up URL
@@ -58,15 +98,15 @@ function LoginForm() {
         email,
         password,
       })
-      
+
       if (error) {
         if (error.message.includes('Invalid login credentials')) {
           setError("Wrong email or password. Please try again.")
           return
         }
-          throw error
+        throw error
       }
-      
+
       router.push("/dashboard")
     } catch (error: unknown) {
       setError(error instanceof Error ? error.message : "An error occurred")
@@ -85,13 +125,13 @@ function LoginForm() {
         provider,
         options: {
           redirectTo: `${window.location.origin}/auth/callback`,
-          scopes: provider === 'google' 
-            ? 'email profile' 
+          scopes: provider === 'google'
+            ? 'email profile'
             : 'email openid profile',
           queryParams: provider === 'azure'
             ? {
-                prompt: 'select_account',
-              }
+              prompt: 'select_account',
+            }
             : undefined,
         },
       })
@@ -101,16 +141,20 @@ function LoginForm() {
       setIsLoading(false)
     }
   }
-
   return (
-    <div className="flex min-h-screen w-full items-center justify-center p-6 bg-background">
-      <div className="w-full max-w-md">
+    <div className="flex min-h-screen w-full items-center justify-center p-6 bg-background relative overflow-hidden">
+      <InteractiveParticles />
+      {/* Dark overlay for better text visibility */}
+      <div className="absolute inset-0 z-0 bg-background/30 backdrop-blur-[1px]" />
+      <div className="absolute inset-0 z-0 bg-[radial-gradient(circle_800px_at_center,theme(colors.background)_30%,transparent_100%)]" />
+
+      <div className="w-full max-w-md relative z-10">
         <div className="flex flex-col gap-6">
           <div className="flex flex-col items-center gap-2 text-center">
-            <Image 
-              src="/notes9-logo.png" 
-              alt="Notes9 Logo" 
-              width={60} 
+            <Image
+              src="/notes9-logo.png"
+              alt="Notes9 Logo"
+              width={60}
               height={60}
             />
             <h1 className="text-2xl font-bold">Welcome to Notes9</h1>
@@ -118,7 +162,7 @@ function LoginForm() {
               Research Lab Management
             </p>
           </div>
-          
+
           <Card>
             <CardHeader>
               <CardTitle className="text-xl">Sign In</CardTitle>
@@ -224,10 +268,23 @@ function LoginForm() {
                       {error}
                     </div>
                   )}
-                  <Button 
-                    type="submit" 
-                    className="w-full" 
-                    disabled={isLoading}
+                  {emailExists === false && !checkingEmail && !error && (
+                    <div className="rounded-md bg-muted p-3 text-sm">
+                      <p className="text-muted-foreground mb-2">
+                        No account found with this email.
+                      </p>
+                      <Link
+                        href={`/auth/sign-up?email=${encodeURIComponent(email)}`}
+                        className="text-primary underline underline-offset-4 hover:text-primary/80"
+                      >
+                        Sign up with this email instead
+                      </Link>
+                    </div>
+                  )}
+                  <Button
+                    type="submit"
+                    className="w-full"
+                    disabled={isLoading || checkingEmail}
                   >
                     {isLoading ? "Signing in..." : "Sign In"}
                   </Button>
