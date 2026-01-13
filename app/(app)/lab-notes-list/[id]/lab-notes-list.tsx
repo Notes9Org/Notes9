@@ -54,6 +54,7 @@ export default function LabNotesList({
         <button
           key={note.id}
           onClick={() => handleSelectNote(note)}
+          data-navigate
           className={`w-full text-left p-3 rounded-lg border transition-colors ${
             selectedNote?.id === note.id && !isCreating
               ? "border-primary bg-primary/5"
