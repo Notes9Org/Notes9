@@ -237,6 +237,7 @@ export default function NewProtocolPage() {
                   type="button"
                   variant="outline"
                   onClick={() => router.push("/protocols")}
+                  data-navigate
                   disabled={isLoading}
                 >
                   Cancel
