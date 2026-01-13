@@ -58,7 +58,7 @@ export function FeaturesSection() {
           <h2 className="text-3xl font-bold tracking-tight text-foreground sm:text-4xl text-balance">
             Core Capabilities
           </h2>
-          <p className="mt-4 text-lg text-muted-foreground whitespace-pre-wrap">Empowering researchers with next-generation tools.</p>
+          <p className="mt-4 text-lg text-foreground/80 whitespace-pre-wrap">Empowering researchers with next-generation tools.</p>
         </div>
 
         {/* Active Features */}
@@ -81,7 +81,7 @@ export function FeaturesSection() {
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <p className="text-muted-foreground leading-relaxed">{feature.description}</p>
+                  <p className="text-foreground/80 leading-relaxed">{feature.description}</p>
                 </CardContent>
               </Card>
             </motion.div>
