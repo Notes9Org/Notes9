@@ -728,7 +728,7 @@ export function AppSidebar() {
                       const isProjectOpen = openProjects[project.id] ?? false
                       return (
                         <SidebarMenuItem key={project.id}>
-                          <div className="flex items-center gap-2">
+                          <div className="flex items-center gap-2 px-2">
                             <button
                               className="flex-shrink-0 text-muted-foreground hover:text-foreground"
                               onClick={() =>
@@ -737,7 +737,11 @@ export function AppSidebar() {
                                   [project.id]: !isProjectOpen,
                                 }))
                               }
-                              aria-label={isProjectOpen ? "Collapse project" : "Expand project"}
+                              aria-label={
+                                isProjectOpen
+                                  ? "Collapse project"
+                                  : "Expand project"
+                              }
                             >
                               {isProjectOpen ? (
                                 <FolderOpen className="size-4" />
@@ -749,8 +753,9 @@ export function AppSidebar() {
                             <Link
                               href={`/projects/${project.id}`}
                               className={cn(
-                                "flex items-center gap-2 flex-1 min-w-0 px-2 py-1.5 rounded-md text-sm transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
-                                mounted && pathname === `/projects/${project.id}`
+                                "flex items-center gap-2 flex-1 min-w-0 py-1.5 rounded-md text-sm transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
+                                mounted &&
+                                  pathname === `/projects/${project.id}`
                                   ? "bg-sidebar-accent font-medium text-sidebar-accent-foreground"
                                   : "text-sidebar-foreground"
                               )}
@@ -758,82 +763,109 @@ export function AppSidebar() {
                               <div
                                 className={cn(
                                   "size-2 rounded-full shrink-0",
-                                  project.status === "active" ? "bg-green-500" : "bg-yellow-500"
+                                  project.status === "active"
+                                    ? "bg-green-500"
+                                    : "bg-yellow-500"
                                 )}
                               />
                               <span className="truncate">{project.name}</span>
                             </Link>
 
-                            {project.experiment_count && project.experiment_count > 0 && (
-                              <div className="flex h-5 min-w-5 items-center justify-center rounded-md bg-sidebar-primary px-1 text-xs font-medium text-sidebar-primary-foreground tabular-nums flex-shrink-0">
-                                {project.experiment_count}
-                              </div>
-                            )}
+                            <div className="flex h-5 min-w-5 items-center justify-center rounded-md bg-sidebar-primary text-xs font-medium text-sidebar-primary-foreground tabular-nums flex-shrink-0">
+                              {project.experiment_count}
+                            </div>
                           </div>
 
-                          {isProjectOpen && project.experiments && project.experiments.length > 0 && (
-                            <div className="ml-6 mt-2 space-y-1 border-l border-border/50 pl-3">
-                              {project.experiments.map((exp) => {
-                                const isExpOpen = openExperiments[exp.id] ?? false
-                                return (
-                                  <div key={exp.id}>
-                                    <div className="flex items-start">
-                                      <button
-                                        className="mr-2 mt-0.5 text-muted-foreground hover:text-foreground"
-                                        onClick={() =>
-                                          setOpenExperiments((prev) => ({
-                                            ...prev,
-                                            [exp.id]: !isExpOpen,
-                                          }))
-                                        }
-                                        aria-label={isExpOpen ? "Collapse experiment" : "Expand experiment"}
-                                      >
-                                        <FlaskConical
-                                          className={cn(
-                                            "size-4 transition-transform",
-                                            isExpOpen ? "rotate-12 text-foreground" : "-rotate-12 text-muted-foreground"
-                                          )}
-                                        />
-                                      </button>
-                                      <button
-                                        onClick={() => router.push(`/experiments/${exp.id}`)}
-                                        data-navigate
-                                        className={cn(
-                                          "flex-1 text-left text-sm truncate hover:text-foreground",
-                                          pathname === `/experiments/${exp.id}` ? "font-semibold text-foreground" : "text-muted-foreground"
-                                        )}
-                                      >
-                                        {exp.name}
-                                      </button>
-                                    </div>
-
-                                    {isExpOpen && exp.lab_notes && exp.lab_notes.length > 0 && (
-                                      <div className="ml-6 mt-1 space-y-1">
-                                        {exp.lab_notes.map((note) => (
-                                          <button
-                                            key={note.id}
-                                            onClick={() => router.push(`/experiments/${exp.id}?tab=notes&noteId=${note.id}`)}
-                                            data-navigate
+                          {isProjectOpen &&
+                            project.experiments &&
+                            project.experiments.length > 0 && (
+                              <div className="ml-6 mt-2 space-y-1 border-l border-border/50 pl-3">
+                                {project.experiments.map((exp) => {
+                                  const isExpOpen =
+                                    openExperiments[exp.id] ?? false;
+                                  return (
+                                    <div key={exp.id}>
+                                      <div className="flex items-start">
+                                        <button
+                                          className="mr-2 mt-0.5 text-muted-foreground hover:text-foreground"
+                                          onClick={() =>
+                                            setOpenExperiments((prev) => ({
+                                              ...prev,
+                                              [exp.id]: !isExpOpen,
+                                            }))
+                                          }
+                                          aria-label={
+                                            isExpOpen
+                                              ? "Collapse experiment"
+                                              : "Expand experiment"
+                                          }
+                                        >
+                                          <FlaskConical
                                             className={cn(
-                                              "block w-full text-left text-xs truncate px-2 py-1 rounded hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
-                                              pathname.startsWith(`/experiments/${exp.id}`) ? "text-foreground" : "text-muted-foreground"
+                                              "size-4 transition-transform",
+                                              isExpOpen
+                                                ? "rotate-12 text-foreground"
+                                                : "-rotate-12 text-muted-foreground"
                                             )}
-                                          >
-                                            <span className="inline-flex items-center gap-1">
-                                              <FileText className="h-3 w-3" />
-                                              {note.title || "Untitled note"}
-                                            </span>
-                                          </button>
-                                        ))}
+                                          />
+                                        </button>
+                                        <button
+                                          onClick={() =>
+                                            router.push(
+                                              `/experiments/${exp.id}`
+                                            )
+                                          }
+                                          data-navigate
+                                          className={cn(
+                                            "flex-1 text-left text-sm truncate hover:text-foreground",
+                                            pathname ===
+                                              `/experiments/${exp.id}`
+                                              ? "font-semibold text-foreground"
+                                              : "text-muted-foreground"
+                                          )}
+                                        >
+                                          {exp.name}
+                                        </button>
                                       </div>
-                                    )}
-                                  </div>
-                                )
-                              })}
-                            </div>
-                          )}
+
+                                      {isExpOpen &&
+                                        exp.lab_notes &&
+                                        exp.lab_notes.length > 0 && (
+                                          <div className="ml-6 mt-1 space-y-1">
+                                            {exp.lab_notes.map((note) => (
+                                              <button
+                                                key={note.id}
+                                                onClick={() =>
+                                                  router.push(
+                                                    `/experiments/${exp.id}?tab=notes&noteId=${note.id}`
+                                                  )
+                                                }
+                                                data-navigate
+                                                className={cn(
+                                                  "block w-full text-left text-xs truncate px-2 py-1 rounded hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
+                                                  pathname.startsWith(
+                                                    `/experiments/${exp.id}`
+                                                  )
+                                                    ? "text-foreground"
+                                                    : "text-muted-foreground"
+                                                )}
+                                              >
+                                                <span className="inline-flex items-center gap-1">
+                                                  <FileText className="h-3 w-3" />
+                                                  {note.title ||
+                                                    "Untitled note"}
+                                                </span>
+                                              </button>
+                                            ))}
+                                          </div>
+                                        )}
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            )}
                         </SidebarMenuItem>
-                      )
+                      );
                     })
                   )}
                 </SidebarMenu>
