@@ -759,527 +759,585 @@ export function TiptapEditor({
     >
       {/* Toolbar */}
       {!hideToolbar && (
-      <div className="flex items-center gap-1 p-2 border-b border-border flex-wrap bg-muted/30">
-        <TooltipProvider delayDuration={300}>
-          {/* Undo/Redo */}
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => editor.chain().focus().undo().run()}
-                disabled={!editor.can().undo()}
-                className="h-8 w-8 p-0"
-              >
-                <Undo className="h-4 w-4" />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>Undo</TooltipContent>
-          </Tooltip>
-
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => editor.chain().focus().redo().run()}
-                disabled={!editor.can().redo()}
-                className="h-8 w-8 p-0"
-              >
-                <Redo className="h-4 w-4" />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>Redo</TooltipContent>
-          </Tooltip>
-
-          <Separator orientation="vertical" className="h-6 mx-1" />
-
-          {/* Colors */}
-          <DropdownMenu>
+        <div className="flex items-center gap-1 p-2 border-b border-border flex-wrap bg-muted/30">
+          <TooltipProvider delayDuration={300}>
+            {/* Undo/Redo */}
             <Tooltip>
               <TooltipTrigger asChild>
-                <DropdownMenuTrigger asChild>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-8 w-8 p-0"
-                  >
-                    <Palette className="h-4 w-4" />
-                  </Button>
-                </DropdownMenuTrigger>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => editor.chain().focus().undo().run()}
+                  disabled={!editor.can().undo()}
+                  className="h-8 w-8 p-0"
+                >
+                  <Undo className="h-4 w-4" />
+                </Button>
               </TooltipTrigger>
-              <TooltipContent>Text Color</TooltipContent>
+              <TooltipContent>Undo</TooltipContent>
             </Tooltip>
-            <DropdownMenuContent className="w-40">
-              <DropdownMenuLabel>Colors</DropdownMenuLabel>
-              <div className="grid grid-cols-4 gap-1 p-2">
-                {[
-                  "#e53935",
-                  "#fb8c00",
-                  "#fdd835",
-                  "#43a047",
-                  "#1e88e5",
-                  "#8e24aa",
-                  "#ffffff",
-                  "#000000",
-                ].map((color) => (
-                  <button
-                    key={color}
-                    onClick={() => editor.chain().focus().setColor(color).run()}
-                    className="h-6 w-6 rounded border border-border"
-                    style={{ backgroundColor: color }}
-                    aria-label={`Set color ${color}`}
-                  />
-                ))}
-              </div>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={() => editor.chain().focus().unsetColor().run()}>
-                Clear color
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
 
-          {/* Text Formatting */}
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => editor.chain().focus().toggleBold().run()}
-                className={cn(
-                  "h-8 w-8 p-0",
-                  editor.isActive("bold") && "bg-accent"
-                )}
-              >
-                <Bold className="h-4 w-4" />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>Bold</TooltipContent>
-          </Tooltip>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => editor.chain().focus().redo().run()}
+                  disabled={!editor.can().redo()}
+                  className="h-8 w-8 p-0"
+                >
+                  <Redo className="h-4 w-4" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Redo</TooltipContent>
+            </Tooltip>
 
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => editor.chain().focus().toggleItalic().run()}
-                className={cn(
-                  "h-8 w-8 p-0",
-                  editor.isActive("italic") && "bg-accent"
-                )}
-              >
-                <Italic className="h-4 w-4" />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>Italic</TooltipContent>
-          </Tooltip>
+            <Separator orientation="vertical" className="h-6 mx-1" />
 
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => editor.chain().focus().toggleStrike().run()}
-                className={cn(
-                  "h-8 w-8 p-0",
-                  editor.isActive("strike") && "bg-accent"
-                )}
-              >
-                <Strikethrough className="h-4 w-4" />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>Strikethrough</TooltipContent>
-          </Tooltip>
-
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => editor.chain().focus().toggleCode().run()}
-                className={cn(
-                  "h-8 w-8 p-0",
-                  editor.isActive("code") && "bg-accent"
-                )}
-              >
-                <Code className="h-4 w-4" />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>Inline Code</TooltipContent>
-          </Tooltip>
-
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => editor.chain().focus().toggleHighlight().run()}
-                className={cn(
-                  "h-8 w-8 p-0",
-                  editor.isActive("highlight") && "bg-accent"
-                )}
-              >
-                <Highlighter className="h-4 w-4" />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>Highlight</TooltipContent>
-          </Tooltip>
-
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={handleSetLink}
-                className={cn(
-                  "h-8 w-8 p-0",
-                  editor.isActive("link") && "bg-accent"
-                )}
-              >
-                <Link2 className="h-4 w-4" />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>Insert Link</TooltipContent>
-          </Tooltip>
-
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={handleInsertImage}
-                className="h-8 w-8 p-0"
-              >
-                <ImageIcon className="h-4 w-4" />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>Insert Image</TooltipContent>
-          </Tooltip>
-
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={handleFilePicker}
-                className="h-8 w-8 p-0"
-              >
-                <FileInput className="h-4 w-4" />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>Import File (.docx, .txt, .md, .html)</TooltipContent>
-          </Tooltip>
-
-          <Separator orientation="vertical" className="h-6 mx-1" />
-
-          {/* Headings */}
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() =>
-                  editor.chain().focus().toggleHeading({ level: 1 }).run()
-                }
-                className={cn(
-                  "h-8 w-8 p-0",
-                  editor.isActive("heading", { level: 1 }) && "bg-accent"
-                )}
-              >
-                <Heading1 className="h-4 w-4" />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>Heading 1</TooltipContent>
-          </Tooltip>
-
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() =>
-                  editor.chain().focus().toggleHeading({ level: 2 }).run()
-                }
-                className={cn(
-                  "h-8 w-8 p-0",
-                  editor.isActive("heading", { level: 2 }) && "bg-accent"
-                )}
-              >
-                <Heading2 className="h-4 w-4" />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>Heading 2</TooltipContent>
-          </Tooltip>
-
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() =>
-                  editor.chain().focus().toggleHeading({ level: 3 }).run()
-                }
-                className={cn(
-                  "h-8 w-8 p-0",
-                  editor.isActive("heading", { level: 3 }) && "bg-accent"
-                )}
-              >
-                <Heading3 className="h-4 w-4" />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>Heading 3</TooltipContent>
-          </Tooltip>
-
-          <Separator orientation="vertical" className="h-6 mx-1" />
-
-          {/* Lists */}
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => editor.chain().focus().toggleBulletList().run()}
-                className={cn(
-                  "h-8 w-8 p-0",
-                  editor.isActive("bulletList") && "bg-accent"
-                )}
-              >
-                <List className="h-4 w-4" />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>Bullet List</TooltipContent>
-          </Tooltip>
-
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => editor.chain().focus().toggleOrderedList().run()}
-                className={cn(
-                  "h-8 w-8 p-0",
-                  editor.isActive("orderedList") && "bg-accent"
-                )}
-              >
-                <ListOrdered className="h-4 w-4" />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>Numbered List</TooltipContent>
-          </Tooltip>
-
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => editor.chain().focus().toggleTaskList().run()}
-                className={cn(
-                  "h-8 w-8 p-0",
-                  editor.isActive("taskList") && "bg-accent"
-                )}
-              >
-                <ListChecks className="h-4 w-4" />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>Task List</TooltipContent>
-          </Tooltip>
-
-          <Separator orientation="vertical" className="h-6 mx-1" />
-
-          {/* Block Elements */}
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => {
-                  editor.chain().focus().toggleBlockquote().run()
-                  const { from, to } = editor.state.selection
-                  // wrap current line/selection in quotes
-                  editor.chain().focus().insertContentAt({ from, to }, `"${editor.state.doc.textBetween(from, to, " ")}"`).run()
-                }}
-                className={cn(
-                  "h-8 w-8 p-0",
-                  editor.isActive("blockquote") && "bg-accent"
-                )}
-              >
-                <Quote className="h-4 w-4" />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>Blockquote</TooltipContent>
-          </Tooltip>
-
-          <DropdownMenu open={tableMenuOpen} onOpenChange={(open) => {
-            setTableMenuOpen(open)
-            if (open) {
-              const selTable = getSelectedTable()
-              const currentRows = selTable ? selTable.node.childCount : 3
-              const currentCols = selTable ? selTable.node.child(0)?.childCount || 3 : 3
-              setTableRows(currentRows)
-              setTableCols(currentCols)
-            }
-          }}>
-          <Tooltip>
-            <TooltipTrigger asChild>
-                <DropdownMenuTrigger asChild>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-8 w-8 p-0"
-              >
-                <TableIcon className="h-4 w-4" />
-              </Button>
-                </DropdownMenuTrigger>
-            </TooltipTrigger>
-              <TooltipContent>Insert / Resize Table</TooltipContent>
-          </Tooltip>
-            <DropdownMenuContent side="bottom" align="start" className="w-48">
-              <DropdownMenuLabel className="text-xs">Rows & Columns</DropdownMenuLabel>
-              <div className="grid grid-cols-2 gap-2 px-2 py-2">
-                <div className="space-y-1">
-                  <span className="text-xs text-muted-foreground">Rows</span>
-                  <Input
-                    type="number"
-                    min={1}
-                    value={tableRows}
-                    onChange={(e) => setTableRows(Math.max(parseInt(e.target.value || "1"), 1))}
-                    className="h-8"
-                  />
+            {/* Colors */}
+            <DropdownMenu>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
+                      <Palette className="h-4 w-4" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                </TooltipTrigger>
+                <TooltipContent>Text Color</TooltipContent>
+              </Tooltip>
+              <DropdownMenuContent className="w-40">
+                <DropdownMenuLabel>Colors</DropdownMenuLabel>
+                <div className="grid grid-cols-4 gap-1 p-2">
+                  {[
+                    "#e53935",
+                    "#fb8c00",
+                    "#fdd835",
+                    "#43a047",
+                    "#1e88e5",
+                    "#8e24aa",
+                    "#ffffff",
+                    "#000000",
+                  ].map((color) => (
+                    <button
+                      key={color}
+                      onClick={() =>
+                        editor.chain().focus().setColor(color).run()
+                      }
+                      className="h-6 w-6 rounded border border-border"
+                      style={{ backgroundColor: color }}
+                      aria-label={`Set color ${color}`}
+                    />
+                  ))}
                 </div>
-                <div className="space-y-1">
-                  <span className="text-xs text-muted-foreground">Columns</span>
-                  <Input
-                    type="number"
-                    min={1}
-                    value={tableCols}
-                    onChange={(e) => setTableCols(Math.max(parseInt(e.target.value || "1"), 1))}
-                    className="h-8"
-                  />
-                </div>
-              </div>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem
-                onClick={handleTable}
-                className="justify-center font-medium"
-              >
-                Apply
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                onClick={removeTable}
-                className="justify-center text-destructive"
-              >
-                Delete Table
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
+                  onClick={() => editor.chain().focus().unsetColor().run()}
+                >
+                  Clear color
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
 
-          <Separator orientation="vertical" className="h-6 mx-1" />
+            {/* Text Formatting */}
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => editor.chain().focus().toggleBold().run()}
+                  className={cn(
+                    "h-8 w-8 p-0",
+                    editor.isActive("bold") && "bg-accent"
+                  )}
+                >
+                  <Bold className="h-4 w-4" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Bold</TooltipContent>
+            </Tooltip>
 
-          {/* Chemistry Tools */}
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => {
-                  const { from, to } = editor.state.selection
-                  const selectedText = editor.state.doc.textBetween(from, to, " ")
-                  if (selectedText) {
-                    const formatted = formatChemicalFormula(selectedText)
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => editor.chain().focus().toggleItalic().run()}
+                  className={cn(
+                    "h-8 w-8 p-0",
+                    editor.isActive("italic") && "bg-accent"
+                  )}
+                >
+                  <Italic className="h-4 w-4" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Italic</TooltipContent>
+            </Tooltip>
+
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => editor.chain().focus().toggleStrike().run()}
+                  className={cn(
+                    "h-8 w-8 p-0",
+                    editor.isActive("strike") && "bg-accent"
+                  )}
+                >
+                  <Strikethrough className="h-4 w-4" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Strikethrough</TooltipContent>
+            </Tooltip>
+
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => editor.chain().focus().toggleCode().run()}
+                  className={cn(
+                    "h-8 w-8 p-0",
+                    editor.isActive("code") && "bg-accent"
+                  )}
+                >
+                  <Code className="h-4 w-4" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Inline Code</TooltipContent>
+            </Tooltip>
+
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => editor.chain().focus().toggleHighlight().run()}
+                  className={cn(
+                    "h-8 w-8 p-0",
+                    editor.isActive("highlight") && "bg-accent"
+                  )}
+                >
+                  <Highlighter className="h-4 w-4" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Highlight</TooltipContent>
+            </Tooltip>
+
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={handleSetLink}
+                  className={cn(
+                    "h-8 w-8 p-0",
+                    editor.isActive("link") && "bg-accent"
+                  )}
+                >
+                  <Link2 className="h-4 w-4" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Insert Link</TooltipContent>
+            </Tooltip>
+
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={handleInsertImage}
+                  className="h-8 w-8 p-0"
+                >
+                  <ImageIcon className="h-4 w-4" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Insert Image</TooltipContent>
+            </Tooltip>
+
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={handleFilePicker}
+                  className="h-8 w-8 p-0"
+                >
+                  <FileInput className="h-4 w-4" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>
+                Import File (.docx, .txt, .md, .html)
+              </TooltipContent>
+            </Tooltip>
+
+            <Separator orientation="vertical" className="h-6 mx-1" />
+
+            {/* Headings */}
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() =>
+                    editor.chain().focus().toggleHeading({ level: 1 }).run()
+                  }
+                  className={cn(
+                    "h-8 w-8 p-0",
+                    editor.isActive("heading", { level: 1 }) && "bg-accent"
+                  )}
+                >
+                  <Heading1 className="h-4 w-4" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Heading 1</TooltipContent>
+            </Tooltip>
+
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() =>
+                    editor.chain().focus().toggleHeading({ level: 2 }).run()
+                  }
+                  className={cn(
+                    "h-8 w-8 p-0",
+                    editor.isActive("heading", { level: 2 }) && "bg-accent"
+                  )}
+                >
+                  <Heading2 className="h-4 w-4" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Heading 2</TooltipContent>
+            </Tooltip>
+
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() =>
+                    editor.chain().focus().toggleHeading({ level: 3 }).run()
+                  }
+                  className={cn(
+                    "h-8 w-8 p-0",
+                    editor.isActive("heading", { level: 3 }) && "bg-accent"
+                  )}
+                >
+                  <Heading3 className="h-4 w-4" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Heading 3</TooltipContent>
+            </Tooltip>
+
+            <Separator orientation="vertical" className="h-6 mx-1" />
+
+            {/* Lists */}
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() =>
+                    editor.chain().focus().toggleBulletList().run()
+                  }
+                  className={cn(
+                    "h-8 w-8 p-0",
+                    editor.isActive("bulletList") && "bg-accent"
+                  )}
+                >
+                  <List className="h-4 w-4" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Bullet List</TooltipContent>
+            </Tooltip>
+
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() =>
+                    editor.chain().focus().toggleOrderedList().run()
+                  }
+                  className={cn(
+                    "h-8 w-8 p-0",
+                    editor.isActive("orderedList") && "bg-accent"
+                  )}
+                >
+                  <ListOrdered className="h-4 w-4" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Numbered List</TooltipContent>
+            </Tooltip>
+
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => editor.chain().focus().toggleTaskList().run()}
+                  className={cn(
+                    "h-8 w-8 p-0",
+                    editor.isActive("taskList") && "bg-accent"
+                  )}
+                >
+                  <ListChecks className="h-4 w-4" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Task List</TooltipContent>
+            </Tooltip>
+
+            <Separator orientation="vertical" className="h-6 mx-1" />
+
+            {/* Block Elements */}
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    editor.chain().focus().toggleBlockquote().run();
+                    const { from, to } = editor.state.selection;
+                    // wrap current line/selection in quotes
                     editor
                       .chain()
                       .focus()
-                      .deleteRange({ from, to })
-                      .insertContent(formatted)
-                      .run()
-                  }
-                }}
-                className="h-8 w-8 p-0"
-              >
-                <FlaskConical className="h-4 w-4" />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>Format Chemical Formula</TooltipContent>
-          </Tooltip>
+                      .insertContentAt(
+                        { from, to },
+                        `"${editor.state.doc.textBetween(from, to, " ")}"`
+                      )
+                      .run();
+                  }}
+                  className={cn(
+                    "h-8 w-8 p-0",
+                    editor.isActive("blockquote") && "bg-accent"
+                  )}
+                >
+                  <Quote className="h-4 w-4" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Blockquote</TooltipContent>
+            </Tooltip>
 
-          {/* AI Tools */}
-          {showAITools && (
-            <>
-              <Separator orientation="vertical" className="h-6 mx-1" />
-
-              {/* Speech to text */}
+            <DropdownMenu
+              open={tableMenuOpen}
+              onOpenChange={(open) => {
+                setTableMenuOpen(open);
+                if (open) {
+                  const selTable = getSelectedTable();
+                  const currentRows = selTable ? selTable.node.childCount : 3;
+                  const currentCols = selTable
+                    ? selTable.node.child(0)?.childCount || 3
+                    : 3;
+                  setTableRows(currentRows);
+                  setTableCols(currentCols);
+                }
+              }}
+            >
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <Button
-                    variant={isListening ? "secondary" : "ghost"}
-                    size="sm"
-                    className="h-8 w-8 p-0"
-                    onClick={isListening ? stopSpeechToText : startSpeechToText}
-                  >
-                    <Mic className="h-4 w-4" />
-                  </Button>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
+                      <TableIcon className="h-4 w-4" />
+                    </Button>
+                  </DropdownMenuTrigger>
                 </TooltipTrigger>
-                <TooltipContent>{isListening ? "Stop dictation" : "Start dictation"}</TooltipContent>
+                <TooltipContent>Insert / Resize Table</TooltipContent>
               </Tooltip>
+              <DropdownMenuContent side="bottom" align="start" className="w-48">
+                <DropdownMenuLabel className="text-xs">
+                  Rows & Columns
+                </DropdownMenuLabel>
+                <div className="grid grid-cols-2 gap-2 px-2 py-2">
+                  <div className="space-y-1">
+                    <span className="text-xs text-muted-foreground">Rows</span>
+                    <Input
+                      type="number"
+                      min={1}
+                      value={tableRows}
+                      onChange={(e) =>
+                        setTableRows(
+                          Math.max(parseInt(e.target.value || "1"), 1)
+                        )
+                      }
+                      className="h-8"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <span className="text-xs text-muted-foreground">
+                      Columns
+                    </span>
+                    <Input
+                      type="number"
+                      min={1}
+                      value={tableCols}
+                      onChange={(e) =>
+                        setTableCols(
+                          Math.max(parseInt(e.target.value || "1"), 1)
+                        )
+                      }
+                      className="h-8"
+                    />
+                  </div>
+                </div>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
+                  onClick={handleTable}
+                  className="justify-center font-medium"
+                >
+                  Apply
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onClick={removeTable}
+                  className="justify-center text-destructive"
+                >
+                  Delete Table
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
 
-              <DropdownMenu open={aiDropdownOpen} onOpenChange={setAiDropdownOpen}>
-                <DropdownMenuTrigger asChild>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-8 gap-1 px-2"
-                    disabled={isAIProcessing}
-                  >
-                    {isAIProcessing ? (
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                    ) : (
-                      <Sparkles className="h-4 w-4" />
-                    )}
-                    <span className="text-xs">AI</span>
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="start" className="w-56">
-                  <DropdownMenuLabel className="flex items-center gap-2">
-                    <WandSparkles className="h-4 w-4" />
-                    AI Writing Tools
-                  </DropdownMenuLabel>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem onClick={aiImprove} disabled={isAIProcessing}>
-                    <Sparkles className="mr-2 h-4 w-4" />
-                    Improve Writing
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={aiContinue} disabled={isAIProcessing}>
-                    <WandSparkles className="mr-2 h-4 w-4" />
-                    Continue Writing
-                  </DropdownMenuItem>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem onClick={aiShorter} disabled={isAIProcessing}>
-                    Make Shorter
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={aiLonger} disabled={isAIProcessing}>
-                    Make Longer
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={aiSimplify} disabled={isAIProcessing}>
-                    Simplify Language
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={aiGrammar} disabled={isAIProcessing}>
-                    Fix Grammar
-                  </DropdownMenuItem>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuLabel className="flex items-center gap-2">
-                    <FlaskConical className="h-4 w-4" />
-                    Chemistry Tools
-                  </DropdownMenuLabel>
-                  <DropdownMenuItem onClick={aiStructure} disabled={isAIProcessing}>
-                    <FlaskConical className="mr-2 h-4 w-4" />
-                    Structure Properly
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-            </>
-          )}
-        </TooltipProvider>
-      </div>
+            <Separator orientation="vertical" className="h-6 mx-1" />
+
+            {/* Chemistry Tools */}
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    const { from, to } = editor.state.selection;
+                    const selectedText = editor.state.doc.textBetween(
+                      from,
+                      to,
+                      " "
+                    );
+                    if (selectedText) {
+                      const formatted = formatChemicalFormula(selectedText);
+                      editor
+                        .chain()
+                        .focus()
+                        .deleteRange({ from, to })
+                        .insertContent(formatted)
+                        .run();
+                    }
+                  }}
+                  className="h-8 w-8 p-0"
+                >
+                  <FlaskConical className="h-4 w-4" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Format Chemical Formula</TooltipContent>
+            </Tooltip>
+
+            {/* AI Tools */}
+            {showAITools && (
+              <>
+                <Separator orientation="vertical" className="h-6 mx-1" />
+
+                {/* Speech to text */}
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant={isListening ? "secondary" : "ghost"}
+                      size="sm"
+                      className="h-8 w-8 p-0"
+                      onClick={
+                        isListening ? stopSpeechToText : startSpeechToText
+                      }
+                    >
+                      <Mic className="h-4 w-4" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    {isListening ? "Stop dictation" : "Start dictation"}
+                  </TooltipContent>
+                </Tooltip>
+
+                <DropdownMenu
+                  open={aiDropdownOpen}
+                  onOpenChange={setAiDropdownOpen}
+                >
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-8 gap-1 px-2"
+                      disabled={isAIProcessing}
+                    >
+                      {isAIProcessing ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <Sparkles className="h-4 w-4" />
+                      )}
+                      <span className="text-xs">AI</span>
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="start" className="w-56">
+                    <DropdownMenuLabel className="flex items-center gap-2">
+                      <WandSparkles className="h-4 w-4" />
+                      AI Writing Tools
+                    </DropdownMenuLabel>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem
+                      onClick={aiImprove}
+                      disabled={isAIProcessing}
+                    >
+                      <Sparkles className="mr-2 h-4 w-4" />
+                      Improve Writing
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      onClick={aiContinue}
+                      disabled={isAIProcessing}
+                    >
+                      <WandSparkles className="mr-2 h-4 w-4" />
+                      Continue Writing
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem
+                      onClick={aiShorter}
+                      disabled={isAIProcessing}
+                    >
+                      Make Shorter
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      onClick={aiLonger}
+                      disabled={isAIProcessing}
+                    >
+                      Make Longer
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      onClick={aiSimplify}
+                      disabled={isAIProcessing}
+                    >
+                      Simplify Language
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      onClick={aiGrammar}
+                      disabled={isAIProcessing}
+                    >
+                      Fix Grammar
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuLabel className="flex items-center gap-2">
+                      <FlaskConical className="h-4 w-4" />
+                      Chemistry Tools
+                    </DropdownMenuLabel>
+                    <DropdownMenuItem
+                      onClick={aiStructure}
+                      disabled={isAIProcessing}
+                    >
+                      <FlaskConical className="mr-2 h-4 w-4" />
+                      Structure Properly
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </>
+            )}
+          </TooltipProvider>
+        </div>
       )}
 
       {/* Editor Content */}
@@ -1303,17 +1361,17 @@ export function TiptapEditor({
             list-style-position: outside;
           }
           .ProseMirror blockquote {
-            border-left: 3px solid hsl(var(--border));
+            border-left: 3px solid var(--border);
             padding-left: 0.75rem;
             margin: 0.5rem 0;
-            color: hsl(var(--muted-foreground));
+            color: var(--muted-foreground);
             font-style: italic;
           }
           .ProseMirror table {
             border-collapse: collapse;
             width: auto;
-            color: hsl(var(--foreground));
-            background: hsl(var(--card));
+            color: var(--foreground);
+            background: var(--card);
             border: 1.5px solid rgba(255, 255, 255, 0.7);
             box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.2);
           }
@@ -1324,8 +1382,8 @@ export function TiptapEditor({
             vertical-align: top;
           }
           .ProseMirror table th {
-            background: hsl(var(--muted));
-            color: hsl(var(--foreground));
+            background: var(--muted);
+            color: var(--foreground);
             font-weight: 600;
           }
         `}</style>
@@ -1341,5 +1399,5 @@ export function TiptapEditor({
         </div>
       )}
     </div>
-  )
+  );
 }
