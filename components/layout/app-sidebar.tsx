@@ -74,7 +74,7 @@ const navigation = [
   { name: "Equipment", href: "/equipment", icon: Wrench },
   { name: "Protocols", href: "/protocols", icon: FileText },
   { name: "Literature", href: "/literature-reviews", icon: BookOpen },
-  { name: "Reports", href: "/reports", icon: BarChart3 },
+  // { name: "Reports", href: "/reports", icon: BarChart3 }, // Hidden for now
 ]
 
 interface LabNoteSummary {
