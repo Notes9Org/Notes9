@@ -1,10 +1,4 @@
--- Migration: Create semantic_chunks and chunk_jobs tables
--- Purpose: Enable semantic search with vector embeddings for lab notes, reports, protocols, and literature reviews
--- Author: System
--- Date: 2025-01-20
-
--- Enable required extensions
--- Migration: Create semantic_chunks and chunk_jobs tables
+-- Create semantic_chunks and chunk_jobs tables
 -- Purpose: Enable semantic search with vector embeddings for lab notes, reports, protocols, and literature reviews
 -- Author: System
 -- Date: 2025-01-20
@@ -71,29 +65,6 @@ CREATE TABLE IF NOT EXISTS chunk_jobs (
 CREATE UNIQUE INDEX IF NOT EXISTS idx_chunk_jobs_unique_pending 
 ON chunk_jobs (source_type, source_id, operation) 
 WHERE status = 'pending';
-
--- Add created_by column to existing tables if they don't exist (for migrations)
--- This MUST run before creating indexes on created_by
-DO $$ 
-BEGIN
-  -- Add created_by to semantic_chunks if it doesn't exist
-  IF NOT EXISTS (
-    SELECT 1 FROM information_schema.columns 
-    WHERE table_schema = 'public' AND table_name = 'semantic_chunks' AND column_name = 'created_by'
-  ) THEN
-    ALTER TABLE semantic_chunks 
-    ADD COLUMN created_by UUID REFERENCES profiles(id) ON DELETE SET NULL;
-  END IF;
-  
-  -- Add created_by to chunk_jobs if it doesn't exist
-  IF NOT EXISTS (
-    SELECT 1 FROM information_schema.columns 
-    WHERE table_schema = 'public' AND table_name = 'chunk_jobs' AND column_name = 'created_by'
-  ) THEN
-    ALTER TABLE chunk_jobs 
-    ADD COLUMN created_by UUID REFERENCES profiles(id) ON DELETE SET NULL;
-  END IF;
-END $$;
 
 -- Create indexes for semantic_chunks
 CREATE INDEX IF NOT EXISTS idx_semantic_chunks_source ON semantic_chunks(source_type, source_id);
