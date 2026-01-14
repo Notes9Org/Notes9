@@ -2,8 +2,9 @@ import { Inter } from 'next/font/google'
 import "./globals.css"
 import { ThemeProvider } from "@/components/theme-provider"
 import { Toaster } from "@/components/ui/toaster"
+import { NavigationLoader } from "@/components/navigation-loader"
 
-const inter = Inter({ 
+const inter = Inter({
   subsets: ['latin'],
   variable: '--font-inter',
 })
@@ -11,7 +12,7 @@ const inter = Inter({
 export const metadata = {
   title: 'Notes9 - Research Lab Management',
   description: 'Professional laboratory research and experiment management platform',
-    generator: 'v0.app'
+  generator: 'v0.app'
 }
 
 export default function RootLayout({
@@ -24,10 +25,11 @@ export default function RootLayout({
       <body className={`font-sans ${inter.variable} antialiased`}>
         <ThemeProvider
           attribute="class"
-          defaultTheme="dark"
+          defaultTheme="light"
           enableSystem
           disableTransitionOnChange
         >
+          <NavigationLoader />
           {children}
           <Toaster />
         </ThemeProvider>
