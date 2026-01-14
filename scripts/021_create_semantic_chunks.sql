@@ -32,7 +32,7 @@ CREATE TABLE IF NOT EXISTS semantic_chunks (
   organization_id UUID REFERENCES organizations(id) ON DELETE CASCADE,
   project_id UUID REFERENCES projects(id) ON DELETE SET NULL,
   experiment_id UUID REFERENCES experiments(id) ON DELETE SET NULL,
-  user_id UUID REFERENCES profiles(id) ON DELETE SET NULL,
+  created_by UUID REFERENCES profiles(id) ON DELETE SET NULL,
   
   -- Chunk data
   chunk_index INT NOT NULL,
@@ -59,7 +59,7 @@ CREATE TABLE IF NOT EXISTS chunk_jobs (
   source_id UUID NOT NULL,
   operation TEXT NOT NULL CHECK (operation IN ('create', 'update', 'delete')),
   status TEXT DEFAULT 'pending' CHECK (status IN ('pending', 'processing', 'completed', 'failed')),
-  user_id UUID REFERENCES profiles(id) ON DELETE SET NULL,
+  created_by UUID REFERENCES profiles(id) ON DELETE SET NULL,
   payload JSONB,
   error_message TEXT,
   retry_count INT DEFAULT 0,
@@ -72,26 +72,26 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_chunk_jobs_unique_pending
 ON chunk_jobs (source_type, source_id, operation) 
 WHERE status = 'pending';
 
--- Add user_id column to existing tables if they don't exist (for migrations)
--- This MUST run before creating indexes on user_id
+-- Add created_by column to existing tables if they don't exist (for migrations)
+-- This MUST run before creating indexes on created_by
 DO $$ 
 BEGIN
-  -- Add user_id to semantic_chunks if it doesn't exist
+  -- Add created_by to semantic_chunks if it doesn't exist
   IF NOT EXISTS (
     SELECT 1 FROM information_schema.columns 
-    WHERE table_schema = 'public' AND table_name = 'semantic_chunks' AND column_name = 'user_id'
+    WHERE table_schema = 'public' AND table_name = 'semantic_chunks' AND column_name = 'created_by'
   ) THEN
     ALTER TABLE semantic_chunks 
-    ADD COLUMN user_id UUID REFERENCES profiles(id) ON DELETE SET NULL;
+    ADD COLUMN created_by UUID REFERENCES profiles(id) ON DELETE SET NULL;
   END IF;
   
-  -- Add user_id to chunk_jobs if it doesn't exist
+  -- Add created_by to chunk_jobs if it doesn't exist
   IF NOT EXISTS (
     SELECT 1 FROM information_schema.columns 
-    WHERE table_schema = 'public' AND table_name = 'chunk_jobs' AND column_name = 'user_id'
+    WHERE table_schema = 'public' AND table_name = 'chunk_jobs' AND column_name = 'created_by'
   ) THEN
     ALTER TABLE chunk_jobs 
-    ADD COLUMN user_id UUID REFERENCES profiles(id) ON DELETE SET NULL;
+    ADD COLUMN created_by UUID REFERENCES profiles(id) ON DELETE SET NULL;
   END IF;
 END $$;
 
@@ -100,14 +100,14 @@ CREATE INDEX IF NOT EXISTS idx_semantic_chunks_source ON semantic_chunks(source_
 CREATE INDEX IF NOT EXISTS idx_semantic_chunks_organization ON semantic_chunks(organization_id);
 CREATE INDEX IF NOT EXISTS idx_semantic_chunks_project ON semantic_chunks(project_id);
 CREATE INDEX IF NOT EXISTS idx_semantic_chunks_experiment ON semantic_chunks(experiment_id);
-CREATE INDEX IF NOT EXISTS idx_semantic_chunks_user_id ON semantic_chunks(user_id);
+CREATE INDEX IF NOT EXISTS idx_semantic_chunks_created_by ON semantic_chunks(created_by);
 CREATE INDEX IF NOT EXISTS idx_semantic_chunks_embedding ON semantic_chunks USING ivfflat (embedding vector_cosine_ops) WITH (lists = 100);
 CREATE INDEX IF NOT EXISTS idx_semantic_chunks_fts ON semantic_chunks USING gin(fts);
 
 -- Create indexes for chunk_jobs
 CREATE INDEX IF NOT EXISTS idx_chunk_jobs_status ON chunk_jobs(status, created_at);
 CREATE INDEX IF NOT EXISTS idx_chunk_jobs_source ON chunk_jobs(source_type, source_id);
-CREATE INDEX IF NOT EXISTS idx_chunk_jobs_user_id ON chunk_jobs(user_id);
+CREATE INDEX IF NOT EXISTS idx_chunk_jobs_created_by ON chunk_jobs(created_by);
 
 -- Create trigger function to queue chunk jobs
 CREATE OR REPLACE FUNCTION queue_semantic_chunk_job()
@@ -116,7 +116,7 @@ DECLARE
   org_id UUID;
   proj_id UUID;
   exp_id UUID;
-  user_id_val UUID;
+  created_by_val UUID;
   content_text TEXT;
   title_text TEXT;
   source_type_value TEXT;
@@ -146,7 +146,7 @@ BEGIN
       
       proj_id := OLD.project_id;
       exp_id := OLD.experiment_id;
-      user_id_val := OLD.created_by;
+      created_by_val := OLD.created_by;
       
     ELSIF TG_TABLE_NAME = 'reports' THEN
       -- Get organization from generator's profile
@@ -156,34 +156,34 @@ BEGIN
       
       proj_id := OLD.project_id;
       exp_id := OLD.experiment_id;
-      user_id_val := OLD.generated_by;
+      created_by_val := OLD.generated_by;
       
     ELSIF TG_TABLE_NAME = 'protocols' THEN
       org_id := OLD.organization_id;
       proj_id := NULL;
       exp_id := NULL;
-      user_id_val := OLD.created_by;
+      created_by_val := OLD.created_by;
       
     ELSIF TG_TABLE_NAME = 'literature_reviews' THEN
       org_id := OLD.organization_id;
       proj_id := OLD.project_id;
       exp_id := OLD.experiment_id;
-      user_id_val := OLD.created_by;
+      created_by_val := OLD.created_by;
     END IF;
     
     -- Insert delete job (always create, even if org_id is NULL)
     -- Use INSERT ... ON CONFLICT to handle duplicate pending jobs gracefully
-    INSERT INTO chunk_jobs (source_type, source_id, operation, user_id, payload)
+    INSERT INTO chunk_jobs (source_type, source_id, operation, created_by, payload)
     VALUES (
       source_type_value,
       OLD.id,
       'delete',
-      user_id_val,
+      created_by_val,
       jsonb_build_object(
         'organization_id', org_id,
         'project_id', proj_id,
         'experiment_id', exp_id,
-        'user_id', user_id_val
+        'created_by', created_by_val
       )
     )
     ON CONFLICT (source_type, source_id, operation) 
@@ -217,7 +217,7 @@ BEGIN
     
     proj_id := NEW.project_id;
     exp_id := NEW.experiment_id;
-    user_id_val := NEW.created_by;
+    created_by_val := NEW.created_by;
     content_text := NEW.content;
     title_text := NEW.title;
     
@@ -229,7 +229,7 @@ BEGIN
     
     proj_id := NEW.project_id;
     exp_id := NEW.experiment_id;
-    user_id_val := NEW.generated_by;
+    created_by_val := NEW.generated_by;
     content_text := NEW.content;
     title_text := NEW.title;
     
@@ -237,7 +237,7 @@ BEGIN
     org_id := NEW.organization_id;
     proj_id := NULL;
     exp_id := NULL;
-    user_id_val := NEW.created_by;
+    created_by_val := NEW.created_by;
     content_text := NEW.content;
     title_text := NEW.name;
     
@@ -245,7 +245,7 @@ BEGIN
     org_id := NEW.organization_id;
     proj_id := NEW.project_id;
     exp_id := NEW.experiment_id;
-    user_id_val := NEW.created_by;
+    created_by_val := NEW.created_by;
     -- Combine abstract and personal_notes for literature reviews
     content_text := CONCAT_WS(E'\n\n', NEW.abstract, NEW.personal_notes);
     title_text := NEW.title;
@@ -256,7 +256,7 @@ BEGIN
   IF content_text IS NOT NULL AND length(trim(content_text)) > 50 THEN
     -- Insert job using ON CONFLICT to handle duplicates gracefully
     -- Update payload if a pending job already exists (for UPDATE operations)
-    INSERT INTO chunk_jobs (source_type, source_id, operation, user_id, payload)
+    INSERT INTO chunk_jobs (source_type, source_id, operation, created_by, payload)
     VALUES (
       source_type_value,
       NEW.id,
@@ -265,20 +265,20 @@ BEGIN
         WHEN 'UPDATE' THEN 'update'
         ELSE 'create'
       END,
-      user_id_val,
+      created_by_val,
       jsonb_build_object(
         'content', content_text,
         'title', COALESCE(title_text, ''),
         'organization_id', org_id,
         'project_id', proj_id,
         'experiment_id', exp_id,
-        'user_id', user_id_val
+        'created_by', created_by_val
       )
     )
     ON CONFLICT (source_type, source_id, operation) 
     WHERE status = 'pending'
     DO UPDATE SET
-      user_id = EXCLUDED.user_id,
+      created_by = EXCLUDED.created_by,
       payload = EXCLUDED.payload,
       created_at = NOW();
   END IF;

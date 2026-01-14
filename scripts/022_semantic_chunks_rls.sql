@@ -27,11 +27,11 @@ CREATE POLICY "Users can view semantic chunks in their organization"
     )
   );
 
--- Policy: Users can view their own chunks (for user_id-based access)
+-- Policy: Users can view their own chunks (for created_by-based access)
 CREATE POLICY "Users can view their own semantic chunks"
   ON semantic_chunks
   FOR SELECT
-  USING (user_id = auth.uid());
+  USING (created_by = auth.uid());
 
 -- Policy: Service role can do everything (for worker process)
 CREATE POLICY "Service role full access semantic_chunks"
@@ -52,11 +52,11 @@ CREATE POLICY "Users can view chunk jobs in their organization"
     )
   );
 
--- Policy: Users can view their own chunk jobs (for user_id-based access)
+-- Policy: Users can view their own chunk jobs (for created_by-based access)
 CREATE POLICY "Users can view their own chunk jobs"
   ON chunk_jobs
   FOR SELECT
-  USING (user_id = auth.uid());
+  USING (created_by = auth.uid());
 
 -- Policy: Service role can manage chunk jobs (for worker process)
 CREATE POLICY "Service role full access chunk_jobs"
