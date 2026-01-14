@@ -1,0 +1,5 @@
+{"query": "How many experiments are in progress?", "expected_tool": "sql", "expected_intent": "aggregate", "expected_has_answer": true}
+{"query": "What protocols mention PCR?", "expected_tool": "rag", "expected_intent": "search", "expected_has_answer": true}
+{"query": "Show me experiments about cell culture and count active samples", "expected_tool": "hybrid", "expected_intent": "hybrid", "expected_has_answer": true}
+{"query": "What is the status of experiment EXP-001?", "expected_tool": "sql", "expected_intent": "aggregate", "expected_has_answer": true}
+{"query": "Find lab notes about protein purification", "expected_tool": "rag", "expected_intent": "search", "expected_has_answer": true}

@@ -1,13 +1,11 @@
 """FastAPI application for Notes9 Agent Service."""
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
-from typing import List, Optional, Dict, Any
 import os
 from dotenv import load_dotenv
 import structlog
 
-from agents.chat_agent import ChatAgent
+from agents.api.routes import router as agent_router
 
 load_dotenv()
 
@@ -28,7 +26,7 @@ app = FastAPI(
     version="1.0.0"
 )
 
-# CORS middleware
+# CORS middleware (must be before routes)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=os.getenv("CORS_ORIGINS", "*").split(","),
@@ -37,29 +35,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Initialize agent
-chat_agent = ChatAgent()
-
-
-# Request/Response models
-class ChatMessage(BaseModel):
-    role: str  # 'user' or 'assistant'
-    content: str
-
-
-class ChatRequest(BaseModel):
-    messages: List[ChatMessage]
-    session_id: str
-    user_id: str
-    scope: Dict[str, Optional[str]]  # organization_id, project_id, experiment_id
-    options: Optional[Dict[str, Any]] = None
-
-
-class ChatResponse(BaseModel):
-    response: str
-    citations: List[Dict[str, str]]
-    confidence: float
-    debug: Optional[Dict[str, Any]] = None
+# Include agent routes
+app.include_router(agent_router)
 
 
 @app.get("/health")
@@ -74,34 +51,12 @@ async def root():
     return {
         "message": "Notes9 Agent Service",
         "version": "1.0.0",
-        "status": "operational"
+        "status": "operational",
+        "endpoints": {
+            "agent": "/agent/run",
+            "health": "/health"
+        }
     }
-
-
-@app.post("/chat", response_model=ChatResponse)
-async def chat(request: ChatRequest):
-    """
-    Agentic chat endpoint with SQL + RAG + ReAct capabilities.
-    """
-    try:
-        result = await chat_agent.process(
-            query=request.messages[-1].content if request.messages else "",
-            user_id=request.user_id,
-            session_id=request.session_id,
-            scope=request.scope,
-            history=request.messages[:-1] if len(request.messages) > 1 else [],
-            options=request.options or {}
-        )
-        
-        return ChatResponse(
-            response=result["answer"],
-            citations=result.get("citations", []),
-            confidence=result.get("confidence_score", 0.0),
-            debug=result.get("debug")
-        )
-    except Exception as e:
-        logger.error("Chat error", error=str(e))
-        raise HTTPException(status_code=500, detail=str(e))
 
 
 if __name__ == "__main__":

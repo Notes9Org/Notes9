@@ -14,7 +14,10 @@ class AzureOpenAIConfig:
     """Configuration and client factory for Azure OpenAI."""
     
     def __init__(self):
-        self.endpoint = os.getenv("AZURE_OPENAI_ENDPOINT", "https://notes9.openai.azure.com/")
+        # Support both endpoint formats:
+        # - OpenAI: https://<resource>.openai.azure.com
+        # - Cognitive Services: https://<resource>-<region>.cognitiveservices.azure.com
+        self.endpoint = os.getenv("AZURE_OPENAI_ENDPOINT", "")
         self.api_key = os.getenv("AZURE_OPENAI_API_KEY")
         self.api_version = os.getenv("AZURE_OPENAI_API_VERSION", "2024-12-01-preview")
         self.model_name = os.getenv("AZURE_OPENAI_MODEL_NAME", "text-embedding-3-small")
@@ -22,6 +25,13 @@ class AzureOpenAIConfig:
         self.dimensions = int(os.getenv("EMBEDDING_DIMENSIONS", "1536"))
         
         # Validate configuration
+        if not self.endpoint:
+            raise ValueError(
+                "AZURE_OPENAI_ENDPOINT must be set. "
+                "Format: https://<resource>.openai.azure.com or "
+                "https://<resource>-<region>.cognitiveservices.azure.com"
+            )
+        
         if not self.api_key:
             raise ValueError(
                 "AZURE_OPENAI_API_KEY must be set. "
@@ -48,11 +58,22 @@ class AzureOpenAIConfig:
             if not endpoint.startswith('https://'):
                 raise ValueError(f"Invalid endpoint format: {endpoint}. Must start with https://")
             
-            if '.openai.azure.com' not in endpoint:
+            # Support both endpoint formats:
+            # - OpenAI format: https://<resource>.openai.azure.com
+            # - Cognitive Services format: https://<resource>-<region>.cognitiveservices.azure.com
+            is_valid_endpoint = (
+                '.openai.azure.com' in endpoint or 
+                '.cognitiveservices.azure.com' in endpoint
+            )
+            
+            if not is_valid_endpoint:
                 logger.warning(
-                    "Endpoint may be incorrect",
+                    "Endpoint format may be incorrect",
                     endpoint=endpoint,
-                    expected_format="https://<resource-name>.openai.azure.com"
+                    expected_formats=[
+                        "https://<resource>.openai.azure.com",
+                        "https://<resource>-<region>.cognitiveservices.azure.com"
+                    ]
                 )
             
             client = AzureOpenAI(
