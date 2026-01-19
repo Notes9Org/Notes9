@@ -4,6 +4,7 @@ import structlog
 from agents.graph.state import AgentState
 from agents.services.sql_service import SQLService
 from services.trace_service import TraceService
+from agents.services.thinking_logger import get_thinking_logger
 
 logger = structlog.get_logger()
 
@@ -72,16 +73,17 @@ def sql_node(state: AgentState) -> AgentState:
         sql_service = get_sql_service()
         
         # Get original query and normalized query
-        original_query = request.get("query", "")
+        original_query = request.get("query", "") if isinstance(request, dict) else getattr(request, "query", "")
         normalized_query_text = normalized.normalized_query if normalized else original_query
         entities = normalized.entities if normalized else {}
+        scope = request.get("scope", {}) if isinstance(request, dict) else getattr(request, "scope", {})
         
         # Generate and execute SQL
         result = sql_service.generate_and_execute(
             query=original_query,
             normalized_query=normalized_query_text,
             entities=entities,
-            scope=request["scope"]
+            scope=scope
         )
         
         latency_ms = int((time.time() - start_time) * 1000)
@@ -96,6 +98,25 @@ def sql_node(state: AgentState) -> AgentState:
         )
         
         state["sql_result"] = result
+        
+        # Log thinking: SQL execution reasoning
+        thinking_logger = get_thinking_logger()
+        if run_id:
+            has_error = "error" in result
+            thinking_logger.log_analysis(
+                run_id=run_id,
+                node_name="sql",
+                analysis=f"Executed SQL query: {'Success' if not has_error else 'Failed'}",
+                data_summary={
+                    "row_count": result.get("row_count", 0),
+                    "has_error": has_error,
+                    "execution_time_ms": result.get("execution_time_ms", 0)
+                },
+                insights=[
+                    f"Query returned {result.get('row_count', 0)} rows",
+                    f"Execution time: {result.get('execution_time_ms', 0)}ms"
+                ] if not has_error else [f"Error: {result.get('error', 'Unknown')}"]
+            )
         
         # Log output event (safe data only - no full SQL queries)
         if run_id:
@@ -118,7 +139,8 @@ def sql_node(state: AgentState) -> AgentState:
                 pass
         
         # Add to trace if debug enabled
-        if request.get("options", {}).get("debug"):
+        options = request.get("options", {}) if isinstance(request, dict) else getattr(request, "options", {}) if hasattr(request, "options") else {}
+        if (isinstance(options, dict) and options.get("debug")) or (hasattr(options, "debug") and getattr(options, "debug", False)):
             state["trace"].append({
                 "node": "sql",
                 "input": {

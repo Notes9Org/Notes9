@@ -36,35 +36,232 @@ class SQLService:
     def _get_pg_connection(self):
         """Get or create PostgreSQL connection."""
         if self._pg_conn is None or self._pg_conn.closed:
+            # Method 1: Try connection string first (DATABASE_URL)
+            database_url = os.getenv("DATABASE_URL")
+            if database_url:
+                try:
+                    self._pg_conn = psycopg2.connect(database_url, connect_timeout=10)
+                    logger.info("PostgreSQL connection established via DATABASE_URL")
+                    return self._pg_conn
+                except Exception as e:
+                    logger.warning("Failed to connect via DATABASE_URL, trying individual credentials", error=str(e))
+            
+            # Method 2: Use individual credentials
             # Extract connection details from Supabase URL
             # Format: https://<project-ref>.supabase.co
             supabase_url = os.getenv("NEXT_PUBLIC_SUPABASE_URL", "")
             
             # Parse host from URL (e.g., https://xxx.supabase.co -> db.xxx.supabase.co)
+            project_ref = None
             if ".supabase.co" in supabase_url:
                 project_ref = supabase_url.replace("https://", "").replace(".supabase.co", "")
-                db_host = f"db.{project_ref}.supabase.co"
             else:
-                # Fallback to direct DB host env var
-                db_host = os.getenv("DB_HOST", "localhost")
+                # Try to extract project_ref from DB_HOST if it's a Supabase host
+                db_host_env = os.getenv("DB_HOST", "")
+                if ".supabase.co" in db_host_env:
+                    project_ref = db_host_env.replace("db.", "").replace(".pooler.supabase.com", "").replace(".supabase.co", "")
             
             db_port = int(os.getenv("DB_PORT", "5432"))
-            db_user = os.getenv("DB_USER", "postgres")
+            db_user_env = os.getenv("DB_USER", "postgres")
             db_password = os.getenv("DB_PASSWORD")
             db_name = os.getenv("DB_NAME", "postgres")
             
-            if not db_password:
-                raise ValueError("DB_PASSWORD environment variable is required for SQL execution")
+            # Determine if we're using pooler or direct connection
+            use_pooler = db_port == 6543
             
-            self._pg_conn = psycopg2.connect(
-                host=db_host,
-                port=db_port,
-                user=db_user,
-                password=db_password,
-                database=db_name,
-                connect_timeout=10
-            )
-            logger.info("PostgreSQL connection established", host=db_host)
+            if use_pooler:
+                # Pooler connection: use pooler host, not db host
+                if not project_ref:
+                    raise ValueError(
+                        "Cannot use pooler (port 6543) without project_ref. "
+                        "Set NEXT_PUBLIC_SUPABASE_URL or DB_HOST with Supabase host."
+                    )
+                
+                # Pooler user must be postgres.<project-ref>
+                if db_user_env == "postgres" or not os.getenv("DB_USER"):
+                    db_user = f"postgres.{project_ref}"
+                    logger.info("Using pooler user format", user=db_user, project_ref=project_ref, port=db_port)
+                else:
+                    db_user = db_user_env
+                    logger.info("Using explicit DB_USER for pooler", user=db_user, port=db_port)
+                
+                # For pooler, ignore DB_HOST if it's a direct DB host (db.*.supabase.co)
+                # Only use DB_HOST if it's explicitly a pooler host
+                db_host_env = os.getenv("DB_HOST", "")
+                if ".pooler.supabase.com" in db_host_env:
+                    # User explicitly set pooler host - use it
+                    db_host = db_host_env
+                    logger.info("Using explicit pooler host from DB_HOST", host=db_host)
+                else:
+                    # Ignore DB_HOST if it's a direct DB host - we'll try pooler regions
+                    db_host = None
+                    logger.info("Port 6543 detected - will use pooler hosts, ignoring direct DB host", db_host_env=db_host_env)
+            else:
+                # Direct connection: use db host
+                if ".supabase.co" in supabase_url:
+                    db_host = f"db.{project_ref}.supabase.co"
+                else:
+                    db_host = os.getenv("DB_HOST", "localhost")
+                db_user = db_user_env
+            
+            if not db_password:
+                error_msg = (
+                    "DB_PASSWORD environment variable is required for SQL execution.\n"
+                    "\n"
+                    "To fix this:\n"
+                    "1. Get your database password from Supabase Dashboard:\n"
+                    "   - Go to https://supabase.com/dashboard\n"
+                    "   - Select your project\n"
+                    "   - Go to Settings → Database\n"
+                    "   - Copy the 'Database Password' (or reset it if needed)\n"
+                    "\n"
+                    "2. Add to your .env file in python-service/:\n"
+                    f"   DB_HOST={db_host}\n"
+                    f"   DB_PORT={db_port}\n"
+                    f"   DB_USER={db_user}\n"
+                    f"   DB_PASSWORD=your_database_password_here\n"
+                    f"   DB_NAME={db_name}\n"
+                    "\n"
+                    "Alternatively, you can use a connection string:\n"
+                    "   DATABASE_URL=postgresql://postgres:password@host:port/database\n"
+                )
+                raise ValueError(error_msg)
+            
+            # Try connection based on port
+            if use_pooler:
+                # Pooler connection: use pooler host, not db host
+                pooler_host_explicit = os.getenv("DB_HOST", "")
+                if ".pooler.supabase.com" in pooler_host_explicit:
+                    # User explicitly set pooler host
+                    db_host = pooler_host_explicit
+                    logger.info("Using explicit pooler host from DB_HOST", host=db_host)
+                    try:
+                        self._pg_conn = psycopg2.connect(
+                            host=db_host,
+                            port=db_port,
+                            user=db_user,
+                            password=db_password,
+                            database=db_name,
+                            connect_timeout=10,
+                            sslmode='require'
+                        )
+                        logger.info("PostgreSQL connection established via pooler", host=db_host, port=db_port, user=db_user)
+                        return self._pg_conn
+                    except Exception as e:
+                        error_str = str(e)
+                        logger.warning("Explicit pooler host failed, trying other regions", error=error_str, host=db_host)
+                
+                # Try multiple pooler regions
+                if not project_ref:
+                    raise ValueError(
+                        "Cannot use pooler (port 6543) without project_ref. "
+                        "Set NEXT_PUBLIC_SUPABASE_URL or ensure DB_HOST contains project reference."
+                    )
+                
+                pooler_regions = [
+                    "aws-0-us-east-1",  # US East
+                    "aws-0-us-west-1",  # US West
+                    "aws-0-eu-west-1",   # EU West
+                    "aws-0-ap-south-1", # Asia Pacific
+                ]
+                
+                for region in pooler_regions:
+                    pooler_host = f"{region}.pooler.supabase.com"
+                    try:
+                        logger.info("Trying pooler connection", host=pooler_host, port=db_port, user=db_user)
+                        self._pg_conn = psycopg2.connect(
+                            host=pooler_host,
+                            port=db_port,
+                            user=db_user,
+                            password=db_password,
+                            database=db_name,
+                            connect_timeout=10,
+                            sslmode='require'
+                        )
+                        logger.info("PostgreSQL connection established via pooler", host=pooler_host, port=db_port, user=db_user)
+                        return self._pg_conn
+                    except Exception as pooler_error:
+                        logger.debug("Pooler connection failed for region", region=region, error=str(pooler_error))
+                        continue
+                
+                # All pooler attempts failed
+                error_str = f"All pooler connection attempts failed for project {project_ref}"
+                logger.error("All pooler connection attempts failed", project_ref=project_ref)
+            else:
+                # Direct connection (port 5432)
+                try:
+                    # Supabase requires SSL connections
+                    self._pg_conn = psycopg2.connect(
+                        host=db_host,
+                        port=db_port,
+                        user=db_user,
+                        password=db_password,
+                        database=db_name,
+                                connect_timeout=10,
+                                sslmode='require'  # Supabase requires SSL
+                            )
+                    logger.info("PostgreSQL connection established", host=db_host, port=db_port, user=db_user, database=db_name)
+                except psycopg2.OperationalError as e:
+                    error_str = str(e)
+                    logger.warning("Direct connection failed, trying connection pooler as fallback", error=error_str, host=db_host, port=db_port)
+                    
+                    # If direct connection failed and we have project_ref, try pooler as fallback
+                    if project_ref:
+                        # Common pooler regions to try
+                        pooler_regions = [
+                            "aws-0-us-east-1",  # US East
+                            "aws-0-us-west-1",  # US West
+                            "aws-0-eu-west-1",   # EU West
+                            "aws-0-ap-south-1", # Asia Pacific
+                        ]
+                        
+                        pooler_port = 6543
+                        pooler_user = f"postgres.{project_ref}"  # Pooler requires this format
+                        
+                        for region in pooler_regions:
+                            pooler_host = f"{region}.pooler.supabase.com"
+                            try:
+                                logger.info("Trying pooler connection", host=pooler_host, port=pooler_port, user=pooler_user)
+                                self._pg_conn = psycopg2.connect(
+                                    host=pooler_host,
+                                    port=pooler_port,
+                                    user=pooler_user,
+                                    password=db_password,
+                                    database=db_name,
+                                    connect_timeout=10,
+                                    sslmode='require'
+                                )
+                                logger.info("PostgreSQL connection established via pooler", host=pooler_host, port=pooler_port, user=pooler_user)
+                                return self._pg_conn
+                            except Exception as pooler_error:
+                                logger.debug("Pooler connection failed for region", region=region, error=str(pooler_error))
+                                continue
+                        
+                        logger.error("All pooler connection attempts failed", project_ref=project_ref)
+                    
+                    # If we get here, all connection attempts failed
+                    if "password authentication failed" in error_str.lower() or "no such user" in error_str.lower():
+                        helpful_msg = (
+                            f"Database connection failed.\n"
+                            f"\n"
+                            f"Connection details:\n"
+                            f"  Host: {db_host}\n"
+                            f"  Port: {db_port}\n"
+                            f"  User: {db_user}\n"
+                            f"  Database: {db_name}\n"
+                            f"\n"
+                            f"To fix:\n"
+                            f"1. Verify DB_PASSWORD in your .env file matches your Supabase database password\n"
+                            f"2. Get/reset password from Supabase Dashboard → Settings → Database\n"
+                            f"3. For pooler (port 6543), user must be 'postgres.<project-ref>'\n"
+                            f"4. Check your Supabase project region and use the correct pooler host\n"
+                            f"\n"
+                            f"Current error: {error_str}"
+                        )
+                        logger.error("Database connection failed", error=helpful_msg)
+                        raise ValueError(helpful_msg) from e
+                    else:
+                        raise
         
         return self._pg_conn
     
@@ -98,7 +295,9 @@ class SQLService:
         
         # Verify query includes organization_id filter
         # This is a basic check - the LLM should be instructed to include it
-        if "organization_id" not in sql_upper:
+        # Check for organization_id in WHERE clause or JOIN condition
+        has_org_filter = "ORGANIZATION_ID" in sql_upper
+        if not has_org_filter:
             logger.warning("SQL query may not include organization_id filter", sql=sql[:200])
         
         return True, ""
@@ -129,10 +328,74 @@ class SQLService:
         if not organization_id:
             raise ValueError("organization_id is required in scope")
         
+        # Validate organization_id is a valid UUID format
+        import re
+        uuid_pattern = re.compile(
+            r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$',
+            re.IGNORECASE
+        )
+        if not uuid_pattern.match(str(organization_id)):
+            raise ValueError(
+                f"organization_id must be a valid UUID format, got: {organization_id}. "
+                f"Example: 'cedbb951-4b9f-440a-96ad-0373fe059a1b'"
+            )
+        
+        # Extract experiment_ids from entities if present
+        experiment_ids_from_entities = []
+        if entities and isinstance(entities, dict):
+            # Check for experiment_ids (plural) or experiment_id (singular)
+            if "experiment_ids" in entities and isinstance(entities["experiment_ids"], list):
+                experiment_ids_from_entities = entities["experiment_ids"]
+            elif "experiment_id" in entities:
+                exp_id = entities["experiment_id"]
+                if isinstance(exp_id, list):
+                    experiment_ids_from_entities = exp_id
+                elif exp_id:
+                    experiment_ids_from_entities = [exp_id]
+        
+        # Use experiment_id from entities if not in scope
+        if not experiment_id and experiment_ids_from_entities:
+            experiment_id = experiment_ids_from_entities[0]  # Use first one
+        
         # Build prompt for LLM
         entities_text = ""
         if entities:
             entities_text = "\n".join([f"- {k}: {v}" for k, v in entities.items()])
+        
+        # Add explicit note about experiment IDs if found
+        experiment_id_note = ""
+        if experiment_ids_from_entities:
+            experiment_id_note = f"\n\nIMPORTANT: The query mentions specific experiment ID(s): {experiment_ids_from_entities}\nYou MUST filter by these experiment IDs in your WHERE clause.\nWhen filtering by specific experiment_id, use: (p.organization_id = '{organization_id}'::uuid OR p.organization_id IS NULL) to allow experiments in projects without organization_id."
+        
+        # Check if querying by specific project_id
+        project_id_note = ""
+        if project_id or (entities and isinstance(entities, dict) and ("project_id" in entities or "project_ids" in entities)):
+            project_id_note = f"\n\nIMPORTANT: The query mentions specific project ID(s).\nWhen filtering by specific project_id, use: (organization_id = '{organization_id}'::uuid OR organization_id IS NULL) to allow projects without organization_id."
+        
+        # Check if querying by experiment names
+        experiment_names_note = ""
+        if entities and isinstance(entities, dict):
+            experiment_names = entities.get("experiment_names", [])
+            if experiment_names and isinstance(experiment_names, list) and len(experiment_names) > 0:
+                names_list = ", ".join([f"'{name}'" for name in experiment_names[:3]])
+                experiment_names_note = f"\n\nIMPORTANT: The query mentions experiment name(s): {names_list}\nYou MUST filter by experiment name using flexible matching that handles spaces, underscores, and case variations.\n\nFor each experiment name, create a pattern that matches both spaces and underscores:\n- Use: REPLACE(LOWER(e.name), '_', ' ') ILIKE '%' || REPLACE(LOWER('<experiment_name>'), '_', ' ') || '%'\n- OR use multiple ILIKE conditions: (e.name ILIKE '%<experiment_name>%' OR e.name ILIKE '%<experiment_name_with_underscores>%')\n\nExample (handles 'Vaccine production' matching 'Vaccine_Production'):\n  SELECT e.* FROM experiments e\n  JOIN projects p ON e.project_id = p.id\n  WHERE (p.organization_id = '{organization_id}'::uuid OR p.organization_id IS NULL)\n    AND (REPLACE(LOWER(e.name), '_', ' ') ILIKE '%' || REPLACE(LOWER('<experiment_name>'), '_', ' ') || '%'\n         OR e.name ILIKE '%<experiment_name>%')"
+        
+        # Check if querying by project names
+        project_names_note = ""
+        if entities and isinstance(entities, dict):
+            project_names = entities.get("project_names", [])
+            if project_names and isinstance(project_names, list) and len(project_names) > 0:
+                names_list = ", ".join([f"'{name}'" for name in project_names[:3]])
+                project_names_note = f"\n\nIMPORTANT: The query mentions project name(s): {names_list}\nYou MUST filter by project name using flexible matching that handles spaces, underscores, and case variations.\n\nFor each project name, create a pattern that matches both spaces and underscores:\n- Use: REPLACE(LOWER(p.name), '_', ' ') ILIKE '%' || REPLACE(LOWER('<project_name>'), '_', ' ') || '%'\n- OR use multiple ILIKE conditions: (p.name ILIKE '%<project_name>%' OR p.name ILIKE '%<project_name_with_underscores>%')\n\nExample for querying projects table directly (handles 'Vaccine production' matching 'Vaccine_Production'):\n  SELECT * FROM projects\n  WHERE (REPLACE(LOWER(name), '_', ' ') ILIKE '%' || REPLACE(LOWER('<project_name>'), '_', ' ') || '%'\n         OR name ILIKE '%<project_name>%')\n    AND (organization_id = '{organization_id}'::uuid OR organization_id IS NULL)\n\nExample for querying through experiments:\n  SELECT e.* FROM experiments e\n  JOIN projects p ON e.project_id = p.id\n  WHERE (p.organization_id = '{organization_id}'::uuid OR p.organization_id IS NULL)\n    AND (REPLACE(LOWER(p.name), '_', ' ') ILIKE '%' || REPLACE(LOWER('<project_name>'), '_', ' ') || '%'\n         OR p.name ILIKE '%<project_name>%')"
+        
+        # Check if querying by person names
+        person_names_note = ""
+        if entities and isinstance(entities, dict):
+            person_names = entities.get("person_names", [])
+            if person_names and isinstance(person_names, list) and len(person_names) > 0:
+                # Format person names for the prompt
+                names_list = ", ".join([f"'{name}'" for name in person_names[:3]])  # Limit to first 3
+                person_names_note = f"\n\nIMPORTANT: The query mentions person name(s): {names_list}\nYou MUST join with the profiles table to find experiments/projects by person name.\n\nFor queries about experiments:\n- Join: JOIN profiles pr ON (e.created_by = pr.id OR e.assigned_to = pr.id)\n- Filter by name using ILIKE for case-insensitive matching:\n  * If name has space (e.g., 'John Doe'): Split and match both first_name and last_name, OR match full name\n  * If single word: Match against first_name OR last_name\n  * Use: (pr.first_name ILIKE '%<first_part>%' AND pr.last_name ILIKE '%<second_part>%') OR (CONCAT(pr.first_name, ' ', pr.last_name) ILIKE '%<full_name>%')\n\nExample for 'John Doe':\n  SELECT e.* FROM experiments e\n  JOIN projects p ON e.project_id = p.id\n  JOIN profiles pr ON e.created_by = pr.id\n  WHERE (p.organization_id = '{organization_id}'::uuid OR p.organization_id IS NULL)\n    AND ((pr.first_name ILIKE '%John%' AND pr.last_name ILIKE '%Doe%')\n         OR CONCAT(pr.first_name, ' ', pr.last_name) ILIKE '%John Doe%')"
         
         prompt = f"""Generate a PostgreSQL SELECT query to answer the following question about a lab management system.
 
@@ -146,32 +409,92 @@ Access Scope:
 - organization_id: {organization_id} (REQUIRED - must filter by this)
 {f"- project_id: {project_id}" if project_id else ""}
 {f"- experiment_id: {experiment_id}" if experiment_id else ""}
+{experiment_id_note}
+{experiment_names_note}
+{project_id_note}
+{project_names_note}
+{person_names_note}
 
 Database Schema:
 {DB_SCHEMA}
 
 CRITICAL REQUIREMENTS:
 1. Query MUST be a SELECT statement only (read-only)
-2. Query MUST filter by organization_id = '{organization_id}' for security
+2. For security, filter by organization_id when available:
+   - If querying by specific project_id or experiment_id (from entities/scope), you have two options:
+     a) Use: (p.organization_id = '{organization_id}'::uuid OR p.organization_id IS NULL) - allows NULL org
+     b) OR skip organization_id filter entirely when querying by specific ID - user explicitly requested this resource
+   - For general queries (no specific IDs), use: p.organization_id = '{organization_id}'::uuid
+   - When querying projects table directly by id, you can skip organization_id filter if the query is for a specific project_id
 3. If querying experiments, samples, or lab_notes, join through projects to get organization_id
 4. Use proper JOINs to access related tables
 5. Return only the columns needed to answer the query
 6. Use appropriate WHERE clauses based on entities and scope
-7. Use proper PostgreSQL syntax
+7. Use proper PostgreSQL syntax - organization_id is UUID type, cast string literals with ::uuid
 8. Do NOT include any DROP, DELETE, UPDATE, INSERT, ALTER, or other write operations
 9. Do NOT include comments in the SQL
 
 Example JOIN patterns:
-- To get experiments for an organization: 
+- To get a specific experiment by ID (allows NULL organization_id):
   SELECT e.* FROM experiments e 
   JOIN projects p ON e.project_id = p.id 
-  WHERE p.organization_id = '{organization_id}'
+  WHERE e.id = '<experiment_id>'::uuid
+    AND (p.organization_id = '{organization_id}'::uuid OR p.organization_id IS NULL)
+  
+- To get experiments for an organization (general query):
+  SELECT e.* FROM experiments e 
+  JOIN projects p ON e.project_id = p.id 
+  WHERE p.organization_id = '{organization_id}'::uuid
+  
+- To get a specific project by ID (when project_id is explicitly provided, you can skip organization_id filter):
+  SELECT * FROM projects
+  WHERE id = '<project_id>'::uuid
+  
+  OR if you want to be more restrictive:
+  SELECT * FROM projects
+  WHERE id = '<project_id>'::uuid
+    AND (organization_id = '{organization_id}'::uuid OR organization_id IS NULL)
   
 - To get samples for an organization:
   SELECT s.* FROM samples s
   JOIN experiments e ON s.experiment_id = e.id
   JOIN projects p ON e.project_id = p.id
-  WHERE p.organization_id = '{organization_id}'
+  WHERE p.organization_id = '{organization_id}'::uuid
+
+- To get experiments created by a person (by name):
+  SELECT e.* FROM experiments e
+  JOIN projects p ON e.project_id = p.id
+  JOIN profiles pr ON e.created_by = pr.id
+  WHERE (p.organization_id = '{organization_id}'::uuid OR p.organization_id IS NULL)
+    AND (pr.first_name ILIKE '%<first_name>%' OR pr.last_name ILIKE '%<last_name>%' 
+         OR CONCAT(pr.first_name, ' ', pr.last_name) ILIKE '%<full_name>%')
+
+- To get experiments assigned to a person (by name):
+  SELECT e.* FROM experiments e
+  JOIN projects p ON e.project_id = p.id
+  JOIN profiles pr ON e.assigned_to = pr.id
+  WHERE (p.organization_id = '{organization_id}'::uuid OR p.organization_id IS NULL)
+    AND (pr.first_name ILIKE '%<first_name>%' OR pr.last_name ILIKE '%<last_name>%'
+         OR CONCAT(pr.first_name, ' ', pr.last_name) ILIKE '%<full_name>%')
+
+- To get experiment by name (handles spaces, underscores, case variations):
+  SELECT e.* FROM experiments e
+  JOIN projects p ON e.project_id = p.id
+  WHERE (p.organization_id = '{organization_id}'::uuid OR p.organization_id IS NULL)
+    AND (REPLACE(LOWER(e.name), '_', ' ') ILIKE '%' || REPLACE(LOWER('<experiment_name>'), '_', ' ') || '%'
+         OR e.name ILIKE '%<experiment_name>%')
+
+- To get project by name (handles spaces, underscores, case variations):
+  SELECT * FROM projects
+  WHERE (REPLACE(LOWER(name), '_', ' ') ILIKE '%' || REPLACE(LOWER('<project_name>'), '_', ' ') || '%'
+         OR name ILIKE '%<project_name>%')
+    AND (organization_id = '{organization_id}'::uuid OR organization_id IS NULL)
+
+- To get project status by name (handles spaces, underscores, case variations):
+  SELECT status FROM projects
+  WHERE (REPLACE(LOWER(name), '_', ' ') ILIKE '%' || REPLACE(LOWER('<project_name>'), '_', ' ') || '%'
+         OR name ILIKE '%<project_name>%')
+    AND (organization_id = '{organization_id}'::uuid OR organization_id IS NULL)
 
 Return ONLY the SQL query, no explanations, no markdown, just the SQL statement."""
 
@@ -194,7 +517,7 @@ Return ONLY the SQL query, no explanations, no markdown, just the SQL statement.
             if sql.endswith(';'):
                 sql = sql[:-1]
             
-            logger.info("SQL generated", query_length=len(sql), sql_preview=sql[:100])
+            logger.info("SQL generated", query_length=len(sql), sql_preview=sql[:100], sql_full=sql)
             
             return sql
             
@@ -246,7 +569,8 @@ Return ONLY the SQL query, no explanations, no markdown, just the SQL statement.
             logger.info(
                 "SQL executed successfully",
                 row_count=row_count,
-                execution_time_ms=round(execution_time_ms, 2)
+                execution_time_ms=round(execution_time_ms, 2),
+                sql_full=sql
             )
             
             return {
@@ -329,9 +653,12 @@ Return ONLY the SQL query, no explanations, no markdown, just the SQL statement.
     
     def __del__(self):
         """Close PostgreSQL connection on cleanup."""
-        if self._pg_conn and not self._pg_conn.closed:
-            self._pg_conn.close()
-            logger.info("PostgreSQL connection closed")
+        try:
+            if hasattr(self, '_pg_conn') and self._pg_conn and not self._pg_conn.closed:
+                self._pg_conn.close()
+        except Exception:
+            # Ignore errors during cleanup (Python may be shutting down)
+            pass
     
     def execute_template(
         self,

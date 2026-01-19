@@ -1,4 +1,5 @@
 """RAG retrieval node."""
+import os
 import time
 import structlog
 from typing import List, Dict, Any
@@ -6,8 +7,14 @@ from agents.graph.state import AgentState
 from services.rag import RAGService
 from services.embedder import EmbeddingService
 from services.trace_service import TraceService
+from agents.services.thinking_logger import get_thinking_logger
 
 logger = structlog.get_logger()
+
+# Configurable similarity threshold (default: 0.30 for better matching)
+# Can be overridden via RAG_SIMILARITY_THRESHOLD environment variable
+# Lowered from 0.75 to 0.30 based on actual similarity scores in the database
+DEFAULT_RAG_THRESHOLD = float(os.getenv("RAG_SIMILARITY_THRESHOLD", "0.30"))
 
 # Singleton services
 _rag_service: RAGService = None
@@ -100,10 +107,25 @@ def rag_node(state: AgentState) -> AgentState:
         query_embedding = embedding_service.embed_text(normalized.normalized_query)
         
         # Extract scope
-        scope = request["scope"]
-        organization_id = scope.get("organization_id")
-        project_id = scope.get("project_id")
-        experiment_id = scope.get("experiment_id")
+        scope = request.get("scope", {}) if isinstance(request, dict) else getattr(request, "scope", {})
+        if isinstance(scope, dict):
+            organization_id = scope.get("organization_id")
+            project_id = scope.get("project_id")
+            experiment_id = scope.get("experiment_id")
+        else:
+            organization_id = getattr(scope, "organization_id", None)
+            project_id = getattr(scope, "project_id", None)
+            experiment_id = getattr(scope, "experiment_id", None)
+        
+        # Get threshold from env or use default
+        match_threshold = float(os.getenv("RAG_SIMILARITY_THRESHOLD", str(DEFAULT_RAG_THRESHOLD)))
+        
+        logger.info(
+            "RAG search threshold",
+            run_id=run_id,
+            threshold=match_threshold,
+            source="env" if os.getenv("RAG_SIMILARITY_THRESHOLD") else "default"
+        )
         
         # Search chunks
         chunks = rag_service.search_chunks(
@@ -111,7 +133,7 @@ def rag_node(state: AgentState) -> AgentState:
             organization_id=organization_id,
             project_id=project_id,
             experiment_id=experiment_id,
-            match_threshold=0.75,
+            match_threshold=match_threshold,
             match_count=6
         )
         
@@ -165,6 +187,25 @@ def rag_node(state: AgentState) -> AgentState:
         
         state["rag_result"] = rag_result
         
+        # Log thinking: RAG retrieval reasoning
+        thinking_logger = get_thinking_logger()
+        if run_id:
+            thinking_logger.log_analysis(
+                run_id=run_id,
+                node_name="rag",
+                analysis=f"Retrieved {len(final_chunks)} semantic chunks",
+                data_summary={
+                    "chunks_found": len(final_chunks),
+                    "avg_similarity": round(avg_similarity, 3),
+                    "deduplicated": len(final_chunks) < len(chunks)
+                },
+                insights=[
+                    f"Average similarity: {avg_similarity:.3f}",
+                    f"Deduplicated by experiment_id",
+                    f"Top {len(final_chunks)} chunks selected"
+                ]
+            )
+        
         # Log output event (safe data only - no full chunk content)
         if run_id:
             try:
@@ -184,7 +225,8 @@ def rag_node(state: AgentState) -> AgentState:
                 pass
         
         # Add to trace if debug enabled
-        if request.get("options", {}).get("debug"):
+        options = request.get("options", {}) if isinstance(request, dict) else getattr(request, "options", {}) if hasattr(request, "options") else {}
+        if (isinstance(options, dict) and options.get("debug")) or (hasattr(options, "debug") and getattr(options, "debug", False)):
             state["trace"].append({
                 "node": "rag",
                 "input": {"normalized_query": normalized.normalized_query[:200]},

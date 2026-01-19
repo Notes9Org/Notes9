@@ -122,6 +122,17 @@ class RAGService:
                 parsed_embedding = parse_embedding(embedding)
                 
                 if parsed_embedding is None:
+                    logger.debug("Skipping chunk with unparseable embedding", chunk_id=chunk.get("id"))
+                    continue
+                
+                # Ensure dimensions match
+                if len(parsed_embedding) != len(query_embedding):
+                    logger.warning(
+                        "Embedding dimension mismatch",
+                        chunk_id=chunk.get("id"),
+                        chunk_dim=len(parsed_embedding),
+                        query_dim=len(query_embedding)
+                    )
                     continue
                 
                 chunk_vec = np.array(parsed_embedding, dtype=np.float32)
@@ -136,6 +147,16 @@ class RAGService:
                 else:
                     similarity = dot_product / (norm_query * norm_chunk)
                 
+                # Log all similarities for debugging (not just above threshold)
+                if len(results) < 5:  # Log first 5 for debugging
+                    logger.debug(
+                        "Similarity calculated",
+                        chunk_id=chunk.get("id")[:8],
+                        similarity=round(similarity, 4),
+                        threshold=match_threshold,
+                        passes=similarity >= match_threshold
+                    )
+                
                 # Filter by threshold
                 if similarity >= match_threshold:
                     chunk["similarity"] = float(similarity)
@@ -144,6 +165,32 @@ class RAGService:
             # Sort by similarity (descending) and limit
             results.sort(key=lambda x: x.get("similarity", 0), reverse=True)
             results = results[:match_count]
+            
+            # Debug: Log top similarities even if below threshold
+            if len(chunks) > 0 and len(results) == 0:
+                # Calculate similarities for all chunks to see what we're missing
+                all_similarities = []
+                for chunk in chunks[:10]:  # Check first 10
+                    embedding = chunk.get("embedding")
+                    parsed_embedding = parse_embedding(embedding)
+                    if parsed_embedding and len(parsed_embedding) == len(query_embedding):
+                        chunk_vec = np.array(parsed_embedding, dtype=np.float32)
+                        dot_product = np.dot(query_vec, chunk_vec)
+                        norm_query = np.linalg.norm(query_vec)
+                        norm_chunk = np.linalg.norm(chunk_vec)
+                        if norm_query > 0 and norm_chunk > 0:
+                            sim = dot_product / (norm_query * norm_chunk)
+                            all_similarities.append(sim)
+                
+                if all_similarities:
+                    max_sim = max(all_similarities)
+                    logger.warning(
+                        "No results above threshold",
+                        match_threshold=match_threshold,
+                        max_similarity_found=round(max_sim, 4),
+                        chunks_checked=len(chunks),
+                        suggestion=f"Consider lowering threshold to {round(max_sim + 0.05, 2)}"
+                    )
             
             logger.info(
                 "Vector search completed",

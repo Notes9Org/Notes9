@@ -6,6 +6,7 @@ from agents.graph.state import AgentState
 from agents.services.llm_client import LLMClient, LLMError
 from agents.graph.nodes.normalize import get_llm_client
 from services.trace_service import TraceService
+from agents.services.thinking_logger import get_thinking_logger
 
 logger = structlog.get_logger()
 
@@ -29,7 +30,9 @@ def summarizer_node(state: AgentState) -> AgentState:
     """
     start_time = time.time()
     sql_result = state.get("sql_result")
-    rag_result = state.get("rag_result", [])
+    rag_result = state.get("rag_result")  # Can be None if RAG was skipped
+    if rag_result is None:
+        rag_result = []  # Default to empty list if None
     normalized = state.get("normalized_query")
     request = state["request"]
     run_id = state.get("run_id")
@@ -62,24 +65,31 @@ def summarizer_node(state: AgentState) -> AgentState:
         
         # Build context from SQL results
         sql_context = ""
-        if sql_result and sql_result.get("data"):
-            sql_context = f"SQL Facts:\n{_format_sql_result(sql_result)}"
+        if sql_result and isinstance(sql_result, dict):
+            if sql_result.get("data") and not sql_result.get("error"):
+                sql_context = f"SQL Facts:\n{_format_sql_result(sql_result)}"
+            elif sql_result.get("error"):
+                sql_context = f"SQL Facts: Error occurred - {sql_result.get('error', 'Unknown error')}"
+            else:
+                sql_context = "SQL Facts: No data returned"
         else:
             sql_context = "SQL Facts: None available"
         
         # Build context from RAG chunks
         rag_context = ""
-        if rag_result:
+        if rag_result and isinstance(rag_result, list) and len(rag_result) > 0:
             rag_context = "RAG Evidence:\n"
             for i, chunk in enumerate(rag_result, 1):
-                rag_context += f"\n[{i}] Source: {chunk.get('source_type')} (ID: {chunk.get('source_id')})\n"
-                rag_context += f"Similarity: {chunk.get('similarity', 0.0):.3f}\n"
-                rag_context += f"Content: {chunk.get('content', '')}\n"
+                if isinstance(chunk, dict):
+                    rag_context += f"\n[{i}] Source: {chunk.get('source_type', 'unknown')} (ID: {chunk.get('source_id', 'unknown')})\n"
+                    rag_context += f"Similarity: {chunk.get('similarity', 0.0):.3f}\n"
+                    rag_context += f"Content: {chunk.get('content', '')[:500]}\n"
         else:
             rag_context = "RAG Evidence: None available"
         
         # Build prompt
-        original_query = normalized.normalized_query if normalized else request["query"]
+        query_text = request.get("query", "") if isinstance(request, dict) else getattr(request, "query", "")
+        original_query = normalized.normalized_query if normalized else query_text
         
         prompt = f"""Synthesize a scientific answer from the following data for a lab management system.
 
@@ -138,14 +148,35 @@ Citations must reference actual sources from the RAG evidence or SQL results."""
         }
         
         # Call LLM
-        result = llm_client.complete_json(prompt, schema, temperature=0.3)
+        try:
+            result = llm_client.complete_json(prompt, schema, temperature=0.3)
+        except Exception as e:
+            logger.error("Summarizer LLM call failed", error=str(e), run_id=run_id)
+            # Return error summary
+            state["summary"] = {
+                "answer": f"Error synthesizing answer: {str(e)}",
+                "citations": []
+            }
+            return state
+        
+        if not result or not isinstance(result, dict):
+            logger.error("Invalid LLM result in summarizer", run_id=run_id)
+            state["summary"] = {
+                "answer": "Error: Invalid response from synthesis",
+                "citations": []
+            }
+            return state
         
         # Validate citations map to actual sources
         validated_citations = []
-        rag_source_map = {
-            (chunk.get("source_type"), chunk.get("source_id")): chunk
-            for chunk in rag_result
-        }
+        rag_source_map = {}
+        if rag_result and isinstance(rag_result, list) and len(rag_result) > 0:
+            for chunk in rag_result:
+                if isinstance(chunk, dict):
+                    source_type = chunk.get("source_type")
+                    source_id = chunk.get("source_id")
+                    if source_type and source_id:
+                        rag_source_map[(source_type, source_id)] = chunk
         
         for citation in result.get("citations", []):
             source_key = (citation.get("source_type"), citation.get("source_id"))
@@ -164,6 +195,26 @@ Citations must reference actual sources from the RAG evidence or SQL results."""
             "answer": result.get("answer", ""),
             "citations": validated_citations
         }
+        
+        # Log thinking: synthesis reasoning
+        thinking_logger = get_thinking_logger()
+        if run_id:
+            thinking_logger.log_analysis(
+                run_id=run_id,
+                node_name="summarizer",
+                analysis=f"Synthesized answer from {len(validated_citations)} citations",
+                data_summary={
+                    "sql_rows": sql_result.get("row_count", 0) if sql_result else 0,
+                    "rag_chunks": len(rag_result),
+                    "answer_length": len(summary["answer"]),
+                    "citations_count": len(validated_citations)
+                },
+                insights=[
+                    f"Combined SQL facts with RAG evidence",
+                    f"Validated {len(validated_citations)} citations",
+                    f"Generated {len(summary['answer'])} character answer"
+                ]
+            )
         
         latency_ms = int((time.time() - start_time) * 1000)
         
@@ -194,7 +245,8 @@ Citations must reference actual sources from the RAG evidence or SQL results."""
                 pass
         
         # Add to trace if debug enabled
-        if request.get("options", {}).get("debug"):
+        options = request.get("options", {}) if isinstance(request, dict) else getattr(request, "options", {}) if hasattr(request, "options") else {}
+        if (isinstance(options, dict) and options.get("debug")) or (hasattr(options, "debug") and getattr(options, "debug", False)):
             state["trace"].append({
                 "node": "summarizer",
                 "input": {

@@ -1,4 +1,10 @@
 """FastAPI application for Notes9 Agent Service."""
+# Patch websockets before any supabase imports
+try:
+    from services.websockets_patch import *  # noqa: F401, F403
+except ImportError:
+    pass  # Patch not critical
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 import os

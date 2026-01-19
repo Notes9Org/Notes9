@@ -1,5 +1,12 @@
 import os
 from typing import Optional, List, Dict, Any
+
+# Patch websockets before importing supabase
+try:
+    from services.websockets_patch import *  # noqa: F401, F403
+except ImportError:
+    pass  # Patch not critical if websockets not installed
+
 from supabase import create_client, Client
 from dotenv import load_dotenv
 import structlog
@@ -35,6 +42,72 @@ class SupabaseService:
         except Exception as e:
             logger.error("Error getting pending jobs", error=str(e))
             return []
+    
+    def get_failed_jobs(self, limit: int = 100, max_retries: Optional[int] = None) -> List[Dict[str, Any]]:
+        """Get failed chunk jobs from the database"""
+        try:
+            query = self.client.table("chunk_jobs")\
+                .select("*")\
+                .eq("status", "failed")\
+                .order("created_at", desc=False)
+            
+            if max_retries is not None:
+                query = query.lte("retry_count", max_retries)
+            
+            response = query.limit(limit).execute()
+            
+            return response.data if response.data else []
+        except Exception as e:
+            logger.error("Error getting failed jobs", error=str(e))
+            return []
+    
+    def reset_jobs_to_pending(self, job_ids: List[str]) -> int:
+        """Reset failed jobs to pending status for retry. Returns number of jobs reset."""
+        if not job_ids:
+            return 0
+        
+        try:
+            response = self.client.table("chunk_jobs")\
+                .update({
+                    "status": "pending",
+                    "error_message": None,
+                    "processed_at": None
+                })\
+                .in_("id", job_ids)\
+                .eq("status", "failed")\
+                .execute()
+            
+            count = len(response.data) if response.data else 0
+            logger.info("Jobs reset to pending", count=count, job_ids=job_ids)
+            return count
+        except Exception as e:
+            logger.error("Error resetting jobs to pending", error=str(e), job_ids=job_ids)
+            return 0
+    
+    def reset_all_failed_jobs_to_pending(self, max_retries: Optional[int] = None) -> int:
+        """Reset all failed jobs to pending status. Returns number of jobs reset."""
+        try:
+            query = self.client.table("chunk_jobs")\
+                .update({
+                    "status": "pending",
+                    "error_message": None,
+                    "processed_at": None
+                })\
+                .eq("status", "failed")
+            
+            if max_retries is not None:
+                query = query.lte("retry_count", max_retries)
+            
+            # Note: Supabase doesn't return count directly, so we need to query first
+            failed_jobs = self.get_failed_jobs(limit=10000, max_retries=max_retries)
+            if not failed_jobs:
+                return 0
+            
+            job_ids = [job["id"] for job in failed_jobs]
+            return self.reset_jobs_to_pending(job_ids)
+        except Exception as e:
+            logger.error("Error resetting all failed jobs", error=str(e))
+            return 0
     
     def update_job_status(self, job_id: str, status: str, error_message: Optional[str] = None) -> bool:
         """Update the status of a chunk job"""

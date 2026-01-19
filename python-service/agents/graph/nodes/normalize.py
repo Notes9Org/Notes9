@@ -6,6 +6,7 @@ from agents.contracts.normalized import NormalizedQuery
 from agents.services.llm_client import LLMClient, LLMError
 from services.trace_service import TraceService
 from agents.graph.nodes.normalize_validator import validate_normalized_output
+from agents.services.thinking_logger import get_thinking_logger
 
 logger = structlog.get_logger()
 
@@ -41,28 +42,36 @@ def normalize_node(state: AgentState) -> AgentState:
     run_id = state.get("run_id")
     trace_service = get_trace_service()
     
+    # Handle both dict and object access for request
+    query_text = request.get("query", "") if isinstance(request, dict) else getattr(request, "query", "")
+    user_id = request.get("user_id", "") if isinstance(request, dict) else getattr(request, "user_id", "")
+    history = request.get("history", []) if isinstance(request, dict) else getattr(request, "history", [])
+    scope = request.get("scope", {}) if isinstance(request, dict) else getattr(request, "scope", {})
+    
     logger.info(
         "normalize_node started",
         run_id=run_id,
-        query=request["query"][:100],
-        user_id=request["user_id"],
-        has_history=len(request.get("history", [])) > 0
+        query=query_text[:100],
+        user_id=user_id,
+        has_history=len(history) > 0
     )
     
     # Log input event (enhanced)
     if run_id:
         try:
+            scope_keys = list(scope.keys()) if isinstance(scope, dict) else list(scope.__dict__.keys()) if hasattr(scope, "__dict__") else []
+            scope_dict = scope if isinstance(scope, dict) else scope.__dict__ if hasattr(scope, "__dict__") else {}
             trace_service.log_event(
                 run_id=run_id,
                 node_name="normalize",
                 event_type="input",
                 payload={
-                    "query": request["query"][:200],
-                    "has_history": len(request.get("history", [])) > 0,
-                    "history_length": len(request.get("history", [])),
-                    "scope_keys": list(request.get("scope", {}).keys()),
-                    "has_organization_id": bool(request.get("scope", {}).get("organization_id")),
-                    "has_project_id": bool(request.get("scope", {}).get("project_id"))
+                    "query": query_text[:200],
+                    "has_history": len(history) > 0,
+                    "history_length": len(history),
+                    "scope_keys": scope_keys,
+                    "has_organization_id": bool(scope_dict.get("organization_id") if isinstance(scope_dict, dict) else getattr(scope, "organization_id", None)),
+                    "has_project_id": bool(scope_dict.get("project_id") if isinstance(scope_dict, dict) else getattr(scope, "project_id", None))
                 }
             )
         except Exception:
@@ -71,19 +80,20 @@ def normalize_node(state: AgentState) -> AgentState:
     try:
         # Build prompt
         history_text = ""
-        if request.get("history"):
+        if history:
+            # Handle both dict and object message formats
             history_text = "\n".join([
-                f"{msg['role']}: {msg['content']}"
-                for msg in request["history"][-5:]  # Last 5 messages
+                f"{msg.get('role', getattr(msg, 'role', 'user'))}: {msg.get('content', getattr(msg, 'content', ''))}"
+                for msg in history[-5:]  # Last 5 messages
             ])
         
         scope_text = ", ".join([
-            f"{k}={v}" for k, v in request["scope"].items() if v
+            f"{k}={v}" for k, v in (scope.items() if isinstance(scope, dict) else scope.__dict__.items() if hasattr(scope, "__dict__") else []) if v
         ])
         
         prompt = f"""Normalize the following user query for a scientific lab management system.
 
-User Query: {request['query']}
+User Query: {query_text}
 
 Conversation History:
 {history_text if history_text else 'None'}
@@ -92,17 +102,32 @@ Context (Scope):
 {scope_text if scope_text else 'None'}
 
 Extract and return JSON with:
-1. intent: One of "aggregate" (for counting/statistics), "search" (for semantic search), or "hybrid" (needs both)
+1. intent: One of "aggregate", "search", or "hybrid"
+   - "aggregate": Use for queries that need SQL/database queries:
+     * Counting, statistics, aggregations (e.g., "How many experiments?")
+     * Retrieving specific data points by ID (e.g., "What is the status of experiment X?")
+     * Filtering by structured fields (status, dates, types)
+     * Queries with specific IDs (experiment_id, sample_id, project_id)
+   - "search": Use for semantic/conceptual queries:
+     * "What is attention mechanism?" (conceptual explanation)
+     * "Find notes about PCR" (semantic search)
+     * Questions requiring understanding of content meaning
+   - "hybrid": Use when both SQL and semantic search are needed
 2. normalized_query: Cleaned query text preserving scientific terms
 3. entities: Dict with extracted entities:
    - dates: List of date strings if mentioned
    - numbers: List of numbers if mentioned
-   - experiment_ids: List of experiment IDs if mentioned
+   - experiment_ids: List of experiment IDs (UUIDs) if mentioned
+   - experiment_names: List of experiment names (e.g., "Protein purification", "Vaccine production") if mentioned
+   - project_ids: List of project IDs (UUIDs) if mentioned
+   - project_names: List of project names (e.g., "Vaccine production", "Research Project A") if mentioned
    - sample_types: List of sample types if mentioned
    - statuses: List of statuses if mentioned
+   - person_names: List of person names (first name, last name, or full name like "John Doe") if mentioned
+   - person_ids: List of person/profile IDs (UUIDs) if mentioned
 4. context: Dict with:
-   - requires_aggregation: boolean
-   - requires_semantic_search: boolean
+   - requires_aggregation: boolean (true if needs SQL)
+   - requires_semantic_search: boolean (true if needs RAG)
    - time_range: optional dict with start/end dates
 5. history_summary: Optional string summarizing relevant conversation history (only if needed)
 
@@ -137,16 +162,39 @@ Return ONLY valid JSON matching this structure:
         
         # Retry once if JSON invalid
         llm_retries = 0
+        result = None
         try:
             result = llm_client.complete_json(prompt, schema, temperature=normalize_temperature)
-        except LLMError:
+        except LLMError as e:
             # Retry once
             llm_retries = 1
-            logger.warning("Normalization failed, retrying once")
-            result = llm_client.complete_json(prompt, schema, temperature=normalize_temperature)
+            logger.warning("Normalization failed, retrying once", error=str(e))
+            try:
+                result = llm_client.complete_json(prompt, schema, temperature=normalize_temperature)
+            except LLMError as e2:
+                logger.error("Normalization failed after retry", error=str(e2))
+                raise
+        
+        if not result:
+            raise ValueError("LLM returned empty result")
         
         # Validate and create NormalizedQuery
         normalized = NormalizedQuery(**result)
+        
+        # Log thinking: normalization reasoning
+        thinking_logger = get_thinking_logger()
+        if run_id:
+            thinking_logger.log_reasoning(
+                run_id=run_id,
+                node_name="normalize",
+                reasoning=f"Normalized query from '{query_text}' to '{normalized.normalized_query}'",
+                factors=[
+                    f"Intent detected: {normalized.intent}",
+                    f"Entities extracted: {len(normalized.entities)}",
+                    f"Context flags: aggregation={normalized.context.get('requires_aggregation', False)}, search={normalized.context.get('requires_semantic_search', False)}"
+                ],
+                conclusion=f"Query classified as {normalized.intent} intent with {len(normalized.entities)} entities"
+            )
         
         # Run invariant validation
         is_valid, validation_issues = validate_normalized_output(normalized, request)
@@ -156,6 +204,17 @@ Return ONLY valid JSON matching this structure:
                 run_id=run_id,
                 issues=validation_issues,
                 intent=normalized.intent
+            )
+            
+            # Log validation thinking
+            if run_id:
+                thinking_logger.log_validation(
+                    run_id=run_id,
+                    node_name="normalize",
+                    validation_type="invariant",
+                    criteria=["intent matches context", "query not empty", "entities structure valid"],
+                    result="fail",
+                    issues=validation_issues
             )
         
         latency_ms = int((time.time() - start_time) * 1000)
@@ -211,7 +270,7 @@ Return ONLY valid JSON matching this structure:
                     node_name="normalize",
                     event_type="metric",
                     payload={
-                        "query_length": len(request["query"]),
+                        "query_length": len(query_text),
                         "normalized_length": len(normalized.normalized_query),
                         "entities_extracted": len(normalized.entities),
                         "llm_retries": llm_retries,
@@ -224,10 +283,12 @@ Return ONLY valid JSON matching this structure:
                 pass  # Don't break execution if trace logging fails
         
         # Add to trace if debug enabled
-        if request.get("options", {}).get("debug"):
+        options = request.get("options", {}) if isinstance(request, dict) else getattr(request, "options", {})
+        if (isinstance(options, dict) and options.get("debug")) or (hasattr(options, "debug") and getattr(options, "debug", False)):
+            query_for_trace = request.get("query", "") if isinstance(request, dict) else getattr(request, "query", "")
             state["trace"].append({
                 "node": "normalize",
-                "input": {"query": request["query"][:200]},
+                "input": {"query": query_for_trace[:200]},
                 "output": {
                     "intent": normalized.intent,
                     "normalized_query": normalized.normalized_query[:200]

@@ -5,6 +5,7 @@ import structlog
 from agents.graph.state import AgentState
 from agents.contracts.router import RouterDecision
 from services.trace_service import TraceService
+from agents.services.thinking_logger import get_thinking_logger
 
 logger = structlog.get_logger()
 
@@ -54,7 +55,8 @@ def router_node(state: AgentState) -> AgentState:
         
         return state
     
-    logger.info("Router node started", run_id=run_id, request=request, normalized_query=normalized.normalized_query[:100])
+    normalized_query_text = normalized.normalized_query[:100] if normalized and normalized.normalized_query else "None"
+    logger.info("Router node started", run_id=run_id, normalized_query=normalized_query_text)
 
     # Log input event
     if run_id:
@@ -70,37 +72,54 @@ def router_node(state: AgentState) -> AgentState:
 
     try:
 
+        # Log thinking: routing decision
+        thinking_logger = get_thinking_logger()
+
         if normalized.intent == "aggregate":
             tools = ["sql"]
-            confidence = 0.8
+            confidence = 0.9
             reasoning = "Intent: aggregate (SQL) data analysis."
         elif normalized.intent == "search":
             tools = ["rag"]
-            confidence = 0.6
+            confidence = 0.8
             reasoning = "Intent: search (RAG) semantic retrieval."
         elif normalized.intent == "hybrid":
             tools = ["sql", "rag"]
-            confidence = 0.7
+            confidence = 0.85
             reasoning = "Intent: hybrid (SQL + RAG) comprehensive analysis."
         else:
             # Fallback
             tools = ["rag"]
-            confidence = 0.4
+            confidence = 0.5
             reasoning = f"Fallback: unknown intent: {normalized.intent}."
+        
+        # Log routing decision thinking
+        if run_id:
+            thinking_logger.log_decision(
+                run_id=run_id,
+                node_name="router",
+                decision=f"Route to {', '.join(tools)}",
+                alternatives=["sql", "rag", "hybrid"],
+                rationale=reasoning,
+                confidence=confidence
+            )
 
         constraints = {}
 
-        if normalized.entities.get("dates"):
-            constraints["date_range"] = normalized.entities["dates"]
+        # Extract constraints from entities safely
+        entities = normalized.entities if normalized and isinstance(normalized.entities, dict) else {}
         
-        if normalized.entities.get("statuses"):
-            constraints["status"] = normalized.entities["statuses"]
+        if entities.get("dates"):
+            constraints["date_range"] = entities["dates"]
+        
+        if entities.get("statuses"):
+            constraints["status"] = entities["statuses"]
 
-        if normalized.entities.get("sample_types"):
-            constraints["sample_type"] = normalized.entities["sample_types"]
+        if entities.get("sample_types"):
+            constraints["sample_type"] = entities["sample_types"]
 
-        if normalized.entities.get("time_range"):
-            constraints["time_range"] = normalized.entities["time_range"]
+        if entities.get("time_range"):
+            constraints["time_range"] = entities["time_range"]
 
         decision = RouterDecision(
             tools=tools,
@@ -130,7 +149,9 @@ def router_node(state: AgentState) -> AgentState:
             except Exception:
                 pass
 
-        if request.get("options", {}).get("debug"):
+        # Handle both dict and object access
+        options = request.get("options", {}) if isinstance(request, dict) else getattr(request, "options", {}) if hasattr(request, "options") else {}
+        if (isinstance(options, dict) and options.get("debug")) or (hasattr(options, "debug") and getattr(options, "debug", False)):
             state["trace"].append({
                 "node": "router",
                 "input": {"intent": normalized.intent},

@@ -159,7 +159,7 @@ async def run_agent(request: AgentRequest) -> FinalResponse:
         # Create initial state
         initial_state: AgentState = {
             "run_id": run_id,
-            "request": request.dict(),
+            "request": request.model_dump(),  # Use model_dump() instead of deprecated dict()
             "normalized_query": None,
             "router_decision": None,
             "sql_result": None,

@@ -26,10 +26,17 @@ def should_retry(state: AgentState) -> str:
     judge = state.get("judge_result")
     retry_count = state.get("retry_count", 0)
     request = state.get("request", {})
-    max_retries = request.get("options", {}).get("max_retries", 2)
+    
+    # Handle both dict and object access
+    if isinstance(request, dict):
+        options = request.get("options", {})
+    else:
+        options = getattr(request, "options", {}) if hasattr(request, "options") else {}
+    
+    max_retries = options.get("max_retries", 2) if isinstance(options, dict) else getattr(options, "max_retries", 2)
     
     # If judge passed, go to final
-    if judge and judge.get("verdict") == "pass":
+    if judge and isinstance(judge, dict) and judge.get("verdict") == "pass":
         return "final"
     
     # If max retries reached, go to final

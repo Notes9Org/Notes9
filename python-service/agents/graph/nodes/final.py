@@ -61,16 +61,29 @@ def final_node(state: AgentState) -> AgentState:
         # Determine tool used
         tool_used = "rag"  # Default
         if router:
-            tools = router.tools
-            if "sql" in tools and "rag" in tools:
-                tool_used = "hybrid"
-            elif "sql" in tools:
-                tool_used = "sql"
-            elif "rag" in tools:
-                tool_used = "rag"
+            # Handle both dict and object access
+            if isinstance(router, dict):
+                tools = router.get("tools", [])
+            else:
+                tools = getattr(router, "tools", [])
+            
+            if isinstance(tools, list):
+                if "sql" in tools and "rag" in tools:
+                    tool_used = "hybrid"
+                elif "sql" in tools:
+                    tool_used = "sql"
+                elif "rag" in tools:
+                    tool_used = "rag"
         
         # Handle error cases
         if not summary:
+            logger.warning(
+                "final_node: No summary found in state",
+                run_id=run_id,
+                state_keys=list(state.keys()),
+                retry_count=retry_count,
+                has_judge=judge is not None
+            )
             answer = "Unable to generate answer. Please try rephrasing your query."
             citations = []
             confidence = 0.0
@@ -103,16 +116,31 @@ def final_node(state: AgentState) -> AgentState:
         
         # Build debug trace if enabled
         debug = None
-        if request.get("options", {}).get("debug"):
+        options = request.get("options", {}) if isinstance(request, dict) else getattr(request, "options", {}) if hasattr(request, "options") else {}
+        if (isinstance(options, dict) and options.get("debug")) or (hasattr(options, "debug") and getattr(options, "debug", False)):
+            router_tools = []
+            router_reasoning = None
+            if router:
+                if isinstance(router, dict):
+                    router_tools = router.get("tools", [])
+                    router_reasoning = router.get("reasoning")
+                else:
+                    router_tools = getattr(router, "tools", [])
+                    router_reasoning = getattr(router, "reasoning", None)
+            
+            judge_verdict = None
+            if judge:
+                judge_verdict = judge.get("verdict") if isinstance(judge, dict) else getattr(judge, "verdict", None)
+            
             debug = {
                 "trace": trace,
                 "retry_count": retry_count,
                 "router_decision": {
-                    "tools": router.tools if router else [],
-                    "reasoning": router.reasoning if router else None
-                } if router else None,
-                "judge_verdict": judge.get("verdict") if judge else None,
-                "total_latency_ms": sum(t.get("latency_ms", 0) for t in trace)
+                    "tools": router_tools,
+                    "reasoning": router_reasoning
+                },
+                "judge_verdict": judge_verdict,
+                "total_latency_ms": sum(t.get("latency_ms", 0) if isinstance(t, dict) else 0 for t in trace)
             }
         
         # Create final response

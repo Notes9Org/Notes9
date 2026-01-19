@@ -5,6 +5,7 @@ from typing import Dict
 from agents.graph.state import AgentState
 from agents.graph.nodes.normalize import get_llm_client
 from services.trace_service import TraceService
+from agents.services.thinking_logger import get_thinking_logger
 
 logger = structlog.get_logger()
 
@@ -29,7 +30,9 @@ def judge_node(state: AgentState) -> AgentState:
     start_time = time.time()
     summary = state.get("summary")
     sql_result = state.get("sql_result")
-    rag_result = state.get("rag_result", [])
+    rag_result = state.get("rag_result")  # Can be None if RAG was skipped
+    if rag_result is None:
+        rag_result = []  # Default to empty list if None
     normalized = state.get("normalized_query")
     request = state["request"]
     run_id = state.get("run_id")
@@ -85,20 +88,26 @@ def judge_node(state: AgentState) -> AgentState:
         llm_client = get_llm_client()
         
         # Build context
-        original_query = normalized.normalized_query if normalized else request["query"]
+        query_text = request.get("query", "") if isinstance(request, dict) else getattr(request, "query", "")
+        original_query = normalized.normalized_query if normalized else query_text
         answer = summary.get("answer", "")
         citations = summary.get("citations", [])
         
         sql_facts = ""
-        if sql_result and sql_result.get("data"):
-            sql_facts = _format_sql_result(sql_result)
+        if sql_result and isinstance(sql_result, dict):
+            if sql_result.get("data") and not sql_result.get("error"):
+                sql_facts = _format_sql_result(sql_result)
+            elif sql_result.get("error"):
+                sql_facts = f"Error: {sql_result.get('error', 'Unknown error')}"
+            else:
+                sql_facts = "No data"
         else:
             sql_facts = "None"
         
         rag_evidence = ""
-        if rag_result:
+        if rag_result and isinstance(rag_result, list) and len(rag_result) > 0:
             rag_evidence = "\n".join([
-                f"[{i+1}] {chunk.get('content', '')[:200]}"
+                f"[{i+1}] {chunk.get('content', '')[:200] if isinstance(chunk, dict) else str(chunk)[:200]}"
                 for i, chunk in enumerate(rag_result[:3])
             ])
         else:
@@ -163,7 +172,30 @@ Verdict "fail" if any major issue exists."""
         }
         
         # Call LLM
-        result = llm_client.complete_json(prompt, schema, temperature=0.0)
+        try:
+            result = llm_client.complete_json(prompt, schema, temperature=0.0)
+        except Exception as e:
+            logger.error("Judge LLM call failed", error=str(e), run_id=run_id)
+            # Default to fail on error
+            judge_output = {
+                "verdict": "fail",
+                "confidence": 0.0,
+                "issues": [f"Judge error: {str(e)}"],
+                "suggested_revision": None
+            }
+            state["judge_result"] = judge_output
+            return state
+        
+        if not result or not isinstance(result, dict):
+            logger.error("Invalid LLM result in judge", run_id=run_id)
+            judge_output = {
+                "verdict": "fail",
+                "confidence": 0.0,
+                "issues": ["Invalid judge response"],
+                "suggested_revision": None
+            }
+            state["judge_result"] = judge_output
+            return state
         
         judge_output = {
             "verdict": result.get("verdict", "fail"),
@@ -171,6 +203,36 @@ Verdict "fail" if any major issue exists."""
             "issues": result.get("issues", []),
             "suggested_revision": result.get("suggested_revision")
         }
+        
+        # Log thinking: validation reasoning
+        thinking_logger = get_thinking_logger()
+        if run_id:
+            thinking_logger.log_validation(
+                run_id=run_id,
+                node_name="judge",
+                validation_type="answer_quality",
+                criteria=[
+                    "Factual consistency (SQL numbers match answer)",
+                    "Citation coverage (all claims cited)",
+                    "Scope leakage (no out-of-scope info)",
+                    "Completeness (answers the query)"
+                ],
+                result=judge_output["verdict"],
+                issues=judge_output["issues"]
+            )
+            
+            thinking_logger.log_analysis(
+                run_id=run_id,
+                node_name="judge",
+                analysis=f"Evaluated answer quality: {judge_output['verdict']}",
+                data_summary={
+                    "verdict": judge_output["verdict"],
+                    "confidence": judge_output["confidence"],
+                    "issues_count": len(judge_output["issues"]),
+                    "has_suggestion": bool(judge_output.get("suggested_revision"))
+                },
+                insights=judge_output["issues"][:3] if judge_output["issues"] else ["No issues found"]
+            )
         
         latency_ms = int((time.time() - start_time) * 1000)
         
@@ -203,7 +265,8 @@ Verdict "fail" if any major issue exists."""
                 pass
         
         # Add to trace if debug enabled
-        if request.get("options", {}).get("debug"):
+        options = request.get("options", {}) if isinstance(request, dict) else getattr(request, "options", {}) if hasattr(request, "options") else {}
+        if (isinstance(options, dict) and options.get("debug")) or (hasattr(options, "debug") and getattr(options, "debug", False)):
             state["trace"].append({
                 "node": "judge",
                 "input": {
