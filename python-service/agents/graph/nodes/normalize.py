@@ -35,7 +35,8 @@ def normalize_node(state: AgentState) -> AgentState:
     """
     Normalize user query into structured format.
     
-    Converts raw query + history + scope → NormalizedQuery with intent, entities, context.
+    Converts raw query + history → NormalizedQuery with intent, entities, context.
+    No filtering applied - processes query based on content only.
     """
     start_time = time.time()
     request = state["request"]
@@ -46,7 +47,6 @@ def normalize_node(state: AgentState) -> AgentState:
     query_text = request.get("query", "") if isinstance(request, dict) else getattr(request, "query", "")
     user_id = request.get("user_id", "") if isinstance(request, dict) else getattr(request, "user_id", "")
     history = request.get("history", []) if isinstance(request, dict) else getattr(request, "history", [])
-    scope = request.get("scope", {}) if isinstance(request, dict) else getattr(request, "scope", {})
     
     logger.info(
         "normalize_node started",
@@ -56,11 +56,9 @@ def normalize_node(state: AgentState) -> AgentState:
         has_history=len(history) > 0
     )
     
-    # Log input event (enhanced)
+    # Log input event
     if run_id:
         try:
-            scope_keys = list(scope.keys()) if isinstance(scope, dict) else list(scope.__dict__.keys()) if hasattr(scope, "__dict__") else []
-            scope_dict = scope if isinstance(scope, dict) else scope.__dict__ if hasattr(scope, "__dict__") else {}
             trace_service.log_event(
                 run_id=run_id,
                 node_name="normalize",
@@ -68,10 +66,7 @@ def normalize_node(state: AgentState) -> AgentState:
                 payload={
                     "query": query_text[:200],
                     "has_history": len(history) > 0,
-                    "history_length": len(history),
-                    "scope_keys": scope_keys,
-                    "has_organization_id": bool(scope_dict.get("organization_id") if isinstance(scope_dict, dict) else getattr(scope, "organization_id", None)),
-                    "has_project_id": bool(scope_dict.get("project_id") if isinstance(scope_dict, dict) else getattr(scope, "project_id", None))
+                    "history_length": len(history)
                 }
             )
         except Exception:
@@ -87,19 +82,12 @@ def normalize_node(state: AgentState) -> AgentState:
                 for msg in history[-5:]  # Last 5 messages
             ])
         
-        scope_text = ", ".join([
-            f"{k}={v}" for k, v in (scope.items() if isinstance(scope, dict) else scope.__dict__.items() if hasattr(scope, "__dict__") else []) if v
-        ])
-        
         prompt = f"""Normalize the following user query for a scientific lab management system.
 
 User Query: {query_text}
 
 Conversation History:
 {history_text if history_text else 'None'}
-
-Context (Scope):
-{scope_text if scope_text else 'None'}
 
 Extract and return JSON with:
 1. intent: One of "aggregate", "search", or "hybrid"

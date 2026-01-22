@@ -50,7 +50,9 @@ def rag_node(state: AgentState) -> AgentState:
     """
     Execute RAG tool if selected by router.
     
-    Embeds query, searches semantic chunks, filters by scope and similarity.
+    Embeds query and searches semantic chunks across all data.
+    No filtering applied - users have complete access to all chunks.
+    Results filtered only by similarity threshold.
     """
     start_time = time.time()
     router = state.get("router_decision")
@@ -106,16 +108,13 @@ def rag_node(state: AgentState) -> AgentState:
         # Generate embedding for normalized query
         query_embedding = embedding_service.embed_text(normalized.normalized_query)
         
-        # Extract scope
-        scope = request.get("scope", {}) if isinstance(request, dict) else getattr(request, "scope", {})
-        if isinstance(scope, dict):
-            organization_id = scope.get("organization_id")
-            project_id = scope.get("project_id")
-            experiment_id = scope.get("experiment_id")
-        else:
-            organization_id = getattr(scope, "organization_id", None)
-            project_id = getattr(scope, "project_id", None)
-            experiment_id = getattr(scope, "experiment_id", None)
+        # NO FILTERING - Search across all data
+        # Users have complete access to all data
+        logger.info(
+            "RAG search - no filters applied",
+            run_id=run_id,
+            message="Searching across all organizations, projects, and experiments"
+        )
         
         # Get threshold from env or use default
         match_threshold = float(os.getenv("RAG_SIMILARITY_THRESHOLD", str(DEFAULT_RAG_THRESHOLD)))
@@ -127,12 +126,12 @@ def rag_node(state: AgentState) -> AgentState:
             source="env" if os.getenv("RAG_SIMILARITY_THRESHOLD") else "default"
         )
         
-        # Search chunks
+        # Search chunks - NO FILTERS (all None)
         chunks = rag_service.search_chunks(
             query_embedding=query_embedding,
-            organization_id=organization_id,
-            project_id=project_id,
-            experiment_id=experiment_id,
+            organization_id=None,  # No filter
+            project_id=None,  # No filter
+            experiment_id=None,  # No filter
             match_threshold=match_threshold,
             match_count=6
         )

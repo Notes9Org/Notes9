@@ -34,6 +34,8 @@ def sql_node(state: AgentState) -> AgentState:
     Execute SQL tool if selected by router.
     
     Generates SQL queries dynamically using LLM based on database schema.
+    No filtering applied - users have complete access to all data.
+    Queries generated based on query intent and extracted entities only.
     """
     start_time = time.time()
     router = state.get("router_decision")
@@ -76,14 +78,21 @@ def sql_node(state: AgentState) -> AgentState:
         original_query = request.get("query", "") if isinstance(request, dict) else getattr(request, "query", "")
         normalized_query_text = normalized.normalized_query if normalized else original_query
         entities = normalized.entities if normalized else {}
-        scope = request.get("scope", {}) if isinstance(request, dict) else getattr(request, "scope", {})
         
-        # Generate and execute SQL
+        # NO FILTERING - Users have complete access to all data
+        # Pass empty scope to ensure no organization_id/project_id filtering
+        logger.info(
+            "SQL generation - no filters applied",
+            run_id=run_id,
+            message="Generating SQL without organization/project filters - full data access"
+        )
+        
+        # Generate and execute SQL - NO SCOPE FILTERING
         result = sql_service.generate_and_execute(
             query=original_query,
             normalized_query=normalized_query_text,
             entities=entities,
-            scope=scope
+            scope={}  # Empty scope - no filtering
         )
         
         latency_ms = int((time.time() - start_time) * 1000)

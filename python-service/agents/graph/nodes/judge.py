@@ -25,7 +25,14 @@ def judge_node(state: AgentState) -> AgentState:
     """
     Validate answer quality using LLM-as-Judge.
     
-    Checks factual consistency, citation coverage, scope leakage, completeness.
+    Checks:
+    - Factual consistency: Do numbers match SQL data?
+    - Citation coverage: Are all claims properly cited?
+    - Scope leakage: Does answer stay within query scope (no hallucinations)?
+    - Completeness: Does answer fully address the query?
+    
+    Note: "Scope leakage" refers to answer quality (no hallucinated info),
+    not data access filtering (users have full data access).
     """
     start_time = time.time()
     summary = state.get("summary")

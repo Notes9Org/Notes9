@@ -5,14 +5,14 @@ from fastapi import APIRouter, HTTPException
 from fastapi.responses import JSONResponse
 import structlog
 
-from agents.contracts.request import AgentRequest
+from agents.contracts.request import AgentRequest, ChatMessage
 from agents.contracts.response import FinalResponse
 from agents.graph.state import AgentState
 from agents.graph.build_graph import build_agent_graph
 from agents.graph.nodes.normalize import normalize_node
 from services.trace_service import TraceService
 from pydantic import BaseModel
-from typing import Optional
+from typing import Optional, List
 
 logger = structlog.get_logger()
 
@@ -25,11 +25,9 @@ _agent_graph = None
 class NormalizeTestRequest(BaseModel):
     """Request model for normalize testing."""
     query: str
-    organization_id: str = "test-org"
-    project_id: Optional[str] = None
     user_id: str = "test-user"
     session_id: str = "test-session"
-    history: Optional[list] = None
+    history: Optional[List[ChatMessage]] = None
 
 
 def get_agent_graph():
@@ -52,7 +50,8 @@ async def test_normalize(request: NormalizeTestRequest):
     ```json
     {
         "query": "How many experiments were completed last month?",
-        "organization_id": "org-123"
+        "user_id": "user-123",
+        "session_id": "session-456"
     }
     ```
     """
@@ -60,18 +59,15 @@ async def test_normalize(request: NormalizeTestRequest):
     
     run_id = str(uuid4())
     
-    # Create minimal state
+    # Create minimal state - no scope filtering
     state: AgentState = {
         "run_id": run_id,
         "request": {
             "query": request.query,
             "user_id": request.user_id,
             "session_id": request.session_id,
-            "scope": {
-                "organization_id": request.organization_id,
-                **({"project_id": request.project_id} if request.project_id else {})
-            },
-            "history": request.history or [],
+            "scope": {},  # Empty scope - no filtering
+            "history": [msg.model_dump() if hasattr(msg, "model_dump") else msg for msg in (request.history or [])],
             "options": {}
         },
         "normalized_query": None,
@@ -139,27 +135,30 @@ async def run_agent(request: AgentRequest) -> FinalResponse:
     )
     
     try:
-        # Validate scope includes required fields
-        if not request.scope.get("organization_id"):
-            raise HTTPException(
-                status_code=400,
-                detail="organization_id is required in scope"
+        # Create run record in database (no scope filtering)
+        try:
+            trace_service.create_run(
+                run_id=run_id,
+                organization_id=None,  # No filtering
+                created_by=request.user_id,
+                session_id=request.session_id,
+                query=request.query,
+                project_id=None
             )
+        except Exception as e:
+            logger.warning("Trace logging failed, continuing", error=str(e), run_id=run_id)
         
-        # Create run record in database
-        trace_service.create_run(
-            run_id=run_id,
-            organization_id=request.scope["organization_id"],
-            created_by=request.user_id,
-            session_id=request.session_id,
-            query=request.query,
-            project_id=request.scope.get("project_id")
-        )
-        
-        # Create initial state
+        # Create initial state - no scope filtering, always use empty dict
         initial_state: AgentState = {
             "run_id": run_id,
-            "request": request.model_dump(),  # Use model_dump() instead of deprecated dict()
+            "request": {
+                "query": request.query,
+                "user_id": request.user_id,
+                "session_id": request.session_id,
+                "scope": {},  # Always empty - no filtering applied
+                "history": [msg.model_dump() if hasattr(msg, "model_dump") else msg for msg in request.history],
+                "options": request.options or {}
+            },
             "normalized_query": None,
             "router_decision": None,
             "sql_result": None,
