@@ -62,6 +62,11 @@ def console_renderer(logger, name, event_dict):
         if output_candidates:
             output_items = output_candidates
     
+    # Special handling for SQL node - show generated SQL
+    if node == "SQL" and "output_generated_sql" in payload:
+        if "generated_sql" not in output_items:
+            output_items["generated_sql"] = payload.get("output_generated_sql", "")
+    
     # Only print if we have something to show
     if not input_items and not output_items and latency_ms is None:
         return ""
@@ -84,13 +89,22 @@ def console_renderer(logger, name, event_dict):
     if output_items:
         print("📤 OUTPUT:")
         for key, value in output_items.items():
-            if isinstance(value, str) and len(value) > 250:
+            # Special formatting for SQL queries
+            if key == "generated_sql" and isinstance(value, str):
+                # Show full SQL query for debugging
+                print(f"   • {key}:")
+                # Print SQL with indentation for readability
+                sql_lines = value.split('\n')
+                for line in sql_lines:
+                    print(f"      {line}")
+            elif isinstance(value, str) and len(value) > 250:
                 value = value[:250] + "..."
             elif isinstance(value, (list, dict)):
                 value_str = str(value)
                 if len(value_str) > 250:
                     value = value_str[:250] + "..."
-            print(f"   • {key}: {value}")
+            else:
+                print(f"   • {key}: {value}")
     
     if latency_ms is not None:
         print(f"⏱️  Latency: {latency_ms}ms")

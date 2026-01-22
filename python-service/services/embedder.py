@@ -5,7 +5,7 @@ from dotenv import load_dotenv
 import structlog
 from tenacity import retry, stop_after_attempt, wait_exponential
 
-from services.config import AzureOpenAIConfig
+from services.config import get_azure_openai_config
 
 load_dotenv()
 
@@ -16,7 +16,7 @@ class EmbeddingService:
     """Service for generating text embeddings using Azure OpenAI."""
     
     def __init__(self):
-        self.config = AzureOpenAIConfig()
+        self.config = get_azure_openai_config()
         self.client = self.config.create_client()
         self.model = self.config.get_embedding_model()
         self.dimensions = self.config.get_dimensions()
@@ -116,17 +116,37 @@ class EmbeddingService:
                 dimensions=self.dimensions
             )
             
+            # Validate response
+            if not response.data or len(response.data) != len(text_values):
+                raise ValueError(
+                    f"Invalid response: expected {len(text_values)} embeddings, got {len(response.data) if response.data else 0}"
+                )
+            
             # Map embeddings back to original order
-            embeddings = {}
-            for embedding_data in response.data:
-                embeddings[embedding_data.index] = embedding_data.embedding
+            # Azure OpenAI returns embeddings in the same order as input
+            # Use list comprehension to extract embeddings in order
+            embedding_list = [item.embedding for item in response.data]
             
             # Build result list with None for empty texts
             result = []
             valid_idx = 0
             for i, text in enumerate(texts):
                 if text and text.strip():
-                    result.append(embeddings.get(valid_idx))
+                    if valid_idx < len(embedding_list):
+                        embedding = embedding_list[valid_idx]
+                        # Validate embedding dimensions
+                        if embedding and len(embedding) == self.dimensions:
+                            result.append(embedding)
+                        else:
+                            logger.warning(
+                                "Invalid embedding dimensions",
+                                expected=self.dimensions,
+                                got=len(embedding) if embedding else 0,
+                                index=valid_idx
+                            )
+                            result.append(None)
+                    else:
+                        result.append(None)
                     valid_idx += 1
                 else:
                     result.append(None)

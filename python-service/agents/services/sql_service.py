@@ -310,6 +310,22 @@ Example JOIN patterns:
   SELECT status FROM projects
   WHERE (REPLACE(LOWER(name), '_', ' ') ILIKE '%' || REPLACE(LOWER('<project_name>'), '_', ' ') || '%'
          OR name ILIKE '%<project_name>%')
+    AND created_by = '{user_id}'::uuid
+
+- To get all active projects for the user (MUST filter by user):
+  SELECT * FROM projects
+  WHERE status = 'active'
+    AND created_by = '{user_id}'::uuid
+
+- To get projects by status (planning, active, on_hold, completed, cancelled):
+  SELECT * FROM projects
+  WHERE status = '<status_value>'
+    AND created_by = '{user_id}'::uuid
+
+- To get current/active projects (status = 'active'):
+  SELECT * FROM projects
+  WHERE status = 'active'
+    AND created_by = '{user_id}'::uuid
 
 Return ONLY the SQL query, no explanations, no markdown, just the SQL statement."""
 

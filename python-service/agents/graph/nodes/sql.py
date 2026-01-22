@@ -91,11 +91,23 @@ def sql_node(state: AgentState) -> AgentState:
         )
         
         latency_ms = int((time.time() - start_time) * 1000)
+        
+        # Extract generated SQL for debugging
+        generated_sql = result.get("generated_sql", "")
+        sql_preview = generated_sql[:200] + "..." if len(generated_sql) > 200 else generated_sql
+        
         logger.info("sql_node completed", agent_node="sql", run_id=run_id,
                    row_count=result.get("row_count", 0), latency_ms=round(latency_ms, 2),
-                   payload={"input_query": original_query[:200], "input_intent": normalized.intent if normalized else None,
-                           "output_row_count": result.get("row_count", 0), "output_has_error": "error" in result,
-                           "output_execution_time_ms": result.get("execution_time_ms", 0)})
+                   payload={
+                       "input_query": original_query[:200], 
+                       "input_intent": normalized.intent if normalized else None,
+                       "output_row_count": result.get("row_count", 0), 
+                       "output_has_error": "error" in result,
+                       "output_execution_time_ms": result.get("execution_time_ms", 0),
+                       "output_generated_sql": generated_sql  # Full SQL for debugging
+                   },
+                   sql_preview=sql_preview,
+                   sql_full=generated_sql)
         state["sql_result"] = result
         
         thinking_logger = get_thinking_logger()
