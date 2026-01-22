@@ -1,14 +1,12 @@
 """LLM client abstraction with retry and JSON validation."""
-import os
 import json
 import time
 import re
 from typing import Dict, Any, Optional
-from openai import AzureOpenAI
 from tenacity import retry, stop_after_attempt, wait_exponential
 import structlog
 
-from services.config import AzureOpenAIConfig
+from services.config import get_azure_openai_config
 
 logger = structlog.get_logger()
 
@@ -22,31 +20,14 @@ class LLMClient:
     
     def __init__(self):
         """Initialize LLM client with Azure OpenAI."""
-        self.config = AzureOpenAIConfig()
+        self.config = get_azure_openai_config()
         self.client = self.config.create_client()
         
-        # Get chat model deployment - prioritize CHAT_DEPLOYMENT over CHAT_MODEL
-        # This ensures we use the deployment name, not the model name
-        self.default_deployment = (
-            os.getenv("AZURE_OPENAI_CHAT_DEPLOYMENT") or 
-            os.getenv("AZURE_OPENAI_CHAT_MODEL") or 
-            "gpt-5.2-chat"
-        )
+        # Get configuration from config object
+        self.default_deployment = self.config.chat_deployment
         self.default_model = self.default_deployment  # Use deployment name as model
-        self.max_completion_tokens = int(os.getenv("AZURE_OPENAI_MAX_COMPLETION_TOKENS", "16384"))
-        
-        # Default temperature - can be overridden per call
-        # Some models (like gpt-5.2-chat) only support default (1.0)
-        # Others support any value between 0.0 and 2.0
-        self.default_temperature = float(os.getenv("AZURE_OPENAI_DEFAULT_TEMPERATURE", "0.0"))
-        
-        # Validate that we have a chat model configured
-        if not self.default_deployment:
-            raise ValueError(
-                "Chat model deployment not configured. "
-                "Set AZURE_OPENAI_CHAT_DEPLOYMENT in your .env file. "
-                "Example: AZURE_OPENAI_CHAT_DEPLOYMENT=gpt-4"
-            )
+        self.max_completion_tokens = self.config.max_completion_tokens
+        self.default_temperature = self.config.default_temperature
         
         logger.info(
             "LLM client initialized",

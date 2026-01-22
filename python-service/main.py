@@ -1,19 +1,4 @@
-"""
-FastAPI application for Notes9 Agent Chat Service.
-
-This service provides an AI-powered chat interface for Notes9, enabling users to:
-- Query their lab notes, experiments, and protocols
-- Get intelligent answers using RAG (Retrieval Augmented Generation)
-- Execute SQL queries on structured data
-- Maintain conversation context across sessions
-
-Architecture:
-- LangGraph-based agentic framework
-- Multi-node processing pipeline (normalize → router → tools → judge → final)
-- Support for both SQL and RAG-based queries
-- Comprehensive tracing and logging
-"""
-import os
+"""FastAPI application for Notes9 Agent Chat Service."""
 import time
 from contextlib import asynccontextmanager
 from typing import Dict, Any
@@ -25,18 +10,99 @@ from dotenv import load_dotenv
 import structlog
 import uvicorn
 
-# Patch websockets before any supabase imports
 try:
     from services.websockets_patch import *  # noqa: F401, F403
 except ImportError:
-    pass  # Patch not critical
+    pass
 
 from agents.api.routes import router as agent_router
 
-# Load environment variables
 load_dotenv()
 
-# Configure structured logging
+def console_renderer(logger, name, event_dict):
+    """Console renderer for agent node events - shows only completed events with results."""
+    if "agent_node" not in event_dict:
+        return ""
+    
+    event = event_dict.get("event", "")
+    
+    # Only show completed events (they have final results)
+    if not (event.endswith("_completed") or event.endswith(" completed") or event == "completed"):
+        return ""
+    
+    if "error" in event_dict or "thinking_type" in event_dict:
+        return ""
+    
+    node = event_dict.get("agent_node", "unknown").upper()
+    payload = event_dict.get("payload", {})
+    latency_ms = event_dict.get("latency_ms")
+    
+    # Extract input/output from payload
+    input_items = {k.replace("input_", ""): v for k, v in payload.items() if k.startswith("input_")}
+    output_items = {k.replace("output_", ""): v for k, v in payload.items() if k.startswith("output_")}
+    
+    # If no output_items, try to extract from event_dict directly
+    if not output_items:
+        # Extract meaningful output from event_dict fields
+        output_candidates = {}
+        if "intent" in event_dict:
+            output_candidates["intent"] = event_dict.get("intent")
+        if "tools" in event_dict:
+            output_candidates["tools"] = event_dict.get("tools")
+        if "row_count" in event_dict:
+            output_candidates["row_count"] = event_dict.get("row_count")
+        if "chunks_found" in event_dict:
+            output_candidates["chunks_found"] = event_dict.get("chunks_found")
+        if "answer_length" in event_dict:
+            output_candidates["answer_length"] = event_dict.get("answer_length")
+        if "verdict" in event_dict:
+            output_candidates["verdict"] = event_dict.get("verdict")
+        if "confidence" in event_dict:
+            output_candidates["confidence"] = event_dict.get("confidence")
+        if output_candidates:
+            output_items = output_candidates
+    
+    # Only print if we have something to show
+    if not input_items and not output_items and latency_ms is None:
+        return ""
+    
+    print("-" * 8)
+    print(f"🤖 {node}")
+    print("-" * 8)
+    
+    if input_items:
+        print("📥 INPUT:")
+        for key, value in input_items.items():
+            if isinstance(value, str) and len(value) > 250:
+                value = value[:250] + "..."
+            elif isinstance(value, (list, dict)):
+                value_str = str(value)
+                if len(value_str) > 250:
+                    value = value_str[:250] + "..."
+            print(f"   • {key}: {value}")
+    
+    if output_items:
+        print("📤 OUTPUT:")
+        for key, value in output_items.items():
+            if isinstance(value, str) and len(value) > 250:
+                value = value[:250] + "..."
+            elif isinstance(value, (list, dict)):
+                value_str = str(value)
+                if len(value_str) > 250:
+                    value = value_str[:250] + "..."
+            print(f"   • {key}: {value}")
+    
+    if latency_ms is not None:
+        print(f"⏱️  Latency: {latency_ms}ms")
+    
+    print("=" * 80)
+    return ""
+
+from services.config import get_app_config, get_azure_openai_config, get_supabase_config
+
+app_config = get_app_config()
+use_json = app_config.log_format == "json"
+
 structlog.configure(
     processors=[
         structlog.contextvars.merge_contextvars,
@@ -44,7 +110,7 @@ structlog.configure(
         structlog.processors.add_log_level,
         structlog.processors.StackInfoRenderer(),
         structlog.processors.format_exc_info,
-        structlog.processors.JSONRenderer()
+        console_renderer if not use_json else structlog.processors.JSONRenderer()
     ]
 )
 
@@ -53,54 +119,29 @@ logger = structlog.get_logger()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """
-    Application lifespan manager.
-    Handles startup and shutdown events.
-    """
-    # Startup
-    logger.info(
-        "service_starting",
-        service="notes9-agent-chat",
-        version="1.0.0",
-        environment=os.getenv("ENVIRONMENT", "development")
-    )
+    """Application lifespan manager."""
+    app_config = get_app_config()
+    logger.info("service_starting", service="notes9-agent-chat", version="1.0.0")
     
-    # Validate critical environment variables
-    required_vars = [
-        "NEXT_PUBLIC_SUPABASE_URL",
-        "SUPABASE_SERVICE_ROLE_KEY",
-    ]
-    missing_vars = [var for var in required_vars if not os.getenv(var)]
-    if missing_vars:
-        logger.warning(
-            "missing_environment_variables",
-            missing=missing_vars,
-            message="Service may not function correctly without these variables"
-        )
+    try:
+        get_supabase_config()
+        logger.info("Supabase service: available")
+    except Exception as e:
+        logger.error("Supabase service: not available", error=str(e))
     
-    # Log configuration (without sensitive data)
-    logger.info(
-        "service_configuration",
-        cors_origins=os.getenv("CORS_ORIGINS", "*"),
-        port=os.getenv("PORT", "8000"),
-        has_azure_openai=bool(os.getenv("AZURE_OPENAI_ENDPOINT")),
-        has_openai=bool(os.getenv("OPENAI_API_KEY")),
-    )
+    try:
+        get_azure_openai_config()
+        logger.info("Azure OpenAI service: available")
+    except Exception as e:
+        logger.error("Azure OpenAI service: not available", error=str(e))
     
     yield
-    
-    # Shutdown
     logger.info("service_shutting_down", service="notes9-agent-chat")
 
 
-# Create FastAPI application
 app = FastAPI(
     title="Notes9 Agent Chat Service",
-    description=(
-        "AI-powered chat service for Notes9 scientific lab documentation platform. "
-        "Provides intelligent query processing using LangGraph-based agentic framework "
-        "with support for SQL queries, RAG-based retrieval, and hybrid approaches."
-    ),
+    description="AI-powered chat service for Notes9 scientific lab documentation platform.",
     version="1.0.0",
     lifespan=lifespan,
     docs_url="/docs",
@@ -108,11 +149,9 @@ app = FastAPI(
     openapi_url="/openapi.json",
 )
 
-# CORS middleware configuration
-cors_origins = os.getenv("CORS_ORIGINS", "*").split(",")
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[origin.strip() for origin in cors_origins],
+    allow_origins=[origin.strip() for origin in app_config.cors_origins],
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["*"],
@@ -120,156 +159,75 @@ app.add_middleware(
 )
 
 
-# Request logging middleware
 @app.middleware("http")
 async def log_requests(request: Request, call_next):
-    """Log all incoming requests and responses."""
+    """Log incoming requests and responses."""
     start_time = time.time()
-    
-    # Log request
-    logger.info(
-        "request_received",
-        method=request.method,
-        path=request.url.path,
-        query_params=str(request.query_params) if request.query_params else None,
-        client_host=request.client.host if request.client else None,
-    )
+    logger.info("request_received", method=request.method, path=request.url.path)
     
     try:
         response = await call_next(request)
-        
-        # Calculate processing time
         process_time = time.time() - start_time
-        
-        # Log response
-        logger.info(
-            "request_completed",
-            method=request.method,
-            path=request.url.path,
-            status_code=response.status_code,
-            process_time_ms=round(process_time * 1000, 2),
-        )
-        
-        # Add process time header
+        logger.info("request_completed", method=request.method, path=request.url.path, 
+                   status_code=response.status_code, process_time_ms=round(process_time * 1000, 2))
         response.headers["X-Process-Time"] = str(round(process_time * 1000, 2))
-        
         return response
     except Exception as e:
-        process_time = time.time() - start_time
-        logger.error(
-            "request_failed",
-            method=request.method,
-            path=request.url.path,
-            error=str(e),
-            process_time_ms=round(process_time * 1000, 2),
-            exc_info=True,
-        )
+        logger.error("request_failed", method=request.method, path=request.url.path, error=str(e))
         raise
 
 
-# Global exception handlers
 @app.exception_handler(HTTPException)
 async def http_exception_handler(request: Request, exc: HTTPException):
-    """Handle HTTP exceptions with structured logging."""
-    logger.warning(
-        "http_exception",
-        status_code=exc.status_code,
-        detail=exc.detail,
-        path=request.url.path,
-    )
+    """Handle HTTP exceptions."""
+    logger.warning("http_exception", status_code=exc.status_code, detail=exc.detail)
     return JSONResponse(
         status_code=exc.status_code,
-        content={
-            "error": exc.detail,
-            "status_code": exc.status_code,
-            "path": request.url.path,
-        },
+        content={"error": exc.detail, "status_code": exc.status_code},
     )
 
 
 @app.exception_handler(RequestValidationError)
 async def validation_exception_handler(request: Request, exc: RequestValidationError):
     """Handle request validation errors."""
-    logger.warning(
-        "validation_error",
-        errors=exc.errors(),
-        path=request.url.path,
-    )
+    logger.warning("validation_error", errors=exc.errors())
     return JSONResponse(
         status_code=422,
-        content={
-            "error": "Validation error",
-            "details": exc.errors(),
-            "path": request.url.path,
-        },
+        content={"error": "Validation error", "details": exc.errors()},
     )
 
 
 @app.exception_handler(Exception)
 async def general_exception_handler(request: Request, exc: Exception):
     """Handle unexpected exceptions."""
-    logger.error(
-        "unexpected_error",
-        error=str(exc),
-        path=request.url.path,
-        exc_info=True,
-    )
+    logger.error("unexpected_error", error=str(exc), exc_info=True)
     return JSONResponse(
         status_code=500,
-        content={
-            "error": "Internal server error",
-            "message": "An unexpected error occurred",
-            "path": request.url.path,
-        },
+        content={"error": "Internal server error"},
     )
 
 
-# Include agent routes
 app.include_router(agent_router)
 
 
 @app.get("/health", tags=["monitoring"])
 async def health_check() -> Dict[str, Any]:
-    """
-    Health check endpoint for service monitoring.
-    
-    Returns:
-        Dict with service status and basic information
-    """
-    return {
-        "status": "healthy",
-        "service": "notes9-agent-chat",
-        "version": "1.0.0",
-        "timestamp": time.time(),
-    }
+    """Health check endpoint."""
+    return {"status": "healthy", "service": "notes9-agent-chat", "version": "1.0.0"}
 
 
 @app.get("/health/ready", tags=["monitoring"])
 async def readiness_check() -> Dict[str, Any]:
-    """
-    Readiness check endpoint for Kubernetes/Docker health probes.
+    """Readiness check for Kubernetes/Docker health probes."""
+    checks = {"database": False, "embeddings": False}
     
-    Checks if the service is ready to accept requests by validating
-    critical dependencies.
-    
-    Returns:
-        Dict with readiness status
-    """
-    checks = {
-        "database": False,
-        "embeddings": False,
-    }
-    
-    # Check database connection
     try:
         from services.db import SupabaseService
         db = SupabaseService()
-        # Simple check - try to access the service
         checks["database"] = db.client is not None
     except Exception as e:
         logger.warning("database_check_failed", error=str(e))
     
-    # Check embeddings service
     try:
         from services.embedder import EmbeddingService
         embedder = EmbeddingService()
@@ -278,73 +236,37 @@ async def readiness_check() -> Dict[str, Any]:
         logger.warning("embeddings_check_failed", error=str(e))
     
     all_ready = all(checks.values())
-    status_code = 200 if all_ready else 503
-    
     return JSONResponse(
-        status_code=status_code,
-        content={
-            "status": "ready" if all_ready else "not_ready",
-            "checks": checks,
-            "timestamp": time.time(),
-        },
+        status_code=200 if all_ready else 503,
+        content={"status": "ready" if all_ready else "not_ready", "checks": checks},
     )
 
 
 @app.get("/", tags=["info"])
 async def root() -> Dict[str, Any]:
-    """
-    Root endpoint providing service information and available endpoints.
-    
-    Returns:
-        Dict with service metadata and endpoint information
-    """
+    """Root endpoint with service information."""
     return {
         "service": "Notes9 Agent Chat Service",
         "version": "1.0.0",
         "status": "operational",
-        "description": "AI-powered chat service for scientific lab documentation",
         "endpoints": {
-            "agent": {
-                "run": "/agent/run",
-                "normalize_test": "/agent/normalize/test",
-            },
-            "monitoring": {
-                "health": "/health",
-                "readiness": "/health/ready",
-            },
-            "documentation": {
-                "swagger": "/docs",
-                "redoc": "/redoc",
-                "openapi": "/openapi.json",
-            },
+            "agent": {"run": "/agent/run", "normalize_test": "/agent/normalize/test"},
+            "monitoring": {"health": "/health", "readiness": "/health/ready"},
+            "documentation": {"swagger": "/docs", "redoc": "/redoc"},
         },
     }
 
 
 if __name__ == "__main__":
-    # Get configuration from environment
-    host = os.getenv("HOST", "0.0.0.0")
-    port = int(os.getenv("PORT", "8000"))
-    workers = int(os.getenv("WORKERS", "1"))
-    log_level = os.getenv("LOG_LEVEL", "info").lower()
-    reload = os.getenv("RELOAD", "false").lower() == "true"
+    app_config = get_app_config()
+    logger.info("starting_server", host=app_config.host, port=app_config.port)
     
-    logger.info(
-        "starting_server",
-        host=host,
-        port=port,
-        workers=workers,
-        log_level=log_level,
-        reload=reload,
-    )
-    
-    # Run the application
     uvicorn.run(
         "main:app",
-        host=host,
-        port=port,
-        workers=workers if not reload else 1,  # Reload only works with 1 worker
-        log_level=log_level,
-        reload=reload,
+        host=app_config.host,
+        port=app_config.port,
+        workers=app_config.workers if not app_config.reload else 1,
+        log_level=app_config.log_level,
+        reload=app_config.reload,
         access_log=True,
     )

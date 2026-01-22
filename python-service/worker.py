@@ -30,10 +30,12 @@ class ChunkWorker:
     def __init__(self):
         self.db = SupabaseService()
         self.embedder = EmbeddingService()
-        self.batch_size = int(os.getenv("CHUNK_WORKER_BATCH_SIZE", "10"))
-        self.poll_interval = int(os.getenv("CHUNK_WORKER_POLL_INTERVAL", "5"))
-        self.chunk_size = int(os.getenv("CHUNK_SIZE", "1000"))
-        self.chunk_overlap = int(os.getenv("CHUNK_OVERLAP", "200"))
+        from services.config import get_app_config
+        app_config = get_app_config()
+        self.batch_size = app_config.chunk_worker_batch_size
+        self.poll_interval = app_config.chunk_worker_poll_interval
+        self.chunk_size = app_config.chunk_size
+        self.chunk_overlap = app_config.chunk_overlap
     
     def process_job(self, job: Dict[str, Any]) -> bool:
         """Process a single chunk job."""

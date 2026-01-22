@@ -1,5 +1,4 @@
 """SQL service with LLM-generated queries for safe execution."""
-import os
 import time
 import re
 from typing import Dict, Any, Optional, List, Tuple
@@ -8,6 +7,7 @@ import psycopg2
 from psycopg2.extras import RealDictCursor
 
 from services.db import SupabaseService
+from services.config import get_database_config, ConfigurationError
 from agents.services.llm_client import LLMClient, LLMError
 from agents.services.db_schema import DB_SCHEMA
 
@@ -30,238 +30,70 @@ class SQLService:
         
         # PostgreSQL connection for raw SQL execution
         self._pg_conn = None
+        self._db_config = get_database_config()
         
         logger.info("SQL service initialized")
     
-    def _get_pg_connection(self):
-        """Get or create PostgreSQL connection."""
-        if self._pg_conn is None or self._pg_conn.closed:
-            # Method 1: Try connection string first (DATABASE_URL)
-            database_url = os.getenv("DATABASE_URL")
-            if database_url:
+    def _get_pg_connection(self, force_new: bool = False):
+        """
+        Get or create PostgreSQL connection with autocommit enabled for read-only queries.
+        
+        Args:
+            force_new: If True, always create a new connection (useful after errors)
+        """
+        # If forcing new connection, close existing one
+        if force_new:
+            try:
+                if self._pg_conn and not self._pg_conn.closed:
+                    self._pg_conn.close()
+            except Exception:
+                pass
+            self._pg_conn = None
+        
+        # Check if connection exists and is valid
+        if self._pg_conn is not None and not self._pg_conn.closed:
+            # Test connection with a simple query to ensure it's in good state
+            try:
+                # First ensure autocommit is enabled
+                if not self._pg_conn.autocommit:
+                    self._pg_conn.autocommit = True
+                
+                # Test with a simple query - if this fails, connection is in bad state
+                test_cursor = self._pg_conn.cursor()
+                test_cursor.execute("SELECT 1")
+                test_cursor.fetchone()
+                test_cursor.close()
+                return self._pg_conn
+            except (psycopg2.OperationalError, psycopg2.InterfaceError, psycopg2.InternalError) as e:
+                # Connection is broken or in bad state, create new one
+                logger.warning("Connection test failed, creating new connection", error=str(e))
                 try:
-                    self._pg_conn = psycopg2.connect(database_url, connect_timeout=10)
-                    logger.info("PostgreSQL connection established via DATABASE_URL")
-                    return self._pg_conn
-                except Exception as e:
-                    logger.warning("Failed to connect via DATABASE_URL, trying individual credentials", error=str(e))
-            
-            # Method 2: Use individual credentials
-            # Extract connection details from Supabase URL
-            # Format: https://<project-ref>.supabase.co
-            supabase_url = os.getenv("NEXT_PUBLIC_SUPABASE_URL", "")
-            
-            # Parse host from URL (e.g., https://xxx.supabase.co -> db.xxx.supabase.co)
-            project_ref = None
-            if ".supabase.co" in supabase_url:
-                project_ref = supabase_url.replace("https://", "").replace(".supabase.co", "")
-            else:
-                # Try to extract project_ref from DB_HOST if it's a Supabase host
-                db_host_env = os.getenv("DB_HOST", "")
-                if ".supabase.co" in db_host_env:
-                    project_ref = db_host_env.replace("db.", "").replace(".pooler.supabase.com", "").replace(".supabase.co", "")
-            
-            db_port = int(os.getenv("DB_PORT", "5432"))
-            db_user_env = os.getenv("DB_USER", "postgres")
-            db_password = os.getenv("DB_PASSWORD")
-            db_name = os.getenv("DB_NAME", "postgres")
-            
-            # Determine if we're using pooler or direct connection
-            use_pooler = db_port == 6543
-            
-            if use_pooler:
-                # Pooler connection: use pooler host, not db host
-                if not project_ref:
-                    raise ValueError(
-                        "Cannot use pooler (port 6543) without project_ref. "
-                        "Set NEXT_PUBLIC_SUPABASE_URL or DB_HOST with Supabase host."
-                    )
-                
-                # Pooler user must be postgres.<project-ref>
-                if db_user_env == "postgres" or not os.getenv("DB_USER"):
-                    db_user = f"postgres.{project_ref}"
-                    logger.info("Using pooler user format", user=db_user, project_ref=project_ref, port=db_port)
-                else:
-                    db_user = db_user_env
-                    logger.info("Using explicit DB_USER for pooler", user=db_user, port=db_port)
-                
-                # For pooler, ignore DB_HOST if it's a direct DB host (db.*.supabase.co)
-                # Only use DB_HOST if it's explicitly a pooler host
-                db_host_env = os.getenv("DB_HOST", "")
-                if ".pooler.supabase.com" in db_host_env:
-                    # User explicitly set pooler host - use it
-                    db_host = db_host_env
-                    logger.info("Using explicit pooler host from DB_HOST", host=db_host)
-                else:
-                    # Ignore DB_HOST if it's a direct DB host - we'll try pooler regions
-                    db_host = None
-                    logger.info("Port 6543 detected - will use pooler hosts, ignoring direct DB host", db_host_env=db_host_env)
-            else:
-                # Direct connection: use db host
-                if ".supabase.co" in supabase_url:
-                    db_host = f"db.{project_ref}.supabase.co"
-                else:
-                    db_host = os.getenv("DB_HOST", "localhost")
-                db_user = db_user_env
-            
-            if not db_password:
-                error_msg = (
-                    "DB_PASSWORD environment variable is required for SQL execution.\n"
-                    "\n"
-                    "To fix this:\n"
-                    "1. Get your database password from Supabase Dashboard:\n"
-                    "   - Go to https://supabase.com/dashboard\n"
-                    "   - Select your project\n"
-                    "   - Go to Settings → Database\n"
-                    "   - Copy the 'Database Password' (or reset it if needed)\n"
-                    "\n"
-                    "2. Add to your .env file in python-service/:\n"
-                    f"   DB_HOST={db_host}\n"
-                    f"   DB_PORT={db_port}\n"
-                    f"   DB_USER={db_user}\n"
-                    f"   DB_PASSWORD=your_database_password_here\n"
-                    f"   DB_NAME={db_name}\n"
-                    "\n"
-                    "Alternatively, you can use a connection string:\n"
-                    "   DATABASE_URL=postgresql://postgres:password@host:port/database\n"
-                )
-                raise ValueError(error_msg)
-            
-            # Try connection based on port
-            if use_pooler:
-                # Pooler connection: use pooler host, not db host
-                pooler_host_explicit = os.getenv("DB_HOST", "")
-                if ".pooler.supabase.com" in pooler_host_explicit:
-                    # User explicitly set pooler host
-                    db_host = pooler_host_explicit
-                    logger.info("Using explicit pooler host from DB_HOST", host=db_host)
-                    try:
-                        self._pg_conn = psycopg2.connect(
-                            host=db_host,
-                            port=db_port,
-                            user=db_user,
-                            password=db_password,
-                            database=db_name,
-                            connect_timeout=10,
-                            sslmode='require'
-                        )
-                        logger.info("PostgreSQL connection established via pooler", host=db_host, port=db_port, user=db_user)
-                        return self._pg_conn
-                    except Exception as e:
-                        error_str = str(e)
-                        logger.warning("Explicit pooler host failed, trying other regions", error=error_str, host=db_host)
-                
-                # Try multiple pooler regions
-                if not project_ref:
-                    raise ValueError(
-                        "Cannot use pooler (port 6543) without project_ref. "
-                        "Set NEXT_PUBLIC_SUPABASE_URL or ensure DB_HOST contains project reference."
-                    )
-                
-                pooler_regions = [
-                    "aws-0-us-east-1",  # US East
-                    "aws-0-us-west-1",  # US West
-                    "aws-0-eu-west-1",   # EU West
-                    "aws-0-ap-south-1", # Asia Pacific
-                ]
-                
-                for region in pooler_regions:
-                    pooler_host = f"{region}.pooler.supabase.com"
-                    try:
-                        logger.info("Trying pooler connection", host=pooler_host, port=db_port, user=db_user)
-                        self._pg_conn = psycopg2.connect(
-                            host=pooler_host,
-                            port=db_port,
-                            user=db_user,
-                            password=db_password,
-                            database=db_name,
-                            connect_timeout=10,
-                            sslmode='require'
-                        )
-                        logger.info("PostgreSQL connection established via pooler", host=pooler_host, port=db_port, user=db_user)
-                        return self._pg_conn
-                    except Exception as pooler_error:
-                        logger.debug("Pooler connection failed for region", region=region, error=str(pooler_error))
-                        continue
-                
-                # All pooler attempts failed
-                error_str = f"All pooler connection attempts failed for project {project_ref}"
-                logger.error("All pooler connection attempts failed", project_ref=project_ref)
-            else:
-                # Direct connection (port 5432)
+                    self._pg_conn.close()
+                except Exception:
+                    pass
+                self._pg_conn = None
+            except Exception as e:
+                # Any other error - connection might be in bad state
+                logger.warning("Connection test failed with unexpected error, creating new connection", error=str(e))
                 try:
-                    # Supabase requires SSL connections
-                    self._pg_conn = psycopg2.connect(
-                        host=db_host,
-                        port=db_port,
-                        user=db_user,
-                        password=db_password,
-                        database=db_name,
-                                connect_timeout=10,
-                                sslmode='require'  # Supabase requires SSL
-                            )
-                    logger.info("PostgreSQL connection established", host=db_host, port=db_port, user=db_user, database=db_name)
-                except psycopg2.OperationalError as e:
-                    error_str = str(e)
-                    logger.warning("Direct connection failed, trying connection pooler as fallback", error=error_str, host=db_host, port=db_port)
-                    
-                    # If direct connection failed and we have project_ref, try pooler as fallback
-                    if project_ref:
-                        # Common pooler regions to try
-                        pooler_regions = [
-                            "aws-0-us-east-1",  # US East
-                            "aws-0-us-west-1",  # US West
-                            "aws-0-eu-west-1",   # EU West
-                            "aws-0-ap-south-1", # Asia Pacific
-                        ]
-                        
-                        pooler_port = 6543
-                        pooler_user = f"postgres.{project_ref}"  # Pooler requires this format
-                        
-                        for region in pooler_regions:
-                            pooler_host = f"{region}.pooler.supabase.com"
-                            try:
-                                logger.info("Trying pooler connection", host=pooler_host, port=pooler_port, user=pooler_user)
-                                self._pg_conn = psycopg2.connect(
-                                    host=pooler_host,
-                                    port=pooler_port,
-                                    user=pooler_user,
-                                    password=db_password,
-                                    database=db_name,
-                                    connect_timeout=10,
-                                    sslmode='require'
-                                )
-                                logger.info("PostgreSQL connection established via pooler", host=pooler_host, port=pooler_port, user=pooler_user)
-                                return self._pg_conn
-                            except Exception as pooler_error:
-                                logger.debug("Pooler connection failed for region", region=region, error=str(pooler_error))
-                                continue
-                        
-                        logger.error("All pooler connection attempts failed", project_ref=project_ref)
-                    
-                    # If we get here, all connection attempts failed
-                    if "password authentication failed" in error_str.lower() or "no such user" in error_str.lower():
-                        helpful_msg = (
-                            f"Database connection failed.\n"
-                            f"\n"
-                            f"Connection details:\n"
-                            f"  Host: {db_host}\n"
-                            f"  Port: {db_port}\n"
-                            f"  User: {db_user}\n"
-                            f"  Database: {db_name}\n"
-                            f"\n"
-                            f"To fix:\n"
-                            f"1. Verify DB_PASSWORD in your .env file matches your Supabase database password\n"
-                            f"2. Get/reset password from Supabase Dashboard → Settings → Database\n"
-                            f"3. For pooler (port 6543), user must be 'postgres.<project-ref>'\n"
-                            f"4. Check your Supabase project region and use the correct pooler host\n"
-                            f"\n"
-                            f"Current error: {error_str}"
-                        )
-                        logger.error("Database connection failed", error=helpful_msg)
-                        raise ValueError(helpful_msg) from e
-                    else:
-                        raise
+                    self._pg_conn.close()
+                except Exception:
+                    pass
+                self._pg_conn = None
+        
+        # Create new connection using config
+        if self._pg_conn is None or (hasattr(self._pg_conn, 'closed') and self._pg_conn.closed):
+            try:
+                self._pg_conn = self._db_config.get_connection(autocommit=True)
+                return self._pg_conn
+            except ConfigurationError as e:
+                # Re-raise configuration errors as-is (they already have helpful messages)
+                raise
+            except Exception as e:
+                # Wrap other errors
+                raise ConfigurationError(
+                    f"Database service is not available: Failed to establish connection. Error: {str(e)}"
+                ) from e
         
         return self._pg_conn
     
@@ -269,7 +101,8 @@ class SQLService:
         """
         Validate SQL query is safe to execute.
         
-        NO FILTERING - Only validates that query is read-only.
+        Validates that query is read-only (SELECT only).
+        Note: User_id filtering is enforced in generate_sql, not validated here.
         
         Returns:
             (is_safe, error_message)
@@ -297,6 +130,7 @@ class SQLService:
     def generate_sql(
         self,
         query: str,
+        user_id: Optional[str] = None,
         normalized_query: Optional[str] = None,
         entities: Optional[Dict[str, Any]] = None,
         scope: Optional[Dict[str, Optional[str]]] = None
@@ -306,16 +140,17 @@ class SQLService:
         
         Args:
             query: Original user query
+            user_id: User ID for filtering (REQUIRED for security - filters by created_by)
             normalized_query: Normalized query text
-            entities: Extracted entities from normalization (used for query generation, not filtering)
+            entities: Extracted entities from normalization (used for query generation)
             scope: Access scope (deprecated - ignored, not used for filtering)
             
         Returns:
             Generated SQL query string
         """
-        # NO FILTERING - Users have complete access to all data
-        # Extract entities for query generation (not for filtering)
-        # Scope is ignored - no organization_id/project_id filtering
+        # SECURITY: Always filter by user_id (created_by) to ensure users only see their own data
+        if not user_id:
+            raise ValueError("user_id is required for SQL generation - security requirement")
         
         # Build prompt for LLM
         entities_text = ""
@@ -387,6 +222,7 @@ class SQLService:
 
 User Query: {query}
 {f"Normalized Query: {normalized_query}" if normalized_query else ""}
+User ID (for security filtering): {user_id}
 
 Extracted Entities:
 {entities_text if entities_text else "None"}
@@ -402,8 +238,17 @@ Database Schema:
 
 CRITICAL REQUIREMENTS:
 1. Query MUST be a SELECT statement only (read-only)
-2. NO ORGANIZATION FILTERING - Users have complete access to all data across all organizations
-3. Generate queries based ONLY on the query intent and extracted entities
+2. SECURITY: ALWAYS filter by user_id (created_by) - Users can ONLY see their own data
+   - For experiments: WHERE e.created_by = '{user_id}'::uuid
+   - For projects: WHERE p.created_by = '{user_id}'::uuid
+   - For samples: WHERE s.created_by = '{user_id}'::uuid
+   - For lab_notes: WHERE ln.created_by = '{user_id}'::uuid
+   - For protocols: WHERE pr.created_by = '{user_id}'::uuid
+   - For reports: WHERE r.generated_by = '{user_id}'::uuid
+   - For literature_reviews: WHERE lr.created_by = '{user_id}'::uuid
+   - For semantic_chunks: WHERE sc.created_by = '{user_id}'::uuid
+   - If querying multiple tables, ensure ALL are filtered by the user's created_by
+3. Generate queries based on the query intent and extracted entities
 4. If querying experiments, samples, or lab_notes, join through projects as needed
 5. Use proper JOINs to access related tables
 6. Return only the columns needed to answer the query
@@ -414,23 +259,27 @@ CRITICAL REQUIREMENTS:
 11. Do NOT filter by organization_id, project_id, or experiment_id unless explicitly mentioned in the query
 
 Example JOIN patterns:
-- To get a specific experiment by ID:
+- To get a specific experiment by ID (MUST filter by user):
   SELECT e.* FROM experiments e 
   JOIN projects p ON e.project_id = p.id 
   WHERE e.id = '<experiment_id>'::uuid
+    AND e.created_by = '{user_id}'::uuid
   
-- To get all experiments (general query):
+- To get all experiments for the user (MUST filter by user):
   SELECT e.* FROM experiments e 
   JOIN projects p ON e.project_id = p.id
+  WHERE e.created_by = '{user_id}'::uuid
   
-- To get a specific project by ID:
+- To get a specific project by ID (MUST filter by user):
   SELECT * FROM projects
   WHERE id = '<project_id>'::uuid
+    AND created_by = '{user_id}'::uuid
   
-- To get all samples:
+- To get all samples for the user (MUST filter by user):
   SELECT s.* FROM samples s
   JOIN experiments e ON s.experiment_id = e.id
   JOIN projects p ON e.project_id = p.id
+  WHERE s.created_by = '{user_id}'::uuid
 
 - To get experiments created by a person (by name):
   SELECT e.* FROM experiments e
@@ -499,11 +348,11 @@ Return ONLY the SQL query, no explanations, no markdown, just the SQL statement.
         """
         Execute SQL query safely.
         
-        NO FILTERING - Users have complete access to all data.
+        SECURITY: SQL should already be filtered by user_id (created_by) from generate_sql.
         Only validates that query is read-only (SELECT only).
         
         Args:
-            sql: SQL query to execute
+            sql: SQL query to execute (should already include user_id filtering)
             scope: Access scope (deprecated - not used for filtering)
             
         Returns:
@@ -517,11 +366,13 @@ Return ONLY the SQL query, no explanations, no markdown, just the SQL statement.
             if not is_safe:
                 raise ValueError(f"SQL safety validation failed: {error_msg}")
             
-            # Get PostgreSQL connection
-            conn = self._get_pg_connection()
+            # Get PostgreSQL connection (autocommit is enabled, so no transaction issues)
+            # Always get a fresh connection to avoid any state issues from previous queries
+            conn = self._get_pg_connection(force_new=False)
+            
             cursor = conn.cursor(cursor_factory=RealDictCursor)
             
-            # Execute query
+            # Execute query (autocommit mode means each query runs in its own transaction)
             cursor.execute(sql)
             
             # Fetch results
@@ -532,6 +383,8 @@ Return ONLY the SQL query, no explanations, no markdown, just the SQL statement.
             row_count = len(data)
             
             cursor.close()
+            
+            # No need to commit - autocommit is enabled
             
             execution_time_ms = (time.time() - start_time) * 1000
             
@@ -550,11 +403,44 @@ Return ONLY the SQL query, no explanations, no markdown, just the SQL statement.
             
         except psycopg2.Error as e:
             execution_time_ms = (time.time() - start_time) * 1000
+            
+            # CRITICAL: Reset connection on error to prevent transaction state issues
+            # Even with autocommit, a failed query can leave the connection in a bad state
+            try:
+                if hasattr(self, '_pg_conn') and self._pg_conn and not self._pg_conn.closed:
+                    try:
+                        # Try to rollback any aborted transaction
+                        self._pg_conn.rollback()
+                    except Exception:
+                        pass
+                    self._pg_conn.close()
+            except Exception:
+                pass
+            self._pg_conn = None
+            
+            # Log the error details for debugging
+            error_str = str(e)
+            if "transaction is aborted" in error_str.lower():
+                logger.warning(
+                    "Connection had aborted transaction - connection will be reset",
+                    error=error_str
+                )
+                # Raise as ConfigurationError with helpful message
+                raise ConfigurationError(
+                    f"Database service is not available: Connection has aborted transaction. "
+                    f"This usually means the connection is in a bad state. Error: {error_str}"
+                ) from e
+            
             logger.error(
                 "SQL execution failed (PostgreSQL error)",
                 error=str(e),
                 execution_time_ms=round(execution_time_ms, 2)
             )
+            
+            # Raise as ConfigurationError for other database errors
+            raise ConfigurationError(
+                f"Database service is not available: SQL execution failed. Error: {error_str}"
+            ) from e
             return {
                 "data": [],
                 "row_count": 0,
@@ -578,6 +464,7 @@ Return ONLY the SQL query, no explanations, no markdown, just the SQL statement.
     def generate_and_execute(
         self,
         query: str,
+        user_id: Optional[str] = None,
         normalized_query: Optional[str] = None,
         entities: Optional[Dict[str, Any]] = None,
         scope: Optional[Dict[str, Optional[str]]] = None
@@ -587,9 +474,10 @@ Return ONLY the SQL query, no explanations, no markdown, just the SQL statement.
         
         Args:
             query: Original user query
+            user_id: User ID for filtering (REQUIRED for security)
             normalized_query: Normalized query text
             entities: Extracted entities
-            scope: Access scope
+            scope: Access scope (deprecated)
             
         Returns:
             Dict with data, row_count, execution_time_ms, or error
@@ -598,6 +486,7 @@ Return ONLY the SQL query, no explanations, no markdown, just the SQL statement.
             # Generate SQL
             sql = self.generate_sql(
                 query=query,
+                user_id=user_id,
                 normalized_query=normalized_query,
                 entities=entities,
                 scope=scope

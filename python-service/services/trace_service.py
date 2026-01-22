@@ -111,7 +111,8 @@ class TraceService:
             
         except Exception as e:
             # Don't break agent execution if trace logging fails
-            logger.error(
+            # Silently fail - don't log errors to avoid console noise
+            logger.debug(
                 "Failed to log trace event",
                 run_id=run_id,
                 node_name=node_name,

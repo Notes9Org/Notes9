@@ -2,7 +2,6 @@
 import time
 from uuid import uuid4
 from fastapi import APIRouter, HTTPException
-from fastapi.responses import JSONResponse
 import structlog
 
 from agents.contracts.request import AgentRequest, ChatMessage
@@ -40,33 +39,16 @@ def get_agent_graph():
 
 @router.post("/normalize/test")
 async def test_normalize(request: NormalizeTestRequest):
-    """
-    Test normalize node directly - simple endpoint for quick testing.
-    
-    Use this to test how queries are normalized without running the full agent.
-    Perfect for Postman/testing!
-    
-    Example:
-    ```json
-    {
-        "query": "How many experiments were completed last month?",
-        "user_id": "user-123",
-        "session_id": "session-456"
-    }
-    ```
-    """
-    from uuid import uuid4
-    
+    """Test normalize node directly without running full agent."""
     run_id = str(uuid4())
     
-    # Create minimal state - no scope filtering
     state: AgentState = {
         "run_id": run_id,
         "request": {
             "query": request.query,
             "user_id": request.user_id,
             "session_id": request.session_id,
-            "scope": {},  # Empty scope - no filtering
+            "scope": {},
             "history": [msg.model_dump() if hasattr(msg, "model_dump") else msg for msg in (request.history or [])],
             "options": {}
         },
@@ -88,11 +70,7 @@ async def test_normalize(request: NormalizeTestRequest):
         if normalized:
             return {
                 "success": True,
-                "input": {
-                    "query": request.query,
-                    "organization_id": request.organization_id,
-                    "project_id": request.project_id
-                },
+                "input": {"query": request.query},
                 "output": {
                     "intent": normalized.intent,
                     "normalized_query": normalized.normalized_query,
@@ -103,59 +81,41 @@ async def test_normalize(request: NormalizeTestRequest):
             }
         else:
             error_msg = result.get("final_response", {}).get("answer", "Unknown error") if result.get("final_response") else "No output generated"
-            return {
-                "success": False,
-                "error": error_msg
-            }
+            return {"success": False, "error": error_msg}
     except Exception as e:
         logger.error("normalize test failed", error=str(e), query=request.query)
-        return {
-            "success": False,
-            "error": str(e)
-        }
+        return {"success": False, "error": str(e)}
 
 
 @router.post("/run", response_model=FinalResponse)
 async def run_agent(request: AgentRequest) -> FinalResponse:
-    """
-    Execute agent graph with user query.
-    
-    Processes query through normalize → router → tools → summarizer → judge → final.
-    """
+    """Execute agent graph: normalize → router → tools → summarizer → judge → final."""
     start_time = time.time()
     run_id = str(uuid4())
     trace_service = TraceService()
     
-    logger.info(
-        "agent_run started",
-        run_id=run_id,
-        query=request.query[:100],
-        user_id=request.user_id,
-        session_id=request.session_id
-    )
+    logger.info("agent_run started", run_id=run_id, query=request.query[:100])
     
     try:
-        # Create run record in database (no scope filtering)
         try:
             trace_service.create_run(
                 run_id=run_id,
-                organization_id=None,  # No filtering
+                organization_id=None,
                 created_by=request.user_id,
                 session_id=request.session_id,
                 query=request.query,
                 project_id=None
             )
         except Exception as e:
-            logger.warning("Trace logging failed, continuing", error=str(e), run_id=run_id)
+            logger.warning("Trace logging failed, continuing", error=str(e))
         
-        # Create initial state - no scope filtering, always use empty dict
         initial_state: AgentState = {
             "run_id": run_id,
             "request": {
                 "query": request.query,
                 "user_id": request.user_id,
                 "session_id": request.session_id,
-                "scope": {},  # Always empty - no filtering applied
+                "scope": {},
                 "history": [msg.model_dump() if hasattr(msg, "model_dump") else msg for msg in request.history],
                 "options": request.options or {}
             },
@@ -170,15 +130,11 @@ async def run_agent(request: AgentRequest) -> FinalResponse:
             "trace": []
         }
         
-        # Execute graph
         graph = get_agent_graph()
         final_state = graph.invoke(initial_state)
-        
-        # Extract final response
         final_response = final_state.get("final_response")
         
         if not final_response:
-            # Fallback error response
             final_response = FinalResponse(
                 answer="Agent execution completed but no response generated.",
                 citations=[],
@@ -187,8 +143,6 @@ async def run_agent(request: AgentRequest) -> FinalResponse:
             )
         
         total_latency_ms = int((time.time() - start_time) * 1000)
-        
-        # Update run status
         trace_service.update_run_status(
             run_id=run_id,
             status="completed",
@@ -197,43 +151,13 @@ async def run_agent(request: AgentRequest) -> FinalResponse:
             total_latency_ms=total_latency_ms
         )
         
-        logger.info(
-            "agent_run completed",
-            run_id=run_id,
-            answer_length=len(final_response.answer),
-            confidence=final_response.confidence,
-            tool_used=final_response.tool_used,
-            total_latency_ms=round(total_latency_ms, 2)
-        )
-        
+        logger.info("agent_run completed", run_id=run_id, confidence=final_response.confidence)
         return final_response
         
     except HTTPException:
-        # Update run status to failed
-        total_latency_ms = int((time.time() - start_time) * 1000)
-        trace_service.update_run_status(
-            run_id=run_id,
-            status="failed",
-            total_latency_ms=total_latency_ms
-        )
+        trace_service.update_run_status(run_id=run_id, status="failed", total_latency_ms=int((time.time() - start_time) * 1000))
         raise
     except Exception as e:
-        total_latency_ms = int((time.time() - start_time) * 1000)
-        
-        # Update run status to failed
-        trace_service.update_run_status(
-            run_id=run_id,
-            status="failed",
-            total_latency_ms=total_latency_ms
-        )
-        
-        logger.error(
-            "agent_run failed",
-            run_id=run_id,
-            error=str(e),
-            total_latency_ms=round(total_latency_ms, 2)
-        )
-        raise HTTPException(
-            status_code=500,
-            detail=f"Agent execution failed: {str(e)}"
-        )
+        trace_service.update_run_status(run_id=run_id, status="failed", total_latency_ms=int((time.time() - start_time) * 1000))
+        logger.error("agent_run failed", run_id=run_id, error=str(e))
+        raise HTTPException(status_code=500, detail=f"Agent execution failed: {str(e)}")

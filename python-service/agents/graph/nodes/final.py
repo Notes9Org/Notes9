@@ -20,9 +20,7 @@ def get_trace_service() -> TraceService:
 
 
 def final_node(state: AgentState) -> AgentState:
-    """
-    Format final response with answer, citations, confidence, and debug trace.
-    """
+    """Format final response with answer, citations, confidence, and debug trace."""
     start_time = time.time()
     summary = state.get("summary")
     judge = state.get("judge_result")
@@ -35,33 +33,28 @@ def final_node(state: AgentState) -> AgentState:
     
     logger.info(
         "final_node started",
+        agent_node="final",
         run_id=run_id,
         has_summary=summary is not None,
         has_judge=judge is not None,
-        retry_count=retry_count
+        retry_count=retry_count,
+        payload={
+            "input_has_summary": summary is not None,
+            "input_has_judge": judge is not None,
+            "input_retry_count": retry_count
+        }
     )
     
-    # Log input event
     if run_id:
         try:
-            trace_service.log_event(
-                run_id=run_id,
-                node_name="final",
-                event_type="input",
-                payload={
-                    "has_summary": summary is not None,
-                    "has_judge": judge is not None,
-                    "retry_count": retry_count
-                }
-            )
+            trace_service.log_event(run_id=run_id, node_name="final", event_type="input",
+                                   payload={"has_summary": summary is not None, "has_judge": judge is not None})
         except Exception:
             pass
     
     try:
-        # Determine tool used
-        tool_used = "rag"  # Default
+        tool_used = "rag"
         if router:
-            # Handle both dict and object access
             if isinstance(router, dict):
                 tools = router.get("tools", [])
             else:
@@ -75,22 +68,12 @@ def final_node(state: AgentState) -> AgentState:
                 elif "rag" in tools:
                     tool_used = "rag"
         
-        # Handle error cases
         if not summary:
-            logger.warning(
-                "final_node: No summary found in state",
-                run_id=run_id,
-                state_keys=list(state.keys()),
-                retry_count=retry_count,
-                has_judge=judge is not None
-            )
             answer = "Unable to generate answer. Please try rephrasing your query."
             citations = []
             confidence = 0.0
         else:
             answer = summary.get("answer", "")
-            
-            # Convert citations to Citation objects
             citations = []
             for cit in summary.get("citations", []):
                 citations.append(Citation(
@@ -101,119 +84,62 @@ def final_node(state: AgentState) -> AgentState:
                     excerpt=cit.get("excerpt")
                 ))
             
-            # Determine confidence
             if judge and judge.get("verdict") == "pass":
                 confidence = judge.get("confidence", 0.7)
-                # Boost confidence for hybrid
                 if tool_used == "hybrid":
                     confidence = min(confidence + 0.1, 1.0)
             elif tool_used == "sql":
-                # SQL-only queries are high confidence
                 confidence = 0.9
             else:
-                # Default confidence
                 confidence = 0.6
         
-        # Build debug trace if enabled
         debug = None
         options = request.get("options", {}) if isinstance(request, dict) else getattr(request, "options", {}) if hasattr(request, "options") else {}
         if (isinstance(options, dict) and options.get("debug")) or (hasattr(options, "debug") and getattr(options, "debug", False)):
             router_tools = []
-            router_reasoning = None
             if router:
-                if isinstance(router, dict):
-                    router_tools = router.get("tools", [])
-                    router_reasoning = router.get("reasoning")
-                else:
-                    router_tools = getattr(router, "tools", [])
-                    router_reasoning = getattr(router, "reasoning", None)
+                router_tools = router.get("tools", []) if isinstance(router, dict) else getattr(router, "tools", [])
             
-            judge_verdict = None
-            if judge:
-                judge_verdict = judge.get("verdict") if isinstance(judge, dict) else getattr(judge, "verdict", None)
-            
+            judge_verdict = judge.get("verdict") if judge and isinstance(judge, dict) else getattr(judge, "verdict", None) if judge else None
             debug = {
-                "trace": trace,
-                "retry_count": retry_count,
-                "router_decision": {
-                    "tools": router_tools,
-                    "reasoning": router_reasoning
-                },
-                "judge_verdict": judge_verdict,
-                "total_latency_ms": sum(t.get("latency_ms", 0) if isinstance(t, dict) else 0 for t in trace)
+                "trace": trace, "retry_count": retry_count,
+                "router_decision": {"tools": router_tools},
+                "judge_verdict": judge_verdict
             }
         
-        # Create final response
         final_response = FinalResponse(
-            answer=answer,
-            citations=citations,
-            confidence=confidence,
-            tool_used=tool_used,
-            debug=debug
+            answer=answer, citations=citations, confidence=confidence, tool_used=tool_used, debug=debug
         )
         
         latency_ms = int((time.time() - start_time) * 1000)
-        
-        logger.info(
-            "final_node completed",
-            run_id=run_id,
-            answer_length=len(answer),
-            citations_count=len(citations),
-            confidence=confidence,
-            tool_used=tool_used,
-            latency_ms=round(latency_ms, 2)
-        )
-        
+        logger.info("final_node completed", agent_node="final", run_id=run_id,
+                   answer_length=len(answer), confidence=confidence, tool_used=tool_used,
+                   payload={"input_has_summary": summary is not None, "input_has_judge": judge is not None,
+                           "output_answer_length": len(answer), "output_confidence": confidence,
+                           "output_tool_used": tool_used, "output_citations_count": len(citations)})
         state["final_response"] = final_response
         
-        # Log output event
         if run_id:
             try:
-                trace_service.log_event(
-                    run_id=run_id,
-                    node_name="final",
-                    event_type="output",
-                    payload={
-                        "answer_length": len(answer),
-                        "citations_count": len(citations),
-                        "confidence": confidence,
-                        "tool_used": tool_used
-                    },
-                    latency_ms=latency_ms
-                )
+                trace_service.log_event(run_id=run_id, node_name="final", event_type="output",
+                                      payload={"answer_length": len(answer), "confidence": confidence},
+                                      latency_ms=latency_ms)
             except Exception:
                 pass
         
         return state
         
     except Exception as e:
-        latency_ms = int((time.time() - start_time) * 1000)
-        logger.error(
-            "final_node failed",
-            run_id=run_id,
-            error=str(e),
-            latency_ms=round(latency_ms, 2)
-        )
+        logger.error("final_node failed", run_id=run_id, error=str(e))
         
-        # Log error event
         if run_id:
             try:
-                trace_service.log_event(
-                    run_id=run_id,
-                    node_name="final",
-                    event_type="error",
-                    payload={"error": str(e)},
-                    latency_ms=latency_ms
-                )
+                trace_service.log_event(run_id=run_id, node_name="final", event_type="error",
+                                      payload={"error": str(e)})
             except Exception:
                 pass
         
-        # Error response
         state["final_response"] = FinalResponse(
-            answer=f"Error formatting response: {str(e)}",
-            citations=[],
-            confidence=0.0,
-            tool_used="rag"
+            answer=f"Error formatting response: {str(e)}", citations=[], confidence=0.0, tool_used="rag"
         )
-        
         return state

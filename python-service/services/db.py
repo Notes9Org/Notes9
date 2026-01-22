@@ -1,17 +1,7 @@
-import os
 from typing import Optional, List, Dict, Any
-
-# Patch websockets before importing supabase
-try:
-    from services.websockets_patch import *  # noqa: F401, F403
-except ImportError:
-    pass  # Patch not critical if websockets not installed
-
-from supabase import create_client, Client
-from dotenv import load_dotenv
 import structlog
 
-load_dotenv()
+from services.config import get_supabase_config
 
 logger = structlog.get_logger()
 
@@ -19,14 +9,9 @@ logger = structlog.get_logger()
 class SupabaseService:
 
     def __init__(self):
-        self.url = os.getenv("NEXT_PUBLIC_SUPABASE_URL")
-        self.service_key = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
-
-        if not self.url or not self.service_key:
-            raise ValueError("NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY must be set")
-
-        self.client: Client = create_client(self.url, self.service_key)
-        logger.info("Supabase client initialized", url=self.url)
+        config = get_supabase_config()
+        self.client = config.get_client()
+        logger.info("Supabase client initialized", url=config.url)
 
     def get_pending_jobs(self, limit: int = 10) -> List[Dict[str, Any]]:
         """Get pending chunk jobs from the database"""

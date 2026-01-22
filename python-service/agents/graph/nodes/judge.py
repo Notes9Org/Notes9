@@ -22,18 +22,7 @@ def get_trace_service() -> TraceService:
 
 
 def judge_node(state: AgentState) -> AgentState:
-    """
-    Validate answer quality using LLM-as-Judge.
-    
-    Checks:
-    - Factual consistency: Do numbers match SQL data?
-    - Citation coverage: Are all claims properly cited?
-    - Scope leakage: Does answer stay within query scope (no hallucinations)?
-    - Completeness: Does answer fully address the query?
-    
-    Note: "Scope leakage" refers to answer quality (no hallucinated info),
-    not data access filtering (users have full data access).
-    """
+    """Validate answer quality: factual consistency, citations, completeness."""
     start_time = time.time()
     summary = state.get("summary")
     sql_result = state.get("sql_result")
@@ -71,30 +60,27 @@ def judge_node(state: AgentState) -> AgentState:
     
     logger.info(
         "judge_node started",
+        agent_node="judge",
         run_id=run_id,
         answer_length=len(summary.get("answer", "")),
-        citations_count=len(summary.get("citations", []))
+        citations_count=len(summary.get("citations", [])),
+        payload={
+            "input_answer_preview": summary.get("answer", "")[:200],
+            "input_answer_length": len(summary.get("answer", "")),
+            "input_citations_count": len(summary.get("citations", []))
+        }
     )
     
-    # Log input event
     if run_id:
         try:
-            trace_service.log_event(
-                run_id=run_id,
-                node_name="judge",
-                event_type="input",
-                payload={
-                    "answer_length": len(summary.get("answer", "")),
-                    "citations_count": len(summary.get("citations", []))
-                }
-            )
+            trace_service.log_event(run_id=run_id, node_name="judge", event_type="input",
+                                   payload={"answer_length": len(summary.get("answer", "")),
+                                           "citations_count": len(summary.get("citations", []))})
         except Exception:
             pass
     
     try:
         llm_client = get_llm_client()
-        
-        # Build context
         query_text = request.get("query", "") if isinstance(request, dict) else getattr(request, "query", "")
         original_query = normalized.normalized_query if normalized else query_text
         answer = summary.get("answer", "")
@@ -178,29 +164,19 @@ Verdict "fail" if any major issue exists."""
             "required": ["verdict", "confidence", "issues"]
         }
         
-        # Call LLM
         try:
             result = llm_client.complete_json(prompt, schema, temperature=0.0)
         except Exception as e:
             logger.error("Judge LLM call failed", error=str(e), run_id=run_id)
-            # Default to fail on error
-            judge_output = {
-                "verdict": "fail",
-                "confidence": 0.0,
-                "issues": [f"Judge error: {str(e)}"],
-                "suggested_revision": None
-            }
+            judge_output = {"verdict": "fail", "confidence": 0.0, "issues": [f"Judge error: {str(e)}"],
+                           "suggested_revision": None}
             state["judge_result"] = judge_output
             return state
         
         if not result or not isinstance(result, dict):
             logger.error("Invalid LLM result in judge", run_id=run_id)
-            judge_output = {
-                "verdict": "fail",
-                "confidence": 0.0,
-                "issues": ["Invalid judge response"],
-                "suggested_revision": None
-            }
+            judge_output = {"verdict": "fail", "confidence": 0.0, "issues": ["Invalid judge response"],
+                           "suggested_revision": None}
             state["judge_result"] = judge_output
             return state
         
@@ -211,112 +187,52 @@ Verdict "fail" if any major issue exists."""
             "suggested_revision": result.get("suggested_revision")
         }
         
-        # Log thinking: validation reasoning
         thinking_logger = get_thinking_logger()
         if run_id:
             thinking_logger.log_validation(
-                run_id=run_id,
-                node_name="judge",
-                validation_type="answer_quality",
-                criteria=[
-                    "Factual consistency (SQL numbers match answer)",
-                    "Citation coverage (all claims cited)",
-                    "Scope leakage (no out-of-scope info)",
-                    "Completeness (answers the query)"
-                ],
-                result=judge_output["verdict"],
-                issues=judge_output["issues"]
-            )
-            
-            thinking_logger.log_analysis(
-                run_id=run_id,
-                node_name="judge",
-                analysis=f"Evaluated answer quality: {judge_output['verdict']}",
-                data_summary={
-                    "verdict": judge_output["verdict"],
-                    "confidence": judge_output["confidence"],
-                    "issues_count": len(judge_output["issues"]),
-                    "has_suggestion": bool(judge_output.get("suggested_revision"))
-                },
-                insights=judge_output["issues"][:3] if judge_output["issues"] else ["No issues found"]
+                run_id=run_id, node_name="judge", validation_type="answer_quality",
+                criteria=["Factual consistency", "Citation coverage", "Completeness"],
+                result=judge_output["verdict"], issues=judge_output["issues"]
             )
         
         latency_ms = int((time.time() - start_time) * 1000)
-        
-        logger.info(
-            "judge_node completed",
-            run_id=run_id,
-            verdict=judge_output["verdict"],
-            confidence=judge_output["confidence"],
-            issues_count=len(judge_output["issues"]),
-            latency_ms=round(latency_ms, 2)
-        )
-        
+        logger.info("judge_node completed", agent_node="judge", run_id=run_id,
+                   verdict=judge_output["verdict"], confidence=judge_output["confidence"],
+                   latency_ms=round(latency_ms, 2),
+                   payload={"input_answer_length": len(answer), "input_citations_count": len(citations),
+                           "output_verdict": judge_output["verdict"], "output_confidence": judge_output["confidence"],
+                           "output_issues_count": len(judge_output["issues"])})
         state["judge_result"] = judge_output
         
-        # Log output event
         if run_id:
             try:
-                trace_service.log_event(
-                    run_id=run_id,
-                    node_name="judge",
-                    event_type="output",
-                    payload={
-                        "verdict": judge_output["verdict"],
-                        "confidence": judge_output["confidence"],
-                        "issues_count": len(judge_output["issues"])
-                    },
-                    latency_ms=latency_ms
-                )
+                trace_service.log_event(run_id=run_id, node_name="judge", event_type="output",
+                                       payload={"verdict": judge_output["verdict"],
+                                               "confidence": judge_output["confidence"]}, latency_ms=latency_ms)
             except Exception:
                 pass
         
-        # Add to trace if debug enabled
         options = request.get("options", {}) if isinstance(request, dict) else getattr(request, "options", {}) if hasattr(request, "options") else {}
         if (isinstance(options, dict) and options.get("debug")) or (hasattr(options, "debug") and getattr(options, "debug", False)):
             state["trace"].append({
-                "node": "judge",
-                "input": {
-                    "answer_length": len(answer),
-                    "citations_count": len(citations)
-                },
-                "output": judge_output,
-                "latency_ms": round(latency_ms, 2),
-                "timestamp": time.time()
+                "node": "judge", "input": {"answer_length": len(answer)},
+                "output": judge_output, "latency_ms": round(latency_ms, 2)
             })
         
         return state
         
     except Exception as e:
-        latency_ms = int((time.time() - start_time) * 1000)
-        logger.error(
-            "judge_node failed",
-            run_id=run_id,
-            error=str(e),
-            latency_ms=round(latency_ms, 2)
-        )
+        logger.error("judge_node failed", run_id=run_id, error=str(e))
         
-        # Log error event
         if run_id:
             try:
-                trace_service.log_event(
-                    run_id=run_id,
-                    node_name="judge",
-                    event_type="error",
-                    payload={"error": str(e)},
-                    latency_ms=latency_ms
-                )
+                trace_service.log_event(run_id=run_id, node_name="judge", event_type="error",
+                                       payload={"error": str(e)})
             except Exception:
                 pass
         
-        # Default to fail on error
-        state["judge_result"] = {
-            "verdict": "fail",
-            "confidence": 0.0,
-            "issues": [f"Judge error: {str(e)}"],
-            "suggested_revision": None
-        }
-        
+        state["judge_result"] = {"verdict": "fail", "confidence": 0.0, "issues": [f"Judge error: {str(e)}"],
+                                "suggested_revision": None}
         return state
 
 

@@ -67,6 +67,7 @@ class RAGService:
     def search_chunks(
         self,
         query_embedding: List[float],
+        user_id: Optional[str] = None,
         organization_id: Optional[str] = None,
         project_id: Optional[str] = None,
         experiment_id: Optional[str] = None,
@@ -80,6 +81,7 @@ class RAGService:
         
         Args:
             query_embedding: Query text embedding vector
+            user_id: Filter by user (created_by) - REQUIRED for security
             organization_id: Filter by organization
             project_id: Filter by project
             experiment_id: Filter by experiment
@@ -96,7 +98,14 @@ class RAGService:
                 .select("*")\
                 .not_.is_("embedding", "null")
             
-            # Apply filters
+            # SECURITY: Always filter by user_id (created_by) to ensure users only see their own data
+            if user_id:
+                query = query.eq("created_by", user_id)
+            else:
+                logger.warning("RAG search called without user_id - security risk, returning empty results")
+                return []
+            
+            # Apply additional filters
             if organization_id:
                 query = query.eq("organization_id", organization_id)
             if project_id:
@@ -209,6 +218,7 @@ class RAGService:
         self,
         query_embedding: List[float],
         query_text: str,
+        user_id: Optional[str] = None,
         organization_id: Optional[str] = None,
         project_id: Optional[str] = None,
         experiment_id: Optional[str] = None,
@@ -225,6 +235,7 @@ class RAGService:
         Args:
             query_embedding: Query text embedding vector
             query_text: Query text for full-text matching
+            user_id: Filter by user (created_by) - REQUIRED for security
             organization_id: Filter by organization
             project_id: Filter by project
             experiment_id: Filter by experiment
@@ -243,7 +254,14 @@ class RAGService:
                 .select("*")\
                 .not_.is_("embedding", "null")
             
-            # Apply filters
+            # SECURITY: Always filter by user_id (created_by) to ensure users only see their own data
+            if user_id:
+                query = query.eq("created_by", user_id)
+            else:
+                logger.warning("Hybrid RAG search called without user_id - security risk, returning empty results")
+                return []
+            
+            # Apply additional filters
             if organization_id:
                 query = query.eq("organization_id", organization_id)
             if project_id:

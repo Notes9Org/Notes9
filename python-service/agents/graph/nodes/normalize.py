@@ -32,54 +32,44 @@ def get_trace_service() -> TraceService:
 
 
 def normalize_node(state: AgentState) -> AgentState:
-    """
-    Normalize user query into structured format.
-    
-    Converts raw query + history → NormalizedQuery with intent, entities, context.
-    No filtering applied - processes query based on content only.
-    """
+    """Normalize user query into structured format with intent, entities, and context."""
     start_time = time.time()
     request = state["request"]
     run_id = state.get("run_id")
     trace_service = get_trace_service()
     
-    # Handle both dict and object access for request
     query_text = request.get("query", "") if isinstance(request, dict) else getattr(request, "query", "")
     user_id = request.get("user_id", "") if isinstance(request, dict) else getattr(request, "user_id", "")
     history = request.get("history", []) if isinstance(request, dict) else getattr(request, "history", [])
     
     logger.info(
         "normalize_node started",
+        agent_node="normalize",
         run_id=run_id,
         query=query_text[:100],
         user_id=user_id,
-        has_history=len(history) > 0
+        has_history=len(history) > 0,
+        payload={
+            "input_query": query_text,
+            "user_id": user_id,
+            "history_length": len(history),
+            "history_preview": [{"role": msg.get("role", getattr(msg, "role", "user")), "content": (msg.get("content", getattr(msg, "content", ""))[:100])} for msg in history[-2:]] if history else []
+        }
     )
     
-    # Log input event
     if run_id:
         try:
-            trace_service.log_event(
-                run_id=run_id,
-                node_name="normalize",
-                event_type="input",
-                payload={
-                    "query": query_text[:200],
-                    "has_history": len(history) > 0,
-                    "history_length": len(history)
-                }
-            )
+            trace_service.log_event(run_id=run_id, node_name="normalize", event_type="input",
+                                   payload={"query": query_text[:200], "has_history": len(history) > 0})
         except Exception:
-            pass  # Don't break execution if trace logging fails
+            pass
     
     try:
-        # Build prompt
         history_text = ""
         if history:
-            # Handle both dict and object message formats
             history_text = "\n".join([
                 f"{msg.get('role', getattr(msg, 'role', 'user'))}: {msg.get('content', getattr(msg, 'content', ''))}"
-                for msg in history[-5:]  # Last 5 messages
+                for msg in history[-5:]
             ])
         
         prompt = f"""Normalize the following user query for a scientific lab management system.
@@ -128,10 +118,7 @@ Return ONLY valid JSON matching this structure:
   "history_summary": null or "summary string"
 }}"""
 
-        # Call LLM with JSON schema
         llm_client = get_llm_client()
-        
-        # Define expected schema structure
         schema = {
             "type": "object",
             "properties": {
@@ -144,17 +131,13 @@ Return ONLY valid JSON matching this structure:
             "required": ["intent", "normalized_query", "entities", "context"]
         }
         
-        # Get temperature from env or use default (0.0 for deterministic)
-        import os
-        normalize_temperature = float(os.getenv("NORMALIZE_TEMPERATURE", "0.0"))
+        from services.config import get_app_config
+        normalize_temperature = get_app_config().normalize_temperature
         
-        # Retry once if JSON invalid
         llm_retries = 0
-        result = None
         try:
             result = llm_client.complete_json(prompt, schema, temperature=normalize_temperature)
         except LLMError as e:
-            # Retry once
             llm_retries = 1
             logger.warning("Normalization failed, retrying once", error=str(e))
             try:
@@ -166,10 +149,8 @@ Return ONLY valid JSON matching this structure:
         if not result:
             raise ValueError("LLM returned empty result")
         
-        # Validate and create NormalizedQuery
         normalized = NormalizedQuery(**result)
         
-        # Log thinking: normalization reasoning
         thinking_logger = get_thinking_logger()
         if run_id:
             thinking_logger.log_reasoning(
@@ -177,145 +158,65 @@ Return ONLY valid JSON matching this structure:
                 node_name="normalize",
                 reasoning=f"Normalized query from '{query_text}' to '{normalized.normalized_query}'",
                 factors=[
-                    f"Intent detected: {normalized.intent}",
-                    f"Entities extracted: {len(normalized.entities)}",
-                    f"Context flags: aggregation={normalized.context.get('requires_aggregation', False)}, search={normalized.context.get('requires_semantic_search', False)}"
+                    f"Intent: {normalized.intent}",
+                    f"Entities: {len(normalized.entities)}"
                 ],
-                conclusion=f"Query classified as {normalized.intent} intent with {len(normalized.entities)} entities"
+                conclusion=f"Query classified as {normalized.intent} intent"
             )
         
-        # Run invariant validation
         is_valid, validation_issues = validate_normalized_output(normalized, request)
         if not is_valid:
-            logger.warning(
-                "Normalize validation issues detected",
-                run_id=run_id,
-                issues=validation_issues,
-                intent=normalized.intent
-            )
-            
-            # Log validation thinking
+            logger.warning("Normalize validation issues", run_id=run_id, issues=validation_issues)
             if run_id:
                 thinking_logger.log_validation(
-                    run_id=run_id,
-                    node_name="normalize",
-                    validation_type="invariant",
-                    criteria=["intent matches context", "query not empty", "entities structure valid"],
-                    result="fail",
-                    issues=validation_issues
-            )
+                    run_id=run_id, node_name="normalize", validation_type="invariant",
+                    criteria=["intent matches context", "query not empty"],
+                    result="fail", issues=validation_issues
+                )
         
         latency_ms = int((time.time() - start_time) * 1000)
+        logger.info("normalize_node completed", agent_node="normalize", run_id=run_id,
+                   intent=normalized.intent, normalized_query=normalized.normalized_query[:100],
+                   entities_count=len(normalized.entities), latency_ms=round(latency_ms, 2),
+                   payload={"input_query": query_text[:200], "output_intent": normalized.intent,
+                           "output_normalized_query": normalized.normalized_query[:200], "output_entities_count": len(normalized.entities)})
         
-        logger.info(
-            "normalize_node completed",
-            run_id=run_id,
-            intent=normalized.intent,
-            normalized_query=normalized.normalized_query[:100],
-            entities_count=len(normalized.entities),
-            latency_ms=round(latency_ms, 2)
-        )
-        
-        # Update state
         state["normalized_query"] = normalized
         
-        # Log output event (enhanced)
         if run_id:
             try:
-                # Get sample of entities (first 3 keys)
-                entities_sample = {}
-                for i, (k, v) in enumerate(list(normalized.entities.items())[:3]):
-                    entities_sample[k] = str(v)[:50]  # Truncate long values
-                
                 trace_service.log_event(
-                    run_id=run_id,
-                    node_name="normalize",
-                    event_type="output",
-                    payload={
-                        "intent": normalized.intent,
-                        "normalized_query": normalized.normalized_query[:200],
-                        "entities_keys": list(normalized.entities.keys()),
-                        "entities_sample": entities_sample,
-                        "entities_count": len(normalized.entities),
-                        "context_keys": list(normalized.context.keys()),
-                        "has_history_summary": bool(normalized.history_summary),
-                        "validation_passed": is_valid,
-                        "validation_issues": validation_issues if not is_valid else []
-                    },
+                    run_id=run_id, node_name="normalize", event_type="output",
+                    payload={"intent": normalized.intent, "entities_count": len(normalized.entities)},
                     latency_ms=latency_ms
                 )
             except Exception:
-                pass  # Don't break execution if trace logging fails
+                pass
         
-        # Log metric event
-        if run_id:
-            try:
-                # Estimate prompt tokens (rough: ~4 chars per token)
-                prompt_tokens_estimate = len(prompt) // 4
-                
-                trace_service.log_event(
-                    run_id=run_id,
-                    node_name="normalize",
-                    event_type="metric",
-                    payload={
-                        "query_length": len(query_text),
-                        "normalized_length": len(normalized.normalized_query),
-                        "entities_extracted": len(normalized.entities),
-                        "llm_retries": llm_retries,
-                        "prompt_tokens_estimate": prompt_tokens_estimate,
-                        "validation_passed": is_valid
-                    },
-                    latency_ms=latency_ms
-                )
-            except Exception:
-                pass  # Don't break execution if trace logging fails
-        
-        # Add to trace if debug enabled
         options = request.get("options", {}) if isinstance(request, dict) else getattr(request, "options", {})
         if (isinstance(options, dict) and options.get("debug")) or (hasattr(options, "debug") and getattr(options, "debug", False)):
-            query_for_trace = request.get("query", "") if isinstance(request, dict) else getattr(request, "query", "")
             state["trace"].append({
                 "node": "normalize",
-                "input": {"query": query_for_trace[:200]},
-                "output": {
-                    "intent": normalized.intent,
-                    "normalized_query": normalized.normalized_query[:200]
-                },
-                "latency_ms": round(latency_ms, 2),
-                "timestamp": time.time()
+                "input": {"query": query_text[:200]},
+                "output": {"intent": normalized.intent, "normalized_query": normalized.normalized_query[:200]},
+                "latency_ms": round(latency_ms, 2)
             })
         
         return state
         
     except Exception as e:
         latency_ms = int((time.time() - start_time) * 1000)
-        logger.error(
-            "normalize_node failed",
-            run_id=run_id,
-            error=str(e),
-            latency_ms=round(latency_ms, 2)
-        )
+        logger.error("normalize_node failed", run_id=run_id, error=str(e))
         
-        # Log error event
         if run_id:
             try:
-                trace_service.log_event(
-                    run_id=run_id,
-                    node_name="normalize",
-                    event_type="error",
-                    payload={"error": str(e)},
-                    latency_ms=latency_ms
-                )
+                trace_service.log_event(run_id=run_id, node_name="normalize", event_type="error",
+                                       payload={"error": str(e)}, latency_ms=latency_ms)
             except Exception:
-                pass  # Don't break execution if trace logging fails
+                pass
         
-        # Set error response
         from agents.contracts.response import FinalResponse
         state["final_response"] = FinalResponse(
-            answer=f"Error normalizing query: {str(e)}",
-            citations=[],
-            confidence=0.0,
-            tool_used="rag"  # Default
+            answer=f"Error normalizing query: {str(e)}", citations=[], confidence=0.0, tool_used="rag"
         )
-        
         return state
