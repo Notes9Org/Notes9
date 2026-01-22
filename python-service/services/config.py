@@ -362,6 +362,15 @@ class AzureOpenAIConfig:
                 "   AZURE_OPENAI_CHAT_MODEL=gpt-4"
             )
     
+    def get_embedding_model(self) -> str:
+        """Get the embedding model deployment name."""
+        # Use deployment name for Azure OpenAI (deployment name is what's used in API calls)
+        return self.deployment or self.model_name
+    
+    def get_dimensions(self) -> int:
+        """Get the embedding dimensions."""
+        return self.dimensions
+    
     def create_client(self):
         """Create and return Azure OpenAI client."""
         try:

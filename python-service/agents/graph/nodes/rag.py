@@ -106,7 +106,48 @@ def rag_node(state: AgentState) -> AgentState:
     try:
         embedding_service = get_embedding_service()
         rag_service = get_rag_service()
-        query_embedding = embedding_service.embed_text(normalized.normalized_query)
+        
+        # Generate query embedding with error handling
+        try:
+            query_embedding = embedding_service.embed_text(normalized.normalized_query)
+            
+            if not query_embedding or len(query_embedding) == 0:
+                logger.error("RAG search: empty embedding generated", run_id=run_id)
+                state["rag_result"] = []
+                if run_id:
+                    try:
+                        trace_service.log_event(
+                            run_id=run_id, node_name="rag", event_type="error",
+                            payload={"error": "Empty embedding generated"}
+                        )
+                    except Exception:
+                        pass
+                return state
+            
+            logger.debug(
+                "Query embedding generated",
+                run_id=run_id,
+                embedding_dim=len(query_embedding),
+                query_preview=normalized.normalized_query[:100]
+            )
+        except Exception as e:
+            logger.error(
+                "RAG search: failed to generate embedding",
+                run_id=run_id,
+                error=str(e),
+                error_type=type(e).__name__
+            )
+            state["rag_result"] = []
+            if run_id:
+                try:
+                    trace_service.log_event(
+                        run_id=run_id, node_name="rag", event_type="error",
+                        payload={"error": f"Embedding generation failed: {str(e)}"}
+                    )
+                except Exception:
+                    pass
+            return state
+        
         user_id = request.get("user_id", "") if isinstance(request, dict) else getattr(request, "user_id", "")
         
         if not user_id:

@@ -38,15 +38,47 @@ class EmbeddingService:
             raise ValueError("Text cannot be empty")
         
         try:
+            logger.debug(
+                "Generating embedding",
+                model=self.model,
+                dimensions=self.dimensions,
+                text_length=len(text),
+                text_preview=text[:100]
+            )
+            
             response = self.client.embeddings.create(
                 model=self.model,
                 input=text.strip(),
                 dimensions=self.dimensions
             )
             
-            return response.data[0].embedding
+            if not response.data or len(response.data) == 0:
+                raise ValueError("Empty response from embedding API")
+            
+            embedding = response.data[0].embedding
+            
+            if not embedding or len(embedding) != self.dimensions:
+                raise ValueError(
+                    f"Invalid embedding dimensions: expected {self.dimensions}, got {len(embedding) if embedding else 0}"
+                )
+            
+            logger.debug(
+                "Embedding generated successfully",
+                model=self.model,
+                dimensions=len(embedding),
+                embedding_norm=sum(x * x for x in embedding) ** 0.5
+            )
+            
+            return embedding
         except Exception as e:
-            logger.error("Error generating embedding", error=str(e), text_length=len(text))
+            logger.error(
+                "Error generating embedding",
+                error=str(e),
+                error_type=type(e).__name__,
+                text_length=len(text),
+                model=self.model,
+                dimensions=self.dimensions
+            )
             raise
     
     @retry(
