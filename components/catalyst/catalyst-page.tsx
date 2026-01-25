@@ -72,13 +72,12 @@ export function CatalystChat({ sessionId }: CatalystChatProps) {
   } = useChatSessions();
 
   // Create transport with prepareSendMessagesRequest to include modelId dynamically
-  // This follows the Vercel Chat SDK pattern
   const transport = useMemo(() => new DefaultChatTransport({
     api: '/api/chat',
     prepareSendMessagesRequest(request) {
       return {
         body: {
-          messages: request.messages,  // Include messages from request
+          messages: request.messages,
           modelId: currentModelRef.current,
           ...request.body,
         },
@@ -90,7 +89,6 @@ export function CatalystChat({ sessionId }: CatalystChatProps) {
     id: `catalyst-${sessionId || 'new'}`,
     transport,
     // Throttle UI updates during streaming - updates every 100ms
-    // Without this, React batches updates and shows everything at once!
     experimental_throttle: 100,
   });
 
@@ -278,12 +276,13 @@ export function CatalystChat({ sessionId }: CatalystChatProps) {
     if ((!text.trim() && (!attachments || attachments.length === 0)) || isLoading) return;
 
     let sid = currentSessionRef.current;
+    const isNewSession = !sid;
+    
     if (!sid) {
       sid = await createSession();
       if (!sid) return;
       currentSessionRef.current = sid;
       hasLoadedSessionRef.current = sid;
-      router.push(`/catalyst/${sid}`);
     }
 
     // Build message parts
@@ -306,7 +305,14 @@ export function CatalystChat({ sessionId }: CatalystChatProps) {
       parts.push({ type: 'text', text });
     }
 
+    // Send message first, THEN navigate for new sessions
+    // This fixes the bug where the first message response was lost during navigation
     await sendMessage({ parts });
+    
+    // Navigate to session URL after sending (for new sessions only)
+    if (isNewSession) {
+      router.push(`/catalyst/${sid}`);
+    }
   };
 
   const getMessageContent = (message: (typeof messages)[0]): string => {

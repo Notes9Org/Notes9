@@ -69,13 +69,12 @@ export function RightSidebar() {
   }, [selectedModelId]);
 
   // Create transport with prepareSendMessagesRequest to include modelId dynamically
-  // This follows the Vercel Chat SDK pattern
   const transport = useMemo(() => new DefaultChatTransport({
     api: '/api/chat',
     prepareSendMessagesRequest(request) {
       return {
         body: {
-          messages: request.messages,  // Include messages from request
+          messages: request.messages,
           modelId: currentModelRef.current,
           ...request.body,
         },
@@ -87,7 +86,6 @@ export function RightSidebar() {
     id: 'sidebar-chat',
     transport,
     // Throttle UI updates during streaming - updates every 100ms
-    // Without this, React batches updates and shows everything at once!
     experimental_throttle: 100,
   });
 

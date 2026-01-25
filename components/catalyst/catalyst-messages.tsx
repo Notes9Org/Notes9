@@ -7,6 +7,7 @@ import { cn } from '@/lib/utils';
 import { MarkdownRenderer } from './markdown-renderer';
 import { MessageActions } from './message-actions';
 import { MessageEditor } from './message-editor';
+import { ToolInvocation } from './tool-invocation';
 import type { Vote } from '@/lib/db/schema';
 
 interface CatalystMessagesProps {
@@ -17,6 +18,62 @@ interface CatalystMessagesProps {
   votes?: Vote[];
   onEditMessage?: (messageId: string, newContent: string) => Promise<void>;
   onRegenerate?: () => void;
+}
+
+// Helper to render message parts including tools
+function renderMessageParts(message: UIMessage, textContent: string) {
+  // Check if message has parts array (AI SDK v6)
+  if (!message.parts || !Array.isArray(message.parts)) {
+    // Fallback to simple text rendering
+    return <MarkdownRenderer content={textContent} />;
+  }
+
+  return (
+    <>
+      {message.parts.map((part, index) => {
+        // Handle text parts
+        if (part.type === 'text') {
+          return <MarkdownRenderer key={`text-${index}`} content={part.text} />;
+        }
+
+        // Handle dynamic tool parts (MCP tools)
+        if (part.type === 'dynamic-tool') {
+          const toolPart = part as {
+            type: 'dynamic-tool';
+            toolName: string;
+            toolCallId: string;
+            state: 'input-streaming' | 'input-available' | 'output-available' | 'output-error';
+            input?: Record<string, unknown>;
+            output?: unknown;
+            errorText?: string;
+          };
+
+          return (
+            <ToolInvocation
+              key={toolPart.toolCallId}
+              toolName={toolPart.toolName}
+              state={toolPart.state}
+              input={toolPart.input}
+              output={toolPart.output}
+              errorText={toolPart.errorText}
+            />
+          );
+        }
+
+        // Handle step-start parts (multi-step tool calls)
+        if (part.type === 'step-start' && index > 0) {
+          return (
+            <hr
+              key={`step-${index}`}
+              className="my-2 border-muted-foreground/20"
+            />
+          );
+        }
+
+        return null;
+      })}
+    </>
+  );
 }
 
 export function CatalystMessages({
@@ -106,7 +163,7 @@ export function CatalystMessages({
                         {message.role === 'user' ? (
                           <div className="whitespace-pre-wrap">{content}</div>
                         ) : (
-                          <MarkdownRenderer content={content} />
+                          renderMessageParts(message, content)
                         )}
                       </div>
 

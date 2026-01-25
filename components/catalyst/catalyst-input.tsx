@@ -7,6 +7,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { cn } from '@/lib/utils';
 import { PreviewAttachment, type Attachment } from './preview-attachment';
 import { ModelSelector } from './model-selector';
+import { MCPButton } from './mcp-button';
 import { toast } from 'sonner';
 
 interface CatalystInputProps {
@@ -249,6 +250,7 @@ export function CatalystInput({
               >
                 <Clock className="size-4" />
               </Button>
+              <MCPButton disabled={isLoading} />
             </div>
 
             {/* Right - Model selector + Submit/Stop button */}
