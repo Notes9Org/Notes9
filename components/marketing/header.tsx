@@ -34,6 +34,9 @@ export function Header() {
             <Link href="/about" className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">
               About
             </Link>
+            <Link href="/resources" className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">
+              Resources
+            </Link>
           </nav>
 
           {/* Desktop CTAs */}
@@ -72,6 +75,13 @@ export function Header() {
                 onClick={() => setIsMenuOpen(false)}
               >
                 About
+              </Link>
+              <Link
+                href="/resources"
+                className="text-base font-medium text-foreground px-4 py-2 hover:bg-muted rounded-md"
+                onClick={() => setIsMenuOpen(false)}
+              >
+                Resources
               </Link>
               <div className="flex flex-col space-y-3 pt-4 px-4">
                 <Button variant="outline" size="sm" className="w-full justify-center" asChild>
