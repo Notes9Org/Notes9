@@ -13,18 +13,25 @@ const jetbrainsMono = JetBrains_Mono({
   variable: "--font-jetbrains-mono",
 })
 
+import { MarketingParticles } from "@/components/marketing/marketing-particles"
+
 export default function MarketingLayout({
   children,
 }: {
   children: React.ReactNode
 }) {
   return (
-    <div className={`${inter.variable} ${jetbrainsMono.variable} font-sans antialiased min-h-screen flex flex-col bg-background text-foreground`}>
-      <Header />
-      <main className="flex-1">
-        {children}
-      </main>
-      <Footer />
+    <div className={`${inter.variable} ${jetbrainsMono.variable} font-sans antialiased min-h-screen flex flex-col bg-background text-foreground relative overflow-hidden`}>
+      <MarketingParticles />
+      {/* Radial gradient to improve text legibility in the center, similar to login page */}
+
+      <div className="relative z-10 flex flex-col min-h-screen">
+        <Header />
+        <main className="flex-1">
+          {children}
+        </main>
+        <Footer />
+      </div>
     </div>
   )
 }
