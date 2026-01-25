@@ -34,18 +34,18 @@ export function Footer() {
               <span className="text-xl font-bold text-foreground tracking-tight">Notes9</span>
             </Link>
 
-            <p className="text-muted-foreground mb-6 text-sm leading-relaxed">
-              Empowering researchers worldwide with agentic intelligence that accelerates scientific discovery.
+            <p className="text-foreground/80 mb-6 text-sm leading-relaxed">
+              Empowering researchers worldwide with agentic intelligence that accelerates daily research tasks.
             </p>
 
-            <div className="space-y-2 text-sm text-muted-foreground">
+            <div className="space-y-2 text-sm text-foreground/80">
               <div className="flex items-center space-x-2">
                 <MapPin className="h-4 w-4" />
-                <span>San Francisco, CA</span>
+                <span>USA</span>
               </div>
               <div className="flex items-center space-x-2">
                 <Mail className="h-4 w-4" />
-                <span>hello@notes9.com</span>
+                <span>admin@notes9.com</span>
               </div>
             </div>
           </div>
@@ -57,7 +57,7 @@ export function Footer() {
               <ul className="space-y-2">
                 {footerLinks.product.map((link) => (
                   <li key={link.name}>
-                    <Link href={link.href} className="text-sm text-muted-foreground hover:text-foreground transition-colors">
+                    <Link href={link.href} className="text-sm text-foreground/80 hover:text-foreground transition-colors">
                       {link.name}
                     </Link>
                   </li>
@@ -70,7 +70,7 @@ export function Footer() {
               <ul className="space-y-2">
                 {footerLinks.company.map((link) => (
                   <li key={link.name}>
-                    <Link href={link.href} className="text-sm text-muted-foreground hover:text-foreground transition-colors">
+                    <Link href={link.href} className="text-sm text-foreground/80 hover:text-foreground transition-colors">
                       {link.name}
                     </Link>
                   </li>
@@ -82,7 +82,7 @@ export function Footer() {
 
         {/* Bottom Section */}
         <div className="border-t border-border pt-8 text-center md:text-left">
-          <span className="text-sm text-muted-foreground">© 2025 Notes9, Inc. All rights reserved.</span>
+          <span className="text-sm text-foreground/80">© 2025 Notes9, Inc. All rights reserved.</span>
         </div>
       </div>
     </footer>

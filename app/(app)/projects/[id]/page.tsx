@@ -17,6 +17,7 @@ import {
 import { Plus, Users, Calendar, FlaskConical, FileText, Settings } from 'lucide-react'
 import Link from 'next/link'
 import { ProjectActions } from './project-actions'
+import { HtmlContentTruncated } from '@/components/html-content'
 
 export default async function ProjectDetailPage({
   params,
@@ -173,7 +174,7 @@ export default async function ProjectDetailPage({
                           <Badge variant="outline">{experiment.status}</Badge>
                         </div>
                         <CardDescription className="line-clamp-2">
-                          {experiment.description || "No description"}
+                          <HtmlContentTruncated content={experiment.description} />
                         </CardDescription>
                       </CardHeader>
                       <CardContent className="space-y-2">

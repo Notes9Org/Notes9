@@ -22,6 +22,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import { RichTextEditor } from "@/components/rich-text-editor"
 import { useToast } from "@/hooks/use-toast"
 import { useRouter } from "next/navigation"
 import { Pencil, Loader2 } from "lucide-react"
@@ -250,12 +251,10 @@ export function EditExperimentDialog({ experiment, projects, users, asMenuItem =
           {/* Description */}
           <div className="space-y-2">
             <Label htmlFor="description">Description</Label>
-            <Textarea
-              id="description"
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
+            <RichTextEditor
+              content={description}
+              onChange={setDescription}
               placeholder="Detailed description of the experiment..."
-              rows={3}
               disabled={isSaving}
             />
           </div>

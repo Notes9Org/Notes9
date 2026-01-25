@@ -394,6 +394,7 @@ export default function NewSamplePage() {
                   type="button"
                   variant="outline"
                   onClick={() => router.push("/samples")}
+                  data-navigate
                   disabled={isLoading}
                 >
                   Cancel

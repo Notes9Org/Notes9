@@ -40,6 +40,30 @@ interface ProjectListProps {
 export function ProjectList({ projects }: ProjectListProps) {
   const [viewMode, setViewMode] = useState<"grid" | "table">("grid")
 
+  // Helper function to get better status display
+  const getStatusDisplay = (status: string) => {
+    const statusMap: Record<string, string> = {
+      'active': 'Active',
+      'completed': 'Completed',
+      'planning': 'Planning',
+      'on_hold': 'On Hold',
+      'cancelled': 'Cancelled',
+      'archived': 'Archived'
+    }
+    return statusMap[status] || status.replace('_', ' ')
+  }
+
+  // Helper function for priority display
+  const getPriorityDisplay = (priority: string) => {
+    const priorityMap: Record<string, string> = {
+      'critical': 'Critical',
+      'high': 'High',
+      'medium': 'Medium',
+      'low': 'Low'
+    }
+    return priorityMap[priority] || priority
+  }
+
   if (!projects || projects.length === 0) {
     return null
   }
@@ -72,67 +96,92 @@ export function ProjectList({ projects }: ProjectListProps) {
 
       {/* Grid View - Use auto-fill with fixed card sizes to prevent expansion */}
       {viewMode === "grid" && (
-        <div className="grid gap-4" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 320px))' }}>
+        <div className="grid gap-4 grid-cols-[repeat(auto-fit,minmax(280px,1fr))]">
           {projects.map((project) => (
-            <Card key={project.id} className="hover:border-primary transition-colors flex flex-col">
-              <CardHeader>
-                <div className="flex items-start justify-between gap-2">
-                  <CardTitle className="text-lg text-foreground line-clamp-2 flex-1">
+            <Card key={project.id} className="hover:border-primary transition-colors flex flex-col min-w-0 overflow-hidden">
+              <CardHeader className="pb-3 min-w-0">
+                <div className="space-y-2 min-w-0">
+                  <CardTitle className="text-lg text-foreground leading-tight min-w-0 overflow-hidden text-ellipsis" style={{ 
+                    display: '-webkit-box',
+                    WebkitLineClamp: 2,
+                    WebkitBoxOrient: 'vertical',
+                    wordBreak: 'break-all',
+                    overflowWrap: 'break-word'
+                  }}>
                     {project.name}
                   </CardTitle>
-                  <Badge
-                    variant={
-                      project.status === "active"
-                        ? "default"
-                        : project.status === "completed"
-                          ? "secondary"
-                          : "outline"
-                    }
-                    className="shrink-0"
-                  >
-                    {project.status}
-                  </Badge>
-                </div>
-                {project.description && (
-                  <CardDescription className="line-clamp-2">
-                    {project.description}
-                  </CardDescription>
-                )}
-              </CardHeader>
-              <CardContent className="space-y-4 flex-1 flex flex-col">
-                <div className="space-y-3 flex-1">
-                  <div className="flex items-center justify-between text-sm">
-                    <div className="flex items-center gap-1 text-muted-foreground">
-                      <Users className="h-4 w-4" />
-                      <span>{project.project_members?.length || 0} members</span>
-                    </div>
-                    <div className="flex items-center gap-1 text-muted-foreground">
-                      <TrendingUp className="h-4 w-4" />
-                      <span>{project.experiments?.length || 0} experiments</span>
-                    </div>
-                  </div>
-                  {project.start_date && (
-                    <div className="flex items-center gap-1 text-sm text-muted-foreground">
-                      <Calendar className="h-3 w-3" />
-                      <span>Started: {formatDate(project.start_date)}</span>
-                    </div>
+                  {project.description && (
+                    <CardDescription className="text-sm min-w-0 overflow-hidden text-ellipsis" style={{ 
+                      display: '-webkit-box',
+                      WebkitLineClamp: 2,
+                      WebkitBoxOrient: 'vertical',
+                      wordBreak: 'break-all',
+                      overflowWrap: 'break-word'
+                    }}>
+                      {project.description}
+                    </CardDescription>
                   )}
-                  {project.priority && (
+                </div>
+                {/* Status and priority badges in separate row */}
+                <div className="flex items-center justify-between pt-2 gap-2 min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap min-w-0 overflow-hidden">
                     <Badge
                       variant={
-                        project.priority === "critical" || project.priority === "high"
-                          ? "destructive"
+                        project.status === "active"
+                          ? "default"
+                          : project.status === "completed"
+                          ? "secondary"
                           : "outline"
                       }
+                      className="text-xs font-medium whitespace-nowrap shrink-0 max-w-full overflow-hidden text-ellipsis"
                     >
-                      {project.priority} priority
+                      {getStatusDisplay(project.status)}
                     </Badge>
+                    {project.priority && (
+                      <Badge
+                        variant={
+                          project.priority === "critical" || project.priority === "high"
+                            ? "destructive"
+                            : "outline"
+                        }
+                        className="text-xs font-medium whitespace-nowrap shrink-0 max-w-full overflow-hidden text-ellipsis"
+                      >
+                        {getPriorityDisplay(project.priority)}
+                      </Badge>
+                    )}
+                  </div>
+                  {project.start_date && (
+                    <span className="text-xs text-muted-foreground whitespace-nowrap shrink-0 overflow-hidden text-ellipsis max-w-[80px]">
+                      {new Date(project.start_date).toLocaleDateString()}
+                    </span>
                   )}
                 </div>
-                <Button variant="outline" size="sm" className="w-full mt-auto" asChild>
+              </CardHeader>
+              <CardContent className="space-y-4 flex-1 flex flex-col pt-0 min-w-0">
+                <div className="space-y-3 flex-1 min-w-0">
+                  <div className="flex items-center justify-between text-sm gap-2 min-w-0">
+                    <div className="flex items-center gap-1 text-muted-foreground min-w-0 overflow-hidden">
+                      <Users className="h-4 w-4 shrink-0" />
+                      <span className="truncate text-ellipsis overflow-hidden">{project.project_members?.length || 0} members</span>
+                    </div>
+                    <div className="flex items-center gap-1 text-muted-foreground min-w-0 overflow-hidden">
+                      <TrendingUp className="h-4 w-4 shrink-0" />
+                      <span className="truncate text-ellipsis overflow-hidden">{project.experiments?.length || 0} experiments</span>
+                    </div>
+                  </div>
+                  {project.created_by && (
+                    <div className="flex items-center gap-1 text-sm text-muted-foreground min-w-0 overflow-hidden">
+                      <span className="text-xs shrink-0">Lead:</span>
+                      <span className="truncate text-ellipsis overflow-hidden">
+                        {project.created_by.first_name} {project.created_by.last_name}
+                      </span>
+                    </div>
+                  )}
+                </div>
+                <Button variant="outline" size="sm" className="w-full mt-auto shrink-0" asChild>
                   <Link href={`/projects/${project.id}`}>
                     <Eye className="h-4 w-4 mr-2" />
-                    View Project
+                    <span className="truncate">View Project</span>
                   </Link>
                 </Button>
               </CardContent>
@@ -185,8 +234,9 @@ export function ProjectList({ projects }: ProjectListProps) {
                                 ? "secondary"
                                 : "outline"
                           }
+                          className="whitespace-nowrap"
                         >
-                          {project.status}
+                          {getStatusDisplay(project.status)}
                         </Badge>
                       </TableCell>
                       <TableCell>
@@ -197,8 +247,9 @@ export function ProjectList({ projects }: ProjectListProps) {
                                 ? "destructive"
                                 : "outline"
                             }
+                            className="whitespace-nowrap"
                           >
-                            {project.priority}
+                            {getPriorityDisplay(project.priority)}
                           </Badge>
                         ) : (
                           <span className="text-muted-foreground">—</span>

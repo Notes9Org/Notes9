@@ -17,7 +17,7 @@ export async function POST(request: NextRequest) {
     const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash-lite' })
 
     // Build context-aware prompts for chemistry/biochemistry
-    let systemPrompt = `You are an AI assistant specialized in chemistry and biochemistry documentation. 
+    let systemPrompt = `You are an AI Researchassistant specialized in biology, biotechnology,chemistry and biochemistry documentation. 
 You help scientists write clear, accurate, and well-structured scientific notes.
 
 CRITICAL RULES:

@@ -52,3 +52,5 @@ scripts/000_*.sql
 scripts/017_*.sql
 lib/supabase/admin.ts
 public/notes9-logo.svg
+litreview-ai-assistant_V01.zip
+litreview-ai-assistant_V01
