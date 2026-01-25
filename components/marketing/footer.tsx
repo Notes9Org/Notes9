@@ -35,17 +35,17 @@ export function Footer() {
             </Link>
 
             <p className="text-foreground/80 mb-6 text-sm leading-relaxed">
-              Empowering researchers worldwide with agentic intelligence that accelerates scientific discovery.
+              Empowering researchers worldwide with agentic intelligence that accelerates daily research tasks.
             </p>
 
             <div className="space-y-2 text-sm text-foreground/80">
               <div className="flex items-center space-x-2">
                 <MapPin className="h-4 w-4" />
-                <span>San Francisco, CA</span>
+                <span>USA</span>
               </div>
               <div className="flex items-center space-x-2">
                 <Mail className="h-4 w-4" />
-                <span>hello@notes9.com</span>
+                <span>admin@notes9.com</span>
               </div>
             </div>
           </div>
