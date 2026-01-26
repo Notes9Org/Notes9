@@ -101,7 +101,7 @@ export function ProjectList({ projects }: ProjectListProps) {
             <Card key={project.id} className="hover:border-primary transition-colors flex flex-col min-w-0 overflow-hidden">
               <CardHeader className="pb-3 min-w-0">
                 <div className="space-y-2 min-w-0">
-                  <CardTitle className="text-lg text-foreground leading-tight min-w-0 overflow-hidden text-ellipsis" style={{ 
+                  <CardTitle className="text-lg text-foreground leading-tight min-w-0 overflow-hidden text-ellipsis" style={{
                     display: '-webkit-box',
                     WebkitLineClamp: 2,
                     WebkitBoxOrient: 'vertical',
@@ -111,7 +111,7 @@ export function ProjectList({ projects }: ProjectListProps) {
                     {project.name}
                   </CardTitle>
                   {project.description && (
-                    <CardDescription className="text-sm min-w-0 overflow-hidden text-ellipsis" style={{ 
+                    <CardDescription className="text-sm min-w-0 overflow-hidden text-ellipsis" style={{
                       display: '-webkit-box',
                       WebkitLineClamp: 2,
                       WebkitBoxOrient: 'vertical',
@@ -130,8 +130,8 @@ export function ProjectList({ projects }: ProjectListProps) {
                         project.status === "active"
                           ? "default"
                           : project.status === "completed"
-                          ? "secondary"
-                          : "outline"
+                            ? "secondary"
+                            : "outline"
                       }
                       className="text-xs font-medium whitespace-nowrap shrink-0 max-w-full overflow-hidden text-ellipsis"
                     >
@@ -295,4 +295,3 @@ export function ProjectList({ projects }: ProjectListProps) {
     </>
   )
 }
-
