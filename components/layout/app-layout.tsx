@@ -40,7 +40,7 @@ export function AppLayout({ children }: AppLayoutProps) {
       window.removeEventListener('sidebar-width-change', handleSidebarWidthChange as EventListener)
     }
   }, [])
-  
+
   // Left sidebar resizing
   const leftSidebar = useResizable({
     initialWidth: isMobile ? 0 : isTablet ? 240 : 280,
@@ -62,9 +62,9 @@ export function AppLayout({ children }: AppLayoutProps) {
         {/* Left Sidebar - Hidden on mobile, shown via SidebarProvider */}
         {!isMobile && (
           <div className="flex shrink-0">
-            <div 
+            <div
               data-sidebar-container
-              style={{ 
+              style={{
                 '--sidebar-width': `${leftSidebarWidth}px`,
                 width: leftSidebarWidth,
                 transition: 'width 200ms ease-in-out'
@@ -108,9 +108,9 @@ export function AppLayout({ children }: AppLayoutProps) {
             </div>
           </header>
 
-          {/* Main Content - fixed width to match layout with sidebar open */}
+          {/* Main Content */}
           <main className="flex-1 overflow-auto p-3 sm:p-4 md:p-6">
-            <div style={{ maxWidth: '900px' }}>
+            <div className="w-full">
               {children}
             </div>
           </main>

@@ -96,7 +96,7 @@ export function ExperimentList({ experiments }: ExperimentListProps) {
                     <FlaskConical className="h-5 w-5 text-primary" />
                   </div>
                   <div className="min-w-0 flex-1 space-y-1 overflow-hidden">
-                    <CardTitle className="text-base text-foreground leading-tight min-w-0 overflow-hidden text-ellipsis" style={{ 
+                    <CardTitle className="text-base text-foreground leading-tight min-w-0 overflow-hidden text-ellipsis" style={{
                       display: '-webkit-box',
                       WebkitLineClamp: 2,
                       WebkitBoxOrient: 'vertical',
@@ -106,7 +106,7 @@ export function ExperimentList({ experiments }: ExperimentListProps) {
                       {experiment.name}
                     </CardTitle>
                     {experiment.project && (
-                      <CardDescription className="text-xs min-w-0 overflow-hidden text-ellipsis" style={{ 
+                      <CardDescription className="text-xs min-w-0 overflow-hidden text-ellipsis" style={{
                         wordBreak: 'break-all',
                         overflowWrap: 'break-word'
                       }}>
@@ -130,7 +130,7 @@ export function ExperimentList({ experiments }: ExperimentListProps) {
                     {getStatusDisplay(experiment.status)}
                   </Badge>
                   {experiment.start_date && (
-                    <span className="text-xs text-muted-foreground whitespace-nowrap shrink-0 overflow-hidden text-ellipsis max-w-[80px]">
+                    <span className="text-xs text-muted-foreground whitespace-nowrap shrink-0 overflow-hidden text-ellipsis max-w-20">
                       {new Date(experiment.start_date).toLocaleDateString()}
                     </span>
                   )}
@@ -146,10 +146,10 @@ export function ExperimentList({ experiments }: ExperimentListProps) {
                       </span>
                     </div>
                   )}
-                  <HtmlContentTruncated 
+                  <HtmlContentTruncated
                     content={experiment.description}
                     className="text-sm text-muted-foreground min-w-0 overflow-hidden text-ellipsis"
-                    style={{ 
+                    style={{
                       display: '-webkit-box',
                       WebkitLineClamp: 2,
                       WebkitBoxOrient: 'vertical',
@@ -199,7 +199,7 @@ export function ExperimentList({ experiments }: ExperimentListProps) {
                           <FlaskConical className="h-4 w-4 text-primary shrink-0" />
                           <div className="max-w-[280px]">
                             <div className="font-semibold truncate">{experiment.name}</div>
-                            <HtmlContentTruncated 
+                            <HtmlContentTruncated
                               content={experiment.description}
                               className="text-sm text-muted-foreground truncate"
                             />
@@ -256,4 +256,3 @@ export function ExperimentList({ experiments }: ExperimentListProps) {
     </>
   )
 }
-
