@@ -19,7 +19,6 @@ import Link from 'next/link'
 import { LabNotesTab } from './lab-notes-tab'
 import { DataFilesTab } from './data-files-tab'
 import { ExperimentActions } from './experiment-actions'
-import { StatusUpdateButtons } from './status-update-buttons'
 import { HtmlContent } from '@/components/html-content'
 import { LinkProtocolDialog } from './link-protocol-dialog'
 import { ProtocolCard } from './protocol-card'
@@ -168,25 +167,23 @@ export default async function ExperimentDetailPage({
             Part of <Link href={`/projects/${experiment.projectId}`} className="text-primary hover:underline">{experiment.project}</Link>
           </p>
         </div>
-        <div className="flex gap-2">
-          <ExperimentActions
-            experiment={{
-              id: experimentData.id,
-              name: experimentData.name,
-              description: experimentData.description,
-              hypothesis: experimentData.hypothesis,
-              status: experimentData.status,
-              start_date: experimentData.start_date,
-              completion_date: experimentData.completion_date,
-              project_id: experimentData.project_id,
-              assigned_to: experimentData.assigned_to,
-            }}
-            projects={projects || []}
-            users={users || []}
-          />
-          <StatusUpdateButtons experimentId={experimentData.id} currentStatus={experimentData.status} />
-        </div>
+        <ExperimentActions
+          experiment={{
+            id: experimentData.id,
+            name: experimentData.name,
+            description: experimentData.description,
+            hypothesis: experimentData.hypothesis,
+            status: experimentData.status,
+            start_date: experimentData.start_date,
+            completion_date: experimentData.completion_date,
+            project_id: experimentData.project_id,
+            assigned_to: experimentData.assigned_to,
+          }}
+          projects={projects || []}
+          users={users || []}
+        />
       </div>
+
 
 
 

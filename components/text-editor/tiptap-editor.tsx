@@ -995,39 +995,18 @@ export function TiptapEditor({
 
   const downloadAsDOCX = useCallback(async () => {
     if (!editor) return
-    setIsAIProcessing(true) // Reuse existing loading state or add a new one
+    setIsAIProcessing(true)
 
     try {
       const html = editor.getHTML()
-
-      const response = await fetch('/api/export-docx', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          html,
-          title: title || 'experiment-protocol',
-        }),
-      })
-
-      if (!response.ok) {
-        const errorData = await response.json()
-        throw new Error(errorData.error || 'Export failed')
-      }
-
-      // Reset loading state safely before handling download which might block
+      
+      // Dynamically import the DOCX export function (proper .docx format!)
+      const { exportHtmlToDocx } = await import('@/lib/docx-export')
+      
+      // Export to DOCX (works on Mac, Windows, Linux!)
+      await exportHtmlToDocx(html, title || 'Document')
+      
       setIsAIProcessing(false)
-
-      const blob = await response.blob()
-      const url = URL.createObjectURL(blob)
-      const a = document.createElement("a")
-      a.href = url
-      a.download = `${title || 'document'}.docx`
-      document.body.appendChild(a)
-      a.click()
-      document.body.removeChild(a)
-      URL.revokeObjectURL(url)
     } catch (error) {
       console.error("DOCX export error:", error)
       setIsAIProcessing(false)
