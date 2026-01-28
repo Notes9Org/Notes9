@@ -87,7 +87,7 @@ export function LabNotesTab({ experimentId }: { experimentId: string }) {
     // Use provided values or fall back to formData
     const titleToSave = title !== undefined ? title : formData.title;
     const noteTypeToSave = noteType !== undefined ? noteType : formData.note_type;
-    
+
     // Don't auto-save if title is empty
     if (!titleToSave.trim()) return;
 
@@ -407,7 +407,7 @@ export function LabNotesTab({ experimentId }: { experimentId: string }) {
     // Use iframe-based print approach for complete style isolation
     // This prevents CSS leaks that can break the main page
     let iframe: HTMLIFrameElement | null = null;
-    
+
     try {
       toast({
         title: "Generating PDF",
@@ -614,62 +614,14 @@ export function LabNotesTab({ experimentId }: { experimentId: string }) {
         description: "Please wait...",
       });
 
-      // Clean and format HTML content
+      // Get clean content
       const cleanContent = formData.content || "<p>No content</p>";
 
-      const html = `<!DOCTYPE html>
-<html>
-<head>
-  <meta charset='utf-8'>
-  <title>${formData.title || "Lab Note"}</title>
-</head>
-<body>
-  <h1>${formData.title || "Lab Note"}</h1>
-  ${cleanContent}
-</body>
-</html>`;
+      // Dynamically import the DOCX export function (proper .docx format!)
+      const { exportHtmlToDocx } = await import('@/lib/docx-export')
 
-      // Call server-side API to convert HTML to DOCX
-      const response = await fetch("/api/export-docx", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          html,
-          title: formData.title || "lab-note",
-        }),
-      });
-
-      console.log("Response status:", response.status);
-      console.log("Response headers:", response.headers.get("content-type"));
-
-      if (!response.ok) {
-        const error = await response.json();
-        console.error("Server error:", error);
-        throw new Error(error.error || "Failed to generate DOCX");
-      }
-
-      // Get the blob from response
-      const blob = await response.blob();
-      console.log("Received blob size:", blob.size);
-
-      // Check if blob has content
-      if (!blob || blob.size === 0) {
-        throw new Error(
-          "Generated document is empty - received 0 bytes from server"
-        );
-      }
-
-      // Download
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `${formData.title || "lab-note"}.docx`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
+      // Export to DOCX (works on Mac, Windows, Linux!)
+      await exportHtmlToDocx(cleanContent, formData.title || "Lab Note");
 
       toast({
         title: "DOCX exported",
@@ -679,9 +631,7 @@ export function LabNotesTab({ experimentId }: { experimentId: string }) {
       console.error("DOCX export error:", error);
       toast({
         title: "Export failed",
-        description:
-          error.message ||
-          "Failed to export as DOCX. Please try HTML or PDF format instead.",
+        description: error.message || "Failed to export as DOCX. Please try HTML or PDF format instead.",
         variant: "destructive",
       });
     }
@@ -980,10 +930,10 @@ export function LabNotesTab({ experimentId }: { experimentId: string }) {
                         <FileText className="h-4 w-4 mr-2" />
                         PDF (.pdf)
                       </DropdownMenuItem>
-                      <DropdownMenuItem onClick={downloadAsDOCX}>
+                      {/* <DropdownMenuItem onClick={downloadAsDOCX}>
                         <FileText className="h-4 w-4 mr-2" />
                         Word (.docx)
-                      </DropdownMenuItem>
+                      </DropdownMenuItem> */}
                     </DropdownMenuContent>
                   </DropdownMenu>
                 )}

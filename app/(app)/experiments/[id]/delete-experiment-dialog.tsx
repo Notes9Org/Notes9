@@ -23,14 +23,27 @@ interface DeleteExperimentDialogProps {
   experimentId: string
   experimentName: string
   asMenuItem?: boolean
+  open?: boolean
+  onOpenChange?: (open: boolean) => void
 }
 
-export function DeleteExperimentDialog({ experimentId, experimentName, asMenuItem = false }: DeleteExperimentDialogProps) {
+export function DeleteExperimentDialog({ 
+  experimentId, 
+  experimentName, 
+  asMenuItem = false,
+  open: externalOpen,
+  onOpenChange
+}: DeleteExperimentDialogProps) {
   const { toast } = useToast()
   const router = useRouter()
   const supabase = createClient()
 
-  const [open, setOpen] = useState(false)
+  const [internalOpen, setInternalOpen] = useState(false)
+  const open = externalOpen !== undefined ? externalOpen : internalOpen
+  const setOpen = (value: boolean) => {
+    setInternalOpen(value)
+    onOpenChange?.(value)
+  }
   const [isDeleting, setIsDeleting] = useState(false)
 
   const handleDelete = async () => {
@@ -63,20 +76,25 @@ export function DeleteExperimentDialog({ experimentId, experimentName, asMenuIte
     }
   }
 
+  // When externally controlled, don't render the trigger
+  const isExternallyControlled = externalOpen !== undefined
+
   return (
     <AlertDialog open={open} onOpenChange={setOpen}>
-      {asMenuItem ? (
-        <AlertDialogTrigger className="flex items-center w-full px-2 py-1.5 text-destructive hover:bg-accent rounded-sm cursor-pointer text-left">
-          <Trash2 className="h-4 w-4 mr-2" />
-          <span>Delete</span>
-        </AlertDialogTrigger>
-      ) : (
-        <AlertDialogTrigger asChild>
-          <Button variant="destructive" size="sm">
+      {!isExternallyControlled && (
+        asMenuItem ? (
+          <AlertDialogTrigger className="flex items-center w-full px-2 py-1.5 text-destructive hover:bg-accent rounded-sm cursor-pointer text-left">
             <Trash2 className="h-4 w-4 mr-2" />
-            Delete
-          </Button>
-        </AlertDialogTrigger>
+            <span>Delete</span>
+          </AlertDialogTrigger>
+        ) : (
+          <AlertDialogTrigger asChild>
+            <Button variant="destructive" size="sm">
+              <Trash2 className="h-4 w-4 mr-2" />
+              Delete
+            </Button>
+          </AlertDialogTrigger>
+        )
       )}
       <AlertDialogContent>
         <AlertDialogHeader>
@@ -132,4 +150,3 @@ export function DeleteExperimentDialog({ experimentId, experimentName, asMenuIte
     </AlertDialog>
   )
 }
-

@@ -31,14 +31,26 @@ interface Experiment {
 interface DuplicateExperimentDialogProps {
   experiment: Experiment
   asMenuItem?: boolean
+  open?: boolean
+  onOpenChange?: (open: boolean) => void
 }
 
-export function DuplicateExperimentDialog({ experiment, asMenuItem = false }: DuplicateExperimentDialogProps) {
+export function DuplicateExperimentDialog({ 
+  experiment, 
+  asMenuItem = false,
+  open: externalOpen,
+  onOpenChange
+}: DuplicateExperimentDialogProps) {
   const { toast } = useToast()
   const router = useRouter()
   const supabase = createClient()
 
-  const [open, setOpen] = useState(false)
+  const [internalOpen, setInternalOpen] = useState(false)
+  const open = externalOpen !== undefined ? externalOpen : internalOpen
+  const setOpen = (value: boolean) => {
+    setInternalOpen(value)
+    onOpenChange?.(value)
+  }
   const [isDuplicating, setIsDuplicating] = useState(false)
   const [newName, setNewName] = useState(`${experiment.name} (Copy)`)
   const [includeProtocols, setIncludeProtocols] = useState(true)
@@ -116,20 +128,25 @@ export function DuplicateExperimentDialog({ experiment, asMenuItem = false }: Du
     }
   }
 
+  // When externally controlled, don't render the trigger
+  const isExternallyControlled = externalOpen !== undefined
+
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      {asMenuItem ? (
-        <DialogTrigger className="flex items-center w-full px-2 py-1.5 hover:bg-accent rounded-sm cursor-pointer text-left">
-          <Copy className="h-4 w-4 mr-2" />
-          <span>Duplicate</span>
-        </DialogTrigger>
-      ) : (
-        <DialogTrigger asChild>
-          <Button variant="outline" size="sm">
+      {!isExternallyControlled && (
+        asMenuItem ? (
+          <DialogTrigger className="flex items-center w-full px-2 py-1.5 hover:bg-accent rounded-sm cursor-pointer text-left">
             <Copy className="h-4 w-4 mr-2" />
-            Duplicate
-          </Button>
-        </DialogTrigger>
+            <span>Duplicate</span>
+          </DialogTrigger>
+        ) : (
+          <DialogTrigger asChild>
+            <Button variant="outline" size="sm">
+              <Copy className="h-4 w-4 mr-2" />
+              Duplicate
+            </Button>
+          </DialogTrigger>
+        )
       )}
       <DialogContent>
         <DialogHeader>
@@ -210,4 +227,3 @@ export function DuplicateExperimentDialog({ experiment, asMenuItem = false }: Du
     </Dialog>
   )
 }
-
