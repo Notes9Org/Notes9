@@ -251,6 +251,7 @@ function LoginForm() {
                       required
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
+                      suppressHydrationWarning
                     />
                   </div>
                   <div className="grid gap-2">
