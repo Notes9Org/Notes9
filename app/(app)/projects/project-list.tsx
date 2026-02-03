@@ -9,6 +9,13 @@ import { Progress } from "@/components/ui/progress"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Users, Calendar, TrendingUp, Eye, Grid3x3, List } from 'lucide-react'
 
+// Format date consistently to avoid hydration mismatch between server/client locales
+const formatDate = (dateStr: string): string => {
+  const date = new Date(dateStr)
+  // Use ISO format parts for consistency: YYYY-MM-DD
+  return date.toISOString().split('T')[0]
+}
+
 interface Project {
   id: string
   name: string
@@ -87,14 +94,14 @@ export function ProjectList({ projects }: ProjectListProps) {
         </div>
       </div>
 
-      {/* Grid View */}
+      {/* Grid View - Use auto-fill with fixed card sizes to prevent expansion */}
       {viewMode === "grid" && (
         <div className="grid gap-4 grid-cols-[repeat(auto-fit,minmax(280px,1fr))]">
           {projects.map((project) => (
             <Card key={project.id} className="hover:border-primary transition-colors flex flex-col min-w-0 overflow-hidden">
               <CardHeader className="pb-3 min-w-0">
                 <div className="space-y-2 min-w-0">
-                  <CardTitle className="text-lg text-foreground leading-tight min-w-0 overflow-hidden text-ellipsis" style={{ 
+                  <CardTitle className="text-lg text-foreground leading-tight min-w-0 overflow-hidden text-ellipsis" style={{
                     display: '-webkit-box',
                     WebkitLineClamp: 2,
                     WebkitBoxOrient: 'vertical',
@@ -104,7 +111,7 @@ export function ProjectList({ projects }: ProjectListProps) {
                     {project.name}
                   </CardTitle>
                   {project.description && (
-                    <CardDescription className="text-sm min-w-0 overflow-hidden text-ellipsis" style={{ 
+                    <CardDescription className="text-sm min-w-0 overflow-hidden text-ellipsis" style={{
                       display: '-webkit-box',
                       WebkitLineClamp: 2,
                       WebkitBoxOrient: 'vertical',
@@ -123,8 +130,8 @@ export function ProjectList({ projects }: ProjectListProps) {
                         project.status === "active"
                           ? "default"
                           : project.status === "completed"
-                          ? "secondary"
-                          : "outline"
+                            ? "secondary"
+                            : "outline"
                       }
                       className="text-xs font-medium whitespace-nowrap shrink-0 max-w-full overflow-hidden text-ellipsis"
                     >
@@ -224,8 +231,8 @@ export function ProjectList({ projects }: ProjectListProps) {
                             project.status === "active"
                               ? "default"
                               : project.status === "completed"
-                              ? "secondary"
-                              : "outline"
+                                ? "secondary"
+                                : "outline"
                           }
                           className="whitespace-nowrap"
                         >
@@ -262,7 +269,7 @@ export function ProjectList({ projects }: ProjectListProps) {
                       </TableCell>
                       <TableCell className="text-muted-foreground">
                         {project.start_date
-                          ? new Date(project.start_date).toLocaleDateString()
+                          ? formatDate(project.start_date)
                           : "—"}
                       </TableCell>
                       <TableCell className="text-muted-foreground">
@@ -288,4 +295,3 @@ export function ProjectList({ projects }: ProjectListProps) {
     </>
   )
 }
-
