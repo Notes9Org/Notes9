@@ -19,7 +19,6 @@ import Link from 'next/link'
 import { LabNotesTab } from './lab-notes-tab'
 import { DataFilesTab } from './data-files-tab'
 import { ExperimentActions } from './experiment-actions'
-import { StatusUpdateButtons } from './status-update-buttons'
 import { HtmlContent } from '@/components/html-content'
 import { LinkProtocolDialog } from './link-protocol-dialog'
 import { ProtocolCard } from './protocol-card'
@@ -38,7 +37,7 @@ export default async function ExperimentDetailPage({
   const initialTab = resolvedSearch.tab || (resolvedSearch.noteId ? "notes" : "overview")
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
-  
+
   if (!user) {
     redirect("/auth/login")
   }
@@ -106,8 +105,8 @@ export default async function ExperimentDetailPage({
     projectId: experimentData.project_id,
     startDate: experimentData.start_date,
     completionDate: experimentData.completion_date,
-    researcher: experimentData.assigned_to_user 
-      ? `${experimentData.assigned_to_user.first_name} ${experimentData.assigned_to_user.last_name}` 
+    researcher: experimentData.assigned_to_user
+      ? `${experimentData.assigned_to_user.first_name} ${experimentData.assigned_to_user.last_name}`
       : "Unassigned",
     progress: experimentData.progress || 0,
     protocols: linkedProtocols || [],
@@ -115,311 +114,257 @@ export default async function ExperimentDetailPage({
   }
 
   return (
-      <div className="space-y-6">
-        {/* Breadcrumb */}
-        <Breadcrumb>
-          <BreadcrumbList>
-            <BreadcrumbItem>
-              <BreadcrumbLink asChild>
-                <Link href="/dashboard">Dashboard</Link>
-              </BreadcrumbLink>
-            </BreadcrumbItem>
-            <BreadcrumbSeparator />
-            <BreadcrumbItem>
-              <BreadcrumbLink asChild>
-                <Link href="/projects">Projects</Link>
-              </BreadcrumbLink>
-            </BreadcrumbItem>
-            <BreadcrumbSeparator />
-            <BreadcrumbItem>
-              <BreadcrumbLink asChild>
-                <Link href={`/projects/${experiment.projectId}`}>{experiment.project}</Link>
-              </BreadcrumbLink>
-            </BreadcrumbItem>
-            <BreadcrumbSeparator />
-            <BreadcrumbItem>
-              <BreadcrumbLink asChild>
-                <Link href="/experiments">Experiments</Link>
-              </BreadcrumbLink>
-            </BreadcrumbItem>
-            <BreadcrumbSeparator />
-            <BreadcrumbItem>
-              <BreadcrumbPage>{experiment.name}</BreadcrumbPage>
-            </BreadcrumbItem>
-          </BreadcrumbList>
-        </Breadcrumb>
+    <div className="space-y-6">
+      {/* Breadcrumb */}
+      <Breadcrumb>
+        <BreadcrumbList>
+          <BreadcrumbItem>
+            <BreadcrumbLink asChild>
+              <Link href="/dashboard">Dashboard</Link>
+            </BreadcrumbLink>
+          </BreadcrumbItem>
+          <BreadcrumbSeparator />
+          <BreadcrumbItem>
+            <BreadcrumbLink asChild>
+              <Link href="/projects">Projects</Link>
+            </BreadcrumbLink>
+          </BreadcrumbItem>
+          <BreadcrumbSeparator />
+          <BreadcrumbItem>
+            <BreadcrumbLink asChild>
+              <Link href={`/projects/${experiment.projectId}`}>{experiment.project}</Link>
+            </BreadcrumbLink>
+          </BreadcrumbItem>
+          <BreadcrumbSeparator />
+          <BreadcrumbItem>
+            <BreadcrumbLink asChild>
+              <Link href="/experiments">Experiments</Link>
+            </BreadcrumbLink>
+          </BreadcrumbItem>
+          <BreadcrumbSeparator />
+          <BreadcrumbItem>
+            <BreadcrumbPage>{experiment.name}</BreadcrumbPage>
+          </BreadcrumbItem>
+        </BreadcrumbList>
+      </Breadcrumb>
 
-        {/* Header */}
-        <div className="flex items-start justify-between">
-          <div className="space-y-1">
-            <div className="flex items-center gap-2">
-              <h1 className="text-3xl font-bold tracking-tight text-foreground">
-                {experiment.name}
-              </h1>
-              <Badge variant={
-                experiment.status === "in_progress" ? "default" :
+      {/* Header */}
+      <div className="flex items-start justify-between">
+        <div className="space-y-1">
+          <div className="flex items-center gap-2">
+            <h1 className="text-3xl font-bold tracking-tight text-foreground">
+              {experiment.name}
+            </h1>
+            <Badge variant={
+              experiment.status === "in_progress" ? "default" :
                 experiment.status === "completed" ? "secondary" :
-                "outline"
-              }>
-                {experiment.status.replace("_", " ")}
-              </Badge>
-            </div>
-            <p className="text-muted-foreground">
-              Part of <Link href={`/projects/${experiment.projectId}`} className="text-primary hover:underline">{experiment.project}</Link>
-            </p>
+                  "outline"
+            }>
+              {experiment.status.replace("_", " ")}
+            </Badge>
           </div>
-          <div className="flex gap-2">
-            <ExperimentActions 
-              experiment={{
-                id: experimentData.id,
-                name: experimentData.name,
-                description: experimentData.description,
-                hypothesis: experimentData.hypothesis,
-                status: experimentData.status,
-                start_date: experimentData.start_date,
-                completion_date: experimentData.completion_date,
-                project_id: experimentData.project_id,
-                assigned_to: experimentData.assigned_to,
-              }}
-              projects={projects || []}
-              users={users || []}
-            />
-            <StatusUpdateButtons experimentId={experimentData.id} currentStatus={experimentData.status} />
-          </div>
+          <p className="text-muted-foreground">
+            Part of <Link href={`/projects/${experiment.projectId}`} className="text-primary hover:underline">{experiment.project}</Link>
+          </p>
         </div>
-
-        {/* Slim pills with toggleable details (matched to tab styling) */}
-        <div className="grid gap-2 md:grid-cols-4">
-          <details className="group rounded-md border border-border bg-muted/10">
-            <summary className="flex items-center justify-between px-3 py-2 cursor-pointer text-[12px] font-medium text-muted-foreground hover:bg-muted/20 rounded-md">
-              <span className="flex items-center gap-2">
-                <User className="h-3 w-3 text-muted-foreground" />
-                Researcher
-              </span>
-              <ChevronDown className="h-3 w-3 text-muted-foreground transition-transform duration-150 group-open:rotate-180" />
-            </summary>
-            <div className="px-3 pb-2 pt-1 text-[13px] text-foreground truncate">
-              {experiment.researcher}
-              </div>
-          </details>
-
-          <details className="group rounded-md border border-border bg-muted/10">
-            <summary className="flex items-center justify-between px-3 py-2 cursor-pointer text-[12px] font-medium text-muted-foreground hover:bg-muted/20 rounded-md">
-              <span className="flex items-center gap-2">
-                <Calendar className="h-3 w-3 text-muted-foreground" />
-                Start Date
-              </span>
-              <ChevronDown className="h-3 w-3 text-muted-foreground transition-transform duration-150 group-open:rotate-180" />
-            </summary>
-            <div className="px-3 pb-2 pt-1 text-[13px] text-foreground truncate">
-              {experiment.startDate || "Not set"}
-              </div>
-          </details>
-
-          <details className="group rounded-md border border-border bg-muted/10">
-            <summary className="flex items-center justify-between px-3 py-2 cursor-pointer text-[12px] font-medium text-muted-foreground hover:bg-muted/20 rounded-md">
-              <span className="flex items-center gap-2">
-                <FileText className="h-3 w-3 text-muted-foreground" />
-                Protocol
-              </span>
-              <ChevronDown className="h-3 w-3 text-muted-foreground transition-transform duration-150 group-open:rotate-180" />
-            </summary>
-            <div className="px-3 pb-2 pt-1 text-[13px] text-foreground truncate">
-              {experiment.protocol}
-              </div>
-          </details>
-
-          <details className="group rounded-md border border-border bg-muted/10">
-            <summary className="flex items-center justify-between px-3 py-2 cursor-pointer text-[12px] font-medium text-muted-foreground hover:bg-muted/20 rounded-md">
-              <span className="flex items-center gap-2">
-                <FlaskConical className="h-3 w-3 text-muted-foreground" />
-                Progress
-              </span>
-              <ChevronDown className="h-3 w-3 text-muted-foreground transition-transform duration-150 group-open:rotate-180" />
-            </summary>
-            <div className="px-3 pb-2 pt-1 text-[13px] text-foreground">
-              {experiment.progress}%
-              </div>
-          </details>
-        </div>
-
-        {/* Main Content Tabs */}
-        <Tabs defaultValue={initialTab} className="space-y-3">
-          <TabsList className="flex flex-wrap gap-1 bg-muted/10 p-1 rounded-md">
-            <TabsTrigger
-              value="overview"
-              className="px-2.5 py-1.25 rounded-md text-[12px] font-medium text-muted-foreground data-[state=active]:bg-foreground data-[state=active]:text-background transition-colors"
-            >
-              Overview
-            </TabsTrigger>
-            <TabsTrigger
-              value="protocol"
-              className="px-2.5 py-1.25 rounded-md text-[12px] font-medium text-muted-foreground data-[state=active]:bg-foreground data-[state=active]:text-background transition-colors"
-            >
-              Protocol & Assays
-            </TabsTrigger>
-            <TabsTrigger
-              value="samples"
-              className="px-2.5 py-1.25 rounded-md text-[12px] font-medium text-muted-foreground data-[state=active]:bg-foreground data-[state=active]:text-background transition-colors"
-            >
-              Samples
-            </TabsTrigger>
-            <TabsTrigger
-              value="data"
-              className="px-2.5 py-1.25 rounded-md text-[12px] font-medium text-muted-foreground data-[state=active]:bg-foreground data-[state=active]:text-background transition-colors"
-            >
-              Data & Files
-            </TabsTrigger>
-            <TabsTrigger
-              value="notes"
-              className="px-2.5 py-1.25 rounded-md text-[12px] font-medium text-muted-foreground data-[state=active]:bg-foreground data-[state=active]:text-background transition-colors"
-            >
-              Lab Notes
-            </TabsTrigger>
-          </TabsList>
-
-          <TabsContent value="overview" className="space-y-4">
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-foreground">Experiment Description</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <HtmlContent content={experiment.description} />
-              </CardContent>
-            </Card>
-
-            <div className="grid gap-4 md:grid-cols-2">
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-foreground">Equipment Reserved</CardTitle>
-                  <CardDescription>Laboratory equipment for this experiment</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div className="text-center py-8">
-                    <p className="text-sm text-muted-foreground mb-4">No equipment reservations yet</p>
-                    <Button variant="outline" size="sm" disabled>
-                      <Plus className="h-4 w-4 mr-2" />
-                      Reserve Equipment
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-foreground">Timeline</CardTitle>
-                  <CardDescription>Experiment schedule</CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-3">
-                  <div>
-                    <p className="text-sm font-medium text-muted-foreground">Start Date</p>
-                    <p className="text-sm text-foreground">{experiment.startDate}</p>
-                  </div>
-                  <div>
-                    <p className="text-sm font-medium text-muted-foreground">Expected End</p>
-                    <p className="text-sm text-foreground">{experiment.completionDate || "Not set"}</p>
-                  </div>
-                  <div>
-                    <p className="text-sm font-medium text-muted-foreground">Duration</p>
-                    <p className="text-sm text-foreground">15 days</p>
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
-          </TabsContent>
-
-          <TabsContent value="protocol" className="space-y-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <h3 className="text-lg font-semibold">Linked Protocols</h3>
-                <p className="text-sm text-muted-foreground">
-                  Protocols provide detailed procedures and methods for this experiment
-                </p>
-              </div>
-              <LinkProtocolDialog 
-                experimentId={experiment.id}
-                linkedProtocolIds={experiment.protocols.map((p: any) => p.protocol.id)}
-              />
-            </div>
-
-            {experiment.protocols && experiment.protocols.length > 0 ? (
-              <div className="space-y-4">
-                {experiment.protocols.map((protocolLink: any) => (
-                  <ProtocolCard key={protocolLink.id} protocolLink={protocolLink} />
-                ))}
-              </div>
-            ) : (
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-foreground">No Protocols Linked</CardTitle>
-                  <CardDescription>
-                    Link existing protocols to this experiment to provide detailed procedures and methods.
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <LinkProtocolDialog 
-                    experimentId={experiment.id}
-                    linkedProtocolIds={[]}
-                  />
-                </CardContent>
-              </Card>
-            )}
-          </TabsContent>
-
-          <TabsContent value="samples" className="space-y-4">
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-foreground">Sample Inventory</CardTitle>
-                <CardDescription>Samples used in this experiment</CardDescription>
-              </CardHeader>
-              <CardContent>
-                {experiment.samples && experiment.samples.length > 0 ? (
-                  <div className="space-y-3">
-                    {experiment.samples.map((sample: any) => (
-                      <div key={sample.id} className="flex items-center justify-between p-3 border border-border rounded-lg">
-                        <div>
-                          <p className="text-sm font-medium text-foreground">{sample.sample_type}</p>
-                          <p className="text-xs text-muted-foreground">
-                            ID: {sample.id.slice(0, 8)} | Location: {sample.storage_location || "Not specified"}
-                          </p>
-                          {sample.description && (
-                            <p className="text-xs text-muted-foreground mt-1">{sample.description}</p>
-                          )}
-                        </div>
-                        <div className="text-right">
-                          <span className="text-sm font-medium text-foreground">
-                            {sample.quantity || "N/A"} {sample.unit || ""}
-                          </span>
-                          <p className="text-xs text-muted-foreground">
-                            {new Date(sample.created_at).toLocaleDateString()}
-                          </p>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="text-center py-8">
-                    <p className="text-sm text-muted-foreground mb-4">No samples linked to this experiment</p>
-                    <Button variant="outline" size="sm" asChild>
-                      <Link href={`/samples/new?experiment=${experiment.id}`}>
-                        <Plus className="h-4 w-4 mr-2" />
-                        Add Sample
-                      </Link>
-                    </Button>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          <TabsContent value="data" className="space-y-4">
-            <DataFilesTab experimentId={id} />
-          </TabsContent>
-
-          <TabsContent value="notes" className="space-y-4">
-            <LabNotesTab experimentId={id} />
-          </TabsContent>
-        </Tabs>
+        <ExperimentActions
+          experiment={{
+            id: experimentData.id,
+            name: experimentData.name,
+            description: experimentData.description,
+            hypothesis: experimentData.hypothesis,
+            status: experimentData.status,
+            start_date: experimentData.start_date,
+            completion_date: experimentData.completion_date,
+            project_id: experimentData.project_id,
+            assigned_to: experimentData.assigned_to,
+          }}
+          projects={projects || []}
+          users={users || []}
+        />
       </div>
-    )
+
+
+
+
+
+      {/* Main Content Tabs */}
+      <Tabs defaultValue={initialTab} className="space-y-3">
+        <TabsList className="flex flex-wrap gap-1 bg-muted/10 p-1 rounded-md">
+          <TabsTrigger
+            value="overview"
+            className="px-2.5 py-1.25 rounded-md text-[12px] font-medium text-muted-foreground data-[state=active]:bg-foreground data-[state=active]:text-background transition-colors"
+          >
+            Overview
+          </TabsTrigger>
+          <TabsTrigger
+            value="protocol"
+            className="px-2.5 py-1.25 rounded-md text-[12px] font-medium text-muted-foreground data-[state=active]:bg-foreground data-[state=active]:text-background transition-colors"
+          >
+            Protocol & Assays
+          </TabsTrigger>
+          <TabsTrigger
+            value="samples"
+            className="px-2.5 py-1.25 rounded-md text-[12px] font-medium text-muted-foreground data-[state=active]:bg-foreground data-[state=active]:text-background transition-colors"
+          >
+            Samples
+          </TabsTrigger>
+          <TabsTrigger
+            value="data"
+            className="px-2.5 py-1.25 rounded-md text-[12px] font-medium text-muted-foreground data-[state=active]:bg-foreground data-[state=active]:text-background transition-colors"
+          >
+            Data & Files
+          </TabsTrigger>
+          <TabsTrigger
+            value="notes"
+            className="px-2.5 py-1.25 rounded-md text-[12px] font-medium text-muted-foreground data-[state=active]:bg-foreground data-[state=active]:text-background transition-colors"
+          >
+            Lab Notes
+          </TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="overview" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-foreground">Experiment Description</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <HtmlContent content={experiment.description} />
+            </CardContent>
+          </Card>
+
+          <div className="grid gap-4 md:grid-cols-2">
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-foreground">Equipment Reserved</CardTitle>
+                <CardDescription>Laboratory equipment for this experiment</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="text-center py-8">
+                  <p className="text-sm text-muted-foreground mb-4">No equipment reservations yet</p>
+                  <Button variant="outline" size="sm" disabled>
+                    <Plus className="h-4 w-4 mr-2" />
+                    Reserve Equipment
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-foreground">Timeline</CardTitle>
+                <CardDescription>Experiment schedule</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <div>
+                  <p className="text-sm font-medium text-muted-foreground">Start Date</p>
+                  <p className="text-sm text-foreground">{experiment.startDate}</p>
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-muted-foreground">Expected End</p>
+                  <p className="text-sm text-foreground">{experiment.completionDate || "Not set"}</p>
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-muted-foreground">Duration</p>
+                  <p className="text-sm text-foreground">15 days</p>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        </TabsContent>
+
+        <TabsContent value="protocol" className="space-y-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className="text-lg font-semibold">Linked Protocols</h3>
+              <p className="text-sm text-muted-foreground">
+                Protocols provide detailed procedures and methods for this experiment
+              </p>
+            </div>
+            <LinkProtocolDialog
+              experimentId={experiment.id}
+              linkedProtocolIds={experiment.protocols.map((p: any) => p.protocol.id)}
+            />
+          </div>
+
+          {experiment.protocols && experiment.protocols.length > 0 ? (
+            <div className="space-y-4">
+              {experiment.protocols.map((protocolLink: any) => (
+                <ProtocolCard key={protocolLink.id} protocolLink={protocolLink} />
+              ))}
+            </div>
+          ) : (
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-foreground">No Protocols Linked</CardTitle>
+                <CardDescription>
+                  Link existing protocols to this experiment to provide detailed procedures and methods.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <LinkProtocolDialog
+                  experimentId={experiment.id}
+                  linkedProtocolIds={[]}
+                />
+              </CardContent>
+            </Card>
+          )}
+        </TabsContent>
+
+        <TabsContent value="samples" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-foreground">Sample Inventory</CardTitle>
+              <CardDescription>Samples used in this experiment</CardDescription>
+            </CardHeader>
+            <CardContent>
+              {experiment.samples && experiment.samples.length > 0 ? (
+                <div className="space-y-3">
+                  {experiment.samples.map((sample: any) => (
+                    <div key={sample.id} className="flex items-center justify-between p-3 border border-border rounded-lg">
+                      <div>
+                        <p className="text-sm font-medium text-foreground">{sample.sample_type}</p>
+                        <p className="text-xs text-muted-foreground">
+                          ID: {sample.id.slice(0, 8)} | Location: {sample.storage_location || "Not specified"}
+                        </p>
+                        {sample.description && (
+                          <p className="text-xs text-muted-foreground mt-1">{sample.description}</p>
+                        )}
+                      </div>
+                      <div className="text-right">
+                        <span className="text-sm font-medium text-foreground">
+                          {sample.quantity || "N/A"} {sample.unit || ""}
+                        </span>
+                        <p className="text-xs text-muted-foreground">
+                          {new Date(sample.created_at).toLocaleDateString()}
+                        </p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-center py-8">
+                  <p className="text-sm text-muted-foreground mb-4">No samples linked to this experiment</p>
+                  <Button variant="outline" size="sm" asChild>
+                    <Link href={`/samples/new?experiment=${experiment.id}`}>
+                      <Plus className="h-4 w-4 mr-2" />
+                      Add Sample
+                    </Link>
+                  </Button>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="data" className="space-y-4">
+          <DataFilesTab experimentId={id} />
+        </TabsContent>
+
+        <TabsContent value="notes" className="space-y-4">
+          <LabNotesTab experimentId={id} />
+        </TabsContent>
+      </Tabs>
+    </div>
+  )
 }

@@ -10,6 +10,13 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { FlaskConical, Calendar, User, Eye, Grid3x3, List } from 'lucide-react'
 import { HtmlContentTruncated } from '@/components/html-content'
 
+// Format date consistently to avoid hydration mismatch between server/client locales
+const formatDate = (dateStr: string): string => {
+  const date = new Date(dateStr)
+  // Use ISO format parts for consistency: YYYY-MM-DD
+  return date.toISOString().split('T')[0]
+}
+
 interface Experiment {
   id: string
   name: string
@@ -78,7 +85,7 @@ export function ExperimentList({ experiments }: ExperimentListProps) {
         </div>
       </div>
 
-      {/* Grid View */}
+      {/* Grid View - Use auto-fill with fixed card sizes to prevent expansion */}
       {viewMode === "grid" && (
         <div className="grid gap-4 grid-cols-[repeat(auto-fit,minmax(280px,1fr))]">
           {experiments.map((experiment) => (
@@ -89,7 +96,7 @@ export function ExperimentList({ experiments }: ExperimentListProps) {
                     <FlaskConical className="h-5 w-5 text-primary" />
                   </div>
                   <div className="min-w-0 flex-1 space-y-1 overflow-hidden">
-                    <CardTitle className="text-base text-foreground leading-tight min-w-0 overflow-hidden text-ellipsis" style={{ 
+                    <CardTitle className="text-base text-foreground leading-tight min-w-0 overflow-hidden text-ellipsis" style={{
                       display: '-webkit-box',
                       WebkitLineClamp: 2,
                       WebkitBoxOrient: 'vertical',
@@ -99,7 +106,7 @@ export function ExperimentList({ experiments }: ExperimentListProps) {
                       {experiment.name}
                     </CardTitle>
                     {experiment.project && (
-                      <CardDescription className="text-xs min-w-0 overflow-hidden text-ellipsis" style={{ 
+                      <CardDescription className="text-xs min-w-0 overflow-hidden text-ellipsis" style={{
                         wordBreak: 'break-all',
                         overflowWrap: 'break-word'
                       }}>
@@ -123,7 +130,7 @@ export function ExperimentList({ experiments }: ExperimentListProps) {
                     {getStatusDisplay(experiment.status)}
                   </Badge>
                   {experiment.start_date && (
-                    <span className="text-xs text-muted-foreground whitespace-nowrap shrink-0 overflow-hidden text-ellipsis max-w-[80px]">
+                    <span className="text-xs text-muted-foreground whitespace-nowrap shrink-0 overflow-hidden text-ellipsis max-w-20">
                       {new Date(experiment.start_date).toLocaleDateString()}
                     </span>
                   )}
@@ -139,10 +146,10 @@ export function ExperimentList({ experiments }: ExperimentListProps) {
                       </span>
                     </div>
                   )}
-                  <HtmlContentTruncated 
+                  <HtmlContentTruncated
                     content={experiment.description}
                     className="text-sm text-muted-foreground min-w-0 overflow-hidden text-ellipsis"
-                    style={{ 
+                    style={{
                       display: '-webkit-box',
                       WebkitLineClamp: 2,
                       WebkitBoxOrient: 'vertical',
@@ -192,7 +199,7 @@ export function ExperimentList({ experiments }: ExperimentListProps) {
                           <FlaskConical className="h-4 w-4 text-primary shrink-0" />
                           <div className="max-w-[280px]">
                             <div className="font-semibold truncate">{experiment.name}</div>
-                            <HtmlContentTruncated 
+                            <HtmlContentTruncated
                               content={experiment.description}
                               className="text-sm text-muted-foreground truncate"
                             />
@@ -223,12 +230,12 @@ export function ExperimentList({ experiments }: ExperimentListProps) {
                       </TableCell>
                       <TableCell className="text-muted-foreground">
                         {experiment.start_date
-                          ? new Date(experiment.start_date).toLocaleDateString()
+                          ? formatDate(experiment.start_date)
                           : "—"}
                       </TableCell>
                       <TableCell className="text-muted-foreground">
                         {experiment.completion_date
-                          ? new Date(experiment.completion_date).toLocaleDateString()
+                          ? formatDate(experiment.completion_date)
                           : "—"}
                       </TableCell>
                       <TableCell className="text-right">
@@ -249,4 +256,3 @@ export function ExperimentList({ experiments }: ExperimentListProps) {
     </>
   )
 }
-
