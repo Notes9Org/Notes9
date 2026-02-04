@@ -16,16 +16,23 @@ export default async function ProjectsPage() {
     redirect("/auth/login")
   }
 
-  // Fetch projects
-  const { data: projects } = await supabase
+  // Fetch projects with member and experiment counts
+  const { data: projectsRaw } = await supabase
     .from("projects")
     .select(`
       *,
       created_by:profiles!projects_created_by_fkey(first_name, last_name),
-      project_members(count),
-      experiments(count)
+      no_of_members:project_members(count),
+      no_of_experiments:experiments(count)
     `)
     .order("created_at", { ascending: false })
+
+  // Transform the data to extract counts as simple numbers
+  const projects = projectsRaw?.map(project => ({
+    ...project,
+    no_of_members: project.no_of_members?.[0]?.count || 0,
+    no_of_experiments: project.no_of_experiments?.[0]?.count || 0,
+  }))
 
   return (
       <div className="space-y-6">

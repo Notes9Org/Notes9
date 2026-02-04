@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react"
 import { createClient } from "@/lib/supabase/client"
+import { usePreventSpaceMenuClose } from "@/hooks/use-prevent-space-menu-close"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -49,6 +50,9 @@ export function EditProjectDialog({ project, asMenuItem = false }: EditProjectDi
 
   const [open, setOpen] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
+
+  // Prevent space key from closing dropdown menu when typing
+  const handleKeyDown = usePreventSpaceMenuClose()
 
   // Form state
   const [name, setName] = useState(project.name)
@@ -136,7 +140,7 @@ export function EditProjectDialog({ project, asMenuItem = false }: EditProjectDi
           </Button>
         </DialogTrigger>
       )}
-      <DialogContent className="sm:max-w-[600px] max-h-[90vh] overflow-y-auto">
+      <DialogContent className="sm:max-w-[600px] max-h-[90vh] overflow-y-auto" onKeyDown={handleKeyDown}>
         <DialogHeader>
           <DialogTitle>Edit Project</DialogTitle>
           <DialogDescription>
@@ -257,4 +261,3 @@ export function EditProjectDialog({ project, asMenuItem = false }: EditProjectDi
     </Dialog>
   )
 }
-

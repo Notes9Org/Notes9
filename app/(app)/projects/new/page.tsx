@@ -3,6 +3,7 @@
 import { useState } from "react"
 import { useRouter } from 'next/navigation'
 import { createClient } from "@/lib/supabase/client"
+import { useSmartBack } from "@/hooks/use-smart-back"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -16,10 +17,10 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { ArrowLeft } from 'lucide-react'
-import Link from 'next/link'
 
 export default function NewProjectPage() {
   const router = useRouter()
+  const handleBack = useSmartBack("/projects")
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   
@@ -85,10 +86,8 @@ export default function NewProjectPage() {
   return (
       <div className="max-w-3xl mx-auto space-y-6">
         <div className="flex items-center gap-4">
-          <Button variant="ghost" size="icon" asChild>
-            <Link href="/projects">
-              <ArrowLeft className="h-4 w-4" />
-            </Link>
+          <Button variant="ghost" size="icon" onClick={handleBack}>
+            <ArrowLeft className="h-4 w-4" />
           </Button>
           <div>
             <h1 className="text-3xl font-bold tracking-tight">Create New Project</h1>
@@ -211,9 +210,6 @@ export default function NewProjectPage() {
               <div className="flex gap-3">
                 <Button type="submit" disabled={isLoading}>
                   {isLoading ? "Creating..." : "Create Project"}
-                </Button>
-                <Button type="button" variant="outline" asChild>
-                  <Link href="/projects">Cancel</Link>
                 </Button>
               </div>
             </form>
