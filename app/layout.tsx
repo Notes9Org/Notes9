@@ -2,6 +2,7 @@ import { Inter } from 'next/font/google'
 import "./globals.css"
 import { ThemeProvider } from "@/components/theme-provider"
 import { Toaster } from "@/components/ui/toaster"
+import { Toaster as Sonner } from "@/components/ui/sonner"
 import { NavigationLoader } from "@/components/navigation-loader"
 
 const inter = Inter({
@@ -32,6 +33,7 @@ export default function RootLayout({
           <NavigationLoader />
           {children}
           <Toaster />
+          <Sonner />
         </ThemeProvider>
       </body>
     </html>
