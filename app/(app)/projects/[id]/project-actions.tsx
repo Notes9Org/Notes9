@@ -12,7 +12,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { MoreHorizontal, Pencil, Copy, Trash2 } from "lucide-react"
+import { MoreHorizontal } from "lucide-react"
 
 interface Project {
   id: string
@@ -32,10 +32,8 @@ interface ProjectActionsProps {
 export function ProjectActions({ project, experimentCount = 0 }: ProjectActionsProps) {
   return (
     <div className="flex items-center gap-2">
-      {/* Status Update Buttons - Primary Actions */}
-      <div className="hidden sm:flex gap-2">
-        <ProjectStatusUpdateButtons projectId={project.id} currentStatus={project.status} />
-      </div>
+      {/* Status Update Dropdown */}
+      <ProjectStatusUpdateButtons projectId={project.id} currentStatus={project.status} />
 
       {/* More Actions Dropdown */}
       <DropdownMenu>
@@ -46,12 +44,11 @@ export function ProjectActions({ project, experimentCount = 0 }: ProjectActionsP
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="w-48">
-          <div className="sm:hidden">
-            <ProjectStatusUpdateButtons projectId={project.id} currentStatus={project.status} compact />
-            <DropdownMenuSeparator />
-          </div>
-          
-          <DropdownMenuItem onSelect={(e) => e.preventDefault()}>
+          <DropdownMenuItem 
+            onSelect={(e) => {
+              e.preventDefault()
+            }}
+          >
             <EditProjectDialog project={project} asMenuItem />
           </DropdownMenuItem>
           

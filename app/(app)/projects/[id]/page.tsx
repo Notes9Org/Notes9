@@ -14,7 +14,7 @@ import {
   BreadcrumbPage,
   BreadcrumbSeparator,
 } from "@/components/ui/breadcrumb"
-import { Plus, Users, Calendar, FlaskConical, FileText, Settings } from 'lucide-react'
+import { Plus, Users, Calendar, FlaskConical, FileText } from 'lucide-react'
 import Link from 'next/link'
 import { ProjectActions } from './project-actions'
 import { HtmlContentTruncated } from '@/components/html-content'
@@ -134,10 +134,6 @@ export default async function ProjectDetailPage({
               }}
               experimentCount={project.experiments?.length || 0}
             />
-            <Button variant="outline" size="sm">
-              <Settings className="h-4 w-4 mr-2" />
-              Settings
-            </Button>
           </div>
         </div>
 

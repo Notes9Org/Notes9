@@ -4,6 +4,14 @@ import { useState } from "react"
 import { createClient } from "@/lib/supabase/client"
 import { Button } from "@/components/ui/button"
 import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+} from "@/components/ui/dropdown-menu"
+import {
   AlertDialog,
   AlertDialogAction,
   AlertDialogCancel,
@@ -15,7 +23,7 @@ import {
 } from "@/components/ui/alert-dialog"
 import { useToast } from "@/hooks/use-toast"
 import { useRouter } from "next/navigation"
-import { CheckCircle2, Pause, Play, Archive, Loader2 } from "lucide-react"
+import { CheckCircle2, Pause, Play, Archive, Loader2, FileEdit, ChevronDown } from "lucide-react"
 
 interface ProjectStatusUpdateButtonsProps {
   projectId: string
@@ -59,11 +67,8 @@ export function ProjectStatusUpdateButtons({ projectId, currentStatus, compact =
         description: statusMessages[newStatus] || "Project status updated",
       })
 
-      router.refresh()
       setDialogOpen(false)
-      
-      // Use hard reload to ensure fresh data
-      window.location.reload()
+      router.refresh()
     } catch (error: any) {
       console.error("Update error:", error)
       toast({
@@ -78,160 +83,84 @@ export function ProjectStatusUpdateButtons({ projectId, currentStatus, compact =
   }
 
   const openConfirmDialog = (status: string) => {
+    if (status === currentStatus) return // Don't open dialog if selecting current status
     setTargetStatus(status)
     setDialogOpen(true)
   }
 
   const statusConfig: Record<
     string,
-    { label: string; description: string; icon: React.ReactNode }
+    { label: string; description: string; icon: React.ReactNode; displayName: string }
   > = {
+    planning: {
+      label: "Move to Planning",
+      displayName: "Planning",
+      description: "This will move the project back to planning status.",
+      icon: <FileEdit className="h-4 w-4 mr-2" />,
+    },
     active: {
       label: "Activate Project",
+      displayName: "Active",
       description: "This will mark the project as active and visible in active projects list.",
       icon: <Play className="h-4 w-4 mr-2" />,
     },
-    planning: {
-      label: "Move to Planning",
-      description: "This will move the project back to planning status.",
+    on_hold: {
+      label: "Put On Hold",
+      displayName: "On Hold",
+      description: "This will pause the project temporarily.",
       icon: <Pause className="h-4 w-4 mr-2" />,
     },
     completed: {
       label: "Mark as Complete",
+      displayName: "Completed",
       description: "This will mark the project as completed. You can still edit it later.",
       icon: <CheckCircle2 className="h-4 w-4 mr-2" />,
     },
     archived: {
       label: "Archive Project",
+      displayName: "Archived",
       description: "This will archive the project. It will be hidden from main lists but not deleted.",
       icon: <Archive className="h-4 w-4 mr-2" />,
     },
-    on_hold: {
-      label: "Put On Hold",
-      description: "This will pause the project temporarily.",
-      icon: <Pause className="h-4 w-4 mr-2" />,
-    },
   }
+
+  const allStatuses = ["planning", "active", "on_hold", "completed", "archived"]
 
   return (
     <>
-      {/* Show buttons based on current status */}
-      {compact ? (
-        // Compact mode for mobile dropdown
-        <div className="flex flex-col gap-1 w-full">
-          {currentStatus === "planning" && (
-            <div onClick={() => openConfirmDialog("active")} className="flex items-center px-2 py-1.5 cursor-pointer hover:bg-accent">
-              <Play className="h-4 w-4 mr-2" />
-              <span>Activate</span>
-            </div>
-          )}
-          {currentStatus === "active" && (
-            <>
-              <div onClick={() => openConfirmDialog("on_hold")} className="flex items-center px-2 py-1.5 cursor-pointer hover:bg-accent">
-                <Pause className="h-4 w-4 mr-2" />
-                <span>Pause</span>
-              </div>
-              <div onClick={() => openConfirmDialog("completed")} className="flex items-center px-2 py-1.5 cursor-pointer hover:bg-accent">
-                <CheckCircle2 className="h-4 w-4 mr-2" />
-                <span>Complete</span>
-              </div>
-            </>
-          )}
-          {currentStatus === "on_hold" && (
-            <div onClick={() => openConfirmDialog("active")} className="flex items-center px-2 py-1.5 cursor-pointer hover:bg-accent">
-              <Play className="h-4 w-4 mr-2" />
-              <span>Resume</span>
-            </div>
-          )}
-          {currentStatus === "completed" && (
-            <div onClick={() => openConfirmDialog("archived")} className="flex items-center px-2 py-1.5 cursor-pointer hover:bg-accent">
-              <Archive className="h-4 w-4 mr-2" />
-              <span>Archive</span>
-            </div>
-          )}
-        </div>
-      ) : (
-        // Regular button mode for desktop
-        <>
-          {currentStatus === "planning" && (
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => openConfirmDialog("active")}
-          disabled={isUpdating}
-        >
-          {isUpdating ? (
-            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-          ) : (
-            <Play className="h-4 w-4 mr-2" />
-          )}
-          Activate
-        </Button>
-      )}
-
-      {currentStatus === "active" && (
-        <>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => openConfirmDialog("on_hold")}
-            disabled={isUpdating}
-          >
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button variant="outline" size="sm" disabled={isUpdating}>
             {isUpdating ? (
               <Loader2 className="h-4 w-4 mr-2 animate-spin" />
             ) : (
-              <Pause className="h-4 w-4 mr-2" />
+              statusConfig[currentStatus]?.icon
             )}
-            Pause
+            <span className="capitalize">
+              {isUpdating ? "Updating..." : statusConfig[currentStatus]?.displayName || currentStatus}
+            </span>
+            <ChevronDown className="h-4 w-4 ml-2" />
           </Button>
-          <Button
-            size="sm"
-            onClick={() => openConfirmDialog("completed")}
-            disabled={isUpdating}
-          >
-            {isUpdating ? (
-              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-            ) : (
-              <CheckCircle2 className="h-4 w-4 mr-2" />
-            )}
-            Complete
-          </Button>
-        </>
-      )}
-
-      {currentStatus === "on_hold" && (
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => openConfirmDialog("active")}
-          disabled={isUpdating}
-        >
-          {isUpdating ? (
-            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-          ) : (
-            <Play className="h-4 w-4 mr-2" />
-          )}
-          Resume
-        </Button>
-      )}
-
-      {currentStatus === "completed" && (
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => openConfirmDialog("archived")}
-          disabled={isUpdating}
-        >
-          {isUpdating ? (
-            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-          ) : (
-            <Archive className="h-4 w-4 mr-2" />
-          )}
-          Archive
-        </Button>
-      )}
-        </>
-      )}
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" className="w-48">
+          <DropdownMenuLabel>Change Status</DropdownMenuLabel>
+          <DropdownMenuSeparator />
+          {allStatuses.map((status) => (
+            <DropdownMenuItem
+              key={status}
+              onClick={() => openConfirmDialog(status)}
+              disabled={status === currentStatus}
+              className={status === currentStatus ? "opacity-50" : ""}
+            >
+              {statusConfig[status]?.icon}
+              <span className="capitalize">{statusConfig[status]?.displayName}</span>
+              {status === currentStatus && (
+                <span className="ml-auto text-xs text-muted-foreground">Current</span>
+              )}
+            </DropdownMenuItem>
+          ))}
+        </DropdownMenuContent>
+      </DropdownMenu>
 
       {/* Confirmation Dialog */}
       <AlertDialog open={dialogOpen} onOpenChange={setDialogOpen}>
@@ -258,4 +187,3 @@ export function ProjectStatusUpdateButtons({ projectId, currentStatus, compact =
     </>
   )
 }
-
