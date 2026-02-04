@@ -15,7 +15,8 @@ import {
   Activity,
   Plus,
   Paperclip,
-  X,
+  Globe,
+  FlaskConical,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useChatSessions } from '@/hooks/use-chat-sessions';
@@ -25,6 +26,9 @@ import { ModelSelector } from '@/components/catalyst/model-selector';
 import { MessageActions } from '@/components/catalyst/message-actions';
 import { DEFAULT_MODEL_ID } from '@/lib/ai/models';
 import { toast } from 'sonner';
+import { createClient } from '@/lib/supabase/client';
+
+type AgentMode = 'general' | 'notes9';
 
 // Helper to get cookie value
 function getCookie(name: string): string | null {
@@ -46,6 +50,9 @@ const ALLOWED_TYPES = [
 export function RightSidebar() {
   const [input, setInput] = useState('');
   const [selectedModelId, setSelectedModelId] = useState(DEFAULT_MODEL_ID);
+  const [agentMode, setAgentMode] = useState<AgentMode>('general');
+  const [userId, setUserId] = useState<string>('');
+  const [notes9Loading, setNotes9Loading] = useState(false);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -55,10 +62,25 @@ export function RightSidebar() {
   const [isDraggingContext, setIsDraggingContext] = useState(false);
   const [contextLoading, setContextLoading] = useState(false);
 
+  const supabase = createClient();
+
   // Prevent hydration mismatch by only rendering Tabs after mount
   useEffect(() => {
     setMounted(true);
   }, []);
+
+  // Load user ID
+  useEffect(() => {
+    const loadUserId = async () => {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (user) {
+        setUserId(user.id);
+      }
+    };
+    loadUserId();
+  }, [supabase]);
 
   // Use ref for model so transport can access current value without recreating
   const currentModelRef = useRef(selectedModelId);
@@ -106,7 +128,7 @@ export function RightSidebar() {
   } = useChatSessions();
 
   const currentSessionRef = useRef<string | null>(null);
-  const isLoading = status === 'streaming' || status === 'submitted';
+  const isLoading = status === 'streaming' || status === 'submitted' || notes9Loading;
   const isUploading = uploadQueue.length > 0;
 
   // Auto-scroll to bottom
@@ -227,7 +249,98 @@ export function RightSidebar() {
       }
     }
 
-    // Build message parts
+    // Handle Notes9 mode
+    if (agentMode === 'notes9') {
+      try {
+        setNotes9Loading(true);
+        
+        // Add user message to UI immediately
+        const userMessageId = `user-${Date.now()}`;
+        const userMessage = {
+          id: userMessageId,
+          role: 'user' as const,
+          content: text,
+          parts: [{ type: 'text' as const, text }],
+          createdAt: new Date(),
+        };
+        setMessages((prev) => [...prev, userMessage]);
+
+        // Call Notes9 API
+        const response = await fetch('http://44.200.140.134:8000/agent/run', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            history: [],
+            query: text,
+            session_id: currentSessionRef.current || 'sidebar-session',
+            user_id: userId,
+          }),
+        });
+
+        if (!response.ok) {
+          throw new Error('Notes9 API request failed');
+        }
+
+        const data = await response.json();
+        
+        // Format response with citations as clickable links
+        let formattedAnswer = data.answer;
+        if (data.citations && data.citations.length > 0) {
+          formattedAnswer += '\n\n**References:**\n';
+          data.citations.forEach((citation: any, index: number) => {
+            const sourceId = citation.source_id;
+            const sourceType = citation.source_type;
+            
+            // Create route based on source type (only for types with detail pages)
+            let route = '';
+            switch (sourceType) {
+              case 'literature_review':
+                route = `/literature-reviews/${sourceId}`;
+                break;
+              case 'protocol':
+                route = `/protocols/${sourceId}`;
+                break;
+              // lab_note and report don't have detail pages yet
+              case 'lab_note':
+              case 'report':
+              default:
+                route = '';
+            }
+            
+            // Format citation with link
+            const excerpt = citation.excerpt.substring(0, 150);
+            const sourceLabel = sourceType.replace('_', ' ');
+            
+            if (route) {
+              formattedAnswer += `\n[${index + 1}] [View ${sourceLabel}](${route}): ${excerpt}...`;
+            } else {
+              formattedAnswer += `\n[${index + 1}] ${sourceLabel}: ${excerpt}...`;
+            }
+          });
+        }
+
+        // Add assistant message to UI
+        const assistantMessageId = `assistant-${Date.now()}`;
+        const assistantMessage = {
+          id: assistantMessageId,
+          role: 'assistant' as const,
+          content: formattedAnswer,
+          parts: [{ type: 'text' as const, text: formattedAnswer }],
+          createdAt: new Date(),
+        };
+        setMessages((prev) => [...prev, assistantMessage]);
+      } catch (error) {
+        console.error('Notes9 API error:', error);
+        toast.error('Failed to get response from Notes9');
+      } finally {
+        setNotes9Loading(false);
+      }
+      return;
+    }
+
+    // Build message parts for General mode
     const parts: Array<{ type: 'text'; text: string } | { type: 'file'; url: string; name: string; mediaType: string }> = [];
 
     for (const attachment of currentAttachments) {
@@ -513,6 +626,38 @@ export function RightSidebar() {
 
             {/* Input Area */}
             <div className="p-2 border-t shrink-0">
+              {/* Agent Mode Toggle */}
+              <div className="flex items-center gap-1 mb-1.5 sm:mb-2">
+                <Button
+                  type="button"
+                  variant={agentMode === 'notes9' ? 'default' : 'ghost'}
+                  size="sm"
+                  className={cn(
+                    'h-6 sm:h-7 gap-1 text-[10px] sm:text-xs font-medium transition-all px-1.5 sm:px-2',
+                    agentMode === 'notes9' && 'bg-primary text-primary-foreground'
+                  )}
+                  onClick={() => setAgentMode('notes9')}
+                  disabled={isLoading}
+                >
+                  <FlaskConical className="size-2.5 sm:size-3" />
+                  Notes9
+                </Button>
+                <Button
+                  type="button"
+                  variant={agentMode === 'general' ? 'default' : 'ghost'}
+                  size="sm"
+                  className={cn(
+                    'h-6 sm:h-7 gap-1 text-[10px] sm:text-xs font-medium transition-all px-1.5 sm:px-2',
+                    agentMode === 'general' && 'bg-primary text-primary-foreground'
+                  )}
+                  onClick={() => setAgentMode('general')}
+                  disabled={isLoading}
+                >
+                  <Globe className="size-2.5 sm:size-3" />
+                  General
+                </Button>
+              </div>
+
               {/* Attachment Previews */}
               {(attachments.length > 0 || uploadQueue.length > 0) && (
                 <div className="flex flex-wrap gap-1 mb-1.5 sm:mb-2">
@@ -607,12 +752,14 @@ export function RightSidebar() {
                       New
                     </Button>
                   )}
-                  <ModelSelector
-                    selectedModelId={selectedModelId}
-                    onModelChange={setSelectedModelId}
-                    compact
-                    disabled={isLoading}
-                  />
+                  {agentMode === 'general' && (
+                    <ModelSelector
+                      selectedModelId={selectedModelId}
+                      onModelChange={setSelectedModelId}
+                      compact
+                      disabled={isLoading}
+                    />
+                  )}
                   <Button
                     type="button"
                     size="icon"

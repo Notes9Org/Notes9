@@ -3,6 +3,7 @@
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeHighlight from 'rehype-highlight';
+import Link from 'next/link';
 import { cn } from '@/lib/utils';
 import 'highlight.js/styles/github-dark.css';
 
@@ -47,8 +48,22 @@ export function MarkdownRenderer({ content, className }: MarkdownRendererProps) 
             </pre>
           );
         },
-        // Custom link styling
+        // Custom link styling - use Next.js Link for internal routes
         a({ href, children, ...props }) {
+          const isInternal = href?.startsWith('/');
+          
+          if (isInternal) {
+            return (
+              <Link
+                href={href}
+                className="text-primary underline underline-offset-2 hover:text-primary/80 transition-colors"
+                {...props}
+              >
+                {children}
+              </Link>
+            );
+          }
+          
           return (
             <a
               href={href}
