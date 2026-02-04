@@ -4,6 +4,13 @@ import { useState } from "react"
 import { createClient } from "@/lib/supabase/client"
 import { Button } from "@/components/ui/button"
 import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
+import {
   AlertDialog,
   AlertDialogAction,
   AlertDialogCancel,
@@ -15,7 +22,7 @@ import {
 } from "@/components/ui/alert-dialog"
 import { useToast } from "@/hooks/use-toast"
 import { useRouter } from "next/navigation"
-import { CheckCircle2, Pause, Play, Ban, Loader2 } from "lucide-react"
+import { CheckCircle2, Pause, Play, Ban, Loader2, ChevronDown } from "lucide-react"
 
 interface StatusUpdateButtonsProps {
   experimentId: string
@@ -30,6 +37,7 @@ export function StatusUpdateButtons({ experimentId, currentStatus }: StatusUpdat
   const [isUpdating, setIsUpdating] = useState(false)
   const [dialogOpen, setDialogOpen] = useState(false)
   const [targetStatus, setTargetStatus] = useState<string | null>(null)
+  const [dropdownOpen, setDropdownOpen] = useState(false)
 
   const handleStatusUpdate = async (newStatus: string) => {
     setIsUpdating(true)
@@ -60,6 +68,7 @@ export function StatusUpdateButtons({ experimentId, currentStatus }: StatusUpdat
       })
 
       setDialogOpen(false)
+      setDropdownOpen(false)
       router.refresh()
     } catch (error: any) {
       console.error("Update error:", error)
@@ -79,6 +88,45 @@ export function StatusUpdateButtons({ experimentId, currentStatus }: StatusUpdat
     setDialogOpen(true)
   }
 
+  // Get available actions based on current status
+  const getAvailableActions = () => {
+    const actions: { status: string; label: string; icon: React.ReactNode; variant?: "default" | "destructive" }[] = []
+    
+    if (currentStatus === "in_progress") {
+      actions.push(
+        { status: "completed", label: "Mark as Complete", icon: <CheckCircle2 className="h-4 w-4 mr-2" />, variant: "default" },
+        { status: "planned", label: "Pause Experiment", icon: <Pause className="h-4 w-4 mr-2" /> },
+        { status: "data_ready", label: "Mark Data Ready", icon: <CheckCircle2 className="h-4 w-4 mr-2" /> },
+      )
+    } else if (currentStatus === "planned") {
+      actions.push(
+        { status: "in_progress", label: "Start Experiment", icon: <Play className="h-4 w-4 mr-2" />, variant: "default" },
+      )
+    } else if (currentStatus === "data_ready") {
+      actions.push(
+        { status: "analyzed", label: "Mark as Analyzed", icon: <CheckCircle2 className="h-4 w-4 mr-2" />, variant: "default" },
+        { status: "in_progress", label: "Resume Experiment", icon: <Play className="h-4 w-4 mr-2" /> },
+      )
+    } else if (currentStatus === "analyzed") {
+      actions.push(
+        { status: "completed", label: "Mark as Complete", icon: <CheckCircle2 className="h-4 w-4 mr-2" />, variant: "default" },
+        { status: "in_progress", label: "Resume Experiment", icon: <Play className="h-4 w-4 mr-2" /> },
+      )
+    }
+    
+    // Always allow cancel (except if already cancelled or completed)
+    if (currentStatus !== "cancelled" && currentStatus !== "completed") {
+      actions.push({ status: "cancelled", label: "Cancel Experiment", icon: <Ban className="h-4 w-4 mr-2" />, variant: "destructive" })
+    }
+    
+    return actions
+  }
+
+  const actions = getAvailableActions()
+  
+  // Get primary action (first non-destructive action)
+  const primaryAction = actions.find(a => a.variant !== "destructive")
+  
   const statusConfig: Record<
     string,
     { label: string; description: string; icon: React.ReactNode }
@@ -115,54 +163,47 @@ export function StatusUpdateButtons({ experimentId, currentStatus }: StatusUpdat
     },
   }
 
+  // If no actions available, show status badge
+  if (actions.length === 0) {
+    return (
+      <Button variant="outline" size="sm" disabled>
+        <CheckCircle2 className="h-4 w-4 mr-2" />
+        {currentStatus === "completed" ? "Completed" : "Cancelled"}
+      </Button>
+    )
+  }
+
   return (
     <>
-      {/* Show buttons based on current status */}
-      {currentStatus === "in_progress" && (
-        <>
-          <Button
-            variant="outline"
+      <DropdownMenu open={dropdownOpen} onOpenChange={setDropdownOpen}>
+        <DropdownMenuTrigger asChild>
+          <Button 
+            variant={primaryAction ? "default" : "outline"} 
             size="sm"
-            onClick={() => openConfirmDialog("planned")}
             disabled={isUpdating}
           >
             {isUpdating ? (
               <Loader2 className="h-4 w-4 mr-2 animate-spin" />
             ) : (
-              <Pause className="h-4 w-4 mr-2" />
+              primaryAction?.icon || <CheckCircle2 className="h-4 w-4 mr-2" />
             )}
-            Pause
+            {primaryAction?.label || "Actions"}
+            <ChevronDown className="h-3 w-3 ml-2" />
           </Button>
-          <Button
-            size="sm"
-            onClick={() => openConfirmDialog("completed")}
-            disabled={isUpdating}
-          >
-            {isUpdating ? (
-              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-            ) : (
-              <CheckCircle2 className="h-4 w-4 mr-2" />
-            )}
-            Complete
-          </Button>
-        </>
-      )}
-
-      {currentStatus === "planned" && (
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => openConfirmDialog("in_progress")}
-          disabled={isUpdating}
-        >
-          {isUpdating ? (
-            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-          ) : (
-            <Play className="h-4 w-4 mr-2" />
-          )}
-          Start
-        </Button>
-      )}
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" className="w-56">
+          {actions.map((action, index) => (
+            <DropdownMenuItem
+              key={action.status}
+              onClick={() => openConfirmDialog(action.status)}
+              className={action.variant === "destructive" ? "text-destructive focus:text-destructive" : ""}
+            >
+              {action.icon}
+              {action.label}
+            </DropdownMenuItem>
+          ))}
+        </DropdownMenuContent>
+      </DropdownMenu>
 
       {/* Confirmation Dialog */}
       <AlertDialog open={dialogOpen} onOpenChange={setDialogOpen}>

@@ -21,7 +21,7 @@ export function AppLayout({ children }: AppLayoutProps) {
   const [leftSidebarWidth, setLeftSidebarWidth] = useState(280)
   const isMobile = useMediaQuery("(max-width: 768px)")
   const isTablet = useMediaQuery("(max-width: 1024px)")
-  
+
   // Close right sidebar on mobile by default
   useEffect(() => {
     if (isMobile) {
@@ -40,14 +40,14 @@ export function AppLayout({ children }: AppLayoutProps) {
       window.removeEventListener('sidebar-width-change', handleSidebarWidthChange as EventListener)
     }
   }, [])
-  
+
   // Left sidebar resizing
   const leftSidebar = useResizable({
     initialWidth: isMobile ? 0 : isTablet ? 240 : 280,
     minWidth: 200,
     maxWidth: 400,
   })
-  
+
   // Right sidebar resizing
   const rightSidebar = useResizable({
     initialWidth: isTablet ? 280 : 320,
@@ -62,9 +62,9 @@ export function AppLayout({ children }: AppLayoutProps) {
         {/* Left Sidebar - Hidden on mobile, shown via SidebarProvider */}
         {!isMobile && (
           <div className="flex shrink-0">
-            <div 
+            <div
               data-sidebar-container
-              style={{ 
+              style={{
                 '--sidebar-width': `${leftSidebarWidth}px`,
                 width: leftSidebarWidth,
                 transition: 'width 200ms ease-in-out'
@@ -90,7 +90,7 @@ export function AppLayout({ children }: AppLayoutProps) {
               <Image src="/notes9-logo.png" alt="Notes9" width={24} height={24} />
               <h1 className="text-base sm:text-lg font-semibold">Notes9</h1>
             </div>
-          
+
             <div className="flex items-center gap-1 sm:gap-2">
               {/* Mobile: Show AI button with icon */}
               <Button
@@ -110,7 +110,9 @@ export function AppLayout({ children }: AppLayoutProps) {
 
           {/* Main Content */}
           <main className="flex-1 overflow-auto p-3 sm:p-4 md:p-6">
-            {children}
+            <div className="w-full">
+              {children}
+            </div>
           </main>
         </SidebarInset>
 
