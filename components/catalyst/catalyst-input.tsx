@@ -1,13 +1,15 @@
 'use client';
 
 import { useRef, useEffect, useState, useCallback, type ChangeEvent } from 'react';
-import { ArrowUp, Square, Paperclip, Clock, X } from 'lucide-react';
+import { ArrowUp, Square, Paperclip, Clock, X, Globe, FlaskConical } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { cn } from '@/lib/utils';
 import { PreviewAttachment, type Attachment } from './preview-attachment';
 import { ModelSelector } from './model-selector';
 import { toast } from 'sonner';
+
+export type AgentMode = 'general' | 'notes9';
 
 interface CatalystInputProps {
   input: string;
@@ -18,6 +20,8 @@ interface CatalystInputProps {
   hasMessages: boolean;
   selectedModelId: string;
   onModelChange: (modelId: string) => void;
+  agentMode: AgentMode;
+  onAgentModeChange: (mode: AgentMode) => void;
 }
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
@@ -41,6 +45,8 @@ export function CatalystInput({
   hasMessages,
   selectedModelId,
   onModelChange,
+  agentMode,
+  onAgentModeChange,
 }: CatalystInputProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -184,6 +190,38 @@ export function CatalystInput({
     <div className={cn('mx-auto w-full max-w-3xl px-4 pb-6', hasMessages ? 'pt-4' : 'pt-0')}>
       <form onSubmit={handleSubmit}>
         <div className="relative rounded-2xl border border-border bg-background shadow-sm transition-all focus-within:border-primary/50 focus-within:shadow-md">
+          {/* Agent Mode Toggle */}
+          <div className="flex items-center gap-1 p-2 border-b border-border/50">
+            <Button
+              type="button"
+              variant={agentMode === 'notes9' ? 'default' : 'ghost'}
+              size="sm"
+              className={cn(
+                'h-8 gap-2 text-xs font-medium transition-all',
+                agentMode === 'notes9' && 'bg-primary text-primary-foreground'
+              )}
+              onClick={() => onAgentModeChange('notes9')}
+              disabled={isLoading}
+            >
+              <FlaskConical className="size-3.5" />
+              Notes9
+            </Button>
+            <Button
+              type="button"
+              variant={agentMode === 'general' ? 'default' : 'ghost'}
+              size="sm"
+              className={cn(
+                'h-8 gap-2 text-xs font-medium transition-all',
+                agentMode === 'general' && 'bg-primary text-primary-foreground'
+              )}
+              onClick={() => onAgentModeChange('general')}
+              disabled={isLoading}
+            >
+              <Globe className="size-3.5" />
+              General
+            </Button>
+          </div>
+
           {/* Attachment Previews */}
           {(attachments.length > 0 || uploadQueue.length > 0) && (
             <div className="flex flex-wrap gap-2 p-3 pb-0">
@@ -253,11 +291,13 @@ export function CatalystInput({
 
             {/* Right - Model selector + Submit/Stop button */}
             <div className="flex items-center gap-2">
-              <ModelSelector
-                selectedModelId={selectedModelId}
-                onModelChange={onModelChange}
-                disabled={isLoading}
-              />
+              {agentMode === 'general' && (
+                <ModelSelector
+                  selectedModelId={selectedModelId}
+                  onModelChange={onModelChange}
+                  disabled={isLoading}
+                />
+              )}
 
               {isLoading ? (
                 <Button
