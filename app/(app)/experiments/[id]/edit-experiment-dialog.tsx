@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react"
 import { createClient } from "@/lib/supabase/client"
+import { usePreventSpaceMenuClose } from "@/hooks/use-prevent-space-menu-close"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -67,6 +68,9 @@ export function EditExperimentDialog({
     onOpenChange?.(value)
   }
   const [isSaving, setIsSaving] = useState(false)
+
+  // Prevent space key from closing dropdown menu when typing
+  const handleKeyDown = usePreventSpaceMenuClose()
 
   // Form state
   const [name, setName] = useState(experiment.name)
@@ -161,7 +165,7 @@ export function EditExperimentDialog({
           </DialogTrigger>
         )
       )}
-      <DialogContent className="sm:max-w-[600px] max-h-[90vh] overflow-y-auto">
+      <DialogContent className="sm:max-w-[600px] max-h-[90vh] overflow-y-auto" onKeyDown={handleKeyDown}>
         <DialogHeader>
           <DialogTitle>Edit Experiment</DialogTitle>
           <DialogDescription>
@@ -317,4 +321,3 @@ export function EditExperimentDialog({
     </Dialog>
   )
 }
-
