@@ -5,9 +5,8 @@ import Link from "next/link"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { Progress } from "@/components/ui/progress"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Users, Calendar, TrendingUp, Eye, Grid3x3, List } from 'lucide-react'
+import { Users, TrendingUp, Eye, Grid3x3, List } from 'lucide-react'
 
 // Format date consistently to avoid hydration mismatch between server/client locales
 const formatDate = (dateStr: string): string => {
@@ -25,8 +24,8 @@ interface Project {
   start_date: string | null
   end_date: string | null
   created_at: string
-  project_members: any[]
-  experiments: any[]
+  no_of_members: number
+  no_of_experiments: number
   created_by: {
     first_name: string
     last_name: string
@@ -162,11 +161,11 @@ export function ProjectList({ projects }: ProjectListProps) {
                   <div className="flex items-center justify-between text-sm gap-2 min-w-0">
                     <div className="flex items-center gap-1 text-muted-foreground min-w-0 overflow-hidden">
                       <Users className="h-4 w-4 shrink-0" />
-                      <span className="truncate text-ellipsis overflow-hidden">{project.project_members?.length || 0} members</span>
+                      <span className="truncate text-ellipsis overflow-hidden">{project.no_of_members} members</span>
                     </div>
                     <div className="flex items-center gap-1 text-muted-foreground min-w-0 overflow-hidden">
                       <TrendingUp className="h-4 w-4 shrink-0" />
-                      <span className="truncate text-ellipsis overflow-hidden">{project.experiments?.length || 0} experiments</span>
+                      <span className="truncate text-ellipsis overflow-hidden">{project.no_of_experiments} experiments</span>
                     </div>
                   </div>
                   {project.created_by && (
@@ -258,13 +257,13 @@ export function ProjectList({ projects }: ProjectListProps) {
                       <TableCell>
                         <div className="flex items-center gap-1">
                           <Users className="h-4 w-4 text-muted-foreground" />
-                          <span>{project.project_members?.length || 0}</span>
+                          <span>{project.no_of_members}</span>
                         </div>
                       </TableCell>
                       <TableCell>
                         <div className="flex items-center gap-1">
                           <TrendingUp className="h-4 w-4 text-muted-foreground" />
-                          <span>{project.experiments?.length || 0}</span>
+                          <span>{project.no_of_experiments}</span>
                         </div>
                       </TableCell>
                       <TableCell className="text-muted-foreground">

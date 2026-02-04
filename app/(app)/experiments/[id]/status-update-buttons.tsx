@@ -67,12 +67,9 @@ export function StatusUpdateButtons({ experimentId, currentStatus }: StatusUpdat
         description: statusMessages[newStatus] || "Experiment status updated",
       })
 
-      router.refresh()
       setDialogOpen(false)
       setDropdownOpen(false)
-      
-      // Use hard reload to ensure fresh data
-      window.location.reload()
+      router.refresh()
     } catch (error: any) {
       console.error("Update error:", error)
       toast({
