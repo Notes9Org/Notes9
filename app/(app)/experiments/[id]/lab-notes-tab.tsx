@@ -27,7 +27,8 @@ import { TiptapEditor } from "@/components/text-editor/tiptap-editor"
 import { useToast } from "@/hooks/use-toast"
 import { useAutoSave } from "@/hooks/use-auto-save"
 import { SaveStatusIndicator } from "@/components/ui/save-status"
-import { Save, Plus, FileText, Download, FileCode, Globe, Loader2 } from "lucide-react"
+import { Save, Plus, FileText, Download, FileCode, Globe, Loader2, X, Users } from "lucide-react"
+import { LinkNoteProtocolDialog } from "./link-note-protocol-dialog"
 import {
   Table,
   TableBody,
@@ -46,6 +47,17 @@ interface LabNote {
   note_type: string | null;
   created_at: string;
   updated_at: string;
+  created_by: string;
+}
+
+interface LinkedProtocol {
+  id: string;
+  protocol_id: string;
+  protocol: {
+    id: string;
+    name: string;
+    version: string | null;
+  };
 }
 
 export function LabNotesTab({ experimentId }: { experimentId: string }) {
@@ -59,6 +71,7 @@ export function LabNotesTab({ experimentId }: { experimentId: string }) {
   const [isSaving, setIsSaving] = useState(false);
   const [isPublishing, setIsPublishing] = useState(false);
   const [publicUrl, setPublicUrl] = useState<string | null>(null);
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
 
   const [formData, setFormData] = useState({
     title: "",
@@ -66,10 +79,17 @@ export function LabNotesTab({ experimentId }: { experimentId: string }) {
     note_type: "general",
   });
 
+  // Linked protocols state
+  const [linkedProtocols, setLinkedProtocols] = useState<LinkedProtocol[]>([]);
+
   // Auto-save functionality
-  const handleAutoSave = async (content: string) => {
+  const handleAutoSave = async (content: string, title?: string, noteType?: string) => {
+    // Use provided values or fall back to formData
+    const titleToSave = title !== undefined ? title : formData.title;
+    const noteTypeToSave = noteType !== undefined ? noteType : formData.note_type;
+
     // Don't auto-save if title is empty
-    if (!formData.title.trim()) return;
+    if (!titleToSave.trim()) return;
 
     try {
       const supabase = createClient();
@@ -85,9 +105,9 @@ export function LabNotesTab({ experimentId }: { experimentId: string }) {
           .from("lab_notes")
           .insert({
             experiment_id: experimentId,
-            title: formData.title,
+            title: titleToSave,
             content,
-            note_type: formData.note_type,
+            note_type: noteTypeToSave,
             created_by: user.id,
           })
           .select()
@@ -107,8 +127,8 @@ export function LabNotesTab({ experimentId }: { experimentId: string }) {
           .from("lab_notes")
           .update({
             content,
-            title: formData.title,
-            note_type: formData.note_type,
+            title: titleToSave,
+            note_type: noteTypeToSave,
             updated_at: new Date().toISOString(),
           })
           .eq("id", selectedNote.id);
@@ -120,12 +140,12 @@ export function LabNotesTab({ experimentId }: { experimentId: string }) {
           notes.map((note) =>
             note.id === selectedNote.id
               ? {
-                  ...note,
-                  content,
-                  title: formData.title,
-                  note_type: formData.note_type,
-                  updated_at: new Date().toISOString(),
-                }
+                ...note,
+                content,
+                title: titleToSave,
+                note_type: noteTypeToSave,
+                updated_at: new Date().toISOString(),
+              }
               : note
           )
         );
@@ -149,9 +169,30 @@ export function LabNotesTab({ experimentId }: { experimentId: string }) {
   // Fetch existing lab notes
   const noteIdFromQuery = searchParams.get("noteId");
 
+  // Fetch current user ID
+  useEffect(() => {
+    const fetchCurrentUser = async () => {
+      const supabase = createClient();
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        setCurrentUserId(user.id);
+      }
+    };
+    fetchCurrentUser();
+  }, []);
+
   useEffect(() => {
     fetchNotes(noteIdFromQuery);
   }, [experimentId, noteIdFromQuery]);
+
+  // Fetch linked protocols when a note is selected
+  useEffect(() => {
+    if (selectedNote && !isCreating) {
+      fetchLinkedProtocols(selectedNote.id);
+    } else {
+      setLinkedProtocols([]);
+    }
+  }, [selectedNote?.id, isCreating]);
 
   // Check if note is published when selected
   useEffect(() => {
@@ -280,19 +321,7 @@ export function LabNotesTab({ experimentId }: { experimentId: string }) {
     }
   };
 
-  // Download functions
-  const downloadAsMarkdown = () => {
-    const text = formData.content.replace(/<[^>]*>/g, ""); // Strip HTML tags
-    const blob = new Blob([text], { type: "text/markdown" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `${formData.title || "lab-note"}.md`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-  };
+
 
   const downloadAsHTML = () => {
     const fullHTML = `<!DOCTYPE html>
@@ -334,98 +363,249 @@ export function LabNotesTab({ experimentId }: { experimentId: string }) {
     URL.revokeObjectURL(url);
   };
 
-  const downloadAsText = () => {
-    const text = formData.content.replace(/<[^>]*>/g, ""); // Strip HTML tags
-    const blob = new Blob([text], { type: "text/plain" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `${formData.title || "lab-note"}.txt`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-  };
-
-  const downloadAsPDF = async () => {
+  const downloadAsMarkdown = async () => {
     try {
-      // Show loading toast
-      toast({
-        title: "Generating PDF",
-        description: "Please wait...",
+      // @ts-ignore
+      const TurndownService = (await import('turndown')).default;
+      // @ts-ignore
+      const { gfm } = await import('turndown-plugin-gfm');
+
+      const turndownService = new TurndownService({
+        headingStyle: 'atx',
+        codeBlockStyle: 'fenced',
+        bulletListMarker: '-',
       });
 
-      // Dynamic import - using html2pdf for much smaller file sizes
-      const html2pdf = (await import("html2pdf.js")).default;
-      // Sanitize content and strip problematic colors/styles
-      const parser = new DOMParser();
-      const parsed = parser.parseFromString(
-        formData.content || "",
-        "text/html"
-      );
-      parsed
-        .querySelectorAll("[style]")
-        .forEach((n) => n.removeAttribute("style"));
-      parsed.querySelectorAll("*").forEach((el) => {
-        if (el instanceof HTMLElement) {
-          el.style.color = "#000000";
-          el.style.backgroundColor = "transparent";
-          el.style.borderColor = "#000000";
-        }
-      });
-      const cleanBody = parsed.body.innerHTML;
+      turndownService.use(gfm);
 
-      // Create clean HTML content
-      const element = document.createElement("div");
-      element.innerHTML = `
-        <style>
-          * { color: #000 !important; background: transparent !important; border-color: #000 !important; }
-          a { color: #0000ee !important; }
-        </style>
-        <div style="padding: 20px; font-family: Arial, sans-serif; color: #000000; background: #ffffff;">
-          <h1 style="font-size: 24px; margin-bottom: 20px; font-weight: bold; color: #000000;">${formData.title}</h1>
-          <div style="line-height: 1.6; font-size: 12px; color: #000000;">${cleanBody}</div>
-        </div>
-      `;
-
-      // Configure html2pdf options for optimal size/quality balance
-      const options = {
-        margin: [10, 10, 10, 10] as [number, number, number, number],
-        filename: `${formData.title || "lab-note"}.pdf`,
-        image: { type: "jpeg" as const, quality: 0.95 },
-        html2canvas: {
-          scale: 2,
-          useCORS: true,
-          letterRendering: true,
-          logging: false,
-        },
-        jsPDF: {
-          unit: "mm",
-          format: "a4",
-          orientation: "portrait" as const,
-          compress: true, // Enable PDF compression
-        },
-        pagebreak: { mode: ["avoid-all", "css", "legacy"] },
-      };
-
-      // Generate and download PDF
-      await html2pdf().set(options).from(element).save();
+      const markdown = turndownService.turndown(formData.content);
+      const blob = new Blob([markdown], { type: "text/markdown" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `${formData.title || "lab-note"}.md`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
 
       toast({
-        title: "PDF exported",
-        description: "Your note has been exported as PDF.",
+        title: "Markdown exported",
+        description: "Your note has been exported as Markdown.",
       });
     } catch (error: any) {
-      console.error("PDF export error:", error);
+      console.error("Markdown export error:", error);
       toast({
         title: "Export failed",
-        description:
-          error.message ||
-          "Failed to export as PDF. Please try HTML or DOCX format instead.",
+        description: "Failed to export as Markdown.",
         variant: "destructive",
       });
     }
   };
+
+  const downloadAsPDF = async () => {
+    // Use iframe-based print approach for complete style isolation
+    // This prevents CSS leaks that can break the main page
+    let iframe: HTMLIFrameElement | null = null;
+
+    try {
+      toast({
+        title: "Generating PDF",
+        description: "Opening print dialog...",
+      });
+
+      // Create an isolated iframe for printing
+      iframe = document.createElement("iframe");
+      iframe.style.cssText = `
+        position: fixed;
+        right: 0;
+        bottom: 0;
+        width: 0;
+        height: 0;
+        border: 0;
+        visibility: hidden;
+      `;
+      document.body.appendChild(iframe);
+
+      // Wait for iframe to be ready
+      await new Promise(resolve => setTimeout(resolve, 100));
+
+      const iframeDoc = iframe.contentDocument || iframe.contentWindow?.document;
+      if (!iframeDoc) {
+        throw new Error("Could not access iframe document");
+      }
+
+      // Sanitize HTML helper
+      const sanitizeHtml = (html: string) => {
+        return html
+          .replace(/lab\([^)]+\)/gi, '#000000')
+          .replace(/lch\([^)]+\)/gi, '#000000')
+          .replace(/oklab\([^)]+\)/gi, '#000000')
+          .replace(/oklch\([^)]+\)/gi, '#000000')
+          .replace(/var\([^)]+\)/gi, '#000000');
+      };
+
+      const cleanContent = sanitizeHtml(formData.content || "");
+
+      // Write isolated HTML with comprehensive print-friendly styles
+      iframeDoc.open();
+      iframeDoc.write(`
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <meta charset="UTF-8">
+          <title>${formData.title || "Lab Note"}</title>
+          <style>
+            /* Reset */
+            * { margin: 0; padding: 0; box-sizing: border-box; }
+            
+            /* Base */
+            body {
+              font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+              font-size: 12pt;
+              line-height: 1.6;
+              padding: 40px;
+              background: #fff;
+              color: #000;
+              max-width: 100%;
+            }
+            
+            /* Typography */
+            h1 { font-size: 24pt; font-weight: 700; margin: 0 0 20pt; border-bottom: 2pt solid #333; padding-bottom: 10pt; }
+            h2 { font-size: 18pt; font-weight: 600; margin: 20pt 0 10pt; border-bottom: 1pt solid #ccc; padding-bottom: 5pt; }
+            h3 { font-size: 14pt; font-weight: 600; margin: 15pt 0 8pt; }
+            h4 { font-size: 12pt; font-weight: 600; margin: 12pt 0 6pt; }
+            p { margin: 8pt 0; }
+            
+            /* Text formatting */
+            strong, b { font-weight: 700; }
+            em, i { font-style: italic; }
+            u { text-decoration: underline; }
+            s, strike { text-decoration: line-through; }
+            sub { vertical-align: sub; font-size: 0.8em; }
+            sup { vertical-align: super; font-size: 0.8em; }
+            mark { background: #ff0; padding: 0 2px; }
+            
+            /* Links */
+            a { color: #0066cc; text-decoration: underline; }
+            
+            /* Lists */
+            ul, ol { margin: 10pt 0; padding-left: 25pt; }
+            li { margin: 4pt 0; }
+            ul { list-style-type: disc; }
+            ol { list-style-type: decimal; }
+            
+            /* Task lists */
+            ul[data-type="taskList"] { list-style: none; padding-left: 0; }
+            ul[data-type="taskList"] li { display: flex; align-items: flex-start; gap: 8px; }
+            
+            /* Blockquotes */
+            blockquote {
+              border-left: 4pt solid #666;
+              padding-left: 15pt;
+              margin: 15pt 0;
+              color: #444;
+              font-style: italic;
+            }
+            
+            /* Code */
+            code {
+              font-family: 'Courier New', Courier, monospace;
+              font-size: 10pt;
+              background: #f0f0f0;
+              padding: 1pt 4pt;
+              border-radius: 2pt;
+            }
+            pre {
+              font-family: 'Courier New', Courier, monospace;
+              font-size: 10pt;
+              background: #f0f0f0;
+              padding: 12pt;
+              border-radius: 4pt;
+              margin: 12pt 0;
+              overflow-x: auto;
+              white-space: pre-wrap;
+              word-break: break-word;
+            }
+            pre code { background: none; padding: 0; }
+            
+            /* Tables - High contrast for print */
+            table {
+              border-collapse: collapse;
+              width: 100%;
+              margin: 15pt 0;
+              font-size: 11pt;
+            }
+            th, td {
+              border: 1pt solid #000;
+              padding: 8pt 10pt;
+              text-align: left;
+              vertical-align: top;
+            }
+            th {
+              background: #e8e8e8 !important;
+              font-weight: 700;
+              -webkit-print-color-adjust: exact;
+              print-color-adjust: exact;
+            }
+            td p { margin: 0; }
+            
+            /* Images */
+            img { max-width: 100%; height: auto; margin: 10pt 0; }
+            
+            /* Horizontal rule */
+            hr { border: none; border-top: 1pt solid #666; margin: 20pt 0; }
+            
+            /* Print-specific */
+            @media print {
+              body { padding: 0; }
+              @page { margin: 20mm; }
+            }
+          </style>
+        </head>
+        <body>
+          <h1>${formData.title || "Lab Note"}</h1>
+          ${cleanContent}
+        </body>
+        </html>
+      `);
+      iframeDoc.close();
+
+      // Wait for content to render
+      await new Promise(resolve => setTimeout(resolve, 200));
+
+      // Use browser's print functionality
+      const printWindow = iframe.contentWindow;
+      if (printWindow) {
+        printWindow.focus();
+        printWindow.print();
+      }
+
+      toast({
+        title: "Print dialog opened",
+        description: "Save as PDF from your browser's print dialog.",
+      });
+
+      // Clean up after a delay to allow print dialog to work
+      setTimeout(() => {
+        if (iframe && document.body.contains(iframe)) {
+          document.body.removeChild(iframe);
+        }
+      }, 2000);
+    } catch (error: any) {
+      console.error("PDF export error:", error);
+      // Clean up on error
+      if (iframe && document.body.contains(iframe)) {
+        document.body.removeChild(iframe);
+      }
+      toast({
+        title: "Export failed",
+        description: error.message || "Failed to export as PDF.",
+        variant: "destructive",
+      });
+    }
+  };
+
 
   const downloadAsDOCX = async () => {
     try {
@@ -434,62 +614,14 @@ export function LabNotesTab({ experimentId }: { experimentId: string }) {
         description: "Please wait...",
       });
 
-      // Clean and format HTML content
+      // Get clean content
       const cleanContent = formData.content || "<p>No content</p>";
 
-      const html = `<!DOCTYPE html>
-<html>
-<head>
-  <meta charset='utf-8'>
-  <title>${formData.title || "Lab Note"}</title>
-</head>
-<body>
-  <h1>${formData.title || "Lab Note"}</h1>
-  ${cleanContent}
-</body>
-</html>`;
+      // Dynamically import the DOCX export function (proper .docx format!)
+      const { exportHtmlToDocx } = await import('@/lib/docx-export')
 
-      // Call server-side API to convert HTML to DOCX
-      const response = await fetch("/api/export-docx", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          html,
-          title: formData.title || "lab-note",
-        }),
-      });
-
-      console.log("Response status:", response.status);
-      console.log("Response headers:", response.headers.get("content-type"));
-
-      if (!response.ok) {
-        const error = await response.json();
-        console.error("Server error:", error);
-        throw new Error(error.error || "Failed to generate DOCX");
-      }
-
-      // Get the blob from response
-      const blob = await response.blob();
-      console.log("Received blob size:", blob.size);
-
-      // Check if blob has content
-      if (!blob || blob.size === 0) {
-        throw new Error(
-          "Generated document is empty - received 0 bytes from server"
-        );
-      }
-
-      // Download
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `${formData.title || "lab-note"}.docx`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
+      // Export to DOCX (works on Mac, Windows, Linux!)
+      await exportHtmlToDocx(cleanContent, formData.title || "Lab Note");
 
       toast({
         title: "DOCX exported",
@@ -499,9 +631,7 @@ export function LabNotesTab({ experimentId }: { experimentId: string }) {
       console.error("DOCX export error:", error);
       toast({
         title: "Export failed",
-        description:
-          error.message ||
-          "Failed to export as DOCX. Please try HTML or PDF format instead.",
+        description: error.message || "Failed to export as DOCX. Please try HTML or PDF format instead.",
         variant: "destructive",
       });
     }
@@ -578,14 +708,104 @@ export function LabNotesTab({ experimentId }: { experimentId: string }) {
     }
   };
 
-  const handleNewNote = () => {
-    setIsCreating(true);
-    setSelectedNote(null);
-    setFormData({
-      title: "",
-      content: "",
-      note_type: "general",
-    });
+  const handleNewNote = async () => {
+    try {
+      const supabase = createClient();
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+
+      if (!user) throw new Error("Not authenticated");
+
+      // Create new note with "untitled" as default title
+      const { data, error } = await supabase
+        .from("lab_notes")
+        .insert({
+          experiment_id: experimentId,
+          title: "untitled",
+          content: "",
+          note_type: "general",
+          created_by: user.id,
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      toast({
+        title: "Note created",
+        description: "New lab note created. You can rename it anytime.",
+      });
+
+      // Refresh notes list and select the new note
+      await fetchNotes(data.id);
+      setSelectedNote(data);
+      setFormData({
+        title: data.title,
+        content: data.content,
+        note_type: data.note_type || "general",
+      });
+      setIsCreating(false);
+    } catch (error: any) {
+      console.error("Error creating note:", error);
+      toast({
+        title: "Error",
+        description: error.message || "Failed to create note",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const fetchLinkedProtocols = async (noteId: string) => {
+    try {
+      const supabase = createClient();
+      const { data, error } = await supabase
+        .from("lab_note_protocols")
+        .select(`
+          id,
+          protocol_id,
+          protocol:protocols(id, name, version)
+        `)
+        .eq("lab_note_id", noteId);
+
+      if (error) throw error;
+
+      // Map the data to handle Supabase returning protocol as array
+      const mapped = (data || []).map((item: any) => ({
+        id: item.id,
+        protocol_id: item.protocol_id,
+        protocol: Array.isArray(item.protocol) ? item.protocol[0] : item.protocol,
+      })).filter((item: any) => item.protocol);
+
+      setLinkedProtocols(mapped);
+    } catch (error) {
+      console.error("Error fetching linked protocols:", error);
+      setLinkedProtocols([]);
+    }
+  };
+
+  const removeLinkedProtocol = async (linkId: string) => {
+    try {
+      const supabase = createClient();
+      const { error } = await supabase
+        .from("lab_note_protocols")
+        .delete()
+        .eq("id", linkId);
+
+      if (error) throw error;
+
+      setLinkedProtocols(prev => prev.filter(p => p.id !== linkId));
+      toast({
+        title: "Protocol unlinked",
+        description: "Protocol removed from this note",
+      });
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to remove protocol",
+        variant: "destructive",
+      });
+    }
   };
 
   const handleSelectNote = (note: LabNote) => {
@@ -596,6 +816,7 @@ export function LabNotesTab({ experimentId }: { experimentId: string }) {
       content: note.content,
       note_type: note.note_type || "general",
     });
+    fetchLinkedProtocols(note.id);
   };
 
   return (
@@ -703,22 +924,21 @@ export function LabNotesTab({ experimentId }: { experimentId: string }) {
                         <FileText className="h-4 w-4 mr-2" />
                         HTML (.html)
                       </DropdownMenuItem>
-                      <DropdownMenuItem onClick={downloadAsText}>
-                        <FileText className="h-4 w-4 mr-2" />
-                        Plain Text (.txt)
-                      </DropdownMenuItem>
+
                       <DropdownMenuSeparator />
                       <DropdownMenuItem onClick={downloadAsPDF}>
                         <FileText className="h-4 w-4 mr-2" />
                         PDF (.pdf)
                       </DropdownMenuItem>
-                      <DropdownMenuItem onClick={downloadAsDOCX}>
+                      {/* <DropdownMenuItem onClick={downloadAsDOCX}>
                         <FileText className="h-4 w-4 mr-2" />
                         Word (.docx)
-                      </DropdownMenuItem>
+                      </DropdownMenuItem> */}
                     </DropdownMenuContent>
                   </DropdownMenu>
                 )}
+                {/* Share Button - Google Docs style */}
+
                 {/* Publish button temporarily hidden */}
                 {/* {!isCreating && selectedNote && (
                   <div className="flex items-center gap-2">
@@ -787,9 +1007,12 @@ export function LabNotesTab({ experimentId }: { experimentId: string }) {
                 <Input
                   id="title"
                   value={formData.title}
-                  onChange={(e) =>
-                    setFormData({ ...formData, title: e.target.value })
-                  }
+                  onChange={(e) => {
+                    const newTitle = e.target.value;
+                    setFormData({ ...formData, title: newTitle });
+                    // Trigger auto-save when title changes, passing the new title directly
+                    debouncedSave(formData.content, newTitle, formData.note_type);
+                  }}
                   placeholder="e.g., Day 3 Observations"
                   required
                 />
@@ -799,9 +1022,11 @@ export function LabNotesTab({ experimentId }: { experimentId: string }) {
                 <Label htmlFor="note_type">Note Type</Label>
                 <Select
                   value={formData.note_type}
-                  onValueChange={(value) =>
-                    setFormData({ ...formData, note_type: value })
-                  }
+                  onValueChange={(value) => {
+                    setFormData({ ...formData, note_type: value });
+                    // Trigger auto-save when note type changes, passing the new note type directly
+                    debouncedSave(formData.content, formData.title, value);
+                  }}
                 >
                   <SelectTrigger id="note_type">
                     <SelectValue placeholder="Select type" />
@@ -816,6 +1041,57 @@ export function LabNotesTab({ experimentId }: { experimentId: string }) {
               </div>
             </div>
 
+            {/* Linked Protocols */}
+            {!isCreating && selectedNote && (
+              <div className="space-y-2">
+                <div className="flex items-center gap-2">
+                  <Label className="text-xs text-muted-foreground">Linked Protocols</Label>
+                  <LinkNoteProtocolDialog
+                    noteId={selectedNote.id}
+                    linkedProtocolIds={linkedProtocols.map(p => p.protocol_id)}
+                    onLink={() => fetchLinkedProtocols(selectedNote.id)}
+                  />
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {linkedProtocols.length > 0 ? (
+                    linkedProtocols.map((link) => (
+                      <Badge
+                        key={link.id}
+                        variant="secondary"
+                        className="flex items-center gap-1 pr-1 cursor-grab active:cursor-grabbing"
+                        draggable
+                        onDragStart={(e) => {
+                          e.dataTransfer.setData(
+                            "application/x-protocol",
+                            JSON.stringify({
+                              id: link.protocol_id,
+                              name: link.protocol.name,
+                            })
+                          );
+                          e.dataTransfer.effectAllowed = "copy";
+                        }}
+                      >
+                        <span>{link.protocol.name}</span>
+                        {link.protocol.version && (
+                          <span className="text-muted-foreground text-xs">v{link.protocol.version}</span>
+                        )}
+                        <button
+                          type="button"
+                          title="Remove linked protocol"
+                          onClick={() => removeLinkedProtocol(link.id)}
+                          className="ml-1 rounded-full hover:bg-destructive/20 p-0.5"
+                        >
+                          <X className="h-3 w-3" />
+                        </button>
+                      </Badge>
+                    ))
+                  ) : (
+                    <span className="text-xs text-muted-foreground">No protocols linked</span>
+                  )}
+                </div>
+              </div>
+            )}
+
             {/* Rich Text Editor */}
             <div className="space-y-2">
               <Label>Content</Label>
@@ -826,10 +1102,15 @@ export function LabNotesTab({ experimentId }: { experimentId: string }) {
                   // Trigger auto-save (works for both creation and editing)
                   debouncedSave(content);
                 }}
-                placeholder="Write your lab notes here..."
+                placeholder="Write your lab notes here... Use @ to tag protocols"
                 title={formData.title || "lab-note"}
                 minHeight="400px"
                 showAITools={true}
+                protocols={linkedProtocols.map(lp => ({
+                  id: lp.protocol_id,
+                  name: lp.protocol.name,
+                  version: lp.protocol.version,
+                }))}
               />
             </div>
 

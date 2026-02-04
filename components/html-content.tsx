@@ -7,6 +7,7 @@ interface HtmlContentProps {
   content: string | null
   className?: string
   fallback?: string
+  style?: React.CSSProperties
 }
 
 export function HtmlContent({ content, className, fallback = "No description" }: HtmlContentProps) {
@@ -15,7 +16,7 @@ export function HtmlContent({ content, className, fallback = "No description" }:
   }
 
   return (
-    <div 
+    <div
       className={cn("prose prose-sm max-w-none html-content", className)}
       dangerouslySetInnerHTML={{ __html: content }}
       style={{
@@ -41,16 +42,16 @@ export function HtmlContent({ content, className, fallback = "No description" }:
 }
 
 // For truncated display in lists
-export function HtmlContentTruncated({ content, className, fallback = "No description" }: HtmlContentProps) {
+export function HtmlContentTruncated({ content, className, fallback = "No description", style }: HtmlContentProps) {
   if (!content || content.trim() === '' || content === '<p></p>') {
-    return <span className={cn("text-muted-foreground", className)}>{fallback}</span>
+    return <span className={cn("text-muted-foreground", className)} style={style}>{fallback}</span>
   }
 
   // Strip HTML tags for truncated display
   const textContent = content.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim()
-  
+
   return (
-    <span className={className}>
+    <span className={className} style={style}>
       {textContent}
     </span>
   )

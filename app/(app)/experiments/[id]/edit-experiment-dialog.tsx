@@ -45,14 +45,28 @@ interface EditExperimentDialogProps {
   projects: Array<{ id: string; name: string }>
   users: Array<{ id: string; first_name: string; last_name: string }>
   asMenuItem?: boolean
+  open?: boolean
+  onOpenChange?: (open: boolean) => void
 }
 
-export function EditExperimentDialog({ experiment, projects, users, asMenuItem = false }: EditExperimentDialogProps) {
+export function EditExperimentDialog({ 
+  experiment, 
+  projects, 
+  users, 
+  asMenuItem = false,
+  open: externalOpen,
+  onOpenChange
+}: EditExperimentDialogProps) {
   const { toast } = useToast()
   const router = useRouter()
   const supabase = createClient()
 
-  const [open, setOpen] = useState(false)
+  const [internalOpen, setInternalOpen] = useState(false)
+  const open = externalOpen !== undefined ? externalOpen : internalOpen
+  const setOpen = (value: boolean) => {
+    setInternalOpen(value)
+    onOpenChange?.(value)
+  }
   const [isSaving, setIsSaving] = useState(false)
 
   // Prevent space key from closing dropdown menu when typing
@@ -131,20 +145,25 @@ export function EditExperimentDialog({ experiment, projects, users, asMenuItem =
     }
   }
 
+  // When externally controlled, don't render the trigger
+  const isExternallyControlled = externalOpen !== undefined
+
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      {asMenuItem ? (
-        <DialogTrigger className="flex items-center w-full px-2 py-1.5 hover:bg-accent rounded-sm cursor-pointer text-left">
-          <Pencil className="h-4 w-4 mr-2" />
-          <span>Edit Experiment</span>
-        </DialogTrigger>
-      ) : (
-        <DialogTrigger asChild>
-          <Button variant="outline" size="sm">
+      {!isExternallyControlled && (
+        asMenuItem ? (
+          <DialogTrigger className="flex items-center w-full px-2 py-1.5 hover:bg-accent rounded-sm cursor-pointer text-left">
             <Pencil className="h-4 w-4 mr-2" />
-            Edit
-          </Button>
-        </DialogTrigger>
+            <span>Edit Experiment</span>
+          </DialogTrigger>
+        ) : (
+          <DialogTrigger asChild>
+            <Button variant="outline" size="sm">
+              <Pencil className="h-4 w-4 mr-2" />
+              Edit
+            </Button>
+          </DialogTrigger>
+        )
       )}
       <DialogContent className="sm:max-w-[600px] max-h-[90vh] overflow-y-auto" onKeyDown={handleKeyDown}>
         <DialogHeader>
