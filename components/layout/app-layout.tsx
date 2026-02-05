@@ -18,7 +18,6 @@ interface AppLayoutProps {
 
 export function AppLayout({ children }: AppLayoutProps) {
   const [rightSidebarOpen, setRightSidebarOpen] = useState(true)
-  const [leftSidebarWidth, setLeftSidebarWidth] = useState(280)
   const isMobile = useMediaQuery("(max-width: 768px)")
   const isTablet = useMediaQuery("(max-width: 1024px)")
 
@@ -28,25 +27,6 @@ export function AppLayout({ children }: AppLayoutProps) {
       setRightSidebarOpen(false)
     }
   }, [isMobile])
-
-  // Listen for sidebar width changes
-  useEffect(() => {
-    const handleSidebarWidthChange = (event: CustomEvent) => {
-      setLeftSidebarWidth(event.detail.width)
-    }
-
-    window.addEventListener('sidebar-width-change', handleSidebarWidthChange as EventListener)
-    return () => {
-      window.removeEventListener('sidebar-width-change', handleSidebarWidthChange as EventListener)
-    }
-  }, [])
-
-  // Left sidebar resizing
-  const leftSidebar = useResizable({
-    initialWidth: isMobile ? 0 : isTablet ? 240 : 280,
-    minWidth: 200,
-    maxWidth: 400,
-  })
 
   // Right sidebar resizing
   const rightSidebar = useResizable({
@@ -59,28 +39,8 @@ export function AppLayout({ children }: AppLayoutProps) {
   return (
     <SidebarProvider defaultOpen={!isMobile}>
       <div className="flex h-screen w-full overflow-hidden bg-background">
-        {/* Left Sidebar - Hidden on mobile, shown via SidebarProvider */}
-        {!isMobile && (
-          <div className="flex shrink-0">
-            <div
-              data-sidebar-container
-              style={{
-                '--sidebar-width': `${leftSidebarWidth}px`,
-                width: leftSidebarWidth,
-                transition: 'width 200ms ease-in-out'
-              } as React.CSSProperties}
-            >
-              <AppSidebar />
-            </div>
-            {leftSidebarWidth > 64 && (
-              <ResizeHandle
-                onMouseDown={leftSidebar.handleMouseDown}
-                isResizing={leftSidebar.isResizing}
-                position="right"
-              />
-            )}
-          </div>
-        )}
+        {/* Left Sidebar - The Sidebar component handles its own layout */}
+        <AppSidebar />
 
         {/* Main Content Area */}
         <SidebarInset className="flex flex-col overflow-hidden flex-1 min-w-0">

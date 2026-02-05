@@ -265,13 +265,15 @@ export function RightSidebar() {
       setContextLoading(true);
       const response = await fetch(`/api/context?type=${type}&id=${id}`);
       if (!response.ok) {
-        throw new Error('Failed to fetch context');
+        const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
+        console.error('Context API error:', response.status, errorData);
+        throw new Error(errorData.error || `Failed to fetch context (${response.status})`);
       }
       const data = await response.json();
       return data.context;
     } catch (error) {
       console.error('Error fetching context:', error);
-      toast.error('Failed to load context');
+      toast.error(error instanceof Error ? error.message : 'Failed to load context');
       return null;
     } finally {
       setContextLoading(false);
@@ -301,10 +303,26 @@ export function RightSidebar() {
 
     try {
       const jsonData = e.dataTransfer.getData('application/json');
-      if (!jsonData) return;
+      if (!jsonData) {
+        console.log('No JSON data in drop');
+        return;
+      }
 
       const data = JSON.parse(jsonData);
-      if (!data.type || !data.id) return;
+      console.log('Drop data:', data);
+      
+      if (!data.type || !data.id) {
+        console.warn('Missing type or id in drop data');
+        return;
+      }
+
+      // Validate type
+      const validTypes = ['project', 'experiment', 'lab_note'];
+      if (!validTypes.includes(data.type)) {
+        console.warn('Invalid type:', data.type);
+        toast.error(`Cannot load context for type: ${data.type}`);
+        return;
+      }
 
       // Fetch context from API
       const context = await fetchContext(data.type, data.id);

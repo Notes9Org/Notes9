@@ -117,9 +117,9 @@ interface Counts {
 export function AppSidebar() {
   const pathname = usePathname()
   const router = useRouter()
-  const { setOpenMobile, isMobile, state, openMobile } = useSidebar()
+  const { setOpenMobile, isMobile, state, openMobile, toggleSidebar } = useSidebar()
   const [searchQuery, setSearchQuery] = useState("")
-  const [isIconMode, setIsIconMode] = useState(false)
+  const isIconMode = state === 'collapsed'
   const [projects, setProjects] = useState<Project[]>([])
   const [user, setUser] = useState<User | null>(null)
   const [counts, setCounts] = useState<Counts>({ projects: 0, experiments: 0, samples: 0, literature: 0 })
@@ -129,40 +129,7 @@ export function AppSidebar() {
   const [openExperiments, setOpenExperiments] = useState<Record<string, boolean>>({})
   const supabase = createClient()
 
-  const toggleIconMode = () => {
-    setIsIconMode(!isIconMode)
-  }
 
-  // Update parent width when icon mode changes
-  useEffect(() => {
-    const sidebarContainer = document.querySelector('[data-slot="sidebar-container"]') as HTMLElement
-    if (sidebarContainer) {
-      if (isIconMode) {
-        sidebarContainer.style.width = '64px'
-        sidebarContainer.style.setProperty('--sidebar-width', '64px')
-      } else {
-        sidebarContainer.style.width = '280px'
-        sidebarContainer.style.setProperty('--sidebar-width', '280px')
-      }
-    }
-
-    // Also update the custom layout width variable
-    const customSidebarContainer = document.querySelector('[data-sidebar-container]') as HTMLElement
-    if (customSidebarContainer) {
-      if (isIconMode) {
-        customSidebarContainer.style.width = '64px'
-        customSidebarContainer.style.setProperty('--sidebar-width', '64px')
-      } else {
-        customSidebarContainer.style.width = '280px'
-        customSidebarContainer.style.setProperty('--sidebar-width', '280px')
-      }
-    }
-
-    // Dispatch custom event to notify layout of width change
-    window.dispatchEvent(new CustomEvent('sidebar-width-change', {
-      detail: { width: isIconMode ? 64 : 280, isIconMode }
-    }))
-  }, [isIconMode])
 
   // Prevent hydration mismatch by only activating after mount
   useEffect(() => {
@@ -559,17 +526,8 @@ export function AppSidebar() {
   return (
     <Sidebar
       variant="sidebar"
-      className={cn(
-        "transition-all duration-200 ease-in-out",
-        isIconMode && "!w-16"
-      )}
-      style={
-        {
-          ...(isIconMode && {
-            "--sidebar-width": "64px",
-          }),
-        } as React.CSSProperties
-      }
+      collapsible="icon"
+      className="transition-all duration-200 ease-in-out"
     >
       {/* Header with Workspace Dropdown */}
       <SidebarHeader className="p-2">
@@ -592,7 +550,7 @@ export function AppSidebar() {
 
                 {/* Expand Button - Below logo in icon mode */}
                 <button
-                  onClick={toggleIconMode}
+                  onClick={toggleSidebar}
                   className="flex h-6 w-6 items-center justify-center rounded-md text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground transition-colors"
                   title="Expand sidebar"
                 >
@@ -620,7 +578,7 @@ export function AppSidebar() {
 
                 {/* Collapse Button */}
                 <button
-                  onClick={toggleIconMode}
+                  onClick={toggleSidebar}
                   className="flex h-8 w-8 items-center justify-center rounded-md text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground transition-colors flex-shrink-0"
                   title="Collapse sidebar"
                 >

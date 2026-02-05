@@ -29,6 +29,7 @@ import { useAutoSave } from "@/hooks/use-auto-save"
 import { SaveStatusIndicator } from "@/components/ui/save-status"
 import { Save, Plus, FileText, Download, FileCode, Globe, Loader2, X, Users } from "lucide-react"
 import { LinkNoteProtocolDialog } from "./link-note-protocol-dialog"
+import { CollaboratorsDialog } from "@/components/lab-notes/collaborators-dialog"
 import {
   Table,
   TableBody,
@@ -938,6 +939,12 @@ export function LabNotesTab({ experimentId }: { experimentId: string }) {
                   </DropdownMenu>
                 )}
                 {/* Share Button - Google Docs style */}
+                {!isCreating && selectedNote && (
+                  <CollaboratorsDialog 
+                    labNoteId={selectedNote.id}
+                    labNoteTitle={selectedNote.title}
+                  />
+                )}
 
                 {/* Publish button temporarily hidden */}
                 {/* {!isCreating && selectedNote && (

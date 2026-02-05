@@ -6,6 +6,7 @@ import { createClient } from "@/lib/supabase/client"
 import LabNotesList from "@/app/(app)/lab-notes-list/[id]/lab-notes-list"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Loader2 } from "lucide-react"
+import { PendingInvitations } from "@/components/lab-notes/pending-invitations"
 
 type LabNote = {
   id: string
@@ -96,6 +97,9 @@ export default function LabNotesPage() {
           <AlertDescription>{error}</AlertDescription>
         </Alert>
       )}
+
+      {/* Pending Invitations */}
+      <PendingInvitations />
 
       {isLoading ? (
         <div className="flex items-center gap-2 text-muted-foreground">
