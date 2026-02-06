@@ -11,7 +11,8 @@ const footerLinks = {
   ],
   company: [
     { name: "About Us", href: "/about" },
-    // Removed careers/press placeholders
+    { name: "Privacy Policy", href: "/privacy" },
+    { name: "Terms of Service", href: "/terms" },
   ],
 }
 

@@ -24,7 +24,20 @@ const jetbrainsMono = JetBrains_Mono({
   variable: "--font-jetbrains-mono",
 })
 
-export default async function HomePage() {
+export default async function HomePage({
+  searchParams,
+}: {
+  searchParams: Promise<{ [key: string]: string | string[] | undefined }>
+}) {
+  const params = await searchParams
+  const code = params.code
+
+  // Handle OAuth redirect falling back to root
+  // If we have a code, forward to the callback handler
+  if (code && typeof code === 'string') {
+    return redirect(`/auth/callback?code=${code}`)
+  }
+
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
 
