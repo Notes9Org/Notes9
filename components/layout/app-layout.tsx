@@ -128,15 +128,15 @@ export function AppLayout({ children }: AppLayoutProps) {
           </Sheet>
         ) : (
           rightSidebarOpen && (
-            <div className="flex shrink-0">
+            <div className="flex shrink-0 h-full min-h-0">
               <ResizeHandle
                 onMouseDown={rightSidebar.handleMouseDown}
                 isResizing={rightSidebar.isResizing}
                 position="left"
               />
               <div
-                className="border-l border-border overflow-hidden"
-                style={{ width: rightSidebar.width }}
+                className="border-l border-border overflow-hidden h-full min-h-0 flex flex-col"
+                style={{ width: rightSidebar.width, minWidth: 0 }}
               >
                 <RightSidebar />
               </div>

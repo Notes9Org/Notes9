@@ -747,9 +747,9 @@ export function AppSidebar() {
                         const isProjectOpen = openProjects[project.id] ?? false
                         return (
                           <SidebarMenuItem key={project.id}>
-                            <div className="flex items-start">
+                            <div className="flex items-center">
                               <button
-                                className="mr-2 mt-0.5 text-muted-foreground hover:text-foreground"
+                                className="mr-2 text-muted-foreground hover:text-foreground shrink-0"
                                 onClick={() =>
                                   setOpenProjects((prev) => ({
                                     ...prev,
@@ -797,9 +797,9 @@ export function AppSidebar() {
                                   const isExpOpen = openExperiments[exp.id] ?? false
                                   return (
                                     <div key={exp.id}>
-                                      <div className="flex items-start">
+                                      <div className="flex items-center">
                                         <button
-                                          className="mr-2 mt-0.5 text-muted-foreground hover:text-foreground"
+                                          className="mr-2 text-muted-foreground hover:text-foreground shrink-0"
                                           onClick={() =>
                                             setOpenExperiments((prev) => ({
                                               ...prev,
@@ -935,21 +935,7 @@ export function AppSidebar() {
       <SidebarFooter>
         <SidebarMenu>
           {/* Catalyst AI Button */}
-          <SidebarMenuItem>
-            <SidebarMenuButton
-              asChild
-              tooltip={isIconMode ? "Catalyst AI" : undefined}
-              className={cn(
-                "bg-primary/10 hover:bg-primary/20 text-primary",
-                isIconMode && "justify-center"
-              )}
-            >
-              <Link href="/catalyst">
-                <Sparkles className="size-4" />
-                <span className={cn(isIconMode && "hidden")}>Catalyst</span>
-              </Link>
-            </SidebarMenuButton>
-          </SidebarMenuItem>
+
 
           {/* User Dropdown - Only render after mount to prevent hydration mismatch */}
           <SidebarMenuItem>
