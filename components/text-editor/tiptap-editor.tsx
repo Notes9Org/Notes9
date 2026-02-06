@@ -1717,7 +1717,9 @@ export function TiptapEditor({
   }
 
   const stopSpeechToText = () => {
-    recognitionRef.current?.stop()
+    if (recognitionRef.current) {
+      recognitionRef.current.stop()
+    }
     setIsListening(false)
     // Clean up interim text when manually stopped
     if (lastInterimTextRef.current && editor) {
@@ -1735,6 +1737,7 @@ export function TiptapEditor({
       }
       lastInterimTextRef.current = ""
     }
+    // Reset for next session
     lastFinalIndexRef.current = 0
   }
 
