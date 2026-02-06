@@ -18,6 +18,13 @@ const stagger = {
 export default function AboutPage() {
   const founders = [
     {
+      name: "Hari Hara Nithin Reddy Manupati",
+      role: "CEO",
+      background:
+        "Applied AI developer with expertise in document-processing pipelines, information retrieval, and human–computer interaction. Has contributed to production AI systems at Equifax and multiple early-stage technology startups.",
+      education: "Master of International Business – Hult International Business School; BA Pharmacy – BITS Pilani",
+    },
+    {
       name: "Nitheesh Yanamandala",
       role: "CPO (Product)",
       background:
@@ -51,13 +58,6 @@ export default function AboutPage() {
       background:
         "Formulation scientist with experience in nanoparticle-based drug delivery, and forecasting for pharmaceutical portfolios. Former analyst at PharmaACE working at the interface of science, strategy, and health economics.",
       education: "MS Pharmaceutical Sciences – University of Maryland, Baltimore; BA Pharmacy – BITS Pilani",
-    },
-    {
-      name: "Hari Hara Nithin Reddy Manupati",
-      role: "CEO",
-      background:
-        "Applied AI developer with expertise in document-processing pipelines, information retrieval, and human–computer interaction. Has contributed to production AI systems at Equifax and multiple early-stage technology startups.",
-      education: "Master of International Business – Hult International Business School; BA Pharmacy – BITS Pilani",
     },
   ]
 
