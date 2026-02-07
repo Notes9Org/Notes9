@@ -61,6 +61,7 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible"
+import { Popover, PopoverAnchor, PopoverContent } from "@/components/ui/popover"
 import { createClient } from "@/lib/supabase/client"
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
@@ -114,6 +115,14 @@ interface Counts {
   literature: number
 }
 
+type SearchResultItem = {
+  id: string
+  type: "project" | "experiment" | "lab_note" | "protocol" | "sample"
+  title: string
+  subtitle?: string
+  href: string
+}
+
 export function AppSidebar() {
   const pathname = usePathname()
   const router = useRouter()
@@ -127,47 +136,59 @@ export function AppSidebar() {
   const [mounted, setMounted] = useState(false)
   const [openProjects, setOpenProjects] = useState<Record<string, boolean>>({})
   const [openExperiments, setOpenExperiments] = useState<Record<string, boolean>>({})
+  const [searchResults, setSearchResults] = useState<SearchResultItem[]>([])
+  const [searchLoading, setSearchLoading] = useState(false)
   const supabase = createClient()
 
   const toggleIconMode = () => {
     setIsIconMode(!isIconMode)
   }
 
-  // Update parent width when icon mode changes
+  // When icon mode: set width to 64px. When expanded: do not touch width — layout (leftSidebar.width) controls it so left sidebar is resizable like the right sidecar.
   useEffect(() => {
+    if (!isIconMode) {
+      window.dispatchEvent(new CustomEvent('sidebar-width-change', { detail: { width: 280, isIconMode: false } }))
+      return
+    }
     const sidebarContainer = document.querySelector('[data-slot="sidebar-container"]') as HTMLElement
-    if (sidebarContainer) {
-      if (isIconMode) {
-        sidebarContainer.style.width = '64px'
-        sidebarContainer.style.setProperty('--sidebar-width', '64px')
-      } else {
-        sidebarContainer.style.width = '280px'
-        sidebarContainer.style.setProperty('--sidebar-width', '280px')
-      }
-    }
-
-    // Also update the custom layout width variable
     const customSidebarContainer = document.querySelector('[data-sidebar-container]') as HTMLElement
-    if (customSidebarContainer) {
-      if (isIconMode) {
-        customSidebarContainer.style.width = '64px'
-        customSidebarContainer.style.setProperty('--sidebar-width', '64px')
-      } else {
-        customSidebarContainer.style.width = '280px'
-        customSidebarContainer.style.setProperty('--sidebar-width', '280px')
-      }
+    if (sidebarContainer) {
+      sidebarContainer.style.width = '64px'
+      sidebarContainer.style.setProperty('--sidebar-width', '64px')
     }
-
-    // Dispatch custom event to notify layout of width change
-    window.dispatchEvent(new CustomEvent('sidebar-width-change', {
-      detail: { width: isIconMode ? 64 : 280, isIconMode }
-    }))
+    if (customSidebarContainer) {
+      customSidebarContainer.style.width = '64px'
+      customSidebarContainer.style.setProperty('--sidebar-width', '64px')
+    }
+    window.dispatchEvent(new CustomEvent('sidebar-width-change', { detail: { width: 64, isIconMode: true } }))
   }, [isIconMode])
 
   // Prevent hydration mismatch by only activating after mount
   useEffect(() => {
     setMounted(true)
   }, [])
+
+  // Debounced sidebar search (file/document level)
+  useEffect(() => {
+    if (!searchQuery.trim() || searchQuery.length < 2) {
+      setSearchResults([])
+      return
+    }
+    const t = setTimeout(async () => {
+      setSearchLoading(true)
+      try {
+        const res = await fetch(`/api/search?q=${encodeURIComponent(searchQuery.trim())}`)
+        const data = await res.json()
+        if (res.ok) setSearchResults(data.results ?? [])
+        else setSearchResults([])
+      } catch {
+        setSearchResults([])
+      } finally {
+        setSearchLoading(false)
+      }
+    }, 300)
+    return () => clearTimeout(t)
+  }, [searchQuery])
 
   useEffect(() => {
     async function fetchData() {
@@ -636,13 +657,76 @@ export function AppSidebar() {
         {/* Search - Hidden in icon mode */}
         <SidebarGroup className={cn(isIconMode && "hidden")}>
           <SidebarGroupContent className="relative px-2">
-            <Search className="pointer-events-none absolute left-4 top-1/2 size-4 -translate-y-1/2 select-none opacity-50" />
-            <SidebarInput
-              placeholder="Search..."
-              className="pl-8"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-            />
+            <Popover open={searchQuery.length >= 2}>
+              <PopoverAnchor asChild>
+                <div className="relative">
+                  <Search className="pointer-events-none absolute left-4 top-1/2 size-4 -translate-y-1/2 select-none opacity-50" />
+                  <SidebarInput
+                    placeholder="Search..."
+                    className="pl-8"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Escape") setSearchQuery("")
+                    }}
+                  />
+                </div>
+              </PopoverAnchor>
+              <PopoverContent
+                className="w-[var(--sidebar-width)] min-w-0 p-0 max-h-[min(60vh,400px)] overflow-auto"
+                align="start"
+                sideOffset={4}
+                onOpenAutoFocus={(e) => e.preventDefault()}
+              >
+                {searchLoading ? (
+                  <div className="px-3 py-4 text-center text-sm text-muted-foreground">
+                    Searching...
+                  </div>
+                ) : searchResults.length === 0 ? (
+                  <div className="px-3 py-4 text-center text-sm text-muted-foreground">
+                    No files or documents found.
+                  </div>
+                ) : (
+                  <ul className="py-1">
+                    {searchResults.map((item) => {
+                      const Icon =
+                        item.type === "project"
+                          ? Folder
+                          : item.type === "experiment"
+                            ? FlaskConical
+                            : item.type === "lab_note"
+                              ? FileText
+                              : item.type === "protocol"
+                                ? FileText
+                                : TestTube
+                      return (
+                        <li key={`${item.type}-${item.id}`}>
+                          <button
+                            type="button"
+                            className="flex w-full items-center gap-2 px-3 py-2 text-sm hover:bg-sidebar-accent hover:text-sidebar-accent-foreground rounded-sm mx-1 text-left"
+                            onClick={() => {
+                              setSearchQuery("")
+                              setSearchResults([])
+                              router.push(item.href)
+                            }}
+                          >
+                            <Icon className="size-4 shrink-0 opacity-70" />
+                            <span className="min-w-0 flex-1 truncate" title={item.title}>
+                              {item.title}
+                              {item.subtitle ? (
+                                <span className="text-muted-foreground text-xs ml-1">
+                                  · {item.subtitle}
+                                </span>
+                              ) : null}
+                            </span>
+                          </button>
+                        </li>
+                      )
+                    })}
+                  </ul>
+                )}
+              </PopoverContent>
+            </Popover>
           </SidebarGroupContent>
         </SidebarGroup>
 

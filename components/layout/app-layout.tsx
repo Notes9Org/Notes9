@@ -1,7 +1,7 @@
 "use client"
 
 import { ReactNode, useState, useEffect } from "react"
-import Image from "next/image"
+import { usePathname } from "next/navigation"
 import { AppSidebar } from "./app-sidebar"
 import { RightSidebar } from "./right-sidebar"
 import { Button } from "@/components/ui/button"
@@ -12,15 +12,37 @@ import { useResizable } from "@/hooks/use-resizable"
 import { Menu, X, Sparkles } from 'lucide-react'
 import { useMediaQuery } from "@/hooks/use-media-query"
 
+const ROUTE_TITLES: { path: string; title: string }[] = [
+  { path: "/dashboard", title: "Dashboard" },
+  { path: "/projects", title: "Projects" },
+  { path: "/experiments", title: "Experiments" },
+  { path: "/lab-notes", title: "Lab Notes" },
+  { path: "/samples", title: "Samples" },
+  { path: "/equipment", title: "Equipment" },
+  { path: "/protocols", title: "Protocols" },
+  { path: "/literature-reviews", title: "Literature" },
+  { path: "/settings", title: "Settings" },
+  { path: "/", title: "Dashboard" },
+]
+
+function getHeaderTitle(pathname: string): string {
+  if (!pathname) return "Notes9"
+  for (const { path, title } of ROUTE_TITLES) {
+    if (path === pathname || (path !== "/" && pathname.startsWith(path + "/"))) return title
+  }
+  return "Notes9"
+}
+
 interface AppLayoutProps {
   children: ReactNode
 }
 
 export function AppLayout({ children }: AppLayoutProps) {
+  const pathname = usePathname()
   const [rightSidebarOpen, setRightSidebarOpen] = useState(true)
-  const [leftSidebarWidth, setLeftSidebarWidth] = useState(280)
   const isMobile = useMediaQuery("(max-width: 768px)")
   const isTablet = useMediaQuery("(max-width: 1024px)")
+  const headerTitle = getHeaderTitle(pathname ?? "")
 
   // Close right sidebar on mobile by default
   useEffect(() => {
@@ -29,24 +51,21 @@ export function AppLayout({ children }: AppLayoutProps) {
     }
   }, [isMobile])
 
-  // Listen for sidebar width changes
-  useEffect(() => {
-    const handleSidebarWidthChange = (event: CustomEvent) => {
-      setLeftSidebarWidth(event.detail.width)
-    }
-
-    window.addEventListener('sidebar-width-change', handleSidebarWidthChange as EventListener)
-    return () => {
-      window.removeEventListener('sidebar-width-change', handleSidebarWidthChange as EventListener)
-    }
-  }, [])
-
-  // Left sidebar resizing
+  // Left sidebar resizing — same as right sidecar: user drags handle left/right to set width
   const leftSidebar = useResizable({
     initialWidth: isMobile ? 0 : isTablet ? 240 : 280,
     minWidth: 200,
     maxWidth: 400,
+    direction: 'left', // handle on right edge: drag right = narrower, drag left = wider
   })
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const w = (e as CustomEvent<{ width: number }>).detail?.width
+      if (typeof w === 'number') leftSidebar.setWidth(w)
+    }
+    window.addEventListener('sidebar-width-change', handler)
+    return () => window.removeEventListener('sidebar-width-change', handler)
+  }, [leftSidebar.setWidth])
 
   // Right sidebar resizing
   const rightSidebar = useResizable({
@@ -58,25 +77,34 @@ export function AppLayout({ children }: AppLayoutProps) {
 
   return (
     <SidebarProvider defaultOpen={!isMobile}>
-      <div className="flex h-screen w-full overflow-hidden bg-background">
-        {/* Left Sidebar - Hidden on mobile, shown via SidebarProvider */}
+      <div
+        className="flex h-screen w-full overflow-hidden bg-background"
+        style={{
+          '--sidebar-width': `${leftSidebar.width}px`,
+          '--sidebar-width-icon': '3rem',
+        } as React.CSSProperties}
+      >
+        {/* Left Sidebar - resizable; width drives fixed panel and main content */}
         {!isMobile && (
-          <div className="flex shrink-0">
+          <div className="flex shrink-0 h-full min-h-0">
             <div
               data-sidebar-container
+              data-resizing={leftSidebar.isResizing ? 'true' : undefined}
+              className="h-full min-h-0 shrink-0 overflow-hidden"
               style={{
-                '--sidebar-width': `${leftSidebarWidth}px`,
-                width: leftSidebarWidth,
-                transition: 'width 200ms ease-in-out'
+                '--sidebar-width': `${leftSidebar.width}px`,
+                width: leftSidebar.width,
+                transition: leftSidebar.isResizing ? 'none' : 'width 0.2s ease-out',
               } as React.CSSProperties}
             >
               <AppSidebar />
             </div>
-            {leftSidebarWidth > 64 && (
+            {leftSidebar.width > 64 && (
               <ResizeHandle
                 onMouseDown={leftSidebar.handleMouseDown}
                 isResizing={leftSidebar.isResizing}
                 position="right"
+                className="z-10 shrink-0"
               />
             )}
           </div>
@@ -86,10 +114,7 @@ export function AppLayout({ children }: AppLayoutProps) {
         <SidebarInset className="flex flex-col overflow-hidden flex-1 min-w-0">
           {/* Top Bar */}
           <header className="h-12 sm:h-14 border-b border-border flex items-center justify-between px-3 sm:px-4 shrink-0">
-            <div className="flex items-center gap-2">
-              <Image src="/notes9-logo.png" alt="Notes9" width={24} height={24} />
-              <h1 className="text-base sm:text-lg font-semibold">Notes9</h1>
-            </div>
+            <h1 className="text-base sm:text-lg font-semibold truncate min-w-0">{headerTitle}</h1>
 
             <div className="flex items-center gap-1 sm:gap-2">
               {/* Mobile: Show AI button with icon */}

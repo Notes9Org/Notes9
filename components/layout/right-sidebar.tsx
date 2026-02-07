@@ -24,7 +24,6 @@ import {
   Paperclip,
   Globe,
   FlaskConical,
-  PanelLeft,
   PenBox,
   MoreHorizontal,
   Trash2,
@@ -474,7 +473,7 @@ export function RightSidebar() {
           }}
           onKeyDown={handleKeyDown}
           placeholder="Plan, @ for context, / for commands"
-          className="w-full min-h-[96px] resize-none bg-transparent px-4 py-3 text-sm placeholder:text-muted-foreground/60 focus:outline-none scrollbar-hide"
+          className="w-full min-h-[52px] resize-none bg-transparent px-4 py-2.5 text-sm placeholder:text-muted-foreground/60 focus:outline-none scrollbar-hide"
           disabled={isLoading || contextLoading}
           autoFocus
         />
@@ -530,14 +529,23 @@ export function RightSidebar() {
           </div>
         </div>
       </div>
-
-      {/* Footer / Context Scope */}
-      <div className="flex items-center gap-1 mt-2 px-1 text-[10px] text-muted-foreground/70">
-        <PanelLeft className="size-3" />
-        <span>Local Context</span>
-      </div>
     </div>
   );
+
+  /** Format session time: "Just now" / "Xm" / "Past hour" / "Xh" if within 24h, else "Yesterday" or "Feb 6". */
+  const formatSessionTime = (updatedAt: string): string => {
+    const date = new Date(updatedAt);
+    const now = new Date();
+    const diffMs = now.getTime() - date.getTime();
+    const diffMins = Math.floor(diffMs / 60_000);
+    const diffHours = Math.floor(diffMs / 3_600_000);
+    const diffDays = Math.floor(diffMs / 86_400_000);
+    if (diffMins < 1) return 'Just now';
+    if (diffMins < 60) return `${diffMins}m`;
+    if (diffHours < 24) return diffHours < 2 ? 'Past hour' : `${diffHours}h`;
+    if (diffDays === 1) return 'Yesterday';
+    return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+  };
 
   const SessionItem = ({ session }: { session: ChatSession }) => (
     <div className="group/item grid grid-cols-[1fr_28px] gap-1 w-full min-w-0 items-center rounded-lg">
@@ -551,16 +559,16 @@ export function RightSidebar() {
             : "hover:bg-muted/50 text-muted-foreground hover:text-foreground"
         )}
       >
-        <span className="truncate min-w-0 flex-1 pr-1">{session.title || 'New conversation'}</span>
-        <span className="text-[10px] shrink-0 opacity-70 whitespace-nowrap">
-          {new Date(session.updated_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
+        <span className="text-[10px] shrink-0 opacity-70 whitespace-nowrap opacity-0 transition-opacity group-hover/item:opacity-70 mr-2">
+          {formatSessionTime(session.updated_at)}
         </span>
+        <span className="truncate min-w-0 flex-1">{session.title || 'New conversation'}</span>
       </button>
       <Button
         type="button"
         variant="ghost"
         size="icon"
-        className="h-7 w-7 shrink-0 col-start-2 text-muted-foreground hover:text-destructive"
+        className="h-7 w-7 shrink-0 col-start-2 text-muted-foreground hover:text-destructive opacity-0 transition-opacity group-hover/item:opacity-100"
         onClick={(e) => handleDeleteSession(e, session.id)}
         aria-label="Delete chat"
       >
@@ -653,80 +661,83 @@ export function RightSidebar() {
         </div>
       ) : (
         <>
-          {/* Header: Tab-like Navigation */}
+          {/* Header: Tab-like Navigation (History + New Chat hidden when maximized; left sidebar has them) */}
           <header className="h-12 sm:h-14 flex items-center justify-between px-2 sm:px-3 border-b shrink-0 bg-background/50 backdrop-blur z-10 text-xs select-none">
             <div className="flex items-center gap-1 overflow-hidden">
-              {/* "Tabs" - Recent Session & New Chat */}
-              <ScrollArea className="w-full whitespace-nowrap scrollbar-hide">
-                <div className="flex items-center gap-1">
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <button
-                        aria-label="Chat history"
-                        className={cn(
-                          "px-3 py-1.5 rounded-md flex items-center justify-center transition-colors",
-                          currentSessionId ? "bg-accent/40 text-foreground" : "text-muted-foreground hover:text-foreground hover:bg-muted/30"
-                        )}
-                      >
-                        <History className="size-3.5" />
-                      </button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="start" className="w-[280px] max-w-[min(280px,90vw)] p-0 overflow-hidden" sideOffset={4}>
-                      <div className="p-2 text-xs font-semibold text-muted-foreground/80 uppercase tracking-wider border-b shrink-0">
-                        History
-                      </div>
-                      <ScrollArea className="max-h-[280px] overflow-hidden">
-                        <div className="p-1 min-w-0">
-                          {sessions.length === 0 ? (
-                            <div className="py-6 text-center text-muted-foreground text-xs">No history yet.</div>
-                          ) : (
-                            sessions.map(session => (
-                              <div key={session.id} className="flex items-center gap-1 group/hist w-full min-w-0 rounded-md">
-                                <button
-                                  type="button"
-                                  onClick={() => loadSession(session.id)}
-                                  className={cn(
-                                    "flex-1 min-w-0 flex items-center justify-between gap-2 px-3 py-2 text-left text-sm rounded-md transition-colors overflow-hidden",
-                                    currentSessionId === session.id
-                                      ? "bg-accent text-accent-foreground"
-                                      : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
-                                  )}
-                                >
-                                  <span className="truncate min-w-0 flex-1">{session.title || 'New conversation'}</span>
-                                  <span className="text-[10px] shrink-0 opacity-70">
-                                    {new Date(session.updated_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
-                                  </span>
-                                </button>
-                                <Button
-                                  type="button"
-                                  variant="ghost"
-                                  size="icon"
-                                  className="h-7 w-7 shrink-0 text-muted-foreground hover:text-destructive flex-shrink-0"
-                                  onClick={(e) => handleDeleteSession(e, session.id)}
-                                  aria-label="Delete chat"
-                                >
-                                  <Trash2 className="size-3.5" />
-                                </Button>
-                              </div>
-                            ))
+              {!isExpanded && (
+              <>
+                <ScrollArea className="w-full whitespace-nowrap scrollbar-hide">
+                  <div className="flex items-center gap-1">
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <button
+                          aria-label="Chat history"
+                          className={cn(
+                            "px-3 py-1.5 rounded-md flex items-center justify-center transition-colors",
+                            currentSessionId ? "bg-accent/40 text-foreground" : "text-muted-foreground hover:text-foreground hover:bg-muted/30"
                           )}
+                        >
+                          <History className="size-3.5" />
+                        </button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="start" className="w-[280px] max-w-[min(280px,90vw)] p-0 overflow-hidden" sideOffset={4}>
+                        <div className="p-2 text-xs font-semibold text-muted-foreground/80 uppercase tracking-wider border-b shrink-0">
+                          History
                         </div>
-                      </ScrollArea>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
+                        <ScrollArea className="max-h-[280px] overflow-hidden">
+                          <div className="p-1 min-w-0">
+                            {sessions.length === 0 ? (
+                              <div className="py-6 text-center text-muted-foreground text-xs">No history yet.</div>
+                            ) : (
+                              sessions.map(session => (
+                                <div key={session.id} className="flex items-center gap-1 group/hist w-full min-w-0 rounded-md">
+                                  <button
+                                    type="button"
+                                    onClick={() => loadSession(session.id)}
+                                    className={cn(
+                                      "flex-1 min-w-0 flex items-center justify-between gap-2 px-3 py-2 text-left text-sm rounded-md transition-colors overflow-hidden",
+                                      currentSessionId === session.id
+                                        ? "bg-accent text-accent-foreground"
+                                        : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
+                                    )}
+                                  >
+                                    <span className="truncate min-w-0 flex-1">{session.title || 'New conversation'}</span>
+                                    <span className="text-[10px] shrink-0 opacity-70">
+                                      {new Date(session.updated_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
+                                    </span>
+                                  </button>
+                                  <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="icon"
+                                    className="h-7 w-7 shrink-0 text-muted-foreground hover:text-destructive flex-shrink-0"
+                                    onClick={(e) => handleDeleteSession(e, session.id)}
+                                    aria-label="Delete chat"
+                                  >
+                                    <Trash2 className="size-3.5" />
+                                  </Button>
+                                </div>
+                              ))
+                            )}
+                          </div>
+                        </ScrollArea>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
 
-                  <button
-                    onClick={handleNewChat}
-                    className={cn(
-                      "px-3 py-1.5 rounded-md flex items-center gap-2 transition-colors",
-                      !currentSessionId ? "bg-accent/40 text-foreground" : "text-muted-foreground hover:text-foreground hover:bg-muted/30"
-                    )}
-                  >
-                    <PenBox className="size-3.5" />
-                    <span>New Chat</span>
-                  </button>
-                </div>
-              </ScrollArea>
+                    <button
+                      onClick={handleNewChat}
+                      className={cn(
+                        "px-3 py-1.5 rounded-md flex items-center gap-2 transition-colors",
+                        !currentSessionId ? "bg-accent/40 text-foreground" : "text-muted-foreground hover:text-foreground hover:bg-muted/30"
+                      )}
+                    >
+                      <PenBox className="size-3.5" />
+                      <span>New Chat</span>
+                    </button>
+                  </div>
+                </ScrollArea>
+              </>
+              )}
             </div>
 
             <div className="flex items-center gap-1 pl-2">
@@ -736,38 +747,78 @@ export function RightSidebar() {
             </div>
           </header>
 
-          {/* Main Content */}
-          {messages.length === 0 ? (
-            // --- Empty State (Cursor "Home" View): input area grows, Past Chats pinned to bottom ---
-            <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
-              {/* Top: input takes flexible space (content at top) */}
-              <div className="flex-1 min-h-0 flex flex-col pt-6 px-6 pb-4 overflow-auto">
-                {renderCursorInput()}
-              </div>
-
-              {/* Past Chats - shrink-0 so it stays at bottom; list scrolls when > 5, max height capped */}
-              <div className="flex-shrink-0 flex flex-col bg-muted/5 border-t min-w-0 max-h-[40vh]">
-                <div className="flex-shrink-0 p-3 text-xs font-semibold text-muted-foreground/70 uppercase tracking-wider flex items-center justify-between">
-                  <span>Past Chats</span>
-                  {hasMorePastChats && (
-                    <button
-                      type="button"
-                      onClick={() => setShowAllPastChats((prev) => !prev)}
-                      className="text-[10px] cursor-pointer hover:text-foreground focus:outline-none"
-                    >
-                      {showAllPastChats ? 'Show less' : 'View all'}
-                    </button>
-                  )}
+          {/* When full screen: left = conversation list, right = chat. Otherwise: single column. */}
+          <div className={cn("flex-1 flex min-h-0 overflow-hidden", isExpanded ? "flex-row" : "flex-col")}>
+            {/* Full-screen only: left sidebar with previous conversations */}
+            {isExpanded && (
+              <aside className="w-[260px] sm:w-[280px] flex-shrink-0 flex flex-col border-r border-border bg-muted/5 overflow-hidden min-h-0">
+                <div className="p-2 border-b border-border shrink-0">
+                  <button
+                    type="button"
+                    onClick={handleNewChat}
+                    className={cn(
+                      "w-full px-3 py-2.5 rounded-lg flex items-center gap-2 text-sm font-medium transition-colors",
+                      !currentSessionId ? "bg-accent text-accent-foreground" : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
+                    )}
+                  >
+                    <PenBox className="size-4" />
+                    <span>New chat</span>
+                  </button>
                 </div>
-                <ScrollArea className="flex-1 min-h-0 overflow-hidden min-w-0 max-h-[240px]">
-                  <div className="px-2 pb-4 space-y-0.5 min-w-0 w-full">
+                <ScrollArea className="flex-1 min-h-0 overflow-hidden">
+                  <div className="py-2 px-1 min-h-0">
                     {sessions.length === 0 ? (
-                      <div className="p-4 text-center text-muted-foreground text-xs italic">No history yet.</div>
+                      <div className="px-3 py-6 text-center text-muted-foreground text-xs">No previous conversations.</div>
                     ) : (
-                      pastChatsToShow.map((session) => <SessionItem key={session.id} session={session} />)
+                      <div className="space-y-0.5">
+                        {sessions.map((session) => (
+                          <div key={session.id} className="group/row grid grid-cols-[1fr_28px] gap-0 items-center rounded-lg min-w-0">
+                            <button
+                              type="button"
+                              onClick={() => loadSession(session.id)}
+                              className={cn(
+                                "min-w-0 flex items-center justify-between gap-2 text-left px-3 py-2.5 rounded-lg text-sm transition-colors truncate",
+                                currentSessionId === session.id
+                                  ? "bg-accent text-accent-foreground"
+                                  : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
+                              )}
+                            >
+                              <span className="text-[10px] shrink-0 opacity-70 whitespace-nowrap opacity-0 transition-opacity group-hover/row:opacity-70 mr-2">
+                                {formatSessionTime(session.updated_at)}
+                              </span>
+                              <span className="truncate block flex-1 min-w-0">{session.title || 'New conversation'}</span>
+                            </button>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              className="h-7 w-7 shrink-0 text-muted-foreground hover:text-destructive opacity-0 transition-opacity group-hover/row:opacity-100"
+                              onClick={(e) => handleDeleteSession(e, session.id)}
+                              aria-label="Delete chat"
+                            >
+                              <Trash2 className="size-3.5" />
+                            </Button>
+                          </div>
+                        ))}
+                      </div>
                     )}
                   </div>
                 </ScrollArea>
+              </aside>
+            )}
+
+            {/* Main chat area (narrow: only this; full screen: right side) */}
+            <div className="flex-1 flex flex-col min-h-0 min-w-0 overflow-hidden">
+          {messages.length === 0 ? (
+            // --- Empty State: input at bottom; full screen = compact bar, narrow = full input card ---
+            <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
+              <div className="flex-1 min-h-0" />
+
+              {/* Input at bottom (General, model, textarea) */}
+              <div className="flex-shrink-0 p-4 bg-background/95 backdrop-blur border-t">
+                <div className="max-w-3xl mx-auto min-w-0">
+                  {renderCursorInput()}
+                </div>
               </div>
             </div>
           ) : (
@@ -817,6 +868,8 @@ export function RightSidebar() {
               </div>
             </div>
           )}
+            </div>
+          </div>
         </>
       )}
     </div>
