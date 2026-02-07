@@ -42,7 +42,7 @@ export async function POST(
     }
     
     // Parse request body
-    const body = await request.json()
+    const body = await request.json().catch(() => null)
     const { labNoteId, email, permissionLevel = 'viewer' } = body
     
     if (!labNoteId || !email) {
@@ -253,8 +253,9 @@ export async function POST(
     
   } catch (error) {
     console.error("Error in invite endpoint:", error)
+    const message = error instanceof Error ? error.message : "Internal server error"
     return NextResponse.json(
-      { error: "Internal server error" },
+      { error: process.env.NODE_ENV === "production" ? "Internal server error" : message },
       { status: 500 }
     )
   }
