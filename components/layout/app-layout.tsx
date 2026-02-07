@@ -2,14 +2,16 @@
 
 import { ReactNode, useState, useEffect } from "react"
 import { usePathname } from "next/navigation"
+import Link from "next/link"
 import { AppSidebar } from "./app-sidebar"
 import { RightSidebar } from "./right-sidebar"
+import { BreadcrumbProvider, useBreadcrumb } from "./breadcrumb-context"
 import { Button } from "@/components/ui/button"
 import { ResizeHandle } from "@/components/ui/resize-handle"
 import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar"
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet"
 import { useResizable } from "@/hooks/use-resizable"
-import { Menu, X, Sparkles } from 'lucide-react'
+import { Menu, X, Sparkles, ChevronRight } from 'lucide-react'
 import { useMediaQuery } from "@/hooks/use-media-query"
 
 const ROUTE_TITLES: { path: string; title: string }[] = [
@@ -33,16 +35,46 @@ function getHeaderTitle(pathname: string): string {
   return "Notes9"
 }
 
+function HeaderTitle() {
+  const pathname = usePathname()
+  const { segments } = useBreadcrumb()
+  const fallbackTitle = getHeaderTitle(pathname ?? "")
+
+  const filtered = segments.filter((s) => s.label !== "Dashboard")
+  if (filtered.length === 0) {
+    return (
+      <h1 className="text-base sm:text-lg font-semibold truncate min-w-0">
+        {fallbackTitle}
+      </h1>
+    )
+  }
+
+  return (
+    <nav aria-label="breadcrumb" className="flex flex-wrap items-center gap-1.5 text-sm text-muted-foreground sm:gap-2.5 min-w-0 truncate">
+      {filtered.map((seg, i) => (
+        <span key={i} className="inline-flex items-center gap-1.5 shrink-0">
+          {i > 0 && <ChevronRight className="size-3.5 shrink-0" aria-hidden />}
+          {seg.href ? (
+            <Link href={seg.href} className="transition-colors hover:text-foreground truncate">
+              {seg.label}
+            </Link>
+          ) : (
+            <span className="font-normal text-foreground truncate">{seg.label}</span>
+          )}
+        </span>
+      ))}
+    </nav>
+  )
+}
+
 interface AppLayoutProps {
   children: ReactNode
 }
 
 export function AppLayout({ children }: AppLayoutProps) {
-  const pathname = usePathname()
   const [rightSidebarOpen, setRightSidebarOpen] = useState(true)
   const isMobile = useMediaQuery("(max-width: 768px)")
   const isTablet = useMediaQuery("(max-width: 1024px)")
-  const headerTitle = getHeaderTitle(pathname ?? "")
 
   // Close right sidebar on mobile by default
   useEffect(() => {
@@ -76,8 +108,9 @@ export function AppLayout({ children }: AppLayoutProps) {
   })
 
   return (
-    <SidebarProvider defaultOpen={!isMobile}>
-      <div
+    <BreadcrumbProvider>
+      <SidebarProvider defaultOpen={!isMobile}>
+        <div
         className="flex h-screen w-full overflow-hidden bg-background"
         style={{
           '--sidebar-width': `${leftSidebar.width}px`,
@@ -114,7 +147,9 @@ export function AppLayout({ children }: AppLayoutProps) {
         <SidebarInset className="flex flex-col overflow-hidden flex-1 min-w-0">
           {/* Top Bar */}
           <header className="h-12 sm:h-14 border-b border-border flex items-center justify-between px-3 sm:px-4 shrink-0">
-            <h1 className="text-base sm:text-lg font-semibold truncate min-w-0">{headerTitle}</h1>
+            <div className="min-w-0 flex-1 truncate">
+              <HeaderTitle />
+            </div>
 
             <div className="flex items-center gap-1 sm:gap-2">
               {/* Mobile: Show AI button with icon */}
@@ -168,7 +203,8 @@ export function AppLayout({ children }: AppLayoutProps) {
             </div>
           )
         )}
-      </div>
-    </SidebarProvider>
+        </div>
+      </SidebarProvider>
+    </BreadcrumbProvider>
   )
 }

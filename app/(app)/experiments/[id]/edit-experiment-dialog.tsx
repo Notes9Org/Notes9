@@ -24,7 +24,9 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { RichTextEditor } from "@/components/rich-text-editor"
+import { countWordsFromHtml } from "@/components/ui/textarea-with-word-count"
 import { useToast } from "@/hooks/use-toast"
+import { cn } from "@/lib/utils"
 import { useRouter } from "next/navigation"
 import { Pencil, Loader2 } from "lucide-react"
 
@@ -101,6 +103,15 @@ export function EditExperimentDialog({
       toast({
         title: "Validation Error",
         description: "Experiment name is required.",
+        variant: "destructive",
+      })
+      return
+    }
+    const descWords = countWordsFromHtml(description)
+    if (descWords > 1000) {
+      toast({
+        title: "Description too long",
+        description: `Description must be 1000 words or fewer (currently ${descWords} words).`,
         variant: "destructive",
       })
       return
@@ -280,6 +291,16 @@ export function EditExperimentDialog({
               placeholder="Detailed description of the experiment..."
               disabled={isSaving}
             />
+            <p
+              className={cn(
+                "text-right text-xs tabular-nums",
+                countWordsFromHtml(description) > 1000
+                  ? "text-destructive"
+                  : "text-muted-foreground"
+              )}
+            >
+              {countWordsFromHtml(description)} / 1000 words
+            </p>
           </div>
 
           {/* Hypothesis */}

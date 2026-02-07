@@ -732,7 +732,6 @@ export function AppSidebar() {
 
         {/* Main Navigation */}
         <SidebarGroup>
-          {/* <SidebarGroupLabel>Platform</SidebarGroupLabel> */}
           <SidebarGroupContent>
             <SidebarMenu>
               {navigation.map((item) => {
@@ -791,12 +790,10 @@ export function AppSidebar() {
         {mounted ? (
           <Collapsible defaultOpen={true} className="group/collapsible group-data-[collapsible=icon]:hidden">
             <SidebarGroup>
-              <div className="flex items-center justify-between px-2 py-1">
-                <CollapsibleTrigger
-                  className="flex flex-1 items-center gap-2 text-xs font-medium text-sidebar-foreground/70 hover:text-sidebar-foreground"
-                >
-                  <span>Active Projects</span>
-                  <ChevronDown className="size-4 transition-transform duration-200 group-data-[state=open]/collapsible:rotate-180" />
+              <div className="flex h-8 shrink-0 items-center gap-2 rounded-md px-2 text-xs font-medium text-sidebar-foreground/70 outline-hidden ring-sidebar-ring focus-visible:ring-2 [&>svg]:size-4 [&>svg]:shrink-0">
+                <CollapsibleTrigger className="flex min-w-0 flex-1 items-center gap-2 text-left hover:text-sidebar-foreground transition-colors">
+                  <span className="truncate">Active Projects</span>
+                  <ChevronDown className="size-4 shrink-0 transition-transform duration-200 group-data-[state=open]/collapsible:rotate-180" />
                 </CollapsibleTrigger>
                 <button
                   title="Add Project"
@@ -805,7 +802,7 @@ export function AppSidebar() {
                     e.stopPropagation()
                     window.location.href = "/projects/new"
                   }}
-                  className="flex size-5 items-center justify-center rounded-md hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+                  className="flex aspect-square w-5 items-center justify-center rounded-md p-0 text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground transition-colors"
                 >
                   <Plus className="size-4" />
                   <span className="sr-only">Add Project</span>
@@ -822,7 +819,7 @@ export function AppSidebar() {
                       ))
                     ) : projects.length === 0 ? (
                       <SidebarMenuItem>
-                        <div className="px-2 py-1 text-xs text-muted-foreground">
+                        <div className="flex h-8 items-center rounded-md px-2 text-xs text-sidebar-foreground/70">
                           No active projects
                         </div>
                       </SidebarMenuItem>
@@ -831,9 +828,9 @@ export function AppSidebar() {
                         const isProjectOpen = openProjects[project.id] ?? false
                         return (
                           <SidebarMenuItem key={project.id}>
-                            <div className="flex items-center">
+                            <div className="flex w-full min-w-0 items-center gap-2">
                               <button
-                                className="mr-2 text-muted-foreground hover:text-foreground shrink-0"
+                                className="shrink-0 rounded-md p-2 text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground transition-colors [&>svg]:size-4"
                                 onClick={() =>
                                   setOpenProjects((prev) => ({
                                     ...prev,
@@ -848,7 +845,7 @@ export function AppSidebar() {
                                   <Folder className="size-4" />
                                 )}
                               </button>
-                              <SidebarMenuButton asChild isActive={mounted && pathname === `/projects/${project.id}`} tooltip={project.name}>
+                              <SidebarMenuButton asChild isActive={mounted && pathname === `/projects/${project.id}`} tooltip={project.name} className="min-w-0 flex-1">
                                 <Link
                                   href={`/projects/${project.id}`}
                                   draggable
@@ -870,9 +867,9 @@ export function AppSidebar() {
                                   <span className="truncate">{project.name}</span>
                                 </Link>
                               </SidebarMenuButton>
-                              {project.experiment_count && project.experiment_count > 0 && (
-                                <SidebarMenuBadge>{project.experiment_count}</SidebarMenuBadge>
-                              )}
+                              <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-md text-xs font-medium tabular-nums text-sidebar-foreground/70">
+                                {project.experiment_count ?? 0}
+                              </span>
                             </div>
 
                             {isProjectOpen && project.experiments && project.experiments.length > 0 && (
@@ -881,9 +878,9 @@ export function AppSidebar() {
                                   const isExpOpen = openExperiments[exp.id] ?? false
                                   return (
                                     <div key={exp.id}>
-                                      <div className="flex items-center">
+                                      <div className="flex w-full min-w-0 items-center gap-2">
                                         <button
-                                          className="mr-2 text-muted-foreground hover:text-foreground shrink-0"
+                                          className="shrink-0 rounded-md p-1.5 text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground transition-colors [&>svg]:size-4"
                                           onClick={() =>
                                             setOpenExperiments((prev) => ({
                                               ...prev,
@@ -895,7 +892,7 @@ export function AppSidebar() {
                                           <FlaskConical
                                             className={cn(
                                               "size-4 transition-transform",
-                                              isExpOpen ? "rotate-12 text-foreground" : "-rotate-12 text-muted-foreground"
+                                              isExpOpen ? "rotate-12 text-sidebar-accent-foreground" : "-rotate-12"
                                             )}
                                           />
                                         </button>
@@ -912,8 +909,10 @@ export function AppSidebar() {
                                             e.dataTransfer.effectAllowed = 'copy';
                                           }}
                                           className={cn(
-                                            "flex-1 text-left text-sm truncate hover:text-foreground cursor-grab active:cursor-grabbing",
-                                            pathname === `/experiments/${exp.id}` ? "font-semibold text-foreground" : "text-muted-foreground"
+                                            "min-w-0 flex-1 rounded-md px-2 py-1.5 text-left text-sm truncate cursor-grab active:cursor-grabbing transition-colors",
+                                            pathname === `/experiments/${exp.id}`
+                                              ? "font-medium text-sidebar-accent-foreground bg-sidebar-accent"
+                                              : "text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
                                           )}
                                         >
                                           {exp.name}
@@ -921,7 +920,7 @@ export function AppSidebar() {
                                       </div>
 
                                       {isExpOpen && exp.lab_notes && exp.lab_notes.length > 0 && (
-                                        <div className="ml-6 mt-1 space-y-1">
+                                        <div className="ml-6 mt-1 space-y-0.5">
                                           {exp.lab_notes.map((note) => (
                                             <button
                                               key={note.id}
@@ -938,14 +937,14 @@ export function AppSidebar() {
                                                 e.dataTransfer.effectAllowed = 'copy';
                                               }}
                                               className={cn(
-                                                "block w-full text-left text-xs truncate px-2 py-1 rounded hover:bg-sidebar-accent hover:text-sidebar-accent-foreground cursor-grab active:cursor-grabbing",
-                                                pathname.startsWith(`/experiments/${exp.id}`) ? "text-foreground" : "text-muted-foreground"
+                                                "flex w-full min-w-0 items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs truncate cursor-grab active:cursor-grabbing transition-colors [&>svg]:size-4 [&>svg]:shrink-0",
+                                                pathname.startsWith(`/experiments/${exp.id}`)
+                                                  ? "bg-sidebar-accent text-sidebar-accent-foreground font-medium"
+                                                  : "text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
                                               )}
                                             >
-                                              <span className="inline-flex items-center gap-1">
-                                                <FileText className="h-3 w-3" />
-                                                {note.title || "Untitled note"}
-                                              </span>
+                                              <FileText className="size-4 shrink-0" />
+                                              <span className="min-w-0 truncate">{note.title || "Untitled note"}</span>
                                             </button>
                                           ))}
                                         </div>
@@ -966,8 +965,8 @@ export function AppSidebar() {
           </Collapsible>
         ) : (
           <SidebarGroup className="group-data-[collapsible=icon]:hidden">
-            <div className="flex items-center justify-between px-2 py-1">
-              <span className="flex flex-1 items-center gap-2 text-xs font-medium text-sidebar-foreground/70">Active Projects</span>
+            <div className="flex h-8 shrink-0 items-center rounded-md px-2 text-xs font-medium text-sidebar-foreground/70">
+              Active Projects
             </div>
           </SidebarGroup>
         )}

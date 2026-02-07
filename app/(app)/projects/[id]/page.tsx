@@ -6,14 +6,7 @@ import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
-import {
-  Breadcrumb,
-  BreadcrumbItem,
-  BreadcrumbLink,
-  BreadcrumbList,
-  BreadcrumbPage,
-  BreadcrumbSeparator,
-} from "@/components/ui/breadcrumb"
+import { SetPageBreadcrumb } from "@/components/layout/breadcrumb-context"
 import { Plus, Users, Calendar, FlaskConical, FileText } from 'lucide-react'
 import Link from 'next/link'
 import { ProjectActions } from './project-actions'
@@ -58,27 +51,12 @@ export default async function ProjectDetailPage({
 
   return (
       <div className="space-y-6">
-        {/* Breadcrumb */}
-        <Breadcrumb>
-          <BreadcrumbList>
-            <BreadcrumbItem>
-              <BreadcrumbLink asChild>
-                <Link href="/dashboard">Dashboard</Link>
-              </BreadcrumbLink>
-            </BreadcrumbItem>
-            <BreadcrumbSeparator />
-            <BreadcrumbItem>
-              <BreadcrumbLink asChild>
-                <Link href="/projects">Projects</Link>
-              </BreadcrumbLink>
-            </BreadcrumbItem>
-            <BreadcrumbSeparator />
-            <BreadcrumbItem>
-              <BreadcrumbPage>{project.name}</BreadcrumbPage>
-            </BreadcrumbItem>
-          </BreadcrumbList>
-        </Breadcrumb>
-
+        <SetPageBreadcrumb
+          segments={[
+            { label: "Projects", href: "/projects" },
+            { label: project.name },
+          ]}
+        />
         {/* Header */}
         <div className="flex items-start justify-between">
             <div>

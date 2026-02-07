@@ -15,7 +15,7 @@ import {
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Textarea } from "@/components/ui/textarea"
+import { TextareaWithWordCount } from "@/components/ui/textarea-with-word-count"
 import {
   Select,
   SelectContent,
@@ -225,15 +225,16 @@ export function EditProjectDialog({ project, asMenuItem = false }: EditProjectDi
           {/* Description */}
           <div className="space-y-2">
             <Label htmlFor="description">Description</Label>
-            <Textarea
+            <TextareaWithWordCount
               id="description"
               value={description}
-              onChange={(e) => setDescription(e.target.value)}
+              onChange={setDescription}
               placeholder="Detailed description of the project goals and objectives..."
               rows={4}
               disabled={isSaving}
+              maxWords={1000}
             />
-        </div>
+          </div>
 
           {/* Actions */}
           <div className="flex justify-end gap-2 pt-4">
