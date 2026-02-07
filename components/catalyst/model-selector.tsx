@@ -3,6 +3,8 @@
 import { useState } from 'react';
 import { Check, ChevronDown, Sparkles, Zap, Brain } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { cn } from '@/lib/utils';
+
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -19,7 +21,6 @@ import {
   DEFAULT_MODEL_ID,
   type ChatModel,
 } from '@/lib/ai/models';
-import { cn } from '@/lib/utils';
 
 interface ModelSelectorProps {
   selectedModelId: string;
@@ -28,7 +29,7 @@ interface ModelSelectorProps {
   disabled?: boolean;
 }
 
-// Provider icons
+// Provider icons (Google/Gemini uses Sparkles as before)
 function ProviderIcon({ provider, className }: { provider: string; className?: string }) {
   switch (provider) {
     case 'google':
@@ -67,12 +68,12 @@ export function ModelSelector({
           <Button
             variant="ghost"
             size="sm"
-            className="h-5 sm:h-6 px-1.5 sm:px-2 text-[10px] sm:text-xs text-muted-foreground hover:text-foreground gap-1"
+            className="h-5 sm:h-6 px-1.5 sm:px-2 text-[10px] sm:text-xs text-muted-foreground hover:text-foreground gap-1.5"
             disabled={disabled}
           >
-            <ProviderIcon provider={selectedModel.provider} className="size-2.5 sm:size-3" />
-            <span className="hidden sm:inline max-w-[60px] truncate">{selectedModel.name}</span>
-            <ChevronDown className="size-2.5 sm:size-3 opacity-50" />
+            <ProviderIcon provider={selectedModel.provider} className="size-2.5 sm:size-3 shrink-0" />
+            <span className="hidden sm:inline max-w-[60px] truncate min-w-0">{selectedModel.name}</span>
+            <ChevronDown className="size-2.5 sm:size-3 opacity-50 shrink-0" />
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="start" className="w-56">
