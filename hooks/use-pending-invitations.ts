@@ -8,6 +8,7 @@ export interface PendingInvitation {
   id: string
   lab_note_id: string
   email: string
+  invited_by: string
   permission_level: 'editor' | 'viewer'
   status: string
   expires_at: string
@@ -47,8 +48,7 @@ export function usePendingInvitations() {
         .from('lab_note_invitations')
         .select(`
           *,
-          lab_note:lab_notes(title, experiment_id),
-          inviter:profiles!lab_note_invitations_invited_by_fkey(first_name, last_name, email)
+          lab_note:lab_notes(title, experiment_id)
         `)
         .eq('email', user.email.toLowerCase())
         .eq('status', 'pending')
@@ -59,7 +59,42 @@ export function usePendingInvitations() {
         throw error
       }
 
-      setInvitations(data || [])
+      const invitations = data || []
+      const inviterIds = Array.from(new Set(
+        invitations
+          .map((inv) => inv.invited_by)
+          .filter(Boolean)
+      ))
+
+      let inviterMap = new Map<string, PendingInvitation["inviter"]>()
+      if (inviterIds.length > 0) {
+        const { data: profiles, error: profilesError } = await supabase
+          .from('profiles')
+          .select('id, first_name, last_name, email')
+          .in('id', inviterIds)
+
+        if (profilesError) {
+          console.error("Error fetching inviters:", profilesError)
+        } else if (profiles) {
+          inviterMap = new Map(
+            profiles.map((profile) => [
+              profile.id,
+              {
+                first_name: profile.first_name,
+                last_name: profile.last_name,
+                email: profile.email,
+              },
+            ])
+          )
+        }
+      }
+
+      const normalized = invitations.map((inv) => ({
+        ...inv,
+        inviter: inviterMap.get(inv.invited_by) ?? null,
+      }))
+
+      setInvitations(normalized)
     } catch (error: any) {
       console.error("Error fetching invitations:", error)
       toast({

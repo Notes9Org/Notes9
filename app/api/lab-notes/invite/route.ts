@@ -1,9 +1,16 @@
 import { createClient } from "@/lib/supabase/server"
+import { createAdminClient } from "@/lib/supabase/admin-client"
 import { NextRequest, NextResponse } from "next/server"
 import { randomBytes } from "crypto"
 
 // Permission level type
  type PermissionLevel = 'owner' | 'editor' | 'viewer'
+
+function getInviteRedirectUrl(request: NextRequest): string | undefined {
+  const origin = request.headers.get("origin")
+  if (!origin) return undefined
+  return `${origin}/invite/accept`
+}
 
 // Invite collaborator to a lab note
 export async function POST(
@@ -90,6 +97,14 @@ export async function POST(
       .eq("email", normalizedEmail)
       .eq("status", "pending")
       .maybeSingle()
+
+    if (existingInviteError) {
+      console.error("Error checking existing invitations:", existingInviteError)
+      return NextResponse.json(
+        { error: "Failed to validate existing invitations" },
+        { status: 500 }
+      )
+    }
     
     if (existingInvitation) {
       return NextResponse.json(
@@ -151,9 +166,60 @@ export async function POST(
       )
     }
     
-    // TODO: Send email notification (implement with your email service)
-    // For now, we'll just return the invitation data
-    // You can integrate with Resend, SendGrid, or any email service here
+    const adminClient = createAdminClient()
+    let emailSent = false
+    let emailError: string | null = null
+
+    if (!adminClient) {
+      emailError = "Supabase service role key is not configured"
+    } else {
+      const redirectTo = getInviteRedirectUrl(request)
+      const { error: inviteAuthError } = await adminClient.auth.admin.inviteUserByEmail(
+        normalizedEmail,
+        {
+          data: {
+            labNoteInvitationId: invitation.id,
+            labNoteId: invitation.lab_note_id,
+            permissionLevel: invitation.permission_level,
+          },
+          redirectTo,
+        }
+      )
+
+      if (inviteAuthError) {
+        console.error("Supabase inviteUserByEmail failed:", inviteAuthError)
+        emailError = inviteAuthError.message
+      } else {
+        emailSent = true
+      }
+
+      if (!emailSent) {
+        const { data: existingUser, error: existingUserError } =
+          await adminClient.auth.admin.getUserByEmail(normalizedEmail)
+
+        if (existingUserError) {
+          console.error("Failed to lookup existing user by email:", existingUserError)
+        } else if (existingUser?.user) {
+          const existingMetadata = existingUser.user.user_metadata || {}
+          const { error: updateError } = await adminClient.auth.admin.updateUserById(
+            existingUser.user.id,
+            {
+              user_metadata: {
+                ...existingMetadata,
+                labNoteInvitationId: invitation.id,
+                labNoteId: invitation.lab_note_id,
+                permissionLevel: invitation.permission_level,
+              },
+            }
+          )
+
+          if (updateError) {
+            console.error("Failed to update user metadata for invite:", updateError)
+            emailError = emailError || updateError.message
+          }
+        }
+      }
+    }
     
     return NextResponse.json({
       success: true,
@@ -166,6 +232,8 @@ export async function POST(
         expiresAt: invitation.expires_at,
         createdAt: invitation.created_at,
       },
+      emailSent,
+      emailError,
       // Include token in response for development/testing
       // In production, you might want to remove this and only send via email
       token: invitation.token,
