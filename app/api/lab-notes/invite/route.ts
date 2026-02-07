@@ -1,10 +1,22 @@
 import { createClient } from "@/lib/supabase/server"
 import { createAdminClient } from "@/lib/supabase/admin-client"
 import { NextRequest, NextResponse } from "next/server"
-import { randomBytes } from "crypto"
 
 // Permission level type
  type PermissionLevel = 'owner' | 'editor' | 'viewer'
+
+function generateToken(): string {
+  const cryptoRef = globalThis.crypto
+  if (cryptoRef?.randomUUID) {
+    return cryptoRef.randomUUID()
+  }
+  if (cryptoRef?.getRandomValues) {
+    const bytes = new Uint8Array(32)
+    cryptoRef.getRandomValues(bytes)
+    return Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("")
+  }
+  return `${Date.now().toString(36)}${Math.random().toString(36).slice(2)}`
+}
 
 function getInviteRedirectUrl(request: NextRequest): string | undefined {
   const origin = request.headers.get("origin")
@@ -137,7 +149,7 @@ export async function POST(
     }
     
     // Generate invitation token
-    const token = randomBytes(32).toString("hex")
+    const token = generateToken()
     
     // Calculate expiration (7 days)
     const expiresAt = new Date()
