@@ -164,7 +164,7 @@ export function TableOfContents({ editor, className }: TableOfContentsProps) {
             style={{
                 top: cursorY !== null ? `${cursorY}px` : "100px",
                 transform: "translateY(-50%)",
-                transition: "top 0.2s cubic-bezier(0.2, 0, 0, 1)"
+                transition: "top 1.2s cubic-bezier(0.65, 0, 0.35, 1)"
             }}
         >
             {items.map((item) => {
