@@ -786,7 +786,7 @@ export function TiptapEditor({
       
       // Call the literature search API with limit=3
       const response = await fetch(
-        `${process.env.NEXT_PUBLIC_AI_SERVICE_URL || 'http://13.221.90.39:8000'}/literature/search?q=${encodeURIComponent(selectedText)}&limit=3`,
+        `https://z3thrlksg0.execute-api.us-east-1.amazonaws.com/literature/search?q=${encodeURIComponent(selectedText)}&limit=3`,
         {
           method: 'GET',
           headers: {
@@ -1050,7 +1050,7 @@ export function TiptapEditor({
           // If we have stored metadata (title, paperId), try to fetch full details
           if (citation.paperId) {
             const response = await fetch(
-              `${process.env.NEXT_PUBLIC_AI_SERVICE_URL || 'http://13.221.90.39:8000'}/literature/search?q=${encodeURIComponent(citation.paperId)}&limit=1`,
+              `https://z3thrlksg0.execute-api.us-east-1.amazonaws.com/literature/search?q=${encodeURIComponent(citation.paperId)}&limit=1`,
               {
                 method: 'GET',
                 headers: {
