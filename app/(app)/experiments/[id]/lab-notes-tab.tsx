@@ -296,11 +296,11 @@ export function LabNotesTab({
 
     if (selectedNote && !isCreating) {
       attrs["data-note-id"] = selectedNote.id;
-      attrs["data-note-title"] = selectedNote.title || "Untitled";
+      attrs["data-note-title"] = selectedNote.title || "New Lab Note";
       attrs["data-note-created-at"] = selectedNote.created_at ?? "";
       attrs["data-note-updated-at"] = selectedNote.updated_at ?? "";
     } else if (isCreating) {
-      attrs["data-note-title"] = formData.title.trim() || "Untitled";
+      attrs["data-note-title"] = formData.title.trim() || "New Lab Note";
       attrs["data-note-created-at"] = "";
       attrs["data-note-updated-at"] = "";
     } else {
@@ -823,10 +823,10 @@ export function LabNotesTab({
       .select("title")
       .eq("experiment_id", experimentId);
     const existing = (data || []).map((r) => (r as { title: string }).title);
-    if (!existing.includes("Untitled")) return "Untitled";
+    if (!existing.includes("New Lab Note")) return "New Lab Note";
     let n = 2;
-    while (existing.includes(`Untitled (${n})`)) n++;
-    return `Untitled (${n})`;
+    while (existing.includes(`New Lab Note (${n})`)) n++;
+    return `New Lab Note (${n})`;
   };
 
   const handleNewNote = async () => {
@@ -1122,7 +1122,7 @@ export function LabNotesTab({
                               >
                                 <FileText className="h-4 w-4 shrink-0 text-muted-foreground" />
                                 <p className="min-w-0 truncate font-medium m-0 text-sm">
-                                  {note.title || "Untitled"}
+                                  {note.title || "New Lab Note"}
                                 </p>
                                 <DropdownMenu>
                                   <DropdownMenuTrigger asChild>
@@ -1158,7 +1158,7 @@ export function LabNotesTab({
                       </ul>
                     ) : (
                       <div className="flex flex-col items-center justify-center gap-2 px-2 py-6">
-                        <p className="text-center text-xs text-muted-foreground">No notes yet</p>
+                        <p className="text-center text-xs text-muted-foreground w-3/4">Create your first lab notebook by clicking "+" button</p>
                         <Button
                           onClick={handleNewNote}
                           variant="outline"
@@ -1249,7 +1249,7 @@ export function LabNotesTab({
                             <CardTitle className="text-lg font-semibold text-foreground truncate leading-none">
                               {isCreating
                                 ? "New Lab Note"
-                                : formData.title || "Untitled Lab Note"}
+                                : (!selectedNote ? "Lab Notes" : formData.title || "New Lab Note")}
                             </CardTitle>
                           </div>
                         )}
@@ -1389,28 +1389,41 @@ export function LabNotesTab({
                   className="min-h-0"
                 />
               </CardHeader>
-              <CardContent className="space-y-3 px-4 sm:px-6">
-                {/* Rich Text Editor */}
-                <div>
-                  <TiptapEditor
-                    content={formData.content}
-                    onChange={(content) => {
-                      setFormData({ ...formData, content });
-                      // Trigger auto-save (works for both creation and editing)
-                      debouncedSave(content);
-                    }}
-                    placeholder="Write your lab notes here... Use @ to tag protocols"
-                    title={formData.title || "lab-note"}
-                    minHeight="400px"
-                    showAITools={true}
-                    protocols={availableProtocols.map(p => ({
-                      id: p.id,
-                      name: p.name,
-                      version: p.version,
-                    }))}
-                    toolbarPortalRef={toolbarPortalRef}
-                  />
-                </div>
+              <CardContent className="space-y-3 px-4 sm:px-6 h-full">
+                {!isCreating && !selectedNote ? (
+                  <div className="flex flex-col items-center justify-center h-full min-h-[400px] text-muted-foreground">
+                    <p className="text-lg font-medium mb-2">No note selected</p>
+                    <p className="text-sm text-center max-w-sm mb-6">
+                      Select a note from the sidebar or create your first lab notebook by clicking "+" button
+                    </p>
+                    <Button onClick={handleNewNote}>
+                      <Plus className="mr-2 h-4 w-4" />
+                      Create Note
+                    </Button>
+                  </div>
+                ) : (
+                  /* Rich Text Editor */
+                  <div className="h-full">
+                    <TiptapEditor
+                      content={formData.content}
+                      onChange={(content) => {
+                        setFormData({ ...formData, content });
+                        // Trigger auto-save (works for both creation and editing)
+                        debouncedSave(content);
+                      }}
+                      placeholder="Write your lab notes here... Use @ to tag protocols"
+                      title={formData.title || "lab-note"}
+                      minHeight="400px"
+                      showAITools={true}
+                      protocols={availableProtocols.map(p => ({
+                        id: p.id,
+                        name: p.name,
+                        version: p.version,
+                      }))}
+                      toolbarPortalRef={toolbarPortalRef}
+                    />
+                  </div>
+                )}
               </CardContent>
             </div>
           </div>
