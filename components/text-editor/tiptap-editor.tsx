@@ -432,10 +432,6 @@ export function TiptapEditor({
   const recognitionRef = useRef<any>(null)
   const lastFinalIndexRef = useRef<number>(0)
   const lastInterimTextRef = useRef<string>("")
-  const pageBodyRef = useRef<HTMLDivElement>(null)
-  const scrollContainerRef = useRef<HTMLDivElement>(null)
-  const [pageCount, setPageCount] = useState(1)
-  const [currentPage, setCurrentPage] = useState(1)
 
   // Use ref for protocols so the mention extension always has access to current protocols
   const protocolsRef = useRef<ProtocolItem[]>(protocols)
@@ -449,40 +445,6 @@ export function TiptapEditor({
   useEffect(() => {
     labNotesRef.current = labNotes
   }, [labNotes])
-
-  // Compute page count from content height (A4 page height ≈ 297mm)
-  useEffect(() => {
-    const el = pageBodyRef.current
-    if (!el) return
-    const PAGE_HEIGHT_MM = 297
-    const mmToPx = 96 / 25.4
-    const pageHeightPx = PAGE_HEIGHT_MM * mmToPx
-    const updatePageCount = () => {
-      const contentHeight = el.scrollHeight
-      const count = Math.max(1, Math.ceil(contentHeight / pageHeightPx))
-      setPageCount(count)
-    }
-    updatePageCount()
-    const ro = new ResizeObserver(updatePageCount)
-    ro.observe(el)
-    return () => ro.disconnect()
-  }, [content])
-
-  // Track current page on scroll (for footer "Page X of N")
-  useEffect(() => {
-    const scrollEl = scrollContainerRef.current
-    if (!scrollEl) return
-    const PAGE_HEIGHT_MM = 297
-    const mmToPx = 96 / 25.4
-    const pageHeightPx = PAGE_HEIGHT_MM * mmToPx
-    const onScroll = () => {
-      const page = Math.min(pageCount, Math.max(1, Math.floor(scrollEl.scrollTop / pageHeightPx) + 1))
-      setCurrentPage(page)
-    }
-    scrollEl.addEventListener("scroll", onScroll, { passive: true })
-    onScroll()
-    return () => scrollEl.removeEventListener("scroll", onScroll)
-  }, [pageCount])
 
   const editor = useEditor({
     immediatelyRender: false,
@@ -2581,40 +2543,12 @@ export function TiptapEditor({
           className
         )}
       >
-      {/* Editor Content - A4 page layout */}
+      {/* Editor Content */}
       <div
-        ref={scrollContainerRef}
-        className="overflow-y-auto flex justify-center py-8 px-6 min-h-0 bg-muted/40 dark:bg-muted/30"
+        className="overflow-y-auto px-2 pb-2"
         style={{ minHeight, maxHeight: "calc(100vh - 300px)" }}
       >
-        {/* A4 page container: 210×297mm with margins, paper-like shadow, continuation pages, header & footer */}
-        <div
-          className="a4-page-editor w-full max-w-[210mm] min-h-[297mm] rounded-md relative bg-card shadow-[0_1px_3px_0_rgb(0_0_0_/0.08),0_4px_12px_-2px_rgb(0_0_0_/0.1)] dark:shadow-[0_1px_3px_0_rgb(0_0_0_/0.2),0_4px_12px_-2px_rgb(0_0_0_/0.3)] border border-border"
-          style={{
-            padding: "2cm",
-            backgroundImage: "linear-gradient(to bottom, transparent calc(297mm - 4px), hsl(var(--border)) calc(297mm - 4px), hsl(var(--border)) 297mm)",
-            backgroundSize: "100% 297mm",
-            backgroundRepeat: "repeat-y",
-            backgroundPosition: "0 0",
-          }}
-        >
-          {/* Document header - appears at top of first page */}
-          <header className="a4-page-header flex items-center justify-between border-b border-border pb-2 mb-3 text-xs text-muted-foreground shrink-0">
-            <span className="font-medium text-foreground truncate">{title || "Lab Notes"}</span>
-            <span>{new Date().toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" })}</span>
-          </header>
-
-          {/* Editor content - flows across continuation pages */}
-          <div ref={pageBodyRef} className="a4-page-body relative">
-            <EditorContent editor={editor} />
-          </div>
-
-          {/* Document footer - page number and total pages */}
-          <footer className="a4-page-footer flex items-center justify-between border-t border-border pt-2 mt-4 text-xs text-muted-foreground shrink-0">
-            <span>Lab Notes</span>
-            <span>Page {currentPage} of {pageCount}</span>
-          </footer>
-        </div>
+        <EditorContent editor={editor} />
         <style jsx global>{`
           .ProseMirror ul {
             list-style-type: disc;
@@ -2745,56 +2679,6 @@ export function TiptapEditor({
             mask-composite: exclude;
             animation: rainbow-border 4s linear infinite;
             pointer-events: none;
-          }
-        `}</style>
-        <style jsx global>{`
-          /* A4 page: clearer page boundaries and separator lines */
-          .a4-page-editor {
-            /* Stronger page separator line (override inline if needed for visibility) */
-            --page-separator: hsl(var(--border));
-          }
-          .dark .a4-page-editor {
-            --page-separator: hsl(var(--foreground) / 0.15);
-          }
-          .a4-page-body {
-            min-height: calc(297mm - 6rem);
-          }
-          .a4-page-editor .ProseMirror {
-            min-height: calc(297mm - 6rem - 2rem);
-          }
-          /* Make header/footer borders more visible */
-          .a4-page-header {
-            border-bottom-width: 1px;
-          }
-          .a4-page-footer {
-            border-top-width: 1px;
-          }
-          @media print {
-            .a4-page-editor {
-              max-width: none !important;
-              width: 210mm !important;
-              min-height: auto !important;
-              padding: 2cm !important;
-              box-shadow: none !important;
-              border: none !important;
-              border-radius: 0 !important;
-              background: white !important;
-              background-image: none !important;
-            }
-            .a4-page-header {
-              border-bottom-color: #e5e7eb !important;
-            }
-            .a4-page-footer {
-              border-top-color: #e5e7eb !important;
-            }
-            .a4-page-body,
-            .a4-page-editor .ProseMirror {
-              min-height: 0 !important;
-            }
-            @page {
-              size: A4;
-              margin: 2cm;
-            }
           }
         `}</style>
       </div>
