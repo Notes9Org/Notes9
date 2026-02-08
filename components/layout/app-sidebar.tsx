@@ -578,10 +578,17 @@ export function AppSidebar() {
                   <div className="flex aspect-square size-8 items-center justify-center rounded-lg overflow-hidden">
                     <Image
                       src="/notes9-logo.png"
-                      alt="Notes9"
+                      alt="Notes9 Logo"
                       width={32}
                       height={32}
-                      className="size-8 object-contain"
+                      className="size-8 object-contain dark:hidden"
+                    />
+                    <Image
+                      src="/Dark mode_Notes9_logo.png"
+                      alt="Notes9 Logo"
+                      width={32}
+                      height={32}
+                      className="hidden dark:block size-8 object-contain scale-[1.75]"
                     />
                   </div>
                 </SidebarMenuButton>
@@ -604,10 +611,17 @@ export function AppSidebar() {
                   <div className="flex aspect-square size-8 items-center justify-center rounded-lg overflow-hidden">
                     <Image
                       src="/notes9-logo.png"
-                      alt="Notes9"
+                      alt="Notes9 Logo"
                       width={32}
                       height={32}
-                      className="size-8 object-contain"
+                      className="size-8 object-contain dark:hidden"
+                    />
+                    <Image
+                      src="/Dark mode_Notes9_logo.png"
+                      alt="Notes9 Logo"
+                      width={32}
+                      height={32}
+                      className="hidden dark:block size-8 object-contain scale-[1.75]"
                     />
                   </div>
                   <div className="grid flex-1 text-left text-sm leading-tight min-w-0">
