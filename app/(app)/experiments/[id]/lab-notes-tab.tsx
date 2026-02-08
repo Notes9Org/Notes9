@@ -1286,10 +1286,10 @@ export function LabNotesTab({
                         <FileText className="h-4 w-4 mr-2" />
                         PDF (.pdf)
                       </DropdownMenuItem>
-                      {/* <DropdownMenuItem onClick={downloadAsDOCX}>
+                      <DropdownMenuItem onClick={downloadAsDOCX}>
                         <FileText className="h-4 w-4 mr-2" />
                         Word (.docx)
-                      </DropdownMenuItem> */}
+                      </DropdownMenuItem>
                     </DropdownMenuContent>
                   </DropdownMenu>
                 )}
