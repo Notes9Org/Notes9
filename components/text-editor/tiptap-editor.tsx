@@ -6,7 +6,7 @@ import { Placeholder } from "@tiptap/extension-placeholder"
 import { Link } from "@tiptap/extension-link"
 import { Image } from "@tiptap/extension-image"
 import { Highlight } from "@tiptap/extension-highlight"
-import { TextStyle } from "@tiptap/extension-text-style"
+import { TextStyle, FontFamily, FontSize } from "@tiptap/extension-text-style"
 import { Color } from "@tiptap/extension-color"
 import { TaskList } from "@tiptap/extension-task-list"
 import { TaskItem } from "@tiptap/extension-task-item"
@@ -29,18 +29,13 @@ import {
   Italic,
   Strikethrough,
   Code,
-  Heading1,
-  Heading2,
-  Heading3,
   List,
   ListOrdered,
   ListChecks,
-  Quote,
   Undo,
   Redo,
   Link2,
   Mic,
-  Image as ImageIcon,
   Highlighter,
   Palette,
   Table as TableIcon,
@@ -54,12 +49,19 @@ import {
   Underline as UnderlineIcon,
   Subscript as SubscriptIcon,
   Superscript as SuperscriptIcon,
+  Type,
+  Paintbrush,
+  MessageSquarePlus,
+  IndentDecrease,
+  IndentIncrease,
+  ChevronDown,
 } from "lucide-react"
 import { Extension, mergeAttributes } from "@tiptap/core"
 import { Plugin, PluginKey } from "@tiptap/pm/state"
 import { Decoration, DecorationSet } from "@tiptap/pm/view"
 import { cn } from "@/lib/utils"
 import { useCallback, useEffect, useRef, useState } from "react"
+import { createPortal } from "react-dom"
 // @ts-ignore
 import * as mammoth from "mammoth"
 import { toast } from "sonner"
@@ -125,6 +127,8 @@ interface TiptapEditorProps {
   onAutoSave?: (content: string) => Promise<void>
   protocols?: ProtocolItem[]
   labNotes?: LabNoteItem[]
+  /** When set, the toolbar is rendered into this container (e.g. card header) instead of above the editor. */
+  toolbarPortalRef?: React.RefObject<HTMLDivElement | null>
 }
 
 // Custom Table extension with width/height support
@@ -409,6 +413,7 @@ export function TiptapEditor({
   hideToolbar = false,
   protocols = [],
   labNotes = [],
+  toolbarPortalRef,
 }: TiptapEditorProps & { hideToolbar?: boolean }) {
   const [isAIProcessing, setIsAIProcessing] = useState(false)
   const [isCiteProcessing, setIsCiteProcessing] = useState(false)
@@ -427,6 +432,10 @@ export function TiptapEditor({
   const recognitionRef = useRef<any>(null)
   const lastFinalIndexRef = useRef<number>(0)
   const lastInterimTextRef = useRef<string>("")
+  const pageBodyRef = useRef<HTMLDivElement>(null)
+  const scrollContainerRef = useRef<HTMLDivElement>(null)
+  const [pageCount, setPageCount] = useState(1)
+  const [currentPage, setCurrentPage] = useState(1)
 
   // Use ref for protocols so the mention extension always has access to current protocols
   const protocolsRef = useRef<ProtocolItem[]>(protocols)
@@ -440,6 +449,40 @@ export function TiptapEditor({
   useEffect(() => {
     labNotesRef.current = labNotes
   }, [labNotes])
+
+  // Compute page count from content height (A4 page height ≈ 297mm)
+  useEffect(() => {
+    const el = pageBodyRef.current
+    if (!el) return
+    const PAGE_HEIGHT_MM = 297
+    const mmToPx = 96 / 25.4
+    const pageHeightPx = PAGE_HEIGHT_MM * mmToPx
+    const updatePageCount = () => {
+      const contentHeight = el.scrollHeight
+      const count = Math.max(1, Math.ceil(contentHeight / pageHeightPx))
+      setPageCount(count)
+    }
+    updatePageCount()
+    const ro = new ResizeObserver(updatePageCount)
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [content])
+
+  // Track current page on scroll (for footer "Page X of N")
+  useEffect(() => {
+    const scrollEl = scrollContainerRef.current
+    if (!scrollEl) return
+    const PAGE_HEIGHT_MM = 297
+    const mmToPx = 96 / 25.4
+    const pageHeightPx = PAGE_HEIGHT_MM * mmToPx
+    const onScroll = () => {
+      const page = Math.min(pageCount, Math.max(1, Math.floor(scrollEl.scrollTop / pageHeightPx) + 1))
+      setCurrentPage(page)
+    }
+    scrollEl.addEventListener("scroll", onScroll, { passive: true })
+    onScroll()
+    return () => scrollEl.removeEventListener("scroll", onScroll)
+  }, [pageCount])
 
   const editor = useEditor({
     immediatelyRender: false,
@@ -467,6 +510,8 @@ export function TiptapEditor({
         multicolor: true,
       }),
       TextStyle,
+      FontFamily,
+      FontSize,
       Color,
       TaskList,
       TaskItem.configure({
@@ -1754,15 +1799,11 @@ export function TiptapEditor({
   }
 
   return (
-    <div
-      className={cn(
-        "border border-border rounded-lg bg-card overflow-hidden",
-        className
-      )}
-    >
-      {/* Toolbar */}
-      {!hideToolbar && (
-        <div className="flex items-center gap-1 p-2 border-b border-border flex-wrap bg-muted/30">
+    <>
+      {/* Toolbar - outside the editor card, or portaled to toolbarPortalRef when provided */}
+      {!hideToolbar && (() => {
+        const toolbar = (
+        <div className="box-content flex items-center gap-x-2 gap-y-1.5 p-2 rounded-lg border border-border flex-wrap bg-muted/30 m-2 min-h-9">
           <TooltipProvider delayDuration={300}>
             {/* Undo/Redo */}
             <Tooltip>
@@ -1772,7 +1813,7 @@ export function TiptapEditor({
                   size="sm"
                   onClick={() => editor.chain().focus().undo().run()}
                   disabled={!editor.can().undo()}
-                  className="h-8 w-8 p-0"
+                  className="h-8 w-8 p-0 shrink-0"
                 >
                   <Undo className="h-4 w-4" />
                 </Button>
@@ -1787,7 +1828,7 @@ export function TiptapEditor({
                   size="sm"
                   onClick={() => editor.chain().focus().redo().run()}
                   disabled={!editor.can().redo()}
-                  className="h-8 w-8 p-0"
+                  className="h-8 w-8 p-0 shrink-0"
                 >
                   <Redo className="h-4 w-4" />
                 </Button>
@@ -1795,15 +1836,146 @@ export function TiptapEditor({
               <TooltipContent>Redo</TooltipContent>
             </Tooltip>
 
-            <Separator orientation="vertical" className="h-6 mx-1" />
-
-            {/* Colors */}
+            {/* Paragraph styles - Google Docs style */}
             <DropdownMenu>
               <Tooltip>
                 <TooltipTrigger asChild>
                   <DropdownMenuTrigger asChild>
-                    <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
-                      <Palette className="h-4 w-4" />
+                    <Button variant="ghost" size="sm" className="h-8 gap-1.5 px-2 shrink-0">
+                      <Type className="h-4 w-4 shrink-0" />
+                      <span className="text-xs max-w-[4rem] truncate">
+                        {editor.isActive("heading", { level: 1 }) ? "Heading 1" : editor.isActive("heading", { level: 2 }) ? "Heading 2" : editor.isActive("heading", { level: 3 }) ? "Heading 3" : "Normal text"}
+                      </span>
+                      <ChevronDown className="h-4 w-4 shrink-0 opacity-70" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                </TooltipTrigger>
+                <TooltipContent>Paragraph style</TooltipContent>
+              </Tooltip>
+              <DropdownMenuContent align="start" className="w-40">
+                <DropdownMenuItem onClick={() => editor.chain().focus().setParagraph().run()}>
+                  Normal text
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => editor.chain().focus().toggleHeading({ level: 1 }).run()}>
+                  Heading 1
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()}>
+                  Heading 2
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => editor.chain().focus().toggleHeading({ level: 3 }).run()}>
+                  Heading 3
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+
+            <Separator orientation="vertical" className="h-5 shrink-0 mx-0.5" />
+
+            {/* Font family - Google Docs style */}
+            <DropdownMenu>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="ghost" size="sm" className="h-8 gap-1.5 px-2 min-w-[7rem] justify-between shrink-0">
+                      <span className="text-xs truncate max-w-[5.5rem]" style={{ fontFamily: editor.getAttributes("textStyle").fontFamily || "inherit" }}>
+                        {editor.getAttributes("textStyle").fontFamily || "Default"}
+                      </span>
+                      <ChevronDown className="h-4 w-4 shrink-0 opacity-70" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                </TooltipTrigger>
+                <TooltipContent>Font</TooltipContent>
+              </Tooltip>
+              <DropdownMenuContent align="start" className="w-48 max-h-[16rem] overflow-y-auto">
+                {[
+                  { label: "Default", value: "" },
+                  { label: "Arial", value: "Arial, sans-serif" },
+                  { label: "Times New Roman", value: "'Times New Roman', serif" },
+                  { label: "Georgia", value: "Georgia, serif" },
+                  { label: "Verdana", value: "Verdana, sans-serif" },
+                  { label: "Courier New", value: "'Courier New', monospace" },
+                  { label: "Comic Sans MS", value: "'Comic Sans MS', cursive" },
+                  { label: "Trebuchet MS", value: "'Trebuchet MS', sans-serif" },
+                  { label: "Lucida Sans", value: "'Lucida Sans Unicode', sans-serif" },
+                ].map(({ label, value }) => (
+                  <DropdownMenuItem
+                    key={value || "default"}
+                    onClick={() => (value ? editor.chain().focus().setFontFamily(value).run() : editor.chain().focus().unsetFontFamily().run())}
+                  >
+                    <span style={value ? { fontFamily: value } : undefined}>{label}</span>
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
+
+            {/* Font size - Google Docs style: minus, value, plus */}
+            <div className="flex items-center gap-0 rounded-md border border-border bg-background overflow-hidden h-8 shrink-0">
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-8 w-8 p-0 rounded-none border-r border-border"
+                    onClick={() => {
+                      const current = editor.getAttributes("textStyle").fontSize || "16px";
+                      const num = Math.max(8, parseInt(current, 10) - 1);
+                      editor.chain().focus().setFontSize(`${num}px`).run();
+                    }}
+                  >
+                    <span className="text-sm font-medium">−</span>
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>Decrease font size</TooltipContent>
+              </Tooltip>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="ghost" size="sm" className="h-8 min-w-[2.25rem] px-2 rounded-none text-xs font-normal hover:bg-muted/50">
+                    {(() => {
+                      const fs = editor.getAttributes("textStyle").fontSize || "16px";
+                      return fs.replace("px", "");
+                    })()}
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="start" className="w-24">
+                  {[8, 9, 10, 11, 12, 14, 16, 18, 24, 36].map((n) => (
+                    <DropdownMenuItem
+                      key={n}
+                      onClick={() => editor.chain().focus().setFontSize(`${n}px`).run()}
+                    >
+                      {n}
+                    </DropdownMenuItem>
+                  ))}
+                </DropdownMenuContent>
+              </DropdownMenu>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-8 w-8 p-0 rounded-none border-l border-border"
+                    onClick={() => {
+                      const current = editor.getAttributes("textStyle").fontSize || "16px";
+                      const num = Math.min(96, parseInt(current, 10) + 1);
+                      editor.chain().focus().setFontSize(`${num}px`).run();
+                    }}
+                  >
+                    <span className="text-sm font-medium">+</span>
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>Increase font size</TooltipContent>
+              </Tooltip>
+            </div>
+
+
+
+            <Separator orientation="vertical" className="h-5 shrink-0 mx-0.5" />
+
+            {/* Text Color */}
+            <DropdownMenu>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="ghost" size="sm" className="h-8 w-8 p-0 font-serif text-base font-bold underline decoration-2 underline-offset-1 shrink-0">
+                      A
                     </Button>
                   </DropdownMenuTrigger>
                 </TooltipTrigger>
@@ -1851,7 +2023,7 @@ export function TiptapEditor({
                   size="sm"
                   onClick={() => editor.chain().focus().toggleBold().run()}
                   className={cn(
-                    "h-8 w-8 p-0",
+                    "h-8 w-8 p-0 shrink-0",
                     editor.isActive("bold") && "bg-accent"
                   )}
                 >
@@ -1868,7 +2040,7 @@ export function TiptapEditor({
                   size="sm"
                   onClick={() => editor.chain().focus().toggleItalic().run()}
                   className={cn(
-                    "h-8 w-8 p-0",
+                    "h-8 w-8 p-0 shrink-0",
                     editor.isActive("italic") && "bg-accent"
                   )}
                 >
@@ -1885,7 +2057,7 @@ export function TiptapEditor({
                   size="sm"
                   onClick={() => editor.chain().focus().toggleStrike().run()}
                   className={cn(
-                    "h-8 w-8 p-0",
+                    "h-8 w-8 p-0 shrink-0",
                     editor.isActive("strike") && "bg-accent"
                   )}
                 >
@@ -1902,7 +2074,7 @@ export function TiptapEditor({
                   size="sm"
                   onClick={() => editor.chain().focus().toggleUnderline().run()}
                   className={cn(
-                    "h-8 w-8 p-0",
+                    "h-8 w-8 p-0 shrink-0",
                     editor.isActive("underline") && "bg-accent"
                   )}
                 >
@@ -1912,39 +2084,42 @@ export function TiptapEditor({
               <TooltipContent>Underline</TooltipContent>
             </Tooltip>
 
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="sm"
+            {/* Subscript / Superscript - single dropdown */}
+            <DropdownMenu>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className={cn(
+                        "h-8 w-8 p-0 shrink-0",
+                        (editor.isActive("subscript") || editor.isActive("superscript")) && "bg-accent"
+                      )}
+                    >
+                      <SubscriptIcon className="h-4 w-4" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                </TooltipTrigger>
+                <TooltipContent>Subscript / Superscript</TooltipContent>
+              </Tooltip>
+              <DropdownMenuContent align="start" className="w-40">
+                <DropdownMenuItem
                   onClick={() => (editor.chain().focus() as any).toggleSubscript().run()}
-                  className={cn(
-                    "h-8 w-8 p-0",
-                    editor.isActive("subscript") && "bg-accent"
-                  )}
+                  className={cn(editor.isActive("subscript") && "bg-accent")}
                 >
-                  <SubscriptIcon className="h-4 w-4" />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>Subscript</TooltipContent>
-            </Tooltip>
-
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="sm"
+                  <SubscriptIcon className="h-4 w-4 mr-2" />
+                  Subscript
+                </DropdownMenuItem>
+                <DropdownMenuItem
                   onClick={() => (editor.chain().focus() as any).toggleSuperscript().run()}
-                  className={cn(
-                    "h-8 w-8 p-0",
-                    editor.isActive("superscript") && "bg-accent"
-                  )}
+                  className={cn(editor.isActive("superscript") && "bg-accent")}
                 >
-                  <SuperscriptIcon className="h-4 w-4" />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>Superscript</TooltipContent>
-            </Tooltip>
+                  <SuperscriptIcon className="h-4 w-4 mr-2" />
+                  Superscript
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
 
             <Tooltip>
               <TooltipTrigger asChild>
@@ -1953,7 +2128,7 @@ export function TiptapEditor({
                   size="sm"
                   onClick={() => editor.chain().focus().toggleCode().run()}
                   className={cn(
-                    "h-8 w-8 p-0",
+                    "h-8 w-8 p-0 shrink-0",
                     editor.isActive("code") && "bg-accent"
                   )}
                 >
@@ -1970,7 +2145,7 @@ export function TiptapEditor({
                   size="sm"
                   onClick={() => editor.chain().focus().toggleHighlight().run()}
                   className={cn(
-                    "h-8 w-8 p-0",
+                    "h-8 w-8 p-0 shrink-0",
                     editor.isActive("highlight") && "bg-accent"
                   )}
                 >
@@ -1987,7 +2162,7 @@ export function TiptapEditor({
                   size="sm"
                   onClick={handleSetLink}
                   className={cn(
-                    "h-8 w-8 p-0",
+                    "h-8 w-8 p-0 shrink-0",
                     editor.isActive("link") && "bg-accent"
                   )}
                 >
@@ -1999,16 +2174,11 @@ export function TiptapEditor({
 
             <Tooltip>
               <TooltipTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={handleInsertImage}
-                  className="h-8 w-8 p-0"
-                >
-                  <ImageIcon className="h-4 w-4" />
+                <Button variant="ghost" size="sm" className="h-8 w-8 p-0 shrink-0" onClick={() => toast.info("Comments coming soon")}>
+                  <MessageSquarePlus className="h-4 w-4" />
                 </Button>
               </TooltipTrigger>
-              <TooltipContent>Insert Image</TooltipContent>
+              <TooltipContent>Insert comment</TooltipContent>
             </Tooltip>
 
             <Tooltip>
@@ -2017,7 +2187,7 @@ export function TiptapEditor({
                   variant="ghost"
                   size="sm"
                   onClick={handleFilePicker}
-                  className="h-8 w-8 p-0"
+                  className="h-8 w-8 p-0 shrink-0"
                 >
                   <FileInput className="h-4 w-4" />
                 </Button>
@@ -2027,107 +2197,7 @@ export function TiptapEditor({
               </TooltipContent>
             </Tooltip>
 
-            <Separator orientation="vertical" className="h-6 mx-1" />
-
-            {/* Headings */}
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() =>
-                    editor.chain().focus().toggleHeading({ level: 1 }).run()
-                  }
-                  className={cn(
-                    "h-8 w-8 p-0",
-                    editor.isActive("heading", { level: 1 }) && "bg-accent"
-                  )}
-                >
-                  <Heading1 className="h-4 w-4" />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>Heading 1</TooltipContent>
-            </Tooltip>
-
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() =>
-                    editor.chain().focus().toggleHeading({ level: 2 }).run()
-                  }
-                  className={cn(
-                    "h-8 w-8 p-0",
-                    editor.isActive("heading", { level: 2 }) && "bg-accent"
-                  )}
-                >
-                  <Heading2 className="h-4 w-4" />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>Heading 2</TooltipContent>
-            </Tooltip>
-
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() =>
-                    editor.chain().focus().toggleHeading({ level: 3 }).run()
-                  }
-                  className={cn(
-                    "h-8 w-8 p-0",
-                    editor.isActive("heading", { level: 3 }) && "bg-accent"
-                  )}
-                >
-                  <Heading3 className="h-4 w-4" />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>Heading 3</TooltipContent>
-            </Tooltip>
-
-            <Separator orientation="vertical" className="h-6 mx-1" />
-
-            {/* Lists */}
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() =>
-                    editor.chain().focus().toggleBulletList().run()
-                  }
-                  className={cn(
-                    "h-8 w-8 p-0",
-                    editor.isActive("bulletList") && "bg-accent"
-                  )}
-                >
-                  <List className="h-4 w-4" />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>Bullet List</TooltipContent>
-            </Tooltip>
-
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() =>
-                    editor.chain().focus().toggleOrderedList().run()
-                  }
-                  className={cn(
-                    "h-8 w-8 p-0",
-                    editor.isActive("orderedList") && "bg-accent"
-                  )}
-                >
-                  <ListOrdered className="h-4 w-4" />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>Numbered List</TooltipContent>
-            </Tooltip>
-
+            {/* Checklist */}
             <Tooltip>
               <TooltipTrigger asChild>
                 <Button
@@ -2135,47 +2205,78 @@ export function TiptapEditor({
                   size="sm"
                   onClick={() => editor.chain().focus().toggleTaskList().run()}
                   className={cn(
-                    "h-8 w-8 p-0",
+                    "h-8 w-8 p-0 shrink-0",
                     editor.isActive("taskList") && "bg-accent"
                   )}
                 >
                   <ListChecks className="h-4 w-4" />
                 </Button>
               </TooltipTrigger>
-              <TooltipContent>Task List</TooltipContent>
+              <TooltipContent>Checklist</TooltipContent>
             </Tooltip>
 
-            <Separator orientation="vertical" className="h-6 mx-1" />
-
-            {/* Block Elements */}
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => {
-                    editor.chain().focus().toggleBlockquote().run();
-                    const { from, to } = editor.state.selection;
-                    // wrap current line/selection in quotes
-                    editor
-                      .chain()
-                      .focus()
-                      .insertContentAt(
-                        { from, to },
-                        `"${editor.state.doc.textBetween(from, to, " ")}"`
-                      )
-                      .run();
-                  }}
-                  className={cn(
-                    "h-8 w-8 p-0",
-                    editor.isActive("blockquote") && "bg-accent"
-                  )}
+            {/* Bullet list & Numbered list - single dropdown */}
+            <DropdownMenu>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className={cn(
+                        "h-8 w-8 p-0 shrink-0",
+                        (editor.isActive("bulletList") || editor.isActive("orderedList")) && "bg-accent"
+                      )}
+                    >
+                      <List className="h-4 w-4" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                </TooltipTrigger>
+                <TooltipContent>List style</TooltipContent>
+              </Tooltip>
+              <DropdownMenuContent align="start" className="w-40">
+                <DropdownMenuItem
+                  onClick={() => editor.chain().focus().toggleBulletList().run()}
+                  className={cn(editor.isActive("bulletList") && "bg-accent")}
                 >
-                  <Quote className="h-4 w-4" />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>Blockquote</TooltipContent>
-            </Tooltip>
+                  <List className="h-4 w-4 mr-2" />
+                  Bullet list
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onClick={() => editor.chain().focus().toggleOrderedList().run()}
+                  className={cn(editor.isActive("orderedList") && "bg-accent")}
+                >
+                  <ListOrdered className="h-4 w-4 mr-2" />
+                  Numbered list
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+
+            {/* Indent - single dropdown */}
+            <DropdownMenu>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="ghost" size="sm" className="h-8 w-8 p-0 shrink-0">
+                      <IndentIncrease className="h-4 w-4" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                </TooltipTrigger>
+                <TooltipContent>Indent</TooltipContent>
+              </Tooltip>
+              <DropdownMenuContent align="start" className="w-40">
+                <DropdownMenuItem onClick={() => {}}>
+                  <IndentDecrease className="h-4 w-4 mr-2" />
+                  Decrease indent
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => {}}>
+                  <IndentIncrease className="h-4 w-4 mr-2" />
+                  Increase indent
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+
+            <Separator orientation="vertical" className="h-5 shrink-0 mx-0.5" />
 
             <DropdownMenu
               open={tableMenuOpen}
@@ -2195,7 +2296,7 @@ export function TiptapEditor({
               <Tooltip>
                 <TooltipTrigger asChild>
                   <DropdownMenuTrigger asChild>
-                    <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
+                    <Button variant="ghost" size="sm" className="h-8 w-8 p-0 shrink-0">
                       <TableIcon className="h-4 w-4" />
                     </Button>
                   </DropdownMenuTrigger>
@@ -2254,92 +2355,71 @@ export function TiptapEditor({
               </DropdownMenuContent>
             </DropdownMenu>
 
-            <Separator orientation="vertical" className="h-6 mx-1" />
+            <Separator orientation="vertical" className="h-5 shrink-0 mx-0.5" />
 
-            {/* Chemistry Tools */}
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="sm"
+            {/* Chemistry & Equations - single dropdown */}
+            <DropdownMenu>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="ghost" size="sm" className="h-8 w-8 p-0 shrink-0">
+                      <Sigma className="h-4 w-4" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                </TooltipTrigger>
+                <TooltipContent>Chemistry & Equations</TooltipContent>
+              </Tooltip>
+              <DropdownMenuContent align="start" className="w-56">
+                <DropdownMenuItem
                   onClick={() => {
                     const { from, to } = editor.state.selection;
-                    const selectedText = editor.state.doc.textBetween(
-                      from,
-                      to,
-                      " "
-                    );
+                    const selectedText = editor.state.doc.textBetween(from, to, " ");
                     if (selectedText) {
                       const formatted = formatChemicalFormula(selectedText);
-                      editor
-                        .chain()
-                        .focus()
-                        .deleteRange({ from, to })
-                        .insertContent(formatted)
-                        .run();
+                      editor.chain().focus().deleteRange({ from, to }).insertContent(formatted).run();
                     }
                   }}
-                  className="h-8 w-8 p-0"
                 >
-                  <FlaskConical className="h-4 w-4" />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>Format Chemical Formula</TooltipContent>
-            </Tooltip>
-
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="sm"
+                  <FlaskConical className="h-4 w-4 mr-2" />
+                  Chemical Formula
+                </DropdownMenuItem>
+                <DropdownMenuItem
                   onClick={() => {
-                    const { from, to } = editor.state.selection
+                    const { from, to } = editor.state.selection;
                     if (from === to) {
-                      editor.chain().focus().insertContent('$ $').run()
-                      editor.chain().focus().setTextSelection(from + 1).run()
+                      editor.chain().focus().insertContent("$ $").run();
+                      editor.chain().focus().setTextSelection(from + 1).run();
                     } else {
-                      const text = editor.state.doc.textBetween(from, to, ' ')
-                      editor.chain().focus().deleteRange({ from, to }).insertContent(`$${text}$`).run()
+                      const text = editor.state.doc.textBetween(from, to, " ");
+                      editor.chain().focus().deleteRange({ from, to }).insertContent(`$${text}$`).run();
                     }
                   }}
-                  className="h-8 w-8 p-0"
                 >
-                  <Sigma className="h-4 w-4" />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>Insert Equation (Inline: $...$)</TooltipContent>
-            </Tooltip>
-
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="sm"
+                  <Sigma className="h-4 w-4 mr-2" />
+                  Inline Equation
+                </DropdownMenuItem>
+                <DropdownMenuItem
                   onClick={() => {
-                    const { from, to } = editor.state.selection
+                    const { from, to } = editor.state.selection;
                     if (from === to) {
-                      editor.chain().focus().insertContent('$$\n\n$$').run()
-                      editor.chain().focus().setTextSelection(from + 3).run()
+                      editor.chain().focus().insertContent("$$\n\n$$").run();
+                      editor.chain().focus().setTextSelection(from + 3).run();
                     } else {
-                      const text = editor.state.doc.textBetween(from, to, ' ')
-                      editor.chain().focus().deleteRange({ from, to }).insertContent(`$$\n${text}\n$$`).run()
+                      const text = editor.state.doc.textBetween(from, to, " ");
+                      editor.chain().focus().deleteRange({ from, to }).insertContent(`$$\n${text}\n$$`).run();
                     }
                   }}
-                  className="h-8 w-8 p-0"
                 >
-                  <div className="relative">
-                    <Sigma className="h-4 w-4" />
-                    <div className="absolute -bottom-1 -right-1 text-[8px] font-bold">2</div>
-                  </div>
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>Insert Equation (Block: $$...$$)</TooltipContent>
-            </Tooltip>
+                  <Sigma className="h-4 w-4 mr-2" />
+                  Equation Block
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
 
             {/* AI Tools */}
             {showAITools && (
               <>
-                <Separator orientation="vertical" className="h-6 mx-1" />
+                <Separator orientation="vertical" className="h-5 shrink-0 mx-0.5" />
 
                 {/* Speech to text */}
                 <Tooltip>
@@ -2347,7 +2427,7 @@ export function TiptapEditor({
                     <Button
                       variant={isListening ? "secondary" : "ghost"}
                       size="sm"
-                      className="h-8 w-8 p-0"
+                      className="h-8 w-8 p-0 shrink-0"
                       onClick={
                         isListening ? stopSpeechToText : startSpeechToText
                       }
@@ -2491,16 +2571,50 @@ export function TiptapEditor({
 
 
         </div>
+        );
+        return toolbarPortalRef?.current ? createPortal(toolbar, toolbarPortalRef.current) : toolbar;
+      })()}
 
-      )
-      }
-
-      {/* Editor Content */}
       <div
-        className="overflow-y-auto"
+        className={cn(
+          "border border-border rounded-lg bg-card overflow-hidden",
+          className
+        )}
+      >
+      {/* Editor Content - A4 page layout */}
+      <div
+        ref={scrollContainerRef}
+        className="overflow-y-auto flex justify-center py-8 px-6 min-h-0 bg-muted/40 dark:bg-muted/30"
         style={{ minHeight, maxHeight: "calc(100vh - 300px)" }}
       >
-        <EditorContent editor={editor} />
+        {/* A4 page container: 210×297mm with margins, paper-like shadow, continuation pages, header & footer */}
+        <div
+          className="a4-page-editor w-full max-w-[210mm] min-h-[297mm] rounded-md relative bg-card shadow-[0_1px_3px_0_rgb(0_0_0_/0.08),0_4px_12px_-2px_rgb(0_0_0_/0.1)] dark:shadow-[0_1px_3px_0_rgb(0_0_0_/0.2),0_4px_12px_-2px_rgb(0_0_0_/0.3)] border border-border"
+          style={{
+            padding: "2cm",
+            backgroundImage: "linear-gradient(to bottom, transparent calc(297mm - 4px), hsl(var(--border)) calc(297mm - 4px), hsl(var(--border)) 297mm)",
+            backgroundSize: "100% 297mm",
+            backgroundRepeat: "repeat-y",
+            backgroundPosition: "0 0",
+          }}
+        >
+          {/* Document header - appears at top of first page */}
+          <header className="a4-page-header flex items-center justify-between border-b border-border pb-2 mb-3 text-xs text-muted-foreground shrink-0">
+            <span className="font-medium text-foreground truncate">{title || "Lab Notes"}</span>
+            <span>{new Date().toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" })}</span>
+          </header>
+
+          {/* Editor content - flows across continuation pages */}
+          <div ref={pageBodyRef} className="a4-page-body relative">
+            <EditorContent editor={editor} />
+          </div>
+
+          {/* Document footer - page number and total pages */}
+          <footer className="a4-page-footer flex items-center justify-between border-t border-border pt-2 mt-4 text-xs text-muted-foreground shrink-0">
+            <span>Lab Notes</span>
+            <span>Page {currentPage} of {pageCount}</span>
+          </footer>
+        </div>
         <style jsx global>{`
           .ProseMirror ul {
             list-style-type: disc;
@@ -2633,6 +2747,56 @@ export function TiptapEditor({
             pointer-events: none;
           }
         `}</style>
+        <style jsx global>{`
+          /* A4 page: clearer page boundaries and separator lines */
+          .a4-page-editor {
+            /* Stronger page separator line (override inline if needed for visibility) */
+            --page-separator: hsl(var(--border));
+          }
+          .dark .a4-page-editor {
+            --page-separator: hsl(var(--foreground) / 0.15);
+          }
+          .a4-page-body {
+            min-height: calc(297mm - 6rem);
+          }
+          .a4-page-editor .ProseMirror {
+            min-height: calc(297mm - 6rem - 2rem);
+          }
+          /* Make header/footer borders more visible */
+          .a4-page-header {
+            border-bottom-width: 1px;
+          }
+          .a4-page-footer {
+            border-top-width: 1px;
+          }
+          @media print {
+            .a4-page-editor {
+              max-width: none !important;
+              width: 210mm !important;
+              min-height: auto !important;
+              padding: 2cm !important;
+              box-shadow: none !important;
+              border: none !important;
+              border-radius: 0 !important;
+              background: white !important;
+              background-image: none !important;
+            }
+            .a4-page-header {
+              border-bottom-color: #e5e7eb !important;
+            }
+            .a4-page-footer {
+              border-top-color: #e5e7eb !important;
+            }
+            .a4-page-body,
+            .a4-page-editor .ProseMirror {
+              min-height: 0 !important;
+            }
+            @page {
+              size: A4;
+              margin: 2cm;
+            }
+          }
+        `}</style>
       </div>
 
       {/* AI Processing Indicator */}
@@ -2646,6 +2810,7 @@ export function TiptapEditor({
           </div>
         )
       }
+      </div>
 
       {/* Citation Selection Modal */}
       <Dialog open={citationModalOpen} onOpenChange={setCitationModalOpen}>
@@ -2798,6 +2963,6 @@ export function TiptapEditor({
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </div >
+    </>
   );
 }
