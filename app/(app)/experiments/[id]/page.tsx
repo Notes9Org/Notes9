@@ -141,42 +141,46 @@ export default async function ExperimentDetailPage({
 
 
 
-      {/* Main Content Tabs */}
-      <Tabs defaultValue={initialTab} className="flex flex-col gap-3 min-h-0 flex-1">
+      <Tabs id="experiment-tabs" defaultValue={initialTab} className="flex flex-col gap-3 min-h-0 flex-1">
         <TabsList className="flex flex-wrap gap-1 bg-muted/10 p-1 rounded-md">
           <TabsTrigger
             value="overview"
+            id="tab-trigger-overview"
             className="px-2.5 py-1.25 rounded-md text-[12px] font-medium text-muted-foreground data-[state=active]:bg-foreground data-[state=active]:text-background transition-colors"
           >
             Overview
           </TabsTrigger>
           <TabsTrigger
             value="protocol"
+            id="tab-trigger-protocol"
             className="px-2.5 py-1.25 rounded-md text-[12px] font-medium text-muted-foreground data-[state=active]:bg-foreground data-[state=active]:text-background transition-colors"
           >
             Protocol & Assays
           </TabsTrigger>
           <TabsTrigger
             value="samples"
+            id="tab-trigger-samples"
             className="px-2.5 py-1.25 rounded-md text-[12px] font-medium text-muted-foreground data-[state=active]:bg-foreground data-[state=active]:text-background transition-colors"
           >
             Samples
           </TabsTrigger>
           <TabsTrigger
             value="data"
+            id="tab-trigger-data"
             className="px-2.5 py-1.25 rounded-md text-[12px] font-medium text-muted-foreground data-[state=active]:bg-foreground data-[state=active]:text-background transition-colors"
           >
             Data & Files
           </TabsTrigger>
           <TabsTrigger
             value="notes"
+            id="tab-trigger-notes"
             className="px-2.5 py-1.25 rounded-md text-[12px] font-medium text-muted-foreground data-[state=active]:bg-foreground data-[state=active]:text-background transition-colors"
           >
             Lab Notes
           </TabsTrigger>
         </TabsList>
 
-        <TabsContent value="overview" className="space-y-4">
+        <TabsContent value="overview" id="tab-content-overview" className="space-y-4">
           <Card>
             <CardHeader>
               <CardTitle className="text-foreground">Experiment Description</CardTitle>
@@ -226,7 +230,7 @@ export default async function ExperimentDetailPage({
           </div>
         </TabsContent>
 
-        <TabsContent value="protocol" className="space-y-4">
+        <TabsContent value="protocol" id="tab-content-protocol" className="space-y-4">
           <div className="flex items-center justify-between">
             <div>
               <h3 className="text-lg font-semibold">Linked Protocols</h3>
@@ -264,7 +268,7 @@ export default async function ExperimentDetailPage({
           )}
         </TabsContent>
 
-        <TabsContent value="samples" className="space-y-4">
+        <TabsContent value="samples" id="tab-content-samples" className="space-y-4">
           <Card>
             <CardHeader>
               <CardTitle className="text-foreground">Sample Inventory</CardTitle>
@@ -310,11 +314,11 @@ export default async function ExperimentDetailPage({
           </Card>
         </TabsContent>
 
-        <TabsContent value="data" className="space-y-4">
+        <TabsContent value="data" id="tab-content-data" className="space-y-4">
           <DataFilesTab experimentId={id} />
         </TabsContent>
 
-        <TabsContent value="notes" className="flex flex-1 flex-col min-h-[60vh] mt-2 data-[state=active]:flex">
+        <TabsContent value="notes" id="tab-content-notes" className="flex flex-1 flex-col min-h-[60vh] mt-2 data-[state=active]:flex">
           <LabNotesTab experimentId={id} experimentName={experiment.name} projectName={experiment.project} projectId={experiment.projectId} />
         </TabsContent>
       </Tabs>

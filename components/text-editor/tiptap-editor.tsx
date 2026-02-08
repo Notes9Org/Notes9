@@ -1,6 +1,10 @@
 "use client"
 
+// @ts-ignore
 import { useEditor, EditorContent } from "@tiptap/react"
+// @ts-ignore
+import { BubbleMenu } from "@tiptap/react/menus"
+// @ts-ignore
 import { StarterKit } from "@tiptap/starter-kit"
 import { Placeholder } from "@tiptap/extension-placeholder"
 import { Link } from "@tiptap/extension-link"
@@ -21,6 +25,7 @@ import { Superscript } from "@tiptap/extension-superscript"
 import Mention from "@tiptap/extension-mention"
 import { createProtocolSuggestion, ProtocolItem, ProtocolMention } from "./extensions/protocol-mention"
 import { createLabNoteSuggestion, LabNoteItem, LabNoteMention } from "./extensions/labnote-mention"
+
 import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
 import { Input } from "@/components/ui/input"
@@ -55,8 +60,10 @@ import {
   IndentDecrease,
   IndentIncrease,
   ChevronDown,
+  Trash2,
+  X,
 } from "lucide-react"
-import { Extension, mergeAttributes } from "@tiptap/core"
+import { Extension, Mark, mergeAttributes } from "@tiptap/core"
 import { Plugin, PluginKey } from "@tiptap/pm/state"
 import { Decoration, DecorationSet } from "@tiptap/pm/view"
 import { cn } from "@/lib/utils"
@@ -401,6 +408,255 @@ const TableHandleExtension = Extension.create({
   },
 })
 
+export interface IndentOptions {
+  types: string[];
+  indentLevels: number[];
+  defaultIndentLevel: number;
+}
+
+declare module '@tiptap/core' {
+  interface Commands<ReturnType> {
+    indent: {
+      setIndent: () => ReturnType;
+      unsetIndent: () => ReturnType;
+    };
+  }
+}
+
+export const Indent = Extension.create<IndentOptions>({
+  name: 'indent',
+
+  addOptions() {
+    return {
+      types: ['paragraph', 'heading', 'blockquote'],
+      indentLevels: [0, 30, 60, 90, 120, 150, 180, 210],
+      defaultIndentLevel: 0,
+    };
+  },
+
+  addGlobalAttributes() {
+    return [
+      {
+        types: this.options.types,
+        attributes: {
+          indent: {
+            default: this.options.defaultIndentLevel,
+            renderHTML: (attributes) => {
+              if (!attributes.indent || attributes.indent === 0) {
+                return {};
+              }
+              return {
+                style: `margin-left: ${attributes.indent}px`,
+              };
+            },
+            parseHTML: (element) => {
+              const left = element.style.marginLeft || element.style.paddingLeft;
+              const value = parseInt(left, 10);
+              return value && value > 0 ? value : 0;
+            },
+          },
+        },
+      },
+    ];
+  },
+
+  addCommands() {
+    return {
+      setIndent:
+        () =>
+          ({ tr, state, dispatch, editor }) => {
+            const { selection } = state;
+            const { from, to } = selection;
+
+            if (
+              editor.isActive('bulletList') ||
+              editor.isActive('orderedList') ||
+              editor.isActive('taskList')
+            ) {
+              return editor.chain().sinkListItem('listItem').run();
+            }
+
+            tr.doc.nodesBetween(from, to, (node, pos) => {
+              if (this.options.types.includes(node.type.name)) {
+                const indent = node.attrs.indent || 0;
+                const nextLevel =
+                  this.options.indentLevels.find((level) => level > indent) || indent;
+
+                if (nextLevel !== indent) {
+                  tr.setNodeMarkup(pos, undefined, {
+                    ...node.attrs,
+                    indent: nextLevel,
+                  });
+                }
+              }
+            });
+
+            if (dispatch) {
+              dispatch(tr);
+              return true;
+            }
+            return false;
+          },
+      unsetIndent:
+        () =>
+          ({ tr, state, dispatch, editor }) => {
+            const { selection } = state;
+            const { from, to } = selection;
+
+            if (
+              editor.isActive('bulletList') ||
+              editor.isActive('orderedList') ||
+              editor.isActive('taskList')
+            ) {
+              return editor.chain().liftListItem('listItem').run();
+            }
+
+            tr.doc.nodesBetween(from, to, (node, pos) => {
+              if (this.options.types.includes(node.type.name)) {
+                const indent = node.attrs.indent || 0;
+                const prevLevel =
+                  [...this.options.indentLevels]
+                    .reverse()
+                    .find((level) => level < indent) || 0;
+
+                if (prevLevel !== indent) {
+                  tr.setNodeMarkup(pos, undefined, {
+                    ...node.attrs,
+                    indent: prevLevel,
+                  });
+                }
+              }
+            });
+
+            if (dispatch) {
+              dispatch(tr);
+              return true;
+            }
+            return false;
+          },
+    };
+  },
+
+  addKeyboardShortcuts() {
+    return {
+      Tab: () => this.editor.commands.setIndent(),
+      'Shift-Tab': () => this.editor.commands.unsetIndent(),
+    };
+  },
+});
+
+export interface CommentOptions {
+  HTMLAttributes: Record<string, any>;
+}
+
+declare module '@tiptap/core' {
+  interface Commands<ReturnType> {
+    comment: {
+      setComment: (attributes: { author: string; content: string; createdAt?: number }) => ReturnType;
+      unsetComment: () => ReturnType;
+    };
+  }
+}
+
+export const Comment = Mark.create<CommentOptions>({
+  name: 'comment',
+
+  addOptions() {
+    return {
+      HTMLAttributes: {
+        class: 'comment-mark',
+      },
+    };
+  },
+
+  addAttributes() {
+    return {
+      id: {
+        default: null,
+        parseHTML: (element: HTMLElement) => element.getAttribute('data-id'),
+        renderHTML: (attributes: Record<string, any>) => {
+          if (!attributes.id) {
+            return {};
+          }
+          return {
+            'data-id': attributes.id,
+          };
+        },
+      },
+      author: {
+        default: null,
+        parseHTML: (element: HTMLElement) => element.getAttribute('data-author'),
+        renderHTML: (attributes: Record<string, any>) => {
+          if (!attributes.author) {
+            return {};
+          }
+          return {
+            'data-author': attributes.author,
+          };
+        },
+      },
+      createdAt: {
+        default: null,
+        parseHTML: (element: HTMLElement) => element.getAttribute('data-created-at'),
+        renderHTML: (attributes: Record<string, any>) => {
+          if (!attributes.createdAt) {
+            return {};
+          }
+          return {
+            'data-created-at': attributes.createdAt,
+          };
+        },
+      },
+      content: {
+        default: null,
+        parseHTML: (element: HTMLElement) => element.getAttribute('data-content'),
+        renderHTML: (attributes: Record<string, any>) => {
+          if (!attributes.content) {
+            return {};
+          }
+          return {
+            'data-content': attributes.content,
+          };
+        },
+      },
+    };
+  },
+
+  parseHTML() {
+    return [
+      {
+        tag: 'span[data-comment]',
+        getAttrs: (element) => !!(element as HTMLElement).getAttribute('data-comment') && null,
+      },
+    ];
+  },
+
+  renderHTML({ HTMLAttributes }: { HTMLAttributes: Record<string, any> }) {
+    return ['span', mergeAttributes(this.options.HTMLAttributes, HTMLAttributes, { 'data-comment': '' }), 0];
+  },
+
+  addCommands() {
+    console.log("Comment extension addCommands called");
+    return {
+      setComment:
+        (attributes: any) =>
+          ({ commands }: { commands: any }) => {
+            const id = `comment-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+            return commands.setMark(this.name, {
+              ...attributes,
+              id,
+              createdAt: attributes.createdAt || Date.now(),
+            });
+          },
+      unsetComment:
+        () =>
+          ({ commands }: { commands: any }) => {
+            return commands.unsetMark(this.name);
+          },
+    };
+  },
+});
+
 export function TiptapEditor({
   content = "",
   onChange,
@@ -429,6 +685,8 @@ export function TiptapEditor({
   const [citationInsertPosition, setCitationInsertPosition] = useState<number>(0)
   const [citationMetadata, setCitationMetadata] = useState<Map<number, CitationMetadata>>(new Map())
   const [selectedCitationStyle, setSelectedCitationStyle] = useState<'APA' | 'MLA' | 'Chicago' | 'Harvard' | 'IEEE' | 'Vancouver'>('APA')
+  const [isCommenting, setIsCommenting] = useState(false)
+  const [commentText, setCommentText] = useState("")
   const recognitionRef = useRef<any>(null)
   const lastFinalIndexRef = useRef<number>(0)
   const lastInterimTextRef = useRef<string>("")
@@ -445,6 +703,8 @@ export function TiptapEditor({
   useEffect(() => {
     labNotesRef.current = labNotes
   }, [labNotes])
+
+
 
   const editor = useEditor({
     immediatelyRender: false,
@@ -511,6 +771,8 @@ export function TiptapEditor({
           return `#${node.attrs.label ?? node.attrs.id}`
         },
       }),
+      Indent,
+      Comment,
     ],
     content,
     editable,
@@ -790,7 +1052,7 @@ export function TiptapEditor({
 
     try {
       setIsCiteProcessing(true)
-      
+
       // Call the literature search API with limit=3
       const response = await fetch(
         `${process.env.NEXT_PUBLIC_AI_SERVICE_URL || 'http://13.221.90.39:8000'}/literature/search?q=${encodeURIComponent(selectedText)}&limit=3`,
@@ -839,11 +1101,11 @@ export function TiptapEditor({
     // Get all citation links in the document with their positions
     const html = editor.getHTML()
     const citations: { pos: number; number: number; url: string }[] = []
-    
+
     // Find all existing citations with their positions
     const citationRegex = /<a[^>]*href="([^"]*)"[^>]*>\[(\d+)\]<\/a>/g
     let match
-    
+
     while ((match = citationRegex.exec(html)) !== null) {
       const citationNumber = parseInt(match[2])
       const url = match[1]
@@ -872,7 +1134,7 @@ export function TiptapEditor({
 
     // Combine and sort all citations by position
     const allCitations = [...citations, ...newCitations].sort((a, b) => a.pos - b.pos)
-    
+
     // Renumber all citations sequentially
     allCitations.forEach((citation, index) => {
       citation.number = index + 1
@@ -901,18 +1163,18 @@ export function TiptapEditor({
     setTimeout(() => {
       const updatedHtml = editor.getHTML()
       let newHtml = updatedHtml
-      
+
       // Replace all citation numbers with their new sequential numbers
       const allCitationMatches = Array.from(updatedHtml.matchAll(/<a([^>]*href="[^"]*"[^>]*)>\[(\d+)\]<\/a>/g))
-      
+
       // Sort by position to maintain order
       const citationMap = new Map<string, number>()
       let counter = 1
-      
+
       allCitationMatches.forEach((match) => {
         const fullMatch = match[0]
         const attributes = match[1]
-        
+
         if (!citationMap.has(fullMatch)) {
           citationMap.set(fullMatch, counter)
           const newCitation = `<a${attributes}>[${counter}]</a>`
@@ -920,13 +1182,13 @@ export function TiptapEditor({
           counter++
         }
       })
-      
+
       // Update the editor content with renumbered citations
       if (newHtml !== updatedHtml) {
         editor.commands.setContent(newHtml)
       }
     }, 100)
-    
+
     // Close modal and reset
     setCitationModalOpen(false)
     setFoundPapers([])
@@ -947,36 +1209,36 @@ export function TiptapEditor({
 
   const formatCitation = useCallback((metadata: CitationMetadata, style: string): string => {
     const { authors, year, title, journal, url } = metadata
-    const authorStr = authors && authors.length > 0 
-      ? authors.length === 1 
+    const authorStr = authors && authors.length > 0
+      ? authors.length === 1
         ? authors[0]
         : authors.length === 2
           ? `${authors[0]} & ${authors[1]}`
           : `${authors[0]} et al.`
       : 'Unknown Author'
-    
+
     const yearStr = year && year > 0 ? year.toString() : 'n.d.'
-    
+
     switch (style) {
       case 'APA':
         return `${authorStr} (${yearStr}). ${title}. ${journal ? `<em>${journal}</em>. ` : ''}${url ? `Retrieved from ${url}` : ''}`
-      
+
       case 'MLA':
         return `${authorStr}. "${title}." ${journal ? `<em>${journal}</em>, ` : ''}${yearStr}. ${url ? `Web. ${url}` : ''}`
-      
+
       case 'Chicago':
         return `${authorStr}. "${title}." ${journal ? `<em>${journal}</em> ` : ''}(${yearStr}). ${url || ''}`
-      
+
       case 'Harvard':
         return `${authorStr}, ${yearStr}. ${title}. ${journal ? `<em>${journal}</em>. ` : ''}${url ? `Available at: ${url}` : ''}`
-      
+
       case 'IEEE':
         return `${authorStr}, "${title}," ${journal ? `<em>${journal}</em>, ` : ''}${yearStr}. ${url ? `[Online]. Available: ${url}` : ''}`
-      
+
       case 'Vancouver':
         // Vancouver style: Author(s). Title. Journal. Year;volume(issue):pages.
         return `${authorStr}. ${title}. ${journal ? `${journal}. ` : ''}${yearStr}. ${url ? `Available from: ${url}` : ''}`
-      
+
       default:
         return `${authorStr} (${yearStr}). ${title}. ${url || ''}`
     }
@@ -984,21 +1246,21 @@ export function TiptapEditor({
 
   const handleGenerateBibliography = useCallback(async () => {
     if (!editor) return
-    
+
     // Extract all citation links from the document
     const html = editor.getHTML()
-    
+
     // Parse citations more flexibly - attributes can be in any order
     const citations: { number: number; url: string; paperId: string; title: string; source: string; authors: string[]; year: number; journal: string }[] = []
-    
+
     // Find all citation links
     const linkRegex = /<a[^>]*>\[(\d+)\]<\/a>/g
     let match
-    
+
     while ((match = linkRegex.exec(html)) !== null) {
       const fullTag = match[0]
       const citationNumber = parseInt(match[1])
-      
+
       // Extract attributes from the tag
       const hrefMatch = fullTag.match(/href="([^"]*)"/)
       const paperIdMatch = fullTag.match(/data-paper-id="([^"]*)"/)
@@ -1007,7 +1269,7 @@ export function TiptapEditor({
       const paperAuthorsMatch = fullTag.match(/data-paper-authors="([^"]*)"/)
       const paperYearMatch = fullTag.match(/data-paper-year="([^"]*)"/)
       const paperJournalMatch = fullTag.match(/data-paper-journal="([^"]*)"/)
-      
+
       if (hrefMatch) {
         // Parse authors from JSON
         let authors: string[] = []
@@ -1019,7 +1281,7 @@ export function TiptapEditor({
             console.error('Failed to parse authors:', e)
           }
         }
-        
+
         const citation = {
           number: citationNumber,
           url: hrefMatch[1],
@@ -1030,12 +1292,12 @@ export function TiptapEditor({
           year: paperYearMatch ? parseInt(paperYearMatch[1]) || 0 : 0,
           journal: paperJournalMatch ? paperJournalMatch[1].replace(/&quot;/g, '"') : ''
         }
-        
+
         console.log('Extracted citation data:', citation) // Debug log
         citations.push(citation)
       }
     }
-    
+
     // Check if there are any citations
     if (citations.length === 0) {
       toast.error('No citations found', {
@@ -1044,13 +1306,13 @@ export function TiptapEditor({
       })
       return
     }
-    
+
     console.log('Found citations:', citations) // Debug log
-    
+
     // Fetch metadata for each citation using the paper ID
     setIsCiteProcessing(true)
     const citationMetadataMap = new Map<number, CitationMetadata>()
-    
+
     try {
       for (const citation of citations) {
         try {
@@ -1065,11 +1327,11 @@ export function TiptapEditor({
                 },
               }
             )
-            
+
             if (response.ok) {
               const data = await response.json()
               console.log(`API response for citation ${citation.number}:`, data) // Debug log
-              
+
               if (data.papers && data.papers.length > 0) {
                 const paper = data.papers[0]
                 citationMetadataMap.set(citation.number, {
@@ -1086,7 +1348,7 @@ export function TiptapEditor({
               }
             }
           }
-          
+
           // Fallback: use stored data from citation attributes
           citationMetadataMap.set(citation.number, {
             citationNumber: citation.number,
@@ -1113,11 +1375,11 @@ export function TiptapEditor({
           })
         }
       }
-      
+
       // Store the fetched metadata and open modal
       setCitationMetadata(citationMetadataMap)
       setBibliographyModalOpen(true)
-      
+
     } catch (error) {
       console.error('Error generating bibliography:', error)
       toast.error('Failed to generate bibliography', {
@@ -1131,25 +1393,25 @@ export function TiptapEditor({
 
   const handleInsertBibliography = useCallback(() => {
     if (!editor || citationMetadata.size === 0) return
-    
+
     // Sort citations by number
     const sortedCitations = Array.from(citationMetadata.entries())
       .sort((a, b) => a[0] - b[0])
-    
+
     // Generate bibliography HTML
     let bibliographyHtml = '<h2>References</h2><div class="bibliography">'
-    
+
     sortedCitations.forEach(([number, metadata]) => {
       const formattedCitation = formatCitation(metadata, selectedCitationStyle)
       bibliographyHtml += `<p class="bibliography-entry">[${number}] ${formattedCitation}</p>`
     })
-    
+
     bibliographyHtml += '</div>'
-    
+
     // Insert at the end of the document
     const endPos = editor.state.doc.content.size
     editor.chain().focus().setTextSelection(endPos).insertContent(bibliographyHtml).run()
-    
+
     setBibliographyModalOpen(false)
     toast.success('Bibliography inserted successfully')
   }, [editor, citationMetadata, selectedCitationStyle, formatCitation])
@@ -1425,13 +1687,13 @@ export function TiptapEditor({
 
     try {
       const html = editor.getHTML()
-      
+
       // Dynamically import the DOCX export function (proper .docx format!)
       const { exportHtmlToDocx } = await import('@/lib/docx-export')
-      
+
       // Export to DOCX (works on Mac, Windows, Linux!)
       await exportHtmlToDocx(html, title || 'Document')
-      
+
       setIsAIProcessing(false)
     } catch (error) {
       console.error("DOCX export error:", error)
@@ -1765,774 +2027,796 @@ export function TiptapEditor({
       {/* Toolbar - outside the editor card, or portaled to toolbarPortalRef when provided */}
       {!hideToolbar && (() => {
         const toolbar = (
-        <div className="box-content flex items-center gap-x-2 gap-y-1.5 p-2 rounded-lg border border-border flex-wrap bg-muted/30 m-2 min-h-9">
-          <TooltipProvider delayDuration={300}>
-            {/* Undo/Redo */}
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => editor.chain().focus().undo().run()}
-                  disabled={!editor.can().undo()}
-                  className="h-8 w-8 p-0 shrink-0"
-                >
-                  <Undo className="h-4 w-4" />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>Undo</TooltipContent>
-            </Tooltip>
-
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => editor.chain().focus().redo().run()}
-                  disabled={!editor.can().redo()}
-                  className="h-8 w-8 p-0 shrink-0"
-                >
-                  <Redo className="h-4 w-4" />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>Redo</TooltipContent>
-            </Tooltip>
-
-            {/* Paragraph styles - Google Docs style */}
-            <DropdownMenu>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <DropdownMenuTrigger asChild>
-                    <Button variant="ghost" size="sm" className="h-8 gap-1.5 px-2 shrink-0">
-                      <Type className="h-4 w-4 shrink-0" />
-                      <span className="text-xs max-w-[4rem] truncate">
-                        {editor.isActive("heading", { level: 1 }) ? "Heading 1" : editor.isActive("heading", { level: 2 }) ? "Heading 2" : editor.isActive("heading", { level: 3 }) ? "Heading 3" : "Normal text"}
-                      </span>
-                      <ChevronDown className="h-4 w-4 shrink-0 opacity-70" />
-                    </Button>
-                  </DropdownMenuTrigger>
-                </TooltipTrigger>
-                <TooltipContent>Paragraph style</TooltipContent>
-              </Tooltip>
-              <DropdownMenuContent align="start" className="w-40">
-                <DropdownMenuItem onClick={() => editor.chain().focus().setParagraph().run()}>
-                  Normal text
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => editor.chain().focus().toggleHeading({ level: 1 }).run()}>
-                  Heading 1
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()}>
-                  Heading 2
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => editor.chain().focus().toggleHeading({ level: 3 }).run()}>
-                  Heading 3
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-
-            <Separator orientation="vertical" className="h-5 shrink-0 mx-0.5" />
-
-            {/* Font family - Google Docs style */}
-            <DropdownMenu>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <DropdownMenuTrigger asChild>
-                    <Button variant="ghost" size="sm" className="h-8 gap-1.5 px-2 min-w-[7rem] justify-between shrink-0">
-                      <span className="text-xs truncate max-w-[5.5rem]" style={{ fontFamily: editor.getAttributes("textStyle").fontFamily || "inherit" }}>
-                        {editor.getAttributes("textStyle").fontFamily || "Default"}
-                      </span>
-                      <ChevronDown className="h-4 w-4 shrink-0 opacity-70" />
-                    </Button>
-                  </DropdownMenuTrigger>
-                </TooltipTrigger>
-                <TooltipContent>Font</TooltipContent>
-              </Tooltip>
-              <DropdownMenuContent align="start" className="w-48 max-h-[16rem] overflow-y-auto">
-                {[
-                  { label: "Default", value: "" },
-                  { label: "Arial", value: "Arial, sans-serif" },
-                  { label: "Times New Roman", value: "'Times New Roman', serif" },
-                  { label: "Georgia", value: "Georgia, serif" },
-                  { label: "Verdana", value: "Verdana, sans-serif" },
-                  { label: "Courier New", value: "'Courier New', monospace" },
-                  { label: "Comic Sans MS", value: "'Comic Sans MS', cursive" },
-                  { label: "Trebuchet MS", value: "'Trebuchet MS', sans-serif" },
-                  { label: "Lucida Sans", value: "'Lucida Sans Unicode', sans-serif" },
-                ].map(({ label, value }) => (
-                  <DropdownMenuItem
-                    key={value || "default"}
-                    onClick={() => (value ? editor.chain().focus().setFontFamily(value).run() : editor.chain().focus().unsetFontFamily().run())}
-                  >
-                    <span style={value ? { fontFamily: value } : undefined}>{label}</span>
-                  </DropdownMenuItem>
-                ))}
-              </DropdownMenuContent>
-            </DropdownMenu>
-
-            {/* Font size - Google Docs style: minus, value, plus */}
-            <div className="flex items-center gap-0 rounded-md border border-border bg-background overflow-hidden h-8 shrink-0">
+          <div className="box-content flex items-center gap-x-2 gap-y-1.5 p-2 rounded-lg border border-border flex-wrap bg-muted/30 m-2 min-h-9">
+            <TooltipProvider delayDuration={300}>
+              {/* Undo/Redo */}
               <Tooltip>
                 <TooltipTrigger asChild>
                   <Button
                     variant="ghost"
                     size="sm"
-                    className="h-8 w-8 p-0 rounded-none border-r border-border"
-                    onClick={() => {
-                      const current = editor.getAttributes("textStyle").fontSize || "16px";
-                      const num = Math.max(8, parseInt(current, 10) - 1);
-                      editor.chain().focus().setFontSize(`${num}px`).run();
-                    }}
+                    onClick={() => editor.chain().focus().undo().run()}
+                    disabled={!editor.can().undo()}
+                    className="h-8 w-8 p-0 shrink-0"
                   >
-                    <span className="text-sm font-medium">−</span>
+                    <Undo className="h-4 w-4" />
                   </Button>
                 </TooltipTrigger>
-                <TooltipContent>Decrease font size</TooltipContent>
+                <TooltipContent>Undo</TooltipContent>
               </Tooltip>
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button variant="ghost" size="sm" className="h-8 min-w-[2.25rem] px-2 rounded-none text-xs font-normal hover:bg-muted/50">
-                    {(() => {
-                      const fs = editor.getAttributes("textStyle").fontSize || "16px";
-                      return fs.replace("px", "");
-                    })()}
+
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => editor.chain().focus().redo().run()}
+                    disabled={!editor.can().redo()}
+                    className="h-8 w-8 p-0 shrink-0"
+                  >
+                    <Redo className="h-4 w-4" />
                   </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="start" className="w-24">
-                  {[8, 9, 10, 11, 12, 14, 16, 18, 24, 36].map((n) => (
+                </TooltipTrigger>
+                <TooltipContent>Redo</TooltipContent>
+              </Tooltip>
+
+              {/* Paragraph styles - Google Docs style */}
+              <DropdownMenu>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <DropdownMenuTrigger asChild>
+                      <Button variant="ghost" size="sm" className="h-8 gap-1.5 px-2 shrink-0">
+                        <Type className="h-4 w-4 shrink-0" />
+                        <span className="text-xs max-w-[4rem] truncate">
+                          {editor.isActive("heading", { level: 1 }) ? "Heading 1" : editor.isActive("heading", { level: 2 }) ? "Heading 2" : editor.isActive("heading", { level: 3 }) ? "Heading 3" : "Normal text"}
+                        </span>
+                        <ChevronDown className="h-4 w-4 shrink-0 opacity-70" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                  </TooltipTrigger>
+                  <TooltipContent>Paragraph style</TooltipContent>
+                </Tooltip>
+                <DropdownMenuContent align="start" className="w-40">
+                  <DropdownMenuItem onClick={() => editor.chain().focus().setParagraph().run()}>
+                    Normal text
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => editor.chain().focus().toggleHeading({ level: 1 }).run()}>
+                    Heading 1
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()}>
+                    Heading 2
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => editor.chain().focus().toggleHeading({ level: 3 }).run()}>
+                    Heading 3
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+
+              <Separator orientation="vertical" className="h-5 shrink-0 mx-0.5" />
+
+              {/* Font family - Google Docs style */}
+              <DropdownMenu>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <DropdownMenuTrigger asChild>
+                      <Button variant="ghost" size="sm" className="h-8 gap-1.5 px-2 min-w-[7rem] justify-between shrink-0">
+                        <span className="text-xs truncate max-w-[5.5rem]" style={{ fontFamily: editor.getAttributes("textStyle").fontFamily || "inherit" }}>
+                          {editor.getAttributes("textStyle").fontFamily || "Default"}
+                        </span>
+                        <ChevronDown className="h-4 w-4 shrink-0 opacity-70" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                  </TooltipTrigger>
+                  <TooltipContent>Font</TooltipContent>
+                </Tooltip>
+                <DropdownMenuContent align="start" className="w-48 max-h-[16rem] overflow-y-auto">
+                  {[
+                    { label: "Default", value: "" },
+                    { label: "Arial", value: "Arial, sans-serif" },
+                    { label: "Times New Roman", value: "'Times New Roman', serif" },
+                    { label: "Georgia", value: "Georgia, serif" },
+                    { label: "Verdana", value: "Verdana, sans-serif" },
+                    { label: "Courier New", value: "'Courier New', monospace" },
+                    { label: "Comic Sans MS", value: "'Comic Sans MS', cursive" },
+                    { label: "Trebuchet MS", value: "'Trebuchet MS', sans-serif" },
+                    { label: "Lucida Sans", value: "'Lucida Sans Unicode', sans-serif" },
+                  ].map(({ label, value }) => (
                     <DropdownMenuItem
-                      key={n}
-                      onClick={() => editor.chain().focus().setFontSize(`${n}px`).run()}
+                      key={value || "default"}
+                      onClick={() => (value ? editor.chain().focus().setFontFamily(value).run() : editor.chain().focus().unsetFontFamily().run())}
                     >
-                      {n}
+                      <span style={value ? { fontFamily: value } : undefined}>{label}</span>
                     </DropdownMenuItem>
                   ))}
                 </DropdownMenuContent>
               </DropdownMenu>
+
+              {/* Font size - Google Docs style: minus, value, plus */}
+              <div className="flex items-center gap-0 rounded-md border border-border bg-background overflow-hidden h-8 shrink-0">
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-8 w-8 p-0 rounded-none border-r border-border"
+                      onClick={() => {
+                        const current = editor.getAttributes("textStyle").fontSize || "16px";
+                        const num = Math.max(8, parseInt(current, 10) - 1);
+                        editor.chain().focus().setFontSize(`${num}px`).run();
+                      }}
+                    >
+                      <span className="text-sm font-medium">−</span>
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>Decrease font size</TooltipContent>
+                </Tooltip>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="ghost" size="sm" className="h-8 min-w-[2.25rem] px-2 rounded-none text-xs font-normal hover:bg-muted/50">
+                      {(() => {
+                        const fs = editor.getAttributes("textStyle").fontSize || "16px";
+                        return fs.replace("px", "");
+                      })()}
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="start" className="w-24">
+                    {[8, 9, 10, 11, 12, 14, 16, 18, 24, 36].map((n) => (
+                      <DropdownMenuItem
+                        key={n}
+                        onClick={() => editor.chain().focus().setFontSize(`${n}px`).run()}
+                      >
+                        {n}
+                      </DropdownMenuItem>
+                    ))}
+                  </DropdownMenuContent>
+                </DropdownMenu>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-8 w-8 p-0 rounded-none border-l border-border"
+                      onClick={() => {
+                        const current = editor.getAttributes("textStyle").fontSize || "16px";
+                        const num = Math.min(96, parseInt(current, 10) + 1);
+                        editor.chain().focus().setFontSize(`${num}px`).run();
+                      }}
+                    >
+                      <span className="text-sm font-medium">+</span>
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>Increase font size</TooltipContent>
+                </Tooltip>
+              </div>
+
+
+
+              <Separator orientation="vertical" className="h-5 shrink-0 mx-0.5" />
+
+              {/* Text Color */}
+              <DropdownMenu>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <DropdownMenuTrigger asChild>
+                      <Button variant="ghost" size="sm" className="h-8 w-8 p-0 font-serif text-base font-bold underline decoration-2 underline-offset-1 shrink-0">
+                        A
+                      </Button>
+                    </DropdownMenuTrigger>
+                  </TooltipTrigger>
+                  <TooltipContent>Text Color</TooltipContent>
+                </Tooltip>
+                <DropdownMenuContent className="w-40">
+                  <DropdownMenuLabel>Colors</DropdownMenuLabel>
+                  <div className="grid grid-cols-4 gap-1 p-2">
+                    {[
+                      "#e53935",
+                      "#fb8c00",
+                      "#fdd835",
+                      "#43a047",
+                      "#1e88e5",
+                      "#8e24aa",
+                      "#ffffff",
+                      "#000000",
+                    ].map((color) => (
+                      <button
+                        type="button"
+                        key={color}
+                        onClick={() =>
+                          editor.chain().focus().setColor(color).run()
+                        }
+                        className="h-6 w-6 rounded border border-border"
+                        style={{ backgroundColor: color }}
+                        aria-label={`Set color ${color}`}
+                      />
+                    ))}
+                  </div>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem
+                    onClick={() => editor.chain().focus().unsetColor().run()}
+                  >
+                    Clear color
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+
+              {/* Text Formatting */}
               <Tooltip>
                 <TooltipTrigger asChild>
                   <Button
                     variant="ghost"
                     size="sm"
-                    className="h-8 w-8 p-0 rounded-none border-l border-border"
-                    onClick={() => {
-                      const current = editor.getAttributes("textStyle").fontSize || "16px";
-                      const num = Math.min(96, parseInt(current, 10) + 1);
-                      editor.chain().focus().setFontSize(`${num}px`).run();
-                    }}
+                    onClick={() => editor.chain().focus().toggleBold().run()}
+                    className={cn(
+                      "h-8 w-8 p-0 shrink-0",
+                      editor.isActive("bold") && "bg-accent"
+                    )}
                   >
-                    <span className="text-sm font-medium">+</span>
+                    <Bold className="h-4 w-4" />
                   </Button>
                 </TooltipTrigger>
-                <TooltipContent>Increase font size</TooltipContent>
+                <TooltipContent>Bold</TooltipContent>
               </Tooltip>
-            </div>
 
-
-
-            <Separator orientation="vertical" className="h-5 shrink-0 mx-0.5" />
-
-            {/* Text Color */}
-            <DropdownMenu>
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <DropdownMenuTrigger asChild>
-                    <Button variant="ghost" size="sm" className="h-8 w-8 p-0 font-serif text-base font-bold underline decoration-2 underline-offset-1 shrink-0">
-                      A
-                    </Button>
-                  </DropdownMenuTrigger>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => editor.chain().focus().toggleItalic().run()}
+                    className={cn(
+                      "h-8 w-8 p-0 shrink-0",
+                      editor.isActive("italic") && "bg-accent"
+                    )}
+                  >
+                    <Italic className="h-4 w-4" />
+                  </Button>
                 </TooltipTrigger>
-                <TooltipContent>Text Color</TooltipContent>
+                <TooltipContent>Italic</TooltipContent>
               </Tooltip>
-              <DropdownMenuContent className="w-40">
-                <DropdownMenuLabel>Colors</DropdownMenuLabel>
-                <div className="grid grid-cols-4 gap-1 p-2">
-                  {[
-                    "#e53935",
-                    "#fb8c00",
-                    "#fdd835",
-                    "#43a047",
-                    "#1e88e5",
-                    "#8e24aa",
-                    "#ffffff",
-                    "#000000",
-                  ].map((color) => (
-                    <button
-                      type="button"
-                      key={color}
-                      onClick={() =>
-                        editor.chain().focus().setColor(color).run()
+
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => editor.chain().focus().toggleStrike().run()}
+                    className={cn(
+                      "h-8 w-8 p-0 shrink-0",
+                      editor.isActive("strike") && "bg-accent"
+                    )}
+                  >
+                    <Strikethrough className="h-4 w-4" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>Strikethrough</TooltipContent>
+              </Tooltip>
+
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => editor.chain().focus().toggleUnderline().run()}
+                    className={cn(
+                      "h-8 w-8 p-0 shrink-0",
+                      editor.isActive("underline") && "bg-accent"
+                    )}
+                  >
+                    <UnderlineIcon className="h-4 w-4" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>Underline</TooltipContent>
+              </Tooltip>
+
+              {/* Subscript / Superscript - single dropdown */}
+              <DropdownMenu>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <DropdownMenuTrigger asChild>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className={cn(
+                          "h-8 w-8 p-0 shrink-0",
+                          (editor.isActive("subscript") || editor.isActive("superscript")) && "bg-accent"
+                        )}
+                      >
+                        <SubscriptIcon className="h-4 w-4" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                  </TooltipTrigger>
+                  <TooltipContent>Subscript / Superscript</TooltipContent>
+                </Tooltip>
+                <DropdownMenuContent align="start" className="w-40">
+                  <DropdownMenuItem
+                    onClick={() => (editor.chain().focus() as any).toggleSubscript().run()}
+                    className={cn(editor.isActive("subscript") && "bg-accent")}
+                  >
+                    <SubscriptIcon className="h-4 w-4 mr-2" />
+                    Subscript
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onClick={() => (editor.chain().focus() as any).toggleSuperscript().run()}
+                    className={cn(editor.isActive("superscript") && "bg-accent")}
+                  >
+                    <SuperscriptIcon className="h-4 w-4 mr-2" />
+                    Superscript
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => editor.chain().focus().toggleCode().run()}
+                    className={cn(
+                      "h-8 w-8 p-0 shrink-0",
+                      editor.isActive("code") && "bg-accent"
+                    )}
+                  >
+                    <Code className="h-4 w-4" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>Inline Code</TooltipContent>
+              </Tooltip>
+
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => editor.chain().focus().toggleHighlight({ color: 'var(--highlight)' }).run()}
+                    className={cn(
+                      "h-8 w-8 p-0 shrink-0",
+                      editor.isActive("highlight") && "bg-accent"
+                    )}
+                  >
+                    <Highlighter className="h-4 w-4" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>Highlight</TooltipContent>
+              </Tooltip>
+
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={handleSetLink}
+                    className={cn(
+                      "h-8 w-8 p-0 shrink-0",
+                      editor.isActive("link") && "bg-accent"
+                    )}
+                  >
+                    <Link2 className="h-4 w-4" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>Insert Link</TooltipContent>
+              </Tooltip>
+
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className={cn(
+                      "h-8 w-8 p-0 shrink-0",
+                      editor.isActive("comment") && "bg-accent"
+                    )}
+                    onMouseDown={(e) => {
+                      // Prevent focus loss from editor to keep selection
+                      e.preventDefault();
+                    }}
+                    onClick={() => {
+                      console.log("Comment button clicked, selection empty:", editor.state.selection.empty);
+                      if (editor.isActive('comment')) {
+                        editor.chain().focus().unsetComment().run();
+                      } else if (editor.state.selection.empty) {
+                        toast.error("Please select text to comment on");
+                      } else {
+                        setIsCommenting(true);
+                        editor.chain().focus().run();
                       }
-                      className="h-6 w-6 rounded border border-border"
-                      style={{ backgroundColor: color }}
-                      aria-label={`Set color ${color}`}
-                    />
-                  ))}
-                </div>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem
-                  onClick={() => editor.chain().focus().unsetColor().run()}
-                >
-                  Clear color
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
+                    }}
+                  >
+                    <MessageSquarePlus className="h-4 w-4" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>Insert comment</TooltipContent>
+              </Tooltip>
 
-            {/* Text Formatting */}
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => editor.chain().focus().toggleBold().run()}
-                  className={cn(
-                    "h-8 w-8 p-0 shrink-0",
-                    editor.isActive("bold") && "bg-accent"
-                  )}
-                >
-                  <Bold className="h-4 w-4" />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>Bold</TooltipContent>
-            </Tooltip>
-
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => editor.chain().focus().toggleItalic().run()}
-                  className={cn(
-                    "h-8 w-8 p-0 shrink-0",
-                    editor.isActive("italic") && "bg-accent"
-                  )}
-                >
-                  <Italic className="h-4 w-4" />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>Italic</TooltipContent>
-            </Tooltip>
-
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => editor.chain().focus().toggleStrike().run()}
-                  className={cn(
-                    "h-8 w-8 p-0 shrink-0",
-                    editor.isActive("strike") && "bg-accent"
-                  )}
-                >
-                  <Strikethrough className="h-4 w-4" />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>Strikethrough</TooltipContent>
-            </Tooltip>
-
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => editor.chain().focus().toggleUnderline().run()}
-                  className={cn(
-                    "h-8 w-8 p-0 shrink-0",
-                    editor.isActive("underline") && "bg-accent"
-                  )}
-                >
-                  <UnderlineIcon className="h-4 w-4" />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>Underline</TooltipContent>
-            </Tooltip>
-
-            {/* Subscript / Superscript - single dropdown */}
-            <DropdownMenu>
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <DropdownMenuTrigger asChild>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className={cn(
-                        "h-8 w-8 p-0 shrink-0",
-                        (editor.isActive("subscript") || editor.isActive("superscript")) && "bg-accent"
-                      )}
-                    >
-                      <SubscriptIcon className="h-4 w-4" />
-                    </Button>
-                  </DropdownMenuTrigger>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={handleFilePicker}
+                    className="h-8 w-8 p-0 shrink-0"
+                  >
+                    <FileInput className="h-4 w-4" />
+                  </Button>
                 </TooltipTrigger>
-                <TooltipContent>Subscript / Superscript</TooltipContent>
+                <TooltipContent>
+                  Import File (.docx, .txt, .md, .html)
+                </TooltipContent>
               </Tooltip>
-              <DropdownMenuContent align="start" className="w-40">
-                <DropdownMenuItem
-                  onClick={() => (editor.chain().focus() as any).toggleSubscript().run()}
-                  className={cn(editor.isActive("subscript") && "bg-accent")}
-                >
-                  <SubscriptIcon className="h-4 w-4 mr-2" />
-                  Subscript
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                  onClick={() => (editor.chain().focus() as any).toggleSuperscript().run()}
-                  className={cn(editor.isActive("superscript") && "bg-accent")}
-                >
-                  <SuperscriptIcon className="h-4 w-4 mr-2" />
-                  Superscript
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
 
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => editor.chain().focus().toggleCode().run()}
-                  className={cn(
-                    "h-8 w-8 p-0 shrink-0",
-                    editor.isActive("code") && "bg-accent"
-                  )}
-                >
-                  <Code className="h-4 w-4" />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>Inline Code</TooltipContent>
-            </Tooltip>
-
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => editor.chain().focus().toggleHighlight().run()}
-                  className={cn(
-                    "h-8 w-8 p-0 shrink-0",
-                    editor.isActive("highlight") && "bg-accent"
-                  )}
-                >
-                  <Highlighter className="h-4 w-4" />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>Highlight</TooltipContent>
-            </Tooltip>
-
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={handleSetLink}
-                  className={cn(
-                    "h-8 w-8 p-0 shrink-0",
-                    editor.isActive("link") && "bg-accent"
-                  )}
-                >
-                  <Link2 className="h-4 w-4" />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>Insert Link</TooltipContent>
-            </Tooltip>
-
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button variant="ghost" size="sm" className="h-8 w-8 p-0 shrink-0" onClick={() => toast.info("Comments coming soon")}>
-                  <MessageSquarePlus className="h-4 w-4" />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>Insert comment</TooltipContent>
-            </Tooltip>
-
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={handleFilePicker}
-                  className="h-8 w-8 p-0 shrink-0"
-                >
-                  <FileInput className="h-4 w-4" />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>
-                Import File (.docx, .txt, .md, .html)
-              </TooltipContent>
-            </Tooltip>
-
-            {/* Checklist */}
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => editor.chain().focus().toggleTaskList().run()}
-                  className={cn(
-                    "h-8 w-8 p-0 shrink-0",
-                    editor.isActive("taskList") && "bg-accent"
-                  )}
-                >
-                  <ListChecks className="h-4 w-4" />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>Checklist</TooltipContent>
-            </Tooltip>
-
-            {/* Bullet list & Numbered list - single dropdown */}
-            <DropdownMenu>
+              {/* Checklist */}
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <DropdownMenuTrigger asChild>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className={cn(
-                        "h-8 w-8 p-0 shrink-0",
-                        (editor.isActive("bulletList") || editor.isActive("orderedList")) && "bg-accent"
-                      )}
-                    >
-                      <List className="h-4 w-4" />
-                    </Button>
-                  </DropdownMenuTrigger>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => editor.chain().focus().toggleTaskList().run()}
+                    className={cn(
+                      "h-8 w-8 p-0 shrink-0",
+                      editor.isActive("taskList") && "bg-accent"
+                    )}
+                  >
+                    <ListChecks className="h-4 w-4" />
+                  </Button>
                 </TooltipTrigger>
-                <TooltipContent>List style</TooltipContent>
+                <TooltipContent>Checklist</TooltipContent>
               </Tooltip>
-              <DropdownMenuContent align="start" className="w-40">
-                <DropdownMenuItem
-                  onClick={() => editor.chain().focus().toggleBulletList().run()}
-                  className={cn(editor.isActive("bulletList") && "bg-accent")}
-                >
-                  <List className="h-4 w-4 mr-2" />
-                  Bullet list
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                  onClick={() => editor.chain().focus().toggleOrderedList().run()}
-                  className={cn(editor.isActive("orderedList") && "bg-accent")}
-                >
-                  <ListOrdered className="h-4 w-4 mr-2" />
-                  Numbered list
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
 
-            {/* Indent - single dropdown */}
-            <DropdownMenu>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <DropdownMenuTrigger asChild>
-                    <Button variant="ghost" size="sm" className="h-8 w-8 p-0 shrink-0">
-                      <IndentIncrease className="h-4 w-4" />
-                    </Button>
-                  </DropdownMenuTrigger>
-                </TooltipTrigger>
-                <TooltipContent>Indent</TooltipContent>
-              </Tooltip>
-              <DropdownMenuContent align="start" className="w-40">
-                <DropdownMenuItem onClick={() => {}}>
-                  <IndentDecrease className="h-4 w-4 mr-2" />
-                  Decrease indent
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => {}}>
-                  <IndentIncrease className="h-4 w-4 mr-2" />
-                  Increase indent
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
+              {/* Bullet list & Numbered list - single dropdown */}
+              <DropdownMenu>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <DropdownMenuTrigger asChild>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className={cn(
+                          "h-8 w-8 p-0 shrink-0",
+                          (editor.isActive("bulletList") || editor.isActive("orderedList")) && "bg-accent"
+                        )}
+                      >
+                        <List className="h-4 w-4" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                  </TooltipTrigger>
+                  <TooltipContent>List style</TooltipContent>
+                </Tooltip>
+                <DropdownMenuContent align="start" className="w-40">
+                  <DropdownMenuItem
+                    onClick={() => editor.chain().focus().toggleBulletList().run()}
+                    className={cn(editor.isActive("bulletList") && "bg-accent")}
+                  >
+                    <List className="h-4 w-4 mr-2" />
+                    Bullet list
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onClick={() => editor.chain().focus().toggleOrderedList().run()}
+                    className={cn(editor.isActive("orderedList") && "bg-accent")}
+                  >
+                    <ListOrdered className="h-4 w-4 mr-2" />
+                    Numbered list
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
 
-            <Separator orientation="vertical" className="h-5 shrink-0 mx-0.5" />
+              {/* Indent - single dropdown */}
+              <DropdownMenu>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <DropdownMenuTrigger asChild>
+                      <Button variant="ghost" size="sm" className="h-8 w-8 p-0 shrink-0">
+                        <IndentIncrease className="h-4 w-4" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                  </TooltipTrigger>
+                  <TooltipContent>Indent</TooltipContent>
+                </Tooltip>
+                <DropdownMenuContent align="start" className="w-40">
+                  <DropdownMenuItem onClick={() => editor.chain().focus().unsetIndent().run()}>
+                    <IndentDecrease className="h-4 w-4 mr-2" />
+                    Decrease indent
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => editor.chain().focus().setIndent().run()}>
+                    <IndentIncrease className="h-4 w-4 mr-2" />
+                    Increase indent
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
 
-            <DropdownMenu
-              open={tableMenuOpen}
-              onOpenChange={(open) => {
-                setTableMenuOpen(open);
-                if (open) {
-                  const selTable = getSelectedTable();
-                  const currentRows = selTable ? selTable.node.childCount : 3;
-                  const currentCols = selTable
-                    ? selTable.node.child(0)?.childCount || 3
-                    : 3;
-                  setTableRows(currentRows);
-                  setTableCols(currentCols);
-                }
-              }}
-            >
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <DropdownMenuTrigger asChild>
-                    <Button variant="ghost" size="sm" className="h-8 w-8 p-0 shrink-0">
-                      <TableIcon className="h-4 w-4" />
-                    </Button>
-                  </DropdownMenuTrigger>
-                </TooltipTrigger>
-                <TooltipContent>Insert / Resize Table</TooltipContent>
-              </Tooltip>
-              <DropdownMenuContent side="bottom" align="start" className="w-48">
-                <DropdownMenuLabel className="text-xs">
-                  Rows & Columns
-                </DropdownMenuLabel>
-                <div className="grid grid-cols-2 gap-2 px-2 py-2">
-                  <div className="space-y-1">
-                    <span className="text-xs text-muted-foreground">Rows</span>
-                    <Input
-                      type="number"
-                      min={1}
-                      value={tableRows}
-                      onChange={(e) =>
-                        setTableRows(
-                          Math.max(parseInt(e.target.value || "1"), 1)
-                        )
-                      }
-                      className="h-8"
-                    />
+              <Separator orientation="vertical" className="h-5 shrink-0 mx-0.5" />
+
+              <DropdownMenu
+                open={tableMenuOpen}
+                onOpenChange={(open) => {
+                  setTableMenuOpen(open);
+                  if (open) {
+                    const selTable = getSelectedTable();
+                    const currentRows = selTable ? selTable.node.childCount : 3;
+                    const currentCols = selTable
+                      ? selTable.node.child(0)?.childCount || 3
+                      : 3;
+                    setTableRows(currentRows);
+                    setTableCols(currentCols);
+                  }
+                }}
+              >
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <DropdownMenuTrigger asChild>
+                      <Button variant="ghost" size="sm" className="h-8 w-8 p-0 shrink-0">
+                        <TableIcon className="h-4 w-4" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                  </TooltipTrigger>
+                  <TooltipContent>Insert / Resize Table</TooltipContent>
+                </Tooltip>
+                <DropdownMenuContent side="bottom" align="start" className="w-48">
+                  <DropdownMenuLabel className="text-xs">
+                    Rows & Columns
+                  </DropdownMenuLabel>
+                  <div className="grid grid-cols-2 gap-2 px-2 py-2">
+                    <div className="space-y-1">
+                      <span className="text-xs text-muted-foreground">Rows</span>
+                      <Input
+                        type="number"
+                        min={1}
+                        value={tableRows}
+                        onChange={(e) =>
+                          setTableRows(
+                            Math.max(parseInt(e.target.value || "1"), 1)
+                          )
+                        }
+                        className="h-8"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <span className="text-xs text-muted-foreground">
+                        Columns
+                      </span>
+                      <Input
+                        type="number"
+                        min={1}
+                        value={tableCols}
+                        onChange={(e) =>
+                          setTableCols(
+                            Math.max(parseInt(e.target.value || "1"), 1)
+                          )
+                        }
+                        className="h-8"
+                      />
+                    </div>
                   </div>
-                  <div className="space-y-1">
-                    <span className="text-xs text-muted-foreground">
-                      Columns
-                    </span>
-                    <Input
-                      type="number"
-                      min={1}
-                      value={tableCols}
-                      onChange={(e) =>
-                        setTableCols(
-                          Math.max(parseInt(e.target.value || "1"), 1)
-                        )
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem
+                    onClick={handleTable}
+                    className="justify-center font-medium"
+                  >
+                    Apply
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onClick={removeTable}
+                    className="justify-center text-destructive"
+                  >
+                    Delete Table
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+
+              <Separator orientation="vertical" className="h-5 shrink-0 mx-0.5" />
+
+              {/* Chemistry & Equations - single dropdown */}
+              <DropdownMenu>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <DropdownMenuTrigger asChild>
+                      <Button variant="ghost" size="sm" className="h-8 w-8 p-0 shrink-0">
+                        <Sigma className="h-4 w-4" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                  </TooltipTrigger>
+                  <TooltipContent>Chemistry & Equations</TooltipContent>
+                </Tooltip>
+                <DropdownMenuContent align="start" className="w-56">
+                  <DropdownMenuItem
+                    onClick={() => {
+                      const { from, to } = editor.state.selection;
+                      const selectedText = editor.state.doc.textBetween(from, to, " ");
+                      if (selectedText) {
+                        const formatted = formatChemicalFormula(selectedText);
+                        editor.chain().focus().deleteRange({ from, to }).insertContent(formatted).run();
                       }
-                      className="h-8"
-                    />
-                  </div>
-                </div>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem
-                  onClick={handleTable}
-                  className="justify-center font-medium"
-                >
-                  Apply
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                  onClick={removeTable}
-                  className="justify-center text-destructive"
-                >
-                  Delete Table
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-
-            <Separator orientation="vertical" className="h-5 shrink-0 mx-0.5" />
-
-            {/* Chemistry & Equations - single dropdown */}
-            <DropdownMenu>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <DropdownMenuTrigger asChild>
-                    <Button variant="ghost" size="sm" className="h-8 w-8 p-0 shrink-0">
-                      <Sigma className="h-4 w-4" />
-                    </Button>
-                  </DropdownMenuTrigger>
-                </TooltipTrigger>
-                <TooltipContent>Chemistry & Equations</TooltipContent>
-              </Tooltip>
-              <DropdownMenuContent align="start" className="w-56">
-                <DropdownMenuItem
-                  onClick={() => {
-                    const { from, to } = editor.state.selection;
-                    const selectedText = editor.state.doc.textBetween(from, to, " ");
-                    if (selectedText) {
-                      const formatted = formatChemicalFormula(selectedText);
-                      editor.chain().focus().deleteRange({ from, to }).insertContent(formatted).run();
-                    }
-                  }}
-                >
-                  <FlaskConical className="h-4 w-4 mr-2" />
-                  Chemical Formula
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                  onClick={() => {
-                    const { from, to } = editor.state.selection;
-                    if (from === to) {
-                      editor.chain().focus().insertContent("$ $").run();
-                      editor.chain().focus().setTextSelection(from + 1).run();
-                    } else {
-                      const text = editor.state.doc.textBetween(from, to, " ");
-                      editor.chain().focus().deleteRange({ from, to }).insertContent(`$${text}$`).run();
-                    }
-                  }}
-                >
-                  <Sigma className="h-4 w-4 mr-2" />
-                  Inline Equation
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                  onClick={() => {
-                    const { from, to } = editor.state.selection;
-                    if (from === to) {
-                      editor.chain().focus().insertContent("$$\n\n$$").run();
-                      editor.chain().focus().setTextSelection(from + 3).run();
-                    } else {
-                      const text = editor.state.doc.textBetween(from, to, " ");
-                      editor.chain().focus().deleteRange({ from, to }).insertContent(`$$\n${text}\n$$`).run();
-                    }
-                  }}
-                >
-                  <Sigma className="h-4 w-4 mr-2" />
-                  Equation Block
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-
-            {/* AI Tools */}
-            {showAITools && (
-              <>
-                <Separator orientation="vertical" className="h-5 shrink-0 mx-0.5" />
-
-                {/* Speech to text */}
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button
-                      variant={isListening ? "secondary" : "ghost"}
-                      size="sm"
-                      className="h-8 w-8 p-0 shrink-0"
-                      onClick={
-                        isListening ? stopSpeechToText : startSpeechToText
+                    }}
+                  >
+                    <FlaskConical className="h-4 w-4 mr-2" />
+                    Chemical Formula
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onClick={() => {
+                      const { from, to } = editor.state.selection;
+                      if (from === to) {
+                        editor.chain().focus().insertContent("$ $").run();
+                        editor.chain().focus().setTextSelection(from + 1).run();
+                      } else {
+                        const text = editor.state.doc.textBetween(from, to, " ");
+                        editor.chain().focus().deleteRange({ from, to }).insertContent(`$${text}$`).run();
                       }
-                    >
-                      <Mic className="h-4 w-4" />
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    {isListening ? "Stop dictation" : "Start dictation"}
-                  </TooltipContent>
-                </Tooltip>
+                    }}
+                  >
+                    <Sigma className="h-4 w-4 mr-2" />
+                    Inline Equation
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onClick={() => {
+                      const { from, to } = editor.state.selection;
+                      if (from === to) {
+                        editor.chain().focus().insertContent("$$\n\n$$").run();
+                        editor.chain().focus().setTextSelection(from + 3).run();
+                      } else {
+                        const text = editor.state.doc.textBetween(from, to, " ");
+                        editor.chain().focus().deleteRange({ from, to }).insertContent(`$$\n${text}\n$$`).run();
+                      }
+                    }}
+                  >
+                    <Sigma className="h-4 w-4 mr-2" />
+                    Equation Block
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
 
-                {/* Cite with AI - Standalone Button */}
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="h-8 gap-1 px-2 relative overflow-hidden border-0 bg-background hover:bg-accent/50 transition-colors rainbow-border-button"
-                      onClick={aiCite}
-                      disabled={isCiteProcessing}
-                    >
-                      {isCiteProcessing ? (
-                        <Loader2 className="h-4 w-4 animate-spin relative z-10" />
-                      ) : (
-                        <FileText className="h-4 w-4 relative z-10" />
-                      )}
-                      <span className="text-xs font-medium relative z-10">Cite with AI</span>
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent className="max-w-xs">
-                    <p className="font-medium mb-1">Find and insert citations</p>
-                    <p className="text-xs text-muted-foreground">Select text (at least 10 characters) and click to search for relevant citations</p>
-                  </TooltipContent>
-                </Tooltip>
+              {/* AI Tools */}
+              {showAITools && (
+                <>
+                  <Separator orientation="vertical" className="h-5 shrink-0 mx-0.5" />
 
-                {/* Generate Bibliography Button */}
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="h-8 gap-1 px-2"
-                      onClick={handleGenerateBibliography}
-                      disabled={isCiteProcessing}
-                    >
-                      {isCiteProcessing ? (
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                      ) : (
-                        <FileText className="h-4 w-4" />
-                      )}
-                      <span className="text-xs font-medium">Bibliography</span>
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent>Generate formatted bibliography from citations in document</TooltipContent>
-                </Tooltip>
+                  {/* Speech to text */}
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        variant={isListening ? "secondary" : "ghost"}
+                        size="sm"
+                        className="h-8 w-8 p-0 shrink-0"
+                        onClick={
+                          isListening ? stopSpeechToText : startSpeechToText
+                        }
+                      >
+                        <Mic className="h-4 w-4" />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      {isListening ? "Stop dictation" : "Start dictation"}
+                    </TooltipContent>
+                  </Tooltip>
 
-                <DropdownMenu
-                  open={aiDropdownOpen}
-                  onOpenChange={setAiDropdownOpen}
-                >
-                  <DropdownMenuTrigger asChild>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="h-8 gap-1 px-2"
-                      disabled={isAIProcessing}
-                    >
-                      {isAIProcessing ? (
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                      ) : (
-                        <Sparkles className="h-4 w-4" />
-                      )}
-                      <span className="text-xs">AI</span>
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="start" className="w-56">
-                    <DropdownMenuLabel className="flex items-center gap-2">
-                      <WandSparkles className="h-4 w-4" />
-                      AI Writing Tools
-                    </DropdownMenuLabel>
-                    <DropdownMenuSeparator />
-                    <DropdownMenuItem
-                      onClick={aiImprove}
-                      disabled={isAIProcessing}
-                    >
-                      <Sparkles className="mr-2 h-4 w-4" />
-                      Improve Writing
-                    </DropdownMenuItem>
-                    <DropdownMenuItem
-                      onClick={aiContinue}
-                      disabled={isAIProcessing}
-                    >
-                      <WandSparkles className="mr-2 h-4 w-4" />
-                      Continue Writing
-                    </DropdownMenuItem>
-                    <DropdownMenuSeparator />
-                    <DropdownMenuItem
-                      onClick={aiShorter}
-                      disabled={isAIProcessing}
-                    >
-                      Make Shorter
-                    </DropdownMenuItem>
-                    <DropdownMenuItem
-                      onClick={aiLonger}
-                      disabled={isAIProcessing}
-                    >
-                      Make Longer
-                    </DropdownMenuItem>
-                    <DropdownMenuItem
-                      onClick={aiSimplify}
-                      disabled={isAIProcessing}
-                    >
-                      Simplify Language
-                    </DropdownMenuItem>
-                    <DropdownMenuItem
-                      onClick={aiGrammar}
-                      disabled={isAIProcessing}
-                    >
-                      Fix Grammar
-                    </DropdownMenuItem>
-                    <DropdownMenuSeparator />
-                    <DropdownMenuLabel className="flex items-center gap-2">
-                      <FlaskConical className="h-4 w-4" />
-                      Chemistry Tools
-                    </DropdownMenuLabel>
-                    <DropdownMenuItem
-                      onClick={aiStructure}
-                      disabled={isAIProcessing}
-                    >
-                      <FlaskConical className="mr-2 h-4 w-4" />
-                      Structure Properly
-                    </DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              </>
-            )}
-          </TooltipProvider>
+                  {/* Cite with AI - Standalone Button */}
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-8 gap-1 px-2 relative overflow-hidden border-0 bg-background hover:bg-accent/50 transition-colors rainbow-border-button"
+                        onClick={aiCite}
+                        disabled={isCiteProcessing}
+                      >
+                        {isCiteProcessing ? (
+                          <Loader2 className="h-4 w-4 animate-spin relative z-10" />
+                        ) : (
+                          <FileText className="h-4 w-4 relative z-10" />
+                        )}
+                        <span className="text-xs font-medium relative z-10">Cite with AI</span>
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent className="max-w-xs">
+                      <p className="font-medium mb-1">Find and insert citations</p>
+                      <p className="text-xs text-muted-foreground">Select text (at least 10 characters) and click to search for relevant citations</p>
+                    </TooltipContent>
+                  </Tooltip>
 
-          <div className="flex-1" />
+                  {/* Generate Bibliography Button */}
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-8 gap-1 px-2"
+                        onClick={handleGenerateBibliography}
+                        disabled={isCiteProcessing}
+                      >
+                        {isCiteProcessing ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <FileText className="h-4 w-4" />
+                        )}
+                        <span className="text-xs font-medium">Bibliography</span>
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>Generate formatted bibliography from citations in document</TooltipContent>
+                  </Tooltip>
+
+                  <DropdownMenu
+                    open={aiDropdownOpen}
+                    onOpenChange={setAiDropdownOpen}
+                  >
+                    <DropdownMenuTrigger asChild>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-8 gap-1 px-2"
+                        disabled={isAIProcessing}
+                      >
+                        {isAIProcessing ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <Sparkles className="h-4 w-4" />
+                        )}
+                        <span className="text-xs">AI</span>
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="start" className="w-56">
+                      <DropdownMenuLabel className="flex items-center gap-2">
+                        <WandSparkles className="h-4 w-4" />
+                        AI Writing Tools
+                      </DropdownMenuLabel>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem
+                        onClick={aiImprove}
+                        disabled={isAIProcessing}
+                      >
+                        <Sparkles className="mr-2 h-4 w-4" />
+                        Improve Writing
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        onClick={aiContinue}
+                        disabled={isAIProcessing}
+                      >
+                        <WandSparkles className="mr-2 h-4 w-4" />
+                        Continue Writing
+                      </DropdownMenuItem>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem
+                        onClick={aiShorter}
+                        disabled={isAIProcessing}
+                      >
+                        Make Shorter
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        onClick={aiLonger}
+                        disabled={isAIProcessing}
+                      >
+                        Make Longer
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        onClick={aiSimplify}
+                        disabled={isAIProcessing}
+                      >
+                        Simplify Language
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        onClick={aiGrammar}
+                        disabled={isAIProcessing}
+                      >
+                        Fix Grammar
+                      </DropdownMenuItem>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuLabel className="flex items-center gap-2">
+                        <FlaskConical className="h-4 w-4" />
+                        Chemistry Tools
+                      </DropdownMenuLabel>
+                      <DropdownMenuItem
+                        onClick={aiStructure}
+                        disabled={isAIProcessing}
+                      >
+                        <FlaskConical className="mr-2 h-4 w-4" />
+                        Structure Properly
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                </>
+              )}
+            </TooltipProvider>
+
+            <div className="flex-1" />
 
 
-        </div>
+          </div>
         );
         return toolbarPortalRef?.current ? createPortal(toolbar, toolbarPortalRef.current) : toolbar;
       })()}
@@ -2543,13 +2827,81 @@ export function TiptapEditor({
           className
         )}
       >
-      {/* Editor Content */}
-      <div
-        className="overflow-y-auto px-2 pb-2"
-        style={{ minHeight, maxHeight: "calc(100vh - 300px)" }}
-      >
-        <EditorContent editor={editor} />
-        <style jsx global>{`
+        {/* Editor Content */}
+        <div
+          className="overflow-y-auto px-2 pb-2"
+          style={{ minHeight, maxHeight: "calc(100vh - 300px)" }}
+        >
+          <EditorContent editor={editor} />
+          {editor && (
+            <BubbleMenu
+              editor={editor}
+              shouldShow={({ editor }) => {
+                const show = !editor.isActive('comment') && isCommenting && !editor.state.selection.empty;
+                return show;
+              }}
+              className="z-[200]"
+            >
+              <div className="flex items-center gap-2 p-2 bg-background border border-border rounded-md shadow-lg min-w-[300px] pointer-events-auto">
+                <Input
+                  className="h-8 text-xs flex-1"
+                  placeholder="Type comment..."
+                  value={commentText}
+                  onChange={(e) => setCommentText(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      if (commentText.trim()) {
+                        editor.chain().focus().setComment({ author: "You", content: commentText }).run();
+                        setCommentText("");
+                        setIsCommenting(false);
+                      }
+                    } else if (e.key === 'Escape') {
+                      setIsCommenting(false);
+                    }
+                  }}
+                  autoFocus
+                />
+                <Button size="sm" className="h-7 px-2" onClick={() => {
+                  if (commentText.trim()) {
+                    editor.chain().focus().setComment({ author: "You", content: commentText }).run();
+                    setCommentText("");
+                    setIsCommenting(false);
+                  }
+                }}>Save</Button>
+                <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => setIsCommenting(false)}><X className="h-4 w-4" /></Button>
+              </div>
+            </BubbleMenu>
+          )}
+
+          {editor && (
+            <BubbleMenu
+              editor={editor}
+              shouldShow={({ editor }: { editor: any }) => editor.isActive("comment")}
+              className="flex flex-col gap-1 rounded-lg border bg-background p-2 shadow-md text-xs w-64 z-50"
+            >
+              {editor.getAttributes("comment").author && (
+                <div className="font-semibold text-muted-foreground flex justify-between items-center">
+                  <span>{editor.getAttributes("comment").author}</span>
+                  <span className="text-[10px] opacity-70">
+                    {editor.getAttributes("comment").createdAt ? new Date(editor.getAttributes("comment").createdAt).toLocaleDateString() : ""}
+                  </span>
+                </div>
+              )}
+              <div className="text-foreground">{editor.getAttributes("comment").content}</div>
+              <div className="flex justify-end mt-1">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-6 w-6 text-destructive hover:bg-destructive/10"
+                  onClick={() => editor.chain().focus().unsetComment().run()}
+                  title="Delete comment"
+                >
+                  <Trash2 className="h-3 w-3" />
+                </Button>
+              </div>
+            </BubbleMenu>
+          )}
+          <style jsx global>{`
           .ProseMirror ul {
             list-style-type: disc;
             padding-left: 1.5rem;
@@ -2681,19 +3033,19 @@ export function TiptapEditor({
             pointer-events: none;
           }
         `}</style>
-      </div>
+        </div>
 
-      {/* AI Processing Indicator */}
-      {
-        (isAIProcessing || isCiteProcessing) && (
-          <div className="border-t border-border p-2 bg-muted/50">
-            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              <Loader2 className="h-4 w-4 animate-spin" />
-              <span>{isCiteProcessing ? 'Searching for citations...' : 'AI is processing your request...'}</span>
+        {/* AI Processing Indicator */}
+        {
+          (isAIProcessing || isCiteProcessing) && (
+            <div className="border-t border-border p-2 bg-muted/50">
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                <span>{isCiteProcessing ? 'Searching for citations...' : 'AI is processing your request...'}</span>
+              </div>
             </div>
-          </div>
-        )
-      }
+          )
+        }
       </div>
 
       {/* Citation Selection Modal */}
@@ -2705,12 +3057,12 @@ export function TiptapEditor({
               Choose which sources you want to cite. Click on a source to select/deselect it.
             </DialogDescription>
           </DialogHeader>
-          
+
           <div className="space-y-3 py-2">
             {foundPapers.map((paper, index) => {
               const year = paper.year && paper.year > 0 ? paper.year : null
               const isSelected = selectedPapers.has(index)
-              
+
               return (
                 <div
                   key={paper.id}
@@ -2788,7 +3140,7 @@ export function TiptapEditor({
               Select citation style and preview your formatted bibliography
             </DialogDescription>
           </DialogHeader>
-          
+
           <div className="flex-1 overflow-y-auto space-y-3 py-2">
             {/* Citation Style Selector - More compact */}
             <div className="flex items-center gap-3">
@@ -2821,11 +3173,11 @@ export function TiptapEditor({
                     .map(([number, metadata]) => (
                       <div key={number} className="text-sm leading-relaxed">
                         <span className="font-medium inline-block min-w-[2rem]">[{number}]</span>
-                        <span 
+                        <span
                           className="inline"
-                          dangerouslySetInnerHTML={{ 
-                            __html: formatCitation(metadata, selectedCitationStyle) 
-                          }} 
+                          dangerouslySetInnerHTML={{
+                            __html: formatCitation(metadata, selectedCitationStyle)
+                          }}
                         />
                       </div>
                     ))}

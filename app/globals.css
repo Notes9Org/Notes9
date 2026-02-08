@@ -37,6 +37,8 @@
   --sidebar-accent-foreground: oklch(0.205 0 0);
   --sidebar-border: oklch(0.975 0 0);
   --sidebar-ring: oklch(0.708 0 0);
+  --highlight: #ffff00;
+  /* Standard vibrant yellow */
 }
 
 .dark {
@@ -71,6 +73,8 @@
   --sidebar-accent-foreground: oklch(0.985 0 0);
   --sidebar-border: oklch(1 0 0 / 10%);
   --sidebar-ring: oklch(0.556 0 0);
+  --highlight: #fff59d;
+  /* Light yellow for dark mode */
 }
 
 @theme inline {
@@ -193,23 +197,23 @@
     font-size: 0.875rem;
     /* 14px */
     cursor: pointer;
-    }
-    
-    /* Ensure interactive elements have pointer cursor */
-    a,
-    button,
-    [role="button"],
-    [type="button"],
-    [type="submit"],
-    [type="reset"],
-    select {
-      cursor: pointer;
-    }
-    
-    /* Disabled state should show not-allowed */
-    button:disabled,
-    [disabled] {
-      cursor: not-allowed;
+  }
+
+  /* Ensure interactive elements have pointer cursor */
+  a,
+  button,
+  [role="button"],
+  [type="button"],
+  [type="submit"],
+  [type="reset"],
+  select {
+    cursor: pointer;
+  }
+
+  /* Disabled state should show not-allowed */
+  button:disabled,
+  [disabled] {
+    cursor: not-allowed;
   }
 }
 
@@ -252,7 +256,40 @@ body {
 }
 
 /* Remove sidebar transition during resize to avoid lag between panel and main content */
-[data-sidebar-container][data-resizing] [data-slot="sidebar-container"],
 [data-sidebar-container][data-resizing] [data-slot="sidebar-gap"] {
   transition: none !important;
+}
+
+/* Comment Mark Styles */
+.comment-mark {
+  background-color: transparent;
+  border-bottom: 2px solid var(--color-primary);
+  /* Correct Tailwind v4 variable */
+  text-decoration: none;
+  position: relative;
+  white-space: nowrap;
+}
+
+.comment-mark::after {
+  content: "💬";
+  display: inline-block;
+  font-size: 0.75em;
+  vertical-align: super;
+  margin-left: 2px;
+  cursor: pointer;
+  opacity: 1;
+  /* Make it fully visible by default as user complained it's not appearing */
+  transition: transform 0.2s;
+}
+
+.comment-mark:hover::after {
+  transform: scale(1.2);
+}
+
+mark {
+  background-color: var(--highlight);
+  color: #1a1a1a !important;
+  /* Force dark text for high contrast on yellow, using !important to override Tiptap inline color if any */
+  border-radius: 2px;
+  padding: 0 2px;
 }
