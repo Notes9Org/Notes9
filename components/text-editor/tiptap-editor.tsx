@@ -993,6 +993,255 @@ export const Comment = Mark.create<CommentOptions>({
   addProseMirrorPlugins() {
     return []
   },
+})
+
+export interface IndentOptions {
+  types: string[];
+  indentLevels: number[];
+  defaultIndentLevel: number;
+}
+
+declare module '@tiptap/core' {
+  interface Commands<ReturnType> {
+    indent: {
+      setIndent: () => ReturnType;
+      unsetIndent: () => ReturnType;
+    };
+  }
+}
+
+export const Indent = Extension.create<IndentOptions>({
+  name: 'indent',
+
+  addOptions() {
+    return {
+      types: ['paragraph', 'heading', 'blockquote'],
+      indentLevels: [0, 30, 60, 90, 120, 150, 180, 210],
+      defaultIndentLevel: 0,
+    };
+  },
+
+  addGlobalAttributes() {
+    return [
+      {
+        types: this.options.types,
+        attributes: {
+          indent: {
+            default: this.options.defaultIndentLevel,
+            renderHTML: (attributes) => {
+              if (!attributes.indent || attributes.indent === 0) {
+                return {};
+              }
+              return {
+                style: `margin-left: ${attributes.indent}px`,
+              };
+            },
+            parseHTML: (element) => {
+              const left = element.style.marginLeft || element.style.paddingLeft;
+              const value = parseInt(left, 10);
+              return value && value > 0 ? value : 0;
+            },
+          },
+        },
+      },
+    ];
+  },
+
+  addCommands() {
+    return {
+      setIndent:
+        () =>
+          ({ tr, state, dispatch, editor }) => {
+            const { selection } = state;
+            const { from, to } = selection;
+
+            if (
+              editor.isActive('bulletList') ||
+              editor.isActive('orderedList') ||
+              editor.isActive('taskList')
+            ) {
+              return editor.chain().sinkListItem('listItem').run();
+            }
+
+            tr.doc.nodesBetween(from, to, (node, pos) => {
+              if (this.options.types.includes(node.type.name)) {
+                const indent = node.attrs.indent || 0;
+                const nextLevel =
+                  this.options.indentLevels.find((level) => level > indent) || indent;
+
+                if (nextLevel !== indent) {
+                  tr.setNodeMarkup(pos, undefined, {
+                    ...node.attrs,
+                    indent: nextLevel,
+                  });
+                }
+              }
+            });
+
+            if (dispatch) {
+              dispatch(tr);
+              return true;
+            }
+            return false;
+          },
+      unsetIndent:
+        () =>
+          ({ tr, state, dispatch, editor }) => {
+            const { selection } = state;
+            const { from, to } = selection;
+
+            if (
+              editor.isActive('bulletList') ||
+              editor.isActive('orderedList') ||
+              editor.isActive('taskList')
+            ) {
+              return editor.chain().liftListItem('listItem').run();
+            }
+
+            tr.doc.nodesBetween(from, to, (node, pos) => {
+              if (this.options.types.includes(node.type.name)) {
+                const indent = node.attrs.indent || 0;
+                const prevLevel =
+                  [...this.options.indentLevels]
+                    .reverse()
+                    .find((level) => level < indent) || 0;
+
+                if (prevLevel !== indent) {
+                  tr.setNodeMarkup(pos, undefined, {
+                    ...node.attrs,
+                    indent: prevLevel,
+                  });
+                }
+              }
+            });
+
+            if (dispatch) {
+              dispatch(tr);
+              return true;
+            }
+            return false;
+          },
+    };
+  },
+
+  addKeyboardShortcuts() {
+    return {
+      Tab: () => this.editor.commands.setIndent(),
+      'Shift-Tab': () => this.editor.commands.unsetIndent(),
+    };
+  },
+});
+
+export interface CommentOptions {
+  HTMLAttributes: Record<string, any>;
+}
+
+declare module '@tiptap/core' {
+  interface Commands<ReturnType> {
+    comment: {
+      setComment: (attributes: { author: string; content: string; createdAt?: number }) => ReturnType;
+      unsetComment: () => ReturnType;
+    };
+  }
+}
+
+export const Comment = Mark.create<CommentOptions>({
+  name: 'comment',
+
+  addOptions() {
+    return {
+      HTMLAttributes: {
+        class: 'comment-mark',
+      },
+    };
+  },
+
+  addAttributes() {
+    return {
+      id: {
+        default: null,
+        parseHTML: (element: HTMLElement) => element.getAttribute('data-id'),
+        renderHTML: (attributes: Record<string, any>) => {
+          if (!attributes.id) {
+            return {};
+          }
+          return {
+            'data-id': attributes.id,
+          };
+        },
+      },
+      author: {
+        default: null,
+        parseHTML: (element: HTMLElement) => element.getAttribute('data-author'),
+        renderHTML: (attributes: Record<string, any>) => {
+          if (!attributes.author) {
+            return {};
+          }
+          return {
+            'data-author': attributes.author,
+          };
+        },
+      },
+      createdAt: {
+        default: null,
+        parseHTML: (element: HTMLElement) => element.getAttribute('data-created-at'),
+        renderHTML: (attributes: Record<string, any>) => {
+          if (!attributes.createdAt) {
+            return {};
+          }
+          return {
+            'data-created-at': attributes.createdAt,
+          };
+        },
+      },
+      content: {
+        default: null,
+        parseHTML: (element: HTMLElement) => element.getAttribute('data-content'),
+        renderHTML: (attributes: Record<string, any>) => {
+          if (!attributes.content) {
+            return {};
+          }
+          return {
+            'data-content': attributes.content,
+          };
+        },
+      },
+    };
+  },
+
+  parseHTML() {
+    return [
+      {
+        tag: 'span[data-comment]',
+        getAttrs: (element) => !!(element as HTMLElement).getAttribute('data-comment') && null,
+      },
+    ];
+  },
+
+  renderHTML({ HTMLAttributes }: { HTMLAttributes: Record<string, any> }) {
+    return ['span', mergeAttributes(this.options.HTMLAttributes, HTMLAttributes, { 'data-comment': '' }), 0];
+  },
+
+  addCommands() {
+    console.log("Comment extension addCommands called");
+    return {
+      setComment:
+        (attributes: any) =>
+          ({ commands }: { commands: any }) => {
+            const id = `comment-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+            return commands.setMark(this.name, {
+              ...attributes,
+              id,
+              createdAt: attributes.createdAt || Date.now(),
+            });
+          },
+      unsetComment:
+        () =>
+          ({ commands }: { commands: any }) => {
+            return commands.unsetMark(this.name);
+          },
+    };
+  },
 });
 
 export function TiptapEditor({
@@ -1084,6 +1333,8 @@ export function TiptapEditor({
   useEffect(() => {
     labNotesRef.current = labNotes
   }, [labNotes])
+
+
 
   const editor = useEditor({
     immediatelyRender: false,
@@ -2800,18 +3051,21 @@ export function TiptapEditor({
                       e.preventDefault();
                     }}
                     onClick={() => {
-                      if (!editor.state.selection.empty) {
+                      console.log("Comment button clicked, selection empty:", editor.state.selection.empty);
+                      if (editor.isActive('comment')) {
+                        editor.chain().focus().unsetComment().run();
+                      } else if (editor.state.selection.empty) {
+                        toast.error("Please select text to comment on");
+                      } else {
                         setIsCommenting(true);
                         editor.chain().focus().run();
-                      } else {
-                        setCommentsSidebarOpen(!commentsSidebarOpen);
                       }
                     }}
                   >
-                    <MessageSquare className="h-4 w-4 animate-logo-subtle" />
+                    <MessageSquarePlus className="h-4 w-4" />
                   </Button>
                 </TooltipTrigger>
-                <TooltipContent>Comments</TooltipContent>
+                <TooltipContent>Insert comment</TooltipContent>
               </Tooltip>
 
               <Tooltip>
@@ -3444,7 +3698,6 @@ export function TiptapEditor({
           }
         `}</style>
         </div>
-
 
         {/* AI Processing Indicator */}
         {
