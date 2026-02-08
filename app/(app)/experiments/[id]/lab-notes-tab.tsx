@@ -56,9 +56,15 @@ interface LinkedProtocol {
   protocol: {
     id: string;
     name: string;
-    version: string | null;
+    version?: string | null;
   };
 }
+
+interface ProtocolItem {
+  id: string
+  name: string
+  version?: string | null
+};
 
 export function LabNotesTab({
   experimentId,
@@ -93,6 +99,7 @@ export function LabNotesTab({
 
   // Linked protocols state
   const [linkedProtocols, setLinkedProtocols] = useState<LinkedProtocol[]>([]);
+  const [availableProtocols, setAvailableProtocols] = useState<ProtocolItem[]>([]);
 
   // Notebook list panel collapsed for more note-taking space (start closed)
   const [notebookPanelOpen, setNotebookPanelOpen] = useState(false);
@@ -232,6 +239,23 @@ export function LabNotesTab({
       titleInputRef.current.select();
     }
   }, [isEditingTitle]);
+
+  // Fetch all available protocols for mentions
+  useEffect(() => {
+    const fetchAllProtocols = async () => {
+      const supabase = createClient();
+      const { data } = await supabase
+        .from("protocols")
+        .select("id, name, version")
+        .order("name");
+
+      if (data) {
+        setAvailableProtocols(data);
+      }
+    };
+
+    fetchAllProtocols();
+  }, []);
 
   // Fetch linked protocols when a note is selected
   useEffect(() => {
@@ -1158,145 +1182,145 @@ export function LabNotesTab({
 
             {/* Editor area - header + content */}
             <div className="flex flex-1 min-w-0 min-h-0 flex-col py-4 gap-4 relative z-0">
-          <CardHeader className="pb-0 px-4 sm:px-6 shrink-0">
-            <div className="flex items-center justify-between gap-3">
-              <div className="flex flex-1 min-w-0 items-center gap-2">
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  className="h-8 w-8 shrink-0 text-muted-foreground hover:text-foreground pointer-events-auto"
-                  onClick={(e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    setNotebookPanelOpen((open) => !open);
-                  }}
-                  aria-label={notebookPanelOpen ? "Hide notes" : "Show notes"}
-                  title={notebookPanelOpen ? "Hide notes list" : `Show notes (${notes.length})`}
-                >
-                  {notebookPanelOpen ? (
-                    <ChevronLeft className="h-4 w-4 pointer-events-none" />
-                  ) : (
-                    <List className="h-4 w-4 pointer-events-none" />
-                  )}
-                </Button>
-                <div className="flex flex-1 min-w-0 items-center gap-1">
-                <div className="flex-1 min-w-0">
-                  {isEditingTitle && selectedNote ? (
-                    <input
-                      ref={titleInputRef}
-                      type="text"
-                      value={formData.title}
-                      onChange={(e) => setFormData((f) => ({ ...f, title: e.target.value }))}
-                      onBlur={handleInlineTitleSave}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter") {
-                          e.preventDefault();
-                          titleInputRef.current?.blur();
-                        }
-                        if (e.key === "Escape") {
-                          setFormData((f) => ({ ...f, title: selectedNote.title || "" }));
-                          setIsEditingTitle(false);
-                          titleInputRef.current?.blur();
-                        }
+              <CardHeader className="pb-0 px-4 sm:px-6 shrink-0">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex flex-1 min-w-0 items-center gap-2">
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8 shrink-0 text-muted-foreground hover:text-foreground pointer-events-auto"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        setNotebookPanelOpen((open) => !open);
                       }}
-                      className="w-full bg-transparent text-lg font-semibold text-foreground leading-none outline-none border-b border-transparent focus:border-primary"
-                      aria-label="Edit note title"
-                    />
-                  ) : (
-                    <div
-                      className={cn(
-                        "truncate",
-                        !isCreating && selectedNote && "cursor-pointer rounded px-1 -mx-1 hover:bg-muted/60 hover:text-foreground"
-                      )}
-                      onClick={() => {
-                        if (!isCreating && selectedNote) setIsEditingTitle(true);
-                      }}
-                      role={!isCreating && selectedNote ? "button" : undefined}
-                      tabIndex={!isCreating && selectedNote ? 0 : undefined}
-                      onKeyDown={(e) => {
-                        if (!isCreating && selectedNote && (e.key === "Enter" || e.key === " ")) {
-                          e.preventDefault();
-                          setIsEditingTitle(true);
-                        }
-                      }}
-                      aria-label={!isCreating && selectedNote ? "Click to edit title" : undefined}
+                      aria-label={notebookPanelOpen ? "Hide notes" : "Show notes"}
+                      title={notebookPanelOpen ? "Hide notes list" : `Show notes (${notes.length})`}
                     >
-                      <CardTitle className="text-lg font-semibold text-foreground truncate leading-none">
-                        {isCreating
-                          ? "New Lab Note"
-                          : formData.title || "Untitled Lab Note"}
-                      </CardTitle>
+                      {notebookPanelOpen ? (
+                        <ChevronLeft className="h-4 w-4 pointer-events-none" />
+                      ) : (
+                        <List className="h-4 w-4 pointer-events-none" />
+                      )}
+                    </Button>
+                    <div className="flex flex-1 min-w-0 items-center gap-1">
+                      <div className="flex-1 min-w-0">
+                        {isEditingTitle && selectedNote ? (
+                          <input
+                            ref={titleInputRef}
+                            type="text"
+                            value={formData.title}
+                            onChange={(e) => setFormData((f) => ({ ...f, title: e.target.value }))}
+                            onBlur={handleInlineTitleSave}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") {
+                                e.preventDefault();
+                                titleInputRef.current?.blur();
+                              }
+                              if (e.key === "Escape") {
+                                setFormData((f) => ({ ...f, title: selectedNote.title || "" }));
+                                setIsEditingTitle(false);
+                                titleInputRef.current?.blur();
+                              }
+                            }}
+                            className="w-full bg-transparent text-lg font-semibold text-foreground leading-none outline-none border-b border-transparent focus:border-primary"
+                            aria-label="Edit note title"
+                          />
+                        ) : (
+                          <div
+                            className={cn(
+                              "truncate",
+                              !isCreating && selectedNote && "cursor-pointer rounded px-1 -mx-1 hover:bg-muted/60 hover:text-foreground"
+                            )}
+                            onClick={() => {
+                              if (!isCreating && selectedNote) setIsEditingTitle(true);
+                            }}
+                            role={!isCreating && selectedNote ? "button" : undefined}
+                            tabIndex={!isCreating && selectedNote ? 0 : undefined}
+                            onKeyDown={(e) => {
+                              if (!isCreating && selectedNote && (e.key === "Enter" || e.key === " ")) {
+                                e.preventDefault();
+                                setIsEditingTitle(true);
+                              }
+                            }}
+                            aria-label={!isCreating && selectedNote ? "Click to edit title" : undefined}
+                          >
+                            <CardTitle className="text-lg font-semibold text-foreground truncate leading-none">
+                              {isCreating
+                                ? "New Lab Note"
+                                : formData.title || "Untitled Lab Note"}
+                            </CardTitle>
+                          </div>
+                        )}
+                      </div>
+                      <SaveStatusIndicator
+                        status={autoSaveStatus}
+                        lastSaved={lastSaved}
+                        variant="icon"
+                        onClick={handleSave}
+                        disabled={isSaving || !formData.title.trim()}
+                      />
                     </div>
-                  )}
-                </div>
-                <SaveStatusIndicator
-                  status={autoSaveStatus}
-                  lastSaved={lastSaved}
-                  variant="icon"
-                  onClick={handleSave}
-                  disabled={isSaving || !formData.title.trim()}
-                />
-                </div>
-              </div>
-              <div className="flex items-center gap-1 shrink-0">
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-8 w-8 m-0 text-muted-foreground hover:text-foreground"
-                  disabled={isCreatingNew}
-                  onClick={() => {
-                    setNotebookPanelOpen(true);
-                    handleNewNote();
-                  }}
-                  aria-label="New lab note"
-                >
-                  {isCreatingNew ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <Plus className="h-4 w-4" />
-                  )}
-                </Button>
-                {!isCreating && selectedNote && (
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-8 w-8 text-muted-foreground hover:text-foreground"
-                        aria-label="Export"
-                      >
-                        <Download className="h-4 w-4" />
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
-                      <DropdownMenuLabel>Download as...</DropdownMenuLabel>
-                      <DropdownMenuSeparator />
-                      <DropdownMenuItem onClick={downloadAsMarkdown}>
-                        <FileCode className="h-4 w-4 mr-2" />
-                        Markdown (.md)
-                      </DropdownMenuItem>
-                      <DropdownMenuItem onClick={downloadAsHTML}>
-                        <FileText className="h-4 w-4 mr-2" />
-                        HTML (.html)
-                      </DropdownMenuItem>
+                  </div>
+                  <div className="flex items-center gap-1 shrink-0">
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8 m-0 text-muted-foreground hover:text-foreground"
+                      disabled={isCreatingNew}
+                      onClick={() => {
+                        setNotebookPanelOpen(true);
+                        handleNewNote();
+                      }}
+                      aria-label="New lab note"
+                    >
+                      {isCreatingNew ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <Plus className="h-4 w-4" />
+                      )}
+                    </Button>
+                    {!isCreating && selectedNote && (
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                            aria-label="Export"
+                          >
+                            <Download className="h-4 w-4" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuLabel>Download as...</DropdownMenuLabel>
+                          <DropdownMenuSeparator />
+                          <DropdownMenuItem onClick={downloadAsMarkdown}>
+                            <FileCode className="h-4 w-4 mr-2" />
+                            Markdown (.md)
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onClick={downloadAsHTML}>
+                            <FileText className="h-4 w-4 mr-2" />
+                            HTML (.html)
+                          </DropdownMenuItem>
 
-                      <DropdownMenuSeparator />
-                      <DropdownMenuItem onClick={downloadAsPDF}>
-                        <FileText className="h-4 w-4 mr-2" />
-                        PDF (.pdf)
-                      </DropdownMenuItem>
-                      <DropdownMenuItem onClick={downloadAsDOCX}>
-                        <FileText className="h-4 w-4 mr-2" />
-                        Word (.docx)
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                )}
-                {/* Share Button - Google Docs style */}
+                          <DropdownMenuSeparator />
+                          <DropdownMenuItem onClick={downloadAsPDF}>
+                            <FileText className="h-4 w-4 mr-2" />
+                            PDF (.pdf)
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onClick={downloadAsDOCX}>
+                            <FileText className="h-4 w-4 mr-2" />
+                            Word (.docx)
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    )}
+                    {/* Share Button - Google Docs style */}
 
-                {/* Publish button temporarily hidden */}
-                {/* {!isCreating && selectedNote && (
+                    {/* Publish button temporarily hidden */}
+                    {/* {!isCreating && selectedNote && (
                   <div className="flex items-center gap-2">
                     {publicUrl ? (
                       <div className="flex items-center gap-2">
@@ -1352,42 +1376,42 @@ export function LabNotesTab({
                     )}
                   </div>
                 )} */}
-              </div>
-            </div>
-            <div
-              ref={(el) => {
-                (toolbarPortalRef as React.MutableRefObject<HTMLDivElement | null>).current = el;
-                if (el && !toolbarPortalReadyRef.current) {
-                  toolbarPortalReadyRef.current = true;
-                  setToolbarPortalReady(true);
-                }
-              }}
-              className="min-h-0"
-            />
-          </CardHeader>
-          <CardContent className="space-y-3 px-4 sm:px-6">
-            {/* Rich Text Editor */}
-            <div>
-              <TiptapEditor
-                content={formData.content}
-                onChange={(content) => {
-                  setFormData({ ...formData, content });
-                  // Trigger auto-save (works for both creation and editing)
-                  debouncedSave(content);
-                }}
-                placeholder="Write your lab notes here... Use @ to tag protocols"
-                title={formData.title || "lab-note"}
-                minHeight="400px"
-                showAITools={true}
-                protocols={linkedProtocols.map(lp => ({
-                  id: lp.protocol_id,
-                  name: lp.protocol.name,
-                  version: lp.protocol.version,
-                }))}
-                toolbarPortalRef={toolbarPortalRef}
-              />
-            </div>
-          </CardContent>
+                  </div>
+                </div>
+                <div
+                  ref={(el) => {
+                    (toolbarPortalRef as React.MutableRefObject<HTMLDivElement | null>).current = el;
+                    if (el && !toolbarPortalReadyRef.current) {
+                      toolbarPortalReadyRef.current = true;
+                      setToolbarPortalReady(true);
+                    }
+                  }}
+                  className="min-h-0"
+                />
+              </CardHeader>
+              <CardContent className="space-y-3 px-4 sm:px-6">
+                {/* Rich Text Editor */}
+                <div>
+                  <TiptapEditor
+                    content={formData.content}
+                    onChange={(content) => {
+                      setFormData({ ...formData, content });
+                      // Trigger auto-save (works for both creation and editing)
+                      debouncedSave(content);
+                    }}
+                    placeholder="Write your lab notes here... Use @ to tag protocols"
+                    title={formData.title || "lab-note"}
+                    minHeight="400px"
+                    showAITools={true}
+                    protocols={availableProtocols.map(p => ({
+                      id: p.id,
+                      name: p.name,
+                      version: p.version,
+                    }))}
+                    toolbarPortalRef={toolbarPortalRef}
+                  />
+                </div>
+              </CardContent>
             </div>
           </div>
         </Card>

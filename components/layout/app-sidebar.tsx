@@ -95,6 +95,7 @@ interface Project {
   id: string
   name: string
   status: string
+  created_at?: string
   experiment_count?: number
   experiments?: ExperimentSummary[]
 }
@@ -390,9 +391,10 @@ export function AppSidebar() {
         // Fetch projects for this organization (all statuses)
         const { data: projectsData, error: projectsError } = await supabase
           .from("projects")
-          .select("id, name, status")
+          .select("id, name, status, created_at")
           .eq("organization_id", userProfileData.organization_id)
-          .order("updated_at", { ascending: false })
+          .order("created_at", { ascending: false })
+          .limit(5)
 
         if (projectsError) {
           console.error("Error fetching projects:", projectsError)
@@ -769,7 +771,7 @@ export function AppSidebar() {
                 <SidebarGroup>
                   <div className="flex h-8 shrink-0 items-center gap-2 rounded-md px-2 text-xs font-medium text-sidebar-foreground/70 outline-hidden ring-sidebar-ring focus-visible:ring-2 [&>svg]:size-4 [&>svg]:shrink-0">
                     <CollapsibleTrigger className="flex min-w-0 flex-1 items-center gap-2 text-left hover:text-sidebar-foreground transition-colors">
-                      <span className="truncate">Active Projects</span>
+                      <span className="truncate">Recent Projects</span>
                       <ChevronDown className="size-4 shrink-0 transition-transform duration-200 group-data-[state=open]/collapsible:rotate-180" />
                     </CollapsibleTrigger>
                     <button
@@ -786,171 +788,171 @@ export function AppSidebar() {
                     </button>
                   </div>
                   <CollapsibleContent>
-                <SidebarGroupContent>
-                  <SidebarMenu>
-                    {loading ? (
-                      Array.from({ length: 3 }).map((_, index) => (
-                        <SidebarMenuItem key={index}>
-                          <SidebarMenuSkeleton showIcon />
-                        </SidebarMenuItem>
-                      ))
-                    ) : projects.length === 0 ? (
-                      <SidebarMenuItem>
-                        <div className="flex h-8 items-center rounded-md px-2 text-xs text-sidebar-foreground/70">
-                          No active projects
-                        </div>
-                      </SidebarMenuItem>
-                    ) : (
-                      projects.map((project) => {
-                        const isProjectOpen = openProjects[project.id] ?? false
-                        return (
-                          <SidebarMenuItem key={project.id}>
-                            <div className="flex h-8 w-full min-w-0 items-center gap-2 rounded-md p-2 transition-colors">
-                              <button
-                                type="button"
-                                className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground transition-colors [&>svg]:size-4"
-                                onClick={() =>
-                                  setOpenProjects((prev) => ({
-                                    ...prev,
-                                    [project.id]: !isProjectOpen,
-                                  }))
-                                }
-                                aria-label={isProjectOpen ? "Collapse project" : "Expand project"}
-                              >
-                                {isProjectOpen ? (
-                                  <FolderOpen className="size-4" />
-                                ) : (
-                                  <Folder className="size-4" />
-                                )}
-                              </button>
-                              <SidebarMenuButton
-                                asChild
-                                isActive={mounted && pathname === `/projects/${project.id}`}
-                                tooltip={project.name}
-                                className="min-w-0 flex-1 gap-2 pl-0"
-                              >
-                                <Link
-                                  href={`/projects/${project.id}`}
-                                  draggable
-                                  onDragStart={(e) => {
-                                    e.dataTransfer.setData('application/json', JSON.stringify({
-                                      type: 'project',
-                                      id: project.id,
-                                      name: project.name
-                                    }));
-                                    e.dataTransfer.effectAllowed = 'copy';
-                                  }}
-                                  onClick={(e) => e.stopPropagation()}
-                                >
-                                  <span className="truncate">{project.name}</span>
-                                </Link>
-                              </SidebarMenuButton>
-                              <button
-                                type="button"
-                                className="flex h-5 min-w-[1.25rem] shrink-0 items-center justify-center rounded-md text-xs font-medium tabular-nums text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground transition-colors"
-                                onClick={() =>
-                                  setOpenProjects((prev) => ({
-                                    ...prev,
-                                    [project.id]: !isProjectOpen,
-                                  }))
-                                }
-                                aria-label={isProjectOpen ? "Collapse project" : "Expand project"}
-                              >
-                                {project.experiment_count ?? 0}
-                              </button>
+                    <SidebarGroupContent>
+                      <SidebarMenu>
+                        {loading ? (
+                          Array.from({ length: 3 }).map((_, index) => (
+                            <SidebarMenuItem key={index}>
+                              <SidebarMenuSkeleton showIcon />
+                            </SidebarMenuItem>
+                          ))
+                        ) : projects.length === 0 ? (
+                          <SidebarMenuItem>
+                            <div className="flex h-8 items-center rounded-md px-2 text-xs text-sidebar-foreground/70">
+                              No active projects
                             </div>
+                          </SidebarMenuItem>
+                        ) : (
+                          projects.map((project) => {
+                            const isProjectOpen = openProjects[project.id] ?? false
+                            return (
+                              <SidebarMenuItem key={project.id}>
+                                <div className="flex h-8 w-full min-w-0 items-center gap-2 rounded-md p-2 transition-colors">
+                                  <button
+                                    type="button"
+                                    className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground transition-colors [&>svg]:size-4"
+                                    onClick={() =>
+                                      setOpenProjects((prev) => ({
+                                        ...prev,
+                                        [project.id]: !isProjectOpen,
+                                      }))
+                                    }
+                                    aria-label={isProjectOpen ? "Collapse project" : "Expand project"}
+                                  >
+                                    {isProjectOpen ? (
+                                      <FolderOpen className="size-4" />
+                                    ) : (
+                                      <Folder className="size-4" />
+                                    )}
+                                  </button>
+                                  <SidebarMenuButton
+                                    asChild
+                                    isActive={mounted && pathname === `/projects/${project.id}`}
+                                    tooltip={project.name}
+                                    className="min-w-0 flex-1 gap-2 pl-0"
+                                  >
+                                    <Link
+                                      href={`/projects/${project.id}`}
+                                      draggable
+                                      onDragStart={(e) => {
+                                        e.dataTransfer.setData('application/json', JSON.stringify({
+                                          type: 'project',
+                                          id: project.id,
+                                          name: project.name
+                                        }));
+                                        e.dataTransfer.effectAllowed = 'copy';
+                                      }}
+                                      onClick={(e) => e.stopPropagation()}
+                                    >
+                                      <span className="truncate">{project.name}</span>
+                                    </Link>
+                                  </SidebarMenuButton>
+                                  <button
+                                    type="button"
+                                    className="flex h-5 min-w-[1.25rem] shrink-0 items-center justify-center rounded-md text-xs font-medium tabular-nums text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground transition-colors"
+                                    onClick={() =>
+                                      setOpenProjects((prev) => ({
+                                        ...prev,
+                                        [project.id]: !isProjectOpen,
+                                      }))
+                                    }
+                                    aria-label={isProjectOpen ? "Collapse project" : "Expand project"}
+                                  >
+                                    {project.experiment_count ?? 0}
+                                  </button>
+                                </div>
 
-                            {isProjectOpen && project.experiments && project.experiments.length > 0 && (
-                              <div className="ml-6 mt-2 space-y-1 border-l border-border/50 pl-3">
-                                {project.experiments.map((exp) => {
-                                  const isExpOpen = openExperiments[exp.id] ?? false
-                                  return (
-                                    <div key={exp.id}>
-                                      <div className="flex w-full min-w-0 items-center gap-2">
-                                        <button
-                                          className="shrink-0 rounded-md p-1.5 text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground transition-colors [&>svg]:size-4"
-                                          onClick={() =>
-                                            setOpenExperiments((prev) => ({
-                                              ...prev,
-                                              [exp.id]: !isExpOpen,
-                                            }))
-                                          }
-                                          aria-label={isExpOpen ? "Collapse experiment" : "Expand experiment"}
-                                        >
-                                          <FlaskConical
-                                            className={cn(
-                                              "size-4 transition-transform",
-                                              isExpOpen ? "rotate-12 text-sidebar-accent-foreground" : "-rotate-12"
-                                            )}
-                                          />
-                                        </button>
-                                        <button
-                                          onClick={() => router.push(`/experiments/${exp.id}`)}
-                                          draggable
-                                          onDragStart={(e) => {
-                                            e.stopPropagation();
-                                            e.dataTransfer.setData('application/json', JSON.stringify({
-                                              type: 'experiment',
-                                              id: exp.id,
-                                              name: exp.name
-                                            }));
-                                            e.dataTransfer.effectAllowed = 'copy';
-                                          }}
-                                          className={cn(
-                                            "min-w-0 flex-1 rounded-md px-2 py-1.5 text-left text-sm truncate cursor-grab active:cursor-grabbing transition-colors",
-                                            pathname === `/experiments/${exp.id}`
-                                              ? "font-medium text-sidebar-accent-foreground bg-sidebar-accent"
-                                              : "text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
-                                          )}
-                                        >
-                                          {exp.name}
-                                        </button>
-                                      </div>
-
-                                      {isExpOpen && exp.lab_notes && exp.lab_notes.length > 0 && (
-                                        <div className="ml-6 mt-1 space-y-0.5">
-                                          {exp.lab_notes.map((note) => (
+                                {isProjectOpen && project.experiments && project.experiments.length > 0 && (
+                                  <div className="ml-6 mt-2 space-y-1 border-l border-border/50 pl-3">
+                                    {project.experiments.map((exp) => {
+                                      const isExpOpen = openExperiments[exp.id] ?? false
+                                      return (
+                                        <div key={exp.id}>
+                                          <div className="flex w-full min-w-0 items-center gap-2">
                                             <button
-                                              key={note.id}
-                                              onClick={() => router.push(`/experiments/${exp.id}?tab=notes&noteId=${note.id}`)}
+                                              className="shrink-0 rounded-md p-1.5 text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground transition-colors [&>svg]:size-4"
+                                              onClick={() =>
+                                                setOpenExperiments((prev) => ({
+                                                  ...prev,
+                                                  [exp.id]: !isExpOpen,
+                                                }))
+                                              }
+                                              aria-label={isExpOpen ? "Collapse experiment" : "Expand experiment"}
+                                            >
+                                              <FlaskConical
+                                                className={cn(
+                                                  "size-4 transition-transform",
+                                                  isExpOpen ? "rotate-12 text-sidebar-accent-foreground" : "-rotate-12"
+                                                )}
+                                              />
+                                            </button>
+                                            <button
+                                              onClick={() => router.push(`/experiments/${exp.id}`)}
                                               draggable
                                               onDragStart={(e) => {
                                                 e.stopPropagation();
                                                 e.dataTransfer.setData('application/json', JSON.stringify({
-                                                  type: 'lab_note',
-                                                  id: note.id,
-                                                  name: note.title || 'Untitled note',
-                                                  experimentId: exp.id
+                                                  type: 'experiment',
+                                                  id: exp.id,
+                                                  name: exp.name
                                                 }));
                                                 e.dataTransfer.effectAllowed = 'copy';
                                               }}
                                               className={cn(
-                                                "flex w-full min-w-0 items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs truncate cursor-grab active:cursor-grabbing transition-colors [&>svg]:size-4 [&>svg]:shrink-0",
-                                                pathname.startsWith(`/experiments/${exp.id}`)
-                                                  ? "bg-sidebar-accent text-sidebar-accent-foreground font-medium"
+                                                "min-w-0 flex-1 rounded-md px-2 py-1.5 text-left text-sm truncate cursor-grab active:cursor-grabbing transition-colors",
+                                                pathname === `/experiments/${exp.id}`
+                                                  ? "font-medium text-sidebar-accent-foreground bg-sidebar-accent"
                                                   : "text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
                                               )}
                                             >
-                                              <FileText className="size-4 shrink-0" />
-                                              <span className="min-w-0 truncate">{note.title || "Untitled note"}</span>
+                                              {exp.name}
                                             </button>
-                                          ))}
+                                          </div>
+
+                                          {isExpOpen && exp.lab_notes && exp.lab_notes.length > 0 && (
+                                            <div className="ml-6 mt-1 space-y-0.5">
+                                              {exp.lab_notes.map((note) => (
+                                                <button
+                                                  key={note.id}
+                                                  onClick={() => router.push(`/experiments/${exp.id}?tab=notes&noteId=${note.id}`)}
+                                                  draggable
+                                                  onDragStart={(e) => {
+                                                    e.stopPropagation();
+                                                    e.dataTransfer.setData('application/json', JSON.stringify({
+                                                      type: 'lab_note',
+                                                      id: note.id,
+                                                      name: note.title || 'Untitled note',
+                                                      experimentId: exp.id
+                                                    }));
+                                                    e.dataTransfer.effectAllowed = 'copy';
+                                                  }}
+                                                  className={cn(
+                                                    "flex w-full min-w-0 items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs truncate cursor-grab active:cursor-grabbing transition-colors [&>svg]:size-4 [&>svg]:shrink-0",
+                                                    pathname.startsWith(`/experiments/${exp.id}`)
+                                                      ? "bg-sidebar-accent text-sidebar-accent-foreground font-medium"
+                                                      : "text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+                                                  )}
+                                                >
+                                                  <FileText className="size-4 shrink-0" />
+                                                  <span className="min-w-0 truncate">{note.title || "Untitled note"}</span>
+                                                </button>
+                                              ))}
+                                            </div>
+                                          )}
                                         </div>
-                                      )}
-                                    </div>
-                                  )
-                                })}
-                              </div>
-                            )}
-                          </SidebarMenuItem>
-                        )
-                      })
-                    )}
-                  </SidebarMenu>
-                </SidebarGroupContent>
-              </CollapsibleContent>
-            </SidebarGroup>
-          </Collapsible>
+                                      )
+                                    })}
+                                  </div>
+                                )}
+                              </SidebarMenuItem>
+                            )
+                          })
+                        )}
+                      </SidebarMenu>
+                    </SidebarGroupContent>
+                  </CollapsibleContent>
+                </SidebarGroup>
+              </Collapsible>
             ) : (
               <SidebarGroup>
                 <div className="flex h-8 shrink-0 items-center rounded-md px-2 text-xs font-medium text-sidebar-foreground/70">
