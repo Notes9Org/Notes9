@@ -17,6 +17,7 @@ import { Label } from "@/components/ui/label"
 import { useToast } from "@/hooks/use-toast"
 import { useRouter } from "next/navigation"
 import { Copy, Loader2 } from "lucide-react"
+import { getUniqueNameErrorMessage } from "@/lib/unique-name-error"
 import { Checkbox } from "@/components/ui/checkbox"
 
 interface Experiment {
@@ -120,7 +121,7 @@ export function DuplicateExperimentDialog({
       console.error("Duplicate error:", error)
       toast({
         title: "Duplication Failed",
-        description: error.message || "Failed to duplicate experiment",
+        description: getUniqueNameErrorMessage(error, "experiment"),
         variant: "destructive",
       })
     } finally {

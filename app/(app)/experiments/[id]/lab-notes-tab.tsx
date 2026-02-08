@@ -22,12 +22,19 @@ import {
   DropdownMenuSeparator,
   DropdownMenuLabel,
 } from "@/components/ui/dropdown-menu"
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
 import { AffineBlock } from "@/components/text-editor/affine-block"
 import { TiptapEditor } from "@/components/text-editor/tiptap-editor"
 import { useToast } from "@/hooks/use-toast"
 import { useAutoSave } from "@/hooks/use-auto-save"
 import { SaveStatusIndicator } from "@/components/ui/save-status"
-import { Save, Plus, FileText, Download, FileCode, Globe, Loader2, X, Users } from "lucide-react"
+import { Save, Plus, FileText, Download, FileCode, Globe, Loader2, X, Users, ChevronLeft, ChevronRight, MoreVertical, Trash2, List, Pencil } from "lucide-react"
 import { LinkNoteProtocolDialog } from "./link-note-protocol-dialog"
 import {
   Table,
@@ -38,7 +45,9 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
-import { cn } from "@/lib/utils";
+import { cn } from "@/lib/utils"
+import { getUniqueNameErrorMessage } from "@/lib/unique-name-error"
+import { useBreadcrumb } from "@/components/layout/breadcrumb-context"
 
 interface LabNote {
   id: string;
@@ -60,14 +69,26 @@ interface LinkedProtocol {
   };
 }
 
-export function LabNotesTab({ experimentId }: { experimentId: string }) {
+export function LabNotesTab({
+  experimentId,
+  experimentName,
+  projectName,
+  projectId,
+}: {
+  experimentId: string
+  experimentName?: string
+  projectName?: string
+  projectId?: string
+}) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { toast } = useToast();
+  const { setSegments } = useBreadcrumb();
 
   const [notes, setNotes] = useState<LabNote[]>([]);
   const [selectedNote, setSelectedNote] = useState<LabNote | null>(null);
   const [isCreating, setIsCreating] = useState(false);
+  const [isCreatingNew, setIsCreatingNew] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [isPublishing, setIsPublishing] = useState(false);
   const [publicUrl, setPublicUrl] = useState<string | null>(null);
@@ -81,6 +102,13 @@ export function LabNotesTab({ experimentId }: { experimentId: string }) {
 
   // Linked protocols state
   const [linkedProtocols, setLinkedProtocols] = useState<LinkedProtocol[]>([]);
+
+  // Notebook list panel collapsed for more note-taking space
+  const [notebookPanelOpen, setNotebookPanelOpen] = useState(true);
+
+  // Rename note dialog
+  const [renameNoteId, setRenameNoteId] = useState<string | null>(null);
+  const [renameTitle, setRenameTitle] = useState("");
 
   // Auto-save functionality
   const handleAutoSave = async (content: string, title?: string, noteType?: string) => {
@@ -152,7 +180,7 @@ export function LabNotesTab({ experimentId }: { experimentId: string }) {
       }
     } catch (error: any) {
       console.error("Auto-save error:", error);
-      throw error; // Re-throw to trigger error status in auto-save hook
+      throw new Error(getUniqueNameErrorMessage(error, "lab_note"));
     }
   };
 
@@ -185,6 +213,20 @@ export function LabNotesTab({ experimentId }: { experimentId: string }) {
     fetchNotes(noteIdFromQuery);
   }, [experimentId, noteIdFromQuery]);
 
+  // Sync header breadcrumb: project › experiment › current note name
+  useEffect(() => {
+    if (!projectName || !experimentName) return;
+    const baseSegments = [
+      { label: projectName, href: projectId ? `/projects/${projectId}` : undefined },
+      { label: experimentName },
+    ];
+    const noteTitle = formData.title || selectedNote?.title || "Lab notes";
+    setSegments([...baseSegments, { label: noteTitle }]);
+    return () => {
+      setSegments(baseSegments);
+    };
+  }, [projectName, experimentName, projectId, setSegments, formData.title, selectedNote?.title]);
+
   // Fetch linked protocols when a note is selected
   useEffect(() => {
     if (selectedNote && !isCreating) {
@@ -214,6 +256,42 @@ export function LabNotesTab({ experimentId }: { experimentId: string }) {
 
     checkPublicStatus();
   }, [selectedNote]);
+
+  // Sync current note metadata to document root for external/accessibility use
+  useEffect(() => {
+    const root = document.documentElement;
+    const attrs: Record<string, string> = {
+      "data-experiment-id": String(experimentId ?? ""),
+    };
+
+    if (selectedNote && !isCreating) {
+      attrs["data-note-id"] = selectedNote.id;
+      attrs["data-note-title"] = selectedNote.title || "Untitled";
+      attrs["data-note-created-at"] = selectedNote.created_at ?? "";
+      attrs["data-note-updated-at"] = selectedNote.updated_at ?? "";
+    } else if (isCreating) {
+      attrs["data-note-title"] = formData.title.trim() || "Untitled";
+      attrs["data-note-created-at"] = "";
+      attrs["data-note-updated-at"] = "";
+    } else {
+      attrs["data-note-id"] = "";
+      attrs["data-note-title"] = "";
+      attrs["data-note-created-at"] = "";
+      attrs["data-note-updated-at"] = "";
+    }
+
+    for (const [key, value] of Object.entries(attrs)) {
+      root.setAttribute(key, value);
+    }
+
+    return () => {
+      root.removeAttribute("data-note-id");
+      root.removeAttribute("data-note-title");
+      root.removeAttribute("data-note-created-at");
+      root.removeAttribute("data-note-updated-at");
+      root.removeAttribute("data-experiment-id");
+    };
+  }, [experimentId, selectedNote, isCreating, formData.title]);
 
   const handlePublish = async () => {
     if (!selectedNote) return;
@@ -700,7 +778,7 @@ export function LabNotesTab({ experimentId }: { experimentId: string }) {
     } catch (error: any) {
       toast({
         title: "Error",
-        description: error.message,
+        description: getUniqueNameErrorMessage(error, "lab_note"),
         variant: "destructive",
       });
     } finally {
@@ -708,7 +786,21 @@ export function LabNotesTab({ experimentId }: { experimentId: string }) {
     }
   };
 
+  const getUniqueDefaultTitle = async (): Promise<string> => {
+    const supabase = createClient();
+    const { data } = await supabase
+      .from("lab_notes")
+      .select("title")
+      .eq("experiment_id", experimentId);
+    const existing = (data || []).map((r) => (r as { title: string }).title);
+    if (!existing.includes("Untitled")) return "Untitled";
+    let n = 2;
+    while (existing.includes(`Untitled (${n})`)) n++;
+    return `Untitled (${n})`;
+  };
+
   const handleNewNote = async () => {
+    setIsCreatingNew(true);
     try {
       const supabase = createClient();
       const {
@@ -717,12 +809,12 @@ export function LabNotesTab({ experimentId }: { experimentId: string }) {
 
       if (!user) throw new Error("Not authenticated");
 
-      // Create new note with "untitled" as default title
+      const defaultTitle = await getUniqueDefaultTitle();
       const { data, error } = await supabase
         .from("lab_notes")
         .insert({
           experiment_id: experimentId,
-          title: "untitled",
+          title: defaultTitle,
           content: "",
           note_type: "general",
           created_by: user.id,
@@ -737,7 +829,6 @@ export function LabNotesTab({ experimentId }: { experimentId: string }) {
         description: "New lab note created. You can rename it anytime.",
       });
 
-      // Refresh notes list and select the new note
       await fetchNotes(data.id);
       setSelectedNote(data);
       setFormData({
@@ -750,9 +841,11 @@ export function LabNotesTab({ experimentId }: { experimentId: string }) {
       console.error("Error creating note:", error);
       toast({
         title: "Error",
-        description: error.message || "Failed to create note",
+        description: getUniqueNameErrorMessage(error, "lab_note"),
         variant: "destructive",
       });
+    } finally {
+      setIsCreatingNew(false);
     }
   };
 
@@ -819,70 +912,248 @@ export function LabNotesTab({ experimentId }: { experimentId: string }) {
     fetchLinkedProtocols(note.id);
   };
 
+  const handleDeleteNote = async (e: React.MouseEvent, note: LabNote) => {
+    e.stopPropagation();
+    try {
+      const supabase = createClient();
+      const { error } = await supabase.from("lab_notes").delete().eq("id", note.id);
+      if (error) throw error;
+      setNotes((prev) => prev.filter((n) => n.id !== note.id));
+      if (selectedNote?.id === note.id) {
+        setSelectedNote(null);
+        setIsCreating(true);
+        setFormData({ title: "", content: "", note_type: "general" });
+      }
+      toast({ title: "Note deleted", description: `"${note.title}" has been removed.` });
+    } catch (err: any) {
+      toast({
+        title: "Error",
+        description: err.message || "Failed to delete note",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const openRenameNote = (e: React.MouseEvent, note: LabNote) => {
+    e.stopPropagation();
+    setRenameNoteId(note.id);
+    setRenameTitle(note.title || "");
+  };
+
+  const handleRenameNote = async () => {
+    if (!renameNoteId || !renameTitle.trim()) return;
+    try {
+      const supabase = createClient();
+      const { error } = await supabase
+        .from("lab_notes")
+        .update({ title: renameTitle.trim(), updated_at: new Date().toISOString() })
+        .eq("id", renameNoteId);
+      if (error) throw error;
+      setNotes((prev) =>
+        prev.map((n) =>
+          n.id === renameNoteId ? { ...n, title: renameTitle.trim(), updated_at: new Date().toISOString() } : n
+        )
+      );
+      if (selectedNote?.id === renameNoteId) {
+        setFormData((f) => ({ ...f, title: renameTitle.trim() }));
+        setSelectedNote((prev) =>
+          prev?.id === renameNoteId ? { ...prev, title: renameTitle.trim() } : prev
+        );
+      }
+      toast({ title: "Note renamed", description: "Title updated." });
+      setRenameNoteId(null);
+      setRenameTitle("");
+    } catch (err: any) {
+      toast({
+        title: "Error",
+        description: getUniqueNameErrorMessage(err, "lab_note"),
+        variant: "destructive",
+      });
+    }
+  };
+
   return (
-    <div className="flex gap-4 w-full">
-      {/* Left Sidebar - Notes List */}
-      <div className="w-48 shrink-0">
-        <Card className="h-full">
-          <CardHeader className="">
-            <div className="flex items-center justify-between">
-              <CardTitle className="text-sm font-semibold">NOTEBOOK</CardTitle>
+    <div
+      className={cn(
+        "flex w-full",
+        notebookPanelOpen ? "gap-0" : "items-start gap-2"
+      )}
+    >
+      {/* Left panel - Notes list (sidebar-style) or collapsed pill */}
+      <div
+        className={cn(
+          "flex shrink-0 flex-col overflow-hidden border-r border-border bg-sidebar transition-[width] duration-200 ease-in-out",
+          notebookPanelOpen ? "w-56" : "w-0 border-r-0"
+        )}
+      >
+        {notebookPanelOpen && (
+          <div className="flex h-full min-h-0 flex-col gap-1 p-2">
+            {/* Header row - same pattern as sidebar group label */}
+            <div className="flex h-8 shrink-0 items-center gap-2 rounded-md px-2 text-xs font-medium text-sidebar-foreground/70">
               <Button
-                onClick={handleNewNote}
-                size="icon"
                 variant="ghost"
-                className="h-8 w-8"
+                size="icon"
+                className="h-7 w-7 shrink-0 -ml-0.5"
+                onClick={() => setNotebookPanelOpen(false)}
+                aria-label="Hide notes"
               >
-                <Plus className="h-4 w-4" />
+                <ChevronLeft className="h-4 w-4" />
+              </Button>
+              <span className="flex-1 truncate">Notes</span>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-7 w-7 shrink-0"
+                disabled={isCreatingNew}
+                onClick={handleNewNote}
+                aria-label="New note"
+              >
+                {isCreatingNew ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
               </Button>
             </div>
-          </CardHeader>
-          <CardContent className="p-0">
-            <div className="space-y-0 border-t">
+            {/* List - same gap-1 as SidebarMenu */}
+            <div className="flex min-h-0 flex-1 flex-col gap-1 overflow-auto">
               {notes.length > 0 ? (
-                notes.map((note) => (
-                  <button
-                    key={note.id}
-                    onClick={() => handleSelectNote(note)}
-                    className={cn(
-                      "w-full text-left px-4 py-3 border-b hover:bg-muted/50 transition-colors",
-                      selectedNote?.id === note.id && !isCreating
-                        ? "bg-muted border-l-4 border-l-primary"
-                        : "border-l-4 border-l-transparent"
-                    )}
-                  >
-                    <div className="space-y-1">
-                      <p className="text-sm font-medium text-foreground truncate">
-                        {note.title}
-                      </p>
-                      <p className="text-xs text-muted-foreground">
-                        {new Date(note.created_at).toLocaleDateString("en-US", {
-                          month: "short",
-                          day: "numeric",
-                          hour: "2-digit",
-                          minute: "2-digit",
-                        })}
-                      </p>
-                    </div>
-                  </button>
-                ))
+                <ul className="flex w-full min-w-0 flex-col gap-0.5">
+                  {notes.map((note) => {
+                    const isActive = selectedNote?.id === note.id && !isCreating;
+                    const createdStr = new Date(note.created_at).toLocaleString();
+                    const updatedStr = new Date(note.updated_at).toLocaleString();
+                    return (
+                      <li key={note.id} className="group/list-item relative">
+                        <div
+                          role="button"
+                          tabIndex={0}
+                          onClick={() => handleSelectNote(note)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter" || e.key === " ") {
+                              e.preventDefault();
+                              handleSelectNote(note);
+                            }
+                          }}
+                          data-note-id={note.id}
+                          data-created-at={note.created_at}
+                          data-updated-at={note.updated_at}
+                          title={`Created: ${createdStr} · Updated: ${updatedStr}`}
+                          className={cn(
+                            "grid w-full min-h-9 grid-cols-[auto_1fr_auto] items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm outline-none transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
+                            isActive &&
+                              "bg-sidebar-accent font-medium text-sidebar-accent-foreground"
+                          )}
+                        >
+                          <span className="flex size-8 shrink-0 items-center justify-center text-sidebar-foreground/70" aria-hidden>
+                            <FileText className="h-4 w-4" />
+                          </span>
+                          <p className="min-w-0 truncate font-medium m-0">
+                            {note.title || "Untitled"}
+                          </p>
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="size-8 shrink-0 opacity-70 hover:opacity-100"
+                                onClick={(e) => e.stopPropagation()}
+                                aria-label="Note options"
+                              >
+                                <MoreVertical className="h-4 w-4" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
+                              <DropdownMenuItem onClick={(e) => openRenameNote(e, note)}>
+                                <Pencil className="mr-2 h-4 w-4" />
+                                Rename
+                              </DropdownMenuItem>
+                              <DropdownMenuSeparator />
+                              <DropdownMenuItem
+                                className="text-destructive focus:text-destructive"
+                                onClick={(e) => handleDeleteNote(e, note)}
+                              >
+                                <Trash2 className="mr-2 h-4 w-4" />
+                                Delete note
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        </div>
+                      </li>
+                    );
+                  })}
+                </ul>
               ) : (
-                <div className="px-4 py-8 text-center">
-                  <p className="text-sm text-muted-foreground">No notes yet</p>
+                <div className="flex flex-col items-center justify-center gap-3 px-2 py-8">
+                  <p className="text-center text-xs text-sidebar-foreground/70">No notes yet</p>
                   <Button
                     onClick={handleNewNote}
-                    variant="ghost"
+                    variant="outline"
                     size="sm"
-                    className="mt-2"
+                    className="text-xs"
+                    disabled={isCreatingNew}
                   >
-                    Create your first note
+                    {isCreatingNew ? (
+                      <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
+                    ) : (
+                      <Plus className="mr-2 h-3.5 w-3.5" />
+                    )}
+                    New note
                   </Button>
                 </div>
               )}
             </div>
-          </CardContent>
-        </Card>
+          </div>
+        )}
       </div>
+
+      {/* Collapsed: small pill at top (list icon + count) */}
+      {!notebookPanelOpen && (
+        <button
+          type="button"
+          onClick={() => setNotebookPanelOpen(true)}
+          className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-border bg-muted/50 px-1.5 py-1 pr-2.5 transition-colors hover:bg-muted"
+          aria-label="Show notes"
+        >
+          <span className="flex h-5 w-5 items-center justify-center rounded-full bg-muted">
+            <List className="h-3.5 w-3.5 text-muted-foreground" />
+          </span>
+          <span className="text-xs font-medium tabular-nums text-muted-foreground">
+            {notes.length}
+          </span>
+        </button>
+      )}
+
+      {/* Rename note dialog */}
+      <Dialog
+        open={!!renameNoteId}
+        onOpenChange={(open) => {
+          if (!open) {
+            setRenameNoteId(null);
+            setRenameTitle("");
+          }
+        }}
+      >
+        <DialogContent className="sm:max-w-md" onPointerDownOutside={(e) => e.stopPropagation()}>
+          <DialogHeader>
+            <DialogTitle>Rename note</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-2">
+            <Label htmlFor="rename-title">Note name</Label>
+            <Input
+              id="rename-title"
+              value={renameTitle}
+              onChange={(e) => setRenameTitle(e.target.value)}
+              placeholder="Note title"
+              onKeyDown={(e) => e.key === "Enter" && handleRenameNote()}
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setRenameNoteId(null)}>
+              Cancel
+            </Button>
+            <Button onClick={handleRenameNote} disabled={!renameTitle.trim()}>
+              Save
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Right Side - Note Editor */}
       <div className="flex-1 min-w-0">
@@ -900,6 +1171,22 @@ export function LabNotesTab({ experimentId }: { experimentId: string }) {
                 </CardDescription>
               </div>
               <div className="flex items-center gap-3 shrink-0">
+                <Button
+                  size="sm"
+                  disabled={isCreatingNew}
+                  onClick={() => {
+                    setNotebookPanelOpen(true);
+                    handleNewNote();
+                  }}
+                  aria-label="New lab note"
+                >
+                  {isCreatingNew ? (
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  ) : (
+                    <Plus className="h-4 w-4 mr-2" />
+                  )}
+                  New lab note
+                </Button>
                 {/* Save Status Button - Google Drive Style */}
                 <SaveStatusIndicator
                   status={autoSaveStatus}

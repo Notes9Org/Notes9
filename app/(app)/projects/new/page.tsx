@@ -8,7 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Textarea } from "@/components/ui/textarea"
+import { TextareaWithWordCount } from "@/components/ui/textarea-with-word-count"
 import {
   Select,
   SelectContent,
@@ -17,6 +17,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { ArrowLeft } from 'lucide-react'
+import { getUniqueNameErrorMessage } from "@/lib/unique-name-error"
 
 export default function NewProjectPage() {
   const router = useRouter()
@@ -27,7 +28,6 @@ export default function NewProjectPage() {
   const [formData, setFormData] = useState({
     name: "",
     description: "",
-    status: "planning",
     priority: "medium",
     start_date: "",
     end_date: "",
@@ -56,7 +56,7 @@ export default function NewProjectPage() {
         .insert({
           name: formData.name,
           description: formData.description,
-          status: formData.status,
+          status: "planning",
           priority: formData.priority,
           start_date: formData.start_date || null,
           end_date: formData.end_date || null,
@@ -77,7 +77,7 @@ export default function NewProjectPage() {
 
       router.push(`/projects/${data.id}`)
     } catch (err: any) {
-      setError(err.message)
+      setError(getUniqueNameErrorMessage(err, "project"))
     } finally {
       setIsLoading(false)
     }
@@ -121,58 +121,36 @@ export default function NewProjectPage() {
 
               <div className="space-y-2">
                 <Label htmlFor="description">Description</Label>
-                <Textarea
+                <TextareaWithWordCount
                   id="description"
                   placeholder="Describe the project goals, scope, and expected outcomes..."
                   rows={4}
                   value={formData.description}
-                  onChange={(e) =>
-                    setFormData({ ...formData, description: e.target.value })
+                  onChange={(v) =>
+                    setFormData({ ...formData, description: v })
                   }
+                  maxWords={1000}
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="status">Status</Label>
-                  <Select
-                    value={formData.status}
-                    onValueChange={(value) =>
-                      setFormData({ ...formData, status: value })
-                    }
-                  >
-                    <SelectTrigger id="status">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="planning">Planning</SelectItem>
-                      <SelectItem value="active">Active</SelectItem>
-                      <SelectItem value="on_hold">On Hold</SelectItem>
-                      <SelectItem value="completed">Completed</SelectItem>
-                      <SelectItem value="cancelled">Cancelled</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="priority">Priority</Label>
+              <div className="space-y-2">
+                <Label htmlFor="priority">Priority</Label>
                   <Select
                     value={formData.priority}
                     onValueChange={(value) =>
                       setFormData({ ...formData, priority: value })
                     }
                   >
-                    <SelectTrigger id="priority">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="low">Low</SelectItem>
-                      <SelectItem value="medium">Medium</SelectItem>
-                      <SelectItem value="high">High</SelectItem>
-                      <SelectItem value="critical">Critical</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
+                <SelectTrigger id="priority">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="low">Low</SelectItem>
+                  <SelectItem value="medium">Medium</SelectItem>
+                  <SelectItem value="high">High</SelectItem>
+                  <SelectItem value="critical">Critical</SelectItem>
+                </SelectContent>
+              </Select>
               </div>
 
               <div className="grid grid-cols-2 gap-4">

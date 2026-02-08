@@ -24,14 +24,20 @@ interface DeleteProjectDialogProps {
   projectName: string
   experimentCount?: number
   asMenuItem?: boolean
+  /** When provided with onOpenChange, dialog is controlled and no trigger is rendered */
+  open?: boolean
+  onOpenChange?: (open: boolean) => void
 }
 
-export function DeleteProjectDialog({ projectId, projectName, experimentCount = 0, asMenuItem = false }: DeleteProjectDialogProps) {
+export function DeleteProjectDialog({ projectId, projectName, experimentCount = 0, asMenuItem = false, open: controlledOpen, onOpenChange: controlledOnOpenChange }: DeleteProjectDialogProps) {
   const { toast } = useToast()
   const router = useRouter()
   const supabase = createClient()
 
-  const [open, setOpen] = useState(false)
+  const [internalOpen, setInternalOpen] = useState(false)
+  const isControlled = controlledOpen !== undefined && controlledOnOpenChange !== undefined
+  const open = isControlled ? controlledOpen : internalOpen
+  const setOpen = isControlled ? controlledOnOpenChange : setInternalOpen
   const [isDeleting, setIsDeleting] = useState(false)
 
   const handleDelete = async () => {
@@ -66,48 +72,50 @@ export function DeleteProjectDialog({ projectId, projectName, experimentCount = 
 
   return (
     <AlertDialog open={open} onOpenChange={setOpen}>
-      {asMenuItem ? (
+      {!isControlled && (asMenuItem ? (
         <AlertDialogTrigger className="flex items-center w-full px-2 py-1.5 text-destructive hover:bg-accent rounded-sm cursor-pointer text-left">
           <Trash2 className="h-4 w-4 mr-2" />
           <span>Delete</span>
         </AlertDialogTrigger>
-      ) : (
+      ) : !isControlled ? (
         <AlertDialogTrigger asChild>
           <Button variant="destructive" size="sm">
             <Trash2 className="h-4 w-4 mr-2" />
             Delete
           </Button>
         </AlertDialogTrigger>
-      )}
+      ) : null)}
       <AlertDialogContent>
         <AlertDialogHeader>
           <AlertDialogTitle className="flex items-center gap-2">
             <AlertTriangle className="h-5 w-5 text-destructive" />
             Delete Project?
           </AlertDialogTitle>
-          <AlertDialogDescription className="space-y-3 pt-2">
-            <p>
-              You are about to permanently delete <strong className="text-foreground">"{projectName}"</strong>.
-            </p>
-            
-            {experimentCount > 0 && (
-              <Alert variant="destructive">
-                <AlertTriangle className="h-4 w-4" />
-                <AlertDescription>
-                  <strong>Warning:</strong> This will also delete:
-                  <ul className="list-disc list-inside mt-2 space-y-1">
-                    <li>{experimentCount} experiment{experimentCount > 1 ? 's' : ''}</li>
-                    <li>All lab notes and reports</li>
-                    <li>All uploaded data files</li>
-                    <li>All project members associations</li>
-                  </ul>
-                </AlertDescription>
-              </Alert>
-            )}
+          <AlertDialogDescription asChild>
+            <div className="text-muted-foreground text-sm space-y-3 pt-2">
+              <p>
+                You are about to permanently delete <strong className="text-foreground">"{projectName}"</strong>.
+              </p>
 
-            <p className="text-sm">
-              <strong className="text-foreground">This action cannot be undone.</strong> All data will be permanently removed from the database.
-            </p>
+              {experimentCount > 0 && (
+                <Alert variant="destructive">
+                  <AlertTriangle className="h-4 w-4" />
+                  <AlertDescription>
+                    <strong>Warning:</strong> This will also delete:
+                    <ul className="list-disc list-inside mt-2 space-y-1">
+                      <li>{experimentCount} experiment{experimentCount > 1 ? 's' : ''}</li>
+                      <li>All lab notes and reports</li>
+                      <li>All uploaded data files</li>
+                      <li>All project members associations</li>
+                    </ul>
+                  </AlertDescription>
+                </Alert>
+              )}
+
+              <p className="text-sm">
+                <strong className="text-foreground">This action cannot be undone.</strong> All data will be permanently removed from the database.
+              </p>
+            </div>
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>

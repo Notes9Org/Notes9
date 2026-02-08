@@ -1,18 +1,17 @@
 "use client"
 
+import { useState } from "react"
 import { EditProjectDialog } from "./edit-project-dialog"
 import { DeleteProjectDialog } from "./delete-project-dialog"
 import { DuplicateProjectDialog } from "./duplicate-project-dialog"
-import { ProjectStatusUpdateButtons } from "./project-status-update-buttons"
 import { Button } from "@/components/ui/button"
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
-import { MoreHorizontal } from "lucide-react"
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+  TooltipProvider,
+} from "@/components/ui/tooltip"
+import { Pencil, Copy, Trash2 } from "lucide-react"
 
 interface Project {
   id: string
@@ -30,44 +29,76 @@ interface ProjectActionsProps {
 }
 
 export function ProjectActions({ project, experimentCount = 0 }: ProjectActionsProps) {
-  return (
-    <div className="flex items-center gap-2">
-      {/* Status Update Dropdown */}
-      <ProjectStatusUpdateButtons projectId={project.id} currentStatus={project.status} />
+  const [editOpen, setEditOpen] = useState(false)
+  const [duplicateOpen, setDuplicateOpen] = useState(false)
+  const [deleteOpen, setDeleteOpen] = useState(false)
 
-      {/* More Actions Dropdown */}
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <Button variant="outline" size="sm">
-            <MoreHorizontal className="h-4 w-4" />
-            <span className="ml-2 hidden md:inline">More</span>
-          </Button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="end" className="w-48">
-          <DropdownMenuItem 
-            onSelect={(e) => {
-              e.preventDefault()
-            }}
-          >
-            <EditProjectDialog project={project} asMenuItem />
-          </DropdownMenuItem>
-          
-          <DropdownMenuItem onSelect={(e) => e.preventDefault()}>
-            <DuplicateProjectDialog project={project} asMenuItem />
-          </DropdownMenuItem>
-          
-          <DropdownMenuSeparator />
-          
-          <DropdownMenuItem onSelect={(e) => e.preventDefault()}>
-            <DeleteProjectDialog 
-              projectId={project.id} 
-              projectName={project.name} 
-              experimentCount={experimentCount}
-              asMenuItem
-            />
-          </DropdownMenuItem>
-        </DropdownMenuContent>
-      </DropdownMenu>
-    </div>
+  return (
+    <TooltipProvider>
+      <div className="flex items-center gap-1">
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8"
+              onClick={() => setEditOpen(true)}
+              aria-label="Edit project"
+            >
+              <Pencil className="h-4 w-4" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent side="bottom">Edit</TooltipContent>
+        </Tooltip>
+
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8"
+              onClick={() => setDuplicateOpen(true)}
+              aria-label="Duplicate project"
+            >
+              <Copy className="h-4 w-4" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent side="bottom">Duplicate</TooltipContent>
+        </Tooltip>
+
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8 text-destructive hover:text-destructive"
+              onClick={() => setDeleteOpen(true)}
+              aria-label="Delete project"
+            >
+              <Trash2 className="h-4 w-4" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent side="bottom">Delete</TooltipContent>
+        </Tooltip>
+      </div>
+
+      <EditProjectDialog
+        project={project}
+        open={editOpen}
+        onOpenChange={setEditOpen}
+      />
+      <DuplicateProjectDialog
+        project={project}
+        open={duplicateOpen}
+        onOpenChange={setDuplicateOpen}
+      />
+      <DeleteProjectDialog
+        projectId={project.id}
+        projectName={project.name}
+        experimentCount={experimentCount}
+        open={deleteOpen}
+        onOpenChange={setDeleteOpen}
+      />
+    </TooltipProvider>
   )
 }

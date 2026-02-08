@@ -15,7 +15,7 @@ import {
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Textarea } from "@/components/ui/textarea"
+import { TextareaWithWordCount } from "@/components/ui/textarea-with-word-count"
 import {
   Select,
   SelectContent,
@@ -26,6 +26,7 @@ import {
 import { useToast } from "@/hooks/use-toast"
 import { useRouter } from "next/navigation"
 import { Pencil, Loader2 } from "lucide-react"
+import { getUniqueNameErrorMessage } from "@/lib/unique-name-error"
 import { DatePicker } from "@/components/ui/date-picker"
 
 interface Project {
@@ -41,14 +42,20 @@ interface Project {
 interface EditProjectDialogProps {
   project: Project
   asMenuItem?: boolean
+  /** When provided with onOpenChange, dialog is controlled and no trigger is rendered */
+  open?: boolean
+  onOpenChange?: (open: boolean) => void
 }
 
-export function EditProjectDialog({ project, asMenuItem = false }: EditProjectDialogProps) {
+export function EditProjectDialog({ project, asMenuItem = false, open: controlledOpen, onOpenChange: controlledOnOpenChange }: EditProjectDialogProps) {
   const { toast } = useToast()
   const router = useRouter()
   const supabase = createClient()
 
-  const [open, setOpen] = useState(false)
+  const [internalOpen, setInternalOpen] = useState(false)
+  const isControlled = controlledOpen !== undefined && controlledOnOpenChange !== undefined
+  const open = isControlled ? controlledOpen : internalOpen
+  const setOpen = isControlled ? controlledOnOpenChange : setInternalOpen
   const [isSaving, setIsSaving] = useState(false)
 
   // Prevent space key from closing dropdown menu when typing
@@ -57,7 +64,6 @@ export function EditProjectDialog({ project, asMenuItem = false }: EditProjectDi
   // Form state
   const [name, setName] = useState(project.name)
   const [description, setDescription] = useState(project.description || "")
-  const [status, setStatus] = useState(project.status)
   const [priority, setPriority] = useState(project.priority || "medium")
   const [startDate, setStartDate] = useState<Date | undefined>(
     project.start_date ? new Date(project.start_date) : undefined
@@ -71,7 +77,6 @@ export function EditProjectDialog({ project, asMenuItem = false }: EditProjectDi
     if (open) {
       setName(project.name)
       setDescription(project.description || "")
-      setStatus(project.status)
       setPriority(project.priority || "medium")
       setStartDate(project.start_date ? new Date(project.start_date) : undefined)
       setEndDate(project.end_date ? new Date(project.end_date) : undefined)
@@ -96,7 +101,6 @@ export function EditProjectDialog({ project, asMenuItem = false }: EditProjectDi
         .update({
           name: name.trim(),
           description: description.trim() || null,
-          status,
           priority,
           start_date: startDate ? startDate.toISOString().split('T')[0] : null,
           end_date: endDate ? endDate.toISOString().split('T')[0] : null,
@@ -117,7 +121,7 @@ export function EditProjectDialog({ project, asMenuItem = false }: EditProjectDi
       console.error("Update error:", error)
       toast({
         title: "Update Failed",
-        description: error.message || "Failed to update project",
+        description: getUniqueNameErrorMessage(error, "project"),
         variant: "destructive",
       })
     } finally {
@@ -127,19 +131,19 @@ export function EditProjectDialog({ project, asMenuItem = false }: EditProjectDi
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      {asMenuItem ? (
+      {!isControlled && (asMenuItem ? (
         <DialogTrigger className="flex items-center w-full px-2 py-1.5 hover:bg-accent rounded-sm cursor-pointer text-left">
           <Pencil className="h-4 w-4 mr-2" />
           <span>Edit Project</span>
         </DialogTrigger>
-      ) : (
+      ) : !isControlled ? (
         <DialogTrigger asChild>
           <Button variant="outline" size="sm">
             <Pencil className="h-4 w-4 mr-2" />
             Edit
           </Button>
         </DialogTrigger>
-      )}
+      ) : null)}
       <DialogContent className="sm:max-w-[600px] max-h-[90vh] overflow-y-auto" onKeyDown={handleKeyDown}>
         <DialogHeader>
           <DialogTitle>Edit Project</DialogTitle>
@@ -165,23 +169,6 @@ export function EditProjectDialog({ project, asMenuItem = false }: EditProjectDi
               disabled={isSaving}
               required
             />
-          </div>
-
-          {/* Status */}
-          <div className="space-y-2">
-            <Label htmlFor="status">Status</Label>
-            <Select value={status} onValueChange={setStatus} disabled={isSaving}>
-              <SelectTrigger id="status">
-                <SelectValue placeholder="Select status" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="planning">Planning</SelectItem>
-                <SelectItem value="active">Active</SelectItem>
-                <SelectItem value="on_hold">On Hold</SelectItem>
-                <SelectItem value="completed">Completed</SelectItem>
-                <SelectItem value="archived">Archived</SelectItem>
-              </SelectContent>
-            </Select>
           </div>
 
           {/* Priority */}
@@ -225,15 +212,16 @@ export function EditProjectDialog({ project, asMenuItem = false }: EditProjectDi
           {/* Description */}
           <div className="space-y-2">
             <Label htmlFor="description">Description</Label>
-            <Textarea
+            <TextareaWithWordCount
               id="description"
               value={description}
-              onChange={(e) => setDescription(e.target.value)}
+              onChange={setDescription}
               placeholder="Detailed description of the project goals and objectives..."
               rows={4}
               disabled={isSaving}
+              maxWords={1000}
             />
-        </div>
+          </div>
 
           {/* Actions */}
           <div className="flex justify-end gap-2 pt-4">

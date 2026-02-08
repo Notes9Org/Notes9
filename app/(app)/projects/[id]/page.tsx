@@ -6,14 +6,7 @@ import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
-import {
-  Breadcrumb,
-  BreadcrumbItem,
-  BreadcrumbLink,
-  BreadcrumbList,
-  BreadcrumbPage,
-  BreadcrumbSeparator,
-} from "@/components/ui/breadcrumb"
+import { SetPageBreadcrumb } from "@/components/layout/breadcrumb-context"
 import { Plus, Users, Calendar, FlaskConical, FileText } from 'lucide-react'
 import Link from 'next/link'
 import { ProjectActions } from './project-actions'
@@ -58,83 +51,68 @@ export default async function ProjectDetailPage({
 
   return (
       <div className="space-y-6">
-        {/* Breadcrumb */}
-        <Breadcrumb>
-          <BreadcrumbList>
-            <BreadcrumbItem>
-              <BreadcrumbLink asChild>
-                <Link href="/dashboard">Dashboard</Link>
-              </BreadcrumbLink>
-            </BreadcrumbItem>
-            <BreadcrumbSeparator />
-            <BreadcrumbItem>
-              <BreadcrumbLink asChild>
-                <Link href="/projects">Projects</Link>
-              </BreadcrumbLink>
-            </BreadcrumbItem>
-            <BreadcrumbSeparator />
-            <BreadcrumbItem>
-              <BreadcrumbPage>{project.name}</BreadcrumbPage>
-            </BreadcrumbItem>
-          </BreadcrumbList>
-        </Breadcrumb>
-
+        <SetPageBreadcrumb
+          segments={[
+            { label: "Projects", href: "/projects" },
+            { label: project.name },
+          ]}
+        />
         {/* Header */}
-        <div className="flex items-start justify-between">
-            <div>
-              <div className="flex items-center gap-2 mb-1">
-                <h1 className="text-3xl font-bold tracking-tight">{project.name}</h1>
+        <div className="flex items-start justify-between gap-4">
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-2 mb-1">
+              <h1 className="text-3xl font-bold tracking-tight">{project.name}</h1>
+              <Badge
+                variant={
+                  project.status === "active"
+                    ? "default"
+                    : project.status === "completed"
+                    ? "secondary"
+                    : "outline"
+                }
+              >
+                {project.status}
+              </Badge>
+              {project.priority && (
                 <Badge
                   variant={
-                    project.status === "active"
-                      ? "default"
-                      : project.status === "completed"
-                      ? "secondary"
+                    project.priority === "critical" || project.priority === "high"
+                      ? "destructive"
                       : "outline"
                   }
                 >
-                  {project.status}
+                  {project.priority} priority
                 </Badge>
-                {project.priority && (
-                  <Badge
-                    variant={
-                      project.priority === "critical" || project.priority === "high"
-                        ? "destructive"
-                        : "outline"
-                    }
-                  >
-                    {project.priority} priority
-                  </Badge>
-                )}
-              </div>
-              <p className="text-muted-foreground">{project.description}</p>
-              <div className="flex items-center gap-4 mt-2 text-sm text-muted-foreground">
-                {project.start_date && (
-                  <div className="flex items-center gap-1">
-                    <Calendar className="h-3 w-3" />
-                    <span>Started: {new Date(project.start_date).toLocaleDateString()}</span>
-                  </div>
-                )}
+              )}
+            </div>
+            <p className="text-muted-foreground">{project.description}</p>
+            <div className="flex items-center gap-4 mt-2 text-sm text-muted-foreground">
+              {project.start_date && (
                 <div className="flex items-center gap-1">
-                  <Users className="h-3 w-3" />
-                  <span>{project.project_members?.length || 0} team members</span>
+                  <Calendar className="h-3 w-3" />
+                  <span>Started: {new Date(project.start_date).toLocaleDateString()}</span>
+                </div>
+              )}
+              <div className="flex items-center gap-1">
+                <Users className="h-3 w-3" />
+                <span>
+                  {Math.max(1, project.project_members?.length || 0)} {Math.max(1, project.project_members?.length || 0) === 1 ? 'team member' : 'team members'}
+                </span>
               </div>
             </div>
           </div>
-          <div className="flex gap-2">
-            <ProjectActions
-              project={{
-                id: project.id,
-                name: project.name,
-                description: project.description,
-                status: project.status,
-                priority: project.priority,
-                start_date: project.start_date,
-                end_date: project.end_date,
-              }}
-              experimentCount={project.experiments?.length || 0}
-            />
-          </div>
+          <ProjectActions
+            project={{
+              id: project.id,
+              name: project.name,
+              description: project.description,
+              status: project.status,
+              priority: project.priority,
+              start_date: project.start_date,
+              end_date: project.end_date,
+            }}
+            experimentCount={project.experiments?.length || 0}
+          />
         </div>
 
         {/* Tabs */}
@@ -160,22 +138,28 @@ export default async function ProjectDetailPage({
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
               {project.experiments && project.experiments.length > 0 ? (
                 project.experiments.map((experiment: any) => (
-                  <Link key={experiment.id} href={`/experiments/${experiment.id}`}>
-                    <Card className="hover:border-primary transition-colors cursor-pointer">
-                      <CardHeader>
-                        <div className="flex items-start justify-between">
-                          <CardTitle className="text-base line-clamp-2">
-                            {experiment.name}
-                          </CardTitle>
-                          <Badge variant="outline">{experiment.status}</Badge>
+                  <Link
+                    key={experiment.id}
+                    href={`/experiments/${experiment.id}`}
+                    className="block min-w-0"
+                  >
+                    <Card className="hover:border-primary transition-colors cursor-pointer h-full flex flex-col min-h-0 overflow-hidden">
+                      <CardHeader className="min-w-0 flex flex-col gap-2">
+                        <CardTitle className="text-base line-clamp-2 min-w-0 pr-0">
+                          {experiment.name}
+                        </CardTitle>
+                        <div className="flex items-center gap-2 flex-wrap min-w-0">
+                          <Badge variant="outline" className="shrink-0">
+                            {experiment.status}
+                          </Badge>
                         </div>
-                        <CardDescription className="line-clamp-2">
+                        <CardDescription className="line-clamp-2 min-w-0">
                           <HtmlContentTruncated content={experiment.description} />
                         </CardDescription>
                       </CardHeader>
-                      <CardContent className="space-y-2">
+                      <CardContent className="space-y-2 min-w-0 pt-0">
                         {experiment.assigned_to && (
-                          <p className="text-xs text-muted-foreground">
+                          <p className="text-xs text-muted-foreground truncate">
                             Assigned to: {experiment.assigned_to.first_name}{" "}
                             {experiment.assigned_to.last_name}
                           </p>

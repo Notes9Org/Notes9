@@ -17,6 +17,7 @@ import { CatalystInput, type AgentMode } from './catalyst-input';
 import type { Attachment } from './preview-attachment';
 import { CatalystSidebar } from './catalyst-sidebar';
 import type { Vote } from '@/lib/db/schema';
+import { formatCitationDisplay } from '@/lib/utils';
 
 // Helper to get cookie value
 function getCookie(name: string): string | null {
@@ -311,7 +312,7 @@ export function CatalystChat({ sessionId }: CatalystChatProps) {
         await saveMessage(sid, 'user', text);
 
         // Call Notes9 API
-        const response = await fetch('http://44.200.140.134:8000/agent/run', {
+        const response = await fetch(`${process.env.NEXT_PUBLIC_AI_SERVICE_URL || 'http://13.221.90.39:8000'}/agent/run`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -337,8 +338,7 @@ export function CatalystChat({ sessionId }: CatalystChatProps) {
           data.citations.forEach((citation: any, index: number) => {
             const sourceId = citation.source_id;
             const sourceType = citation.source_type;
-            
-            // Create route based on source type (only for types with detail pages)
+
             let route = '';
             switch (sourceType) {
               case 'literature_review':
@@ -347,21 +347,22 @@ export function CatalystChat({ sessionId }: CatalystChatProps) {
               case 'protocol':
                 route = `/protocols/${sourceId}`;
                 break;
-              // lab_note and report don't have detail pages yet
+              case 'project':
+                route = `/projects/${sourceId}`;
+                break;
               case 'lab_note':
               case 'report':
               default:
                 route = '';
             }
-            
-            // Format citation with link
-            const excerpt = citation.excerpt.substring(0, 150);
+
+            const displayText = formatCitationDisplay(citation);
             const sourceLabel = sourceType.replace('_', ' ');
-            
+
             if (route) {
-              formattedAnswer += `\n[${index + 1}] [View ${sourceLabel}](${route}): ${excerpt}...`;
+              formattedAnswer += `\n[${index + 1}] [View ${sourceLabel}](${route}): ${displayText}`;
             } else {
-              formattedAnswer += `\n[${index + 1}] ${sourceLabel}: ${excerpt}...`;
+              formattedAnswer += `\n[${index + 1}] ${sourceLabel}: ${displayText}`;
             }
           });
         }
