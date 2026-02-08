@@ -315,7 +315,8 @@ export function RightSidebar() {
         const sessionId = currentSessionRef.current!;
         await saveMessage(sessionId, 'user', text);
 
-        const response = await fetch(`${process.env.NEXT_PUBLIC_AI_SERVICE_URL || 'http://13.221.90.39:8000'}/agent/run`, {
+        // Call Notes9 API
+        const response = await fetch('https://z3thrlksg0.execute-api.us-east-1.amazonaws.com/agent/run', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
