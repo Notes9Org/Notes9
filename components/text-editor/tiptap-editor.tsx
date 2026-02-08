@@ -18,6 +18,7 @@ import { Table } from "@tiptap/extension-table"
 import { TableRow } from "@tiptap/extension-table-row"
 import { TableCell } from "@tiptap/extension-table-cell"
 import { TableHeader } from "@tiptap/extension-table-header"
+import { TableOfContents } from "./table-of-contents"
 import { Mathematics } from "@tiptap/extension-mathematics"
 import { Underline } from "@tiptap/extension-underline"
 import { Subscript } from "@tiptap/extension-subscript"
@@ -2823,85 +2824,117 @@ export function TiptapEditor({
 
       <div
         className={cn(
-          "border border-border rounded-lg bg-card overflow-hidden",
+          "border border-border rounded-lg bg-card relative",
           className
         )}
       >
         {/* Editor Content */}
         <div
-          className="overflow-y-auto px-2 pb-2"
+          className="overflow-y-auto px-2 pb-2 h-full"
           style={{ minHeight, maxHeight: "calc(100vh - 300px)" }}
         >
           <EditorContent editor={editor} />
-          {editor && (
-            <BubbleMenu
-              editor={editor}
-              shouldShow={({ editor }) => {
-                const show = !editor.isActive('comment') && isCommenting && !editor.state.selection.empty;
-                return show;
-              }}
-              className="z-[200]"
-            >
-              <div className="flex items-center gap-2 p-2 bg-background border border-border rounded-md shadow-lg min-w-[300px] pointer-events-auto">
-                <Input
-                  className="h-8 text-xs flex-1"
-                  placeholder="Type comment..."
-                  value={commentText}
-                  onChange={(e) => setCommentText(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') {
-                      if (commentText.trim()) {
-                        editor.chain().focus().setComment({ author: "You", content: commentText }).run();
-                        setCommentText("");
-                        setIsCommenting(false);
-                      }
-                    } else if (e.key === 'Escape') {
+        </div>
+        {editor && <TableOfContents editor={editor} />}
+        {editor && (
+          <BubbleMenu
+            editor={editor}
+            shouldShow={({ editor }) => {
+              const show = !editor.isActive('comment') && isCommenting && !editor.state.selection.empty;
+              return show;
+            }}
+            className="z-[200]"
+          >
+            <div className="flex items-center gap-2 p-2 bg-background border border-border rounded-md shadow-lg min-w-[300px] pointer-events-auto">
+              <Input
+                className="h-8 text-xs flex-1"
+                placeholder="Type comment..."
+                value={commentText}
+                onChange={(e) => setCommentText(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    if (commentText.trim()) {
+                      editor.chain().focus().setComment({ author: "You", content: commentText }).run();
+                      setCommentText("");
                       setIsCommenting(false);
                     }
-                  }}
-                  autoFocus
-                />
-                <Button size="sm" className="h-7 px-2" onClick={() => {
-                  if (commentText.trim()) {
-                    editor.chain().focus().setComment({ author: "You", content: commentText }).run();
-                    setCommentText("");
+                  } else if (e.key === 'Escape') {
                     setIsCommenting(false);
                   }
-                }}>Save</Button>
-                <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => setIsCommenting(false)}><X className="h-4 w-4" /></Button>
-              </div>
-            </BubbleMenu>
-          )}
+                }}
+                autoFocus
+              />
+              <Button size="sm" className="h-7 px-2" onClick={() => {
+                if (commentText.trim()) {
+                  editor.chain().focus().setComment({ author: "You", content: commentText }).run();
+                  setCommentText("");
+                  setIsCommenting(false);
+                }
+              }}>Save</Button>
+              <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => setIsCommenting(false)}><X className="h-4 w-4" /></Button>
+            </div>
+          </BubbleMenu>
+        )}
 
-          {editor && (
-            <BubbleMenu
-              editor={editor}
-              shouldShow={({ editor }: { editor: any }) => editor.isActive("comment")}
-              className="flex flex-col gap-1 rounded-lg border bg-background p-2 shadow-md text-xs w-64 z-50"
-            >
-              {editor.getAttributes("comment").author && (
-                <div className="font-semibold text-muted-foreground flex justify-between items-center">
-                  <span>{editor.getAttributes("comment").author}</span>
-                  <span className="text-[10px] opacity-70">
-                    {editor.getAttributes("comment").createdAt ? new Date(editor.getAttributes("comment").createdAt).toLocaleDateString() : ""}
-                  </span>
-                </div>
-              )}
-              <div className="text-foreground">{editor.getAttributes("comment").content}</div>
-              <div className="flex justify-end mt-1">
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-6 w-6 text-destructive hover:bg-destructive/10"
-                  onClick={() => editor.chain().focus().unsetComment().run()}
-                  title="Delete comment"
-                >
-                  <Trash2 className="h-3 w-3" />
-                </Button>
+        {editor && (
+          <BubbleMenu
+            editor={editor}
+            shouldShow={({ editor }: { editor: any }) => editor.isActive("comment")}
+            className="flex flex-col gap-1 rounded-lg border bg-background p-2 shadow-md text-xs w-64 z-50"
+          >
+            {editor.getAttributes("comment").author && (
+              <div className="font-semibold text-muted-foreground flex justify-between items-center">
+                <span>{editor.getAttributes("comment").author}</span>
+                <span className="text-[10px] opacity-70">
+                  {editor.getAttributes("comment").createdAt ? new Date(editor.getAttributes("comment").createdAt).toLocaleDateString() : ""}
+                </span>
               </div>
-            </BubbleMenu>
-          )}
-          <style jsx global>{`
+            )}
+            <div className="text-foreground">{editor.getAttributes("comment").content}</div>
+            <div className="flex justify-end mt-1">
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-6 w-6 text-destructive hover:bg-destructive/10"
+                onClick={() => editor.chain().focus().unsetComment().run()}
+                title="Delete comment"
+              >
+                <Trash2 className="h-3 w-3" />
+              </Button>
+            </div>
+          </BubbleMenu>
+        )}
+
+
+        {editor && (
+          <BubbleMenu
+            editor={editor}
+            shouldShow={({ editor }: { editor: any }) => editor.isActive("comment")}
+            className="flex flex-col gap-1 rounded-lg border bg-background p-2 shadow-md text-xs w-64 z-50"
+          >
+            {editor.getAttributes("comment").author && (
+              <div className="font-semibold text-muted-foreground flex justify-between items-center">
+                <span>{editor.getAttributes("comment").author}</span>
+                <span className="text-[10px] opacity-70">
+                  {editor.getAttributes("comment").createdAt ? new Date(editor.getAttributes("comment").createdAt).toLocaleDateString() : ""}
+                </span>
+              </div>
+            )}
+            <div className="text-foreground">{editor.getAttributes("comment").content}</div>
+            <div className="flex justify-end mt-1">
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-6 w-6 text-destructive hover:bg-destructive/10"
+                onClick={() => editor.chain().focus().unsetComment().run()}
+                title="Delete comment"
+              >
+                <Trash2 className="h-3 w-3" />
+              </Button>
+            </div>
+          </BubbleMenu>
+        )}
+        <style jsx global>{`
           .ProseMirror ul {
             list-style-type: disc;
             padding-left: 1.5rem;
@@ -3033,20 +3066,20 @@ export function TiptapEditor({
             pointer-events: none;
           }
         `}</style>
-        </div>
-
-        {/* AI Processing Indicator */}
-        {
-          (isAIProcessing || isCiteProcessing) && (
-            <div className="border-t border-border p-2 bg-muted/50">
-              <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                <Loader2 className="h-4 w-4 animate-spin" />
-                <span>{isCiteProcessing ? 'Searching for citations...' : 'AI is processing your request...'}</span>
-              </div>
-            </div>
-          )
-        }
       </div>
+
+
+      {/* AI Processing Indicator */}
+      {
+        (isAIProcessing || isCiteProcessing) && (
+          <div className="border-t border-border p-2 bg-muted/50">
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              <span>{isCiteProcessing ? 'Searching for citations...' : 'AI is processing your request...'}</span>
+            </div>
+          </div>
+        )
+      }
 
       {/* Citation Selection Modal */}
       <Dialog open={citationModalOpen} onOpenChange={setCitationModalOpen}>
@@ -3198,7 +3231,7 @@ export function TiptapEditor({
             </Button>
           </DialogFooter>
         </DialogContent>
-      </Dialog>
+      </Dialog >
     </>
   );
 }
