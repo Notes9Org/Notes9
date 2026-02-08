@@ -4,14 +4,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import {
-  Breadcrumb,
-  BreadcrumbItem,
-  BreadcrumbLink,
-  BreadcrumbList,
-  BreadcrumbPage,
-  BreadcrumbSeparator,
-} from "@/components/ui/breadcrumb"
+import { SetPageBreadcrumb } from "@/components/layout/breadcrumb-context"
 import { FlaskConical, Calendar, User, FileText, ChevronDown, Plus } from 'lucide-react'
 import { cn } from "@/lib/utils"
 import { notFound } from 'next/navigation'
@@ -34,7 +27,7 @@ export default async function ExperimentDetailPage({
 }) {
   const { id } = await params
   const resolvedSearch = searchParams ? await searchParams : {}
-  const initialTab = resolvedSearch.tab || (resolvedSearch.noteId ? "notes" : "overview")
+  const initialTab = resolvedSearch.tab ?? "notes"
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
 
@@ -115,39 +108,12 @@ export default async function ExperimentDetailPage({
 
   return (
     <div className="space-y-6">
-      {/* Breadcrumb */}
-      <Breadcrumb>
-        <BreadcrumbList>
-          <BreadcrumbItem>
-            <BreadcrumbLink asChild>
-              <Link href="/dashboard">Dashboard</Link>
-            </BreadcrumbLink>
-          </BreadcrumbItem>
-          <BreadcrumbSeparator />
-          <BreadcrumbItem>
-            <BreadcrumbLink asChild>
-              <Link href="/projects">Projects</Link>
-            </BreadcrumbLink>
-          </BreadcrumbItem>
-          <BreadcrumbSeparator />
-          <BreadcrumbItem>
-            <BreadcrumbLink asChild>
-              <Link href={`/projects/${experiment.projectId}`}>{experiment.project}</Link>
-            </BreadcrumbLink>
-          </BreadcrumbItem>
-          <BreadcrumbSeparator />
-          <BreadcrumbItem>
-            <BreadcrumbLink asChild>
-              <Link href="/experiments">Experiments</Link>
-            </BreadcrumbLink>
-          </BreadcrumbItem>
-          <BreadcrumbSeparator />
-          <BreadcrumbItem>
-            <BreadcrumbPage>{experiment.name}</BreadcrumbPage>
-          </BreadcrumbItem>
-        </BreadcrumbList>
-      </Breadcrumb>
-
+      <SetPageBreadcrumb
+        segments={[
+          { label: experiment.project, href: `/projects/${experiment.projectId}` },
+          { label: experiment.name },
+        ]}
+      />
       {/* Header */}
       <div className="flex items-start justify-between">
         <div className="space-y-1">
@@ -362,7 +328,7 @@ export default async function ExperimentDetailPage({
         </TabsContent>
 
         <TabsContent value="notes" className="space-y-4">
-          <LabNotesTab experimentId={id} />
+          <LabNotesTab experimentId={id} experimentName={experiment.name} projectName={experiment.project} projectId={experiment.projectId} />
         </TabsContent>
       </Tabs>
     </div>

@@ -7,7 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Textarea } from "@/components/ui/textarea"
+import { TextareaWithWordCount } from "@/components/ui/textarea-with-word-count"
 import {
   Select,
   SelectContent,
@@ -177,14 +177,15 @@ export default function NewProtocolPage() {
               {/* Description */}
               <div className="space-y-2">
                 <Label htmlFor="description">Brief Description</Label>
-                <Textarea
+                <TextareaWithWordCount
                   id="description"
                   placeholder="Brief overview of the protocol..."
                   rows={2}
                   value={formData.description}
-                  onChange={(e) =>
-                    setFormData({ ...formData, description: e.target.value })
+                  onChange={(v) =>
+                    setFormData({ ...formData, description: v })
                   }
+                  maxWords={1000}
                 />
               </div>
 

@@ -6,7 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Users, TrendingUp, Eye, Grid3x3, List } from 'lucide-react'
+import { Users, TrendingUp, Eye, Grid3x3, List, Plus } from 'lucide-react'
 
 // Format date consistently to avoid hydration mismatch between server/client locales
 const formatDate = (dateStr: string): string => {
@@ -32,12 +32,59 @@ interface Project {
   } | null
 }
 
-interface ProjectListProps {
-  projects: Project[]
+/** Client wrapper: single-line header (description + Grid/Table toggle + New button) + list */
+export function ProjectsPageContent({ projects }: { projects: Project[] }) {
+  const [viewMode, setViewMode] = useState<"grid" | "table">("grid")
+  return (
+    <div className="space-y-6">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+        <p className="text-muted-foreground">
+          Manage your research initiatives and experiments
+        </p>
+        <div className="flex items-center gap-2 shrink-0">
+          <div className="inline-flex rounded-lg border p-1">
+            <Button
+              variant={viewMode === "grid" ? "secondary" : "ghost"}
+              size="sm"
+              onClick={() => setViewMode("grid")}
+              className="gap-2"
+            >
+              <Grid3x3 className="h-4 w-4" />
+              Grid
+            </Button>
+            <Button
+              variant={viewMode === "table" ? "secondary" : "ghost"}
+              size="sm"
+              onClick={() => setViewMode("table")}
+              className="gap-2"
+            >
+              <List className="h-4 w-4" />
+              Table
+            </Button>
+          </div>
+          <Button asChild size="icon" variant="ghost" className="size-8 rounded-md text-muted-foreground hover:bg-muted hover:text-foreground transition-colors" aria-label="New project">
+            <Link href="/projects/new">
+              <Plus className="size-4" />
+            </Link>
+          </Button>
+        </div>
+      </div>
+      <ProjectList projects={projects} viewMode={viewMode} setViewMode={setViewMode} hideToolbar />
+    </div>
+  )
 }
 
-export function ProjectList({ projects }: ProjectListProps) {
-  const [viewMode, setViewMode] = useState<"grid" | "table">("grid")
+interface ProjectListProps {
+  projects: Project[]
+  viewMode?: "grid" | "table"
+  setViewMode?: (mode: "grid" | "table") => void
+  hideToolbar?: boolean
+}
+
+export function ProjectList({ projects, viewMode: controlledView, setViewMode: setControlledView, hideToolbar }: ProjectListProps) {
+  const [internalView, setInternalView] = useState<"grid" | "table">("grid")
+  const viewMode = controlledView ?? internalView
+  const setViewMode = setControlledView ?? setInternalView
 
   // Helper function to get better status display
   const getStatusDisplay = (status: string) => {
@@ -69,29 +116,31 @@ export function ProjectList({ projects }: ProjectListProps) {
 
   return (
     <>
-      {/* View Toggle */}
-      <div className="flex justify-end mb-4">
-        <div className="inline-flex rounded-lg border p-1">
-          <Button
-            variant={viewMode === "grid" ? "secondary" : "ghost"}
-            size="sm"
-            onClick={() => setViewMode("grid")}
-            className="gap-2"
-          >
-            <Grid3x3 className="h-4 w-4" />
-            Grid
-          </Button>
-          <Button
-            variant={viewMode === "table" ? "secondary" : "ghost"}
-            size="sm"
-            onClick={() => setViewMode("table")}
-            className="gap-2"
-          >
-            <List className="h-4 w-4" />
-            Table
-          </Button>
+      {/* View Toggle - only when not in header */}
+      {!hideToolbar && (
+        <div className="flex justify-end mb-4">
+          <div className="inline-flex rounded-lg border p-1">
+            <Button
+              variant={viewMode === "grid" ? "secondary" : "ghost"}
+              size="sm"
+              onClick={() => setViewMode("grid")}
+              className="gap-2"
+            >
+              <Grid3x3 className="h-4 w-4" />
+              Grid
+            </Button>
+            <Button
+              variant={viewMode === "table" ? "secondary" : "ghost"}
+              size="sm"
+              onClick={() => setViewMode("table")}
+              className="gap-2"
+            >
+              <List className="h-4 w-4" />
+              Table
+            </Button>
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Grid View - Use auto-fill with fixed card sizes to prevent expansion */}
       {viewMode === "grid" && (
@@ -161,7 +210,9 @@ export function ProjectList({ projects }: ProjectListProps) {
                   <div className="flex items-center justify-between text-sm gap-2 min-w-0">
                     <div className="flex items-center gap-1 text-muted-foreground min-w-0 overflow-hidden">
                       <Users className="h-4 w-4 shrink-0" />
-                      <span className="truncate text-ellipsis overflow-hidden">{project.no_of_members} members</span>
+                      <span className="truncate text-ellipsis overflow-hidden">
+                        {Math.max(1, project.no_of_members)} {Math.max(1, project.no_of_members) === 1 ? 'member' : 'members'}
+                      </span>
                     </div>
                     <div className="flex items-center gap-1 text-muted-foreground min-w-0 overflow-hidden">
                       <TrendingUp className="h-4 w-4 shrink-0" />
@@ -257,7 +308,7 @@ export function ProjectList({ projects }: ProjectListProps) {
                       <TableCell>
                         <div className="flex items-center gap-1">
                           <Users className="h-4 w-4 text-muted-foreground" />
-                          <span>{project.no_of_members}</span>
+                          <span>{Math.max(1, project.no_of_members)}</span>
                         </div>
                       </TableCell>
                       <TableCell>

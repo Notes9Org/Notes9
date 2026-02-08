@@ -2,7 +2,6 @@
 
 import { SearchPaper } from '@/types/paper-search';
 import { Input } from '@/components/ui/input';
-import { Button } from '@/components/ui/button';
 import { Search, Loader2, BookOpen, Sparkles, Database } from 'lucide-react';
 import { PaperSearchCard } from './paper-search-card';
 import { PerplexitySearchCard } from './perplexity-search-card';
@@ -129,14 +128,13 @@ export function SearchTab({
     <div className="space-y-6">
       {/* Search Bar with Toggle */}
       <form onSubmit={handleSearch} className="space-y-4">
-        <div className="relative max-w-3xl">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
+        <div className="relative max-w-3xl mx-auto">
           <Input
             placeholder={aiMode 
               ? "Ask a research question..." 
               : "Search database for papers..."
             }
-            className="pl-10 pr-36 h-12 text-base"
+            className="pl-3 pr-36 h-12 text-base"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             disabled={isLoading}
@@ -166,33 +164,6 @@ export function SearchTab({
             </div>
           </button>
         </div>
-        
-        {/* Search Button */}
-        <Button 
-          type="submit" 
-          disabled={isLoading || !query.trim()}
-        >
-          {isLoading ? (
-            <>
-              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-              {aiMode ? 'Searching...' : 'Searching...'}
-            </>
-          ) : (
-            <>
-              {aiMode ? (
-                <>
-                  <Sparkles className="h-4 w-4 mr-2" />
-                  AI Search
-                </>
-              ) : (
-                <>
-                  <Database className="h-4 w-4 mr-2" />
-                  Search
-                </>
-              )}
-            </>
-          )}
-        </Button>
 
         {/* AI Mode Indicator */}
         {aiMode && (

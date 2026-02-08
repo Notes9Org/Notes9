@@ -8,7 +8,6 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Textarea } from "@/components/ui/textarea"
 import {
   Select,
   SelectContent,
@@ -17,7 +16,10 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { RichTextEditor } from "@/components/rich-text-editor"
+import { countWordsFromHtml } from "@/components/ui/textarea-with-word-count"
+import { cn } from "@/lib/utils"
 import { ArrowLeft } from 'lucide-react'
+import { getUniqueNameErrorMessage } from "@/lib/unique-name-error"
 
 function NewExperimentForm() {
   const router = useRouter()
@@ -69,6 +71,11 @@ function NewExperimentForm() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    const descWords = countWordsFromHtml(formData.description)
+    if (descWords > 1000) {
+      setError(`Description must be 1000 words or fewer (currently ${descWords} words).`)
+      return
+    }
     setIsLoading(true)
     setError(null)
 
@@ -109,7 +116,7 @@ function NewExperimentForm() {
 
       router.push(`/experiments/${data.id}`)
     } catch (err: any) {
-      setError(err.message)
+      setError(getUniqueNameErrorMessage(err, "experiment"))
     } finally {
       setIsLoading(false)
     }
@@ -182,6 +189,16 @@ function NewExperimentForm() {
                   placeholder="Describe the experiment methodology, objectives, and expected outcomes..."
                   className="text-foreground"
                 />
+                <p
+                  className={cn(
+                    "text-right text-xs tabular-nums",
+                    countWordsFromHtml(formData.description) > 1000
+                      ? "text-destructive"
+                      : "text-muted-foreground"
+                  )}
+                >
+                  {countWordsFromHtml(formData.description)} / 1000 words
+                </p>
               </div>
 
               <div className="space-y-2">

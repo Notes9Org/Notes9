@@ -4,7 +4,7 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Plus } from 'lucide-react'
 import Link from 'next/link'
-import { ProjectList } from './project-list'
+import { ProjectsPageContent } from './project-list'
 
 export default async function ProjectsPage() {
   const supabase = await createClient()
@@ -36,26 +36,20 @@ export default async function ProjectsPage() {
 
   return (
       <div className="space-y-6">
-        {/* Header */}
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-3xl font-bold tracking-tight">Projects</h1>
-            <p className="text-muted-foreground mt-1">
+        {projects && projects.length > 0 ? (
+          <ProjectsPageContent projects={projects} />
+        ) : (
+          <>
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+            <p className="text-muted-foreground">
               Manage your research initiatives and experiments
             </p>
+            <Button asChild size="icon" variant="ghost" className="shrink-0 size-8 rounded-md text-muted-foreground hover:bg-muted hover:text-foreground transition-colors" aria-label="New project">
+              <Link href="/projects/new">
+                <Plus className="size-4" />
+              </Link>
+            </Button>
           </div>
-          <Button asChild>
-            <Link href="/projects/new">
-              <Plus className="h-4 w-4 mr-2" />
-              New Project
-            </Link>
-          </Button>
-        </div>
-
-        {/* Projects List with Grid/Table Toggle */}
-        {projects && projects.length > 0 ? (
-          <ProjectList projects={projects} />
-        ) : (
           <Card>
             <CardContent className="flex flex-col items-center justify-center py-12">
               <p className="text-muted-foreground mb-4">No projects yet</p>
@@ -67,6 +61,7 @@ export default async function ProjectsPage() {
               </Button>
             </CardContent>
           </Card>
+          </>
         )}
       </div>
     )
