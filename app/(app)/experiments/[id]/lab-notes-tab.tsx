@@ -1,19 +1,12 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -34,8 +27,7 @@ import { TiptapEditor } from "@/components/text-editor/tiptap-editor"
 import { useToast } from "@/hooks/use-toast"
 import { useAutoSave } from "@/hooks/use-auto-save"
 import { SaveStatusIndicator } from "@/components/ui/save-status"
-import { Save, Plus, FileText, Download, FileCode, Globe, Loader2, X, Users, ChevronLeft, ChevronRight, MoreVertical, Trash2, List, Pencil } from "lucide-react"
-import { LinkNoteProtocolDialog } from "./link-note-protocol-dialog"
+import { Plus, FileText, Download, FileCode, Globe, Loader2, Users, ChevronLeft, ChevronRight, MoreVertical, Trash2, List, Pencil } from "lucide-react"
 import {
   Table,
   TableBody,
@@ -44,7 +36,6 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
-import { Badge } from "@/components/ui/badge"
 import { cn } from "@/lib/utils"
 import { getUniqueNameErrorMessage } from "@/lib/unique-name-error"
 import { useBreadcrumb } from "@/components/layout/breadcrumb-context"
@@ -103,12 +94,19 @@ export function LabNotesTab({
   // Linked protocols state
   const [linkedProtocols, setLinkedProtocols] = useState<LinkedProtocol[]>([]);
 
-  // Notebook list panel collapsed for more note-taking space
-  const [notebookPanelOpen, setNotebookPanelOpen] = useState(true);
+  // Notebook list panel collapsed for more note-taking space (start closed)
+  const [notebookPanelOpen, setNotebookPanelOpen] = useState(false);
 
-  // Rename note dialog
+  // Rename note dialog (used from sidebar note menu)
   const [renameNoteId, setRenameNoteId] = useState<string | null>(null);
   const [renameTitle, setRenameTitle] = useState("");
+
+  // Inline title editing in card header (no dialog)
+  const [isEditingTitle, setIsEditingTitle] = useState(false);
+  const titleInputRef = useRef<HTMLInputElement>(null);
+  const toolbarPortalRef = useRef<HTMLDivElement>(null);
+  const toolbarPortalReadyRef = useRef(false);
+  const [, setToolbarPortalReady] = useState(false);
 
   // Auto-save functionality
   const handleAutoSave = async (content: string, title?: string, noteType?: string) => {
@@ -226,6 +224,14 @@ export function LabNotesTab({
       setSegments(baseSegments);
     };
   }, [projectName, experimentName, projectId, setSegments, formData.title, selectedNote?.title]);
+
+  // Focus and select title input when entering inline edit mode
+  useEffect(() => {
+    if (isEditingTitle && titleInputRef.current) {
+      titleInputRef.current.focus();
+      titleInputRef.current.select();
+    }
+  }, [isEditingTitle]);
 
   // Fetch linked protocols when a note is selected
   useEffect(() => {
@@ -972,154 +978,44 @@ export function LabNotesTab({
     }
   };
 
+  const handleInlineTitleSave = async () => {
+    if (!selectedNote) return;
+    const newTitle = formData.title.trim();
+    if (!newTitle) {
+      setFormData((f) => ({ ...f, title: selectedNote.title || "" }));
+      setIsEditingTitle(false);
+      return;
+    }
+    if (newTitle === (selectedNote.title || "")) {
+      setIsEditingTitle(false);
+      return;
+    }
+    try {
+      const supabase = createClient();
+      const { error } = await supabase
+        .from("lab_notes")
+        .update({ title: newTitle, updated_at: new Date().toISOString() })
+        .eq("id", selectedNote.id);
+      if (error) throw error;
+      setNotes((prev) =>
+        prev.map((n) =>
+          n.id === selectedNote.id ? { ...n, title: newTitle, updated_at: new Date().toISOString() } : n
+        )
+      );
+      setSelectedNote((prev) => (prev?.id === selectedNote.id ? { ...prev, title: newTitle } : prev));
+      toast({ title: "Note renamed", description: "Title updated." });
+    } catch (err: any) {
+      toast({
+        title: "Error",
+        description: getUniqueNameErrorMessage(err, "lab_note"),
+        variant: "destructive",
+      });
+    }
+    setIsEditingTitle(false);
+  };
+
   return (
-    <div
-      className={cn(
-        "flex w-full",
-        notebookPanelOpen ? "gap-0" : "items-start gap-2"
-      )}
-    >
-      {/* Left panel - Notes list (sidebar-style) or collapsed pill */}
-      <div
-        className={cn(
-          "flex shrink-0 flex-col overflow-hidden border-r border-border bg-sidebar transition-[width] duration-200 ease-in-out",
-          notebookPanelOpen ? "w-56" : "w-0 border-r-0"
-        )}
-      >
-        {notebookPanelOpen && (
-          <div className="flex h-full min-h-0 flex-col gap-1 p-2">
-            {/* Header row - same pattern as sidebar group label */}
-            <div className="flex h-8 shrink-0 items-center gap-2 rounded-md px-2 text-xs font-medium text-sidebar-foreground/70">
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-7 w-7 shrink-0 -ml-0.5"
-                onClick={() => setNotebookPanelOpen(false)}
-                aria-label="Hide notes"
-              >
-                <ChevronLeft className="h-4 w-4" />
-              </Button>
-              <span className="flex-1 truncate">Notes</span>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-7 w-7 shrink-0"
-                disabled={isCreatingNew}
-                onClick={handleNewNote}
-                aria-label="New note"
-              >
-                {isCreatingNew ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
-              </Button>
-            </div>
-            {/* List - same gap-1 as SidebarMenu */}
-            <div className="flex min-h-0 flex-1 flex-col gap-1 overflow-auto">
-              {notes.length > 0 ? (
-                <ul className="flex w-full min-w-0 flex-col gap-0.5">
-                  {notes.map((note) => {
-                    const isActive = selectedNote?.id === note.id && !isCreating;
-                    const createdStr = new Date(note.created_at).toLocaleString();
-                    const updatedStr = new Date(note.updated_at).toLocaleString();
-                    return (
-                      <li key={note.id} className="group/list-item relative">
-                        <div
-                          role="button"
-                          tabIndex={0}
-                          onClick={() => handleSelectNote(note)}
-                          onKeyDown={(e) => {
-                            if (e.key === "Enter" || e.key === " ") {
-                              e.preventDefault();
-                              handleSelectNote(note);
-                            }
-                          }}
-                          data-note-id={note.id}
-                          data-created-at={note.created_at}
-                          data-updated-at={note.updated_at}
-                          title={`Created: ${createdStr} · Updated: ${updatedStr}`}
-                          className={cn(
-                            "grid w-full min-h-9 grid-cols-[auto_1fr_auto] items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm outline-none transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
-                            isActive &&
-                              "bg-sidebar-accent font-medium text-sidebar-accent-foreground"
-                          )}
-                        >
-                          <span className="flex size-8 shrink-0 items-center justify-center text-sidebar-foreground/70" aria-hidden>
-                            <FileText className="h-4 w-4" />
-                          </span>
-                          <p className="min-w-0 truncate font-medium m-0">
-                            {note.title || "Untitled"}
-                          </p>
-                          <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                className="size-8 shrink-0 opacity-70 hover:opacity-100"
-                                onClick={(e) => e.stopPropagation()}
-                                aria-label="Note options"
-                              >
-                                <MoreVertical className="h-4 w-4" />
-                              </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
-                              <DropdownMenuItem onClick={(e) => openRenameNote(e, note)}>
-                                <Pencil className="mr-2 h-4 w-4" />
-                                Rename
-                              </DropdownMenuItem>
-                              <DropdownMenuSeparator />
-                              <DropdownMenuItem
-                                className="text-destructive focus:text-destructive"
-                                onClick={(e) => handleDeleteNote(e, note)}
-                              >
-                                <Trash2 className="mr-2 h-4 w-4" />
-                                Delete note
-                              </DropdownMenuItem>
-                            </DropdownMenuContent>
-                          </DropdownMenu>
-                        </div>
-                      </li>
-                    );
-                  })}
-                </ul>
-              ) : (
-                <div className="flex flex-col items-center justify-center gap-3 px-2 py-8">
-                  <p className="text-center text-xs text-sidebar-foreground/70">No notes yet</p>
-                  <Button
-                    onClick={handleNewNote}
-                    variant="outline"
-                    size="sm"
-                    className="text-xs"
-                    disabled={isCreatingNew}
-                  >
-                    {isCreatingNew ? (
-                      <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
-                    ) : (
-                      <Plus className="mr-2 h-3.5 w-3.5" />
-                    )}
-                    New note
-                  </Button>
-                </div>
-              )}
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* Collapsed: small pill at top (list icon + count) */}
-      {!notebookPanelOpen && (
-        <button
-          type="button"
-          onClick={() => setNotebookPanelOpen(true)}
-          className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-border bg-muted/50 px-1.5 py-1 pr-2.5 transition-colors hover:bg-muted"
-          aria-label="Show notes"
-        >
-          <span className="flex h-5 w-5 items-center justify-center rounded-full bg-muted">
-            <List className="h-3.5 w-3.5 text-muted-foreground" />
-          </span>
-          <span className="text-xs font-medium tabular-nums text-muted-foreground">
-            {notes.length}
-          </span>
-        </button>
-      )}
-
+    <div className="flex w-full min-h-0 flex-1">
       {/* Rename note dialog */}
       <Dialog
         open={!!renameNoteId}
@@ -1155,24 +1051,199 @@ export function LabNotesTab({
         </DialogContent>
       </Dialog>
 
-      {/* Right Side - Note Editor */}
-      <div className="flex-1 min-w-0">
-        <Card className="h-full">
-          <CardHeader>
-            <div className="flex items-start justify-between">
-              <div className="flex-1 min-w-0">
-                <CardTitle className="text-foreground">
-                  {isCreating
-                    ? "New Lab Note"
-                    : formData.title || "Untitled Lab Note"}
-                </CardTitle>
-                <CardDescription>
-                  Document your observations, analysis, and findings
-                </CardDescription>
-              </div>
-              <div className="flex items-center gap-3 shrink-0">
+      {/* Single Card: notes list (when open) + editor */}
+      <div className="flex-1 min-w-0 min-h-0 flex flex-col">
+        <Card className="h-full flex flex-col min-h-0 py-0 gap-0 overflow-hidden">
+          <div className="flex flex-row flex-1 min-h-0 min-w-0">
+            {/* Notes list - inside card, left side */}
+            <aside
+              className={cn(
+                "flex shrink-0 flex-col overflow-hidden border-r border-border bg-muted/30 relative",
+                notebookPanelOpen ? "w-52 min-w-[13rem] z-10 bg-card" : "w-0 min-w-0 border-r-0 overflow-hidden"
+              )}
+              aria-hidden={!notebookPanelOpen}
+            >
+              {notebookPanelOpen && (
+                <div className="flex h-full min-h-0 w-52 min-w-[13rem] flex-col gap-0 p-2">
+                  <div className="flex h-9 shrink-0 items-center px-1">
+                    <span className="truncate text-xs font-medium text-muted-foreground">Notes</span>
+                  </div>
+                  <div className="flex min-h-0 flex-1 flex-col gap-0.5 overflow-auto mt-1">
+                    {notes.length > 0 ? (
+                      <ul className="flex w-full min-w-0 flex-col gap-0.5">
+                        {notes.map((note) => {
+                          const isActive = selectedNote?.id === note.id && !isCreating;
+                          const createdStr = new Date(note.created_at).toLocaleString();
+                          const updatedStr = new Date(note.updated_at).toLocaleString();
+                          return (
+                            <li key={note.id} className="group/list-item relative">
+                              <div
+                                role="button"
+                                tabIndex={0}
+                                onClick={() => handleSelectNote(note)}
+                                onKeyDown={(e) => {
+                                  if (e.key === "Enter" || e.key === " ") {
+                                    e.preventDefault();
+                                    handleSelectNote(note);
+                                  }
+                                }}
+                                data-note-id={note.id}
+                                data-created-at={note.created_at}
+                                data-updated-at={note.updated_at}
+                                title={`Created: ${createdStr} · Updated: ${updatedStr}`}
+                                className={cn(
+                                  "grid w-full min-h-8 grid-cols-[auto_1fr_auto] items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm outline-none transition-colors hover:bg-muted/80",
+                                  isActive && "bg-muted font-medium"
+                                )}
+                              >
+                                <FileText className="h-4 w-4 shrink-0 text-muted-foreground" />
+                                <p className="min-w-0 truncate font-medium m-0 text-sm">
+                                  {note.title || "Untitled"}
+                                </p>
+                                <DropdownMenu>
+                                  <DropdownMenuTrigger asChild>
+                                    <Button
+                                      variant="ghost"
+                                      size="icon"
+                                      className="size-7 shrink-0 opacity-70 hover:opacity-100"
+                                      onClick={(e) => e.stopPropagation()}
+                                      aria-label="Note options"
+                                    >
+                                      <MoreVertical className="h-3.5 w-3.5" />
+                                    </Button>
+                                  </DropdownMenuTrigger>
+                                  <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
+                                    <DropdownMenuItem onClick={(e) => openRenameNote(e, note)}>
+                                      <Pencil className="mr-2 h-4 w-4" />
+                                      Rename
+                                    </DropdownMenuItem>
+                                    <DropdownMenuSeparator />
+                                    <DropdownMenuItem
+                                      className="text-destructive focus:text-destructive"
+                                      onClick={(e) => handleDeleteNote(e, note)}
+                                    >
+                                      <Trash2 className="mr-2 h-4 w-4" />
+                                      Delete note
+                                    </DropdownMenuItem>
+                                  </DropdownMenuContent>
+                                </DropdownMenu>
+                              </div>
+                            </li>
+                          );
+                        })}
+                      </ul>
+                    ) : (
+                      <div className="flex flex-col items-center justify-center gap-2 px-2 py-6">
+                        <p className="text-center text-xs text-muted-foreground">No notes yet</p>
+                        <Button
+                          onClick={handleNewNote}
+                          variant="outline"
+                          size="sm"
+                          className="text-xs"
+                          disabled={isCreatingNew}
+                        >
+                          {isCreatingNew ? (
+                            <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
+                          ) : (
+                            <Plus className="mr-2 h-3.5 w-3.5" />
+                          )}
+                          New note
+                        </Button>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+            </aside>
+
+            {/* Editor area - header + content */}
+            <div className="flex flex-1 min-w-0 min-h-0 flex-col py-4 gap-4 relative z-0">
+          <CardHeader className="pb-0 px-4 sm:px-6 shrink-0">
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex flex-1 min-w-0 items-center gap-2">
                 <Button
-                  size="sm"
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8 shrink-0 text-muted-foreground hover:text-foreground pointer-events-auto"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    setNotebookPanelOpen((open) => !open);
+                  }}
+                  aria-label={notebookPanelOpen ? "Hide notes" : "Show notes"}
+                  title={notebookPanelOpen ? "Hide notes list" : `Show notes (${notes.length})`}
+                >
+                  {notebookPanelOpen ? (
+                    <ChevronLeft className="h-4 w-4 pointer-events-none" />
+                  ) : (
+                    <List className="h-4 w-4 pointer-events-none" />
+                  )}
+                </Button>
+                <div className="flex flex-1 min-w-0 items-center gap-1">
+                <div className="flex-1 min-w-0">
+                  {isEditingTitle && selectedNote ? (
+                    <input
+                      ref={titleInputRef}
+                      type="text"
+                      value={formData.title}
+                      onChange={(e) => setFormData((f) => ({ ...f, title: e.target.value }))}
+                      onBlur={handleInlineTitleSave}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          e.preventDefault();
+                          titleInputRef.current?.blur();
+                        }
+                        if (e.key === "Escape") {
+                          setFormData((f) => ({ ...f, title: selectedNote.title || "" }));
+                          setIsEditingTitle(false);
+                          titleInputRef.current?.blur();
+                        }
+                      }}
+                      className="w-full bg-transparent text-lg font-semibold text-foreground leading-none outline-none border-b border-transparent focus:border-primary"
+                      aria-label="Edit note title"
+                    />
+                  ) : (
+                    <div
+                      className={cn(
+                        "truncate",
+                        !isCreating && selectedNote && "cursor-pointer rounded px-1 -mx-1 hover:bg-muted/60 hover:text-foreground"
+                      )}
+                      onClick={() => {
+                        if (!isCreating && selectedNote) setIsEditingTitle(true);
+                      }}
+                      role={!isCreating && selectedNote ? "button" : undefined}
+                      tabIndex={!isCreating && selectedNote ? 0 : undefined}
+                      onKeyDown={(e) => {
+                        if (!isCreating && selectedNote && (e.key === "Enter" || e.key === " ")) {
+                          e.preventDefault();
+                          setIsEditingTitle(true);
+                        }
+                      }}
+                      aria-label={!isCreating && selectedNote ? "Click to edit title" : undefined}
+                    >
+                      <CardTitle className="text-lg font-semibold text-foreground truncate leading-none">
+                        {isCreating
+                          ? "New Lab Note"
+                          : formData.title || "Untitled Lab Note"}
+                      </CardTitle>
+                    </div>
+                  )}
+                </div>
+                <SaveStatusIndicator
+                  status={autoSaveStatus}
+                  lastSaved={lastSaved}
+                  variant="icon"
+                  onClick={handleSave}
+                  disabled={isSaving || !formData.title.trim()}
+                />
+                </div>
+              </div>
+              <div className="flex items-center gap-1 shrink-0">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8 m-0 text-muted-foreground hover:text-foreground"
                   disabled={isCreatingNew}
                   onClick={() => {
                     setNotebookPanelOpen(true);
@@ -1181,23 +1252,21 @@ export function LabNotesTab({
                   aria-label="New lab note"
                 >
                   {isCreatingNew ? (
-                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    <Loader2 className="h-4 w-4 animate-spin" />
                   ) : (
-                    <Plus className="h-4 w-4 mr-2" />
+                    <Plus className="h-4 w-4" />
                   )}
-                  New lab note
                 </Button>
-                {/* Save Status Button - Google Drive Style */}
-                <SaveStatusIndicator
-                  status={autoSaveStatus}
-                  lastSaved={lastSaved}
-                />
                 {!isCreating && selectedNote && (
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
-                      <Button variant="outline" size="sm">
-                        <Download className="h-4 w-4 mr-2" />
-                        Export
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                        aria-label="Export"
+                      >
+                        <Download className="h-4 w-4" />
                       </Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end">
@@ -1217,10 +1286,10 @@ export function LabNotesTab({
                         <FileText className="h-4 w-4 mr-2" />
                         PDF (.pdf)
                       </DropdownMenuItem>
-                      {/* <DropdownMenuItem onClick={downloadAsDOCX}>
+                      <DropdownMenuItem onClick={downloadAsDOCX}>
                         <FileText className="h-4 w-4 mr-2" />
                         Word (.docx)
-                      </DropdownMenuItem> */}
+                      </DropdownMenuItem>
                     </DropdownMenuContent>
                   </DropdownMenu>
                 )}
@@ -1285,103 +1354,20 @@ export function LabNotesTab({
                 )} */}
               </div>
             </div>
+            <div
+              ref={(el) => {
+                (toolbarPortalRef as React.MutableRefObject<HTMLDivElement | null>).current = el;
+                if (el && !toolbarPortalReadyRef.current) {
+                  toolbarPortalReadyRef.current = true;
+                  setToolbarPortalReady(true);
+                }
+              }}
+              className="min-h-0"
+            />
           </CardHeader>
-          <CardContent className="space-y-4">
-            {/* Title & Type */}
-            <div className="grid grid-cols-1 md:grid-cols-[1fr_200px] gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="title">Title</Label>
-                <Input
-                  id="title"
-                  value={formData.title}
-                  onChange={(e) => {
-                    const newTitle = e.target.value;
-                    setFormData({ ...formData, title: newTitle });
-                    // Trigger auto-save when title changes, passing the new title directly
-                    debouncedSave(formData.content, newTitle, formData.note_type);
-                  }}
-                  placeholder="e.g., Day 3 Observations"
-                  required
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="note_type">Note Type</Label>
-                <Select
-                  value={formData.note_type}
-                  onValueChange={(value) => {
-                    setFormData({ ...formData, note_type: value });
-                    // Trigger auto-save when note type changes, passing the new note type directly
-                    debouncedSave(formData.content, formData.title, value);
-                  }}
-                >
-                  <SelectTrigger id="note_type">
-                    <SelectValue placeholder="Select type" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="observation">Observation</SelectItem>
-                    <SelectItem value="analysis">Analysis</SelectItem>
-                    <SelectItem value="conclusion">Conclusion</SelectItem>
-                    <SelectItem value="general">General</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-
-            {/* Linked Protocols */}
-            {!isCreating && selectedNote && (
-              <div className="space-y-2">
-                <div className="flex items-center gap-2">
-                  <Label className="text-xs text-muted-foreground">Linked Protocols</Label>
-                  <LinkNoteProtocolDialog
-                    noteId={selectedNote.id}
-                    linkedProtocolIds={linkedProtocols.map(p => p.protocol_id)}
-                    onLink={() => fetchLinkedProtocols(selectedNote.id)}
-                  />
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  {linkedProtocols.length > 0 ? (
-                    linkedProtocols.map((link) => (
-                      <Badge
-                        key={link.id}
-                        variant="secondary"
-                        className="flex items-center gap-1 pr-1 cursor-grab active:cursor-grabbing"
-                        draggable
-                        onDragStart={(e) => {
-                          e.dataTransfer.setData(
-                            "application/x-protocol",
-                            JSON.stringify({
-                              id: link.protocol_id,
-                              name: link.protocol.name,
-                            })
-                          );
-                          e.dataTransfer.effectAllowed = "copy";
-                        }}
-                      >
-                        <span>{link.protocol.name}</span>
-                        {link.protocol.version && (
-                          <span className="text-muted-foreground text-xs">v{link.protocol.version}</span>
-                        )}
-                        <button
-                          type="button"
-                          title="Remove linked protocol"
-                          onClick={() => removeLinkedProtocol(link.id)}
-                          className="ml-1 rounded-full hover:bg-destructive/20 p-0.5"
-                        >
-                          <X className="h-3 w-3" />
-                        </button>
-                      </Badge>
-                    ))
-                  ) : (
-                    <span className="text-xs text-muted-foreground">No protocols linked</span>
-                  )}
-                </div>
-              </div>
-            )}
-
+          <CardContent className="space-y-3 px-4 sm:px-6">
             {/* Rich Text Editor */}
-            <div className="space-y-2">
-              <Label>Content</Label>
+            <div>
               <TiptapEditor
                 content={formData.content}
                 onChange={(content) => {
@@ -1398,20 +1384,12 @@ export function LabNotesTab({
                   name: lp.protocol.name,
                   version: lp.protocol.version,
                 }))}
+                toolbarPortalRef={toolbarPortalRef}
               />
             </div>
-
-            {/* Actions */}
-            <div className="flex justify-end gap-2 pt-4">
-              <Button
-                onClick={handleSave}
-                disabled={isSaving || !formData.title.trim()}
-              >
-                <Save className="h-4 w-4 mr-2" />
-                {isSaving ? "Saving..." : "Save Note"}
-              </Button>
-            </div>
           </CardContent>
+            </div>
+          </div>
         </Card>
       </div>
     </div>
