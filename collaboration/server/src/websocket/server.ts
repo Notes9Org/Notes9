@@ -18,6 +18,7 @@ import {
   connectToDocument, 
   disconnectFromDocument, 
   applyUpdate, 
+  updateAwareness,
   getDocumentState,
   getDocument,
   ManagedDocument 
@@ -250,8 +251,7 @@ async function handleAwareness(
   try {
     const doc = await getDocument(socket.documentId);
     const update = new Uint8Array(payload.update);
-    // Apply awareness update through document manager
-    // This would integrate with y-protocols awareness
+    updateAwareness(doc, update, socket);
   } catch (err) {
     console.error('[WebSocket] Error handling awareness:', err);
   }

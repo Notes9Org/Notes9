@@ -3,6 +3,7 @@
 import { useEditor, EditorContent } from "@tiptap/react"
 import { StarterKit } from "@tiptap/starter-kit"
 import { Placeholder } from "@tiptap/extension-placeholder"
+import Collaboration from "@tiptap/extension-collaboration"
 import { Link } from "@tiptap/extension-link"
 import { Image } from "@tiptap/extension-image"
 import { Highlight } from "@tiptap/extension-highlight"
@@ -60,6 +61,7 @@ import { Plugin, PluginKey } from "@tiptap/pm/state"
 import { Decoration, DecorationSet } from "@tiptap/pm/view"
 import { cn } from "@/lib/utils"
 import { useCallback, useEffect, useRef, useState } from "react"
+import type * as Y from "yjs"
 // @ts-ignore
 import * as mammoth from "mammoth"
 import {
@@ -94,6 +96,23 @@ interface TiptapEditorProps {
   onAutoSave?: (content: string) => Promise<void>
   protocols?: ProtocolItem[]
   labNotes?: LabNoteItem[]
+  collaboration?: TiptapCollaborationConfig
+}
+
+export interface TiptapCollaborationUser {
+  id: string
+  name: string
+  color: string
+}
+
+export interface TiptapCollaborationConfig {
+  document: Y.Doc
+  provider?: {
+    setAwarenessField?: (key: string, value: unknown) => void
+  } | null
+  user: TiptapCollaborationUser
+  field?: string
+  isSynced?: boolean
 }
 
 // Custom Table extension with width/height support
@@ -378,6 +397,7 @@ export function TiptapEditor({
   hideToolbar = false,
   protocols = [],
   labNotes = [],
+  collaboration,
 }: TiptapEditorProps & { hideToolbar?: boolean }) {
   const [isAIProcessing, setIsAIProcessing] = useState(false)
   const [aiDropdownOpen, setAiDropdownOpen] = useState(false)
@@ -392,6 +412,8 @@ export function TiptapEditor({
   // Use ref for protocols so the mention extension always has access to current protocols
   const protocolsRef = useRef<ProtocolItem[]>(protocols)
   const labNotesRef = useRef<LabNoteItem[]>(labNotes)
+  const hasHydratedCollaborativeContentRef = useRef(false)
+  const isCollaborative = Boolean(collaboration?.document)
 
   // Keep the refs in sync with props
   useEffect(() => {
@@ -409,7 +431,16 @@ export function TiptapEditor({
         heading: {
           levels: [1, 2, 3],
         },
+        undoRedo: isCollaborative ? false : {},
       }),
+      ...(collaboration
+        ? [
+          Collaboration.configure({
+            document: collaboration.document,
+            field: collaboration.field ?? "default",
+          }),
+        ]
+        : []),
       Placeholder.configure({
         placeholder,
       }),
@@ -466,7 +497,7 @@ export function TiptapEditor({
         },
       }),
     ],
-    content,
+    content: isCollaborative ? undefined : content,
     editable,
     onUpdate: ({ editor }) => {
       onChange?.(editor.getHTML())
@@ -570,13 +601,49 @@ export function TiptapEditor({
         },
       },
     },
-  })
+  }, [isCollaborative, collaboration?.document, collaboration?.provider, collaboration?.field])
 
   useEffect(() => {
+    if (isCollaborative) return
     if (editor && content !== editor.getHTML()) {
       editor.commands.setContent(content)
     }
-  }, [content, editor])
+  }, [content, editor, isCollaborative])
+
+  useEffect(() => {
+    hasHydratedCollaborativeContentRef.current = false
+  }, [collaboration?.document])
+
+  useEffect(() => {
+    if (!editor || !collaboration || !collaboration.isSynced) return
+    if (hasHydratedCollaborativeContentRef.current) return
+
+    const fragment = collaboration.document.getXmlFragment(collaboration.field ?? "default")
+    if (fragment.length === 0 && content) {
+      editor.commands.setContent(content)
+    }
+
+    hasHydratedCollaborativeContentRef.current = true
+  }, [editor, collaboration, content])
+
+  useEffect(() => {
+    if (!editor || !collaboration) return
+    const maybeUpdateUser = (editor.commands as { updateUser?: (user: TiptapCollaborationUser) => boolean }).updateUser
+
+    if (typeof maybeUpdateUser === "function") {
+      maybeUpdateUser(collaboration.user)
+      return
+    }
+
+    // Fallback when the cursor command isn't registered yet.
+    collaboration.provider?.setAwarenessField?.("user", collaboration.user)
+  }, [
+    editor,
+    collaboration?.user.id,
+    collaboration?.user.name,
+    collaboration?.user.color,
+    collaboration,
+  ])
 
   // AI Functions using Gemini API
   const callGeminiAPI = useCallback(

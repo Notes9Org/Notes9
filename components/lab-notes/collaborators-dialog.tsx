@@ -61,18 +61,13 @@ export function CollaboratorsDialog({
     pendingInvitations,
     isLoading,
     isOwner,
+    accessDenied,
     inviteCollaborator,
     removeCollaborator,
     updatePermission,
     revokeInvitation,
     refreshCollaborators,
-  } = useLabNoteCollaboration(labNoteId)
-
-  // Debug logging
-  console.log('CollaboratorsDialog - labNoteId:', labNoteId)
-  console.log('CollaboratorsDialog - isOwner:', isOwner)
-  console.log('CollaboratorsDialog - isLoading:', isLoading)
-  console.log('CollaboratorsDialog - collaborators:', collaborators)
+  } = useLabNoteCollaboration(labNoteId, { enabled: open })
 
   const handleInvite = async () => {
     if (!email.trim()) return
@@ -149,15 +144,22 @@ export function CollaboratorsDialog({
         </DialogHeader>
 
         <div className="space-y-4 py-4">
+          {/* Access Warning */}
+          {accessDenied && !isLoading && (
+            <div className="p-3 rounded-lg bg-yellow-50 border border-yellow-200 text-sm text-yellow-800">
+              You don't have access to manage collaborators for this lab note.
+            </div>
+          )}
+
           {/* Not Owner Warning */}
-          {!isOwner && !isLoading && (
+          {!accessDenied && !isOwner && !isLoading && (
             <div className="p-3 rounded-lg bg-yellow-50 border border-yellow-200 text-sm text-yellow-800">
               Only the owner can add collaborators to this lab note.
             </div>
           )}
 
           {/* Invite Form (only for owner) */}
-          {isOwner && (
+          {!accessDenied && isOwner && (
             <div className="space-y-3">
               <Label>Invite by email</Label>
               <div className="flex gap-2">
@@ -201,7 +203,7 @@ export function CollaboratorsDialog({
           )}
 
           {/* Pending Invitations */}
-          {pendingInvitations.length > 0 && (
+          {!accessDenied && pendingInvitations.length > 0 && (
             <div className="space-y-2">
               <Label className="text-sm text-muted-foreground">Pending invitations</Label>
               <div className="space-y-2">
@@ -247,7 +249,7 @@ export function CollaboratorsDialog({
           )}
 
           {/* Add Collaborator Button for Owner */}
-          {isOwner && (
+          {!accessDenied && isOwner && (
             <div className="flex justify-end">
               <Button 
                 variant="outline" 
@@ -280,7 +282,7 @@ export function CollaboratorsDialog({
                 </div>
               ) : collaborators.length === 0 ? (
                 <div className="text-sm text-muted-foreground text-center py-4">
-                  No collaborators yet
+                  {accessDenied ? "Access unavailable" : "No collaborators yet"}
                 </div>
               ) : (
                 collaborators.map((collaborator) => (

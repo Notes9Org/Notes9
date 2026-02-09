@@ -1,7 +1,7 @@
 "use client"
 
-import { useState, useEffect } from "react"
-import { useRouter, useSearchParams } from "next/navigation"
+import { useState, useEffect, useMemo, useRef } from "react"
+import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -26,6 +26,7 @@ import { AffineBlock } from "@/components/text-editor/affine-block"
 import { TiptapEditor } from "@/components/text-editor/tiptap-editor"
 import { useToast } from "@/hooks/use-toast"
 import { useAutoSave } from "@/hooks/use-auto-save"
+import { useCollaborativeEditor } from "@/hooks/useCollaborativeEditor"
 import { SaveStatusIndicator } from "@/components/ui/save-status"
 import { Save, Plus, FileText, Download, FileCode, Globe, Loader2, X, Users } from "lucide-react"
 import { LinkNoteProtocolDialog } from "./link-note-protocol-dialog"
@@ -40,6 +41,28 @@ import {
 } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
 import { cn } from "@/lib/utils";
+
+const COLLAB_WEBSOCKET_URL =
+  process.env.NEXT_PUBLIC_COLLAB_SERVER ?? "ws://localhost:3001/collab";
+
+const AWARENESS_COLORS = [
+  "#2563eb",
+  "#059669",
+  "#dc2626",
+  "#7c3aed",
+  "#ea580c",
+  "#0891b2",
+  "#be123c",
+  "#4f46e5",
+];
+
+function getAwarenessColor(seed: string): string {
+  let hash = 0;
+  for (let index = 0; index < seed.length; index += 1) {
+    hash = (hash * 31 + seed.charCodeAt(index)) >>> 0;
+  }
+  return AWARENESS_COLORS[hash % AWARENESS_COLORS.length];
+}
 
 interface LabNote {
   id: string;
@@ -63,6 +86,7 @@ interface LinkedProtocol {
 
 export function LabNotesTab({ experimentId }: { experimentId: string }) {
   const router = useRouter();
+  const pathname = usePathname();
   const searchParams = useSearchParams();
   const { toast } = useToast();
 
@@ -73,6 +97,12 @@ export function LabNotesTab({ experimentId }: { experimentId: string }) {
   const [isPublishing, setIsPublishing] = useState(false);
   const [publicUrl, setPublicUrl] = useState<string | null>(null);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  const [collabToken, setCollabToken] = useState<string | null>(null);
+  const [collabUser, setCollabUser] = useState<{
+    id: string;
+    name: string;
+    color: string;
+  } | null>(null);
 
   const [formData, setFormData] = useState({
     title: "",
@@ -82,12 +112,42 @@ export function LabNotesTab({ experimentId }: { experimentId: string }) {
 
   // Linked protocols state
   const [linkedProtocols, setLinkedProtocols] = useState<LinkedProtocol[]>([]);
+  const latestContentRef = useRef(formData.content);
+  const selectedNoteIdRef = useRef<string | null>(null);
+  const linkedProtocolsFetchIdRef = useRef(0);
+
+  const syncNoteQueryParam = (noteId: string | null) => {
+    const params = new URLSearchParams(searchParams.toString());
+    if (noteId) {
+      params.set("noteId", noteId);
+    } else {
+      params.delete("noteId");
+    }
+
+    const query = params.toString();
+    router.replace(query ? `${pathname}?${query}` : pathname, { scroll: false });
+  };
+
+  useEffect(() => {
+    latestContentRef.current = formData.content;
+  }, [formData.content]);
+
+  useEffect(() => {
+    selectedNoteIdRef.current = selectedNote?.id ?? null;
+  }, [selectedNote?.id]);
 
   // Auto-save functionality
-  const handleAutoSave = async (content: string, title?: string, noteType?: string) => {
+  const handleAutoSave = async (
+    content: string,
+    title?: string,
+    noteType?: string,
+    noteId?: string | null
+  ) => {
     // Use provided values or fall back to formData
     const titleToSave = title !== undefined ? title : formData.title;
     const noteTypeToSave = noteType !== undefined ? noteType : formData.note_type;
+    const targetNoteId = noteId ?? selectedNoteIdRef.current;
+    const shouldCreate = !targetNoteId;
 
     // Don't auto-save if title is empty
     if (!titleToSave.trim()) return;
@@ -101,7 +161,7 @@ export function LabNotesTab({ experimentId }: { experimentId: string }) {
       if (!user) throw new Error("Not authenticated");
 
       // If creating a new note, insert it first
-      if (isCreating || !selectedNote) {
+      if (shouldCreate) {
         const { data, error } = await supabase
           .from("lab_notes")
           .insert({
@@ -119,6 +179,7 @@ export function LabNotesTab({ experimentId }: { experimentId: string }) {
         // Switch to editing mode
         setIsCreating(false);
         setSelectedNote(data);
+        selectedNoteIdRef.current = data.id;
 
         // Refresh notes list
         await fetchNotes();
@@ -132,14 +193,14 @@ export function LabNotesTab({ experimentId }: { experimentId: string }) {
             note_type: noteTypeToSave,
             updated_at: new Date().toISOString(),
           })
-          .eq("id", selectedNote.id);
+          .eq("id", targetNoteId);
 
         if (error) throw error;
 
         // Update local state
-        setNotes(
-          notes.map((note) =>
-            note.id === selectedNote.id
+        setNotes((previousNotes) =>
+          previousNotes.map((note) =>
+            note.id === targetNoteId
               ? {
                 ...note,
                 content,
@@ -169,17 +230,96 @@ export function LabNotesTab({ experimentId }: { experimentId: string }) {
 
   // Fetch existing lab notes
   const noteIdFromQuery = searchParams.get("noteId");
+  const collaborationDocumentId =
+    !isCreating && selectedNote ? `lab-note:${selectedNote.id}` : null;
+
+  const { ydoc, provider, isSynced } = useCollaborativeEditor({
+    documentId: collaborationDocumentId,
+    websocketUrl: COLLAB_WEBSOCKET_URL,
+    token: collabToken,
+    user: collabUser,
+    enabled: Boolean(collaborationDocumentId && collabToken && collabUser),
+  });
+
+  const collaborationConfig = useMemo(() => {
+    // Safety guard: only enable collaborative editor once initial Yjs sync completes.
+    // This prevents an empty unsynced Y.Doc from replacing already-saved note content.
+    if (!ydoc || !provider || !collabUser || !isSynced) return undefined;
+    return {
+      document: ydoc,
+      provider,
+      user: collabUser,
+      field: "default",
+      isSynced,
+    };
+  }, [ydoc, provider, collabUser, isSynced]);
 
   // Fetch current user ID
   useEffect(() => {
     const fetchCurrentUser = async () => {
       const supabase = createClient();
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
       const { data: { user } } = await supabase.auth.getUser();
+
+      setCollabToken(session?.access_token ?? null);
       if (user) {
         setCurrentUserId(user.id);
+        const name =
+          user.user_metadata?.full_name ||
+          user.user_metadata?.name ||
+          [user.user_metadata?.first_name, user.user_metadata?.last_name]
+            .filter(Boolean)
+            .join(" ") ||
+          user.email ||
+          "Anonymous";
+
+        setCollabUser({
+          id: user.id,
+          name,
+          color: getAwarenessColor(user.id),
+        });
+      } else {
+        setCollabUser(null);
       }
     };
+
     fetchCurrentUser();
+  }, []);
+
+  useEffect(() => {
+    const supabase = createClient();
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      setCollabToken(session?.access_token ?? null);
+      const authUser = session?.user;
+
+      if (!authUser) {
+        setCollabUser(null);
+        return;
+      }
+
+      const name =
+        authUser.user_metadata?.full_name ||
+        authUser.user_metadata?.name ||
+        [authUser.user_metadata?.first_name, authUser.user_metadata?.last_name]
+          .filter(Boolean)
+          .join(" ") ||
+        authUser.email ||
+        "Anonymous";
+
+      setCollabUser({
+        id: authUser.id,
+        name,
+        color: getAwarenessColor(authUser.id),
+      });
+    });
+
+    return () => {
+      subscription.unsubscribe();
+    };
   }, []);
 
   useEffect(() => {
@@ -191,6 +331,7 @@ export function LabNotesTab({ experimentId }: { experimentId: string }) {
     if (selectedNote && !isCreating) {
       fetchLinkedProtocols(selectedNote.id);
     } else {
+      linkedProtocolsFetchIdRef.current += 1;
       setLinkedProtocols([]);
     }
   }, [selectedNote?.id, isCreating]);
@@ -315,6 +456,7 @@ export function LabNotesTab({ experimentId }: { experimentId: string }) {
             content: next.content,
             note_type: next.note_type || "general",
           });
+          syncNoteQueryParam(next.id);
         }
       }
     } catch (error: any) {
@@ -758,29 +900,22 @@ export function LabNotesTab({ experimentId }: { experimentId: string }) {
   };
 
   const fetchLinkedProtocols = async (noteId: string) => {
+    const fetchId = ++linkedProtocolsFetchIdRef.current;
     try {
-      const supabase = createClient();
-      const { data, error } = await supabase
-        .from("lab_note_protocols")
-        .select(`
-          id,
-          protocol_id,
-          protocol:protocols(id, name, version)
-        `)
-        .eq("lab_note_id", noteId);
+      const response = await fetch(`/api/lab-notes/linked-protocols?labNoteId=${noteId}`, {
+        cache: "no-store",
+      });
+      if (!response.ok) {
+        const error = await response.json().catch(() => ({}));
+        throw new Error(error.error || "Failed to fetch linked protocols");
+      }
 
-      if (error) throw error;
-
-      // Map the data to handle Supabase returning protocol as array
-      const mapped = (data || []).map((item: any) => ({
-        id: item.id,
-        protocol_id: item.protocol_id,
-        protocol: Array.isArray(item.protocol) ? item.protocol[0] : item.protocol,
-      })).filter((item: any) => item.protocol);
-
-      setLinkedProtocols(mapped);
-    } catch (error) {
+      const data = await response.json();
+      if (fetchId !== linkedProtocolsFetchIdRef.current) return;
+      setLinkedProtocols(data.linkedProtocols || []);
+    } catch (error: any) {
       console.error("Error fetching linked protocols:", error);
+      if (fetchId !== linkedProtocolsFetchIdRef.current) return;
       setLinkedProtocols([]);
     }
   };
@@ -817,6 +952,7 @@ export function LabNotesTab({ experimentId }: { experimentId: string }) {
       content: note.content,
       note_type: note.note_type || "general",
     });
+    syncNoteQueryParam(note.id);
     fetchLinkedProtocols(note.id);
   };
 
@@ -1018,7 +1154,12 @@ export function LabNotesTab({ experimentId }: { experimentId: string }) {
                     const newTitle = e.target.value;
                     setFormData({ ...formData, title: newTitle });
                     // Trigger auto-save when title changes, passing the new title directly
-                    debouncedSave(formData.content, newTitle, formData.note_type);
+                    debouncedSave(
+                      formData.content,
+                      newTitle,
+                      formData.note_type,
+                      selectedNote?.id ?? null
+                    );
                   }}
                   placeholder="e.g., Day 3 Observations"
                   required
@@ -1032,7 +1173,12 @@ export function LabNotesTab({ experimentId }: { experimentId: string }) {
                   onValueChange={(value) => {
                     setFormData({ ...formData, note_type: value });
                     // Trigger auto-save when note type changes, passing the new note type directly
-                    debouncedSave(formData.content, formData.title, value);
+                    debouncedSave(
+                      formData.content,
+                      formData.title,
+                      value,
+                      selectedNote?.id ?? null
+                    );
                   }}
                 >
                   <SelectTrigger id="note_type">
@@ -1105,14 +1251,23 @@ export function LabNotesTab({ experimentId }: { experimentId: string }) {
               <TiptapEditor
                 content={formData.content}
                 onChange={(content) => {
-                  setFormData({ ...formData, content });
+                  // Ignore no-op changes.
+                  if (content === latestContentRef.current) return;
+
+                  setFormData((previous) => ({ ...previous, content }));
                   // Trigger auto-save (works for both creation and editing)
-                  debouncedSave(content);
+                  debouncedSave(
+                    content,
+                    formData.title,
+                    formData.note_type,
+                    selectedNote?.id ?? null
+                  );
                 }}
                 placeholder="Write your lab notes here... Use @ to tag protocols"
                 title={formData.title || "lab-note"}
                 minHeight="400px"
                 showAITools={true}
+                collaboration={collaborationConfig}
                 protocols={linkedProtocols.map(lp => ({
                   id: lp.protocol_id,
                   name: lp.protocol.name,

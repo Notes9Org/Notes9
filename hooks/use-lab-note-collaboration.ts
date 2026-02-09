@@ -34,6 +34,7 @@ export interface UseLabNoteCollaborationReturn {
   pendingInvitations: PendingInvitation[]
   isLoading: boolean
   isOwner: boolean
+  accessDenied: boolean
   inviteCollaborator: (email: string, permissionLevel: Exclude<PermissionLevel, 'owner'>) => Promise<boolean>
   removeCollaborator: (userId: string) => Promise<boolean>
   updatePermission: (userId: string, permissionLevel: Exclude<PermissionLevel, 'owner'>) => Promise<boolean>
@@ -41,32 +42,40 @@ export interface UseLabNoteCollaborationReturn {
   refreshCollaborators: () => Promise<void>
 }
 
-export function useLabNoteCollaboration(labNoteId: string | null): UseLabNoteCollaborationReturn {
+export function useLabNoteCollaboration(
+  labNoteId: string | null,
+  options?: { enabled?: boolean }
+): UseLabNoteCollaborationReturn {
   const { toast } = useToast()
   const [collaborators, setCollaborators] = useState<Collaborator[]>([])
   const [pendingInvitations, setPendingInvitations] = useState<PendingInvitation[]>([])
   const [isLoading, setIsLoading] = useState(false)
   const [isOwner, setIsOwner] = useState(false)
+  const [accessDenied, setAccessDenied] = useState(false)
+  const enabled = options?.enabled ?? true
 
   const fetchCollaborators = useCallback(async () => {
-    if (!labNoteId) return
+    if (!labNoteId || !enabled) return
 
     setIsLoading(true)
     try {
       const response = await fetch(`/api/lab-notes/collaborators?labNoteId=${labNoteId}`)
-      
+
+      if (response.status === 403) {
+        setCollaborators([])
+        setPendingInvitations([])
+        setIsOwner(false)
+        setAccessDenied(true)
+        return
+      }
+
       if (!response.ok) {
         const error = await response.json()
         throw new Error(error.error || "Failed to fetch collaborators")
       }
 
       const data = await response.json()
-      console.log("Collaborators API response:", data)
-      if (data.debug) {
-        console.log("Debug - creatorId:", data.debug.creatorId)
-        console.log("Debug - userId:", data.debug.userId)
-        console.log("Debug - match:", data.debug.match)
-      }
+      setAccessDenied(false)
       setCollaborators(data.collaborators || [])
       setPendingInvitations(data.pendingInvitations || [])
       setIsOwner(data.isOwner || false)
@@ -80,18 +89,19 @@ export function useLabNoteCollaboration(labNoteId: string | null): UseLabNoteCol
     } finally {
       setIsLoading(false)
     }
-  }, [labNoteId, toast])
+  }, [labNoteId, enabled, toast])
 
   // Fetch collaborators when labNoteId changes
   useEffect(() => {
-    if (labNoteId) {
+    if (labNoteId && enabled) {
       fetchCollaborators()
     } else {
       setCollaborators([])
       setPendingInvitations([])
       setIsOwner(false)
+      setAccessDenied(false)
     }
-  }, [labNoteId, fetchCollaborators])
+  }, [labNoteId, enabled, fetchCollaborators])
 
   const inviteCollaborator = useCallback(async (
     email: string,
@@ -244,6 +254,7 @@ export function useLabNoteCollaboration(labNoteId: string | null): UseLabNoteCol
     pendingInvitations,
     isLoading,
     isOwner,
+    accessDenied,
     inviteCollaborator,
     removeCollaborator,
     updatePermission,

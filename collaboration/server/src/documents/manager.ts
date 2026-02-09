@@ -10,10 +10,11 @@
 
 import * as Y from 'yjs';
 import { Awareness } from 'y-protocols/awareness.js';
+import * as awarenessProtocol from 'y-protocols/awareness.js';
 import { serverConfig } from '../config.js';
 import { checkPermission, onPermissionRevoked, PermissionDeniedError } from '../permissions/store.js';
 import { loadYjsState, saveYjsState } from '../persistence/postgres.js';
-import { getUserColor, getUserInfo } from '../auth/jwt.js';
+import { getUserInfo } from '../auth/jwt.js';
 import type { 
   PermissionLevel, 
   AwarenessState,
@@ -142,22 +143,6 @@ export async function connectToDocument(
   doc.connections.set(socket, connectionInfo);
   socketToDocument.set(socket, documentId);
   
-  // Set up awareness for this client
-  const clientId = Math.floor(Math.random() * 0xFFFFFFFF);
-  const awarenessState: AwarenessState = {
-    user: {
-      id: user.id,
-      name: userInfo.name,
-      email: userInfo.email,
-      color: getUserColor(user.id),
-      avatar: userInfo.avatar,
-    },
-    lastActive: Date.now(),
-  };
-  
-  doc.awareness.setLocalState(null); // Clear any previous state
-  doc.awareness.setLocalState(awarenessState);
-  
   console.log(`[Document] User ${user.id} connected to ${documentId} as ${permissionCheck.permissionLevel}`);
   
   return { doc, permissionLevel: permissionCheck.permissionLevel! };
@@ -240,8 +225,9 @@ export function updateAwareness(
     throw new Error('Socket not registered with document');
   }
   
-  // Apply awareness update
-  // This is handled by the awareness protocol
+  // Apply awareness update for this client.
+  // Awareness update events are broadcast via doc.awareness.on('update').
+  awarenessProtocol.applyAwarenessUpdate(doc.awareness, update, origin);
 }
 
 /**
@@ -296,18 +282,14 @@ function broadcastUpdate(
  * Broadcast awareness update to all connected clients
  */
 function broadcastAwareness(doc: ManagedDocument, clientIds: number[]): void {
-  // Get awareness states for changed clients
-  const states = new Map();
-  for (const clientId of clientIds) {
-    const state = doc.awareness.getStates().get(clientId);
-    if (state) {
-      states.set(clientId, state);
-    }
-  }
-  
+  const awarenessUpdate = awarenessProtocol.encodeAwarenessUpdate(doc.awareness, clientIds);
+  const awarenessStates = Array.from(doc.awareness.getStates().entries());
   const message = JSON.stringify({
     type: 'awareness_update',
-    payload: Array.from(states.entries()),
+    payload: {
+      update: Array.from(awarenessUpdate),
+      states: awarenessStates,
+    },
     timestamp: Date.now(),
   });
   
