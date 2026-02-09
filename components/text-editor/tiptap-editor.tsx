@@ -784,6 +784,7 @@ export function TiptapEditor({
       attributes: {
         class: "prose prose-sm sm:prose lg:prose-lg xl:prose-2xl focus:outline-none p-4",
         spellcheck: "true",
+        tabindex: "0",
       },
       handleDrop: (view, event, _slice, _moved) => {
         const dt = event.dataTransfer
@@ -2824,17 +2825,18 @@ export function TiptapEditor({
 
       <div
         className={cn(
-          "border border-border rounded-lg bg-card relative",
+          "border border-border rounded-lg bg-card relative overflow-hidden",
           className
         )}
       >
-        {/* Editor Content */}
+        {/* Editor Content - add right padding to prevent text from going under TOC */}
         <div
-          className="overflow-y-auto px-2 pb-2 h-full"
+          className="overflow-y-auto px-2 pb-2 pr-20 h-full"
           style={{ minHeight, maxHeight: "calc(100vh - 300px)" }}
         >
           <EditorContent editor={editor} />
         </div>
+        {/* TOC positioned absolutely relative to the card, not the scrollable content */}
         {editor && <TableOfContents editor={editor} />}
         {editor && (
           <BubbleMenu
