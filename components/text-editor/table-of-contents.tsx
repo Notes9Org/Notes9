@@ -19,7 +19,6 @@ interface TableOfContentsProps {
 export function TableOfContents({ editor, className }: TableOfContentsProps) {
     const [items, setItems] = useState<TOCItem[]>([])
     const [activeId, setActiveId] = useState<string | null>(null)
-    const [cursorY, setCursorY] = useState<number | null>(null)
 
     const updateTOC = useCallback(() => {
         if (!editor) return
@@ -49,7 +48,7 @@ export function TableOfContents({ editor, className }: TableOfContentsProps) {
         }
     }, [editor, updateTOC])
 
-    // 2. Scroll and Cursor tracking to highlight the active section
+    // 2. Scroll tracking to highlight the active section
     useEffect(() => {
         if (!editor || items.length === 0) return
 
@@ -57,37 +56,7 @@ export function TableOfContents({ editor, className }: TableOfContentsProps) {
             if (!editor) return
             const { from } = editor.state.selection
 
-            // 1. Calculate vertical position for the TOC widget to follow cursor
-            try {
-                // Get cursor coordinates relative to viewport
-                const coords = editor.view.coordsAtPos(from)
-                // Get editor content element (the box that scrolls)
-                const scrollContainer = editor.view.dom.parentElement
-
-                if (scrollContainer) {
-                    const scrollRect = scrollContainer.getBoundingClientRect()
-
-                    // Position relative to the visible editor clipping box
-                    let relativeY = coords.top - scrollRect.top
-
-                    // Add scroll container's current scroll offset if we were absolute to the full content
-                    // But we are absolute to the outer container (the clipping box)
-                    // So relativeY is exactly where it is in the "visible window"
-
-                    // Clamp to keep strictly within visible area (with padding)
-                    // We account for TOC own height roughly by padding more at bottom
-                    const containerHeight = scrollRect.height
-                    const margin = 40
-                    relativeY = Math.max(margin, Math.min(containerHeight - margin, relativeY))
-
-                    setCursorY(relativeY)
-                }
-            } catch (e) {
-                // If coords fail (e.g. editor not ready), default to middle-ish
-                if (cursorY === null) setCursorY(200)
-            }
-
-            // 2. Identify active section based on selection position
+            // Identify active section based on selection position
             let currentActiveId = items[0].id
             for (const item of items) {
                 if (item.pos <= from) {
@@ -158,14 +127,9 @@ export function TableOfContents({ editor, className }: TableOfContentsProps) {
     return (
         <div
             className={cn(
-                "absolute right-4 z-40 pointer-events-none flex flex-col items-end gap-1.5",
+                "absolute right-4 top-1/2 -translate-y-1/2 z-40 pointer-events-none flex flex-col items-end gap-1.5",
                 className
             )}
-            style={{
-                top: cursorY !== null ? `${cursorY}px` : "100px",
-                transform: "translateY(-50%)",
-                transition: "top 1.2s cubic-bezier(0.65, 0, 0.35, 1)"
-            }}
         >
             {items.map((item) => {
                 const isActive = activeId === item.id
