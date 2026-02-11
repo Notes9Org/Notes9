@@ -3,10 +3,11 @@
 import { useEditor, EditorContent } from "@tiptap/react"
 import { StarterKit } from "@tiptap/starter-kit"
 import { Placeholder } from "@tiptap/extension-placeholder"
+import Collaboration from "@tiptap/extension-collaboration"
 import { Link } from "@tiptap/extension-link"
 import { Image } from "@tiptap/extension-image"
 import { Highlight } from "@tiptap/extension-highlight"
-import { TextStyle, FontFamily, FontSize } from "@tiptap/extension-text-style"
+import { TextStyle } from "@tiptap/extension-text-style"
 import { Color } from "@tiptap/extension-color"
 import { TaskList } from "@tiptap/extension-task-list"
 import { TaskItem } from "@tiptap/extension-task-item"
@@ -29,13 +30,18 @@ import {
   Italic,
   Strikethrough,
   Code,
+  Heading1,
+  Heading2,
+  Heading3,
   List,
   ListOrdered,
   ListChecks,
+  Quote,
   Undo,
   Redo,
   Link2,
   Mic,
+  Image as ImageIcon,
   Highlighter,
   Palette,
   Table as TableIcon,
@@ -49,22 +55,15 @@ import {
   Underline as UnderlineIcon,
   Subscript as SubscriptIcon,
   Superscript as SuperscriptIcon,
-  Type,
-  Paintbrush,
-  MessageSquarePlus,
-  IndentDecrease,
-  IndentIncrease,
-  ChevronDown,
 } from "lucide-react"
 import { Extension, mergeAttributes } from "@tiptap/core"
 import { Plugin, PluginKey } from "@tiptap/pm/state"
 import { Decoration, DecorationSet } from "@tiptap/pm/view"
 import { cn } from "@/lib/utils"
 import { useCallback, useEffect, useRef, useState } from "react"
-import { createPortal } from "react-dom"
+import type * as Y from "yjs"
 // @ts-ignore
 import * as mammoth from "mammoth"
-import { toast } from "sonner"
 import {
   Tooltip,
   TooltipContent,
@@ -79,40 +78,10 @@ import {
   DropdownMenuSeparator,
   DropdownMenuLabel,
 } from "@/components/ui/dropdown-menu"
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-  DialogFooter,
-} from "@/components/ui/dialog"
 import { ChemicalFormula, formatChemicalFormula } from "./extensions/chemical-formula"
 import { ChemistryHighlight } from "./extensions/chemistry-highlight"
 // @ts-ignore - CSS import for KaTeX math rendering
 import "katex/dist/katex.min.css"
-
-interface Paper {
-  id: string
-  title: string
-  authors: string[]
-  year: number
-  journal: string
-  abstract: string
-  url: string
-  source: string
-}
-
-interface CitationMetadata {
-  citationNumber: number
-  url: string
-  title: string
-  authors: string[]
-  year: number
-  journal: string
-  source: string
-  paperId: string
-}
 
 interface TiptapEditorProps {
   content?: string
@@ -127,8 +96,23 @@ interface TiptapEditorProps {
   onAutoSave?: (content: string) => Promise<void>
   protocols?: ProtocolItem[]
   labNotes?: LabNoteItem[]
-  /** When set, the toolbar is rendered into this container (e.g. card header) instead of above the editor. */
-  toolbarPortalRef?: React.RefObject<HTMLDivElement | null>
+  collaboration?: TiptapCollaborationConfig
+}
+
+export interface TiptapCollaborationUser {
+  id: string
+  name: string
+  color: string
+}
+
+export interface TiptapCollaborationConfig {
+  document: Y.Doc
+  provider?: {
+    setAwarenessField?: (key: string, value: unknown) => void
+  } | null
+  user: TiptapCollaborationUser
+  field?: string
+  isSynced?: boolean
 }
 
 // Custom Table extension with width/height support
@@ -413,22 +397,14 @@ export function TiptapEditor({
   hideToolbar = false,
   protocols = [],
   labNotes = [],
-  toolbarPortalRef,
+  collaboration,
 }: TiptapEditorProps & { hideToolbar?: boolean }) {
   const [isAIProcessing, setIsAIProcessing] = useState(false)
-  const [isCiteProcessing, setIsCiteProcessing] = useState(false)
   const [aiDropdownOpen, setAiDropdownOpen] = useState(false)
   const [tableMenuOpen, setTableMenuOpen] = useState(false)
   const [tableRows, setTableRows] = useState(3)
   const [tableCols, setTableCols] = useState(3)
   const [isListening, setIsListening] = useState(false)
-  const [citationModalOpen, setCitationModalOpen] = useState(false)
-  const [bibliographyModalOpen, setBibliographyModalOpen] = useState(false)
-  const [foundPapers, setFoundPapers] = useState<Paper[]>([])
-  const [selectedPapers, setSelectedPapers] = useState<Set<number>>(new Set())
-  const [citationInsertPosition, setCitationInsertPosition] = useState<number>(0)
-  const [citationMetadata, setCitationMetadata] = useState<Map<number, CitationMetadata>>(new Map())
-  const [selectedCitationStyle, setSelectedCitationStyle] = useState<'APA' | 'MLA' | 'Chicago' | 'Harvard' | 'IEEE' | 'Vancouver'>('APA')
   const recognitionRef = useRef<any>(null)
   const lastFinalIndexRef = useRef<number>(0)
   const lastInterimTextRef = useRef<string>("")
@@ -436,6 +412,8 @@ export function TiptapEditor({
   // Use ref for protocols so the mention extension always has access to current protocols
   const protocolsRef = useRef<ProtocolItem[]>(protocols)
   const labNotesRef = useRef<LabNoteItem[]>(labNotes)
+  const hasHydratedCollaborativeContentRef = useRef(false)
+  const isCollaborative = Boolean(collaboration?.document)
 
   // Keep the refs in sync with props
   useEffect(() => {
@@ -453,7 +431,16 @@ export function TiptapEditor({
         heading: {
           levels: [1, 2, 3],
         },
+        undoRedo: isCollaborative ? false : {},
       }),
+      ...(collaboration
+        ? [
+          Collaboration.configure({
+            document: collaboration.document,
+            field: collaboration.field ?? "default",
+          }),
+        ]
+        : []),
       Placeholder.configure({
         placeholder,
       }),
@@ -472,8 +459,6 @@ export function TiptapEditor({
         multicolor: true,
       }),
       TextStyle,
-      FontFamily,
-      FontSize,
       Color,
       TaskList,
       TaskItem.configure({
@@ -512,7 +497,7 @@ export function TiptapEditor({
         },
       }),
     ],
-    content,
+    content: isCollaborative ? undefined : content,
     editable,
     onUpdate: ({ editor }) => {
       onChange?.(editor.getHTML())
@@ -616,13 +601,49 @@ export function TiptapEditor({
         },
       },
     },
-  })
+  }, [isCollaborative, collaboration?.document, collaboration?.provider, collaboration?.field])
 
   useEffect(() => {
+    if (isCollaborative) return
     if (editor && content !== editor.getHTML()) {
       editor.commands.setContent(content)
     }
-  }, [content, editor])
+  }, [content, editor, isCollaborative])
+
+  useEffect(() => {
+    hasHydratedCollaborativeContentRef.current = false
+  }, [collaboration?.document])
+
+  useEffect(() => {
+    if (!editor || !collaboration || !collaboration.isSynced) return
+    if (hasHydratedCollaborativeContentRef.current) return
+
+    const fragment = collaboration.document.getXmlFragment(collaboration.field ?? "default")
+    if (fragment.length === 0 && content) {
+      editor.commands.setContent(content)
+    }
+
+    hasHydratedCollaborativeContentRef.current = true
+  }, [editor, collaboration, content])
+
+  useEffect(() => {
+    if (!editor || !collaboration) return
+    const maybeUpdateUser = (editor.commands as { updateUser?: (user: TiptapCollaborationUser) => boolean }).updateUser
+
+    if (typeof maybeUpdateUser === "function") {
+      maybeUpdateUser(collaboration.user)
+      return
+    }
+
+    // Fallback when the cursor command isn't registered yet.
+    collaboration.provider?.setAwarenessField?.("user", collaboration.user)
+  }, [
+    editor,
+    collaboration?.user.id,
+    collaboration?.user.name,
+    collaboration?.user.color,
+    collaboration,
+  ])
 
   // AI Functions using Gemini API
   const callGeminiAPI = useCallback(
@@ -773,386 +794,6 @@ export function TiptapEditor({
     }
     setAiDropdownOpen(false)
   }, [editor, callGeminiAPI])
-
-  const aiCite = useCallback(async () => {
-    if (!editor) return
-    const { from, to } = editor.state.selection
-    const selectedText = editor.state.doc.textBetween(from, to, " ")
-
-    if (!selectedText || selectedText.trim().length < 10) {
-      toast.error('Please select text (at least 10 characters) to find citations', {
-        duration: 4000,
-        description: 'Highlight the text you want to cite, then click this button again.'
-      })
-      setAiDropdownOpen(false)
-      return
-    }
-
-    try {
-      setIsCiteProcessing(true)
-      
-      // Call the literature search API with limit=3
-      const response = await fetch(
-        `https://z3thrlksg0.execute-api.us-east-1.amazonaws.com/literature/search?q=${encodeURIComponent(selectedText)}&limit=3`,
-        {
-          method: 'GET',
-          headers: {
-            'Accept': 'application/json',
-          },
-        }
-      )
-
-      if (!response.ok) {
-        throw new Error('Literature search failed')
-      }
-
-      const data = await response.json()
-
-      if (data.papers && data.papers.length > 0) {
-        // Store papers and open modal
-        setFoundPapers(data.papers)
-        setSelectedPapers(new Set())
-        setCitationInsertPosition(to)
-        setCitationModalOpen(true)
-      } else {
-        toast.error('No citations found for the selected text', {
-          duration: 4000,
-          description: 'Try selecting different text or rephrasing your query.'
-        })
-      }
-    } catch (error) {
-      console.error('Citation search error:', error)
-      toast.error('Failed to fetch citations', {
-        duration: 4000,
-        description: 'Please check your connection and try again.'
-      })
-    } finally {
-      setIsCiteProcessing(false)
-    }
-
-    setAiDropdownOpen(false)
-  }, [editor])
-
-  const handleCiteSelected = useCallback(() => {
-    if (!editor || selectedPapers.size === 0) return
-
-    // Get all citation links in the document with their positions
-    const html = editor.getHTML()
-    const citations: { pos: number; number: number; url: string }[] = []
-    
-    // Find all existing citations with their positions
-    const citationRegex = /<a[^>]*href="([^"]*)"[^>]*>\[(\d+)\]<\/a>/g
-    let match
-    
-    while ((match = citationRegex.exec(html)) !== null) {
-      const citationNumber = parseInt(match[2])
-      const url = match[1]
-      // Find position in document (approximate based on text content)
-      const textBefore = html.substring(0, match.index).replace(/<[^>]*>/g, '').length
-      citations.push({ pos: textBefore, number: citationNumber, url })
-    }
-
-    // Add new citations at the insert position
-    const sortedIndices = Array.from(selectedPapers).sort((a, b) => a - b)
-    const newCitations = sortedIndices.map((index) => {
-      const paper = foundPapers[index]
-      console.log('Paper data being stored:', paper) // Debug log
-      return {
-        pos: citationInsertPosition,
-        number: 0, // Will be assigned later
-        url: paper?.url || '',
-        paperId: paper?.id || '',
-        title: paper?.title || '',
-        authors: paper?.authors || [],
-        year: paper?.year || 0,
-        journal: paper?.journal || '',
-        source: paper?.source || ''
-      }
-    })
-
-    // Combine and sort all citations by position
-    const allCitations = [...citations, ...newCitations].sort((a, b) => a.pos - b.pos)
-    
-    // Renumber all citations sequentially
-    allCitations.forEach((citation, index) => {
-      citation.number = index + 1
-    })
-
-    // Create the new citation text to insert
-    let citationText = ''
-    newCitations.forEach((newCit) => {
-      const finalNumber = allCitations.find(c => c.pos === newCit.pos && c.url === newCit.url)?.number || 1
-      if (newCit.url) {
-        // Store paper metadata in data attributes for later bibliography generation
-        // Encode complex data as JSON to preserve arrays
-        const authorsJson = JSON.stringify(newCit.authors || []).replace(/"/g, '&quot;')
-        const citationHtml = `<a href="${newCit.url}" data-paper-id="${newCit.paperId}" data-paper-title="${newCit.title.replace(/"/g, '&quot;')}" data-paper-authors="${authorsJson}" data-paper-year="${newCit.year}" data-paper-journal="${(newCit.journal || '').replace(/"/g, '&quot;')}" data-paper-source="${newCit.source}" target="_blank" rel="noopener noreferrer">[${finalNumber}]</a>`
-        console.log('Citation HTML being inserted:', citationHtml) // Debug log
-        citationText += citationHtml
-      } else {
-        citationText += `[${finalNumber}]`
-      }
-    })
-
-    // Insert new citations
-    editor.chain().focus().setTextSelection(citationInsertPosition).insertContent(citationText).run()
-
-    // Now renumber all existing citations in the document
-    setTimeout(() => {
-      const updatedHtml = editor.getHTML()
-      let newHtml = updatedHtml
-      
-      // Replace all citation numbers with their new sequential numbers
-      const allCitationMatches = Array.from(updatedHtml.matchAll(/<a([^>]*href="[^"]*"[^>]*)>\[(\d+)\]<\/a>/g))
-      
-      // Sort by position to maintain order
-      const citationMap = new Map<string, number>()
-      let counter = 1
-      
-      allCitationMatches.forEach((match) => {
-        const fullMatch = match[0]
-        const attributes = match[1]
-        
-        if (!citationMap.has(fullMatch)) {
-          citationMap.set(fullMatch, counter)
-          const newCitation = `<a${attributes}>[${counter}]</a>`
-          newHtml = newHtml.replace(fullMatch, newCitation)
-          counter++
-        }
-      })
-      
-      // Update the editor content with renumbered citations
-      if (newHtml !== updatedHtml) {
-        editor.commands.setContent(newHtml)
-      }
-    }, 100)
-    
-    // Close modal and reset
-    setCitationModalOpen(false)
-    setFoundPapers([])
-    setSelectedPapers(new Set())
-  }, [editor, selectedPapers, foundPapers, citationInsertPosition])
-
-  const togglePaperSelection = useCallback((index: number) => {
-    setSelectedPapers(prev => {
-      const newSet = new Set(prev)
-      if (newSet.has(index)) {
-        newSet.delete(index)
-      } else {
-        newSet.add(index)
-      }
-      return newSet
-    })
-  }, [])
-
-  const formatCitation = useCallback((metadata: CitationMetadata, style: string): string => {
-    const { authors, year, title, journal, url } = metadata
-    const authorStr = authors && authors.length > 0 
-      ? authors.length === 1 
-        ? authors[0]
-        : authors.length === 2
-          ? `${authors[0]} & ${authors[1]}`
-          : `${authors[0]} et al.`
-      : 'Unknown Author'
-    
-    const yearStr = year && year > 0 ? year.toString() : 'n.d.'
-    
-    switch (style) {
-      case 'APA':
-        return `${authorStr} (${yearStr}). ${title}. ${journal ? `<em>${journal}</em>. ` : ''}${url ? `Retrieved from ${url}` : ''}`
-      
-      case 'MLA':
-        return `${authorStr}. "${title}." ${journal ? `<em>${journal}</em>, ` : ''}${yearStr}. ${url ? `Web. ${url}` : ''}`
-      
-      case 'Chicago':
-        return `${authorStr}. "${title}." ${journal ? `<em>${journal}</em> ` : ''}(${yearStr}). ${url || ''}`
-      
-      case 'Harvard':
-        return `${authorStr}, ${yearStr}. ${title}. ${journal ? `<em>${journal}</em>. ` : ''}${url ? `Available at: ${url}` : ''}`
-      
-      case 'IEEE':
-        return `${authorStr}, "${title}," ${journal ? `<em>${journal}</em>, ` : ''}${yearStr}. ${url ? `[Online]. Available: ${url}` : ''}`
-      
-      case 'Vancouver':
-        // Vancouver style: Author(s). Title. Journal. Year;volume(issue):pages.
-        return `${authorStr}. ${title}. ${journal ? `${journal}. ` : ''}${yearStr}. ${url ? `Available from: ${url}` : ''}`
-      
-      default:
-        return `${authorStr} (${yearStr}). ${title}. ${url || ''}`
-    }
-  }, [])
-
-  const handleGenerateBibliography = useCallback(async () => {
-    if (!editor) return
-    
-    // Extract all citation links from the document
-    const html = editor.getHTML()
-    
-    // Parse citations more flexibly - attributes can be in any order
-    const citations: { number: number; url: string; paperId: string; title: string; source: string; authors: string[]; year: number; journal: string }[] = []
-    
-    // Find all citation links
-    const linkRegex = /<a[^>]*>\[(\d+)\]<\/a>/g
-    let match
-    
-    while ((match = linkRegex.exec(html)) !== null) {
-      const fullTag = match[0]
-      const citationNumber = parseInt(match[1])
-      
-      // Extract attributes from the tag
-      const hrefMatch = fullTag.match(/href="([^"]*)"/)
-      const paperIdMatch = fullTag.match(/data-paper-id="([^"]*)"/)
-      const paperTitleMatch = fullTag.match(/data-paper-title="([^"]*)"/)
-      const paperSourceMatch = fullTag.match(/data-paper-source="([^"]*)"/)
-      const paperAuthorsMatch = fullTag.match(/data-paper-authors="([^"]*)"/)
-      const paperYearMatch = fullTag.match(/data-paper-year="([^"]*)"/)
-      const paperJournalMatch = fullTag.match(/data-paper-journal="([^"]*)"/)
-      
-      if (hrefMatch) {
-        // Parse authors from JSON
-        let authors: string[] = []
-        if (paperAuthorsMatch) {
-          try {
-            const authorsStr = paperAuthorsMatch[1].replace(/&quot;/g, '"')
-            authors = JSON.parse(authorsStr)
-          } catch (e) {
-            console.error('Failed to parse authors:', e)
-          }
-        }
-        
-        const citation = {
-          number: citationNumber,
-          url: hrefMatch[1],
-          paperId: paperIdMatch ? paperIdMatch[1] : '',
-          title: paperTitleMatch ? paperTitleMatch[1].replace(/&quot;/g, '"') : '',
-          source: paperSourceMatch ? paperSourceMatch[1] : '',
-          authors: authors,
-          year: paperYearMatch ? parseInt(paperYearMatch[1]) || 0 : 0,
-          journal: paperJournalMatch ? paperJournalMatch[1].replace(/&quot;/g, '"') : ''
-        }
-        
-        console.log('Extracted citation data:', citation) // Debug log
-        citations.push(citation)
-      }
-    }
-    
-    // Check if there are any citations
-    if (citations.length === 0) {
-      toast.error('No citations found', {
-        description: 'Add citations using "Cite with AI" before generating bibliography.',
-        duration: 4000
-      })
-      return
-    }
-    
-    console.log('Found citations:', citations) // Debug log
-    
-    // Fetch metadata for each citation using the paper ID
-    setIsCiteProcessing(true)
-    const citationMetadataMap = new Map<number, CitationMetadata>()
-    
-    try {
-      for (const citation of citations) {
-        try {
-          // If we have stored metadata (title, paperId), try to fetch full details
-          if (citation.paperId) {
-            const response = await fetch(
-              `https://z3thrlksg0.execute-api.us-east-1.amazonaws.com/literature/search?q=${encodeURIComponent(citation.paperId)}&limit=1`,
-              {
-                method: 'GET',
-                headers: {
-                  'Accept': 'application/json',
-                },
-              }
-            )
-            
-            if (response.ok) {
-              const data = await response.json()
-              console.log(`API response for citation ${citation.number}:`, data) // Debug log
-              
-              if (data.papers && data.papers.length > 0) {
-                const paper = data.papers[0]
-                citationMetadataMap.set(citation.number, {
-                  citationNumber: citation.number,
-                  url: citation.url,
-                  title: paper.title || citation.title || 'Unknown Title',
-                  authors: paper.authors || citation.authors || [],
-                  year: paper.year || citation.year || 0,
-                  journal: paper.journal || citation.journal || '',
-                  source: paper.source || citation.source || '',
-                  paperId: paper.id || citation.paperId
-                })
-                continue
-              }
-            }
-          }
-          
-          // Fallback: use stored data from citation attributes
-          citationMetadataMap.set(citation.number, {
-            citationNumber: citation.number,
-            url: citation.url,
-            title: citation.title || 'Unknown Title',
-            authors: citation.authors || [],
-            year: citation.year || 0,
-            journal: citation.journal || '',
-            source: citation.source || '',
-            paperId: citation.paperId
-          })
-        } catch (error) {
-          console.error(`Failed to fetch metadata for citation ${citation.number}:`, error)
-          // Add fallback metadata using stored data
-          citationMetadataMap.set(citation.number, {
-            citationNumber: citation.number,
-            url: citation.url,
-            title: citation.title || 'Unknown Title',
-            authors: citation.authors || [],
-            year: citation.year || 0,
-            journal: citation.journal || '',
-            source: citation.source || '',
-            paperId: citation.paperId
-          })
-        }
-      }
-      
-      // Store the fetched metadata and open modal
-      setCitationMetadata(citationMetadataMap)
-      setBibliographyModalOpen(true)
-      
-    } catch (error) {
-      console.error('Error generating bibliography:', error)
-      toast.error('Failed to generate bibliography', {
-        description: 'Please try again.',
-        duration: 4000
-      })
-    } finally {
-      setIsCiteProcessing(false)
-    }
-  }, [editor])
-
-  const handleInsertBibliography = useCallback(() => {
-    if (!editor || citationMetadata.size === 0) return
-    
-    // Sort citations by number
-    const sortedCitations = Array.from(citationMetadata.entries())
-      .sort((a, b) => a[0] - b[0])
-    
-    // Generate bibliography HTML
-    let bibliographyHtml = '<h2>References</h2><div class="bibliography">'
-    
-    sortedCitations.forEach(([number, metadata]) => {
-      const formattedCitation = formatCitation(metadata, selectedCitationStyle)
-      bibliographyHtml += `<p class="bibliography-entry">[${number}] ${formattedCitation}</p>`
-    })
-    
-    bibliographyHtml += '</div>'
-    
-    // Insert at the end of the document
-    const endPos = editor.state.doc.content.size
-    editor.chain().focus().setTextSelection(endPos).insertContent(bibliographyHtml).run()
-    
-    setBibliographyModalOpen(false)
-    toast.success('Bibliography inserted successfully')
-  }, [editor, citationMetadata, selectedCitationStyle, formatCitation])
 
   // Download functions
   const downloadAsMarkdown = useCallback(() => {
@@ -1761,11 +1402,15 @@ export function TiptapEditor({
   }
 
   return (
-    <>
-      {/* Toolbar - outside the editor card, or portaled to toolbarPortalRef when provided */}
-      {!hideToolbar && (() => {
-        const toolbar = (
-        <div className="box-content flex items-center gap-x-2 gap-y-1.5 p-2 rounded-lg border border-border flex-wrap bg-muted/30 m-2 min-h-9">
+    <div
+      className={cn(
+        "border border-border rounded-lg bg-card overflow-hidden",
+        className
+      )}
+    >
+      {/* Toolbar */}
+      {!hideToolbar && (
+        <div className="flex items-center gap-1 p-2 border-b border-border flex-wrap bg-muted/30">
           <TooltipProvider delayDuration={300}>
             {/* Undo/Redo */}
             <Tooltip>
@@ -1775,7 +1420,7 @@ export function TiptapEditor({
                   size="sm"
                   onClick={() => editor.chain().focus().undo().run()}
                   disabled={!editor.can().undo()}
-                  className="h-8 w-8 p-0 shrink-0"
+                  className="h-8 w-8 p-0"
                 >
                   <Undo className="h-4 w-4" />
                 </Button>
@@ -1790,7 +1435,7 @@ export function TiptapEditor({
                   size="sm"
                   onClick={() => editor.chain().focus().redo().run()}
                   disabled={!editor.can().redo()}
-                  className="h-8 w-8 p-0 shrink-0"
+                  className="h-8 w-8 p-0"
                 >
                   <Redo className="h-4 w-4" />
                 </Button>
@@ -1798,146 +1443,15 @@ export function TiptapEditor({
               <TooltipContent>Redo</TooltipContent>
             </Tooltip>
 
-            {/* Paragraph styles - Google Docs style */}
+            <Separator orientation="vertical" className="h-6 mx-1" />
+
+            {/* Colors */}
             <DropdownMenu>
               <Tooltip>
                 <TooltipTrigger asChild>
                   <DropdownMenuTrigger asChild>
-                    <Button variant="ghost" size="sm" className="h-8 gap-1.5 px-2 shrink-0">
-                      <Type className="h-4 w-4 shrink-0" />
-                      <span className="text-xs max-w-[4rem] truncate">
-                        {editor.isActive("heading", { level: 1 }) ? "Heading 1" : editor.isActive("heading", { level: 2 }) ? "Heading 2" : editor.isActive("heading", { level: 3 }) ? "Heading 3" : "Normal text"}
-                      </span>
-                      <ChevronDown className="h-4 w-4 shrink-0 opacity-70" />
-                    </Button>
-                  </DropdownMenuTrigger>
-                </TooltipTrigger>
-                <TooltipContent>Paragraph style</TooltipContent>
-              </Tooltip>
-              <DropdownMenuContent align="start" className="w-40">
-                <DropdownMenuItem onClick={() => editor.chain().focus().setParagraph().run()}>
-                  Normal text
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => editor.chain().focus().toggleHeading({ level: 1 }).run()}>
-                  Heading 1
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()}>
-                  Heading 2
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => editor.chain().focus().toggleHeading({ level: 3 }).run()}>
-                  Heading 3
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-
-            <Separator orientation="vertical" className="h-5 shrink-0 mx-0.5" />
-
-            {/* Font family - Google Docs style */}
-            <DropdownMenu>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <DropdownMenuTrigger asChild>
-                    <Button variant="ghost" size="sm" className="h-8 gap-1.5 px-2 min-w-[7rem] justify-between shrink-0">
-                      <span className="text-xs truncate max-w-[5.5rem]" style={{ fontFamily: editor.getAttributes("textStyle").fontFamily || "inherit" }}>
-                        {editor.getAttributes("textStyle").fontFamily || "Default"}
-                      </span>
-                      <ChevronDown className="h-4 w-4 shrink-0 opacity-70" />
-                    </Button>
-                  </DropdownMenuTrigger>
-                </TooltipTrigger>
-                <TooltipContent>Font</TooltipContent>
-              </Tooltip>
-              <DropdownMenuContent align="start" className="w-48 max-h-[16rem] overflow-y-auto">
-                {[
-                  { label: "Default", value: "" },
-                  { label: "Arial", value: "Arial, sans-serif" },
-                  { label: "Times New Roman", value: "'Times New Roman', serif" },
-                  { label: "Georgia", value: "Georgia, serif" },
-                  { label: "Verdana", value: "Verdana, sans-serif" },
-                  { label: "Courier New", value: "'Courier New', monospace" },
-                  { label: "Comic Sans MS", value: "'Comic Sans MS', cursive" },
-                  { label: "Trebuchet MS", value: "'Trebuchet MS', sans-serif" },
-                  { label: "Lucida Sans", value: "'Lucida Sans Unicode', sans-serif" },
-                ].map(({ label, value }) => (
-                  <DropdownMenuItem
-                    key={value || "default"}
-                    onClick={() => (value ? editor.chain().focus().setFontFamily(value).run() : editor.chain().focus().unsetFontFamily().run())}
-                  >
-                    <span style={value ? { fontFamily: value } : undefined}>{label}</span>
-                  </DropdownMenuItem>
-                ))}
-              </DropdownMenuContent>
-            </DropdownMenu>
-
-            {/* Font size - Google Docs style: minus, value, plus */}
-            <div className="flex items-center gap-0 rounded-md border border-border bg-background overflow-hidden h-8 shrink-0">
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-8 w-8 p-0 rounded-none border-r border-border"
-                    onClick={() => {
-                      const current = editor.getAttributes("textStyle").fontSize || "16px";
-                      const num = Math.max(8, parseInt(current, 10) - 1);
-                      editor.chain().focus().setFontSize(`${num}px`).run();
-                    }}
-                  >
-                    <span className="text-sm font-medium">−</span>
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent>Decrease font size</TooltipContent>
-              </Tooltip>
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button variant="ghost" size="sm" className="h-8 min-w-[2.25rem] px-2 rounded-none text-xs font-normal hover:bg-muted/50">
-                    {(() => {
-                      const fs = editor.getAttributes("textStyle").fontSize || "16px";
-                      return fs.replace("px", "");
-                    })()}
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="start" className="w-24">
-                  {[8, 9, 10, 11, 12, 14, 16, 18, 24, 36].map((n) => (
-                    <DropdownMenuItem
-                      key={n}
-                      onClick={() => editor.chain().focus().setFontSize(`${n}px`).run()}
-                    >
-                      {n}
-                    </DropdownMenuItem>
-                  ))}
-                </DropdownMenuContent>
-              </DropdownMenu>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-8 w-8 p-0 rounded-none border-l border-border"
-                    onClick={() => {
-                      const current = editor.getAttributes("textStyle").fontSize || "16px";
-                      const num = Math.min(96, parseInt(current, 10) + 1);
-                      editor.chain().focus().setFontSize(`${num}px`).run();
-                    }}
-                  >
-                    <span className="text-sm font-medium">+</span>
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent>Increase font size</TooltipContent>
-              </Tooltip>
-            </div>
-
-
-
-            <Separator orientation="vertical" className="h-5 shrink-0 mx-0.5" />
-
-            {/* Text Color */}
-            <DropdownMenu>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <DropdownMenuTrigger asChild>
-                    <Button variant="ghost" size="sm" className="h-8 w-8 p-0 font-serif text-base font-bold underline decoration-2 underline-offset-1 shrink-0">
-                      A
+                    <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
+                      <Palette className="h-4 w-4" />
                     </Button>
                   </DropdownMenuTrigger>
                 </TooltipTrigger>
@@ -1985,7 +1499,7 @@ export function TiptapEditor({
                   size="sm"
                   onClick={() => editor.chain().focus().toggleBold().run()}
                   className={cn(
-                    "h-8 w-8 p-0 shrink-0",
+                    "h-8 w-8 p-0",
                     editor.isActive("bold") && "bg-accent"
                   )}
                 >
@@ -2002,7 +1516,7 @@ export function TiptapEditor({
                   size="sm"
                   onClick={() => editor.chain().focus().toggleItalic().run()}
                   className={cn(
-                    "h-8 w-8 p-0 shrink-0",
+                    "h-8 w-8 p-0",
                     editor.isActive("italic") && "bg-accent"
                   )}
                 >
@@ -2019,7 +1533,7 @@ export function TiptapEditor({
                   size="sm"
                   onClick={() => editor.chain().focus().toggleStrike().run()}
                   className={cn(
-                    "h-8 w-8 p-0 shrink-0",
+                    "h-8 w-8 p-0",
                     editor.isActive("strike") && "bg-accent"
                   )}
                 >
@@ -2036,7 +1550,7 @@ export function TiptapEditor({
                   size="sm"
                   onClick={() => editor.chain().focus().toggleUnderline().run()}
                   className={cn(
-                    "h-8 w-8 p-0 shrink-0",
+                    "h-8 w-8 p-0",
                     editor.isActive("underline") && "bg-accent"
                   )}
                 >
@@ -2046,42 +1560,39 @@ export function TiptapEditor({
               <TooltipContent>Underline</TooltipContent>
             </Tooltip>
 
-            {/* Subscript / Superscript - single dropdown */}
-            <DropdownMenu>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <DropdownMenuTrigger asChild>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className={cn(
-                        "h-8 w-8 p-0 shrink-0",
-                        (editor.isActive("subscript") || editor.isActive("superscript")) && "bg-accent"
-                      )}
-                    >
-                      <SubscriptIcon className="h-4 w-4" />
-                    </Button>
-                  </DropdownMenuTrigger>
-                </TooltipTrigger>
-                <TooltipContent>Subscript / Superscript</TooltipContent>
-              </Tooltip>
-              <DropdownMenuContent align="start" className="w-40">
-                <DropdownMenuItem
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="sm"
                   onClick={() => (editor.chain().focus() as any).toggleSubscript().run()}
-                  className={cn(editor.isActive("subscript") && "bg-accent")}
+                  className={cn(
+                    "h-8 w-8 p-0",
+                    editor.isActive("subscript") && "bg-accent"
+                  )}
                 >
-                  <SubscriptIcon className="h-4 w-4 mr-2" />
-                  Subscript
-                </DropdownMenuItem>
-                <DropdownMenuItem
+                  <SubscriptIcon className="h-4 w-4" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Subscript</TooltipContent>
+            </Tooltip>
+
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="sm"
                   onClick={() => (editor.chain().focus() as any).toggleSuperscript().run()}
-                  className={cn(editor.isActive("superscript") && "bg-accent")}
+                  className={cn(
+                    "h-8 w-8 p-0",
+                    editor.isActive("superscript") && "bg-accent"
+                  )}
                 >
-                  <SuperscriptIcon className="h-4 w-4 mr-2" />
-                  Superscript
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
+                  <SuperscriptIcon className="h-4 w-4" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Superscript</TooltipContent>
+            </Tooltip>
 
             <Tooltip>
               <TooltipTrigger asChild>
@@ -2090,7 +1601,7 @@ export function TiptapEditor({
                   size="sm"
                   onClick={() => editor.chain().focus().toggleCode().run()}
                   className={cn(
-                    "h-8 w-8 p-0 shrink-0",
+                    "h-8 w-8 p-0",
                     editor.isActive("code") && "bg-accent"
                   )}
                 >
@@ -2107,7 +1618,7 @@ export function TiptapEditor({
                   size="sm"
                   onClick={() => editor.chain().focus().toggleHighlight().run()}
                   className={cn(
-                    "h-8 w-8 p-0 shrink-0",
+                    "h-8 w-8 p-0",
                     editor.isActive("highlight") && "bg-accent"
                   )}
                 >
@@ -2124,7 +1635,7 @@ export function TiptapEditor({
                   size="sm"
                   onClick={handleSetLink}
                   className={cn(
-                    "h-8 w-8 p-0 shrink-0",
+                    "h-8 w-8 p-0",
                     editor.isActive("link") && "bg-accent"
                   )}
                 >
@@ -2136,11 +1647,16 @@ export function TiptapEditor({
 
             <Tooltip>
               <TooltipTrigger asChild>
-                <Button variant="ghost" size="sm" className="h-8 w-8 p-0 shrink-0" onClick={() => toast.info("Comments coming soon")}>
-                  <MessageSquarePlus className="h-4 w-4" />
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={handleInsertImage}
+                  className="h-8 w-8 p-0"
+                >
+                  <ImageIcon className="h-4 w-4" />
                 </Button>
               </TooltipTrigger>
-              <TooltipContent>Insert comment</TooltipContent>
+              <TooltipContent>Insert Image</TooltipContent>
             </Tooltip>
 
             <Tooltip>
@@ -2149,7 +1665,7 @@ export function TiptapEditor({
                   variant="ghost"
                   size="sm"
                   onClick={handleFilePicker}
-                  className="h-8 w-8 p-0 shrink-0"
+                  className="h-8 w-8 p-0"
                 >
                   <FileInput className="h-4 w-4" />
                 </Button>
@@ -2159,7 +1675,107 @@ export function TiptapEditor({
               </TooltipContent>
             </Tooltip>
 
-            {/* Checklist */}
+            <Separator orientation="vertical" className="h-6 mx-1" />
+
+            {/* Headings */}
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() =>
+                    editor.chain().focus().toggleHeading({ level: 1 }).run()
+                  }
+                  className={cn(
+                    "h-8 w-8 p-0",
+                    editor.isActive("heading", { level: 1 }) && "bg-accent"
+                  )}
+                >
+                  <Heading1 className="h-4 w-4" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Heading 1</TooltipContent>
+            </Tooltip>
+
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() =>
+                    editor.chain().focus().toggleHeading({ level: 2 }).run()
+                  }
+                  className={cn(
+                    "h-8 w-8 p-0",
+                    editor.isActive("heading", { level: 2 }) && "bg-accent"
+                  )}
+                >
+                  <Heading2 className="h-4 w-4" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Heading 2</TooltipContent>
+            </Tooltip>
+
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() =>
+                    editor.chain().focus().toggleHeading({ level: 3 }).run()
+                  }
+                  className={cn(
+                    "h-8 w-8 p-0",
+                    editor.isActive("heading", { level: 3 }) && "bg-accent"
+                  )}
+                >
+                  <Heading3 className="h-4 w-4" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Heading 3</TooltipContent>
+            </Tooltip>
+
+            <Separator orientation="vertical" className="h-6 mx-1" />
+
+            {/* Lists */}
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() =>
+                    editor.chain().focus().toggleBulletList().run()
+                  }
+                  className={cn(
+                    "h-8 w-8 p-0",
+                    editor.isActive("bulletList") && "bg-accent"
+                  )}
+                >
+                  <List className="h-4 w-4" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Bullet List</TooltipContent>
+            </Tooltip>
+
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() =>
+                    editor.chain().focus().toggleOrderedList().run()
+                  }
+                  className={cn(
+                    "h-8 w-8 p-0",
+                    editor.isActive("orderedList") && "bg-accent"
+                  )}
+                >
+                  <ListOrdered className="h-4 w-4" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Numbered List</TooltipContent>
+            </Tooltip>
+
             <Tooltip>
               <TooltipTrigger asChild>
                 <Button
@@ -2167,78 +1783,47 @@ export function TiptapEditor({
                   size="sm"
                   onClick={() => editor.chain().focus().toggleTaskList().run()}
                   className={cn(
-                    "h-8 w-8 p-0 shrink-0",
+                    "h-8 w-8 p-0",
                     editor.isActive("taskList") && "bg-accent"
                   )}
                 >
                   <ListChecks className="h-4 w-4" />
                 </Button>
               </TooltipTrigger>
-              <TooltipContent>Checklist</TooltipContent>
+              <TooltipContent>Task List</TooltipContent>
             </Tooltip>
 
-            {/* Bullet list & Numbered list - single dropdown */}
-            <DropdownMenu>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <DropdownMenuTrigger asChild>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className={cn(
-                        "h-8 w-8 p-0 shrink-0",
-                        (editor.isActive("bulletList") || editor.isActive("orderedList")) && "bg-accent"
-                      )}
-                    >
-                      <List className="h-4 w-4" />
-                    </Button>
-                  </DropdownMenuTrigger>
-                </TooltipTrigger>
-                <TooltipContent>List style</TooltipContent>
-              </Tooltip>
-              <DropdownMenuContent align="start" className="w-40">
-                <DropdownMenuItem
-                  onClick={() => editor.chain().focus().toggleBulletList().run()}
-                  className={cn(editor.isActive("bulletList") && "bg-accent")}
-                >
-                  <List className="h-4 w-4 mr-2" />
-                  Bullet list
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                  onClick={() => editor.chain().focus().toggleOrderedList().run()}
-                  className={cn(editor.isActive("orderedList") && "bg-accent")}
-                >
-                  <ListOrdered className="h-4 w-4 mr-2" />
-                  Numbered list
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
+            <Separator orientation="vertical" className="h-6 mx-1" />
 
-            {/* Indent - single dropdown */}
-            <DropdownMenu>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <DropdownMenuTrigger asChild>
-                    <Button variant="ghost" size="sm" className="h-8 w-8 p-0 shrink-0">
-                      <IndentIncrease className="h-4 w-4" />
-                    </Button>
-                  </DropdownMenuTrigger>
-                </TooltipTrigger>
-                <TooltipContent>Indent</TooltipContent>
-              </Tooltip>
-              <DropdownMenuContent align="start" className="w-40">
-                <DropdownMenuItem onClick={() => {}}>
-                  <IndentDecrease className="h-4 w-4 mr-2" />
-                  Decrease indent
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => {}}>
-                  <IndentIncrease className="h-4 w-4 mr-2" />
-                  Increase indent
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-
-            <Separator orientation="vertical" className="h-5 shrink-0 mx-0.5" />
+            {/* Block Elements */}
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    editor.chain().focus().toggleBlockquote().run();
+                    const { from, to } = editor.state.selection;
+                    // wrap current line/selection in quotes
+                    editor
+                      .chain()
+                      .focus()
+                      .insertContentAt(
+                        { from, to },
+                        `"${editor.state.doc.textBetween(from, to, " ")}"`
+                      )
+                      .run();
+                  }}
+                  className={cn(
+                    "h-8 w-8 p-0",
+                    editor.isActive("blockquote") && "bg-accent"
+                  )}
+                >
+                  <Quote className="h-4 w-4" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Blockquote</TooltipContent>
+            </Tooltip>
 
             <DropdownMenu
               open={tableMenuOpen}
@@ -2258,7 +1843,7 @@ export function TiptapEditor({
               <Tooltip>
                 <TooltipTrigger asChild>
                   <DropdownMenuTrigger asChild>
-                    <Button variant="ghost" size="sm" className="h-8 w-8 p-0 shrink-0">
+                    <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
                       <TableIcon className="h-4 w-4" />
                     </Button>
                   </DropdownMenuTrigger>
@@ -2317,71 +1902,92 @@ export function TiptapEditor({
               </DropdownMenuContent>
             </DropdownMenu>
 
-            <Separator orientation="vertical" className="h-5 shrink-0 mx-0.5" />
+            <Separator orientation="vertical" className="h-6 mx-1" />
 
-            {/* Chemistry & Equations - single dropdown */}
-            <DropdownMenu>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <DropdownMenuTrigger asChild>
-                    <Button variant="ghost" size="sm" className="h-8 w-8 p-0 shrink-0">
-                      <Sigma className="h-4 w-4" />
-                    </Button>
-                  </DropdownMenuTrigger>
-                </TooltipTrigger>
-                <TooltipContent>Chemistry & Equations</TooltipContent>
-              </Tooltip>
-              <DropdownMenuContent align="start" className="w-56">
-                <DropdownMenuItem
+            {/* Chemistry Tools */}
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="sm"
                   onClick={() => {
                     const { from, to } = editor.state.selection;
-                    const selectedText = editor.state.doc.textBetween(from, to, " ");
+                    const selectedText = editor.state.doc.textBetween(
+                      from,
+                      to,
+                      " "
+                    );
                     if (selectedText) {
                       const formatted = formatChemicalFormula(selectedText);
-                      editor.chain().focus().deleteRange({ from, to }).insertContent(formatted).run();
+                      editor
+                        .chain()
+                        .focus()
+                        .deleteRange({ from, to })
+                        .insertContent(formatted)
+                        .run();
                     }
                   }}
+                  className="h-8 w-8 p-0"
                 >
-                  <FlaskConical className="h-4 w-4 mr-2" />
-                  Chemical Formula
-                </DropdownMenuItem>
-                <DropdownMenuItem
+                  <FlaskConical className="h-4 w-4" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Format Chemical Formula</TooltipContent>
+            </Tooltip>
+
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="sm"
                   onClick={() => {
-                    const { from, to } = editor.state.selection;
+                    const { from, to } = editor.state.selection
                     if (from === to) {
-                      editor.chain().focus().insertContent("$ $").run();
-                      editor.chain().focus().setTextSelection(from + 1).run();
+                      editor.chain().focus().insertContent('$ $').run()
+                      editor.chain().focus().setTextSelection(from + 1).run()
                     } else {
-                      const text = editor.state.doc.textBetween(from, to, " ");
-                      editor.chain().focus().deleteRange({ from, to }).insertContent(`$${text}$`).run();
+                      const text = editor.state.doc.textBetween(from, to, ' ')
+                      editor.chain().focus().deleteRange({ from, to }).insertContent(`$${text}$`).run()
                     }
                   }}
+                  className="h-8 w-8 p-0"
                 >
-                  <Sigma className="h-4 w-4 mr-2" />
-                  Inline Equation
-                </DropdownMenuItem>
-                <DropdownMenuItem
+                  <Sigma className="h-4 w-4" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Insert Equation (Inline: $...$)</TooltipContent>
+            </Tooltip>
+
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="sm"
                   onClick={() => {
-                    const { from, to } = editor.state.selection;
+                    const { from, to } = editor.state.selection
                     if (from === to) {
-                      editor.chain().focus().insertContent("$$\n\n$$").run();
-                      editor.chain().focus().setTextSelection(from + 3).run();
+                      editor.chain().focus().insertContent('$$\n\n$$').run()
+                      editor.chain().focus().setTextSelection(from + 3).run()
                     } else {
-                      const text = editor.state.doc.textBetween(from, to, " ");
-                      editor.chain().focus().deleteRange({ from, to }).insertContent(`$$\n${text}\n$$`).run();
+                      const text = editor.state.doc.textBetween(from, to, ' ')
+                      editor.chain().focus().deleteRange({ from, to }).insertContent(`$$\n${text}\n$$`).run()
                     }
                   }}
+                  className="h-8 w-8 p-0"
                 >
-                  <Sigma className="h-4 w-4 mr-2" />
-                  Equation Block
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
+                  <div className="relative">
+                    <Sigma className="h-4 w-4" />
+                    <div className="absolute -bottom-1 -right-1 text-[8px] font-bold">2</div>
+                  </div>
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Insert Equation (Block: $$...$$)</TooltipContent>
+            </Tooltip>
 
             {/* AI Tools */}
             {showAITools && (
               <>
-                <Separator orientation="vertical" className="h-5 shrink-0 mx-0.5" />
+                <Separator orientation="vertical" className="h-6 mx-1" />
 
                 {/* Speech to text */}
                 <Tooltip>
@@ -2389,7 +1995,7 @@ export function TiptapEditor({
                     <Button
                       variant={isListening ? "secondary" : "ghost"}
                       size="sm"
-                      className="h-8 w-8 p-0 shrink-0"
+                      className="h-8 w-8 p-0"
                       onClick={
                         isListening ? stopSpeechToText : startSpeechToText
                       }
@@ -2400,51 +2006,6 @@ export function TiptapEditor({
                   <TooltipContent>
                     {isListening ? "Stop dictation" : "Start dictation"}
                   </TooltipContent>
-                </Tooltip>
-
-                {/* Cite with AI - Standalone Button */}
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="h-8 gap-1 px-2 relative overflow-hidden border-0 bg-background hover:bg-accent/50 transition-colors rainbow-border-button"
-                      onClick={aiCite}
-                      disabled={isCiteProcessing}
-                    >
-                      {isCiteProcessing ? (
-                        <Loader2 className="h-4 w-4 animate-spin relative z-10" />
-                      ) : (
-                        <FileText className="h-4 w-4 relative z-10" />
-                      )}
-                      <span className="text-xs font-medium relative z-10">Cite with AI</span>
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent className="max-w-xs">
-                    <p className="font-medium mb-1">Find and insert citations</p>
-                    <p className="text-xs text-muted-foreground">Select text (at least 10 characters) and click to search for relevant citations</p>
-                  </TooltipContent>
-                </Tooltip>
-
-                {/* Generate Bibliography Button */}
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="h-8 gap-1 px-2"
-                      onClick={handleGenerateBibliography}
-                      disabled={isCiteProcessing}
-                    >
-                      {isCiteProcessing ? (
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                      ) : (
-                        <FileText className="h-4 w-4" />
-                      )}
-                      <span className="text-xs font-medium">Bibliography</span>
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent>Generate formatted bibliography from citations in document</TooltipContent>
                 </Tooltip>
 
                 <DropdownMenu
@@ -2533,19 +2094,13 @@ export function TiptapEditor({
 
 
         </div>
-        );
-        return toolbarPortalRef?.current ? createPortal(toolbar, toolbarPortalRef.current) : toolbar;
-      })()}
 
-      <div
-        className={cn(
-          "border border-border rounded-lg bg-card overflow-hidden",
-          className
-        )}
-      >
+      )
+      }
+
       {/* Editor Content */}
       <div
-        className="overflow-y-auto px-2 pb-2"
+        className="overflow-y-auto"
         style={{ minHeight, maxHeight: "calc(100vh - 300px)" }}
       >
         <EditorContent editor={editor} />
@@ -2638,215 +2193,20 @@ export function TiptapEditor({
             opacity: 1 !important;
             background: linear-gradient(135deg, transparent 40%, rgba(59, 130, 246, 0.8) 40%) !important;
           }
-          
-          /* Monochrome gradient border animation for Cite with AI button */
-          @keyframes rainbow-border {
-            0% {
-              background-position: 0% 50%;
-            }
-            100% {
-              background-position: 200% 50%;
-            }
-          }
-          
-          .rainbow-border-button::before {
-            content: '';
-            position: absolute;
-            inset: 0;
-            border-radius: 0.375rem;
-            padding: 2px;
-            background: linear-gradient(
-              90deg,
-              #ffffff,
-              #d1d5db,
-              #9ca3af,
-              #6b7280,
-              #4b5563,
-              #374151,
-              #1f2937,
-              #000000,
-              #1f2937,
-              #374151,
-              #4b5563,
-              #6b7280,
-              #9ca3af,
-              #d1d5db,
-              #ffffff
-            );
-            background-size: 200% 100%;
-            -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
-            -webkit-mask-composite: xor;
-            mask-composite: exclude;
-            animation: rainbow-border 4s linear infinite;
-            pointer-events: none;
-          }
         `}</style>
       </div>
 
       {/* AI Processing Indicator */}
       {
-        (isAIProcessing || isCiteProcessing) && (
+        isAIProcessing && (
           <div className="border-t border-border p-2 bg-muted/50">
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
               <Loader2 className="h-4 w-4 animate-spin" />
-              <span>{isCiteProcessing ? 'Searching for citations...' : 'AI is processing your request...'}</span>
+              <span>AI is processing your request...</span>
             </div>
           </div>
         )
       }
-      </div>
-
-      {/* Citation Selection Modal */}
-      <Dialog open={citationModalOpen} onOpenChange={setCitationModalOpen}>
-        <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>Select Citations</DialogTitle>
-            <DialogDescription>
-              Choose which sources you want to cite. Click on a source to select/deselect it.
-            </DialogDescription>
-          </DialogHeader>
-          
-          <div className="space-y-3 py-2">
-            {foundPapers.map((paper, index) => {
-              const year = paper.year && paper.year > 0 ? paper.year : null
-              const isSelected = selectedPapers.has(index)
-              
-              return (
-                <div
-                  key={paper.id}
-                  onClick={() => togglePaperSelection(index)}
-                  className={cn(
-                    "p-4 border rounded-lg cursor-pointer transition-all hover:shadow-md",
-                    isSelected ? "border-primary bg-primary/5 shadow-sm" : "border-border hover:border-primary/50"
-                  )}
-                >
-                  <div className="flex items-start gap-3">
-                    <div className={cn(
-                      "flex-shrink-0 w-6 h-6 rounded-full border-2 flex items-center justify-center text-xs font-semibold transition-colors",
-                      isSelected ? "border-primary bg-primary text-primary-foreground" : "border-muted-foreground/30"
-                    )}>
-                      {isSelected && '✓'}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <h4 className="font-medium text-sm line-clamp-2 mb-1">
-                        {paper.title}
-                      </h4>
-                      {year && (
-                        <p className="text-xs text-muted-foreground mb-2">
-                          {year}
-                        </p>
-                      )}
-                      {paper.abstract && (
-                        <p className="text-xs text-muted-foreground line-clamp-2 mb-2">
-                          {paper.abstract}
-                        </p>
-                      )}
-                      {paper.url && (
-                        <a
-                          href={paper.url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          onClick={(e) => e.stopPropagation()}
-                          className="text-xs text-primary hover:underline inline-block"
-                        >
-                          View source →
-                        </a>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              )
-            })}
-          </div>
-
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => {
-                setCitationModalOpen(false)
-                setSelectedPapers(new Set())
-              }}
-            >
-              Cancel
-            </Button>
-            <Button
-              onClick={handleCiteSelected}
-              disabled={selectedPapers.size === 0}
-            >
-              Cite Selected ({selectedPapers.size})
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Bibliography Generation Modal */}
-      <Dialog open={bibliographyModalOpen} onOpenChange={setBibliographyModalOpen}>
-        <DialogContent className="max-w-4xl max-h-[85vh] overflow-hidden flex flex-col">
-          <DialogHeader>
-            <DialogTitle>Generate Bibliography</DialogTitle>
-            <DialogDescription>
-              Select citation style and preview your formatted bibliography
-            </DialogDescription>
-          </DialogHeader>
-          
-          <div className="flex-1 overflow-y-auto space-y-3 py-2">
-            {/* Citation Style Selector - More compact */}
-            <div className="flex items-center gap-3">
-              <label className="text-sm font-medium whitespace-nowrap">Citation Style:</label>
-              <select
-                value={selectedCitationStyle}
-                onChange={(e) => setSelectedCitationStyle(e.target.value as any)}
-                className="flex-1 h-9 px-3 rounded-md border border-border bg-background text-sm"
-              >
-                <option value="APA">APA</option>
-                <option value="MLA">MLA</option>
-                <option value="Chicago">Chicago</option>
-                <option value="Harvard">Harvard</option>
-                <option value="IEEE">IEEE</option>
-                <option value="Vancouver">Vancouver</option>
-              </select>
-              <span className="text-xs text-muted-foreground whitespace-nowrap">
-                {citationMetadata.size} citation{citationMetadata.size !== 1 ? 's' : ''}
-              </span>
-            </div>
-
-            {/* Preview - More compact */}
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Preview</label>
-              <div className="border rounded-lg p-3 bg-muted/30 max-h-[450px] overflow-y-auto">
-                <h3 className="text-base font-semibold mb-2">References</h3>
-                <div className="space-y-1.5">
-                  {Array.from(citationMetadata.entries())
-                    .sort((a, b) => a[0] - b[0])
-                    .map(([number, metadata]) => (
-                      <div key={number} className="text-sm leading-relaxed">
-                        <span className="font-medium inline-block min-w-[2rem]">[{number}]</span>
-                        <span 
-                          className="inline"
-                          dangerouslySetInnerHTML={{ 
-                            __html: formatCitation(metadata, selectedCitationStyle) 
-                          }} 
-                        />
-                      </div>
-                    ))}
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <DialogFooter className="mt-2">
-            <Button
-              variant="outline"
-              onClick={() => setBibliographyModalOpen(false)}
-            >
-              Cancel
-            </Button>
-            <Button onClick={handleInsertBibliography}>
-              Insert at End
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-    </>
+    </div >
   );
 }

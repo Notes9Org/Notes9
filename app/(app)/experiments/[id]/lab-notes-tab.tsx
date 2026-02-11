@@ -1,12 +1,19 @@
 "use client"
 
-import { useState, useEffect, useRef } from "react"
-import { useRouter, useSearchParams } from "next/navigation"
+import { useState, useEffect, useMemo, useRef } from "react"
+import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -15,19 +22,15 @@ import {
   DropdownMenuSeparator,
   DropdownMenuLabel,
 } from "@/components/ui/dropdown-menu"
-import {
-  Dialog,
-  DialogContent,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog"
 import { AffineBlock } from "@/components/text-editor/affine-block"
 import { TiptapEditor } from "@/components/text-editor/tiptap-editor"
 import { useToast } from "@/hooks/use-toast"
 import { useAutoSave } from "@/hooks/use-auto-save"
+import { useCollaborativeEditor } from "@/hooks/useCollaborativeEditor"
 import { SaveStatusIndicator } from "@/components/ui/save-status"
-import { Plus, FileText, Download, FileCode, Globe, Loader2, Users, ChevronLeft, ChevronRight, MoreVertical, Trash2, List, Pencil } from "lucide-react"
+import { Save, Plus, FileText, Download, FileCode, Globe, Loader2, X, Users } from "lucide-react"
+import { LinkNoteProtocolDialog } from "./link-note-protocol-dialog"
+import { CollaboratorsDialog } from "@/components/lab-notes/collaborators-dialog"
 import {
   Table,
   TableBody,
@@ -36,9 +39,30 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
-import { cn } from "@/lib/utils"
-import { getUniqueNameErrorMessage } from "@/lib/unique-name-error"
-import { useBreadcrumb } from "@/components/layout/breadcrumb-context"
+import { Badge } from "@/components/ui/badge"
+import { cn } from "@/lib/utils";
+
+const COLLAB_WEBSOCKET_URL =
+  process.env.NEXT_PUBLIC_COLLAB_SERVER ?? "ws://localhost:3001/collab";
+
+const AWARENESS_COLORS = [
+  "#2563eb",
+  "#059669",
+  "#dc2626",
+  "#7c3aed",
+  "#ea580c",
+  "#0891b2",
+  "#be123c",
+  "#4f46e5",
+];
+
+function getAwarenessColor(seed: string): string {
+  let hash = 0;
+  for (let index = 0; index < seed.length; index += 1) {
+    hash = (hash * 31 + seed.charCodeAt(index)) >>> 0;
+  }
+  return AWARENESS_COLORS[hash % AWARENESS_COLORS.length];
+}
 
 interface LabNote {
   id: string;
@@ -62,9 +86,6 @@ interface LinkedProtocol {
 
 export function LabNotesTab({
   experimentId,
-  experimentName,
-  projectName,
-  projectId,
 }: {
   experimentId: string
   experimentName?: string
@@ -72,18 +93,23 @@ export function LabNotesTab({
   projectId?: string
 }) {
   const router = useRouter();
+  const pathname = usePathname();
   const searchParams = useSearchParams();
   const { toast } = useToast();
-  const { setSegments } = useBreadcrumb();
 
   const [notes, setNotes] = useState<LabNote[]>([]);
   const [selectedNote, setSelectedNote] = useState<LabNote | null>(null);
   const [isCreating, setIsCreating] = useState(false);
-  const [isCreatingNew, setIsCreatingNew] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [isPublishing, setIsPublishing] = useState(false);
   const [publicUrl, setPublicUrl] = useState<string | null>(null);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  const [collabToken, setCollabToken] = useState<string | null>(null);
+  const [collabUser, setCollabUser] = useState<{
+    id: string;
+    name: string;
+    color: string;
+  } | null>(null);
 
   const [formData, setFormData] = useState({
     title: "",
@@ -93,26 +119,42 @@ export function LabNotesTab({
 
   // Linked protocols state
   const [linkedProtocols, setLinkedProtocols] = useState<LinkedProtocol[]>([]);
+  const latestContentRef = useRef(formData.content);
+  const selectedNoteIdRef = useRef<string | null>(null);
+  const linkedProtocolsFetchIdRef = useRef(0);
 
-  // Notebook list panel collapsed for more note-taking space (start closed)
-  const [notebookPanelOpen, setNotebookPanelOpen] = useState(false);
+  const syncNoteQueryParam = (noteId: string | null) => {
+    const params = new URLSearchParams(searchParams.toString());
+    if (noteId) {
+      params.set("noteId", noteId);
+    } else {
+      params.delete("noteId");
+    }
 
-  // Rename note dialog (used from sidebar note menu)
-  const [renameNoteId, setRenameNoteId] = useState<string | null>(null);
-  const [renameTitle, setRenameTitle] = useState("");
+    const query = params.toString();
+    router.replace(query ? `${pathname}?${query}` : pathname, { scroll: false });
+  };
 
-  // Inline title editing in card header (no dialog)
-  const [isEditingTitle, setIsEditingTitle] = useState(false);
-  const titleInputRef = useRef<HTMLInputElement>(null);
-  const toolbarPortalRef = useRef<HTMLDivElement>(null);
-  const toolbarPortalReadyRef = useRef(false);
-  const [, setToolbarPortalReady] = useState(false);
+  useEffect(() => {
+    latestContentRef.current = formData.content;
+  }, [formData.content]);
+
+  useEffect(() => {
+    selectedNoteIdRef.current = selectedNote?.id ?? null;
+  }, [selectedNote?.id]);
 
   // Auto-save functionality
-  const handleAutoSave = async (content: string, title?: string, noteType?: string) => {
+  const handleAutoSave = async (
+    content: string,
+    title?: string,
+    noteType?: string,
+    noteId?: string | null
+  ) => {
     // Use provided values or fall back to formData
     const titleToSave = title !== undefined ? title : formData.title;
     const noteTypeToSave = noteType !== undefined ? noteType : formData.note_type;
+    const targetNoteId = noteId ?? selectedNoteIdRef.current;
+    const shouldCreate = !targetNoteId;
 
     // Don't auto-save if title is empty
     if (!titleToSave.trim()) return;
@@ -126,7 +168,7 @@ export function LabNotesTab({
       if (!user) throw new Error("Not authenticated");
 
       // If creating a new note, insert it first
-      if (isCreating || !selectedNote) {
+      if (shouldCreate) {
         const { data, error } = await supabase
           .from("lab_notes")
           .insert({
@@ -144,6 +186,7 @@ export function LabNotesTab({
         // Switch to editing mode
         setIsCreating(false);
         setSelectedNote(data);
+        selectedNoteIdRef.current = data.id;
 
         // Refresh notes list
         await fetchNotes();
@@ -157,14 +200,14 @@ export function LabNotesTab({
             note_type: noteTypeToSave,
             updated_at: new Date().toISOString(),
           })
-          .eq("id", selectedNote.id);
+          .eq("id", targetNoteId);
 
         if (error) throw error;
 
         // Update local state
-        setNotes(
-          notes.map((note) =>
-            note.id === selectedNote.id
+        setNotes((previousNotes) =>
+          previousNotes.map((note) =>
+            note.id === targetNoteId
               ? {
                 ...note,
                 content,
@@ -178,7 +221,7 @@ export function LabNotesTab({
       }
     } catch (error: any) {
       console.error("Auto-save error:", error);
-      throw new Error(getUniqueNameErrorMessage(error, "lab_note"));
+      throw error; // Re-throw to trigger error status in auto-save hook
     }
   };
 
@@ -194,50 +237,108 @@ export function LabNotesTab({
 
   // Fetch existing lab notes
   const noteIdFromQuery = searchParams.get("noteId");
+  const collaborationDocumentId =
+    !isCreating && selectedNote ? `lab-note:${selectedNote.id}` : null;
+
+  const { ydoc, provider, isSynced } = useCollaborativeEditor({
+    documentId: collaborationDocumentId,
+    websocketUrl: COLLAB_WEBSOCKET_URL,
+    token: collabToken,
+    user: collabUser,
+    enabled: Boolean(collaborationDocumentId && collabToken && collabUser),
+  });
+
+  const collaborationConfig = useMemo(() => {
+    // Safety guard: only enable collaborative editor once initial Yjs sync completes.
+    // This prevents an empty unsynced Y.Doc from replacing already-saved note content.
+    if (!ydoc || !provider || !collabUser || !isSynced) return undefined;
+    return {
+      document: ydoc,
+      provider,
+      user: collabUser,
+      field: "default",
+      isSynced,
+    };
+  }, [ydoc, provider, collabUser, isSynced]);
 
   // Fetch current user ID
   useEffect(() => {
     const fetchCurrentUser = async () => {
       const supabase = createClient();
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
       const { data: { user } } = await supabase.auth.getUser();
+
+      setCollabToken(session?.access_token ?? null);
       if (user) {
         setCurrentUserId(user.id);
+        const name =
+          user.user_metadata?.full_name ||
+          user.user_metadata?.name ||
+          [user.user_metadata?.first_name, user.user_metadata?.last_name]
+            .filter(Boolean)
+            .join(" ") ||
+          user.email ||
+          "Anonymous";
+
+        setCollabUser({
+          id: user.id,
+          name,
+          color: getAwarenessColor(user.id),
+        });
+      } else {
+        setCollabUser(null);
       }
     };
+
     fetchCurrentUser();
+  }, []);
+
+  useEffect(() => {
+    const supabase = createClient();
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      setCollabToken(session?.access_token ?? null);
+      const authUser = session?.user;
+
+      if (!authUser) {
+        setCollabUser(null);
+        return;
+      }
+
+      const name =
+        authUser.user_metadata?.full_name ||
+        authUser.user_metadata?.name ||
+        [authUser.user_metadata?.first_name, authUser.user_metadata?.last_name]
+          .filter(Boolean)
+          .join(" ") ||
+        authUser.email ||
+        "Anonymous";
+
+      setCollabUser({
+        id: authUser.id,
+        name,
+        color: getAwarenessColor(authUser.id),
+      });
+    });
+
+    return () => {
+      subscription.unsubscribe();
+    };
   }, []);
 
   useEffect(() => {
     fetchNotes(noteIdFromQuery);
   }, [experimentId, noteIdFromQuery]);
 
-  // Sync header breadcrumb: project › experiment › current note name
-  useEffect(() => {
-    if (!projectName || !experimentName) return;
-    const baseSegments = [
-      { label: projectName, href: projectId ? `/projects/${projectId}` : undefined },
-      { label: experimentName },
-    ];
-    const noteTitle = formData.title || selectedNote?.title || "Lab notes";
-    setSegments([...baseSegments, { label: noteTitle }]);
-    return () => {
-      setSegments(baseSegments);
-    };
-  }, [projectName, experimentName, projectId, setSegments, formData.title, selectedNote?.title]);
-
-  // Focus and select title input when entering inline edit mode
-  useEffect(() => {
-    if (isEditingTitle && titleInputRef.current) {
-      titleInputRef.current.focus();
-      titleInputRef.current.select();
-    }
-  }, [isEditingTitle]);
-
   // Fetch linked protocols when a note is selected
   useEffect(() => {
     if (selectedNote && !isCreating) {
       fetchLinkedProtocols(selectedNote.id);
     } else {
+      linkedProtocolsFetchIdRef.current += 1;
       setLinkedProtocols([]);
     }
   }, [selectedNote?.id, isCreating]);
@@ -262,42 +363,6 @@ export function LabNotesTab({
 
     checkPublicStatus();
   }, [selectedNote]);
-
-  // Sync current note metadata to document root for external/accessibility use
-  useEffect(() => {
-    const root = document.documentElement;
-    const attrs: Record<string, string> = {
-      "data-experiment-id": String(experimentId ?? ""),
-    };
-
-    if (selectedNote && !isCreating) {
-      attrs["data-note-id"] = selectedNote.id;
-      attrs["data-note-title"] = selectedNote.title || "Untitled";
-      attrs["data-note-created-at"] = selectedNote.created_at ?? "";
-      attrs["data-note-updated-at"] = selectedNote.updated_at ?? "";
-    } else if (isCreating) {
-      attrs["data-note-title"] = formData.title.trim() || "Untitled";
-      attrs["data-note-created-at"] = "";
-      attrs["data-note-updated-at"] = "";
-    } else {
-      attrs["data-note-id"] = "";
-      attrs["data-note-title"] = "";
-      attrs["data-note-created-at"] = "";
-      attrs["data-note-updated-at"] = "";
-    }
-
-    for (const [key, value] of Object.entries(attrs)) {
-      root.setAttribute(key, value);
-    }
-
-    return () => {
-      root.removeAttribute("data-note-id");
-      root.removeAttribute("data-note-title");
-      root.removeAttribute("data-note-created-at");
-      root.removeAttribute("data-note-updated-at");
-      root.removeAttribute("data-experiment-id");
-    };
-  }, [experimentId, selectedNote, isCreating, formData.title]);
 
   const handlePublish = async () => {
     if (!selectedNote) return;
@@ -398,6 +463,7 @@ export function LabNotesTab({
             content: next.content,
             note_type: next.note_type || "general",
           });
+          syncNoteQueryParam(next.id);
         }
       }
     } catch (error: any) {
@@ -784,7 +850,7 @@ export function LabNotesTab({
     } catch (error: any) {
       toast({
         title: "Error",
-        description: getUniqueNameErrorMessage(error, "lab_note"),
+        description: error.message,
         variant: "destructive",
       });
     } finally {
@@ -792,21 +858,7 @@ export function LabNotesTab({
     }
   };
 
-  const getUniqueDefaultTitle = async (): Promise<string> => {
-    const supabase = createClient();
-    const { data } = await supabase
-      .from("lab_notes")
-      .select("title")
-      .eq("experiment_id", experimentId);
-    const existing = (data || []).map((r) => (r as { title: string }).title);
-    if (!existing.includes("Untitled")) return "Untitled";
-    let n = 2;
-    while (existing.includes(`Untitled (${n})`)) n++;
-    return `Untitled (${n})`;
-  };
-
   const handleNewNote = async () => {
-    setIsCreatingNew(true);
     try {
       const supabase = createClient();
       const {
@@ -815,12 +867,12 @@ export function LabNotesTab({
 
       if (!user) throw new Error("Not authenticated");
 
-      const defaultTitle = await getUniqueDefaultTitle();
+      // Create new note with "untitled" as default title
       const { data, error } = await supabase
         .from("lab_notes")
         .insert({
           experiment_id: experimentId,
-          title: defaultTitle,
+          title: "untitled",
           content: "",
           note_type: "general",
           created_by: user.id,
@@ -835,6 +887,7 @@ export function LabNotesTab({
         description: "New lab note created. You can rename it anytime.",
       });
 
+      // Refresh notes list and select the new note
       await fetchNotes(data.id);
       setSelectedNote(data);
       setFormData({
@@ -847,38 +900,29 @@ export function LabNotesTab({
       console.error("Error creating note:", error);
       toast({
         title: "Error",
-        description: getUniqueNameErrorMessage(error, "lab_note"),
+        description: error.message || "Failed to create note",
         variant: "destructive",
       });
-    } finally {
-      setIsCreatingNew(false);
     }
   };
 
   const fetchLinkedProtocols = async (noteId: string) => {
+    const fetchId = ++linkedProtocolsFetchIdRef.current;
     try {
-      const supabase = createClient();
-      const { data, error } = await supabase
-        .from("lab_note_protocols")
-        .select(`
-          id,
-          protocol_id,
-          protocol:protocols(id, name, version)
-        `)
-        .eq("lab_note_id", noteId);
+      const response = await fetch(`/api/lab-notes/linked-protocols?labNoteId=${noteId}`, {
+        cache: "no-store",
+      });
+      if (!response.ok) {
+        const error = await response.json().catch(() => ({}));
+        throw new Error(error.error || "Failed to fetch linked protocols");
+      }
 
-      if (error) throw error;
-
-      // Map the data to handle Supabase returning protocol as array
-      const mapped = (data || []).map((item: any) => ({
-        id: item.id,
-        protocol_id: item.protocol_id,
-        protocol: Array.isArray(item.protocol) ? item.protocol[0] : item.protocol,
-      })).filter((item: any) => item.protocol);
-
-      setLinkedProtocols(mapped);
-    } catch (error) {
+      const data = await response.json();
+      if (fetchId !== linkedProtocolsFetchIdRef.current) return;
+      setLinkedProtocols(data.linkedProtocols || []);
+    } catch (error: any) {
       console.error("Error fetching linked protocols:", error);
+      if (fetchId !== linkedProtocolsFetchIdRef.current) return;
       setLinkedProtocols([]);
     }
   };
@@ -915,358 +959,102 @@ export function LabNotesTab({
       content: note.content,
       note_type: note.note_type || "general",
     });
+    syncNoteQueryParam(note.id);
     fetchLinkedProtocols(note.id);
   };
 
-  const handleDeleteNote = async (e: React.MouseEvent, note: LabNote) => {
-    e.stopPropagation();
-    try {
-      const supabase = createClient();
-      const { error } = await supabase.from("lab_notes").delete().eq("id", note.id);
-      if (error) throw error;
-      setNotes((prev) => prev.filter((n) => n.id !== note.id));
-      if (selectedNote?.id === note.id) {
-        setSelectedNote(null);
-        setIsCreating(true);
-        setFormData({ title: "", content: "", note_type: "general" });
-      }
-      toast({ title: "Note deleted", description: `"${note.title}" has been removed.` });
-    } catch (err: any) {
-      toast({
-        title: "Error",
-        description: err.message || "Failed to delete note",
-        variant: "destructive",
-      });
-    }
-  };
-
-  const openRenameNote = (e: React.MouseEvent, note: LabNote) => {
-    e.stopPropagation();
-    setRenameNoteId(note.id);
-    setRenameTitle(note.title || "");
-  };
-
-  const handleRenameNote = async () => {
-    if (!renameNoteId || !renameTitle.trim()) return;
-    try {
-      const supabase = createClient();
-      const { error } = await supabase
-        .from("lab_notes")
-        .update({ title: renameTitle.trim(), updated_at: new Date().toISOString() })
-        .eq("id", renameNoteId);
-      if (error) throw error;
-      setNotes((prev) =>
-        prev.map((n) =>
-          n.id === renameNoteId ? { ...n, title: renameTitle.trim(), updated_at: new Date().toISOString() } : n
-        )
-      );
-      if (selectedNote?.id === renameNoteId) {
-        setFormData((f) => ({ ...f, title: renameTitle.trim() }));
-        setSelectedNote((prev) =>
-          prev?.id === renameNoteId ? { ...prev, title: renameTitle.trim() } : prev
-        );
-      }
-      toast({ title: "Note renamed", description: "Title updated." });
-      setRenameNoteId(null);
-      setRenameTitle("");
-    } catch (err: any) {
-      toast({
-        title: "Error",
-        description: getUniqueNameErrorMessage(err, "lab_note"),
-        variant: "destructive",
-      });
-    }
-  };
-
-  const handleInlineTitleSave = async () => {
-    if (!selectedNote) return;
-    const newTitle = formData.title.trim();
-    if (!newTitle) {
-      setFormData((f) => ({ ...f, title: selectedNote.title || "" }));
-      setIsEditingTitle(false);
-      return;
-    }
-    if (newTitle === (selectedNote.title || "")) {
-      setIsEditingTitle(false);
-      return;
-    }
-    try {
-      const supabase = createClient();
-      const { error } = await supabase
-        .from("lab_notes")
-        .update({ title: newTitle, updated_at: new Date().toISOString() })
-        .eq("id", selectedNote.id);
-      if (error) throw error;
-      setNotes((prev) =>
-        prev.map((n) =>
-          n.id === selectedNote.id ? { ...n, title: newTitle, updated_at: new Date().toISOString() } : n
-        )
-      );
-      setSelectedNote((prev) => (prev?.id === selectedNote.id ? { ...prev, title: newTitle } : prev));
-      toast({ title: "Note renamed", description: "Title updated." });
-    } catch (err: any) {
-      toast({
-        title: "Error",
-        description: getUniqueNameErrorMessage(err, "lab_note"),
-        variant: "destructive",
-      });
-    }
-    setIsEditingTitle(false);
-  };
-
   return (
-    <div className="flex w-full min-h-0 flex-1">
-      {/* Rename note dialog */}
-      <Dialog
-        open={!!renameNoteId}
-        onOpenChange={(open) => {
-          if (!open) {
-            setRenameNoteId(null);
-            setRenameTitle("");
-          }
-        }}
-      >
-        <DialogContent className="sm:max-w-md" onPointerDownOutside={(e) => e.stopPropagation()}>
-          <DialogHeader>
-            <DialogTitle>Rename note</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-2">
-            <Label htmlFor="rename-title">Note name</Label>
-            <Input
-              id="rename-title"
-              value={renameTitle}
-              onChange={(e) => setRenameTitle(e.target.value)}
-              placeholder="Note title"
-              onKeyDown={(e) => e.key === "Enter" && handleRenameNote()}
-            />
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setRenameNoteId(null)}>
-              Cancel
-            </Button>
-            <Button onClick={handleRenameNote} disabled={!renameTitle.trim()}>
-              Save
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Single Card: notes list (when open) + editor */}
-      <div className="flex-1 min-w-0 min-h-0 flex flex-col">
-        <Card className="h-full flex flex-col min-h-0 py-0 gap-0 overflow-hidden">
-          <div className="flex flex-row flex-1 min-h-0 min-w-0">
-            {/* Notes list - inside card, left side */}
-            <aside
-              className={cn(
-                "flex shrink-0 flex-col overflow-hidden border-r border-border bg-muted/30 relative",
-                notebookPanelOpen ? "w-52 min-w-[13rem] z-10 bg-card" : "w-0 min-w-0 border-r-0 overflow-hidden"
-              )}
-              aria-hidden={!notebookPanelOpen}
-            >
-              {notebookPanelOpen && (
-                <div className="flex h-full min-h-0 w-52 min-w-[13rem] flex-col gap-0 p-2">
-                  <div className="flex h-9 shrink-0 items-center px-1">
-                    <span className="truncate text-xs font-medium text-muted-foreground">Notes</span>
-                  </div>
-                  <div className="flex min-h-0 flex-1 flex-col gap-0.5 overflow-auto mt-1">
-                    {notes.length > 0 ? (
-                      <ul className="flex w-full min-w-0 flex-col gap-0.5">
-                        {notes.map((note) => {
-                          const isActive = selectedNote?.id === note.id && !isCreating;
-                          const createdStr = new Date(note.created_at).toLocaleString();
-                          const updatedStr = new Date(note.updated_at).toLocaleString();
-                          return (
-                            <li key={note.id} className="group/list-item relative">
-                              <div
-                                role="button"
-                                tabIndex={0}
-                                onClick={() => handleSelectNote(note)}
-                                onKeyDown={(e) => {
-                                  if (e.key === "Enter" || e.key === " ") {
-                                    e.preventDefault();
-                                    handleSelectNote(note);
-                                  }
-                                }}
-                                data-note-id={note.id}
-                                data-created-at={note.created_at}
-                                data-updated-at={note.updated_at}
-                                title={`Created: ${createdStr} · Updated: ${updatedStr}`}
-                                className={cn(
-                                  "grid w-full min-h-8 grid-cols-[auto_1fr_auto] items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm outline-none transition-colors hover:bg-muted/80",
-                                  isActive && "bg-muted font-medium"
-                                )}
-                              >
-                                <FileText className="h-4 w-4 shrink-0 text-muted-foreground" />
-                                <p className="min-w-0 truncate font-medium m-0 text-sm">
-                                  {note.title || "Untitled"}
-                                </p>
-                                <DropdownMenu>
-                                  <DropdownMenuTrigger asChild>
-                                    <Button
-                                      variant="ghost"
-                                      size="icon"
-                                      className="size-7 shrink-0 opacity-70 hover:opacity-100"
-                                      onClick={(e) => e.stopPropagation()}
-                                      aria-label="Note options"
-                                    >
-                                      <MoreVertical className="h-3.5 w-3.5" />
-                                    </Button>
-                                  </DropdownMenuTrigger>
-                                  <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
-                                    <DropdownMenuItem onClick={(e) => openRenameNote(e, note)}>
-                                      <Pencil className="mr-2 h-4 w-4" />
-                                      Rename
-                                    </DropdownMenuItem>
-                                    <DropdownMenuSeparator />
-                                    <DropdownMenuItem
-                                      className="text-destructive focus:text-destructive"
-                                      onClick={(e) => handleDeleteNote(e, note)}
-                                    >
-                                      <Trash2 className="mr-2 h-4 w-4" />
-                                      Delete note
-                                    </DropdownMenuItem>
-                                  </DropdownMenuContent>
-                                </DropdownMenu>
-                              </div>
-                            </li>
-                          );
-                        })}
-                      </ul>
-                    ) : (
-                      <div className="flex flex-col items-center justify-center gap-2 px-2 py-6">
-                        <p className="text-center text-xs text-muted-foreground">No notes yet</p>
-                        <Button
-                          onClick={handleNewNote}
-                          variant="outline"
-                          size="sm"
-                          className="text-xs"
-                          disabled={isCreatingNew}
-                        >
-                          {isCreatingNew ? (
-                            <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
-                          ) : (
-                            <Plus className="mr-2 h-3.5 w-3.5" />
-                          )}
-                          New note
-                        </Button>
-                      </div>
+    <div className="flex gap-4 w-full">
+      {/* Left Sidebar - Notes List */}
+      <div className="w-48 shrink-0">
+        <Card className="h-full">
+          <CardHeader className="">
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-sm font-semibold">NOTEBOOK</CardTitle>
+              <Button
+                onClick={handleNewNote}
+                size="icon"
+                variant="ghost"
+                className="h-8 w-8"
+              >
+                <Plus className="h-4 w-4" />
+              </Button>
+            </div>
+          </CardHeader>
+          <CardContent className="p-0">
+            <div className="space-y-0 border-t">
+              {notes.length > 0 ? (
+                notes.map((note) => (
+                  <button
+                    key={note.id}
+                    onClick={() => handleSelectNote(note)}
+                    className={cn(
+                      "w-full text-left px-4 py-3 border-b hover:bg-muted/50 transition-colors",
+                      selectedNote?.id === note.id && !isCreating
+                        ? "bg-muted border-l-4 border-l-primary"
+                        : "border-l-4 border-l-transparent"
                     )}
-                  </div>
+                  >
+                    <div className="space-y-1">
+                      <p className="text-sm font-medium text-foreground truncate">
+                        {note.title}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        {new Date(note.created_at).toLocaleDateString("en-US", {
+                          month: "short",
+                          day: "numeric",
+                          hour: "2-digit",
+                          minute: "2-digit",
+                        })}
+                      </p>
+                    </div>
+                  </button>
+                ))
+              ) : (
+                <div className="px-4 py-8 text-center">
+                  <p className="text-sm text-muted-foreground">No notes yet</p>
+                  <Button
+                    onClick={handleNewNote}
+                    variant="ghost"
+                    size="sm"
+                    className="mt-2"
+                  >
+                    Create your first note
+                  </Button>
                 </div>
               )}
-            </aside>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
 
-            {/* Editor area - header + content */}
-            <div className="flex flex-1 min-w-0 min-h-0 flex-col py-4 gap-4 relative z-0">
-          <CardHeader className="pb-0 px-4 sm:px-6 shrink-0">
-            <div className="flex items-center justify-between gap-3">
-              <div className="flex flex-1 min-w-0 items-center gap-2">
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  className="h-8 w-8 shrink-0 text-muted-foreground hover:text-foreground pointer-events-auto"
-                  onClick={(e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    setNotebookPanelOpen((open) => !open);
-                  }}
-                  aria-label={notebookPanelOpen ? "Hide notes" : "Show notes"}
-                  title={notebookPanelOpen ? "Hide notes list" : `Show notes (${notes.length})`}
-                >
-                  {notebookPanelOpen ? (
-                    <ChevronLeft className="h-4 w-4 pointer-events-none" />
-                  ) : (
-                    <List className="h-4 w-4 pointer-events-none" />
-                  )}
-                </Button>
-                <div className="flex flex-1 min-w-0 items-center gap-1">
-                <div className="flex-1 min-w-0">
-                  {isEditingTitle && selectedNote ? (
-                    <input
-                      ref={titleInputRef}
-                      type="text"
-                      value={formData.title}
-                      onChange={(e) => setFormData((f) => ({ ...f, title: e.target.value }))}
-                      onBlur={handleInlineTitleSave}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter") {
-                          e.preventDefault();
-                          titleInputRef.current?.blur();
-                        }
-                        if (e.key === "Escape") {
-                          setFormData((f) => ({ ...f, title: selectedNote.title || "" }));
-                          setIsEditingTitle(false);
-                          titleInputRef.current?.blur();
-                        }
-                      }}
-                      className="w-full bg-transparent text-lg font-semibold text-foreground leading-none outline-none border-b border-transparent focus:border-primary"
-                      aria-label="Edit note title"
-                    />
-                  ) : (
-                    <div
-                      className={cn(
-                        "truncate",
-                        !isCreating && selectedNote && "cursor-pointer rounded px-1 -mx-1 hover:bg-muted/60 hover:text-foreground"
-                      )}
-                      onClick={() => {
-                        if (!isCreating && selectedNote) setIsEditingTitle(true);
-                      }}
-                      role={!isCreating && selectedNote ? "button" : undefined}
-                      tabIndex={!isCreating && selectedNote ? 0 : undefined}
-                      onKeyDown={(e) => {
-                        if (!isCreating && selectedNote && (e.key === "Enter" || e.key === " ")) {
-                          e.preventDefault();
-                          setIsEditingTitle(true);
-                        }
-                      }}
-                      aria-label={!isCreating && selectedNote ? "Click to edit title" : undefined}
-                    >
-                      <CardTitle className="text-lg font-semibold text-foreground truncate leading-none">
-                        {isCreating
-                          ? "New Lab Note"
-                          : formData.title || "Untitled Lab Note"}
-                      </CardTitle>
-                    </div>
-                  )}
-                </div>
+      {/* Right Side - Note Editor */}
+      <div className="flex-1 min-w-0">
+        <Card className="h-full">
+          <CardHeader>
+            <div className="flex items-start justify-between">
+              <div className="flex-1 min-w-0">
+                <CardTitle className="text-foreground">
+                  {isCreating
+                    ? "New Lab Note"
+                    : formData.title || "Untitled Lab Note"}
+                </CardTitle>
+                <CardDescription>
+                  Document your observations, analysis, and findings
+                </CardDescription>
+              </div>
+              <div className="flex items-center gap-3 shrink-0">
+                {/* Save Status Button - Google Drive Style */}
                 <SaveStatusIndicator
                   status={autoSaveStatus}
                   lastSaved={lastSaved}
-                  variant="icon"
-                  onClick={handleSave}
-                  disabled={isSaving || !formData.title.trim()}
                 />
-                </div>
-              </div>
-              <div className="flex items-center gap-1 shrink-0">
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-8 w-8 m-0 text-muted-foreground hover:text-foreground"
-                  disabled={isCreatingNew}
-                  onClick={() => {
-                    setNotebookPanelOpen(true);
-                    handleNewNote();
-                  }}
-                  aria-label="New lab note"
-                >
-                  {isCreatingNew ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <Plus className="h-4 w-4" />
-                  )}
-                </Button>
                 {!isCreating && selectedNote && (
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-8 w-8 text-muted-foreground hover:text-foreground"
-                        aria-label="Export"
-                      >
-                        <Download className="h-4 w-4" />
+                      <Button variant="outline" size="sm">
+                        <Download className="h-4 w-4 mr-2" />
+                        Export
                       </Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end">
@@ -1286,14 +1074,20 @@ export function LabNotesTab({
                         <FileText className="h-4 w-4 mr-2" />
                         PDF (.pdf)
                       </DropdownMenuItem>
-                      <DropdownMenuItem onClick={downloadAsDOCX}>
+                      {/* <DropdownMenuItem onClick={downloadAsDOCX}>
                         <FileText className="h-4 w-4 mr-2" />
                         Word (.docx)
-                      </DropdownMenuItem>
+                      </DropdownMenuItem> */}
                     </DropdownMenuContent>
                   </DropdownMenu>
                 )}
                 {/* Share Button - Google Docs style */}
+                {!isCreating && selectedNote && (
+                  <CollaboratorsDialog 
+                    labNoteId={selectedNote.id}
+                    labNoteTitle={selectedNote.title}
+                  />
+                )}
 
                 {/* Publish button temporarily hidden */}
                 {/* {!isCreating && selectedNote && (
@@ -1354,42 +1148,152 @@ export function LabNotesTab({
                 )} */}
               </div>
             </div>
-            <div
-              ref={(el) => {
-                (toolbarPortalRef as React.MutableRefObject<HTMLDivElement | null>).current = el;
-                if (el && !toolbarPortalReadyRef.current) {
-                  toolbarPortalReadyRef.current = true;
-                  setToolbarPortalReady(true);
-                }
-              }}
-              className="min-h-0"
-            />
           </CardHeader>
-          <CardContent className="space-y-3 px-4 sm:px-6">
+          <CardContent className="space-y-4">
+            {/* Title & Type */}
+            <div className="grid grid-cols-1 md:grid-cols-[1fr_200px] gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="title">Title</Label>
+                <Input
+                  id="title"
+                  value={formData.title}
+                  onChange={(e) => {
+                    const newTitle = e.target.value;
+                    setFormData({ ...formData, title: newTitle });
+                    // Trigger auto-save when title changes, passing the new title directly
+                    debouncedSave(
+                      formData.content,
+                      newTitle,
+                      formData.note_type,
+                      selectedNote?.id ?? null
+                    );
+                  }}
+                  placeholder="e.g., Day 3 Observations"
+                  required
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="note_type">Note Type</Label>
+                <Select
+                  value={formData.note_type}
+                  onValueChange={(value) => {
+                    setFormData({ ...formData, note_type: value });
+                    // Trigger auto-save when note type changes, passing the new note type directly
+                    debouncedSave(
+                      formData.content,
+                      formData.title,
+                      value,
+                      selectedNote?.id ?? null
+                    );
+                  }}
+                >
+                  <SelectTrigger id="note_type">
+                    <SelectValue placeholder="Select type" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="observation">Observation</SelectItem>
+                    <SelectItem value="analysis">Analysis</SelectItem>
+                    <SelectItem value="conclusion">Conclusion</SelectItem>
+                    <SelectItem value="general">General</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            {/* Linked Protocols */}
+            {!isCreating && selectedNote && (
+              <div className="space-y-2">
+                <div className="flex items-center gap-2">
+                  <Label className="text-xs text-muted-foreground">Linked Protocols</Label>
+                  <LinkNoteProtocolDialog
+                    noteId={selectedNote.id}
+                    linkedProtocolIds={linkedProtocols.map(p => p.protocol_id)}
+                    onLink={() => fetchLinkedProtocols(selectedNote.id)}
+                  />
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {linkedProtocols.length > 0 ? (
+                    linkedProtocols.map((link) => (
+                      <Badge
+                        key={link.id}
+                        variant="secondary"
+                        className="flex items-center gap-1 pr-1 cursor-grab active:cursor-grabbing"
+                        draggable
+                        onDragStart={(e) => {
+                          e.dataTransfer.setData(
+                            "application/x-protocol",
+                            JSON.stringify({
+                              id: link.protocol_id,
+                              name: link.protocol.name,
+                            })
+                          );
+                          e.dataTransfer.effectAllowed = "copy";
+                        }}
+                      >
+                        <span>{link.protocol.name}</span>
+                        {link.protocol.version && (
+                          <span className="text-muted-foreground text-xs">v{link.protocol.version}</span>
+                        )}
+                        <button
+                          type="button"
+                          title="Remove linked protocol"
+                          onClick={() => removeLinkedProtocol(link.id)}
+                          className="ml-1 rounded-full hover:bg-destructive/20 p-0.5"
+                        >
+                          <X className="h-3 w-3" />
+                        </button>
+                      </Badge>
+                    ))
+                  ) : (
+                    <span className="text-xs text-muted-foreground">No protocols linked</span>
+                  )}
+                </div>
+              </div>
+            )}
+
             {/* Rich Text Editor */}
-            <div>
+            <div className="space-y-2">
+              <Label>Content</Label>
               <TiptapEditor
                 content={formData.content}
                 onChange={(content) => {
-                  setFormData({ ...formData, content });
+                  // Ignore no-op changes.
+                  if (content === latestContentRef.current) return;
+
+                  setFormData((previous) => ({ ...previous, content }));
                   // Trigger auto-save (works for both creation and editing)
-                  debouncedSave(content);
+                  debouncedSave(
+                    content,
+                    formData.title,
+                    formData.note_type,
+                    selectedNote?.id ?? null
+                  );
                 }}
                 placeholder="Write your lab notes here... Use @ to tag protocols"
                 title={formData.title || "lab-note"}
                 minHeight="400px"
                 showAITools={true}
+                collaboration={collaborationConfig}
                 protocols={linkedProtocols.map(lp => ({
                   id: lp.protocol_id,
                   name: lp.protocol.name,
                   version: lp.protocol.version,
                 }))}
-                toolbarPortalRef={toolbarPortalRef}
               />
             </div>
-          </CardContent>
+
+            {/* Actions */}
+            <div className="flex justify-end gap-2 pt-4">
+              <Button
+                onClick={handleSave}
+                disabled={isSaving || !formData.title.trim()}
+              >
+                <Save className="h-4 w-4 mr-2" />
+                {isSaving ? "Saving..." : "Save Note"}
+              </Button>
             </div>
-          </div>
+          </CardContent>
         </Card>
       </div>
     </div>
