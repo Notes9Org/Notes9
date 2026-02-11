@@ -246,9 +246,9 @@ export async function POST(
       },
       emailSent,
       emailError,
-      // Include token in response for development/testing
-      // In production, you might want to remove this and only send via email
-      token: invitation.token,
+      ...(process.env.NODE_ENV !== "production"
+        ? { token: invitation.token }
+        : {}),
     })
     
   } catch (error) {

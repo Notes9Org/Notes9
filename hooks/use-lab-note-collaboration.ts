@@ -124,8 +124,6 @@ export function useLabNoteCollaboration(
         const error = await response.json()
         throw new Error(error.error || "Failed to send invitation")
       }
-
-      const data = await response.json()
       
       toast({
         title: "Invitation sent",

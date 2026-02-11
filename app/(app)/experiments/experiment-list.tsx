@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { FlaskConical, Calendar, User, Eye, Grid3x3, List } from 'lucide-react'
+import { FlaskConical, Calendar, User, Eye, Grid3x3, List, Plus } from 'lucide-react'
 import { HtmlContentTruncated } from '@/components/html-content'
 
 // Format date consistently to avoid hydration mismatch between server/client locales
@@ -34,12 +34,59 @@ interface Experiment {
   } | null
 }
 
-interface ExperimentListProps {
-  experiments: Experiment[]
+/** Client wrapper: single-line header (description + Grid/Table toggle + New button) + list */
+export function ExperimentsPageContent({ experiments }: { experiments: Experiment[] }) {
+  const [viewMode, setViewMode] = useState<"grid" | "table">("grid")
+  return (
+    <div className="space-y-6">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+        <p className="text-muted-foreground">
+          Manage and track all experimental procedures
+        </p>
+        <div className="flex items-center gap-2 shrink-0">
+          <div className="inline-flex rounded-lg border p-1">
+            <Button
+              variant={viewMode === "grid" ? "secondary" : "ghost"}
+              size="sm"
+              onClick={() => setViewMode("grid")}
+              className="gap-2"
+            >
+              <Grid3x3 className="h-4 w-4" />
+              Grid
+            </Button>
+            <Button
+              variant={viewMode === "table" ? "secondary" : "ghost"}
+              size="sm"
+              onClick={() => setViewMode("table")}
+              className="gap-2"
+            >
+              <List className="h-4 w-4" />
+              Table
+            </Button>
+          </div>
+          <Button asChild size="icon" variant="ghost" className="size-8 rounded-md text-muted-foreground hover:bg-muted hover:text-foreground transition-colors" aria-label="New experiment">
+            <Link href="/experiments/new">
+              <Plus className="size-4" />
+            </Link>
+          </Button>
+        </div>
+      </div>
+      <ExperimentList experiments={experiments} viewMode={viewMode} setViewMode={setViewMode} hideToolbar />
+    </div>
+  )
 }
 
-export function ExperimentList({ experiments }: ExperimentListProps) {
-  const [viewMode, setViewMode] = useState<"grid" | "table">("grid")
+interface ExperimentListProps {
+  experiments: Experiment[]
+  viewMode?: "grid" | "table"
+  setViewMode?: (mode: "grid" | "table") => void
+  hideToolbar?: boolean
+}
+
+export function ExperimentList({ experiments, viewMode: controlledView, setViewMode: setControlledView, hideToolbar }: ExperimentListProps) {
+  const [internalView, setInternalView] = useState<"grid" | "table">("grid")
+  const viewMode = controlledView ?? internalView
+  const setViewMode = setControlledView ?? setInternalView
 
   // Helper function to get shorter status text for better display
   const getStatusDisplay = (status: string) => {
@@ -61,29 +108,31 @@ export function ExperimentList({ experiments }: ExperimentListProps) {
 
   return (
     <>
-      {/* View Toggle */}
-      <div className="flex justify-end mb-4">
-        <div className="inline-flex rounded-lg border p-1">
-          <Button
-            variant={viewMode === "grid" ? "secondary" : "ghost"}
-            size="sm"
-            onClick={() => setViewMode("grid")}
-            className="gap-2"
-          >
-            <Grid3x3 className="h-4 w-4" />
-            Grid
-          </Button>
-          <Button
-            variant={viewMode === "table" ? "secondary" : "ghost"}
-            size="sm"
-            onClick={() => setViewMode("table")}
-            className="gap-2"
-          >
-            <List className="h-4 w-4" />
-            Table
-          </Button>
+      {/* View Toggle - only when not in header */}
+      {!hideToolbar && (
+        <div className="flex justify-end mb-4">
+          <div className="inline-flex rounded-lg border p-1">
+            <Button
+              variant={viewMode === "grid" ? "secondary" : "ghost"}
+              size="sm"
+              onClick={() => setViewMode("grid")}
+              className="gap-2"
+            >
+              <Grid3x3 className="h-4 w-4" />
+              Grid
+            </Button>
+            <Button
+              variant={viewMode === "table" ? "secondary" : "ghost"}
+              size="sm"
+              onClick={() => setViewMode("table")}
+              className="gap-2"
+            >
+              <List className="h-4 w-4" />
+              Table
+            </Button>
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Grid View - Use auto-fill with fixed card sizes to prevent expansion */}
       {viewMode === "grid" && (

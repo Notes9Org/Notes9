@@ -14,7 +14,7 @@ CREATE TABLE IF NOT EXISTS public.lab_note_access (
   lab_note_id UUID NOT NULL REFERENCES public.lab_notes(id) ON DELETE CASCADE,
   user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
   permission_level permission_level NOT NULL DEFAULT 'viewer',
-  granted_by UUID NOT NULL REFERENCES auth.users(id) ON DELETE SET NULL,
+  granted_by UUID REFERENCES auth.users(id) ON DELETE SET NULL,
   granted_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   UNIQUE(lab_note_id, user_id)
@@ -25,7 +25,7 @@ CREATE TABLE IF NOT EXISTS public.lab_note_invitations (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   lab_note_id UUID NOT NULL REFERENCES public.lab_notes(id) ON DELETE CASCADE,
   email TEXT NOT NULL,
-  invited_by UUID NOT NULL REFERENCES auth.users(id) ON DELETE SET NULL,
+  invited_by UUID REFERENCES auth.users(id) ON DELETE SET NULL,
   permission_level permission_level NOT NULL DEFAULT 'viewer',
   token TEXT UNIQUE NOT NULL,
   status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'accepted', 'expired', 'revoked')),
@@ -35,6 +35,12 @@ CREATE TABLE IF NOT EXISTS public.lab_note_invitations (
   accepted_at TIMESTAMPTZ,
   accepted_by UUID REFERENCES auth.users(id) ON DELETE SET NULL
 );
+
+-- Align existing tables with nullable FK columns when ON DELETE SET NULL is used.
+ALTER TABLE IF EXISTS public.lab_note_access
+  ALTER COLUMN granted_by DROP NOT NULL;
+ALTER TABLE IF EXISTS public.lab_note_invitations
+  ALTER COLUMN invited_by DROP NOT NULL;
 
 -- Create indexes for performance
 CREATE INDEX IF NOT EXISTS idx_lab_note_access_note_id ON lab_note_access(lab_note_id);

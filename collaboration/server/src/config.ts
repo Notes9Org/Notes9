@@ -6,10 +6,12 @@
  */
 
 import { config } from 'dotenv';
-import { resolve } from 'path';
+import { resolve, dirname } from 'path';
+import { fileURLToPath } from 'url';
 
 // Load .env from server folder
-config({ path: resolve(import.meta.dirname, '../.env') });
+const __dirname = dirname(fileURLToPath(import.meta.url));
+config({ path: resolve(__dirname, '../.env') });
 
 function getEnvVar(key: string, required: boolean = true, defaultValue?: string): string {
   const value = process.env[key] ?? defaultValue;

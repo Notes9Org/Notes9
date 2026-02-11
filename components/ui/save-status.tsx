@@ -13,7 +13,9 @@ interface SaveStatusIndicatorProps {
   status: SaveStatus
   lastSaved?: Date | null
   className?: string
-  variant?: 'button' | 'inline'
+  variant?: 'button' | 'icon' | 'inline'
+  onClick?: () => void
+  disabled?: boolean
 }
 
 export function SaveStatusIndicator({
@@ -21,6 +23,8 @@ export function SaveStatusIndicator({
   lastSaved,
   className,
   variant = 'button',
+  onClick,
+  disabled: disabledProp,
 }: SaveStatusIndicatorProps) {
   const getStatusConfig = () => {
     switch (status) {
@@ -80,27 +84,31 @@ export function SaveStatusIndicator({
     )
   }
 
-  // Google Drive style button
+  const isIconOnly = variant === 'icon'
+
   return (
     <TooltipProvider delayDuration={300}>
       <Tooltip>
         <TooltipTrigger asChild>
           <Button
             variant="ghost"
-            size="sm"
+            size={isIconOnly ? "icon" : "sm"}
             className={cn(
-              'flex items-center gap-2 px-3 h-9 transition-all',
+              isIconOnly ? 'h-8 w-8' : 'flex items-center gap-2 px-3 h-9',
+              'transition-all',
               config.bgClassName,
               config.className,
-              'border border-transparent hover:border-current/20',
+              !isIconOnly && 'border border-transparent hover:border-current/20',
               className
             )}
-            disabled={status === 'saving'}
+            disabled={disabledProp ?? status === 'saving'}
+            onClick={onClick}
+            type={onClick ? "button" : undefined}
+            aria-label={onClick ? "Save note" : undefined}
           >
             <Icon
               className={cn('h-4 w-4', config.animate && 'animate-spin')}
             />
-            {/* <span className="text-xs font-medium">{config.text}</span> */}
           </Button>
         </TooltipTrigger>
         <TooltipContent side="bottom" className="max-w-xs">

@@ -84,7 +84,14 @@ interface LinkedProtocol {
   };
 }
 
-export function LabNotesTab({ experimentId }: { experimentId: string }) {
+export function LabNotesTab({
+  experimentId,
+}: {
+  experimentId: string
+  experimentName?: string
+  projectName?: string
+  projectId?: string
+}) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();

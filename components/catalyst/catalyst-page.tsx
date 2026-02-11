@@ -10,12 +10,14 @@ import { useChatSessions } from '@/hooks/use-chat-sessions';
 import { createClient } from '@/lib/supabase/client';
 import { DEFAULT_MODEL_ID } from '@/lib/ai/models';
 import { deleteTrailingMessages } from '@/app/(app)/catalyst/actions';
+import { toast } from 'sonner';
 import { CatalystGreeting } from './catalyst-greeting';
 import { CatalystMessages } from './catalyst-messages';
-import { CatalystInput } from './catalyst-input';
+import { CatalystInput, type AgentMode } from './catalyst-input';
 import type { Attachment } from './preview-attachment';
 import { CatalystSidebar } from './catalyst-sidebar';
 import type { Vote } from '@/lib/db/schema';
+import { formatCitationDisplay } from '@/lib/utils';
 
 // Helper to get cookie value
 function getCookie(name: string): string | null {
@@ -36,6 +38,9 @@ export function CatalystChat({ sessionId }: CatalystChatProps) {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [selectedModelId, setSelectedModelId] = useState(DEFAULT_MODEL_ID);
   const [votes, setVotes] = useState<Vote[]>([]);
+  const [agentMode, setAgentMode] = useState<AgentMode>('general');
+  const [userId, setUserId] = useState<string>('');
+  const [notes9Loading, setNotes9Loading] = useState(false);
 
   // Load model from cookie on mount
   useEffect(() => {
@@ -94,7 +99,7 @@ export function CatalystChat({ sessionId }: CatalystChatProps) {
     experimental_throttle: 100,
   });
 
-  const isLoading = status === 'streaming' || status === 'submitted';
+  const isLoading = status === 'streaming' || status === 'submitted' || notes9Loading;
 
   // Load user profile
   useEffect(() => {
@@ -103,6 +108,7 @@ export function CatalystChat({ sessionId }: CatalystChatProps) {
         data: { user },
       } = await supabase.auth.getUser();
       if (user) {
+        setUserId(user.id);
         const { data } = await supabase
           .from('profiles')
           .select('full_name')
@@ -286,7 +292,111 @@ export function CatalystChat({ sessionId }: CatalystChatProps) {
       router.push(`/catalyst/${sid}`);
     }
 
-    // Build message parts
+    // Handle Notes9 mode
+    if (agentMode === 'notes9') {
+      try {
+        setNotes9Loading(true);
+        
+        // Add user message to UI immediately
+        const userMessageId = `user-${Date.now()}`;
+        const userMessage = {
+          id: userMessageId,
+          role: 'user' as const,
+          content: text,
+          parts: [{ type: 'text' as const, text }],
+          createdAt: new Date(),
+        };
+        setMessages((prev) => [...prev, userMessage]);
+
+        // Save user message to DB
+        await saveMessage(sid, 'user', text);
+
+        // Call Notes9 API
+        const response = await fetch('https://z3thrlksg0.execute-api.us-east-1.amazonaws.com/agent/run', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            history: [],
+            query: text,
+            session_id: sid,
+            user_id: userId,
+          }),
+        });
+
+        if (!response.ok) {
+          throw new Error('Notes9 API request failed');
+        }
+
+        const data = await response.json();
+        
+        // Format response with citations as clickable links
+        let formattedAnswer = data.answer;
+        if (data.citations && data.citations.length > 0) {
+          formattedAnswer += '\n\n**References:**\n';
+          data.citations.forEach((citation: any, index: number) => {
+            const sourceId = citation.source_id;
+            const sourceType = citation.source_type;
+
+            let route = '';
+            switch (sourceType) {
+              case 'literature_review':
+                route = `/literature-reviews/${sourceId}`;
+                break;
+              case 'protocol':
+                route = `/protocols/${sourceId}`;
+                break;
+              case 'project':
+                route = `/projects/${sourceId}`;
+                break;
+              case 'lab_note':
+              case 'report':
+              default:
+                route = '';
+            }
+
+            const displayText = formatCitationDisplay(citation);
+            const sourceLabel = sourceType.replace('_', ' ');
+
+            if (route) {
+              formattedAnswer += `\n[${index + 1}] [View ${sourceLabel}](${route}): ${displayText}`;
+            } else {
+              formattedAnswer += `\n[${index + 1}] ${sourceLabel}: ${displayText}`;
+            }
+          });
+        }
+
+        // Add assistant message to UI
+        const assistantMessageId = `assistant-${Date.now()}`;
+        const assistantMessage = {
+          id: assistantMessageId,
+          role: 'assistant' as const,
+          content: formattedAnswer,
+          parts: [{ type: 'text' as const, text: formattedAnswer }],
+          createdAt: new Date(),
+        };
+        setMessages((prev) => [...prev, assistantMessage]);
+
+        // Save assistant message to DB
+        await saveMessage(sid, 'assistant', formattedAnswer);
+
+        // Update session title if first exchange
+        if (messages.length === 0) {
+          await updateSessionTitle(sid, text.slice(0, 50) || 'New conversation');
+        }
+
+        loadSessions();
+      } catch (error) {
+        console.error('Notes9 API error:', error);
+        toast.error('Failed to get response from Notes9');
+      } finally {
+        setNotes9Loading(false);
+      }
+      return;
+    }
+
+    // Build message parts for General mode
     const parts: Array<{ type: 'text'; text: string } | { type: 'file'; url: string; name: string; mediaType: string }> = [];
 
     // Add file attachments first
@@ -451,6 +561,8 @@ export function CatalystChat({ sessionId }: CatalystChatProps) {
           hasMessages={messages.length > 0}
           selectedModelId={selectedModelId}
           onModelChange={setSelectedModelId}
+          agentMode={agentMode}
+          onAgentModeChange={setAgentMode}
         />
       </div>
     </div>

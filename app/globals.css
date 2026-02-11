@@ -260,3 +260,9 @@ body {
 :root:not(.dark) {
   color-scheme: light;
 }
+
+/* Remove sidebar transition during resize to avoid lag between panel and main content */
+[data-sidebar-container][data-resizing] [data-slot="sidebar-container"],
+[data-sidebar-container][data-resizing] [data-slot="sidebar-gap"] {
+  transition: none !important;
+}

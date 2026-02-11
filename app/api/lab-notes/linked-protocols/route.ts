@@ -153,7 +153,7 @@ export async function GET(request: NextRequest) {
           name: "Unnamed protocol",
           version: null,
         },
-      }))
+      }));
 
     return NextResponse.json({ linkedProtocols });
   } catch (error: any) {

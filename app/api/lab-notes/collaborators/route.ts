@@ -44,9 +44,6 @@ export async function GET(request: NextRequest) {
     
     // Check if user is the creator
     const creatorId = labNote.created_by
-    console.log("API - Lab note created_by:", creatorId)
-    console.log("API - Current user id:", user.id)
-    console.log("API - Match:", String(creatorId) === String(user.id))
     
     // Check if user has any access to this lab note
     const hasAccess = String(creatorId) === String(user.id) || await checkUserAccess(supabase, labNoteId, user.id)
@@ -134,17 +131,11 @@ export async function GET(request: NextRequest) {
     }
     
     const isOwner = String(creatorId) === String(user.id)
-    console.log("API - Returning isOwner:", isOwner)
     
     return NextResponse.json({
       collaborators,
       pendingInvitations,
       isOwner,
-      debug: {
-        creatorId,
-        userId: user.id,
-        match: isOwner,
-      }
     })
     
   } catch (error) {

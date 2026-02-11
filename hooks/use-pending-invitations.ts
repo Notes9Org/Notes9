@@ -123,8 +123,6 @@ export function usePendingInvitations() {
         const error = await response.json()
         throw new Error(error.error || "Failed to accept invitation")
       }
-
-      const data = await response.json()
       
       toast({
         title: "Invitation accepted",

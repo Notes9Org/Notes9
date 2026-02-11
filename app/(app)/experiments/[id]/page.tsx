@@ -2,16 +2,8 @@ import { redirect } from 'next/navigation'
 import { createClient } from "@/lib/supabase/server"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import {
-  Breadcrumb,
-  BreadcrumbItem,
-  BreadcrumbLink,
-  BreadcrumbList,
-  BreadcrumbPage,
-  BreadcrumbSeparator,
-} from "@/components/ui/breadcrumb"
+import { SetPageBreadcrumb } from "@/components/layout/breadcrumb-context"
 import { FlaskConical, Calendar, User, FileText, ChevronDown, Plus } from 'lucide-react'
 import { cn } from "@/lib/utils"
 import { notFound } from 'next/navigation'
@@ -34,7 +26,7 @@ export default async function ExperimentDetailPage({
 }) {
   const { id } = await params
   const resolvedSearch = searchParams ? await searchParams : {}
-  const initialTab = resolvedSearch.tab || (resolvedSearch.noteId ? "notes" : "overview")
+  const initialTab = resolvedSearch.tab ?? "notes"
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
 
@@ -114,58 +106,19 @@ export default async function ExperimentDetailPage({
   }
 
   return (
-    <div className="space-y-6">
-      {/* Breadcrumb */}
-      <Breadcrumb>
-        <BreadcrumbList>
-          <BreadcrumbItem>
-            <BreadcrumbLink asChild>
-              <Link href="/dashboard">Dashboard</Link>
-            </BreadcrumbLink>
-          </BreadcrumbItem>
-          <BreadcrumbSeparator />
-          <BreadcrumbItem>
-            <BreadcrumbLink asChild>
-              <Link href="/projects">Projects</Link>
-            </BreadcrumbLink>
-          </BreadcrumbItem>
-          <BreadcrumbSeparator />
-          <BreadcrumbItem>
-            <BreadcrumbLink asChild>
-              <Link href={`/projects/${experiment.projectId}`}>{experiment.project}</Link>
-            </BreadcrumbLink>
-          </BreadcrumbItem>
-          <BreadcrumbSeparator />
-          <BreadcrumbItem>
-            <BreadcrumbLink asChild>
-              <Link href="/experiments">Experiments</Link>
-            </BreadcrumbLink>
-          </BreadcrumbItem>
-          <BreadcrumbSeparator />
-          <BreadcrumbItem>
-            <BreadcrumbPage>{experiment.name}</BreadcrumbPage>
-          </BreadcrumbItem>
-        </BreadcrumbList>
-      </Breadcrumb>
-
+    <div className="flex flex-col gap-6 min-h-0 flex-1">
+      <SetPageBreadcrumb
+        segments={[
+          { label: experiment.project, href: `/projects/${experiment.projectId}` },
+          { label: experiment.name },
+        ]}
+      />
       {/* Header */}
-      <div className="flex items-start justify-between">
+      <div className="flex items-start justify-between shrink-0">
         <div className="space-y-1">
-          <div className="flex items-center gap-2">
-            <h1 className="text-3xl font-bold tracking-tight text-foreground">
-              {experiment.name}
-            </h1>
-            <Badge variant={
-              experiment.status === "in_progress" ? "default" :
-                experiment.status === "completed" ? "secondary" :
-                  "outline"
-            }>
-              {experiment.status.replace("_", " ")}
-            </Badge>
-          </div>
-          <p className="text-muted-foreground">
-            Part of <Link href={`/projects/${experiment.projectId}`} className="text-primary hover:underline">{experiment.project}</Link>
-          </p>
+          <h1 className="text-xl font-bold tracking-tight text-foreground">
+            {experiment.name}
+          </h1>
         </div>
         <ExperimentActions
           experiment={{
@@ -189,7 +142,7 @@ export default async function ExperimentDetailPage({
 
 
       {/* Main Content Tabs */}
-      <Tabs defaultValue={initialTab} className="space-y-3">
+      <Tabs defaultValue={initialTab} className="flex flex-col gap-3 min-h-0 flex-1">
         <TabsList className="flex flex-wrap gap-1 bg-muted/10 p-1 rounded-md">
           <TabsTrigger
             value="overview"
@@ -361,8 +314,8 @@ export default async function ExperimentDetailPage({
           <DataFilesTab experimentId={id} />
         </TabsContent>
 
-        <TabsContent value="notes" className="space-y-4">
-          <LabNotesTab experimentId={id} />
+        <TabsContent value="notes" className="flex flex-1 flex-col min-h-[60vh] mt-2 data-[state=active]:flex">
+          <LabNotesTab experimentId={id} experimentName={experiment.name} projectName={experiment.project} projectId={experiment.projectId} />
         </TabsContent>
       </Tabs>
     </div>

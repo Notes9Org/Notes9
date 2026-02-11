@@ -200,6 +200,9 @@ export default async function DashboardPage() {
                         {exp.name}
                       </p>
                       <p className="text-xs text-muted-foreground">
+                        {exp.project?.name || "No project"}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
                         {exp.assigned_to
                           ? `${exp.assigned_to.first_name} ${exp.assigned_to.last_name}`
                           : "Unassigned"}
@@ -304,7 +307,7 @@ export default async function DashboardPage() {
         </CardHeader>
         <CardContent className="flex flex-wrap gap-2">
           <Link href="/projects/new">
-            <Button>Create New Project</Button>
+            <Button variant="outline">Create New Project</Button>
           </Link>
           <Link href="/experiments/new">
             <Button variant="outline">Add Experiment</Button>

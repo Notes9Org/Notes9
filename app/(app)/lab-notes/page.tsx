@@ -1,12 +1,14 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useCallback, useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
 import LabNotesList from "@/app/(app)/lab-notes-list/[id]/lab-notes-list"
+import { NewLabNoteDialog } from "@/app/(app)/lab-notes/new-lab-note-dialog"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
-import { Loader2 } from "lucide-react"
 import { PendingInvitations } from "@/components/lab-notes/pending-invitations"
+import { Button } from "@/components/ui/button"
+import { Loader2, Plus } from "lucide-react"
 
 type LabNote = {
   id: string
@@ -26,53 +28,57 @@ export default function LabNotesPage() {
   const [selectedNote, setSelectedNote] = useState<LabNote | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [newNoteDialogOpen, setNewNoteDialogOpen] = useState(false)
 
-  useEffect(() => {
-    const fetchNotes = async () => {
-      try {
-        setIsLoading(true)
-        const { data, error } = await supabase
-          .from("lab_notes")
-          .select(`
-            id,
-            title,
-            created_at,
-            note_type,
-            experiment_id,
-            experiment:experiments (
-              name,
-              project:projects ( name )
-            )
-          `)
-          .order("created_at", { ascending: false })
+  const fetchNotes = useCallback(async () => {
+    try {
+      setIsLoading(true)
+      const { data, error } = await supabase
+        .from("lab_notes")
+        .select(`
+          id,
+          title,
+          created_at,
+          note_type,
+          experiment_id,
+          experiment:experiments (
+            name,
+            project:projects ( name )
+          )
+        `)
+        .order("created_at", { ascending: false })
 
-        if (error) throw error
-        const normalized =
-          data?.map((note: any) => ({
-            id: note.id,
-            title: note.title,
-            created_at: note.created_at,
-            note_type: note.note_type,
-            experiment_id: note.experiment_id,
-            project_name: note.experiment?.project?.name ?? null,
-            experiment_name: note.experiment?.name ?? null,
-          })) || []
+      if (error) throw error
+      const normalized =
+        data?.map((note: any) => ({
+          id: note.id,
+          title: note.title,
+          created_at: note.created_at,
+          note_type: note.note_type,
+          experiment_id: note.experiment_id,
+          project_name: note.experiment?.project?.name ?? null,
+          experiment_name: note.experiment?.name ?? null,
+        })) || []
 
-        setNotes(normalized)
-        setSelectedNote(normalized[0] || null)
-      } catch (err: any) {
-        setError(err.message || "Failed to load lab notes.")
-      } finally {
-        setIsLoading(false)
-      }
+      setNotes(normalized)
+      setSelectedNote(normalized[0] || null)
+    } catch (err: any) {
+      setError(err.message || "Failed to load lab notes.")
+    } finally {
+      setIsLoading(false)
     }
-
-    fetchNotes()
   }, [supabase])
 
+  useEffect(() => {
+    fetchNotes()
+  }, [fetchNotes])
+
   const handleNewNote = () => {
-    // Redirect to experiments so the user can add a note within an experiment context.
-    router.push("/experiments")
+    setNewNoteDialogOpen(true)
+  }
+
+  const handleNewNoteCreated = () => {
+    fetchNotes()
   }
 
   const handleSelectNote = (note: LabNote) => {
@@ -84,11 +90,19 @@ export default function LabNotesPage() {
 
   return (
     <div className="space-y-6 max-w-5xl mx-auto">
-      <div className="space-y-1">
-        <h1 className="text-2xl font-semibold text-foreground">Lab Notes</h1>
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <p className="text-muted-foreground">
           Access and manage lab notes across your experiments.
         </p>
+        <Button
+          size="icon"
+          variant="ghost"
+          onClick={handleNewNote}
+          className="shrink-0 size-8 rounded-md text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+          aria-label="New lab note"
+        >
+          <Plus className="size-4" />
+        </Button>
       </div>
 
       {error && (
@@ -116,7 +130,12 @@ export default function LabNotesPage() {
           borderless
         />
       )}
+
+      <NewLabNoteDialog
+        open={newNoteDialogOpen}
+        onOpenChange={setNewNoteDialogOpen}
+        onCreated={handleNewNoteCreated}
+      />
     </div>
   )
 }
-
