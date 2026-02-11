@@ -112,6 +112,22 @@ export function CollaboratorsDialog({
     return name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)
   }
 
+  const getDisplayEmail = (collaborator: (typeof collaborators)[number]) => {
+    return collaborator.profile?.email || "No email available"
+  }
+
+  const getDisplayName = (collaborator: (typeof collaborators)[number]) => {
+    const explicitName = collaborator.profile?.name?.trim()
+    if (explicitName) return explicitName
+
+    const email = getDisplayEmail(collaborator)
+    if (email !== "No email available") {
+      return email.split("@")[0] || email
+    }
+
+    return "Unknown User"
+  }
+
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
@@ -137,10 +153,6 @@ export function CollaboratorsDialog({
           <DialogDescription>
             {labNoteTitle ? `Manage access to "${labNoteTitle}"` : 'Invite collaborators to work on this lab note'}
           </DialogDescription>
-          {/* Debug info - remove after fixing */}
-          <div className="text-xs text-muted-foreground mt-2">
-            Status: {isOwner ? 'Owner' : 'Collaborator'} | Note ID: {labNoteId?.slice(0, 8)}...
-          </div>
         </DialogHeader>
 
         <div className="space-y-4 py-4">
@@ -293,15 +305,15 @@ export function CollaboratorsDialog({
                     <div className="flex items-center gap-3">
                       <Avatar className="h-8 w-8">
                         <AvatarFallback className="bg-primary/10 text-primary text-xs">
-                          {getInitials(collaborator.profile?.name)}
+                          {getInitials(getDisplayName(collaborator))}
                         </AvatarFallback>
                       </Avatar>
                       <div className="min-w-0">
                         <p className="text-sm font-medium truncate">
-                          {collaborator.profile?.name || 'Unknown User'}
+                          {getDisplayName(collaborator)}
                         </p>
                         <p className="text-xs text-muted-foreground truncate">
-                          {collaborator.profile?.email}
+                          {getDisplayEmail(collaborator)}
                         </p>
                       </div>
                     </div>

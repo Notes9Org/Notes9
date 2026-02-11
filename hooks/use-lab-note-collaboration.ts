@@ -59,7 +59,10 @@ export function useLabNoteCollaboration(
 
     setIsLoading(true)
     try {
-      const response = await fetch(`/api/lab-notes/collaborators?labNoteId=${labNoteId}`)
+      const response = await fetch(
+        `/api/lab-notes/collaborators?labNoteId=${encodeURIComponent(labNoteId)}`,
+        { cache: "no-store" }
+      )
 
       if (response.status === 403) {
         setCollaborators([])
@@ -148,13 +151,15 @@ export function useLabNoteCollaboration(
     if (!labNoteId) return false
 
     try {
-      const response = await fetch(`/api/lab-notes/collaborators?labNoteId=${labNoteId}&userId=${userId}`, {
+      const response = await fetch(
+        `/api/lab-notes/collaborators?labNoteId=${encodeURIComponent(labNoteId)}&userId=${encodeURIComponent(userId)}`,
+        {
         method: 'DELETE',
       })
 
       if (!response.ok) {
         const error = await response.json()
-        throw new Error(error.error || "Failed to remove collaborator")
+        throw new Error(error.details ? `${error.error}: ${error.details}` : (error.error || "Failed to remove collaborator"))
       }
 
       toast({
@@ -195,7 +200,7 @@ export function useLabNoteCollaboration(
 
       if (!response.ok) {
         const error = await response.json()
-        throw new Error(error.error || "Failed to update permission")
+        throw new Error(error.details ? `${error.error}: ${error.details}` : (error.error || "Failed to update permission"))
       }
 
       toast({

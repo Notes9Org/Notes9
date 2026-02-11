@@ -194,12 +194,21 @@ export async function POST(request: NextRequest) {
       }
 
       if (!emailSent) {
-        const { data: existingUser, error: existingUserError } =
-          await adminClient.auth.admin.getUserByEmail(normalizedEmail)
+        const { data: existingProfile, error: existingProfileError } = await adminClient
+          .from("profiles")
+          .select("id")
+          .ilike("email", normalizedEmail)
+          .maybeSingle()
 
-        if (existingUserError) {
-          console.error("Failed to lookup existing user by email:", existingUserError)
-        } else if (existingUser?.user) {
+        if (existingProfileError) {
+          console.error("Failed to lookup existing profile by email:", existingProfileError)
+        } else if (existingProfile?.id) {
+          const { data: existingUser, error: existingUserError } =
+            await adminClient.auth.admin.getUserById(existingProfile.id)
+
+          if (existingUserError || !existingUser?.user) {
+            console.error("Failed to lookup existing auth user by id:", existingUserError)
+          } else {
           const existingMetadata = existingUser.user.user_metadata || {}
           const { error: updateError } = await adminClient.auth.admin.updateUserById(
             existingUser.user.id,
@@ -216,6 +225,7 @@ export async function POST(request: NextRequest) {
           if (updateError) {
             console.error("Failed to update user metadata for invite:", updateError)
             emailError = emailError || updateError.message
+          }
           }
         }
       }

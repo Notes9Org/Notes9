@@ -1,5 +1,116 @@
 import { createClient } from "@/lib/supabase/server"
+import { createAdminClient } from "@/lib/supabase/admin-client"
 import { NextRequest, NextResponse } from "next/server"
+
+async function acceptWithAdminFallback(token: string, userId: string, userEmail: string | null) {
+  const adminClient = createAdminClient()
+  if (!adminClient) {
+    return {
+      success: false as const,
+      status: 500,
+      error: "Supabase service role key is not configured",
+    }
+  }
+
+  const { data: invitation, error: invitationError } = await adminClient
+    .from("lab_note_invitations")
+    .select("id, lab_note_id, email, permission_level, status, expires_at, invited_by")
+    .eq("token", token)
+    .maybeSingle()
+
+  if (invitationError) {
+    console.error("Fallback invitation lookup failed:", invitationError)
+    return {
+      success: false as const,
+      status: 500,
+      error: "Failed to look up invitation",
+    }
+  }
+
+  if (!invitation) {
+    return {
+      success: false as const,
+      status: 404,
+      error: "Invitation not found",
+    }
+  }
+
+  if (invitation.status !== "pending") {
+    return {
+      success: false as const,
+      status: 400,
+      error: `Invitation has already been ${invitation.status}`,
+    }
+  }
+
+  if (new Date(invitation.expires_at) <= new Date()) {
+    return {
+      success: false as const,
+      status: 400,
+      error: "Invitation has expired",
+    }
+  }
+
+  const normalizedUserEmail = (userEmail || "").toLowerCase().trim()
+  const normalizedInvitationEmail = (invitation.email || "").toLowerCase().trim()
+  if (!normalizedUserEmail || normalizedUserEmail !== normalizedInvitationEmail) {
+    return {
+      success: false as const,
+      status: 400,
+      error: "Invitation email does not match your account",
+    }
+  }
+
+  const now = new Date().toISOString()
+
+  const { error: accessError } = await adminClient
+    .from("lab_note_access")
+    .upsert(
+      {
+        lab_note_id: invitation.lab_note_id,
+        user_id: userId,
+        permission_level: invitation.permission_level,
+        granted_by: invitation.invited_by ?? null,
+        updated_at: now,
+      },
+      { onConflict: "lab_note_id,user_id" }
+    )
+
+  if (accessError) {
+    console.error("Fallback upsert into lab_note_access failed:", accessError)
+    return {
+      success: false as const,
+      status: 500,
+      error: "Failed to grant lab note access",
+    }
+  }
+
+  const { error: updateInvitationError } = await adminClient
+    .from("lab_note_invitations")
+    .update({
+      status: "accepted",
+      accepted_at: now,
+      accepted_by: userId,
+      updated_at: now,
+    })
+    .eq("id", invitation.id)
+
+  if (updateInvitationError) {
+    console.error("Fallback invitation status update failed:", updateInvitationError)
+    return {
+      success: false as const,
+      status: 500,
+      error: "Failed to update invitation status",
+    }
+  }
+
+  return {
+    success: true as const,
+    status: 200,
+    labNoteId: invitation.lab_note_id,
+    permissionLevel: invitation.permission_level,
+  }
+}
 
 // Accept an invitation to collaborate on a lab note
 export async function POST(request: NextRequest) {
@@ -32,27 +143,34 @@ export async function POST(request: NextRequest) {
       "accept_lab_note_invitation",
       { p_token: token }
     )
-    
+
+    if (!acceptError && result?.success) {
+      return NextResponse.json({
+        success: true,
+        labNoteId: result.lab_note_id,
+        permissionLevel: result.permission_level,
+        message: "Invitation accepted successfully",
+      })
+    }
+
     if (acceptError) {
-      console.error("Error accepting invitation:", acceptError)
+      console.error("Error accepting invitation via RPC, trying fallback:", acceptError)
+    } else {
+      console.error("RPC accept_invite returned failure, trying fallback:", result)
+    }
+
+    const fallback = await acceptWithAdminFallback(token, user.id, user.email ?? null)
+    if (!fallback.success) {
       return NextResponse.json(
-        { error: "Failed to accept invitation" },
-        { status: 500 }
+        { error: fallback.error || "Failed to accept invitation" },
+        { status: fallback.status }
       )
     }
-    
-    // Check the result
-    if (!result.success) {
-      return NextResponse.json(
-        { error: result.error || "Failed to accept invitation" },
-        { status: 400 }
-      )
-    }
-    
+
     return NextResponse.json({
       success: true,
-      labNoteId: result.lab_note_id,
-      permissionLevel: result.permission_level,
+      labNoteId: fallback.labNoteId,
+      permissionLevel: fallback.permissionLevel,
       message: "Invitation accepted successfully",
     })
     

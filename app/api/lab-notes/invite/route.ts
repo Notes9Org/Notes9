@@ -93,22 +93,29 @@ export async function POST(
       .select("email")
       .eq("id", user.id)
       .single()
-    
-    if (currentUserProfile?.email?.toLowerCase() === normalizedEmail) {
+
+    const currentUserEmail =
+      currentUserProfile?.email?.toLowerCase() ||
+      user.email?.toLowerCase() ||
+      null
+
+    if (currentUserEmail === normalizedEmail) {
       return NextResponse.json(
         { error: "You cannot invite yourself" },
         { status: 400 }
       )
     }
     
-    // Check if there's already a pending invitation for this email
-    const { data: existingInvitation, error: existingInviteError } = await supabase
+    // Check if there's already a pending invitation for this email.
+    // Use a list query (not maybeSingle) so duplicate historical rows never throw.
+    const { data: existingInvitations, error: existingInviteError } = await supabase
       .from("lab_note_invitations")
-      .select("id, status")
+      .select("id, status, created_at")
       .eq("lab_note_id", labNoteId)
-      .eq("email", normalizedEmail)
+      .ilike("email", normalizedEmail)
       .eq("status", "pending")
-      .maybeSingle()
+      .order("created_at", { ascending: false })
+      .limit(1)
 
     if (existingInviteError) {
       console.error("Error checking existing invitations:", existingInviteError)
@@ -118,7 +125,7 @@ export async function POST(
       )
     }
     
-    if (existingInvitation) {
+    if (existingInvitations && existingInvitations.length > 0) {
       return NextResponse.json(
         { error: "An invitation is already pending for this email" },
         { status: 409 }
@@ -129,7 +136,7 @@ export async function POST(
     const { data: existingUser } = await supabase
       .from("profiles")
       .select("id")
-      .eq("email", normalizedEmail)
+      .ilike("email", normalizedEmail)
       .maybeSingle()
     
     if (existingUser) {
@@ -172,6 +179,12 @@ export async function POST(
     
     if (inviteError) {
       console.error("Error creating invitation:", inviteError)
+      if (inviteError.code === "23505") {
+        return NextResponse.json(
+          { error: "An invitation is already pending for this email" },
+          { status: 409 }
+        )
+      }
       return NextResponse.json(
         { error: "Failed to create invitation" },
         { status: 500 }
@@ -206,12 +219,21 @@ export async function POST(
       }
 
       if (!emailSent) {
-        const { data: existingUser, error: existingUserError } =
-          await adminClient.auth.admin.getUserByEmail(normalizedEmail)
+        const { data: existingProfile, error: existingProfileError } = await adminClient
+          .from("profiles")
+          .select("id")
+          .ilike("email", normalizedEmail)
+          .maybeSingle()
 
-        if (existingUserError) {
-          console.error("Failed to lookup existing user by email:", existingUserError)
-        } else if (existingUser?.user) {
+        if (existingProfileError) {
+          console.error("Failed to lookup existing profile by email:", existingProfileError)
+        } else if (existingProfile?.id) {
+          const { data: existingUser, error: existingUserError } =
+            await adminClient.auth.admin.getUserById(existingProfile.id)
+
+          if (existingUserError || !existingUser?.user) {
+            console.error("Failed to lookup existing auth user by id:", existingUserError)
+          } else {
           const existingMetadata = existingUser.user.user_metadata || {}
           const { error: updateError } = await adminClient.auth.admin.updateUserById(
             existingUser.user.id,
@@ -228,6 +250,7 @@ export async function POST(
           if (updateError) {
             console.error("Failed to update user metadata for invite:", updateError)
             emailError = emailError || updateError.message
+          }
           }
         }
       }
