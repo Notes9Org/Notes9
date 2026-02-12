@@ -55,7 +55,7 @@ export function CatalystChat({ sessionId }: CatalystChatProps) {
   const hasLoadedSessionRef = useRef<string | null>(null);
   // Use ref for model so transport can access current value without recreating
   const currentModelRef = useRef(selectedModelId);
-  
+
   // Keep ref in sync with state
   useEffect(() => {
     currentModelRef.current = selectedModelId;
@@ -296,7 +296,7 @@ export function CatalystChat({ sessionId }: CatalystChatProps) {
     if (agentMode === 'notes9') {
       try {
         setNotes9Loading(true);
-        
+
         // Add user message to UI immediately
         const userMessageId = `user-${Date.now()}`;
         const userMessage = {
@@ -330,7 +330,7 @@ export function CatalystChat({ sessionId }: CatalystChatProps) {
         }
 
         const data = await response.json();
-        
+
         // Format response with citations as clickable links
         let formattedAnswer = data.answer;
         if (data.citations && data.citations.length > 0) {
@@ -443,7 +443,7 @@ export function CatalystChat({ sessionId }: CatalystChatProps) {
       if (savedMessageIds.has(messageId)) {
         // Step 1: Delete trailing messages from DB (this message and all after it)
         await deleteTrailingMessages({ id: messageId });
-        
+
         // Remove deleted IDs from savedMessageIds
         const newSavedIds = new Set<string>();
         for (let i = 0; i < messageIndex; i++) {
@@ -488,7 +488,7 @@ export function CatalystChat({ sessionId }: CatalystChatProps) {
     // Delete from DB if it was saved
     if (savedMessageIds.has(lastAssistantMessage.id)) {
       await deleteTrailingMessages({ id: lastAssistantMessage.id });
-      
+
       // Update savedMessageIds - remove the assistant message
       const newSavedIds = new Set(savedMessageIds);
       newSavedIds.delete(lastAssistantMessage.id);
@@ -511,6 +511,7 @@ export function CatalystChat({ sessionId }: CatalystChatProps) {
         loading={sessionsLoading}
         isOpen={sidebarOpen}
         onToggle={() => setSidebarOpen(!sidebarOpen)}
+        hasMessages={messages.length > 0}
       />
 
       {/* Main Chat Area */}
