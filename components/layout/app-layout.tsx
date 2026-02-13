@@ -8,7 +8,7 @@ import { RightSidebar } from "./right-sidebar"
 import { BreadcrumbProvider, useBreadcrumb } from "./breadcrumb-context"
 import { Button } from "@/components/ui/button"
 import { ResizeHandle } from "@/components/ui/resize-handle"
-import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar"
+import { SidebarProvider, SidebarInset, useSidebar } from "@/components/ui/sidebar"
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet"
 import { useResizable } from "@/hooks/use-resizable"
 import { Menu, X, Sparkles, ChevronRight, Sun, Moon } from 'lucide-react'
@@ -72,6 +72,22 @@ interface AppLayoutProps {
   children: ReactNode
 }
 
+function MobileMenuButton() {
+  const { setOpenMobile, isMobile } = useSidebar()
+  if (!isMobile) return null
+  return (
+    <Button
+      variant="ghost"
+      size="icon"
+      className="size-8 shrink-0"
+      onClick={() => setOpenMobile(true)}
+      aria-label="Open navigation"
+    >
+      <Menu className="size-4" />
+    </Button>
+  )
+}
+
 export function AppLayout({ children }: AppLayoutProps) {
   const { setTheme, resolvedTheme } = useTheme()
   const [rightSidebarOpen, setRightSidebarOpen] = useState(false)
@@ -96,6 +112,14 @@ export function AppLayout({ children }: AppLayoutProps) {
 
   // Left sidebar: open/collapsed drives column width; when open, width is resizable. Start open (expanded) so sidebar comes open when the app loads.
   const [sidebarOpen, setSidebarOpen] = useState(true)
+
+  // When switching to mobile, ensure the sidebar is in expanded (open) mode
+  // so the Sheet overlay shows full content instead of the collapsed icon-only view
+  useEffect(() => {
+    if (isMobile && !sidebarOpen) {
+      setSidebarOpen(true)
+    }
+  }, [isMobile, sidebarOpen])
   const leftSidebar = useResizable({
     initialWidth: isMobile ? 0 : isTablet ? 240 : 280,
     minWidth: 200,
@@ -122,8 +146,8 @@ export function AppLayout({ children }: AppLayoutProps) {
           '--sidebar-width-icon': '3rem',
         } as React.CSSProperties}
       >
-        {/* Left Sidebar - open/collapsed from context; when open, width is resizable */}
-        {!isMobile && (
+        {/* Left Sidebar - Desktop: inline resizable panel, Mobile: uses Sidebar's built-in Sheet */}
+        {!isMobile ? (
           <div className="flex shrink-0 h-full min-h-0">
             <div
               data-sidebar-container
@@ -146,14 +170,21 @@ export function AppLayout({ children }: AppLayoutProps) {
               />
             )}
           </div>
+        ) : (
+          /* On mobile, AppSidebar renders its own Sheet overlay via the Sidebar component */
+          <AppSidebar />
         )}
 
         {/* Main Content Area */}
         <SidebarInset className="flex flex-col overflow-hidden flex-1 min-w-0">
           {/* Top Bar */}
           <header className="h-12 sm:h-14 border-b border-border flex items-center justify-between px-3 sm:px-4 shrink-0">
-            <div className="min-w-0 flex-1 truncate">
-              <HeaderTitle />
+            <div className="flex items-center gap-2 min-w-0 flex-1 truncate">
+              {/* Hamburger menu for mobile - uses sidebar context */}
+              <MobileMenuButton />
+              <div className="min-w-0 flex-1 truncate">
+                <HeaderTitle />
+              </div>
             </div>
 
             <div className="flex items-center gap-1 sm:gap-2">
