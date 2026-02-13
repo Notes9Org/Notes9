@@ -979,7 +979,7 @@ export function TiptapEditor({
         resizable: true,
         allowTableNodeSelection: true,
         handleWidth: 5,
-        cellMinWidth: 175,
+        cellMinWidth: 75,
         lastColumnResizable: true,
       }),
       TableRow,
@@ -3214,7 +3214,8 @@ export function TiptapEditor({
             border: 1px solid var(--border);
             padding: 0.35rem 0.5rem;
             vertical-align: top;
-            min-width: 175px !important;
+            min-width: 75px !important;
+            width: 175px;
             position: relative;
           }
           .ProseMirror table th {
