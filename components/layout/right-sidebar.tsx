@@ -697,78 +697,78 @@ export function RightSidebar() {
                 </Button>
               )}
               {!isExpanded && (
-              <>
-                <ScrollArea className="w-full whitespace-nowrap scrollbar-hide">
-                  <div className="flex items-center gap-1">
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <button
-                          aria-label="Chat history"
-                          className={cn(
-                            "px-3 py-1.5 rounded-md flex items-center justify-center transition-colors",
-                            currentSessionId ? "bg-accent/40 text-foreground" : "text-muted-foreground hover:text-foreground hover:bg-muted/30"
-                          )}
-                        >
-                          <History className="size-3.5" />
-                        </button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="start" className="w-[280px] max-w-[min(280px,90vw)] p-0 overflow-hidden" sideOffset={4}>
-                        <div className="p-2 text-xs font-semibold text-muted-foreground/80 uppercase tracking-wider border-b shrink-0">
-                          History
-                        </div>
-                        <ScrollArea className="max-h-[280px] overflow-hidden">
-                          <div className="p-1 min-w-0">
-                            {sessions.length === 0 ? (
-                              <div className="py-6 text-center text-muted-foreground text-xs">No history yet.</div>
-                            ) : (
-                              sessions.map(session => (
-                                <div key={session.id} className="flex items-center gap-1 group/hist w-full min-w-0 rounded-md">
-                                  <button
-                                    type="button"
-                                    onClick={() => loadSession(session.id)}
-                                    className={cn(
-                                      "flex-1 min-w-0 flex items-center justify-between gap-2 px-3 py-2 text-left text-sm rounded-md transition-colors overflow-hidden",
-                                      currentSessionId === session.id
-                                        ? "bg-accent text-accent-foreground"
-                                        : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
-                                    )}
-                                  >
-                                    <span className="truncate min-w-0 flex-1">{session.title || 'New conversation'}</span>
-                                    <span className="text-[10px] shrink-0 opacity-70">
-                                      {new Date(session.updated_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
-                                    </span>
-                                  </button>
-                                  <Button
-                                    type="button"
-                                    variant="ghost"
-                                    size="icon"
-                                    className="h-7 w-7 shrink-0 text-muted-foreground hover:text-destructive flex-shrink-0"
-                                    onClick={(e) => handleDeleteSession(e, session.id)}
-                                    aria-label="Delete chat"
-                                  >
-                                    <Trash2 className="size-3.5" />
-                                  </Button>
-                                </div>
-                              ))
+                <>
+                  <ScrollArea className="w-full whitespace-nowrap scrollbar-hide">
+                    <div className="flex items-center gap-1">
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <button
+                            aria-label="Chat history"
+                            className={cn(
+                              "px-3 py-1.5 rounded-md flex items-center justify-center transition-colors",
+                              currentSessionId ? "bg-accent/40 text-foreground" : "text-muted-foreground hover:text-foreground hover:bg-muted/30"
                             )}
+                          >
+                            <History className="size-3.5" />
+                          </button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="start" className="w-[280px] max-w-[min(280px,90vw)] p-0 overflow-hidden" sideOffset={4}>
+                          <div className="p-2 text-xs font-semibold text-muted-foreground/80 uppercase tracking-wider border-b shrink-0">
+                            History
                           </div>
-                        </ScrollArea>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
+                          <ScrollArea className="max-h-[280px] overflow-hidden">
+                            <div className="p-1 min-w-0">
+                              {sessions.length === 0 ? (
+                                <div className="py-6 text-center text-muted-foreground text-xs">No history yet.</div>
+                              ) : (
+                                sessions.map(session => (
+                                  <div key={session.id} className="flex items-center gap-1 group/hist w-full min-w-0 rounded-md">
+                                    <button
+                                      type="button"
+                                      onClick={() => loadSession(session.id)}
+                                      className={cn(
+                                        "flex-1 min-w-0 flex items-center justify-between gap-2 px-3 py-2 text-left text-sm rounded-md transition-colors overflow-hidden",
+                                        currentSessionId === session.id
+                                          ? "bg-accent text-accent-foreground"
+                                          : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
+                                      )}
+                                    >
+                                      <span className="truncate min-w-0 flex-1">{session.title || 'New conversation'}</span>
+                                      <span className="text-[10px] shrink-0 opacity-70">
+                                        {new Date(session.updated_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
+                                      </span>
+                                    </button>
+                                    <Button
+                                      type="button"
+                                      variant="ghost"
+                                      size="icon"
+                                      className="h-7 w-7 shrink-0 text-muted-foreground hover:text-destructive flex-shrink-0"
+                                      onClick={(e) => handleDeleteSession(e, session.id)}
+                                      aria-label="Delete chat"
+                                    >
+                                      <Trash2 className="size-3.5" />
+                                    </Button>
+                                  </div>
+                                ))
+                              )}
+                            </div>
+                          </ScrollArea>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
 
-                    <button
-                      onClick={handleNewChat}
-                      className={cn(
-                        "px-3 py-1.5 rounded-md flex items-center gap-2 transition-colors",
-                        !currentSessionId ? "bg-accent/40 text-foreground" : "text-muted-foreground hover:text-foreground hover:bg-muted/30"
-                      )}
-                    >
-                      <PenBox className="size-3.5" />
-                      <span>New Chat</span>
-                    </button>
-                  </div>
-                </ScrollArea>
-              </>
+                      <button
+                        onClick={handleNewChat}
+                        className={cn(
+                          "px-3 py-1.5 rounded-md flex items-center gap-2 transition-colors",
+                          !currentSessionId ? "bg-accent/40 text-foreground" : "text-muted-foreground hover:text-foreground hover:bg-muted/30"
+                        )}
+                      >
+                        <PenBox className="size-3.5" />
+                        <span>New Chat</span>
+                      </button>
+                    </div>
+                  </ScrollArea>
+                </>
               )}
             </div>
 
@@ -850,65 +850,76 @@ export function RightSidebar() {
 
             {/* Main chat area (narrow: only this; full screen: right side) */}
             <div className="flex-1 flex flex-col min-h-0 min-w-0 overflow-hidden">
-          {messages.length === 0 ? (
-            // --- Empty State: input at bottom; full screen = compact bar, narrow = full input card ---
-            <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
-              <div className="flex-1 min-h-0" />
-
-              {/* Input at bottom (General, model, textarea) */}
-              <div className="flex-shrink-0 p-4 bg-background/95 backdrop-blur border-t">
-                <div className="max-w-3xl mx-auto min-w-0">
-                  {renderCursorInput()}
-                </div>
-              </div>
-            </div>
-          ) : (
-            // --- Active Chat View ---
-            <div className="flex-1 flex flex-col min-h-0 overflow-hidden relative">
-              {/* Messages Area - single scroll container */}
-              <ScrollArea className="flex-1 min-h-0 basis-0 overflow-hidden">
-                <div className="flex flex-col gap-6 p-4 pt-5 pb-20 max-w-3xl mx-auto w-full min-w-0">
-                  {messages.map((message, index) => {
-                    const content = getMessageContent(message);
-                    const isLastAssistant = message.role === 'assistant' && index === messages.length - 1;
-                    return (
-                      <div key={message.id} className={cn('group/message flex gap-4 w-full', message.role === 'user' ? 'justify-end' : 'justify-start')}>
-                        {message.role === 'assistant' && (
-                          <div className="size-7 shrink-0 flex items-center justify-center rounded-full bg-background border shadow-sm mt-1">
-                            <Sparkles className="size-3.5 text-primary" />
-                          </div>
-                        )}
-                        <div className={cn("flex flex-col min-w-0 max-w-[85%]", message.role === 'user' ? "items-end" : "items-start")}>
-                          <div className={cn("text-sm leading-relaxed whitespace-pre-wrap break-words overflow-visible", message.role === 'user' ? "bg-primary/5 text-foreground px-4 py-2.5 rounded-2xl rounded-tr-sm" : "prose prose-sm dark:prose-invert max-w-none min-w-0 text-foreground")}>
-                            {message.role === 'user' ? content : <MarkdownRenderer content={content} className="text-sm text-foreground" />}
-                          </div>
-                          <div className="mt-1 opacity-0 group-hover/message:opacity-100 transition-opacity px-1">
-                            <MessageActions sessionId={currentSessionId} messageId={message.id} messageRole={message.role as 'user' | 'assistant'} messageContent={content} isLoading={isLoading} onRegenerate={isLastAssistant ? () => regenerate() : undefined} compact />
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  })}
-                  {isLoading && messages.at(-1)?.role === 'user' && (
-                    <div className="flex gap-3 items-center justify-start w-full">
-                      <div className="size-7 shrink-0 flex items-center justify-center rounded-full bg-background border shadow-sm">
-                        <Sparkles className="size-3.5 text-primary animate-pulse" />
-                      </div>
-                      <div className="text-sm text-muted-foreground italic">Thinking...</div>
+              {messages.length === 0 ? (
+                // --- Empty State: input at bottom; full screen = compact bar, narrow = full input card ---
+                <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
+                  <div className="flex-1 flex flex-col items-center justify-center px-4">
+                    <div className="relative mb-2">
+                      <div className="absolute inset-0 animate-pulse rounded-full bg-gradient-to-r from-orange-400 to-pink-500 opacity-25 blur-xl" />
+                      <Sparkles className="relative size-8 text-orange-500" />
                     </div>
-                  )}
-                  <div ref={messagesEndRef} className="h-4" />
-                </div>
-              </ScrollArea>
+                    <h2 className="text-lg font-bold tracking-tight bg-gradient-to-r from-orange-500 to-pink-600 bg-clip-text text-transparent">
+                      Catalyst AI
+                    </h2>
+                    <p className="text-muted-foreground text-center max-w-xs text-sm">
+                      Your intelligent research assistant. Ask anything about your lab notes, experiments, or protocols.
+                    </p>
+                  </div>
 
-              {/* Fixed Input at Bottom */}
-              <div className="flex-shrink-0 p-4 bg-background/95 backdrop-blur z-20 border-t">
-                <div className="max-w-3xl mx-auto min-w-0">
-                  {renderCursorInput()}
+                  {/* Input at bottom (General, model, textarea) */}
+                  <div className="flex-shrink-0 p-4 bg-background/95 backdrop-blur border-t">
+                    <div className="max-w-3xl mx-auto min-w-0">
+                      {renderCursorInput()}
+                    </div>
+                  </div>
                 </div>
-              </div>
-            </div>
-          )}
+              ) : (
+                // --- Active Chat View ---
+                <div className="flex-1 flex flex-col min-h-0 overflow-hidden relative">
+                  {/* Messages Area - single scroll container */}
+                  <ScrollArea className="flex-1 min-h-0 basis-0 overflow-hidden">
+                    <div className="flex flex-col gap-6 p-4 pt-5 pb-20 max-w-3xl mx-auto w-full min-w-0">
+                      {messages.map((message, index) => {
+                        const content = getMessageContent(message);
+                        const isLastAssistant = message.role === 'assistant' && index === messages.length - 1;
+                        return (
+                          <div key={message.id} className={cn('group/message flex gap-4 w-full', message.role === 'user' ? 'justify-end' : 'justify-start')}>
+                            {message.role === 'assistant' && (
+                              <div className="size-7 shrink-0 flex items-center justify-center rounded-full bg-background border shadow-sm mt-1">
+                                <Sparkles className="size-3.5 text-primary" />
+                              </div>
+                            )}
+                            <div className={cn("flex flex-col min-w-0 max-w-[85%]", message.role === 'user' ? "items-end" : "items-start")}>
+                              <div className={cn("text-sm leading-relaxed whitespace-pre-wrap break-words overflow-visible", message.role === 'user' ? "bg-primary/5 text-foreground px-4 py-2.5 rounded-2xl rounded-tr-sm" : "prose prose-sm dark:prose-invert max-w-none min-w-0 text-foreground")}>
+                                {message.role === 'user' ? content : <MarkdownRenderer content={content} className="text-sm text-foreground" />}
+                              </div>
+                              <div className="mt-1 opacity-0 group-hover/message:opacity-100 transition-opacity px-1">
+                                <MessageActions sessionId={currentSessionId} messageId={message.id} messageRole={message.role as 'user' | 'assistant'} messageContent={content} isLoading={isLoading} onRegenerate={isLastAssistant ? () => regenerate() : undefined} compact />
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                      {isLoading && messages.at(-1)?.role === 'user' && (
+                        <div className="flex gap-3 items-center justify-start w-full">
+                          <div className="size-7 shrink-0 flex items-center justify-center rounded-full bg-background border shadow-sm">
+                            <Sparkles className="size-3.5 text-primary animate-pulse" />
+                          </div>
+                          <div className="text-sm text-muted-foreground italic">Thinking...</div>
+                        </div>
+                      )}
+                      <div ref={messagesEndRef} className="h-4" />
+                    </div>
+                  </ScrollArea>
+
+                  {/* Fixed Input at Bottom */}
+                  <div className="flex-shrink-0 p-4 bg-background/95 backdrop-blur z-20 border-t">
+                    <div className="max-w-3xl mx-auto min-w-0">
+                      {renderCursorInput()}
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </>

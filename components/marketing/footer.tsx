@@ -27,9 +27,15 @@ export function Footer() {
               <div className="w-8 h-8 relative">
                 <Image
                   src="/notes9-logo.png"
-                  alt="Notes9"
+                  alt="Notes9 Logo"
                   fill
-                  className="object-contain"
+                  className="object-contain dark:hidden"
+                />
+                <Image
+                  src="/Dark mode_Notes9_logo.png"
+                  alt="Notes9 Logo"
+                  fill
+                  className="hidden dark:block object-contain scale-[1.75]"
                 />
               </div>
               <span className="text-xl font-bold text-foreground tracking-tight">Notes9</span>

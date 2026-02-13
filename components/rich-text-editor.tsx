@@ -1,5 +1,6 @@
 "use client"
 
+import React, { useState, useCallback, useEffect } from 'react'
 import { useEditor, EditorContent } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
 import { Table } from '@tiptap/extension-table'
@@ -35,6 +36,9 @@ export function RichTextEditor({
   disabled = false,
   className
 }: RichTextEditorProps) {
+  const [tableCols, setTableCols] = useState(3)
+  const editorRef = React.useRef<HTMLDivElement>(null)
+
   const editor = useEditor({
     extensions: [
       StarterKit,
@@ -55,6 +59,34 @@ export function RichTextEditor({
     editable: !disabled,
     immediatelyRender: false,
   })
+
+  // Handle table click to show controls
+  useEffect(() => {
+    if (!editorRef.current) return
+
+    const handleMouseUp = (e: MouseEvent) => {
+      const target = e.target as HTMLElement
+      const table = target.closest('table') as HTMLTableElement
+      setSelectedTable(table)
+    }
+
+    editorRef.current.addEventListener('mouseup', handleMouseUp)
+    return () => {
+      editorRef.current?.removeEventListener('mouseup', handleMouseUp)
+    }
+  }, [])
+
+  // Close table controls when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (!editorRef.current?.contains(e.target as Node)) {
+        setSelectedTable(null)
+      }
+    }
+
+    document.addEventListener('click', handleClickOutside)
+    return () => document.removeEventListener('click', handleClickOutside)
+  }, [])
 
   if (!editor) {
     return (
@@ -145,20 +177,20 @@ export function RichTextEditor({
           type="button"
           variant="ghost"
           size="sm"
-          onClick={addTable}
+          onClick={() => editor.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run()}
           disabled={disabled}
           title="Insert Table"
         >
           <TableIcon className="h-4 w-4" />
         </Button>
 
-        {isTableActive && (
+        {editor.isActive('table') && (
           <>
             <Button
               type="button"
               variant="ghost"
               size="sm"
-              onClick={addColumnBefore}
+              onClick={() => editor.chain().focus().addColumnBefore().run()}
               disabled={disabled}
               title="Add Column Before"
             >
@@ -170,7 +202,7 @@ export function RichTextEditor({
               type="button"
               variant="ghost"
               size="sm"
-              onClick={addRowBefore}
+              onClick={() => editor.chain().focus().addRowBefore().run()}
               disabled={disabled}
               title="Add Row Before"
             >
@@ -182,7 +214,7 @@ export function RichTextEditor({
               type="button"
               variant="ghost"
               size="sm"
-              onClick={deleteColumn}
+              onClick={() => editor.chain().focus().deleteColumn().run()}
               disabled={disabled}
               title="Delete Column"
             >
@@ -194,7 +226,7 @@ export function RichTextEditor({
               type="button"
               variant="ghost"
               size="sm"
-              onClick={deleteRow}
+              onClick={() => editor.chain().focus().deleteRow().run()}
               disabled={disabled}
               title="Delete Row"
             >
@@ -206,7 +238,7 @@ export function RichTextEditor({
               type="button"
               variant="ghost"
               size="sm"
-              onClick={deleteTable}
+              onClick={() => editor.chain().focus().deleteTable().run()}
               disabled={disabled}
               title="Delete Table"
             >
@@ -218,10 +250,12 @@ export function RichTextEditor({
       </div>
 
       {/* Editor */}
-      <EditorContent
-        editor={editor}
-        className="prose prose-sm max-w-none p-3 min-h-[120px] focus-within:outline-none"
-      />
+      <div ref={editorRef} className="relative">
+        <EditorContent
+          editor={editor}
+          className="prose prose-sm max-w-none p-3 min-h-[120px] focus-within:outline-none"
+        />
+      </div>
     </div>
   )
 }
