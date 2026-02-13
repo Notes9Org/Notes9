@@ -553,7 +553,45 @@ export function LabNotesTab({
           .replace(/var\([^)]+\)/gi, '#000000');
       };
 
-      const cleanContent = sanitizeHtml(formData.content || "");
+      // Process comments for export
+      const processCommentsForExport = (html: string) => {
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(html, 'text/html');
+        const comments: any[] = [];
+        const commentMarks = doc.querySelectorAll('span[data-comment]');
+
+        commentMarks.forEach((mark, index) => {
+          const id = mark.getAttribute('data-id');
+          const author = mark.getAttribute('data-author');
+          const content = mark.getAttribute('data-content');
+          const createdAt = mark.getAttribute('data-created-at');
+
+          if (content) {
+            const commentNum = comments.length + 1;
+            comments.push({ id, author, content, createdAt, num: commentNum });
+
+            // Add visual indicator to the text
+            const sup = doc.createElement('sup');
+            sup.textContent = `[${commentNum}]`;
+            sup.style.color = '#7c3aed';
+            sup.style.fontWeight = 'bold';
+            sup.style.marginLeft = '2px';
+            mark.appendChild(sup);
+
+            // Highlight the commented text
+            (mark as HTMLElement).style.backgroundColor = '#f3e8ff';
+            (mark as HTMLElement).style.borderRadius = '2px';
+          }
+        });
+
+        return {
+          content: doc.body.innerHTML,
+          comments
+        };
+      };
+
+      const { content: processedContent, comments } = processCommentsForExport(formData.content || "");
+      const cleanContent = sanitizeHtml(processedContent);
 
       // Write isolated HTML with comprehensive print-friendly styles
       iframeDoc.open();
@@ -570,110 +608,96 @@ export function LabNotesTab({
             /* Base */
             body {
               font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-              font-size: 12pt;
-              line-height: 1.6;
+              font-size: 11pt;
+              line-height: 1.5;
               padding: 40px;
               background: #fff;
               color: #000;
-              max-width: 100%;
             }
             
             /* Typography */
-            h1 { font-size: 24pt; font-weight: 700; margin: 0 0 20pt; border-bottom: 2pt solid #333; padding-bottom: 10pt; }
-            h2 { font-size: 18pt; font-weight: 600; margin: 20pt 0 10pt; border-bottom: 1pt solid #ccc; padding-bottom: 5pt; }
-            h3 { font-size: 14pt; font-weight: 600; margin: 15pt 0 8pt; }
-            h4 { font-size: 12pt; font-weight: 600; margin: 12pt 0 6pt; }
-            p { margin: 8pt 0; }
+            h1 { font-size: 20pt; font-weight: 700; margin: 0 0 15pt; border-bottom: 1.5pt solid #333; padding-bottom: 8pt; }
+            h2 { font-size: 16pt; font-weight: 600; margin: 18pt 0 8pt; border-bottom: 1pt solid #ccc; padding-bottom: 4pt; }
+            h3 { font-size: 13pt; font-weight: 600; margin: 14pt 0 6pt; }
+            p { margin: 6pt 0; }
             
             /* Text formatting */
             strong, b { font-weight: 700; }
             em, i { font-style: italic; }
             u { text-decoration: underline; }
-            s, strike { text-decoration: line-through; }
             sub { vertical-align: sub; font-size: 0.8em; }
             sup { vertical-align: super; font-size: 0.8em; }
-            mark { background: #ff0; padding: 0 2px; }
             
-            /* Links */
-            a { color: #0066cc; text-decoration: underline; }
-            
-            /* Lists */
-            ul, ol { margin: 10pt 0; padding-left: 25pt; }
-            li { margin: 4pt 0; }
-            ul { list-style-type: disc; }
-            ol { list-style-type: decimal; }
-            
-            /* Task lists */
-            ul[data-type="taskList"] { list-style: none; padding-left: 0; }
-            ul[data-type="taskList"] li { display: flex; align-items: flex-start; gap: 8px; }
-            
-            /* Blockquotes */
-            blockquote {
-              border-left: 4pt solid #666;
-              padding-left: 15pt;
-              margin: 15pt 0;
-              color: #444;
-              font-style: italic;
-            }
-            
-            /* Code */
-            code {
-              font-family: 'Courier New', Courier, monospace;
-              font-size: 10pt;
-              background: #f0f0f0;
-              padding: 1pt 4pt;
-              border-radius: 2pt;
-            }
-            pre {
-              font-family: 'Courier New', Courier, monospace;
-              font-size: 10pt;
-              background: #f0f0f0;
-              padding: 12pt;
-              border-radius: 4pt;
-              margin: 12pt 0;
-              overflow-x: auto;
-              white-space: pre-wrap;
-              word-break: break-word;
-            }
-            pre code { background: none; padding: 0; }
-            
-            /* Tables - High contrast for print */
+            /* Tables */
             table {
               border-collapse: collapse;
               width: 100%;
-              margin: 15pt 0;
-              font-size: 11pt;
+              margin: 12pt 0;
             }
             th, td {
-              border: 1pt solid #000;
-              padding: 8pt 10pt;
+              border: 0.5pt solid #000;
+              padding: 6pt 8pt;
               text-align: left;
               vertical-align: top;
             }
             th {
-              background: #e8e8e8 !important;
+              background: #f0f0f0 !important;
               font-weight: 700;
               -webkit-print-color-adjust: exact;
-              print-color-adjust: exact;
             }
-            td p { margin: 0; }
             
-            /* Images */
-            img { max-width: 100%; height: auto; margin: 10pt 0; }
+            /* Comments Section */
+            .comments-section {
+              margin-top: 40pt;
+              border-top: 1pt solid #eee;
+              padding-top: 20pt;
+            }
+            .comments-title {
+              font-size: 14pt;
+              font-weight: 700;
+              margin-bottom: 15pt;
+              color: #333;
+            }
+            .comment-item {
+              margin-bottom: 12pt;
+              font-size: 10pt;
+              line-height: 1.4;
+            }
+            .comment-header {
+              font-weight: 700;
+              margin-bottom: 2pt;
+              display: flex;
+              gap: 8pt;
+            }
+            .comment-author { color: #7c3aed; }
+            .comment-date { color: #666; font-weight: 400; font-size: 9pt; }
+            .comment-content { color: #444; }
             
-            /* Horizontal rule */
-            hr { border: none; border-top: 1pt solid #666; margin: 20pt 0; }
-            
-            /* Print-specific */
             @media print {
               body { padding: 0; }
-              @page { margin: 20mm; }
+              .no-print { display: none; }
             }
           </style>
         </head>
         <body>
           <h1>${formData.title || "Lab Note"}</h1>
           ${cleanContent}
+          
+          ${comments.length > 0 ? `
+            <div class="comments-section">
+              <h2 class="comments-title">Comments</h2>
+              ${comments.map(c => `
+                <div class="comment-item">
+                  <div class="comment-header">
+                    <span class="comment-number">[${c.num}]</span>
+                    <span class="comment-author">${c.author}</span>
+                    <span class="comment-date">${c.createdAt ? new Date(Number(c.createdAt)).toLocaleString() : ""}</span>
+                  </div>
+                  <div class="comment-content">${c.content}</div>
+                </div>
+              `).join('')}
+            </div>
+          ` : ""}
         </body>
         </html>
       `);

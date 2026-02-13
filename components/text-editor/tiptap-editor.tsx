@@ -145,6 +145,47 @@ interface TiptapEditorProps {
   toolbarPortalRef?: React.RefObject<HTMLDivElement | null>
 }
 
+// Extension to support background color for table cells
+const ExtendedTableCell = TableCell.extend({
+  addAttributes() {
+    return {
+      ...this.parent?.(),
+      backgroundColor: {
+        default: null,
+        parseHTML: element => element.style.backgroundColor || null,
+        renderHTML: attributes => {
+          if (!attributes.backgroundColor) {
+            return {}
+          }
+          return {
+            style: `background-color: ${attributes.backgroundColor} !important`,
+          }
+        },
+      },
+    }
+  },
+})
+
+const ExtendedTableHeader = TableHeader.extend({
+  addAttributes() {
+    return {
+      ...this.parent?.(),
+      backgroundColor: {
+        default: null,
+        parseHTML: element => element.style.backgroundColor || null,
+        renderHTML: attributes => {
+          if (!attributes.backgroundColor) {
+            return {}
+          }
+          return {
+            style: `background-color: ${attributes.backgroundColor} !important`,
+          }
+        },
+      },
+    }
+  },
+})
+
 interface CommentItem {
   id: string
   text: string
@@ -152,6 +193,104 @@ interface CommentItem {
   createdAt: number
   content: string
   pos: number
+}
+
+// Standalone helper functions for persisting table state
+// These bypass the Tiptap command registration to avoid runtime "is not a function" errors
+const syncTableSize = (table: HTMLTableElement, view: any) => {
+  try {
+    const pos = view.posAtDOM(table, 0)
+    if (pos < 0) return false
+
+    const $pos = view.state.doc.resolve(pos)
+    let tablePos = -1
+
+    for (let d = $pos.depth; d >= 0; d--) {
+      const node = $pos.node(d)
+      if (node && node.type.name === 'table') {
+        tablePos = $pos.before(d)
+        break
+      }
+    }
+
+    if (tablePos === -1) {
+      const nodeAt = view.state.doc.nodeAt(pos)
+      if (nodeAt?.type.name === 'table') {
+        tablePos = pos
+      }
+    }
+
+    if (tablePos >= 0) {
+      const tableNode = view.state.doc.nodeAt(tablePos)
+      if (tableNode) {
+        const width = `${table.offsetWidth}px`
+        const { tr } = view.state
+        tr.setNodeMarkup(tablePos, undefined, {
+          ...tableNode.attrs,
+          width: width,
+        })
+        view.dispatch(tr)
+        return true
+      }
+    }
+  } catch (e) {
+    console.warn('Failed to sync table size:', e)
+  }
+  return false
+}
+
+const syncCellAttributes = (table: HTMLTableElement, view: any) => {
+  try {
+    const pos = view.posAtDOM(table, 0)
+    if (pos < 0) return false
+
+    const $pos = view.state.doc.resolve(pos)
+    let tablePos = -1
+    for (let d = $pos.depth; d >= 0; d--) {
+      const node = $pos.node(d)
+      if (node && node.type.name === 'table') {
+        tablePos = $pos.before(d)
+        break
+      }
+    }
+
+    if (tablePos === -1) {
+      const nodeAt = view.state.doc.nodeAt(pos)
+      if (nodeAt?.type.name === 'table') {
+        tablePos = pos
+      }
+    }
+
+    if (tablePos < 0) return false
+    const tableNode = view.state.doc.nodeAt(tablePos)
+    if (!tableNode || tableNode.type.name !== 'table') return false
+
+    const { tr } = view.state
+    let cellCount = 0
+    const domCells = table.querySelectorAll('td, th')
+
+    tableNode.descendants((node: any, nodePos: number) => {
+      if (node.type.name === 'tableCell' || node.type.name === 'tableHeader') {
+        const domCell = domCells[cellCount] as HTMLElement
+        if (domCell) {
+          const bgColor = domCell.style.backgroundColor
+          tr.setNodeMarkup(tablePos + nodePos + 1, undefined, {
+            ...node.attrs,
+            backgroundColor: bgColor || null,
+          })
+        }
+        cellCount++
+        return false
+      }
+      return true
+    })
+
+    view.dispatch(tr)
+    return true
+  } catch (e) {
+    console.warn('Failed to sync cell attributes:', e)
+  }
+  return false
 }
 
 function CommentSidebar({ editor, open, onClose }: { editor: any; open: boolean; onClose: () => void }) {
@@ -267,52 +406,6 @@ const ResizableTable = Table.extend({
     }
   },
 
-  addCommands() {
-    return {
-      ...this.parent?.(),
-      persistTableSize: (table: HTMLTableElement) => ({ editor, view }) => {
-        try {
-          const pos = view.posAtDOM(table, 0)
-          if (pos < 0) return false
-
-          const $pos = view.state.doc.resolve(pos)
-          let tablePos = -1
-
-          for (let d = $pos.depth; d >= 0; d--) {
-            const node = $pos.node(d)
-            if (node && node.type.name === 'table') {
-              tablePos = $pos.before(d)
-              break
-            }
-          }
-
-          if (tablePos === -1) {
-            const nodeAt = view.state.doc.nodeAt(pos)
-            if (nodeAt?.type.name === 'table') {
-              tablePos = pos
-            }
-          }
-
-          if (tablePos >= 0) {
-            const tableNode = view.state.doc.nodeAt(tablePos)
-            if (tableNode) {
-              const width = `${table.offsetWidth}px`
-              const { tr } = view.state
-              tr.setNodeMarkup(tablePos, undefined, {
-                ...tableNode.attrs,
-                width: width,
-              })
-              view.dispatch(tr)
-              return true
-            }
-          }
-        } catch (e) {
-          console.warn('Failed to persist table size:', e)
-        }
-        return false
-      }
-    };
-  },
 });
 
 // React component for table controls and resize handles
@@ -376,7 +469,7 @@ const TableControlsOverlay = ({
 
     const onMouseUp = () => {
       if (dragState) {
-        editor.commands.persistTableSize(table)
+        syncTableSize(table, view)
         setDragState(null)
         document.body.style.cursor = ''
         document.body.style.userSelect = ''
@@ -567,6 +660,56 @@ const TableControlsOverlay = ({
               <DropdownMenuItem onClick={() => editor.chain().focus().toggleHeaderColumn().run()} className="text-xs gap-2">
                 <Type className="h-3.5 w-3.5 opacity-70" /> Toggle Column Header
               </DropdownMenuItem>
+
+              <DropdownMenuSeparator />
+
+              <DropdownMenuLabel className="text-[10px] uppercase text-muted-foreground font-semibold px-2 py-1 flex items-center gap-2">
+                <Paintbrush className="h-3 w-3" /> Cell Background
+              </DropdownMenuLabel>
+              <div className="flex flex-wrap gap-1.5 p-2 px-3">
+                {[
+                  { name: 'No Color', value: null, className: 'bg-transparent border border-muted-foreground/30 flex items-center justify-center after:content-["/"] after:text-muted-foreground/40 after:text-[10px] after:font-bold' },
+                  { name: 'Blue', value: '#e3f2fd', className: 'bg-[#e3f2fd] border border-blue-200' },
+                  { name: 'Green', value: '#e8f5e9', className: 'bg-[#e8f5e9] border border-green-200' },
+                  { name: 'Red', value: '#ffebee', className: 'bg-[#ffebee] border border-red-200' },
+                  { name: 'Yellow', value: '#fffde7', className: 'bg-[#fffde7] border border-yellow-200' },
+                  { name: 'Gray', value: '#f5f5f5', className: 'bg-[#f5f5f5] border border-gray-200' },
+                  { name: 'Indigo', value: '#e8eaf6', className: 'bg-[#e8eaf6] border border-indigo-200' },
+                  { name: 'Purple', value: '#f3e5f5', className: 'bg-[#f3e5f5] border border-purple-200' },
+                ].map((color) => (
+                  <button
+                    key={color.name}
+                    title={color.name}
+                    onMouseDown={(e) => e.preventDefault()}
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+
+                      // React Overlay Method:
+                      // 1. Identify cells to color (multi-selection or current focus)
+                      const selectedCells = table.querySelectorAll('.selectedCell');
+
+                      if (selectedCells.length > 0) {
+                        // Color all selected cells
+                        selectedCells.forEach(cell => {
+                          (cell as HTMLElement).style.backgroundColor = color.value || '';
+                        });
+                      } else {
+                        // Fallback: Use Tiptap's built-in command for single cell/current selection
+                        // This ensures we still color the cell even if it's not "selected" in a multi-cell sense
+                        editor.chain().focus().setCellAttribute('backgroundColor', color.value).run();
+                      }
+
+                      // 2. Persist DOM changes to the Tiptap document
+                      syncCellAttributes(table, view);
+                    }}
+                    className={cn(
+                      "h-5 w-5 rounded-sm transition-all hover:scale-110 active:scale-95 shadow-sm",
+                      color.className
+                    )}
+                  />
+                ))}
+              </div>
 
               <DropdownMenuSeparator />
 
@@ -983,8 +1126,8 @@ export function TiptapEditor({
         lastColumnResizable: true,
       }),
       TableRow,
-      TableHeader,
-      TableCell,
+      ExtendedTableHeader,
+      ExtendedTableCell,
       Mathematics.configure({}),
       // Underline,
       Subscript,
