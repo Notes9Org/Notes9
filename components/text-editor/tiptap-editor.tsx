@@ -163,7 +163,9 @@ function CommentSidebar({ editor, open, onClose }: { editor: any; open: boolean;
     editor.state.doc.descendants((node: any, pos: number) => {
       node.marks.forEach((mark: any) => {
         if (mark.type.name === "comment") {
-          if (!items.find((c) => c.id === mark.attrs.id)) {
+          // Changed deduplication: only skip if the SAME comment (same ID) is at the SAME position (node overlap)
+          // This allows copied blocks with same ID to show up multiple times in sidebar
+          if (!items.find((c) => c.id === mark.attrs.id && c.pos === pos)) {
             items.push({
               id: mark.attrs.id,
               author: mark.attrs.author,
@@ -3154,7 +3156,7 @@ export function TiptapEditor({
                 <div className="font-semibold text-muted-foreground flex justify-between items-center">
                   <span>{editor.getAttributes("comment").author}</span>
                   <span className="text-[10px] opacity-70">
-                    {editor.getAttributes("comment").createdAt ? new Date(editor.getAttributes("comment").createdAt).toLocaleDateString() : ""}
+                    {editor.getAttributes("comment").createdAt ? new Date(editor.getAttributes("comment").createdAt).toLocaleString() : ""}
                   </span>
                 </div>
               )}
