@@ -222,7 +222,7 @@ function CommentSidebar({ editor, open, onClose }: { editor: any; open: boolean;
               <div className="flex justify-between items-start mb-1">
                 <span className="text-[10px] font-bold text-primary uppercase">{comment.author}</span>
                 <span className="text-[9px] text-muted-foreground">
-                  {new Date(comment.createdAt).toLocaleDateString()}
+                  {new Date(comment.createdAt).toLocaleString()}
                 </span>
               </div>
               <p className="text-xs text-foreground mb-2 line-clamp-3">{comment.content}</p>
