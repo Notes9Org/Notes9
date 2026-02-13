@@ -210,8 +210,11 @@ function CommentSidebar({ editor, open, onClose }: { editor: any; open: boolean;
               className="p-3 rounded-lg border border-border bg-card hover:border-primary/50 transition-colors cursor-pointer group"
               onClick={() => {
                 editor.commands.focus(comment.pos)
-                const element = editor.view.nodeDOM(comment.pos) as HTMLElement
-                if (element) element.scrollIntoView({ behavior: "smooth", block: "center" })
+                const dom = editor.view.nodeDOM(comment.pos)
+                if (dom) {
+                  const el = dom instanceof Element ? dom : dom.parentElement
+                  if (el) el.scrollIntoView({ behavior: "smooth", block: "center" })
+                }
               }}
             >
               <div className="flex justify-between items-start mb-1">
