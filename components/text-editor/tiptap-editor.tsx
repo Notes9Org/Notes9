@@ -3094,6 +3094,7 @@ export function TiptapEditor({
 
           {editor && (
             <BubbleMenu
+              pluginKey="comment-input"
               editor={editor}
               shouldShow={({ editor }) => {
                 const show = !editor.isActive('comment') && !editor.state.selection.empty;
@@ -3148,6 +3149,7 @@ export function TiptapEditor({
 
           {editor && (
             <BubbleMenu
+              pluginKey="comment-viewer"
               editor={editor}
               shouldShow={({ editor }: { editor: any }) => editor.isActive("comment")}
               className="flex flex-col gap-1 rounded-lg border bg-background p-2 shadow-md text-xs w-64 z-50"
