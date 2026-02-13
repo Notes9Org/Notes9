@@ -56,9 +56,15 @@ interface LinkedProtocol {
   protocol: {
     id: string;
     name: string;
-    version: string | null;
+    version?: string | null;
   };
 }
+
+interface ProtocolItem {
+  id: string
+  name: string
+  version?: string | null
+};
 
 export function LabNotesTab({
   experimentId,
@@ -93,6 +99,7 @@ export function LabNotesTab({
 
   // Linked protocols state
   const [linkedProtocols, setLinkedProtocols] = useState<LinkedProtocol[]>([]);
+  const [availableProtocols, setAvailableProtocols] = useState<ProtocolItem[]>([]);
 
   // Notebook list panel collapsed for more note-taking space (start closed)
   const [notebookPanelOpen, setNotebookPanelOpen] = useState(false);
@@ -233,6 +240,23 @@ export function LabNotesTab({
     }
   }, [isEditingTitle]);
 
+  // Fetch all available protocols for mentions
+  useEffect(() => {
+    const fetchAllProtocols = async () => {
+      const supabase = createClient();
+      const { data } = await supabase
+        .from("protocols")
+        .select("id, name, version")
+        .order("name");
+
+      if (data) {
+        setAvailableProtocols(data);
+      }
+    };
+
+    fetchAllProtocols();
+  }, []);
+
   // Fetch linked protocols when a note is selected
   useEffect(() => {
     if (selectedNote && !isCreating) {
@@ -272,11 +296,11 @@ export function LabNotesTab({
 
     if (selectedNote && !isCreating) {
       attrs["data-note-id"] = selectedNote.id;
-      attrs["data-note-title"] = selectedNote.title || "Untitled";
+      attrs["data-note-title"] = selectedNote.title || "New Lab Note";
       attrs["data-note-created-at"] = selectedNote.created_at ?? "";
       attrs["data-note-updated-at"] = selectedNote.updated_at ?? "";
     } else if (isCreating) {
-      attrs["data-note-title"] = formData.title.trim() || "Untitled";
+      attrs["data-note-title"] = formData.title.trim() || "New Lab Note";
       attrs["data-note-created-at"] = "";
       attrs["data-note-updated-at"] = "";
     } else {
@@ -529,7 +553,45 @@ export function LabNotesTab({
           .replace(/var\([^)]+\)/gi, '#000000');
       };
 
-      const cleanContent = sanitizeHtml(formData.content || "");
+      // Process comments for export
+      const processCommentsForExport = (html: string) => {
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(html, 'text/html');
+        const comments: any[] = [];
+        const commentMarks = doc.querySelectorAll('span[data-comment]');
+
+        commentMarks.forEach((mark, index) => {
+          const id = mark.getAttribute('data-id');
+          const author = mark.getAttribute('data-author');
+          const content = mark.getAttribute('data-content');
+          const createdAt = mark.getAttribute('data-created-at');
+
+          if (content) {
+            const commentNum = comments.length + 1;
+            comments.push({ id, author, content, createdAt, num: commentNum });
+
+            // Add visual indicator to the text
+            const sup = doc.createElement('sup');
+            sup.textContent = `[${commentNum}]`;
+            sup.style.color = '#7c3aed';
+            sup.style.fontWeight = 'bold';
+            sup.style.marginLeft = '2px';
+            mark.appendChild(sup);
+
+            // Highlight the commented text
+            (mark as HTMLElement).style.backgroundColor = '#f3e8ff';
+            (mark as HTMLElement).style.borderRadius = '2px';
+          }
+        });
+
+        return {
+          content: doc.body.innerHTML,
+          comments
+        };
+      };
+
+      const { content: processedContent, comments } = processCommentsForExport(formData.content || "");
+      const cleanContent = sanitizeHtml(processedContent);
 
       // Write isolated HTML with comprehensive print-friendly styles
       iframeDoc.open();
@@ -546,110 +608,96 @@ export function LabNotesTab({
             /* Base */
             body {
               font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-              font-size: 12pt;
-              line-height: 1.6;
+              font-size: 11pt;
+              line-height: 1.5;
               padding: 40px;
               background: #fff;
               color: #000;
-              max-width: 100%;
             }
             
             /* Typography */
-            h1 { font-size: 24pt; font-weight: 700; margin: 0 0 20pt; border-bottom: 2pt solid #333; padding-bottom: 10pt; }
-            h2 { font-size: 18pt; font-weight: 600; margin: 20pt 0 10pt; border-bottom: 1pt solid #ccc; padding-bottom: 5pt; }
-            h3 { font-size: 14pt; font-weight: 600; margin: 15pt 0 8pt; }
-            h4 { font-size: 12pt; font-weight: 600; margin: 12pt 0 6pt; }
-            p { margin: 8pt 0; }
+            h1 { font-size: 20pt; font-weight: 700; margin: 0 0 15pt; border-bottom: 1.5pt solid #333; padding-bottom: 8pt; }
+            h2 { font-size: 16pt; font-weight: 600; margin: 18pt 0 8pt; border-bottom: 1pt solid #ccc; padding-bottom: 4pt; }
+            h3 { font-size: 13pt; font-weight: 600; margin: 14pt 0 6pt; }
+            p { margin: 6pt 0; }
             
             /* Text formatting */
             strong, b { font-weight: 700; }
             em, i { font-style: italic; }
             u { text-decoration: underline; }
-            s, strike { text-decoration: line-through; }
             sub { vertical-align: sub; font-size: 0.8em; }
             sup { vertical-align: super; font-size: 0.8em; }
-            mark { background: #ff0; padding: 0 2px; }
             
-            /* Links */
-            a { color: #0066cc; text-decoration: underline; }
-            
-            /* Lists */
-            ul, ol { margin: 10pt 0; padding-left: 25pt; }
-            li { margin: 4pt 0; }
-            ul { list-style-type: disc; }
-            ol { list-style-type: decimal; }
-            
-            /* Task lists */
-            ul[data-type="taskList"] { list-style: none; padding-left: 0; }
-            ul[data-type="taskList"] li { display: flex; align-items: flex-start; gap: 8px; }
-            
-            /* Blockquotes */
-            blockquote {
-              border-left: 4pt solid #666;
-              padding-left: 15pt;
-              margin: 15pt 0;
-              color: #444;
-              font-style: italic;
-            }
-            
-            /* Code */
-            code {
-              font-family: 'Courier New', Courier, monospace;
-              font-size: 10pt;
-              background: #f0f0f0;
-              padding: 1pt 4pt;
-              border-radius: 2pt;
-            }
-            pre {
-              font-family: 'Courier New', Courier, monospace;
-              font-size: 10pt;
-              background: #f0f0f0;
-              padding: 12pt;
-              border-radius: 4pt;
-              margin: 12pt 0;
-              overflow-x: auto;
-              white-space: pre-wrap;
-              word-break: break-word;
-            }
-            pre code { background: none; padding: 0; }
-            
-            /* Tables - High contrast for print */
+            /* Tables */
             table {
               border-collapse: collapse;
               width: 100%;
-              margin: 15pt 0;
-              font-size: 11pt;
+              margin: 12pt 0;
             }
             th, td {
-              border: 1pt solid #000;
-              padding: 8pt 10pt;
+              border: 0.5pt solid #000;
+              padding: 6pt 8pt;
               text-align: left;
               vertical-align: top;
             }
             th {
-              background: #e8e8e8 !important;
+              background: #f0f0f0 !important;
               font-weight: 700;
               -webkit-print-color-adjust: exact;
-              print-color-adjust: exact;
             }
-            td p { margin: 0; }
             
-            /* Images */
-            img { max-width: 100%; height: auto; margin: 10pt 0; }
+            /* Comments Section */
+            .comments-section {
+              margin-top: 40pt;
+              border-top: 1pt solid #eee;
+              padding-top: 20pt;
+            }
+            .comments-title {
+              font-size: 14pt;
+              font-weight: 700;
+              margin-bottom: 15pt;
+              color: #333;
+            }
+            .comment-item {
+              margin-bottom: 12pt;
+              font-size: 10pt;
+              line-height: 1.4;
+            }
+            .comment-header {
+              font-weight: 700;
+              margin-bottom: 2pt;
+              display: flex;
+              gap: 8pt;
+            }
+            .comment-author { color: #7c3aed; }
+            .comment-date { color: #666; font-weight: 400; font-size: 9pt; }
+            .comment-content { color: #444; }
             
-            /* Horizontal rule */
-            hr { border: none; border-top: 1pt solid #666; margin: 20pt 0; }
-            
-            /* Print-specific */
             @media print {
               body { padding: 0; }
-              @page { margin: 20mm; }
+              .no-print { display: none; }
             }
           </style>
         </head>
         <body>
           <h1>${formData.title || "Lab Note"}</h1>
           ${cleanContent}
+          
+          ${comments.length > 0 ? `
+            <div class="comments-section">
+              <h2 class="comments-title">Comments</h2>
+              ${comments.map(c => `
+                <div class="comment-item">
+                  <div class="comment-header">
+                    <span class="comment-number">[${c.num}]</span>
+                    <span class="comment-author">${c.author}</span>
+                    <span class="comment-date">${c.createdAt ? new Date(Number(c.createdAt)).toLocaleString() : ""}</span>
+                  </div>
+                  <div class="comment-content">${c.content}</div>
+                </div>
+              `).join('')}
+            </div>
+          ` : ""}
         </body>
         </html>
       `);
@@ -799,10 +847,10 @@ export function LabNotesTab({
       .select("title")
       .eq("experiment_id", experimentId);
     const existing = (data || []).map((r) => (r as { title: string }).title);
-    if (!existing.includes("Untitled")) return "Untitled";
+    if (!existing.includes("New Lab Note")) return "New Lab Note";
     let n = 2;
-    while (existing.includes(`Untitled (${n})`)) n++;
-    return `Untitled (${n})`;
+    while (existing.includes(`New Lab Note (${n})`)) n++;
+    return `New Lab Note (${n})`;
   };
 
   const handleNewNote = async () => {
@@ -1098,7 +1146,7 @@ export function LabNotesTab({
                               >
                                 <FileText className="h-4 w-4 shrink-0 text-muted-foreground" />
                                 <p className="min-w-0 truncate font-medium m-0 text-sm">
-                                  {note.title || "Untitled"}
+                                  {note.title || "New Lab Note"}
                                 </p>
                                 <DropdownMenu>
                                   <DropdownMenuTrigger asChild>
@@ -1134,7 +1182,7 @@ export function LabNotesTab({
                       </ul>
                     ) : (
                       <div className="flex flex-col items-center justify-center gap-2 px-2 py-6">
-                        <p className="text-center text-xs text-muted-foreground">No notes yet</p>
+                        <p className="text-center text-xs text-muted-foreground w-3/4">Create your first lab notebook by clicking "+" button</p>
                         <Button
                           onClick={handleNewNote}
                           variant="outline"
@@ -1158,145 +1206,145 @@ export function LabNotesTab({
 
             {/* Editor area - header + content */}
             <div className="flex flex-1 min-w-0 min-h-0 flex-col py-4 gap-4 relative z-0">
-          <CardHeader className="pb-0 px-4 sm:px-6 shrink-0">
-            <div className="flex items-center justify-between gap-3">
-              <div className="flex flex-1 min-w-0 items-center gap-2">
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  className="h-8 w-8 shrink-0 text-muted-foreground hover:text-foreground pointer-events-auto"
-                  onClick={(e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    setNotebookPanelOpen((open) => !open);
-                  }}
-                  aria-label={notebookPanelOpen ? "Hide notes" : "Show notes"}
-                  title={notebookPanelOpen ? "Hide notes list" : `Show notes (${notes.length})`}
-                >
-                  {notebookPanelOpen ? (
-                    <ChevronLeft className="h-4 w-4 pointer-events-none" />
-                  ) : (
-                    <List className="h-4 w-4 pointer-events-none" />
-                  )}
-                </Button>
-                <div className="flex flex-1 min-w-0 items-center gap-1">
-                <div className="flex-1 min-w-0">
-                  {isEditingTitle && selectedNote ? (
-                    <input
-                      ref={titleInputRef}
-                      type="text"
-                      value={formData.title}
-                      onChange={(e) => setFormData((f) => ({ ...f, title: e.target.value }))}
-                      onBlur={handleInlineTitleSave}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter") {
-                          e.preventDefault();
-                          titleInputRef.current?.blur();
-                        }
-                        if (e.key === "Escape") {
-                          setFormData((f) => ({ ...f, title: selectedNote.title || "" }));
-                          setIsEditingTitle(false);
-                          titleInputRef.current?.blur();
-                        }
+              <CardHeader className="pb-0 px-4 sm:px-6 shrink-0">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex flex-1 min-w-0 items-center gap-2">
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8 shrink-0 text-muted-foreground hover:text-foreground pointer-events-auto"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        setNotebookPanelOpen((open) => !open);
                       }}
-                      className="w-full bg-transparent text-lg font-semibold text-foreground leading-none outline-none border-b border-transparent focus:border-primary"
-                      aria-label="Edit note title"
-                    />
-                  ) : (
-                    <div
-                      className={cn(
-                        "truncate",
-                        !isCreating && selectedNote && "cursor-pointer rounded px-1 -mx-1 hover:bg-muted/60 hover:text-foreground"
-                      )}
-                      onClick={() => {
-                        if (!isCreating && selectedNote) setIsEditingTitle(true);
-                      }}
-                      role={!isCreating && selectedNote ? "button" : undefined}
-                      tabIndex={!isCreating && selectedNote ? 0 : undefined}
-                      onKeyDown={(e) => {
-                        if (!isCreating && selectedNote && (e.key === "Enter" || e.key === " ")) {
-                          e.preventDefault();
-                          setIsEditingTitle(true);
-                        }
-                      }}
-                      aria-label={!isCreating && selectedNote ? "Click to edit title" : undefined}
+                      aria-label={notebookPanelOpen ? "Hide notes" : "Show notes"}
+                      title={notebookPanelOpen ? "Hide notes list" : `Show notes (${notes.length})`}
                     >
-                      <CardTitle className="text-lg font-semibold text-foreground truncate leading-none">
-                        {isCreating
-                          ? "New Lab Note"
-                          : formData.title || "Untitled Lab Note"}
-                      </CardTitle>
+                      {notebookPanelOpen ? (
+                        <ChevronLeft className="h-4 w-4 pointer-events-none" />
+                      ) : (
+                        <List className="h-4 w-4 pointer-events-none" />
+                      )}
+                    </Button>
+                    <div className="flex flex-1 min-w-0 items-center gap-1">
+                      <div className="flex-1 min-w-0">
+                        {isEditingTitle && selectedNote ? (
+                          <input
+                            ref={titleInputRef}
+                            type="text"
+                            value={formData.title}
+                            onChange={(e) => setFormData((f) => ({ ...f, title: e.target.value }))}
+                            onBlur={handleInlineTitleSave}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") {
+                                e.preventDefault();
+                                titleInputRef.current?.blur();
+                              }
+                              if (e.key === "Escape") {
+                                setFormData((f) => ({ ...f, title: selectedNote.title || "" }));
+                                setIsEditingTitle(false);
+                                titleInputRef.current?.blur();
+                              }
+                            }}
+                            className="w-full bg-transparent text-lg font-semibold text-foreground leading-none outline-none border-b border-transparent focus:border-primary"
+                            aria-label="Edit note title"
+                          />
+                        ) : (
+                          <div
+                            className={cn(
+                              "truncate",
+                              !isCreating && selectedNote && "cursor-pointer rounded px-1 -mx-1 hover:bg-muted/60 hover:text-foreground"
+                            )}
+                            onClick={() => {
+                              if (!isCreating && selectedNote) setIsEditingTitle(true);
+                            }}
+                            role={!isCreating && selectedNote ? "button" : undefined}
+                            tabIndex={!isCreating && selectedNote ? 0 : undefined}
+                            onKeyDown={(e) => {
+                              if (!isCreating && selectedNote && (e.key === "Enter" || e.key === " ")) {
+                                e.preventDefault();
+                                setIsEditingTitle(true);
+                              }
+                            }}
+                            aria-label={!isCreating && selectedNote ? "Click to edit title" : undefined}
+                          >
+                            <CardTitle className="text-lg font-semibold text-foreground truncate leading-none">
+                              {isCreating
+                                ? "New Lab Note"
+                                : (!selectedNote ? "Lab Notes" : formData.title || "New Lab Note")}
+                            </CardTitle>
+                          </div>
+                        )}
+                      </div>
+                      <SaveStatusIndicator
+                        status={autoSaveStatus}
+                        lastSaved={lastSaved}
+                        variant="icon"
+                        onClick={handleSave}
+                        disabled={isSaving || !formData.title.trim()}
+                      />
                     </div>
-                  )}
-                </div>
-                <SaveStatusIndicator
-                  status={autoSaveStatus}
-                  lastSaved={lastSaved}
-                  variant="icon"
-                  onClick={handleSave}
-                  disabled={isSaving || !formData.title.trim()}
-                />
-                </div>
-              </div>
-              <div className="flex items-center gap-1 shrink-0">
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-8 w-8 m-0 text-muted-foreground hover:text-foreground"
-                  disabled={isCreatingNew}
-                  onClick={() => {
-                    setNotebookPanelOpen(true);
-                    handleNewNote();
-                  }}
-                  aria-label="New lab note"
-                >
-                  {isCreatingNew ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <Plus className="h-4 w-4" />
-                  )}
-                </Button>
-                {!isCreating && selectedNote && (
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-8 w-8 text-muted-foreground hover:text-foreground"
-                        aria-label="Export"
-                      >
-                        <Download className="h-4 w-4" />
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
-                      <DropdownMenuLabel>Download as...</DropdownMenuLabel>
-                      <DropdownMenuSeparator />
-                      <DropdownMenuItem onClick={downloadAsMarkdown}>
-                        <FileCode className="h-4 w-4 mr-2" />
-                        Markdown (.md)
-                      </DropdownMenuItem>
-                      <DropdownMenuItem onClick={downloadAsHTML}>
-                        <FileText className="h-4 w-4 mr-2" />
-                        HTML (.html)
-                      </DropdownMenuItem>
+                  </div>
+                  <div className="flex items-center gap-1 shrink-0">
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8 m-0 text-muted-foreground hover:text-foreground"
+                      disabled={isCreatingNew}
+                      onClick={() => {
+                        setNotebookPanelOpen(true);
+                        handleNewNote();
+                      }}
+                      aria-label="New lab note"
+                    >
+                      {isCreatingNew ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <Plus className="h-4 w-4" />
+                      )}
+                    </Button>
+                    {!isCreating && selectedNote && (
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                            aria-label="Export"
+                          >
+                            <Download className="h-4 w-4" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuLabel>Download as...</DropdownMenuLabel>
+                          <DropdownMenuSeparator />
+                          <DropdownMenuItem onClick={downloadAsMarkdown}>
+                            <FileCode className="h-4 w-4 mr-2" />
+                            Markdown (.md)
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onClick={downloadAsHTML}>
+                            <FileText className="h-4 w-4 mr-2" />
+                            HTML (.html)
+                          </DropdownMenuItem>
 
-                      <DropdownMenuSeparator />
-                      <DropdownMenuItem onClick={downloadAsPDF}>
-                        <FileText className="h-4 w-4 mr-2" />
-                        PDF (.pdf)
-                      </DropdownMenuItem>
-                      <DropdownMenuItem onClick={downloadAsDOCX}>
-                        <FileText className="h-4 w-4 mr-2" />
-                        Word (.docx)
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                )}
-                {/* Share Button - Google Docs style */}
+                          <DropdownMenuSeparator />
+                          <DropdownMenuItem onClick={downloadAsPDF}>
+                            <FileText className="h-4 w-4 mr-2" />
+                            PDF (.pdf)
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onClick={downloadAsDOCX}>
+                            <FileText className="h-4 w-4 mr-2" />
+                            Word (.docx)
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    )}
+                    {/* Share Button - Google Docs style */}
 
-                {/* Publish button temporarily hidden */}
-                {/* {!isCreating && selectedNote && (
+                    {/* Publish button temporarily hidden */}
+                    {/* {!isCreating && selectedNote && (
                   <div className="flex items-center gap-2">
                     {publicUrl ? (
                       <div className="flex items-center gap-2">
@@ -1352,42 +1400,55 @@ export function LabNotesTab({
                     )}
                   </div>
                 )} */}
-              </div>
-            </div>
-            <div
-              ref={(el) => {
-                (toolbarPortalRef as React.MutableRefObject<HTMLDivElement | null>).current = el;
-                if (el && !toolbarPortalReadyRef.current) {
-                  toolbarPortalReadyRef.current = true;
-                  setToolbarPortalReady(true);
-                }
-              }}
-              className="min-h-0"
-            />
-          </CardHeader>
-          <CardContent className="space-y-3 px-4 sm:px-6">
-            {/* Rich Text Editor */}
-            <div>
-              <TiptapEditor
-                content={formData.content}
-                onChange={(content) => {
-                  setFormData({ ...formData, content });
-                  // Trigger auto-save (works for both creation and editing)
-                  debouncedSave(content);
-                }}
-                placeholder="Write your lab notes here... Use @ to tag protocols"
-                title={formData.title || "lab-note"}
-                minHeight="400px"
-                showAITools={true}
-                protocols={linkedProtocols.map(lp => ({
-                  id: lp.protocol_id,
-                  name: lp.protocol.name,
-                  version: lp.protocol.version,
-                }))}
-                toolbarPortalRef={toolbarPortalRef}
-              />
-            </div>
-          </CardContent>
+                  </div>
+                </div>
+                <div
+                  ref={(el) => {
+                    (toolbarPortalRef as React.MutableRefObject<HTMLDivElement | null>).current = el;
+                    if (el && !toolbarPortalReadyRef.current) {
+                      toolbarPortalReadyRef.current = true;
+                      setToolbarPortalReady(true);
+                    }
+                  }}
+                  className="min-h-0"
+                />
+              </CardHeader>
+              <CardContent className="space-y-3 px-4 sm:px-6 h-full">
+                {!isCreating && !selectedNote ? (
+                  <div className="flex flex-col items-center justify-center h-full min-h-[400px] text-muted-foreground">
+                    <p className="text-lg font-medium mb-2">No note selected</p>
+                    <p className="text-sm text-center max-w-sm mb-6">
+                      Select a note from the sidebar or create your first lab notebook by clicking "+" button
+                    </p>
+                    <Button onClick={handleNewNote}>
+                      <Plus className="mr-2 h-4 w-4" />
+                      Create Note
+                    </Button>
+                  </div>
+                ) : (
+                  /* Rich Text Editor */
+                  <div className="h-full">
+                    <TiptapEditor
+                      content={formData.content}
+                      onChange={(content) => {
+                        setFormData({ ...formData, content });
+                        // Trigger auto-save (works for both creation and editing)
+                        debouncedSave(content);
+                      }}
+                      placeholder="Write your lab notes here... Use @ to tag protocols"
+                      title={formData.title || "lab-note"}
+                      minHeight="400px"
+                      showAITools={true}
+                      protocols={availableProtocols.map(p => ({
+                        id: p.id,
+                        name: p.name,
+                        version: p.version,
+                      }))}
+                      toolbarPortalRef={toolbarPortalRef}
+                    />
+                  </div>
+                )}
+              </CardContent>
             </div>
           </div>
         </Card>

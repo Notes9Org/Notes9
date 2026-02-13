@@ -1,6 +1,6 @@
 'use client';
 
-import { Plus, MessageSquare, Trash2, X } from 'lucide-react';
+import { Plus, MessageSquare, Trash2, X, Sparkles } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { cn } from '@/lib/utils';
@@ -16,6 +16,7 @@ interface CatalystSidebarProps {
   loading?: boolean;
   isOpen: boolean;
   onToggle: () => void;
+  hasMessages?: boolean;
 }
 
 export function CatalystSidebar({
@@ -27,11 +28,25 @@ export function CatalystSidebar({
   loading,
   isOpen,
   onToggle,
+  hasMessages = false,
 }: CatalystSidebarProps) {
   if (!isOpen) return null;
 
   return (
     <div className="flex h-full w-72 shrink-0 flex-col bg-muted/20">
+      {/* Search Header Area - Only visible when NO messages */}
+      {!hasMessages && (
+        <div className="flex flex-col items-center justify-center py-8 border-b border-border/50">
+          <div className="relative mb-3">
+            <div className="absolute inset-0 animate-pulse rounded-full bg-gradient-to-r from-orange-400 to-pink-500 opacity-20 blur-xl" />
+            <Sparkles className="relative size-5 text-orange-500" />
+          </div>
+          <span className="text-sm font-semibold bg-gradient-to-r from-orange-500 to-pink-600 bg-clip-text text-transparent">
+            Catalyst AI
+          </span>
+        </div>
+      )}
+
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-3">
         <h2 className="font-semibold text-sm">Chat History</h2>
