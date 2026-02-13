@@ -68,6 +68,7 @@ import {
   Rows,
   Maximize2,
   Minimize2,
+  MessageSquare,
 } from "lucide-react"
 import { Extension, Mark, mergeAttributes } from "@tiptap/core"
 import { Plugin, PluginKey } from "@tiptap/pm/state"
@@ -142,6 +143,104 @@ interface TiptapEditorProps {
   labNotes?: LabNoteItem[]
   /** When set, the toolbar is rendered into this container (e.g. card header) instead of above the editor. */
   toolbarPortalRef?: React.RefObject<HTMLDivElement | null>
+}
+
+interface CommentItem {
+  id: string
+  text: string
+  author: string
+  createdAt: number
+  content: string
+  pos: number
+}
+
+function CommentSidebar({ editor, open, onClose }: { editor: any; open: boolean; onClose: () => void }) {
+  const [comments, setComments] = useState<CommentItem[]>([])
+
+  const updateComments = useCallback(() => {
+    if (!editor) return
+    const items: CommentItem[] = []
+    editor.state.doc.descendants((node: any, pos: number) => {
+      node.marks.forEach((mark: any) => {
+        if (mark.type.name === "comment") {
+          if (!items.find((c) => c.id === mark.attrs.id)) {
+            items.push({
+              id: mark.attrs.id,
+              author: mark.attrs.author,
+              createdAt: mark.attrs.createdAt,
+              content: mark.attrs.content,
+              text: node.textContent,
+              pos,
+            })
+          }
+        }
+      })
+    })
+    setComments(items)
+  }, [editor])
+
+  useEffect(() => {
+    if (!editor) return
+    updateComments()
+    editor.on("update", updateComments)
+    return () => {
+      editor.off("update", updateComments)
+    }
+  }, [editor, updateComments])
+
+  if (!open) return null
+
+  return (
+    <div className="absolute right-0 top-0 h-full w-72 bg-background border-l border-border z-50 shadow-xl flex flex-col animate-in slide-in-from-right duration-300">
+      <div className="p-4 border-b border-border flex justify-between items-center bg-muted/30">
+        <h3 className="font-semibold text-sm flex items-center gap-2">
+          <MessageSquare className="h-4 w-4" /> Comments
+        </h3>
+        <Button variant="ghost" size="icon" className="h-8 w-8" onClick={onClose}>
+          <X className="h-4 w-4" />
+        </Button>
+      </div>
+      <div className="flex-1 overflow-y-auto p-3 space-y-3">
+        {comments.length === 0 ? (
+          <div className="text-center py-10 text-muted-foreground text-xs italic">No comments yet</div>
+        ) : (
+          comments.map((comment) => (
+            <div
+              key={comment.id}
+              className="p-3 rounded-lg border border-border bg-card hover:border-primary/50 transition-colors cursor-pointer group"
+              onClick={() => {
+                editor.commands.focus(comment.pos)
+                const element = editor.view.nodeDOM(comment.pos) as HTMLElement
+                if (element) element.scrollIntoView({ behavior: "smooth", block: "center" })
+              }}
+            >
+              <div className="flex justify-between items-start mb-1">
+                <span className="text-[10px] font-bold text-primary uppercase">{comment.author}</span>
+                <span className="text-[9px] text-muted-foreground">
+                  {new Date(comment.createdAt).toLocaleDateString()}
+                </span>
+              </div>
+              <p className="text-xs text-foreground mb-2 line-clamp-3">{comment.content}</p>
+              <div className="flex justify-between items-center opacity-0 group-hover:opacity-100 transition-opacity">
+                <span className="text-[10px] text-muted-foreground italic truncate max-w-[120px]">"{comment.text}"</span>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-6 w-6 text-destructive hover:bg-destructive/10"
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    editor.commands.deleteComment(comment.id)
+                  }}
+                >
+                  <Trash2 className="h-3 w-3" />
+                </Button>
+              </div>
+            </div>
+          ))
+        )}
+      </div>
+    </div>
+  )
 }
 
 // Custom Table extension with width/height support
@@ -621,6 +720,7 @@ declare module '@tiptap/core' {
     comment: {
       setComment: (attributes: { author: string; content: string; createdAt?: number }) => ReturnType;
       unsetComment: () => ReturnType;
+      deleteComment: (id: string) => ReturnType;
     };
   }
 }
@@ -664,7 +764,10 @@ export const Comment = Mark.create<CommentOptions>({
       },
       createdAt: {
         default: null,
-        parseHTML: (element: HTMLElement) => element.getAttribute('data-created-at'),
+        parseHTML: (element: HTMLElement) => {
+          const val = element.getAttribute('data-created-at');
+          return val ? Number(val) : null;
+        },
         renderHTML: (attributes: Record<string, any>) => {
           if (!attributes.createdAt) {
             return {};
@@ -693,7 +796,6 @@ export const Comment = Mark.create<CommentOptions>({
     return [
       {
         tag: 'span[data-comment]',
-        getAttrs: (element) => !!(element as HTMLElement).getAttribute('data-comment') && null,
       },
     ];
   },
@@ -720,7 +822,28 @@ export const Comment = Mark.create<CommentOptions>({
           ({ commands }: { commands: any }) => {
             return commands.unsetMark(this.name);
           },
+      deleteComment:
+        (id: string) =>
+          ({ tr, state, dispatch }: { tr: any; state: any; dispatch: any }) => {
+            const { doc } = state;
+            doc.descendants((node: any, pos: number) => {
+              node.marks.forEach((mark: any) => {
+                if (mark.type.name === this.name && mark.attrs.id === id) {
+                  tr.removeMark(pos, pos + node.nodeSize, mark.type);
+                }
+              });
+            });
+            if (dispatch) {
+              dispatch(tr);
+              return true;
+            }
+            return false;
+          },
     };
+  },
+
+  addProseMirrorPlugins() {
+    return []
   },
 });
 
@@ -796,6 +919,7 @@ export function TiptapEditor({
   const [selectedCitationStyle, setSelectedCitationStyle] = useState<'APA' | 'MLA' | 'Chicago' | 'Harvard' | 'IEEE' | 'Vancouver'>('APA')
   const [isCommenting, setIsCommenting] = useState(false)
   const [commentText, setCommentText] = useState("")
+  const [commentsSidebarOpen, setCommentsSidebarOpen] = useState(false)
   const recognitionRef = useRef<any>(null)
   const lastFinalIndexRef = useRef<number>(0)
   const lastInterimTextRef = useRef<string>("")
@@ -850,7 +974,7 @@ export function TiptapEditor({
         resizable: true,
         allowTableNodeSelection: true,
         handleWidth: 5,
-        cellMinWidth: 250, // Significantly increased default width
+        cellMinWidth: 175,
         lastColumnResizable: true,
       }),
       TableRow,
@@ -887,6 +1011,11 @@ export function TiptapEditor({
     editable,
     onUpdate: ({ editor }) => {
       onChange?.(editor.getHTML())
+    },
+    onSelectionUpdate: ({ editor }) => {
+      if (editor.state.selection.empty) {
+        setIsCommenting(false)
+      }
     },
     onCreate: () => {
       console.log('TiptapEditor: created')
@@ -2523,21 +2652,18 @@ export function TiptapEditor({
                       e.preventDefault();
                     }}
                     onClick={() => {
-                      console.log("Comment button clicked, selection empty:", editor.state.selection.empty);
-                      if (editor.isActive('comment')) {
-                        editor.chain().focus().unsetComment().run();
-                      } else if (editor.state.selection.empty) {
-                        toast.error("Please select text to comment on");
-                      } else {
+                      if (!editor.state.selection.empty) {
                         setIsCommenting(true);
                         editor.chain().focus().run();
+                      } else {
+                        setCommentsSidebarOpen(!commentsSidebarOpen);
                       }
                     }}
                   >
-                    <MessageSquarePlus className="h-4 w-4" />
+                    <MessageSquare className="h-4 w-4 animate-logo-subtle" />
                   </Button>
                 </TooltipTrigger>
-                <TooltipContent>Insert comment</TooltipContent>
+                <TooltipContent>Comments</TooltipContent>
               </Tooltip>
 
               <Tooltip>
@@ -2957,46 +3083,61 @@ export function TiptapEditor({
               document.body
             )}
           </div>
-          {/* TOC positioned absolutely relative to the card, not the scrollable content */}
-          {editor && <TableOfContents editor={editor} />}
+          {/* TOC and Comment Sidebar positioned absolutely relative to the card */}
+          {editor && <TableOfContents editor={editor} className={cn(commentsSidebarOpen ? "right-[304px]" : "right-4")} />}
+          {editor && <CommentSidebar editor={editor} open={commentsSidebarOpen} onClose={() => setCommentsSidebarOpen(false)} />}
 
           {editor && (
             <BubbleMenu
               editor={editor}
               shouldShow={({ editor }) => {
-                const show = !editor.isActive('comment') && isCommenting && !editor.state.selection.empty;
+                const show = !editor.isActive('comment') && !editor.state.selection.empty;
                 return show;
               }}
               className="z-[200]"
             >
-              <div className="flex items-center gap-2 p-2 bg-background border border-border rounded-md shadow-lg min-w-[300px] pointer-events-auto">
-                <Input
-                  className="h-8 text-xs flex-1"
-                  placeholder="Type comment..."
-                  value={commentText}
-                  onChange={(e) => setCommentText(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') {
-                      if (commentText.trim()) {
-                        editor.chain().focus().setComment({ author: "You", content: commentText }).run();
-                        setCommentText("");
+              {!isCommenting ? (
+                <Button
+                  size="sm"
+                  className="shadow-xl bg-background border hover:bg-accent text-foreground h-8 px-3 gap-2"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    setIsCommenting(true);
+                  }}
+                >
+                  <MessageSquarePlus className="h-4 w-4" /> Add Comment
+                </Button>
+              ) : (
+                <div className="flex items-center gap-2 p-2 bg-background border border-border rounded-md shadow-lg min-w-[300px] pointer-events-auto">
+                  <Input
+                    className="h-8 text-xs flex-1"
+                    placeholder="Type comment..."
+                    value={commentText}
+                    onChange={(e) => setCommentText(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        if (commentText.trim()) {
+                          editor.chain().focus().setComment({ author: "You", content: commentText }).run();
+                          setCommentText("");
+                          setIsCommenting(false);
+                        }
+                      } else if (e.key === 'Escape') {
                         setIsCommenting(false);
                       }
-                    } else if (e.key === 'Escape') {
+                    }}
+                    autoFocus
+                  />
+                  <Button size="sm" className="h-7 px-2" onClick={() => {
+                    if (commentText.trim()) {
+                      editor.chain().focus().setComment({ author: "You", content: commentText }).run();
+                      setCommentText("");
                       setIsCommenting(false);
                     }
-                  }}
-                  autoFocus
-                />
-                <Button size="sm" className="h-7 px-2" onClick={() => {
-                  if (commentText.trim()) {
-                    editor.chain().focus().setComment({ author: "You", content: commentText }).run();
-                    setCommentText("");
-                    setIsCommenting(false);
-                  }
-                }}>Save</Button>
-                <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => setIsCommenting(false)}><X className="h-4 w-4" /></Button>
-              </div>
+                  }}>Save</Button>
+                  <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => setIsCommenting(false)}><X className="h-4 w-4" /></Button>
+                </div>
+              )}
             </BubbleMenu>
           )}
 
@@ -3053,7 +3194,7 @@ export function TiptapEditor({
             border-collapse: collapse;
             table-layout: auto;
             width: auto;
-            min-width: 250px !important;
+            min-width: 175px !important;
             margin: 1rem 0;
             color: var(--foreground);
             background: var(--card);
@@ -3066,7 +3207,7 @@ export function TiptapEditor({
             border: 1px solid var(--border);
             padding: 0.35rem 0.5rem;
             vertical-align: top;
-            min-width: 250px !important;
+            min-width: 175px !important;
             position: relative;
           }
           .ProseMirror table th {
@@ -3128,6 +3269,27 @@ export function TiptapEditor({
             mask-composite: exclude;
             animation: rainbow-border 4s linear infinite;
             pointer-events: none;
+          }
+
+          .comment-mark {
+            background-color: rgba(255, 235, 59, 0.2);
+            border-bottom: 2px solid rgba(255, 214, 0, 0.4);
+            cursor: pointer;
+            transition: background-color 0.2s;
+          }
+
+          .comment-mark:hover {
+            background-color: rgba(255, 235, 59, 0.3);
+          }
+
+          /* Subtle toolbar animation */
+          .animate-logo-subtle {
+            animation: logo-float 4s ease-in-out infinite;
+          }
+
+          @keyframes logo-float {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-1px); }
           }
         `}</style>
         </div>
