@@ -1,6 +1,8 @@
 import { redirect } from 'next/navigation'
 import { createClient } from "@/lib/supabase/server"
 import { AppLayout } from "@/components/layout/app-layout"
+import { TermsAcceptanceModal } from "@/components/marketing/terms-acceptance-modal"
+import { CURRENT_TERMS_VERSION } from "@/lib/constants"
 
 export default async function AppGroupLayout({
   children,
@@ -15,6 +17,15 @@ export default async function AppGroupLayout({
     redirect("/auth/login")
   }
 
-  return <AppLayout>{children}</AppLayout>
+  const currentTermsVersion = CURRENT_TERMS_VERSION
+  const userTermsVersion = user.user_metadata?.terms_accepted_version
+  const mustAcceptTerms = userTermsVersion !== currentTermsVersion
+
+  return (
+    <>
+      {mustAcceptTerms && <TermsAcceptanceModal />}
+      <AppLayout>{children}</AppLayout>
+    </>
+  )
 }
 
