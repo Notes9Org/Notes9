@@ -208,7 +208,7 @@ function CommentSidebar({ editor, open, onClose }: { editor: any; open: boolean;
         ) : (
           comments.map((comment) => (
             <div
-              key={comment.id}
+              key={`${comment.id}-${comment.pos}`}
               className="p-3 rounded-lg border border-border bg-card hover:border-primary/50 transition-colors cursor-pointer group"
               onClick={() => {
                 editor.commands.focus(comment.pos)
