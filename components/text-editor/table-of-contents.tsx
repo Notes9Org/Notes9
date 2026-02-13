@@ -116,9 +116,10 @@ export function TableOfContents({ editor, className }: TableOfContentsProps) {
         // Smooth scroll to the heading
         editor.commands.focus(pos)
 
-        const element = editor.view.nodeDOM(pos) as HTMLElement
-        if (element) {
-            element.scrollIntoView({ behavior: "smooth", block: "start" })
+        const dom = editor.view.nodeDOM(pos)
+        if (dom) {
+            const el = dom instanceof Element ? dom : dom.parentElement
+            if (el) el.scrollIntoView({ behavior: "smooth", block: "start" })
         }
     }
 
