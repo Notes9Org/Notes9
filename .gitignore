@@ -32,6 +32,9 @@ pnpm-debug.log*
 # Vercel
 .vercel
 
+.pnpm-store/
+venv/
+
 # TypeScript
 *.tsbuildinfo
 next-env.d.ts
