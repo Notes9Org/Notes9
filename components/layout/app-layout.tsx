@@ -1,27 +1,92 @@
 "use client"
 
 import { ReactNode, useState, useEffect } from "react"
-import Image from "next/image"
+import { usePathname } from "next/navigation"
+import Link from "next/link"
 import { AppSidebar } from "./app-sidebar"
 import { RightSidebar } from "./right-sidebar"
+import { BreadcrumbProvider, useBreadcrumb } from "./breadcrumb-context"
 import { Button } from "@/components/ui/button"
 import { ResizeHandle } from "@/components/ui/resize-handle"
 import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar"
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet"
 import { useResizable } from "@/hooks/use-resizable"
-import { Menu, X, Sparkles } from 'lucide-react'
+import { Menu, X, Sparkles, ChevronRight, Sun, Moon } from 'lucide-react'
+import { useTheme } from "next-themes"
 import { useMediaQuery } from "@/hooks/use-media-query"
+
+const ROUTE_TITLES: { path: string; title: string }[] = [
+  { path: "/dashboard", title: "Dashboard" },
+  { path: "/projects", title: "Projects" },
+  { path: "/experiments", title: "Experiments" },
+  { path: "/lab-notes", title: "Lab Notes" },
+  { path: "/samples", title: "Samples" },
+  { path: "/equipment", title: "Equipment" },
+  { path: "/protocols", title: "Protocols" },
+  { path: "/literature-reviews", title: "Literature" },
+  { path: "/settings", title: "Settings" },
+  { path: "/", title: "Dashboard" },
+]
+
+function getHeaderTitle(pathname: string): string {
+  if (!pathname) return "Notes9"
+  for (const { path, title } of ROUTE_TITLES) {
+    if (path === pathname || (path !== "/" && pathname.startsWith(path + "/"))) return title
+  }
+  return "Notes9"
+}
+
+function HeaderTitle() {
+  const pathname = usePathname()
+  const { segments } = useBreadcrumb()
+  const fallbackTitle = getHeaderTitle(pathname ?? "")
+
+  const filtered = segments.filter((s) => s.label !== "Dashboard")
+  if (filtered.length === 0) {
+    return (
+      <h1 className="text-base sm:text-lg font-semibold truncate min-w-0">
+        {fallbackTitle}
+      </h1>
+    )
+  }
+
+  return (
+    <nav aria-label="breadcrumb" className="flex flex-wrap items-center gap-1.5 text-sm text-muted-foreground sm:gap-2.5 min-w-0 truncate">
+      {filtered.map((seg, i) => (
+        <span key={i} className="inline-flex items-center gap-1.5 shrink-0">
+          {i > 0 && <ChevronRight className="size-3.5 shrink-0" aria-hidden />}
+          {seg.href ? (
+            <Link href={seg.href} className="transition-colors hover:text-foreground truncate">
+              {seg.label}
+            </Link>
+          ) : (
+            <span className="font-normal text-foreground truncate">{seg.label}</span>
+          )}
+        </span>
+      ))}
+    </nav>
+  )
+}
 
 interface AppLayoutProps {
   children: ReactNode
 }
 
 export function AppLayout({ children }: AppLayoutProps) {
-  const [rightSidebarOpen, setRightSidebarOpen] = useState(true)
-  const [leftSidebarWidth, setLeftSidebarWidth] = useState(280)
+  const { setTheme, resolvedTheme } = useTheme()
+  const [rightSidebarOpen, setRightSidebarOpen] = useState(false)
+  const [themeMounted, setThemeMounted] = useState(false)
   const isMobile = useMediaQuery("(max-width: 768px)")
   const isTablet = useMediaQuery("(max-width: 1024px)")
-  
+
+  const toggleTheme = () => {
+    setTheme(resolvedTheme === "dark" ? "light" : "dark")
+  }
+
+  useEffect(() => {
+    setThemeMounted(true)
+  }, [])
+
   // Close right sidebar on mobile by default
   useEffect(() => {
     if (isMobile) {
@@ -29,25 +94,16 @@ export function AppLayout({ children }: AppLayoutProps) {
     }
   }, [isMobile])
 
-  // Listen for sidebar width changes
-  useEffect(() => {
-    const handleSidebarWidthChange = (event: CustomEvent) => {
-      setLeftSidebarWidth(event.detail.width)
-    }
-
-    window.addEventListener('sidebar-width-change', handleSidebarWidthChange as EventListener)
-    return () => {
-      window.removeEventListener('sidebar-width-change', handleSidebarWidthChange as EventListener)
-    }
-  }, [])
-  
-  // Left sidebar resizing
+  // Left sidebar: open/collapsed drives column width; when open, width is resizable. Start open (expanded) so sidebar comes open when the app loads.
+  const [sidebarOpen, setSidebarOpen] = useState(true)
   const leftSidebar = useResizable({
     initialWidth: isMobile ? 0 : isTablet ? 240 : 280,
     minWidth: 200,
     maxWidth: 400,
+    direction: 'left',
   })
-  
+  const leftColumnWidth = sidebarOpen ? leftSidebar.width : 64
+
   // Right sidebar resizing
   const rightSidebar = useResizable({
     initialWidth: isTablet ? 280 : 320,
@@ -57,26 +113,36 @@ export function AppLayout({ children }: AppLayoutProps) {
   })
 
   return (
-    <SidebarProvider defaultOpen={!isMobile}>
-      <div className="flex h-screen w-full overflow-hidden bg-background">
-        {/* Left Sidebar - Hidden on mobile, shown via SidebarProvider */}
+    <BreadcrumbProvider>
+      <SidebarProvider defaultOpen={!isMobile} open={sidebarOpen} onOpenChange={setSidebarOpen}>
+        <div
+        className="flex h-screen w-full overflow-hidden bg-background"
+        style={{
+          '--sidebar-width': `${leftColumnWidth}px`,
+          '--sidebar-width-icon': '3rem',
+        } as React.CSSProperties}
+      >
+        {/* Left Sidebar - open/collapsed from context; when open, width is resizable */}
         {!isMobile && (
-          <div className="flex shrink-0">
-            <div 
+          <div className="flex shrink-0 h-full min-h-0">
+            <div
               data-sidebar-container
-              style={{ 
-                '--sidebar-width': `${leftSidebarWidth}px`,
-                width: leftSidebarWidth,
-                transition: 'width 200ms ease-in-out'
+              data-resizing={leftSidebar.isResizing ? 'true' : undefined}
+              className="h-full min-h-0 shrink-0 overflow-hidden"
+              style={{
+                '--sidebar-width': `${leftColumnWidth}px`,
+                width: leftColumnWidth,
+                transition: leftSidebar.isResizing ? 'none' : 'width 0.2s ease-out',
               } as React.CSSProperties}
             >
               <AppSidebar />
             </div>
-            {leftSidebarWidth > 64 && (
+            {sidebarOpen && leftSidebar.width > 64 && (
               <ResizeHandle
                 onMouseDown={leftSidebar.handleMouseDown}
                 isResizing={leftSidebar.isResizing}
                 position="right"
+                className="z-10 shrink-0"
               />
             )}
           </div>
@@ -86,13 +152,28 @@ export function AppLayout({ children }: AppLayoutProps) {
         <SidebarInset className="flex flex-col overflow-hidden flex-1 min-w-0">
           {/* Top Bar */}
           <header className="h-12 sm:h-14 border-b border-border flex items-center justify-between px-3 sm:px-4 shrink-0">
-            <div className="flex items-center gap-2">
-              <Image src="/notes9-logo.png" alt="Notes9" width={24} height={24} />
-              <h1 className="text-base sm:text-lg font-semibold">Notes9</h1>
+            <div className="min-w-0 flex-1 truncate">
+              <HeaderTitle />
             </div>
-          
+
             <div className="flex items-center gap-1 sm:gap-2">
-              {/* Mobile: Show AI button with icon */}
+              {/* Theme toggle: one click toggles dark ↔ light (client-only to avoid hydration mismatch) */}
+              <Button
+                variant="ghost"
+                size="icon"
+                className="size-8 sm:size-9"
+                onClick={toggleTheme}
+                aria-label={themeMounted && resolvedTheme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
+              >
+                {!themeMounted ? (
+                  <Moon className="size-4" />
+                ) : resolvedTheme === "dark" ? (
+                  <Sun className="size-4" />
+                ) : (
+                  <Moon className="size-4" />
+                )}
+              </Button>
+              {/* AI / Right sidebar toggle */}
               <Button
                 variant={rightSidebarOpen ? "secondary" : "ghost"}
                 size="icon"
@@ -110,7 +191,9 @@ export function AppLayout({ children }: AppLayoutProps) {
 
           {/* Main Content */}
           <main className="flex-1 overflow-auto p-3 sm:p-4 md:p-6">
-            {children}
+            <div className="w-full">
+              {children}
+            </div>
           </main>
         </SidebarInset>
 
@@ -126,22 +209,23 @@ export function AppLayout({ children }: AppLayoutProps) {
           </Sheet>
         ) : (
           rightSidebarOpen && (
-            <div className="flex shrink-0">
+            <div className="flex shrink-0 h-full min-h-0">
               <ResizeHandle
                 onMouseDown={rightSidebar.handleMouseDown}
                 isResizing={rightSidebar.isResizing}
                 position="left"
               />
               <div
-                className="border-l border-border overflow-hidden"
-                style={{ width: rightSidebar.width }}
+                className="border-l border-border overflow-hidden h-full min-h-0 flex flex-col"
+                style={{ width: rightSidebar.width, minWidth: 0 }}
               >
                 <RightSidebar />
               </div>
             </div>
           )
         )}
-      </div>
-    </SidebarProvider>
+        </div>
+      </SidebarProvider>
+    </BreadcrumbProvider>
   )
 }

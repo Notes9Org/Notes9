@@ -3,11 +3,11 @@
 import { useState, useEffect, Suspense } from "react"
 import { useRouter, useSearchParams } from 'next/navigation'
 import { createClient } from "@/lib/supabase/client"
+import { useSmartBack } from "@/hooks/use-smart-back"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Textarea } from "@/components/ui/textarea"
 import {
   Select,
   SelectContent,
@@ -16,11 +16,14 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { RichTextEditor } from "@/components/rich-text-editor"
+import { countWordsFromHtml } from "@/components/ui/textarea-with-word-count"
+import { cn } from "@/lib/utils"
 import { ArrowLeft } from 'lucide-react'
-import Link from 'next/link'
+import { getUniqueNameErrorMessage } from "@/lib/unique-name-error"
 
 function NewExperimentForm() {
   const router = useRouter()
+  const handleBack = useSmartBack("/experiments")
   const searchParams = useSearchParams()
   const projectId = searchParams.get('project')
   
@@ -68,6 +71,11 @@ function NewExperimentForm() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    const descWords = countWordsFromHtml(formData.description)
+    if (descWords > 1000) {
+      setError(`Description must be 1000 words or fewer (currently ${descWords} words).`)
+      return
+    }
     setIsLoading(true)
     setError(null)
 
@@ -108,7 +116,7 @@ function NewExperimentForm() {
 
       router.push(`/experiments/${data.id}`)
     } catch (err: any) {
-      setError(err.message)
+      setError(getUniqueNameErrorMessage(err, "experiment"))
     } finally {
       setIsLoading(false)
     }
@@ -117,10 +125,8 @@ function NewExperimentForm() {
   return (
       <div className="max-w-3xl mx-auto space-y-6">
         <div className="flex items-center gap-4">
-          <Button variant="ghost" size="icon" asChild>
-            <Link href="/experiments">
-              <ArrowLeft className="h-4 w-4" />
-            </Link>
+          <Button variant="ghost" size="icon" onClick={handleBack}>
+            <ArrowLeft className="h-4 w-4" />
           </Button>
           <div>
             <h1 className="text-3xl font-bold tracking-tight text-foreground">Create New Experiment</h1>
@@ -183,6 +189,16 @@ function NewExperimentForm() {
                   placeholder="Describe the experiment methodology, objectives, and expected outcomes..."
                   className="text-foreground"
                 />
+                <p
+                  className={cn(
+                    "text-right text-xs tabular-nums",
+                    countWordsFromHtml(formData.description) > 1000
+                      ? "text-destructive"
+                      : "text-muted-foreground"
+                  )}
+                >
+                  {countWordsFromHtml(formData.description)} / 1000 words
+                </p>
               </div>
 
               <div className="space-y-2">
@@ -262,9 +278,6 @@ function NewExperimentForm() {
               <div className="flex gap-3">
                 <Button type="submit" disabled={isLoading}>
                   {isLoading ? "Creating..." : "Create Experiment"}
-                </Button>
-                <Button type="button" variant="outline" asChild>
-                  <Link href="/experiments">Cancel</Link>
                 </Button>
               </div>
             </form>

@@ -1,7 +1,9 @@
 # Dependencies
 node_modules/
+venv/
 .pnp
 .pnp.js
+.pnpm-store/
 
 # Testing
 coverage/

@@ -17,6 +17,7 @@ import { Label } from "@/components/ui/label"
 import { useToast } from "@/hooks/use-toast"
 import { useRouter } from "next/navigation"
 import { Copy, Loader2 } from "lucide-react"
+import { getUniqueNameErrorMessage } from "@/lib/unique-name-error"
 import { Checkbox } from "@/components/ui/checkbox"
 
 interface Experiment {
@@ -31,14 +32,26 @@ interface Experiment {
 interface DuplicateExperimentDialogProps {
   experiment: Experiment
   asMenuItem?: boolean
+  open?: boolean
+  onOpenChange?: (open: boolean) => void
 }
 
-export function DuplicateExperimentDialog({ experiment, asMenuItem = false }: DuplicateExperimentDialogProps) {
+export function DuplicateExperimentDialog({ 
+  experiment, 
+  asMenuItem = false,
+  open: externalOpen,
+  onOpenChange
+}: DuplicateExperimentDialogProps) {
   const { toast } = useToast()
   const router = useRouter()
   const supabase = createClient()
 
-  const [open, setOpen] = useState(false)
+  const [internalOpen, setInternalOpen] = useState(false)
+  const open = externalOpen !== undefined ? externalOpen : internalOpen
+  const setOpen = (value: boolean) => {
+    setInternalOpen(value)
+    onOpenChange?.(value)
+  }
   const [isDuplicating, setIsDuplicating] = useState(false)
   const [newName, setNewName] = useState(`${experiment.name} (Copy)`)
   const [includeProtocols, setIncludeProtocols] = useState(true)
@@ -108,7 +121,7 @@ export function DuplicateExperimentDialog({ experiment, asMenuItem = false }: Du
       console.error("Duplicate error:", error)
       toast({
         title: "Duplication Failed",
-        description: error.message || "Failed to duplicate experiment",
+        description: getUniqueNameErrorMessage(error, "experiment"),
         variant: "destructive",
       })
     } finally {
@@ -116,20 +129,25 @@ export function DuplicateExperimentDialog({ experiment, asMenuItem = false }: Du
     }
   }
 
+  // When externally controlled, don't render the trigger
+  const isExternallyControlled = externalOpen !== undefined
+
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      {asMenuItem ? (
-        <DialogTrigger className="flex items-center w-full px-2 py-1.5 hover:bg-accent rounded-sm cursor-pointer text-left">
-          <Copy className="h-4 w-4 mr-2" />
-          <span>Duplicate</span>
-        </DialogTrigger>
-      ) : (
-        <DialogTrigger asChild>
-          <Button variant="outline" size="sm">
+      {!isExternallyControlled && (
+        asMenuItem ? (
+          <DialogTrigger className="flex items-center w-full px-2 py-1.5 hover:bg-accent rounded-sm cursor-pointer text-left">
             <Copy className="h-4 w-4 mr-2" />
-            Duplicate
-          </Button>
-        </DialogTrigger>
+            <span>Duplicate</span>
+          </DialogTrigger>
+        ) : (
+          <DialogTrigger asChild>
+            <Button variant="outline" size="sm">
+              <Copy className="h-4 w-4 mr-2" />
+              Duplicate
+            </Button>
+          </DialogTrigger>
+        )
       )}
       <DialogContent>
         <DialogHeader>
@@ -210,4 +228,3 @@ export function DuplicateExperimentDialog({ experiment, asMenuItem = false }: Du
     </Dialog>
   )
 }
-

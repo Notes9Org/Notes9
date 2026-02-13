@@ -61,6 +61,7 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible"
+import { Popover, PopoverAnchor, PopoverContent } from "@/components/ui/popover"
 import { createClient } from "@/lib/supabase/client"
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
@@ -114,12 +115,19 @@ interface Counts {
   literature: number
 }
 
+type SearchResultItem = {
+  id: string
+  type: "project" | "experiment" | "lab_note" | "protocol" | "sample"
+  title: string
+  subtitle?: string
+  href: string
+}
+
 export function AppSidebar() {
   const pathname = usePathname()
   const router = useRouter()
-  const { setOpenMobile, isMobile, state, openMobile } = useSidebar()
+  const { setOpenMobile, isMobile, state, openMobile, open, setOpen } = useSidebar()
   const [searchQuery, setSearchQuery] = useState("")
-  const [isIconMode, setIsIconMode] = useState(false)
   const [projects, setProjects] = useState<Project[]>([])
   const [user, setUser] = useState<User | null>(null)
   const [counts, setCounts] = useState<Counts>({ projects: 0, experiments: 0, samples: 0, literature: 0 })
@@ -127,47 +135,42 @@ export function AppSidebar() {
   const [mounted, setMounted] = useState(false)
   const [openProjects, setOpenProjects] = useState<Record<string, boolean>>({})
   const [openExperiments, setOpenExperiments] = useState<Record<string, boolean>>({})
+  const [searchResults, setSearchResults] = useState<SearchResultItem[]>([])
+  const [searchLoading, setSearchLoading] = useState(false)
   const supabase = createClient()
 
-  const toggleIconMode = () => {
-    setIsIconMode(!isIconMode)
+  const isIconMode = !open
+
+  const toggleSidebarOpen = () => {
+    setOpen(!open)
   }
-
-  // Update parent width when icon mode changes
-  useEffect(() => {
-    const sidebarContainer = document.querySelector('[data-slot="sidebar-container"]') as HTMLElement
-    if (sidebarContainer) {
-      if (isIconMode) {
-        sidebarContainer.style.width = '64px'
-        sidebarContainer.style.setProperty('--sidebar-width', '64px')
-      } else {
-        sidebarContainer.style.width = '280px'
-        sidebarContainer.style.setProperty('--sidebar-width', '280px')
-      }
-    }
-
-    // Also update the custom layout width variable
-    const customSidebarContainer = document.querySelector('[data-sidebar-container]') as HTMLElement
-    if (customSidebarContainer) {
-      if (isIconMode) {
-        customSidebarContainer.style.width = '64px'
-        customSidebarContainer.style.setProperty('--sidebar-width', '64px')
-      } else {
-        customSidebarContainer.style.width = '280px'
-        customSidebarContainer.style.setProperty('--sidebar-width', '280px')
-      }
-    }
-
-    // Dispatch custom event to notify layout of width change
-    window.dispatchEvent(new CustomEvent('sidebar-width-change', {
-      detail: { width: isIconMode ? 64 : 280, isIconMode }
-    }))
-  }, [isIconMode])
 
   // Prevent hydration mismatch by only activating after mount
   useEffect(() => {
     setMounted(true)
   }, [])
+
+  // Debounced sidebar search (file/document level)
+  useEffect(() => {
+    if (!searchQuery.trim() || searchQuery.length < 2) {
+      setSearchResults([])
+      return
+    }
+    const t = setTimeout(async () => {
+      setSearchLoading(true)
+      try {
+        const res = await fetch(`/api/search?q=${encodeURIComponent(searchQuery.trim())}`)
+        const data = await res.json()
+        if (res.ok) setSearchResults(data.results ?? [])
+        else setSearchResults([])
+      } catch {
+        setSearchResults([])
+      } finally {
+        setSearchLoading(false)
+      }
+    }, 300)
+    return () => clearTimeout(t)
+  }, [searchQuery])
 
   useEffect(() => {
     async function fetchData() {
@@ -559,15 +562,8 @@ export function AppSidebar() {
   return (
     <Sidebar
       variant="sidebar"
-      className={cn(
-        "transition-all duration-200 ease-in-out",
-        isIconMode && "!w-16"
-      )}
-      style={{
-        ...(isIconMode && {
-          '--sidebar-width': '64px',
-        })
-      } as React.CSSProperties}
+      collapsible="icon"
+      className="transition-all duration-200 ease-in-out"
     >
       {/* Header with Workspace Dropdown */}
       <SidebarHeader className="p-2">
@@ -577,22 +573,24 @@ export function AppSidebar() {
               // Icon mode: Logo centered, expand button below or as overlay
               <div className="flex flex-col items-center space-y-2">
                 <SidebarMenuButton size="lg" className="h-10 w-10 p-0">
-                  <div className="flex aspect-square size-8 items-center justify-center rounded-lg">
+                  <div className="flex aspect-square size-8 items-center justify-center rounded-lg overflow-hidden">
                     <Image
                       src="/notes9-logo.png"
                       alt="Notes9"
                       width={32}
                       height={32}
-                      className="size-8"
+                      className="size-8 object-contain"
                     />
                   </div>
                 </SidebarMenuButton>
 
                 {/* Expand Button - Below logo in icon mode */}
                 <button
-                  onClick={toggleIconMode}
+                  type="button"
+                  onClick={toggleSidebarOpen}
                   className="flex h-6 w-6 items-center justify-center rounded-md text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground transition-colors"
                   title="Expand sidebar"
+                  aria-label="Expand sidebar"
                 >
                   <ChevronDown className="h-3 w-3 -rotate-90" />
                 </button>
@@ -601,13 +599,13 @@ export function AppSidebar() {
               // Normal mode: Logo and text with collapse button on the right
               <div className="flex items-center gap-2">
                 <SidebarMenuButton size="lg" className="flex-1 min-w-0">
-                  <div className="flex aspect-square size-8 items-center justify-center rounded-lg">
+                  <div className="flex aspect-square size-8 items-center justify-center rounded-lg overflow-hidden">
                     <Image
                       src="/notes9-logo.png"
                       alt="Notes9"
                       width={32}
                       height={32}
-                      className="size-8"
+                      className="size-8 object-contain"
                     />
                   </div>
                   <div className="grid flex-1 text-left text-sm leading-tight min-w-0">
@@ -618,9 +616,11 @@ export function AppSidebar() {
 
                 {/* Collapse Button */}
                 <button
-                  onClick={toggleIconMode}
+                  type="button"
+                  onClick={toggleSidebarOpen}
                   className="flex h-8 w-8 items-center justify-center rounded-md text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground transition-colors flex-shrink-0"
                   title="Collapse sidebar"
+                  aria-label="Collapse sidebar"
                 >
                   <PanelLeftClose className="h-4 w-4" />
                 </button>
@@ -634,311 +634,390 @@ export function AppSidebar() {
         {/* Search - Hidden in icon mode */}
         <SidebarGroup className={cn(isIconMode && "hidden")}>
           <SidebarGroupContent className="relative px-2">
-            <Search className="pointer-events-none absolute left-4 top-1/2 size-4 -translate-y-1/2 select-none opacity-50" />
-            <SidebarInput
-              placeholder="Search..."
-              className="pl-8"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-            />
+            <Popover open={searchQuery.length >= 2}>
+              <PopoverAnchor asChild>
+                <div className="relative">
+                  <Search className="pointer-events-none absolute left-4 top-1/2 size-4 -translate-y-1/2 select-none opacity-50" />
+                  <SidebarInput
+                    placeholder="Search..."
+                    className="pl-8"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Escape") setSearchQuery("")
+                    }}
+                  />
+                </div>
+              </PopoverAnchor>
+              <PopoverContent
+                className="w-[var(--sidebar-width)] min-w-0 p-0 max-h-[min(60vh,400px)] overflow-auto"
+                align="start"
+                sideOffset={4}
+                onOpenAutoFocus={(e) => e.preventDefault()}
+              >
+                {searchLoading ? (
+                  <div className="px-3 py-4 text-center text-sm text-muted-foreground">
+                    Searching...
+                  </div>
+                ) : searchResults.length === 0 ? (
+                  <div className="px-3 py-4 text-center text-sm text-muted-foreground">
+                    No files or documents found.
+                  </div>
+                ) : (
+                  <ul className="py-1">
+                    {searchResults.map((item) => {
+                      const Icon =
+                        item.type === "project"
+                          ? Folder
+                          : item.type === "experiment"
+                            ? FlaskConical
+                            : item.type === "lab_note"
+                              ? FileText
+                              : item.type === "protocol"
+                                ? FileText
+                                : TestTube
+                      return (
+                        <li key={`${item.type}-${item.id}`}>
+                          <button
+                            type="button"
+                            className="flex w-full items-center gap-2 px-3 py-2 text-sm hover:bg-sidebar-accent hover:text-sidebar-accent-foreground rounded-sm mx-1 text-left"
+                            onClick={() => {
+                              setSearchQuery("")
+                              setSearchResults([])
+                              router.push(item.href)
+                            }}
+                          >
+                            <Icon className="size-4 shrink-0 opacity-70" />
+                            <span className="min-w-0 flex-1 truncate" title={item.title}>
+                              {item.title}
+                              {item.subtitle ? (
+                                <span className="text-muted-foreground text-xs ml-1">
+                                  · {item.subtitle}
+                                </span>
+                              ) : null}
+                            </span>
+                          </button>
+                        </li>
+                      )
+                    })}
+                  </ul>
+                )}
+              </PopoverContent>
+            </Popover>
           </SidebarGroupContent>
         </SidebarGroup>
 
-        {/* Main Navigation */}
-        <SidebarGroup>
-          {/* <SidebarGroupLabel>Platform</SidebarGroupLabel> */}
-          <SidebarGroupContent>
-            <SidebarMenu>
+        {/* Main Navigation - icons only when collapsed; align centered in icon mode */}
+        <SidebarGroup className={cn(isIconMode && "flex flex-col items-center")}>
+          <SidebarGroupContent className={cn(isIconMode && "w-full flex flex-col items-center")}>
+            <SidebarMenu className={cn(isIconMode && "flex flex-col items-center gap-1")}>
               {navigation.map((item) => {
-                const Icon = item.icon
-                const isActive = mounted && (pathname === item.href || pathname.startsWith(item.href + "/"))
+                const Icon = item.icon;
+                const isActive =
+                  mounted &&
+                  (pathname === item.href ||
+                    pathname.startsWith(item.href + "/"));
 
                 // Only show badge for these items and only if count > 0
-                let badge: number | null = null
+                let badge: number | null = null;
                 if (item.name === "Projects" && counts.projects > 0) {
-                  badge = counts.projects
-                } else if (item.name === "Experiments" && counts.experiments > 0) {
-                  badge = counts.experiments
+                  badge = counts.projects;
+                } else if (
+                  item.name === "Experiments" &&
+                  counts.experiments > 0
+                ) {
+                  badge = counts.experiments;
                 } else if (item.name === "Samples" && counts.samples > 0) {
-                  badge = counts.samples
-                } else if (item.name === "Literature" && counts.literature > 0) {
-                  badge = counts.literature
+                  badge = counts.samples;
+                } else if (
+                  item.name === "Literature" &&
+                  counts.literature > 0
+                ) {
+                  badge = counts.literature;
                 }
 
                 return (
                   <SidebarMenuItem key={item.name}>
-                    <SidebarMenuButton asChild isActive={isActive} tooltip={isIconMode ? item.name : undefined}>
+                    <SidebarMenuButton
+                      asChild
+                      isActive={isActive}
+                      tooltip={isIconMode ? item.name : undefined}
+                    >
                       <Link href={item.href}>
                         <Icon />
-                        <span className={cn(isIconMode && "hidden")}>{item.name}</span>
+                        <span className={cn(isIconMode && "hidden")}>
+                          {item.name}
+                        </span>
                       </Link>
                     </SidebarMenuButton>
                     {badge !== null && !isIconMode && (
                       <SidebarMenuBadge>{badge}</SidebarMenuBadge>
                     )}
                   </SidebarMenuItem>
-                )
+                );
               })}
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
 
-        <SidebarSeparator className="group-data-[collapsible=icon]:hidden" />
-
-        {/* Projects Section with Collapsible - Hidden in icon mode */}
-        <Collapsible defaultOpen={true} className={cn("group/collapsible", isIconMode && "hidden")}>
-          <SidebarGroup>
-            <div className="flex items-center justify-between px-2 py-1">
-              <CollapsibleTrigger
-                className="flex flex-1 items-center gap-2 text-xs font-medium text-sidebar-foreground/70 hover:text-sidebar-foreground"
-              >
-                <span>Active Projects</span>
-                <ChevronDown className="size-4 transition-transform duration-200 group-data-[state=open]/collapsible:rotate-180" />
-              </CollapsibleTrigger>
-              <button
-                title="Add Project"
-                onClick={(e) => {
-                  e.preventDefault()
-                  e.stopPropagation()
-                  window.location.href = "/projects/new"
-                }}
-                className="flex size-5 items-center justify-center rounded-md hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
-              >
-                <Plus className="size-4" />
-                <span className="sr-only">Add Project</span>
-              </button>
-            </div>
-            <CollapsibleContent>
-              <SidebarGroupContent>
-                <SidebarMenu>
-                  {loading ? (
-                    Array.from({ length: 3 }).map((_, index) => (
-                      <SidebarMenuItem key={index}>
-                        <SidebarMenuSkeleton showIcon />
+        {/* Projects section and separator: only show when expanded (not in icon mode) */}
+        {!isIconMode && (
+          <>
+            <SidebarSeparator />
+            {mounted ? (
+              <Collapsible defaultOpen={true} className="group/collapsible">
+                <SidebarGroup>
+                  <div className="flex h-8 shrink-0 items-center gap-2 rounded-md px-2 text-xs font-medium text-sidebar-foreground/70 outline-hidden ring-sidebar-ring focus-visible:ring-2 [&>svg]:size-4 [&>svg]:shrink-0">
+                    <CollapsibleTrigger className="flex min-w-0 flex-1 items-center gap-2 text-left hover:text-sidebar-foreground transition-colors">
+                      <span className="truncate">Active Projects</span>
+                      <ChevronDown className="size-4 shrink-0 transition-transform duration-200 group-data-[state=open]/collapsible:rotate-180" />
+                    </CollapsibleTrigger>
+                    <button
+                      title="Add Project"
+                      onClick={(e) => {
+                        e.preventDefault()
+                        e.stopPropagation()
+                        window.location.href = "/projects/new"
+                      }}
+                      className="flex aspect-square w-5 items-center justify-center rounded-md p-0 text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground transition-colors"
+                    >
+                      <Plus className="size-4" />
+                      <span className="sr-only">Add Project</span>
+                    </button>
+                  </div>
+                  <CollapsibleContent>
+                <SidebarGroupContent>
+                  <SidebarMenu>
+                    {loading ? (
+                      Array.from({ length: 3 }).map((_, index) => (
+                        <SidebarMenuItem key={index}>
+                          <SidebarMenuSkeleton showIcon />
+                        </SidebarMenuItem>
+                      ))
+                    ) : projects.length === 0 ? (
+                      <SidebarMenuItem>
+                        <div className="flex h-8 items-center rounded-md px-2 text-xs text-sidebar-foreground/70">
+                          No active projects
+                        </div>
                       </SidebarMenuItem>
-                    ))
-                  ) : projects.length === 0 ? (
-                    <SidebarMenuItem>
-                      <div className="px-2 py-1 text-xs text-muted-foreground">
-                        No active projects
-                      </div>
-                    </SidebarMenuItem>
-                  ) : (
-                    projects.map((project) => {
-                      const isProjectOpen = openProjects[project.id] ?? false
-                      return (
-                        <SidebarMenuItem key={project.id}>
-                          <div className="flex items-center gap-2">
-                            <button
-                              className="flex-shrink-0 text-muted-foreground hover:text-foreground"
-                              onClick={() =>
-                                setOpenProjects((prev) => ({
-                                  ...prev,
-                                  [project.id]: !isProjectOpen,
-                                }))
-                              }
-                              aria-label={isProjectOpen ? "Collapse project" : "Expand project"}
-                            >
-                              {isProjectOpen ? (
-                                <FolderOpen className="size-4" />
-                              ) : (
-                                <Folder className="size-4" />
-                              )}
-                            </button>
-
-                            <Link
-                              href={`/projects/${project.id}`}
-                              className={cn(
-                                "flex items-center gap-2 flex-1 min-w-0 px-2 py-1.5 rounded-md text-sm transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
-                                mounted && pathname === `/projects/${project.id}`
-                                  ? "bg-sidebar-accent font-medium text-sidebar-accent-foreground"
-                                  : "text-sidebar-foreground"
-                              )}
-                            >
-                              <div
-                                className={cn(
-                                  "size-2 rounded-full shrink-0",
-                                  project.status === "active" ? "bg-green-500" : "bg-yellow-500"
+                    ) : (
+                      projects.map((project) => {
+                        const isProjectOpen = openProjects[project.id] ?? false
+                        return (
+                          <SidebarMenuItem key={project.id}>
+                            <div className="flex h-8 w-full min-w-0 items-center gap-2 rounded-md p-2 transition-colors">
+                              <button
+                                type="button"
+                                className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground transition-colors [&>svg]:size-4"
+                                onClick={() =>
+                                  setOpenProjects((prev) => ({
+                                    ...prev,
+                                    [project.id]: !isProjectOpen,
+                                  }))
+                                }
+                                aria-label={isProjectOpen ? "Collapse project" : "Expand project"}
+                              >
+                                {isProjectOpen ? (
+                                  <FolderOpen className="size-4" />
+                                ) : (
+                                  <Folder className="size-4" />
                                 )}
-                              />
-                              <span className="truncate">{project.name}</span>
-                            </Link>
+                              </button>
+                              <SidebarMenuButton
+                                asChild
+                                isActive={mounted && pathname === `/projects/${project.id}`}
+                                tooltip={project.name}
+                                className="min-w-0 flex-1 gap-2 pl-0"
+                              >
+                                <Link
+                                  href={`/projects/${project.id}`}
+                                  draggable
+                                  onDragStart={(e) => {
+                                    e.dataTransfer.setData('application/json', JSON.stringify({
+                                      type: 'project',
+                                      id: project.id,
+                                      name: project.name
+                                    }));
+                                    e.dataTransfer.effectAllowed = 'copy';
+                                  }}
+                                  onClick={(e) => e.stopPropagation()}
+                                >
+                                  <span className="truncate">{project.name}</span>
+                                </Link>
+                              </SidebarMenuButton>
+                              <button
+                                type="button"
+                                className="flex h-5 min-w-[1.25rem] shrink-0 items-center justify-center rounded-md text-xs font-medium tabular-nums text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground transition-colors"
+                                onClick={() =>
+                                  setOpenProjects((prev) => ({
+                                    ...prev,
+                                    [project.id]: !isProjectOpen,
+                                  }))
+                                }
+                                aria-label={isProjectOpen ? "Collapse project" : "Expand project"}
+                              >
+                                {project.experiment_count ?? 0}
+                              </button>
+                            </div>
 
-                            {project.experiment_count && project.experiment_count > 0 && (
-                              <div className="flex h-5 min-w-5 items-center justify-center rounded-md bg-sidebar-primary px-1 text-xs font-medium text-sidebar-primary-foreground tabular-nums flex-shrink-0">
-                                {project.experiment_count}
+                            {isProjectOpen && project.experiments && project.experiments.length > 0 && (
+                              <div className="ml-6 mt-2 space-y-1 border-l border-border/50 pl-3">
+                                {project.experiments.map((exp) => {
+                                  const isExpOpen = openExperiments[exp.id] ?? false
+                                  return (
+                                    <div key={exp.id}>
+                                      <div className="flex w-full min-w-0 items-center gap-2">
+                                        <button
+                                          className="shrink-0 rounded-md p-1.5 text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground transition-colors [&>svg]:size-4"
+                                          onClick={() =>
+                                            setOpenExperiments((prev) => ({
+                                              ...prev,
+                                              [exp.id]: !isExpOpen,
+                                            }))
+                                          }
+                                          aria-label={isExpOpen ? "Collapse experiment" : "Expand experiment"}
+                                        >
+                                          <FlaskConical
+                                            className={cn(
+                                              "size-4 transition-transform",
+                                              isExpOpen ? "rotate-12 text-sidebar-accent-foreground" : "-rotate-12"
+                                            )}
+                                          />
+                                        </button>
+                                        <button
+                                          onClick={() => router.push(`/experiments/${exp.id}`)}
+                                          draggable
+                                          onDragStart={(e) => {
+                                            e.stopPropagation();
+                                            e.dataTransfer.setData('application/json', JSON.stringify({
+                                              type: 'experiment',
+                                              id: exp.id,
+                                              name: exp.name
+                                            }));
+                                            e.dataTransfer.effectAllowed = 'copy';
+                                          }}
+                                          className={cn(
+                                            "min-w-0 flex-1 rounded-md px-2 py-1.5 text-left text-sm truncate cursor-grab active:cursor-grabbing transition-colors",
+                                            pathname === `/experiments/${exp.id}`
+                                              ? "font-medium text-sidebar-accent-foreground bg-sidebar-accent"
+                                              : "text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+                                          )}
+                                        >
+                                          {exp.name}
+                                        </button>
+                                      </div>
+
+                                      {isExpOpen && exp.lab_notes && exp.lab_notes.length > 0 && (
+                                        <div className="ml-6 mt-1 space-y-0.5">
+                                          {exp.lab_notes.map((note) => (
+                                            <button
+                                              key={note.id}
+                                              onClick={() => router.push(`/experiments/${exp.id}?tab=notes&noteId=${note.id}`)}
+                                              draggable
+                                              onDragStart={(e) => {
+                                                e.stopPropagation();
+                                                e.dataTransfer.setData('application/json', JSON.stringify({
+                                                  type: 'lab_note',
+                                                  id: note.id,
+                                                  name: note.title || 'Untitled note',
+                                                  experimentId: exp.id
+                                                }));
+                                                e.dataTransfer.effectAllowed = 'copy';
+                                              }}
+                                              className={cn(
+                                                "flex w-full min-w-0 items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs truncate cursor-grab active:cursor-grabbing transition-colors [&>svg]:size-4 [&>svg]:shrink-0",
+                                                pathname.startsWith(`/experiments/${exp.id}`)
+                                                  ? "bg-sidebar-accent text-sidebar-accent-foreground font-medium"
+                                                  : "text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+                                              )}
+                                            >
+                                              <FileText className="size-4 shrink-0" />
+                                              <span className="min-w-0 truncate">{note.title || "Untitled note"}</span>
+                                            </button>
+                                          ))}
+                                        </div>
+                                      )}
+                                    </div>
+                                  )
+                                })}
                               </div>
                             )}
-                          </div>
-
-                          {isProjectOpen && project.experiments && project.experiments.length > 0 && (
-                            <div className="ml-6 mt-2 space-y-1 border-l border-border/50 pl-3">
-                              {project.experiments.map((exp) => {
-                                const isExpOpen = openExperiments[exp.id] ?? false
-                                return (
-                                  <div key={exp.id}>
-                                    <div className="flex items-start">
-                                      <button
-                                        className="mr-2 mt-0.5 text-muted-foreground hover:text-foreground"
-                                        onClick={() =>
-                                          setOpenExperiments((prev) => ({
-                                            ...prev,
-                                            [exp.id]: !isExpOpen,
-                                          }))
-                                        }
-                                        aria-label={isExpOpen ? "Collapse experiment" : "Expand experiment"}
-                                      >
-                                        <FlaskConical
-                                          className={cn(
-                                            "size-4 transition-transform",
-                                            isExpOpen ? "rotate-12 text-foreground" : "-rotate-12 text-muted-foreground"
-                                          )}
-                                        />
-                                      </button>
-                                      <button
-                                        onClick={() => router.push(`/experiments/${exp.id}`)}
-                                        data-navigate
-                                        className={cn(
-                                          "flex-1 text-left text-sm truncate hover:text-foreground",
-                                          pathname === `/experiments/${exp.id}` ? "font-semibold text-foreground" : "text-muted-foreground"
-                                        )}
-                                      >
-                                        {exp.name}
-                                      </button>
-                                    </div>
-
-                                    {isExpOpen && exp.lab_notes && exp.lab_notes.length > 0 && (
-                                      <div className="ml-6 mt-1 space-y-1">
-                                        {exp.lab_notes.map((note) => (
-                                          <button
-                                            key={note.id}
-                                            onClick={() => router.push(`/experiments/${exp.id}?tab=notes&noteId=${note.id}`)}
-                                            data-navigate
-                                            className={cn(
-                                              "block w-full text-left text-xs truncate px-2 py-1 rounded hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
-                                              pathname.startsWith(`/experiments/${exp.id}`) ? "text-foreground" : "text-muted-foreground"
-                                            )}
-                                          >
-                                            <span className="inline-flex items-center gap-1">
-                                              <FileText className="h-3 w-3" />
-                                              {note.title || "Untitled note"}
-                                            </span>
-                                          </button>
-                                        ))}
-                                      </div>
-                                    )}
-                                  </div>
-                                )
-                              })}
-                            </div>
-                          )}
-                        </SidebarMenuItem>
-                      )
-                    })
-                  )}
-                </SidebarMenu>
-              </SidebarGroupContent>
-            </CollapsibleContent>
-          </SidebarGroup>
-        </Collapsible>
-
-        <SidebarSeparator className="group-data-[collapsible=icon]:hidden" />
-
-        {/* Settings Group - Hidden in icon mode */}
-        <Collapsible defaultOpen={false} className={cn("group/collapsible", isIconMode && "hidden")}>
-          <SidebarGroup>
-            <SidebarGroupLabel asChild>
-              <CollapsibleTrigger className="w-full">
-                Settings
-                <ChevronDown className="ml-auto transition-transform duration-200 group-data-[state=open]/collapsible:rotate-180" />
-              </CollapsibleTrigger>
-            </SidebarGroupLabel>
-            <CollapsibleContent>
-              <SidebarGroupContent>
-                <SidebarMenu>
-                  <SidebarMenuItem>
-                    <SidebarMenuButton asChild>
-                      <Link href="/settings">
-                        <Settings className="size-4" />
-                        <span>General</span>
-                      </Link>
-                    </SidebarMenuButton>
-                  </SidebarMenuItem>
-                  <SidebarMenuItem>
-                    <SidebarMenuButton asChild>
-                      <Link href="/settings/team">
-                        <Users className="size-4" />
-                        <span>Team</span>
-                      </Link>
-                    </SidebarMenuButton>
-                  </SidebarMenuItem>
-                </SidebarMenu>
-              </SidebarGroupContent>
-            </CollapsibleContent>
-          </SidebarGroup>
-        </Collapsible>
+                          </SidebarMenuItem>
+                        )
+                      })
+                    )}
+                  </SidebarMenu>
+                </SidebarGroupContent>
+              </CollapsibleContent>
+            </SidebarGroup>
+          </Collapsible>
+            ) : (
+              <SidebarGroup>
+                <div className="flex h-8 shrink-0 items-center rounded-md px-2 text-xs font-medium text-sidebar-foreground/70">
+                  Active Projects
+                </div>
+              </SidebarGroup>
+            )}
+            <SidebarSeparator />
+          </>
+        )}
       </SidebarContent>
 
       {/* Footer with Catalyst and User Dropdown */}
       <SidebarFooter>
         <SidebarMenu>
           {/* Catalyst AI Button */}
-          <SidebarMenuItem>
-            <SidebarMenuButton
-              asChild
-              tooltip={isIconMode ? "Catalyst AI" : undefined}
-              className={cn(
-                "bg-primary/10 hover:bg-primary/20 text-primary",
-                isIconMode && "justify-center"
-              )}
-            >
-              <Link href="/catalyst">
-                <Sparkles className="size-4" />
-                <span className={cn(isIconMode && "hidden")}>Catalyst</span>
-              </Link>
-            </SidebarMenuButton>
-          </SidebarMenuItem>
 
-          {/* User Dropdown */}
+
+          {/* User Dropdown - Only render after mount to prevent hydration mismatch */}
           <SidebarMenuItem>
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <SidebarMenuButton
-                  size="lg"
-                  className="data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground"
-                  tooltip={isIconMode ? getUserDisplayName() : undefined}
+            {mounted ? (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <SidebarMenuButton
+                    size="lg"
+                    className="data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground"
+                  >
+                    <div className="flex aspect-square size-8 shrink-0 items-center justify-center rounded-lg bg-sidebar-accent text-sidebar-accent-foreground">
+                      <span className="text-xs font-semibold">{getUserInitials()}</span>
+                    </div>
+                    <span className="min-w-0 flex-1 truncate text-left text-sm font-semibold">
+                      {getUserDisplayName()}
+                    </span>
+                    <ChevronUp className="ml-auto size-4 shrink-0" />
+                  </SidebarMenuButton>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent
+                  className="w-[--radix-dropdown-menu-trigger-width] min-w-56 rounded-lg"
+                  side="top"
+                  align="start"
+                  sideOffset={4}
                 >
-                  <div className="flex aspect-square size-8 items-center justify-center rounded-lg bg-sidebar-accent text-sidebar-accent-foreground">
-                    <span className="text-xs font-semibold">{getUserInitials()}</span>
-                  </div>
-                  <div className={cn("grid flex-1 text-left text-sm leading-tight", isIconMode && "hidden")}>
-                    <span className="truncate font-semibold">{getUserDisplayName()}</span>
-                    <span className="truncate text-xs">{user?.email || "Loading..."}</span>
-                  </div>
-                  <ChevronUp className={cn("ml-auto size-4", isIconMode && "hidden")} />
-                </SidebarMenuButton>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent
-                className="w-[--radix-dropdown-menu-trigger-width] min-w-56 rounded-lg"
-                side="top"
-                align="start"
-                sideOffset={4}
-              >
-                <DropdownMenuItem asChild>
-                  <Link href="/settings">
-                    <Settings className="mr-2 size-4" />
-                    <span>Account Settings</span>
-                  </Link>
-                </DropdownMenuItem>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem onClick={handleSignOut}>
-                  <span>Sign out</span>
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
+                  <DropdownMenuItem asChild>
+                    <Link href="/settings">
+                      <Settings className="mr-2 size-4" />
+                      <span>Account Settings</span>
+                    </Link>
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem onClick={handleSignOut}>
+                    <span>Sign out</span>
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            ) : (
+              <SidebarMenuButton size="lg">
+                <div className="flex aspect-square size-8 shrink-0 items-center justify-center rounded-lg bg-sidebar-accent text-sidebar-accent-foreground">
+                  <span className="text-xs font-semibold">...</span>
+                </div>
+                <span className="min-w-0 flex-1 truncate text-left text-sm font-semibold">
+                  Loading...
+                </span>
+              </SidebarMenuButton>
+            )}
           </SidebarMenuItem>
         </SidebarMenu>
       </SidebarFooter>
     </Sidebar>
-  )
+  );
 }

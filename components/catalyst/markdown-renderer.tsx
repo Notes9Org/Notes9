@@ -2,9 +2,13 @@
 
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import remarkMath from 'remark-math';
 import rehypeHighlight from 'rehype-highlight';
+import rehypeKatex from 'rehype-katex';
+import Link from 'next/link';
 import { cn } from '@/lib/utils';
 import 'highlight.js/styles/github-dark.css';
+import 'katex/dist/katex.min.css';
 
 interface MarkdownRendererProps {
   content: string;
@@ -13,10 +17,10 @@ interface MarkdownRendererProps {
 
 export function MarkdownRenderer({ content, className }: MarkdownRendererProps) {
   return (
-    <div className={cn('prose prose-sm dark:prose-invert max-w-none', className)}>
+    <div className={cn('prose prose-sm dark:prose-invert max-w-none text-foreground prose-headings:text-foreground prose-p:text-foreground prose-li:text-foreground [&_.katex]:text-inherit [&_.katex-display]:my-2', 'prose-p:my-1.5 prose-p:leading-relaxed prose-ul:my-1 prose-ol:my-1 prose-li:my-0', className)}>
     <ReactMarkdown
-      remarkPlugins={[remarkGfm]}
-      rehypePlugins={[rehypeHighlight]}
+      remarkPlugins={[remarkGfm, remarkMath]}
+      rehypePlugins={[rehypeHighlight, rehypeKatex]}
       components={{
         // Custom code block rendering
         code({ className, children, ...props }) {
@@ -47,11 +51,26 @@ export function MarkdownRenderer({ content, className }: MarkdownRendererProps) 
             </pre>
           );
         },
-        // Custom link styling
+        // Custom link styling - use Next.js Link for internal routes
         a({ href, children, ...props }) {
+          const url = href ?? '#';
+          const isInternal = url.startsWith('/');
+          
+          if (isInternal) {
+            return (
+              <Link
+                href={url}
+                className="text-primary underline underline-offset-2 hover:text-primary/80 transition-colors"
+                {...props}
+              >
+                {children}
+              </Link>
+            );
+          }
+          
           return (
             <a
-              href={href}
+              href={url}
               target="_blank"
               rel="noopener noreferrer"
               className="text-primary underline underline-offset-2 hover:text-primary/80"
@@ -61,47 +80,47 @@ export function MarkdownRenderer({ content, className }: MarkdownRendererProps) 
             </a>
           );
         },
-        // Custom list styling
+        // Custom list styling (tighter spacing)
         ul({ children, ...props }) {
           return (
-            <ul className="list-disc list-inside space-y-1 my-2" {...props}>
+            <ul className="list-disc list-inside space-y-0.5 my-1" {...props}>
               {children}
             </ul>
           );
         },
         ol({ children, ...props }) {
           return (
-            <ol className="list-decimal list-inside space-y-1 my-2" {...props}>
+            <ol className="list-decimal list-inside space-y-0.5 my-1" {...props}>
               {children}
             </ol>
           );
         },
-        // Custom paragraph
+        // Custom paragraph (readable spacing and line height)
         p({ children, ...props }) {
           return (
-            <p className="my-2 leading-relaxed" {...props}>
+            <p className="my-1.5 leading-relaxed text-foreground" {...props}>
               {children}
             </p>
           );
         },
-        // Custom headings
+        // Custom headings (tighter spacing)
         h1({ children, ...props }) {
           return (
-            <h1 className="text-xl font-bold mt-4 mb-2" {...props}>
+            <h1 className="text-xl font-bold mt-3 mb-1" {...props}>
               {children}
             </h1>
           );
         },
         h2({ children, ...props }) {
           return (
-            <h2 className="text-lg font-semibold mt-3 mb-2" {...props}>
+            <h2 className="text-lg font-semibold mt-2 mb-1" {...props}>
               {children}
             </h2>
           );
         },
         h3({ children, ...props }) {
           return (
-            <h3 className="text-base font-semibold mt-2 mb-1" {...props}>
+            <h3 className="text-base font-semibold mt-2 mb-0.5" {...props}>
               {children}
             </h3>
           );
@@ -110,7 +129,7 @@ export function MarkdownRenderer({ content, className }: MarkdownRendererProps) 
         blockquote({ children, ...props }) {
           return (
             <blockquote
-              className="border-l-4 border-primary/30 pl-4 italic text-muted-foreground my-2"
+              className="border-l-4 border-primary/30 pl-4 italic text-muted-foreground my-1"
               {...props}
             >
               {children}
@@ -120,7 +139,7 @@ export function MarkdownRenderer({ content, className }: MarkdownRendererProps) 
         // Custom table
         table({ children, ...props }) {
           return (
-            <div className="overflow-x-auto my-2">
+            <div className="overflow-x-auto my-1">
               <table className="min-w-full border-collapse border border-border" {...props}>
                 {children}
               </table>

@@ -17,6 +17,7 @@ import { Label } from "@/components/ui/label"
 import { useToast } from "@/hooks/use-toast"
 import { useRouter } from "next/navigation"
 import { Copy, Loader2 } from "lucide-react"
+import { getUniqueNameErrorMessage } from "@/lib/unique-name-error"
 import { Checkbox } from "@/components/ui/checkbox"
 
 interface Project {
@@ -32,14 +33,20 @@ interface Project {
 interface DuplicateProjectDialogProps {
   project: Project
   asMenuItem?: boolean
+  /** When provided with onOpenChange, dialog is controlled and no trigger is rendered */
+  open?: boolean
+  onOpenChange?: (open: boolean) => void
 }
 
-export function DuplicateProjectDialog({ project, asMenuItem = false }: DuplicateProjectDialogProps) {
+export function DuplicateProjectDialog({ project, asMenuItem = false, open: controlledOpen, onOpenChange: controlledOnOpenChange }: DuplicateProjectDialogProps) {
   const { toast } = useToast()
   const router = useRouter()
   const supabase = createClient()
 
-  const [open, setOpen] = useState(false)
+  const [internalOpen, setInternalOpen] = useState(false)
+  const isControlled = controlledOpen !== undefined && controlledOnOpenChange !== undefined
+  const open = isControlled ? controlledOpen : internalOpen
+  const setOpen = isControlled ? controlledOnOpenChange : setInternalOpen
   const [isDuplicating, setIsDuplicating] = useState(false)
   const [newName, setNewName] = useState(`${project.name} (Copy)`)
   const [includeMembers, setIncludeMembers] = useState(true)
@@ -118,7 +125,7 @@ export function DuplicateProjectDialog({ project, asMenuItem = false }: Duplicat
       console.error("Duplicate error:", error)
       toast({
         title: "Duplication Failed",
-        description: error.message || "Failed to duplicate project",
+        description: getUniqueNameErrorMessage(error, "project"),
         variant: "destructive",
       })
     } finally {
@@ -128,19 +135,19 @@ export function DuplicateProjectDialog({ project, asMenuItem = false }: Duplicat
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      {asMenuItem ? (
+      {!isControlled && (asMenuItem ? (
         <DialogTrigger className="flex items-center w-full px-2 py-1.5 hover:bg-accent rounded-sm cursor-pointer text-left">
           <Copy className="h-4 w-4 mr-2" />
           <span>Duplicate</span>
         </DialogTrigger>
-      ) : (
+      ) : !isControlled ? (
         <DialogTrigger asChild>
           <Button variant="outline" size="sm">
             <Copy className="h-4 w-4 mr-2" />
             Duplicate
           </Button>
         </DialogTrigger>
-      )}
+      ) : null)}
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Duplicate Project</DialogTitle>

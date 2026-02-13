@@ -3,7 +3,7 @@ import { useEffect, useRef, useState, useCallback } from 'react'
 export type SaveStatus = 'saved' | 'saving' | 'unsaved' | 'error'
 
 interface UseAutoSaveOptions {
-  onSave: (content: string) => Promise<void>
+  onSave: (content: string, ...args: any[]) => Promise<void>
   delay?: number // milliseconds to wait before saving
   enabled?: boolean
 }
@@ -16,10 +16,10 @@ export function useAutoSave({
   const [status, setStatus] = useState<SaveStatus>('saved')
   const [lastSaved, setLastSaved] = useState<Date | null>(null)
   const timeoutRef = useRef<NodeJS.Timeout | undefined>(undefined)
-  const contentRef = useRef<string>('')
+  const paramsRef = useRef<[string, ...any[]]>([''])
   const isSavingRef = useRef<boolean>(false)
 
-  const save = useCallback(async (content: string) => {
+  const save = useCallback(async (content: string, ...args: any[]) => {
     if (isSavingRef.current) {
       // If already saving, schedule another save after this one completes
       return
@@ -28,7 +28,7 @@ export function useAutoSave({
     try {
       isSavingRef.current = true
       setStatus('saving')
-      await onSave(content)
+      await onSave(content, ...args)
       setStatus('saved')
       setLastSaved(new Date())
     } catch (error) {
@@ -36,8 +36,8 @@ export function useAutoSave({
       setStatus('error')
       // Retry after 5 seconds on error
       setTimeout(() => {
-        if (contentRef.current) {
-          save(contentRef.current)
+        if (paramsRef.current) {
+          save(...paramsRef.current)
         }
       }, 5000)
     } finally {
@@ -45,10 +45,10 @@ export function useAutoSave({
     }
   }, [onSave])
 
-  const debouncedSave = useCallback((content: string) => {
+  const debouncedSave = useCallback((content: string, ...args: any[]) => {
     if (!enabled) return
 
-    contentRef.current = content
+    paramsRef.current = [content, ...args]
     setStatus('unsaved')
 
     // Clear existing timeout
@@ -58,7 +58,7 @@ export function useAutoSave({
 
     // Set new timeout
     timeoutRef.current = setTimeout(() => {
-      save(content)
+      save(content, ...args)
     }, delay)
   }, [enabled, delay, save])
 
@@ -66,8 +66,8 @@ export function useAutoSave({
     if (timeoutRef.current) {
       clearTimeout(timeoutRef.current)
     }
-    if (contentRef.current) {
-      await save(contentRef.current)
+    if (paramsRef.current) {
+      await save(...paramsRef.current)
     }
   }, [save])
 

@@ -39,14 +39,16 @@ export default function LabNotesList({
 
   return (
     <Card className={cardClass}>
-      <CardHeader className={headerClass}>
-  <div className="flex items-center justify-between">
-    <CardTitle className="text-base">Lab Notes</CardTitle>
-    <Button size="sm" onClick={handleNewNote}>
-      <Plus className="h-4 w-4" />
-    </Button>
-  </div>
-</CardHeader>
+      {!borderless && (
+        <CardHeader className={headerClass}>
+          <div className="flex items-center justify-between">
+            <CardTitle className="text-base">Lab Notes</CardTitle>
+            <Button size="sm" onClick={handleNewNote}>
+              <Plus className="h-4 w-4" />
+            </Button>
+          </div>
+        </CardHeader>
+      )}
       <CardContent className={contentClass}>
   {notes.length > 0 ? (
     <div className="space-y-2">

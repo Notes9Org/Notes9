@@ -3,11 +3,12 @@
 import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
+import { useSmartBack } from "@/hooks/use-smart-back"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Textarea } from "@/components/ui/textarea"
+import { TextareaWithWordCount } from "@/components/ui/textarea-with-word-count"
 import {
   Select,
   SelectContent,
@@ -16,7 +17,6 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { ArrowLeft, TestTube } from "lucide-react"
-import Link from "next/link"
 
 const SAMPLE_TYPES = [
   "Chemical",
@@ -51,6 +51,7 @@ const STATUS_OPTIONS = [
 
 export default function NewSamplePage() {
   const router = useRouter()
+  const handleBack = useSmartBack("/samples")
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [experiments, setExperiments] = useState<any[]>([])
@@ -143,10 +144,8 @@ export default function NewSamplePage() {
       <div className="space-y-6">
         {/* Header */}
         <div className="flex items-center gap-4">
-          <Button variant="ghost" size="icon" asChild>
-            <Link href="/samples">
-              <ArrowLeft className="h-4 w-4" />
-            </Link>
+          <Button variant="ghost" size="icon" onClick={handleBack}>
+            <ArrowLeft className="h-4 w-4" />
           </Button>
           <div>
             <h1 className="text-3xl font-bold tracking-tight">Add New Sample</h1>
@@ -247,14 +246,15 @@ export default function NewSamplePage() {
               {/* Description */}
               <div className="space-y-2">
                 <Label htmlFor="description">Description</Label>
-                <Textarea
+                <TextareaWithWordCount
                   id="description"
                   placeholder="Brief description of the sample..."
                   rows={3}
                   value={formData.description}
-                  onChange={(e) =>
-                    setFormData({ ...formData, description: e.target.value })
+                  onChange={(v) =>
+                    setFormData({ ...formData, description: v })
                   }
+                  maxWords={1000}
                 />
               </div>
 
@@ -389,16 +389,7 @@ export default function NewSamplePage() {
               )}
 
               {/* Actions */}
-              <div className="flex justify-end gap-2">
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => router.push("/samples")}
-                  data-navigate
-                  disabled={isLoading}
-                >
-                  Cancel
-                </Button>
+              <div className="flex gap-3">
                 <Button type="submit" disabled={isLoading}>
                   {isLoading ? "Creating..." : "Create Sample"}
                 </Button>

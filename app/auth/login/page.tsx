@@ -23,8 +23,7 @@ function LoginForm() {
   const [password, setPassword] = useState("")
   const [error, setError] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(false)
-  const [emailExists, setEmailExists] = useState<boolean | null>(null)
-  const [checkingEmail, setCheckingEmail] = useState(false)
+
   const router = useRouter()
   const searchParams = useSearchParams()
 
@@ -36,42 +35,7 @@ function LoginForm() {
     }
   }, [searchParams])
 
-  // Check if email exists when user stops typing
-  useEffect(() => {
-    if (!email || !email.includes('@')) {
-      setEmailExists(null)
-      return
-    }
 
-    const checkEmail = async () => {
-      setCheckingEmail(true)
-      const supabase = createClient()
-
-      try {
-        const { data: existingProfile } = await supabase
-          .from("profiles")
-          .select("email")
-          .eq("email", email)
-          .single()
-
-        setEmailExists(!!existingProfile)
-      } catch (error: any) {
-        // If error is "no rows returned", email doesn't exist
-        if (error?.code === 'PGRST116') {
-          setEmailExists(false)
-        } else {
-          // Other errors, don't set state (might be network issue)
-          setEmailExists(null)
-        }
-      } finally {
-        setCheckingEmail(false)
-      }
-    }
-
-    // Debounce email check
-    const timeoutId = setTimeout(checkEmail, 500)
-    return () => clearTimeout(timeoutId)
-  }, [email])
 
   // Handle OAuth errors in URL (route handler handles code exchange)
   useEffect(() => {
@@ -269,23 +233,11 @@ function LoginForm() {
                       {error}
                     </div>
                   )}
-                  {emailExists === false && !checkingEmail && !error && (
-                    <div className="rounded-md bg-muted p-3 text-sm">
-                      <p className="text-muted-foreground mb-2">
-                        No account found with this email.
-                      </p>
-                      <Link
-                        href={`/auth/sign-up?email=${encodeURIComponent(email)}`}
-                        className="text-primary underline underline-offset-4 hover:text-primary/80"
-                      >
-                        Sign up with this email instead
-                      </Link>
-                    </div>
-                  )}
+
                   <Button
                     type="submit"
                     className="w-full"
-                    disabled={isLoading || checkingEmail}
+                    disabled={isLoading}
                   >
                     {isLoading ? "Signing in..." : "Sign In"}
                   </Button>

@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react"
 import { createClient } from "@/lib/supabase/client"
+import { usePreventSpaceMenuClose } from "@/hooks/use-prevent-space-menu-close"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -23,9 +24,12 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { RichTextEditor } from "@/components/rich-text-editor"
+import { countWordsFromHtml } from "@/components/ui/textarea-with-word-count"
 import { useToast } from "@/hooks/use-toast"
+import { cn } from "@/lib/utils"
 import { useRouter } from "next/navigation"
 import { Pencil, Loader2 } from "lucide-react"
+import { getUniqueNameErrorMessage } from "@/lib/unique-name-error"
 
 interface Experiment {
   id: string
@@ -44,15 +48,32 @@ interface EditExperimentDialogProps {
   projects: Array<{ id: string; name: string }>
   users: Array<{ id: string; first_name: string; last_name: string }>
   asMenuItem?: boolean
+  open?: boolean
+  onOpenChange?: (open: boolean) => void
 }
 
-export function EditExperimentDialog({ experiment, projects, users, asMenuItem = false }: EditExperimentDialogProps) {
+export function EditExperimentDialog({ 
+  experiment, 
+  projects, 
+  users, 
+  asMenuItem = false,
+  open: externalOpen,
+  onOpenChange
+}: EditExperimentDialogProps) {
   const { toast } = useToast()
   const router = useRouter()
   const supabase = createClient()
 
-  const [open, setOpen] = useState(false)
+  const [internalOpen, setInternalOpen] = useState(false)
+  const open = externalOpen !== undefined ? externalOpen : internalOpen
+  const setOpen = (value: boolean) => {
+    setInternalOpen(value)
+    onOpenChange?.(value)
+  }
   const [isSaving, setIsSaving] = useState(false)
+
+  // Prevent space key from closing dropdown menu when typing
+  const handleKeyDown = usePreventSpaceMenuClose()
 
   // Form state
   const [name, setName] = useState(experiment.name)
@@ -83,6 +104,15 @@ export function EditExperimentDialog({ experiment, projects, users, asMenuItem =
       toast({
         title: "Validation Error",
         description: "Experiment name is required.",
+        variant: "destructive",
+      })
+      return
+    }
+    const descWords = countWordsFromHtml(description)
+    if (descWords > 1000) {
+      toast({
+        title: "Description too long",
+        description: `Description must be 1000 words or fewer (currently ${descWords} words).`,
         variant: "destructive",
       })
       return
@@ -119,7 +149,7 @@ export function EditExperimentDialog({ experiment, projects, users, asMenuItem =
       console.error("Update error:", error)
       toast({
         title: "Update Failed",
-        description: error.message || "Failed to update experiment",
+        description: getUniqueNameErrorMessage(error, "experiment"),
         variant: "destructive",
       })
     } finally {
@@ -127,22 +157,27 @@ export function EditExperimentDialog({ experiment, projects, users, asMenuItem =
     }
   }
 
+  // When externally controlled, don't render the trigger
+  const isExternallyControlled = externalOpen !== undefined
+
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      {asMenuItem ? (
-        <DialogTrigger className="flex items-center w-full px-2 py-1.5 hover:bg-accent rounded-sm cursor-pointer text-left">
-          <Pencil className="h-4 w-4 mr-2" />
-          <span>Edit Experiment</span>
-        </DialogTrigger>
-      ) : (
-        <DialogTrigger asChild>
-          <Button variant="outline" size="sm">
+      {!isExternallyControlled && (
+        asMenuItem ? (
+          <DialogTrigger className="flex items-center w-full px-2 py-1.5 hover:bg-accent rounded-sm cursor-pointer text-left">
             <Pencil className="h-4 w-4 mr-2" />
-            Edit
-          </Button>
-        </DialogTrigger>
+            <span>Edit Experiment</span>
+          </DialogTrigger>
+        ) : (
+          <DialogTrigger asChild>
+            <Button variant="outline" size="sm">
+              <Pencil className="h-4 w-4 mr-2" />
+              Edit
+            </Button>
+          </DialogTrigger>
+        )
       )}
-      <DialogContent className="sm:max-w-[600px] max-h-[90vh] overflow-y-auto">
+      <DialogContent className="sm:max-w-[600px] max-h-[90vh] overflow-y-auto" onKeyDown={handleKeyDown}>
         <DialogHeader>
           <DialogTitle>Edit Experiment</DialogTitle>
           <DialogDescription>
@@ -257,6 +292,16 @@ export function EditExperimentDialog({ experiment, projects, users, asMenuItem =
               placeholder="Detailed description of the experiment..."
               disabled={isSaving}
             />
+            <p
+              className={cn(
+                "text-right text-xs tabular-nums",
+                countWordsFromHtml(description) > 1000
+                  ? "text-destructive"
+                  : "text-muted-foreground"
+              )}
+            >
+              {countWordsFromHtml(description)} / 1000 words
+            </p>
           </div>
 
           {/* Hypothesis */}
@@ -298,4 +343,3 @@ export function EditExperimentDialog({ experiment, projects, users, asMenuItem =
     </Dialog>
   )
 }
-

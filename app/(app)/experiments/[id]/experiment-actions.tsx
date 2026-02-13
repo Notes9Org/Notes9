@@ -1,17 +1,11 @@
 "use client"
 
+import { useState } from "react"
+import { Button } from "@/components/ui/button"
+import { Pencil, Copy, Trash2 } from "lucide-react"
 import { EditExperimentDialog } from "./edit-experiment-dialog"
 import { DeleteExperimentDialog } from "./delete-experiment-dialog"
 import { DuplicateExperimentDialog } from "./duplicate-experiment-dialog"
-import { Button } from "@/components/ui/button"
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
-import { MoreHorizontal } from "lucide-react"
 
 interface Experiment {
   id: string
@@ -32,29 +26,65 @@ interface ExperimentActionsProps {
 }
 
 export function ExperimentActions({ experiment, projects, users }: ExperimentActionsProps) {
+  const [editDialogOpen, setEditDialogOpen] = useState(false)
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
+  const [duplicateDialogOpen, setDuplicateDialogOpen] = useState(false)
+
   return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <Button variant="outline" size="sm">
-          <MoreHorizontal className="h-4 w-4" />
-          <span className="ml-2 hidden md:inline">Actions</span>
+    <>
+      <div className="flex items-center gap-1">
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-8 w-8 text-muted-foreground hover:text-foreground"
+          onClick={() => setEditDialogOpen(true)}
+          aria-label="Edit experiment"
+        >
+          <Pencil className="h-4 w-4" />
         </Button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-48">
-        <DropdownMenuItem onSelect={(e) => e.preventDefault()}>
-          <EditExperimentDialog experiment={experiment} projects={projects} users={users} asMenuItem />
-        </DropdownMenuItem>
-        
-        <DropdownMenuItem onSelect={(e) => e.preventDefault()}>
-          <DuplicateExperimentDialog experiment={experiment} asMenuItem />
-        </DropdownMenuItem>
-        
-        <DropdownMenuSeparator />
-        
-        <DropdownMenuItem onSelect={(e) => e.preventDefault()}>
-          <DeleteExperimentDialog experimentId={experiment.id} experimentName={experiment.name} asMenuItem />
-        </DropdownMenuItem>
-      </DropdownMenuContent>
-    </DropdownMenu>
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-8 w-8 text-muted-foreground hover:text-foreground"
+          onClick={() => setDuplicateDialogOpen(true)}
+          aria-label="Duplicate experiment"
+        >
+          <Copy className="h-4 w-4" />
+        </Button>
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-8 w-8 text-destructive hover:text-destructive"
+          onClick={() => setDeleteDialogOpen(true)}
+          aria-label="Delete experiment"
+        >
+          <Trash2 className="h-4 w-4" />
+        </Button>
+      </div>
+
+      {/* Edit Dialog */}
+      <EditExperimentDialog 
+        experiment={experiment} 
+        projects={projects} 
+        users={users} 
+        open={editDialogOpen}
+        onOpenChange={setEditDialogOpen}
+      />
+
+      {/* Duplicate Dialog */}
+      <DuplicateExperimentDialog 
+        experiment={experiment} 
+        open={duplicateDialogOpen}
+        onOpenChange={setDuplicateDialogOpen}
+      />
+
+      {/* Delete Dialog */}
+      <DeleteExperimentDialog 
+        experimentId={experiment.id} 
+        experimentName={experiment.name}
+        open={deleteDialogOpen}
+        onOpenChange={setDeleteDialogOpen}
+      />
+    </>
   )
 }
