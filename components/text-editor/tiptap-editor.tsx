@@ -61,8 +61,13 @@ import {
   IndentDecrease,
   IndentIncrease,
   ChevronDown,
+  ChevronUp,
   Trash2,
   X,
+  Columns,
+  Rows,
+  Maximize2,
+  Minimize2,
 } from "lucide-react"
 import { Extension, Mark, mergeAttributes } from "@tiptap/core"
 import { Plugin, PluginKey } from "@tiptap/pm/state"
@@ -157,257 +162,320 @@ const ResizableTable = Table.extend({
       },
     }
   },
-})
 
-// Plugin to enable manual pointer-based table resizing (row, column, diagonal)
-const TableHandleExtension = Extension.create({
-  name: 'tableHandle',
+  addCommands() {
+    return {
+      ...this.parent?.(),
+      persistTableSize: (table: HTMLTableElement) => ({ editor, view }) => {
+        try {
+          const pos = view.posAtDOM(table, 0)
+          if (pos < 0) return false
 
-  addProseMirrorPlugins() {
-    return [
-      new Plugin({
-        key: new PluginKey('tableHandle'),
-        view: (editorView) => {
-          // Drag state
-          let dragState: {
-            type: 'col' | 'row' | 'both'
-            table: HTMLTableElement
-            colIndex: number
-            rowIndex: number
-            startX: number
-            startY: number
-            startColWidths: number[]
-            startRowHeights: number[]
-          } | null = null
+          const $pos = view.state.doc.resolve(pos)
+          let tablePos = -1
 
-          // Add resize handles to all tables
-          const setupTables = () => {
-            const tables = editorView.dom.querySelectorAll('table')
-            tables.forEach((table: HTMLTableElement) => {
-              if (table.dataset.resizeSetup === 'true') return
-              table.dataset.resizeSetup = 'true'
-              table.style.position = 'relative'
-              table.style.borderCollapse = 'collapse'
-
-              // Add handles to each cell
-              addHandlesToTable(table)
-            })
+          for (let d = $pos.depth; d >= 0; d--) {
+            const node = $pos.node(d)
+            if (node && node.type.name === 'table') {
+              tablePos = $pos.before(d)
+              break
+            }
           }
 
-          const addHandlesToTable = (table: HTMLTableElement) => {
-            const rows = table.querySelectorAll('tr')
-            rows.forEach((row, rowIndex) => {
-              const cells = row.querySelectorAll('td, th')
-              cells.forEach((cellEl, colIndex) => {
-                const cell = cellEl as HTMLElement
-                cell.style.position = 'relative'
+          if (tablePos === -1) {
+            const nodeAt = view.state.doc.nodeAt(pos)
+            if (nodeAt?.type.name === 'table') {
+              tablePos = pos
+            }
+          }
 
-                // Column resize handle (right edge) - similar to Sheets
-                const colHandle = document.createElement('div')
-                colHandle.className = 'table-col-handle'
-                colHandle.style.cssText = `
-                  position: absolute;
-                  top: 0;
-                  right: -4px;
-                  width: 8px;
-                  height: 100%;
-                  cursor: col-resize;
-                  z-index: 10;
-                  background: transparent;
-                  transition: background 0.15s;
-                `
-                colHandle.addEventListener('pointerenter', () => {
-                  colHandle.style.background = 'rgba(59, 130, 246, 0.4)'
-                })
-                colHandle.addEventListener('pointerleave', () => {
-                  colHandle.style.background = 'transparent'
-                })
-                colHandle.addEventListener('pointerdown', (e) => startDrag('col', table, colIndex, rowIndex, e))
-                cell.appendChild(colHandle)
-
-                // Row resize handle (bottom edge) - similar to Sheets
-                const rowHandle = document.createElement('div')
-                rowHandle.className = 'table-row-handle'
-                rowHandle.style.cssText = `
-                  position: absolute;
-                  bottom: -4px;
-                  left: 0;
-                  height: 8px;
-                  width: 100%;
-                  cursor: row-resize;
-                  z-index: 10;
-                  background: transparent;
-                  transition: background 0.15s;
-                `
-                rowHandle.addEventListener('pointerenter', () => {
-                  rowHandle.style.background = 'rgba(59, 130, 246, 0.4)'
-                })
-                rowHandle.addEventListener('pointerleave', () => {
-                  rowHandle.style.background = 'transparent'
-                })
-                rowHandle.addEventListener('pointerdown', (e) => startDrag('row', table, colIndex, rowIndex, e))
-                cell.appendChild(rowHandle)
-
-                // Diagonal handle (bottom-right corner) - only on last cell of each row
-                if (colIndex === cells.length - 1) {
-                  const diagHandle = document.createElement('div')
-                  diagHandle.className = 'table-diag-handle'
-                  diagHandle.style.cssText = `
-                    position: absolute;
-                    right: -4px;
-                    bottom: -4px;
-                    width: 10px;
-                    height: 10px;
-                    cursor: nwse-resize;
-                    z-index: 20;
-                    background: linear-gradient(135deg, transparent 50%, var(--primary, #3b82f6) 50%);
-                    border-radius: 0 0 3px 0;
-                    opacity: 0.4;
-                  `
-                  diagHandle.addEventListener('pointerdown', (e) => startDrag('both', table, colIndex, rowIndex, e))
-                  diagHandle.addEventListener('pointerenter', () => { diagHandle.style.opacity = '1' })
-                  diagHandle.addEventListener('pointerleave', () => { diagHandle.style.opacity = '0.4' })
-                  cell.appendChild(diagHandle)
-                }
+          if (tablePos >= 0) {
+            const tableNode = view.state.doc.nodeAt(tablePos)
+            if (tableNode) {
+              const width = `${table.offsetWidth}px`
+              const { tr } = view.state
+              tr.setNodeMarkup(tablePos, undefined, {
+                ...tableNode.attrs,
+                width: width,
               })
-            })
-          }
-
-          const getColWidths = (table: HTMLTableElement): number[] => {
-            const firstRow = table.querySelector('tr')
-            if (!firstRow) return []
-            const cells = firstRow.querySelectorAll('td, th')
-            return Array.from(cells).map(c => (c as HTMLElement).offsetWidth)
-          }
-
-          const getRowHeights = (table: HTMLTableElement): number[] => {
-            const rows = table.querySelectorAll('tr')
-            return Array.from(rows).map(r => (r as HTMLElement).offsetHeight)
-          }
-
-          const startDrag = (
-            type: 'col' | 'row' | 'both',
-            table: HTMLTableElement,
-            colIndex: number,
-            rowIndex: number,
-            e: PointerEvent
-          ) => {
-            e.preventDefault()
-            e.stopPropagation()
-            dragState = {
-              type,
-              table,
-              colIndex,
-              rowIndex,
-              startX: e.clientX,
-              startY: e.clientY,
-              startColWidths: getColWidths(table),
-              startRowHeights: getRowHeights(table),
-            }
-            document.body.style.cursor = type === 'col' ? 'col-resize' : type === 'row' ? 'row-resize' : 'nwse-resize'
-            document.body.style.userSelect = 'none'
-          }
-
-          const onPointerMove = (e: PointerEvent) => {
-            if (!dragState) return
-
-            const dx = e.clientX - dragState.startX
-            const dy = e.clientY - dragState.startY
-            const { table, type, colIndex, rowIndex, startColWidths, startRowHeights } = dragState
-
-            // Update column widths
-            if (type === 'col' || type === 'both') {
-              const newWidth = Math.max(50, startColWidths[colIndex] + dx)
-              const rows = table.querySelectorAll('tr')
-              rows.forEach(row => {
-                const cells = row.querySelectorAll('td, th')
-                if (cells[colIndex]) {
-                  (cells[colIndex] as HTMLElement).style.width = `${newWidth}px`
-                }
-              })
-            }
-
-            // Update row heights
-            if (type === 'row' || type === 'both') {
-              const newHeight = Math.max(24, startRowHeights[rowIndex] + dy)
-              const rows = table.querySelectorAll('tr')
-              if (rows[rowIndex]) {
-                (rows[rowIndex] as HTMLElement).style.height = `${newHeight}px`
-              }
+              view.dispatch(tr)
+              return true
             }
           }
-
-          const onPointerUp = () => {
-            if (dragState) {
-              // Persist the table width to the document
-              persistTableSize(dragState.table)
-              dragState = null
-              document.body.style.cursor = ''
-              document.body.style.userSelect = ''
-            }
-          }
-
-          const persistTableSize = (table: HTMLTableElement) => {
-            try {
-              const pos = editorView.posAtDOM(table, 0)
-              if (pos < 0) return
-
-              const $pos = editorView.state.doc.resolve(pos)
-              let tablePos = -1
-
-              for (let d = $pos.depth; d >= 0; d--) {
-                const node = $pos.node(d)
-                if (node && node.type.name === 'table') {
-                  tablePos = $pos.before(d)
-                  break
-                }
-              }
-
-              if (tablePos === -1) {
-                const nodeAt = editorView.state.doc.nodeAt(pos)
-                if (nodeAt?.type.name === 'table') {
-                  tablePos = pos
-                }
-              }
-
-              if (tablePos >= 0) {
-                const tableNode = editorView.state.doc.nodeAt(tablePos)
-                if (tableNode) {
-                  const width = `${table.offsetWidth}px`
-                  const { tr } = editorView.state
-                  tr.setNodeMarkup(tablePos, undefined, {
-                    ...tableNode.attrs,
-                    width: width,
-                  })
-                  editorView.dispatch(tr)
-                }
-              }
-            } catch (e) {
-              console.warn('Failed to persist table size:', e)
-            }
-          }
-
-          // Global event listeners
-          window.addEventListener('pointermove', onPointerMove)
-          window.addEventListener('pointerup', onPointerUp)
-
-          // Initial setup
-          setTimeout(setupTables, 100)
-
-          return {
-            update: () => {
-              setTimeout(setupTables, 50)
-            },
-            destroy: () => {
-              window.removeEventListener('pointermove', onPointerMove)
-              window.removeEventListener('pointerup', onPointerUp)
-            },
-          }
-        },
-      }),
-    ]
+        } catch (e) {
+          console.warn('Failed to persist table size:', e)
+        }
+        return false
+      }
+    };
   },
-})
+});
+
+// React component for table controls and resize handles
+const TableControlsOverlay = ({
+  table,
+  editor,
+  view
+}: {
+  table: HTMLTableElement,
+  editor: any,
+  view: any
+}) => {
+  const [rect, setRect] = useState<DOMRect | null>(null)
+  const [dragState, setDragState] = useState<{
+    type: 'col' | 'row' | 'both'
+    colIndex: number
+    rowIndex: number
+    startX: number
+    startY: number
+    startColWidths: number[]
+    startRowHeights: number[]
+  } | null>(null)
+
+  // Update rect periodically or on table change
+  useEffect(() => {
+    const updateRect = () => {
+      setRect(table.getBoundingClientRect())
+    }
+    updateRect()
+    const interval = setInterval(updateRect, 100)
+    return () => clearInterval(interval)
+  }, [table])
+
+  useEffect(() => {
+    const onMouseMove = (e: MouseEvent) => {
+      if (!dragState) return
+
+      const dx = e.clientX - dragState.startX
+      const dy = e.clientY - dragState.startY
+      const { type, colIndex, rowIndex, startColWidths, startRowHeights } = dragState
+
+      if (type === 'col' || type === 'both') {
+        const newWidth = Math.max(50, startColWidths[colIndex] + dx)
+        const rows = table.querySelectorAll('tr')
+        rows.forEach(row => {
+          const cells = row.querySelectorAll('td, th')
+          if (cells[colIndex]) {
+            (cells[colIndex] as HTMLElement).style.width = `${newWidth}px`
+          }
+        })
+      }
+
+      if (type === 'row' || type === 'both') {
+        const newHeight = Math.max(24, startRowHeights[rowIndex] + dy)
+        const rows = table.querySelectorAll('tr')
+        if (rows[rowIndex]) {
+          (rows[rowIndex] as HTMLElement).style.height = `${newHeight}px`
+        }
+      }
+    }
+
+    const onMouseUp = () => {
+      if (dragState) {
+        editor.commands.persistTableSize(table)
+        setDragState(null)
+        document.body.style.cursor = ''
+        document.body.style.userSelect = ''
+      }
+    }
+
+    if (dragState) {
+      window.addEventListener('mousemove', onMouseMove)
+      window.addEventListener('mouseup', onMouseUp)
+    }
+    return () => {
+      window.removeEventListener('mousemove', onMouseMove)
+      window.removeEventListener('mouseup', onMouseUp)
+    }
+  }, [dragState, editor, table])
+
+  const getColWidths = () => {
+    const firstRow = table.querySelector('tr')
+    if (!firstRow) return []
+    const cells = firstRow.querySelectorAll('td, th')
+    return Array.from(cells).map(c => (c as HTMLElement).offsetWidth)
+  }
+
+  const getRowHeights = () => {
+    const rows = table.querySelectorAll('tr')
+    return Array.from(rows).map(r => (r as HTMLElement).offsetHeight)
+  }
+
+  const handleStartDrag = (
+    type: 'col' | 'row' | 'both',
+    colIndex: number,
+    rowIndex: number,
+    e: React.MouseEvent
+  ) => {
+    e.preventDefault()
+    e.stopPropagation()
+    setDragState({
+      type,
+      colIndex,
+      rowIndex,
+      startX: e.clientX,
+      startY: e.clientY,
+      startColWidths: getColWidths(),
+      startRowHeights: getRowHeights(),
+    })
+    document.body.style.cursor = type === 'col' ? 'col-resize' : type === 'row' ? 'row-resize' : 'nwse-resize'
+    document.body.style.userSelect = 'none'
+  }
+
+  if (!rect) return null
+
+  // Get cell handles
+  const handles: React.ReactNode[] = []
+  const rows = Array.from(table.querySelectorAll('tr'))
+
+  rows.forEach((row, rowIndex) => {
+    const cells = Array.from(row.querySelectorAll('td, th'))
+    cells.forEach((cellEl, colIndex) => {
+      const cell = cellEl as HTMLElement
+      const cellRect = cell.getBoundingClientRect()
+      const relativeTop = cellRect.top - rect.top
+      const relativeLeft = cellRect.left - rect.left
+
+      // Vertical handle (Right edge)
+      handles.push(
+        <div
+          key={`col-${rowIndex}-${colIndex}`}
+          className="absolute cursor-col-resize hover:bg-blue-400 opacity-0 hover:opacity-100 transition-opacity"
+          style={{
+            top: relativeTop,
+            left: relativeLeft + cellRect.width - 2,
+            width: 4,
+            height: cellRect.height,
+            zIndex: 1001,
+          }}
+          onMouseDown={(e) => handleStartDrag('col', colIndex, rowIndex, e)}
+        />
+      )
+
+      // Horizontal handle (Bottom edge)
+      handles.push(
+        <div
+          key={`row-${rowIndex}-${colIndex}`}
+          className="absolute cursor-row-resize hover:bg-blue-400 opacity-0 hover:opacity-100 transition-opacity"
+          style={{
+            top: relativeTop + cellRect.height - 2,
+            left: relativeLeft,
+            width: cellRect.width,
+            height: 4,
+            zIndex: 1001,
+          }}
+          onMouseDown={(e) => handleStartDrag('row', colIndex, rowIndex, e)}
+        />
+      )
+
+      // Diagonal handle
+      if (colIndex === cells.length - 1 && rowIndex === rows.length - 1) {
+        handles.push(
+          <div
+            key={`diag-${rowIndex}-${colIndex}`}
+            className="absolute cursor-nwse-resize opacity-40 hover:opacity-100"
+            style={{
+              top: relativeTop + cellRect.height - 6,
+              left: relativeLeft + cellRect.width - 6,
+              width: 12,
+              height: 12,
+              background: 'linear-gradient(135deg, transparent 50%, #3b82f6 50%)',
+              zIndex: 1002,
+              borderRadius: '0 0 3px 0'
+            }}
+            onMouseDown={(e) => handleStartDrag('both', colIndex, rowIndex, e)}
+          />
+        )
+      }
+    })
+  })
+
+  return (
+    <div
+      className="absolute pointer-events-none select-none"
+      style={{
+        top: rect.top + window.scrollY,
+        left: rect.left + window.scrollX,
+        width: rect.width,
+        height: rect.height,
+        zIndex: 1000,
+      }}
+    >
+      <div className="relative w-full h-full">
+        {handles}
+
+        {/* Minimalistic Edit Table Trigger - Bottom Right Outside */}
+        <div
+          className="table-controls-overlay absolute pointer-events-auto"
+          style={{
+            bottom: -32,
+            right: 0,
+            zIndex: 1005
+          }}
+        >
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-7 px-2 text-[10px] gap-1.5 bg-background shadow-sm hover:bg-accent border-muted-foreground/20"
+              >
+                <TableIcon className="h-3 w-3" /> Edit Table
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-56 p-1 bg-background/95 backdrop-blur-sm border-border shadow-2xl">
+              <DropdownMenuLabel className="text-[10px] uppercase text-muted-foreground font-semibold px-2 py-1">Rows</DropdownMenuLabel>
+              <DropdownMenuItem onClick={() => editor.chain().focus().addRowBefore().run()} className="text-xs gap-2">
+                <Rows className="h-3.5 w-3.5 rotate-180 opacity-70" /> Add Row Above
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => editor.chain().focus().addRowAfter().run()} className="text-xs gap-2">
+                <Rows className="h-3.5 w-3.5 opacity-70" /> Add Row Below
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => editor.chain().focus().deleteRow().run()} className="text-xs gap-2 text-destructive focus:text-destructive">
+                <Trash2 className="h-3.5 w-3.5 opacity-70" /> Delete Row
+              </DropdownMenuItem>
+
+              <DropdownMenuSeparator />
+
+              <DropdownMenuLabel className="text-[10px] uppercase text-muted-foreground font-semibold px-2 py-1">Columns</DropdownMenuLabel>
+              <DropdownMenuItem onClick={() => editor.chain().focus().addColumnBefore().run()} className="text-xs gap-2">
+                <Columns className="h-3.5 w-3.5 -scale-x-100 opacity-70" /> Add Column Left
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => editor.chain().focus().addColumnAfter().run()} className="text-xs gap-2">
+                <Columns className="h-3.5 w-3.5 opacity-70" /> Add Column Right
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => editor.chain().focus().deleteColumn().run()} className="text-xs gap-2 text-destructive focus:text-destructive">
+                <Trash2 className="h-3.5 w-3.5 opacity-70" /> Delete Column
+              </DropdownMenuItem>
+
+              <DropdownMenuSeparator />
+
+              <DropdownMenuLabel className="text-[10px] uppercase text-muted-foreground font-semibold px-2 py-1">Cells & Headers</DropdownMenuLabel>
+              <DropdownMenuItem onClick={() => editor.chain().focus().mergeCells().run()} className="text-xs gap-2">
+                <Maximize2 className="h-3.5 w-3.5 opacity-70" /> Merge Cells
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => editor.chain().focus().splitCell().run()} className="text-xs gap-2">
+                <Minimize2 className="h-3.5 w-3.5 opacity-70" /> Split Cell
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => editor.chain().focus().toggleHeaderRow().run()} className="text-xs gap-2">
+                <Type className="h-3.5 w-3.5 opacity-70" /> Toggle Row Header
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => editor.chain().focus().toggleHeaderColumn().run()} className="text-xs gap-2">
+                <Type className="h-3.5 w-3.5 opacity-70" /> Toggle Column Header
+              </DropdownMenuItem>
+
+              <DropdownMenuSeparator />
+
+              <DropdownMenuItem onClick={() => editor.chain().focus().deleteTable().run()} className="text-xs gap-2 text-destructive focus:text-destructive font-medium">
+                <Trash2 className="h-3.5 w-3.5" /> Delete Entire Table
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+      </div >
+    </div >
+  )
+}
 
 export interface IndentOptions {
   types: string[];
@@ -417,10 +485,8 @@ export interface IndentOptions {
 
 declare module '@tiptap/core' {
   interface Commands<ReturnType> {
-    indent: {
-      setIndent: () => ReturnType;
-      unsetIndent: () => ReturnType;
-    };
+    setIndent: () => ReturnType;
+    unsetIndent: () => ReturnType;
   }
 }
 
@@ -672,6 +738,48 @@ export function TiptapEditor({
   labNotes = [],
   toolbarPortalRef,
 }: TiptapEditorProps & { hideToolbar?: boolean }) {
+  const [activeTable, setActiveTable] = useState<HTMLTableElement | null>(null)
+  const [editorContainer, setEditorContainer] = useState<HTMLElement | null>(null)
+  const [mounted, setMounted] = useState(false)
+
+  useEffect(() => {
+    setMounted(true)
+  }, [])
+
+  // Track table hover with hide delay
+  useEffect(() => {
+    if (!editorContainer) return
+    let hideTimeout: any
+
+    const onMouseMove = (e: MouseEvent) => {
+      const target = e.target as HTMLElement
+      const table = target.closest('table')
+
+      // Only track if the table is inside THIS editor container
+      const isOurTable = table && editorContainer.contains(table)
+      const overlay = target.closest('.table-controls-overlay')
+
+      if (isOurTable) {
+        clearTimeout(hideTimeout)
+        setActiveTable(table as HTMLTableElement)
+      } else if (overlay) {
+        clearTimeout(hideTimeout)
+        // Keep activeTable as is if we're over ANY table control overlay
+      } else {
+        // Start hide delay
+        clearTimeout(hideTimeout)
+        hideTimeout = setTimeout(() => {
+          setActiveTable(null)
+        }, 800) // Increased delay to 800ms for better usability
+      }
+    }
+
+    document.addEventListener('mousemove', onMouseMove)
+    return () => {
+      document.removeEventListener('mousemove', onMouseMove)
+      clearTimeout(hideTimeout)
+    }
+  }, [editorContainer])
   const [isAIProcessing, setIsAIProcessing] = useState(false)
   const [isCiteProcessing, setIsCiteProcessing] = useState(false)
   const [aiDropdownOpen, setAiDropdownOpen] = useState(false)
@@ -704,8 +812,6 @@ export function TiptapEditor({
   useEffect(() => {
     labNotesRef.current = labNotes
   }, [labNotes])
-
-
 
   const editor = useEditor({
     immediatelyRender: false,
@@ -743,8 +849,10 @@ export function TiptapEditor({
       ResizableTable.configure({
         resizable: true,
         allowTableNodeSelection: true,
+        handleWidth: 5,
+        cellMinWidth: 250, // Significantly increased default width
+        lastColumnResizable: true,
       }),
-      TableHandleExtension,
       TableRow,
       TableHeader,
       TableCell,
@@ -779,6 +887,9 @@ export function TiptapEditor({
     editable,
     onUpdate: ({ editor }) => {
       onChange?.(editor.getHTML())
+    },
+    onCreate: () => {
+      console.log('TiptapEditor: created')
     },
     editorProps: {
       attributes: {
@@ -2824,119 +2935,100 @@ export function TiptapEditor({
       })()}
 
       <div
-        className={cn(
-          "border border-border rounded-lg bg-card relative overflow-hidden",
-          className
-        )}
+        className={cn("border border-border rounded-lg bg-background flex flex-col h-full w-full max-w-full overflow-hidden", className)}
       >
-        {/* Editor Content - add right padding to prevent text from going under TOC */}
         <div
-          className="overflow-y-auto px-2 pb-2 pr-20 h-full"
+          className="flex-1 overflow-hidden relative w-full h-full max-w-full"
           style={{ minHeight, maxHeight: "calc(100vh - 300px)" }}
         >
-          <EditorContent editor={editor} />
-        </div>
-        {/* TOC positioned absolutely relative to the card, not the scrollable content */}
-        {editor && <TableOfContents editor={editor} />}
-        {editor && (
-          <BubbleMenu
-            editor={editor}
-            shouldShow={({ editor }) => {
-              const show = !editor.isActive('comment') && isCommenting && !editor.state.selection.empty;
-              return show;
-            }}
-            className="z-[200]"
+          {/* Editor Content - add right padding to prevent text from going under TOC */}
+          <div
+            className="overflow-y-auto overflow-x-auto px-2 pb-2 pr-20 h-full relative w-full max-w-full"
+            style={{ minHeight, maxHeight: "calc(100vh - 300px)" }}
+            ref={(node) => setEditorContainer(node)}
           >
-            <div className="flex items-center gap-2 p-2 bg-background border border-border rounded-md shadow-lg min-w-[300px] pointer-events-auto">
-              <Input
-                className="h-8 text-xs flex-1"
-                placeholder="Type comment..."
-                value={commentText}
-                onChange={(e) => setCommentText(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') {
-                    if (commentText.trim()) {
-                      editor.chain().focus().setComment({ author: "You", content: commentText }).run();
-                      setCommentText("");
+            <EditorContent editor={editor} />
+            {activeTable && mounted && createPortal(
+              <TableControlsOverlay
+                table={activeTable}
+                editor={editor}
+                view={editor.view}
+              />,
+              document.body
+            )}
+          </div>
+          {/* TOC positioned absolutely relative to the card, not the scrollable content */}
+          {editor && <TableOfContents editor={editor} />}
+
+          {editor && (
+            <BubbleMenu
+              editor={editor}
+              shouldShow={({ editor }) => {
+                const show = !editor.isActive('comment') && isCommenting && !editor.state.selection.empty;
+                return show;
+              }}
+              className="z-[200]"
+            >
+              <div className="flex items-center gap-2 p-2 bg-background border border-border rounded-md shadow-lg min-w-[300px] pointer-events-auto">
+                <Input
+                  className="h-8 text-xs flex-1"
+                  placeholder="Type comment..."
+                  value={commentText}
+                  onChange={(e) => setCommentText(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      if (commentText.trim()) {
+                        editor.chain().focus().setComment({ author: "You", content: commentText }).run();
+                        setCommentText("");
+                        setIsCommenting(false);
+                      }
+                    } else if (e.key === 'Escape') {
                       setIsCommenting(false);
                     }
-                  } else if (e.key === 'Escape') {
+                  }}
+                  autoFocus
+                />
+                <Button size="sm" className="h-7 px-2" onClick={() => {
+                  if (commentText.trim()) {
+                    editor.chain().focus().setComment({ author: "You", content: commentText }).run();
+                    setCommentText("");
                     setIsCommenting(false);
                   }
-                }}
-                autoFocus
-              />
-              <Button size="sm" className="h-7 px-2" onClick={() => {
-                if (commentText.trim()) {
-                  editor.chain().focus().setComment({ author: "You", content: commentText }).run();
-                  setCommentText("");
-                  setIsCommenting(false);
-                }
-              }}>Save</Button>
-              <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => setIsCommenting(false)}><X className="h-4 w-4" /></Button>
-            </div>
-          </BubbleMenu>
-        )}
-
-        {editor && (
-          <BubbleMenu
-            editor={editor}
-            shouldShow={({ editor }: { editor: any }) => editor.isActive("comment")}
-            className="flex flex-col gap-1 rounded-lg border bg-background p-2 shadow-md text-xs w-64 z-50"
-          >
-            {editor.getAttributes("comment").author && (
-              <div className="font-semibold text-muted-foreground flex justify-between items-center">
-                <span>{editor.getAttributes("comment").author}</span>
-                <span className="text-[10px] opacity-70">
-                  {editor.getAttributes("comment").createdAt ? new Date(editor.getAttributes("comment").createdAt).toLocaleDateString() : ""}
-                </span>
+                }}>Save</Button>
+                <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => setIsCommenting(false)}><X className="h-4 w-4" /></Button>
               </div>
-            )}
-            <div className="text-foreground">{editor.getAttributes("comment").content}</div>
-            <div className="flex justify-end mt-1">
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-6 w-6 text-destructive hover:bg-destructive/10"
-                onClick={() => editor.chain().focus().unsetComment().run()}
-                title="Delete comment"
-              >
-                <Trash2 className="h-3 w-3" />
-              </Button>
-            </div>
-          </BubbleMenu>
-        )}
+            </BubbleMenu>
+          )}
 
-
-        {editor && (
-          <BubbleMenu
-            editor={editor}
-            shouldShow={({ editor }: { editor: any }) => editor.isActive("comment")}
-            className="flex flex-col gap-1 rounded-lg border bg-background p-2 shadow-md text-xs w-64 z-50"
-          >
-            {editor.getAttributes("comment").author && (
-              <div className="font-semibold text-muted-foreground flex justify-between items-center">
-                <span>{editor.getAttributes("comment").author}</span>
-                <span className="text-[10px] opacity-70">
-                  {editor.getAttributes("comment").createdAt ? new Date(editor.getAttributes("comment").createdAt).toLocaleDateString() : ""}
-                </span>
+          {editor && (
+            <BubbleMenu
+              editor={editor}
+              shouldShow={({ editor }: { editor: any }) => editor.isActive("comment")}
+              className="flex flex-col gap-1 rounded-lg border bg-background p-2 shadow-md text-xs w-64 z-50"
+            >
+              {editor.getAttributes("comment").author && (
+                <div className="font-semibold text-muted-foreground flex justify-between items-center">
+                  <span>{editor.getAttributes("comment").author}</span>
+                  <span className="text-[10px] opacity-70">
+                    {editor.getAttributes("comment").createdAt ? new Date(editor.getAttributes("comment").createdAt).toLocaleDateString() : ""}
+                  </span>
+                </div>
+              )}
+              <div className="text-foreground">{editor.getAttributes("comment").content}</div>
+              <div className="flex justify-end mt-1">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-6 w-6 text-destructive hover:bg-destructive/10"
+                  onClick={() => editor.chain().focus().unsetComment().run()}
+                  title="Delete comment"
+                >
+                  <Trash2 className="h-3 w-3" />
+                </Button>
               </div>
-            )}
-            <div className="text-foreground">{editor.getAttributes("comment").content}</div>
-            <div className="flex justify-end mt-1">
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-6 w-6 text-destructive hover:bg-destructive/10"
-                onClick={() => editor.chain().focus().unsetComment().run()}
-                title="Delete comment"
-              >
-                <Trash2 className="h-3 w-3" />
-              </Button>
-            </div>
-          </BubbleMenu>
-        )}
-        <style jsx global>{`
+            </BubbleMenu>
+          )}
+          <style jsx global>{`
           .ProseMirror ul {
             list-style-type: disc;
             padding-left: 1.5rem;
@@ -2959,10 +3051,9 @@ export function TiptapEditor({
           }
           .ProseMirror table {
             border-collapse: collapse;
-            table-layout: fixed;
+            table-layout: auto;
             width: auto;
-            min-width: 150px;
-            max-width: 100%;
+            min-width: 250px !important;
             margin: 1rem 0;
             color: var(--foreground);
             background: var(--card);
@@ -2975,7 +3066,7 @@ export function TiptapEditor({
             border: 1px solid var(--border);
             padding: 0.35rem 0.5rem;
             vertical-align: top;
-            min-width: 1em;
+            min-width: 250px !important;
             position: relative;
           }
           .ProseMirror table th {
@@ -2995,35 +3086,6 @@ export function TiptapEditor({
           }
           .ProseMirror table .selectedCell {
             background: rgba(59, 130, 246, 0.1);
-          }
-          /* Table styles for manual resize handles */
-          .ProseMirror table {
-            position: relative;
-            border-collapse: collapse;
-          }
-          .ProseMirror table:hover {
-            outline: 1px solid rgba(59, 130, 246, 0.2);
-          }
-          /* Custom cursor SVGs for resize handles */
-          .table-col-handle {
-            cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2'%3E%3Cpath d='M18 8l4 4-4 4'/%3E%3Cpath d='M6 8l-4 4 4 4'/%3E%3Cline x1='2' y1='12' x2='22' y2='12'/%3E%3C/svg%3E") 12 12, col-resize !important;
-          }
-          .table-row-handle {
-            cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2'%3E%3Cpath d='M8 18l4 4 4-4'/%3E%3Cpath d='M8 6l4-4 4 4'/%3E%3Cline x1='12' y1='2' x2='12' y2='22'/%3E%3C/svg%3E") 12 12, row-resize !important;
-          }
-          .table-diag-handle {
-            cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2'%3E%3Cpath d='M15 3h6v6'/%3E%3Cpath d='M9 21H3v-6'/%3E%3Cline x1='21' y1='3' x2='3' y2='21'/%3E%3C/svg%3E") 12 12, nwse-resize !important;
-          }
-          /* Highlight handles on hover */
-          .table-col-handle:hover {
-            background: rgba(59, 130, 246, 0.4) !important;
-          }
-          .table-row-handle:hover {
-            background: rgba(59, 130, 246, 0.4) !important;
-          }
-          .table-diag-handle:hover {
-            opacity: 1 !important;
-            background: linear-gradient(135deg, transparent 40%, rgba(59, 130, 246, 0.8) 40%) !important;
           }
           
           /* Monochrome gradient border animation for Cite with AI button */
@@ -3068,172 +3130,173 @@ export function TiptapEditor({
             pointer-events: none;
           }
         `}</style>
-      </div>
+        </div>
 
 
-      {/* AI Processing Indicator */}
-      {
-        (isAIProcessing || isCiteProcessing) && (
-          <div className="border-t border-border p-2 bg-muted/50">
-            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              <Loader2 className="h-4 w-4 animate-spin" />
-              <span>{isCiteProcessing ? 'Searching for citations...' : 'AI is processing your request...'}</span>
+        {/* AI Processing Indicator */}
+        {
+          (isAIProcessing || isCiteProcessing) && (
+            <div className="border-t border-border p-2 bg-muted/50">
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                <span>{isCiteProcessing ? 'Searching for citations...' : 'AI is processing your request...'}</span>
+              </div>
             </div>
-          </div>
-        )
-      }
+          )
+        }
 
-      {/* Citation Selection Modal */}
-      <Dialog open={citationModalOpen} onOpenChange={setCitationModalOpen}>
-        <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>Select Citations</DialogTitle>
-            <DialogDescription>
-              Choose which sources you want to cite. Click on a source to select/deselect it.
-            </DialogDescription>
-          </DialogHeader>
+        {/* Citation Selection Modal */}
+        <Dialog open={citationModalOpen} onOpenChange={setCitationModalOpen}>
+          <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>Select Citations</DialogTitle>
+              <DialogDescription>
+                Choose which sources you want to cite. Click on a source to select/deselect it.
+              </DialogDescription>
+            </DialogHeader>
 
-          <div className="space-y-3 py-2">
-            {foundPapers.map((paper, index) => {
-              const year = paper.year && paper.year > 0 ? paper.year : null
-              const isSelected = selectedPapers.has(index)
+            <div className="space-y-3 py-2">
+              {foundPapers.map((paper, index) => {
+                const year = paper.year && paper.year > 0 ? paper.year : null
+                const isSelected = selectedPapers.has(index)
 
-              return (
-                <div
-                  key={paper.id}
-                  onClick={() => togglePaperSelection(index)}
-                  className={cn(
-                    "p-4 border rounded-lg cursor-pointer transition-all hover:shadow-md",
-                    isSelected ? "border-primary bg-primary/5 shadow-sm" : "border-border hover:border-primary/50"
-                  )}
-                >
-                  <div className="flex items-start gap-3">
-                    <div className={cn(
-                      "flex-shrink-0 w-6 h-6 rounded-full border-2 flex items-center justify-center text-xs font-semibold transition-colors",
-                      isSelected ? "border-primary bg-primary text-primary-foreground" : "border-muted-foreground/30"
-                    )}>
-                      {isSelected && '✓'}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <h4 className="font-medium text-sm line-clamp-2 mb-1">
-                        {paper.title}
-                      </h4>
-                      {year && (
-                        <p className="text-xs text-muted-foreground mb-2">
-                          {year}
-                        </p>
-                      )}
-                      {paper.abstract && (
-                        <p className="text-xs text-muted-foreground line-clamp-2 mb-2">
-                          {paper.abstract}
-                        </p>
-                      )}
-                      {paper.url && (
-                        <a
-                          href={paper.url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          onClick={(e) => e.stopPropagation()}
-                          className="text-xs text-primary hover:underline inline-block"
-                        >
-                          View source →
-                        </a>
-                      )}
+                return (
+                  <div
+                    key={paper.id}
+                    onClick={() => togglePaperSelection(index)}
+                    className={cn(
+                      "p-4 border rounded-lg cursor-pointer transition-all hover:shadow-md",
+                      isSelected ? "border-primary bg-primary/5 shadow-sm" : "border-border hover:border-primary/50"
+                    )}
+                  >
+                    <div className="flex items-start gap-3">
+                      <div className={cn(
+                        "flex-shrink-0 w-6 h-6 rounded-full border-2 flex items-center justify-center text-xs font-semibold transition-colors",
+                        isSelected ? "border-primary bg-primary text-primary-foreground" : "border-muted-foreground/30"
+                      )}>
+                        {isSelected && '✓'}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <h4 className="font-medium text-sm line-clamp-2 mb-1">
+                          {paper.title}
+                        </h4>
+                        {year && (
+                          <p className="text-xs text-muted-foreground mb-2">
+                            {year}
+                          </p>
+                        )}
+                        {paper.abstract && (
+                          <p className="text-xs text-muted-foreground line-clamp-2 mb-2">
+                            {paper.abstract}
+                          </p>
+                        )}
+                        {paper.url && (
+                          <a
+                            href={paper.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            onClick={(e) => e.stopPropagation()}
+                            className="text-xs text-primary hover:underline inline-block"
+                          >
+                            View source →
+                          </a>
+                        )}
+                      </div>
                     </div>
                   </div>
-                </div>
-              )
-            })}
-          </div>
-
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => {
-                setCitationModalOpen(false)
-                setSelectedPapers(new Set())
-              }}
-            >
-              Cancel
-            </Button>
-            <Button
-              onClick={handleCiteSelected}
-              disabled={selectedPapers.size === 0}
-            >
-              Cite Selected ({selectedPapers.size})
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Bibliography Generation Modal */}
-      <Dialog open={bibliographyModalOpen} onOpenChange={setBibliographyModalOpen}>
-        <DialogContent className="max-w-4xl max-h-[85vh] overflow-hidden flex flex-col">
-          <DialogHeader>
-            <DialogTitle>Generate Bibliography</DialogTitle>
-            <DialogDescription>
-              Select citation style and preview your formatted bibliography
-            </DialogDescription>
-          </DialogHeader>
-
-          <div className="flex-1 overflow-y-auto space-y-3 py-2">
-            {/* Citation Style Selector - More compact */}
-            <div className="flex items-center gap-3">
-              <label className="text-sm font-medium whitespace-nowrap">Citation Style:</label>
-              <select
-                value={selectedCitationStyle}
-                onChange={(e) => setSelectedCitationStyle(e.target.value as any)}
-                className="flex-1 h-9 px-3 rounded-md border border-border bg-background text-sm"
-              >
-                <option value="APA">APA</option>
-                <option value="MLA">MLA</option>
-                <option value="Chicago">Chicago</option>
-                <option value="Harvard">Harvard</option>
-                <option value="IEEE">IEEE</option>
-                <option value="Vancouver">Vancouver</option>
-              </select>
-              <span className="text-xs text-muted-foreground whitespace-nowrap">
-                {citationMetadata.size} citation{citationMetadata.size !== 1 ? 's' : ''}
-              </span>
+                )
+              })}
             </div>
 
-            {/* Preview - More compact */}
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Preview</label>
-              <div className="border rounded-lg p-3 bg-muted/30 max-h-[450px] overflow-y-auto">
-                <h3 className="text-base font-semibold mb-2">References</h3>
-                <div className="space-y-1.5">
-                  {Array.from(citationMetadata.entries())
-                    .sort((a, b) => a[0] - b[0])
-                    .map(([number, metadata]) => (
-                      <div key={number} className="text-sm leading-relaxed">
-                        <span className="font-medium inline-block min-w-[2rem]">[{number}]</span>
-                        <span
-                          className="inline"
-                          dangerouslySetInnerHTML={{
-                            __html: formatCitation(metadata, selectedCitationStyle)
-                          }}
-                        />
-                      </div>
-                    ))}
+            <DialogFooter>
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setCitationModalOpen(false)
+                  setSelectedPapers(new Set())
+                }}
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={handleCiteSelected}
+                disabled={selectedPapers.size === 0}
+              >
+                Cite Selected ({selectedPapers.size})
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Bibliography Generation Modal */}
+        <Dialog open={bibliographyModalOpen} onOpenChange={setBibliographyModalOpen}>
+          <DialogContent className="max-w-4xl max-h-[85vh] overflow-hidden flex flex-col">
+            <DialogHeader>
+              <DialogTitle>Generate Bibliography</DialogTitle>
+              <DialogDescription>
+                Select citation style and preview your formatted bibliography
+              </DialogDescription>
+            </DialogHeader>
+
+            <div className="flex-1 overflow-y-auto space-y-3 py-2">
+              {/* Citation Style Selector - More compact */}
+              <div className="flex items-center gap-3">
+                <label className="text-sm font-medium whitespace-nowrap">Citation Style:</label>
+                <select
+                  value={selectedCitationStyle}
+                  onChange={(e) => setSelectedCitationStyle(e.target.value as any)}
+                  className="flex-1 h-9 px-3 rounded-md border border-border bg-background text-sm"
+                >
+                  <option value="APA">APA</option>
+                  <option value="MLA">MLA</option>
+                  <option value="Chicago">Chicago</option>
+                  <option value="Harvard">Harvard</option>
+                  <option value="IEEE">IEEE</option>
+                  <option value="Vancouver">Vancouver</option>
+                </select>
+                <span className="text-xs text-muted-foreground whitespace-nowrap">
+                  {citationMetadata.size} citation{citationMetadata.size !== 1 ? 's' : ''}
+                </span>
+              </div>
+
+              {/* Preview - More compact */}
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Preview</label>
+                <div className="border rounded-lg p-3 bg-muted/30 max-h-[450px] overflow-y-auto">
+                  <h3 className="text-base font-semibold mb-2">References</h3>
+                  <div className="space-y-1.5">
+                    {Array.from(citationMetadata.entries())
+                      .sort((a, b) => a[0] - b[0])
+                      .map(([number, metadata]) => (
+                        <div key={number} className="text-sm leading-relaxed">
+                          <span className="font-medium inline-block min-w-[2rem]">[{number}]</span>
+                          <span
+                            className="inline"
+                            dangerouslySetInnerHTML={{
+                              __html: formatCitation(metadata, selectedCitationStyle)
+                            }}
+                          />
+                        </div>
+                      ))}
+                  </div>
                 </div>
               </div>
             </div>
-          </div>
 
-          <DialogFooter className="mt-2">
-            <Button
-              variant="outline"
-              onClick={() => setBibliographyModalOpen(false)}
-            >
-              Cancel
-            </Button>
-            <Button onClick={handleInsertBibliography}>
-              Insert at End
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog >
+            <DialogFooter className="mt-2">
+              <Button
+                variant="outline"
+                onClick={() => setBibliographyModalOpen(false)}
+              >
+                Cancel
+              </Button>
+              <Button onClick={handleInsertBibliography}>
+                Insert at End
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog >
+      </div>
     </>
   );
 }
