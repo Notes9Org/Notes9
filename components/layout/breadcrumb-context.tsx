@@ -8,6 +8,7 @@ import {
   useState,
   type ReactNode,
 } from "react"
+import { usePathname } from "next/navigation"
 
 export type BreadcrumbSegment = { label: string; href?: string }
 
@@ -21,6 +22,13 @@ const BreadcrumbContext = createContext<BreadcrumbContextValue | null>(null)
 export function BreadcrumbProvider({ children }: { children: ReactNode }) {
   const [segments, setSegmentsState] = useState<BreadcrumbSegment[]>([])
   const setSegments = useCallback((s: BreadcrumbSegment[]) => setSegmentsState(s), [])
+  const pathname = usePathname()
+
+  // Auto-reset breadcrumbs on route change so stale segments never survive navigation
+  useEffect(() => {
+    setSegmentsState([])
+  }, [pathname])
+
   return (
     <BreadcrumbContext.Provider value={{ segments, setSegments }}>
       {children}

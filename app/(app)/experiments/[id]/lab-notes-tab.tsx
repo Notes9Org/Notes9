@@ -228,7 +228,7 @@ export function LabNotesTab({
     const noteTitle = formData.title || selectedNote?.title || "Lab notes";
     setSegments([...baseSegments, { label: noteTitle }]);
     return () => {
-      setSegments(baseSegments);
+      setSegments([]);
     };
   }, [projectName, experimentName, projectId, setSegments, formData.title, selectedNote?.title]);
 
