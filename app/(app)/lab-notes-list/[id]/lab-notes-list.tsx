@@ -1,9 +1,11 @@
- "use client"
+"use client"
 
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { useState } from "react"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { FileText, Plus } from "lucide-react"
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { FileText, Grid3x3, List, Eye } from "lucide-react"
 
 type LabNote = {
   id: string
@@ -21,6 +23,15 @@ type LabNotesListProps = {
   handleNewNote: () => void
   handleSelectNote: (note: LabNote) => void
   borderless?: boolean
+  viewMode?: "grid" | "table"
+  setViewMode?: (mode: "grid" | "table") => void
+  hideToolbar?: boolean
+}
+
+// Format date consistently
+const formatDate = (dateStr: string): string => {
+  const date = new Date(dateStr)
+  return date.toISOString().split('T')[0]
 }
 
 export default function LabNotesList({
@@ -30,82 +41,190 @@ export default function LabNotesList({
   handleNewNote,
   handleSelectNote,
   borderless = false,
+  viewMode: controlledView,
+  setViewMode: setControlledView,
+  hideToolbar,
 }: LabNotesListProps) {
-  const cardClass = borderless
-    ? "h-fit border-0 shadow-none bg-transparent p-0"
-    : "h-fit"
-  const headerClass = borderless ? "px-0 pt-0 pb-2" : undefined
-  const contentClass = borderless ? "px-0 pb-0" : undefined
+  const [internalView, setInternalView] = useState<"grid" | "table">("grid")
+  const viewMode = controlledView ?? internalView
+  const setViewMode = setControlledView ?? setInternalView
+
+  if (notes.length === 0) {
+    return (
+      <Card>
+        <CardContent className="flex flex-col items-center justify-center py-12">
+          <FileText className="h-12 w-12 text-muted-foreground/50 mb-4" />
+          <p className="text-muted-foreground mb-4">No lab notes yet</p>
+          <Button onClick={handleNewNote}>
+            <FileText className="h-4 w-4 mr-2" />
+            Create First Lab Note
+          </Button>
+        </CardContent>
+      </Card>
+    )
+  }
 
   return (
-    <Card className={cardClass}>
-      {!borderless && (
-        <CardHeader className={headerClass}>
-          <div className="flex items-center justify-between">
-            <CardTitle className="text-base">Lab Notes</CardTitle>
-            <Button size="sm" onClick={handleNewNote}>
-              <Plus className="h-4 w-4" />
+    <>
+      {/* View Toggle - only when not in header */}
+      {!hideToolbar && (
+        <div className="flex justify-end mb-4">
+          <div className="inline-flex rounded-lg border p-1">
+            <Button
+              variant={viewMode === "grid" ? "secondary" : "ghost"}
+              size="sm"
+              onClick={() => setViewMode("grid")}
+              className="gap-2"
+            >
+              <Grid3x3 className="h-4 w-4" />
+              Grid
+            </Button>
+            <Button
+              variant={viewMode === "table" ? "secondary" : "ghost"}
+              size="sm"
+              onClick={() => setViewMode("table")}
+              className="gap-2"
+            >
+              <List className="h-4 w-4" />
+              Table
             </Button>
           </div>
-        </CardHeader>
+        </div>
       )}
-      <CardContent className={contentClass}>
-  {notes.length > 0 ? (
-    <div className="space-y-2">
-      {notes.map((note) => (
-        <button
-          key={note.id}
-          onClick={() => handleSelectNote(note)}
-          data-navigate
-          className={`w-full text-left p-3 rounded-lg border transition-colors ${
-            selectedNote?.id === note.id && !isCreating
-              ? "border-primary bg-primary/5"
-              : "border-border hover:border-primary/50"
-          }`}
-        >
-          <div className="flex items-start justify-between gap-2">
-            <div className="min-w-0 flex-1">
-              <p className="font-medium text-sm text-foreground truncate">
-                {note.title}
-              </p>
-              <p className="text-xs text-muted-foreground">
-                {new Date(note.created_at).toLocaleDateString()}
-              </p>
-            </div>
-                  <div className="flex flex-col items-end gap-1">
-            {note.note_type && (
-              <Badge variant="outline" className="shrink-0 text-xs">
-                {note.note_type}
-              </Badge>
-            )}
-                    {(note.project_name || note.experiment_name) && (
-                      <div className="text-right text-xs leading-tight text-muted-foreground space-y-0.5">
-                        {note.project_name && (
-                          <div className="truncate">
-                            <span className="font-semibold text-[11px] text-foreground/80">Project: </span>
-                            <span>{note.project_name}</span>
-                          </div>
-                        )}
-                        {note.experiment_name && (
-                          <div className="truncate">
-                            <span className="font-semibold text-[11px] text-foreground/80">Experiment: </span>
-                            <span>{note.experiment_name}</span>
-                          </div>
-                        )}
-                      </div>
+
+      {/* Grid View */}
+      {viewMode === "grid" && (
+        <div className="grid gap-4 grid-cols-[repeat(auto-fit,minmax(280px,1fr))]">
+          {notes.map((note) => (
+            <Card 
+              key={note.id} 
+              className="bg-card hover:border-primary transition-colors flex flex-col min-w-0 overflow-hidden cursor-pointer"
+              onClick={() => handleSelectNote(note)}
+            >
+              <CardHeader className="pb-3 min-w-0">
+                <div className="flex items-start gap-3 min-w-0">
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10">
+                    <FileText className="h-5 w-5 text-primary" />
+                  </div>
+                  <div className="min-w-0 flex-1 space-y-1 overflow-hidden">
+                    <CardTitle className="text-base text-foreground leading-tight min-w-0 overflow-hidden text-ellipsis" style={{
+                      display: '-webkit-box',
+                      WebkitLineClamp: 2,
+                      WebkitBoxOrient: 'vertical',
+                      wordBreak: 'break-all',
+                      overflowWrap: 'break-word'
+                    }}>
+                      {note.title}
+                    </CardTitle>
+                    {note.project_name && (
+                      <CardDescription className="text-xs min-w-0 overflow-hidden text-ellipsis" style={{
+                        wordBreak: 'break-all',
+                        overflowWrap: 'break-word'
+                      }}>
+                        {note.project_name}
+                      </CardDescription>
                     )}
                   </div>
-          </div>
-        </button>
-      ))}
-    </div>
-  ) : (
-    <div className="text-center py-8 text-muted-foreground">
-      <FileText className="h-8 w-8 mx-auto mb-2 opacity-50" />
-      <p className="text-sm">No notes yet</p>
-    </div>
-  )}
-</CardContent>
-</Card>
-)
+                </div>
+                {/* Badge and date */}
+                <div className="flex items-center justify-between pt-2 gap-2 min-w-0">
+                  {note.note_type && (
+                    <Badge variant="outline" className="text-xs font-medium whitespace-nowrap shrink-0 max-w-full overflow-hidden text-ellipsis">
+                      {note.note_type}
+                    </Badge>
+                  )}
+                  <span className="text-xs text-muted-foreground whitespace-nowrap shrink-0 overflow-hidden text-ellipsis max-w-32">
+                    {new Date(note.created_at).toLocaleDateString()}
+                  </span>
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-3 flex-1 flex flex-col pt-0 min-w-0">
+                <div className="space-y-2 flex-1 min-w-0">
+                  {note.experiment_name && (
+                    <div className="flex items-center gap-1 text-sm text-muted-foreground min-w-0 overflow-hidden">
+                      <span className="text-xs font-semibold shrink-0">Experiment:</span>
+                      <span className="truncate text-ellipsis overflow-hidden text-xs">
+                        {note.experiment_name}
+                      </span>
+                    </div>
+                  )}
+                </div>
+                <Button variant="outline" size="sm" className="w-full mt-auto shrink-0">
+                  <Eye className="h-4 w-4 mr-2" />
+                  <span className="truncate">View Details</span>
+                </Button>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      )}
+
+      {/* Table View */}
+      {viewMode === "table" && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-foreground">All Lab Notes</CardTitle>
+            <CardDescription>Complete list of laboratory notes</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="relative w-full overflow-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="min-w-[250px]">Note Title</TableHead>
+                    <TableHead className="min-w-[120px]">Type</TableHead>
+                    <TableHead className="min-w-[180px]">Project</TableHead>
+                    <TableHead className="min-w-[180px]">Experiment</TableHead>
+                    <TableHead className="min-w-[120px]">Created</TableHead>
+                    <TableHead className="text-right min-w-[100px]">Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {notes.map((note) => (
+                    <TableRow key={note.id}>
+                      <TableCell className="font-medium text-foreground">
+                        <div className="flex items-center gap-2">
+                          <FileText className="h-4 w-4 text-primary shrink-0" />
+                          <div className="max-w-[280px]">
+                            <div className="font-semibold truncate">{note.title}</div>
+                          </div>
+                        </div>
+                      </TableCell>
+                      <TableCell className="text-muted-foreground">
+                        {note.note_type ? (
+                          <Badge variant="outline" className="whitespace-nowrap">
+                            {note.note_type}
+                          </Badge>
+                        ) : (
+                          "—"
+                        )}
+                      </TableCell>
+                      <TableCell className="text-muted-foreground">
+                        {note.project_name || "—"}
+                      </TableCell>
+                      <TableCell className="text-muted-foreground">
+                        {note.experiment_name || "—"}
+                      </TableCell>
+                      <TableCell className="text-muted-foreground">
+                        {formatDate(note.created_at)}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <Button 
+                          variant="ghost" 
+                          size="sm"
+                          onClick={() => handleSelectNote(note)}
+                        >
+                          <Eye className="h-4 w-4" />
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+    </>
+  )
 }
