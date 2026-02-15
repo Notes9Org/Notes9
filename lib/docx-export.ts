@@ -3,63 +3,23 @@
 import {
   Document, Paragraph, TextRun, Table, TableRow, TableCell,
   WidthType, BorderStyle, HeadingLevel, Packer, ShadingType,
-  VerticalAlign, AlignmentType, convertInchesToTwip
+  VerticalAlign, AlignmentType, convertInchesToTwip,
+  CommentRangeStart, CommentRangeEnd, CommentReference, ICommentOptions
 } from 'docx'
 import { saveAs } from 'file-saver'
 
 // Parse HTML content and convert to DOCX elements
 export async function exportHtmlToDocx(html: string, title: string) {
   const children: any[] = []
-  const comments: any[] = []
+  const comments: ICommentOptions[] = []
 
-  // Add title
-  if (title) {
-    children.push(new Paragraph({
-      children: [new TextRun({ text: title, bold: true, size: 32 })],
-      heading: HeadingLevel.TITLE,
-      spacing: { after: 400 },
-    }))
-  }
-
-  // Parse HTML and convert to DOCX
   const elements = parseHtmlToDocElements(html, comments)
   children.push(...elements)
 
-  // Append comments section if any
-  if (comments.length > 0) {
-    children.push(new Paragraph({
-      text: "",
-      spacing: { before: 800 },
-      border: { top: { style: BorderStyle.SINGLE, size: 6, color: 'EEEEEE' } },
-    }))
-
-    children.push(new Paragraph({
-      children: [new TextRun({ text: "Comments", bold: true, size: 28 })],
-      heading: HeadingLevel.HEADING_2,
-      spacing: { before: 240, after: 240 },
-    }))
-
-    comments.forEach((c, i) => {
-      const dateStr = c.createdAt ? new Date(Number(c.createdAt)).toLocaleString() : ""
-
-      children.push(new Paragraph({
-        children: [
-          new TextRun({ text: `[${i + 1}] `, bold: true, size: 20 }),
-          new TextRun({ text: c.author, bold: true, size: 20, color: '7C3AED' }),
-          new TextRun({ text: `  ${dateStr}`, size: 18, color: '666666' }),
-        ],
-        spacing: { before: 120 },
-      }))
-
-      children.push(new Paragraph({
-        children: [new TextRun({ text: c.content, size: 20, color: '444444' })],
-        spacing: { after: 120 },
-        indent: { left: 400 },
-      }))
-    })
-  }
-
   const doc = new Document({
+    comments: {
+      children: comments
+    },
     sections: [{
       properties: {
         page: {
@@ -79,7 +39,7 @@ export async function exportHtmlToDocx(html: string, title: string) {
   saveAs(blob, `${title || 'document'}.docx`)
 }
 
-function parseHtmlToDocElements(html: string, comments: any[]): any[] {
+function parseHtmlToDocElements(html: string, comments: ICommentOptions[]): any[] {
   const elements: any[] = []
 
   // Create a temporary DOM element to parse HTML
@@ -102,7 +62,7 @@ function parseHtmlToDocElements(html: string, comments: any[]): any[] {
   return elements
 }
 
-function parseNode(node: Node, comments: any[]): any | null {
+function parseNode(node: Node, comments: ICommentOptions[]): any | null {
   // Text node
   if (node.nodeType === Node.TEXT_NODE) {
     const text = node.textContent?.trim()
@@ -124,17 +84,17 @@ function parseNode(node: Node, comments: any[]): any | null {
       case 'p':
         return parseParagraph(el, comments)
       case 'h1':
-        return parseHeading(el, HeadingLevel.HEADING_1)
+        return parseHeading(el, HeadingLevel.HEADING_1, comments)
       case 'h2':
-        return parseHeading(el, HeadingLevel.HEADING_2)
+        return parseHeading(el, HeadingLevel.HEADING_2, comments)
       case 'h3':
-        return parseHeading(el, HeadingLevel.HEADING_3)
+        return parseHeading(el, HeadingLevel.HEADING_3, comments)
       case 'h4':
-        return parseHeading(el, HeadingLevel.HEADING_4)
+        return parseHeading(el, HeadingLevel.HEADING_4, comments)
       case 'h5':
-        return parseHeading(el, HeadingLevel.HEADING_5)
+        return parseHeading(el, HeadingLevel.HEADING_5, comments)
       case 'h6':
-        return parseHeading(el, HeadingLevel.HEADING_6)
+        return parseHeading(el, HeadingLevel.HEADING_6, comments)
       case 'ul':
       case 'ol':
         return parseList(el, comments)
@@ -179,7 +139,7 @@ function parseNode(node: Node, comments: any[]): any | null {
   return null
 }
 
-function parseParagraph(el: Element, comments: any[]): Paragraph {
+function parseParagraph(el: Element, comments: ICommentOptions[]): Paragraph {
   const runs = parseInlineContent(el, comments)
 
   // Check for alignment
@@ -196,10 +156,33 @@ function parseParagraph(el: Element, comments: any[]): Paragraph {
   })
 }
 
-function parseHeading(el: Element, level: any): Paragraph {
-  const text = el.textContent || ''
+function parseHeading(el: Element, level: any, comments: ICommentOptions[]): Paragraph {
+  const runs = parseInlineContent(el, comments)
+
+  // Force bold and size for heading runs that don't have specific adjustments
+  runs.forEach(run => {
+    // We can't easily modify the TextRun object after creation if it's strictly typed without type assertion 
+    // or we just rely on the Paragraph heading property to style it, 
+    // but word sometimes needs explicit run properties for direct formatting.
+    // However, the `heading: level` in Paragraph usually takes care of it.
+    // Let's just return the runs. Word styles should handle it.
+    // But to match previous behavior (explicit bold/size):
+    // We'd need to reconstruct TextRuns.
+    // The previous code was: new TextRun({ text, bold: true, size: getHeadingSize(level) })
+  })
+
+  // To maintain visual consistency with the previous implementation, 
+  // we might want applied styles. But `parseInlineContent` applies its own styles.
+  // Overriding them might be tricky. 
+  // Generally, Headings in Word are styled by the Style, so we shouldn't manually set size/bold on every run 
+  // UNLESS we want to override the default Heading style.
+  // The previous implementation manually set it. 
+  // Let's trust `heading: level` to do the heavy lifting, but if we really needed that size manual override:
+
+  // Actually, let's just pass `heading: level`.
+
   return new Paragraph({
-    children: [new TextRun({ text, bold: true, size: getHeadingSize(level) })],
+    children: runs.length > 0 ? runs : [new TextRun({ text: '', size: getHeadingSize(level) })],
     heading: level,
     spacing: { before: 240, after: 120 },
   })
@@ -217,7 +200,7 @@ function getHeadingSize(level: any): number {
   }
 }
 
-function parseList(el: Element, comments: any[]): any[] {
+function parseList(el: Element, comments: ICommentOptions[]): any[] {
   const items: any[] = []
   const isOrdered = el.tagName.toLowerCase() === 'ol'
   let index = 1
@@ -240,7 +223,7 @@ function parseList(el: Element, comments: any[]): any[] {
   return items
 }
 
-function parseBlockquote(el: Element, comments: any[]): Paragraph {
+function parseBlockquote(el: Element, comments: ICommentOptions[]): Paragraph {
   const runs = parseInlineContent(el, comments)
   return new Paragraph({
     children: runs.length > 0 ? runs : [new TextRun({ text: '', size: 22 })],
@@ -261,7 +244,7 @@ function parseCodeBlock(el: Element): any[] {
   }))
 }
 
-function parseTable(el: Element, comments: any[]): Table {
+function parseTable(el: Element, comments: ICommentOptions[]): Table {
   const rows: TableRow[] = []
 
   for (const tr of el.querySelectorAll('tr')) {
@@ -333,8 +316,8 @@ function parseTable(el: Element, comments: any[]): Table {
   })
 }
 
-function parseInlineContent(el: Element, comments: any[]): TextRun[] {
-  const runs: TextRun[] = []
+function parseInlineContent(el: Element, comments: ICommentOptions[]): any[] {
+  const runs: any[] = []
 
   for (const node of el.childNodes) {
     if (node.nodeType === Node.TEXT_NODE) {
@@ -372,21 +355,35 @@ function parseInlineContent(el: Element, comments: any[]): TextRun[] {
         const content = childEl.getAttribute('data-content')
         const createdAt = childEl.getAttribute('data-created-at')
 
-        if (content) {
-          comments.push({ id, author, content, createdAt })
-          const commentNum = comments.length
+        if (content && id) {
+          // Used predictable numeric ID for internal DOCX comment referencing
+          // We'll use the current length of the comments array as the reference ID
+          const commentId = comments.length
+
+          comments.push({
+            id: commentId,
+            author: author || "Unknown",
+            initials: author ? author.charAt(0).toUpperCase() : "U",
+            date: createdAt ? new Date(Number(createdAt)) : new Date(),
+            children: [
+              new Paragraph({
+                children: [
+                  new TextRun({ text: content })
+                ]
+              })
+            ]
+          })
 
           // Apply highlight
           runOpts.highlight = 'magenta' // Standard Word highlight color
 
-          // Add superscript [N]
+          // Wrap text with comment range start/end
+          runs.push(new CommentRangeStart(commentId))
           runs.push(new TextRun(runOpts))
+          runs.push(new CommentRangeEnd(commentId))
           runs.push(new TextRun({
-            text: `[${commentNum}]`,
-            superScript: true,
-            bold: true,
-            color: '7C3AED',
-            size: 18,
+            children: [new CommentReference(commentId)],
+            superScript: true
           }))
           continue
         }
@@ -407,13 +404,24 @@ function parseInlineContent(el: Element, comments: any[]): TextRun[] {
       }
 
       // Color from inline style
-      if (color && color !== 'transparent') {
+      if (color && color !== 'transparent' && isValidHex(color)) {
         runOpts.color = color.replace('#', '')
       }
 
       // Background/highlight from mark or style
-      if (tagName === 'mark' || (bgColor && bgColor !== 'transparent')) {
-        runOpts.highlight = 'yellow'
+      if (tagName === 'mark' || (bgColor && bgColor !== 'transparent' && isValidHex(bgColor))) {
+        // If it's a valid hex, we might want to map it to closest highlighting color or use shading
+        // docx highlight only supports specific enum values (yellow, green, etc.)
+        // shading can take hex.
+        if (tagName === 'mark') {
+          runOpts.highlight = 'yellow'
+        } else if (isValidHex(bgColor)) {
+          runOpts.shading = {
+            type: ShadingType.SOLID,
+            color: bgColor.replace('#', ''),
+            fill: bgColor.replace('#', '')
+          }
+        }
       }
 
       runs.push(new TextRun(runOpts))
@@ -425,6 +433,8 @@ function parseInlineContent(el: Element, comments: any[]): TextRun[] {
 
 // Convert RGB to Hex
 function rgbToHex(rgb: string): string {
+  if (!rgb) return ''
+
   // If already hex, return it
   if (rgb.startsWith('#')) {
     return rgb
@@ -439,5 +449,10 @@ function rgbToHex(rgb: string): string {
     return '#' + [r, g, b].map(x => x.toString(16).padStart(2, '0')).join('')
   }
 
+  // Handle common names or return original if can't parse (will be filtered by isValidHex)
   return rgb
+}
+
+function isValidHex(color: string): boolean {
+  return /^#([0-9A-F]{3}){1,2}$/i.test(color)
 }
