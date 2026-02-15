@@ -1,8 +1,8 @@
 'use client';
 
-import { useChat, Chat } from '@ai-sdk/react';
+import { useChat } from '@ai-sdk/react';
 import { DefaultChatTransport } from 'ai';
-import { useRef, useEffect, useState, useCallback } from 'react';
+import { useRef, useEffect, useState, useCallback, useMemo } from 'react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -28,10 +28,6 @@ interface UserProfile {
   avatar_url: string | null;
   full_name: string | null;
 }
-
-// Stable chat instance - created once
-const chatTransport = new DefaultChatTransport({ api: '/api/chat' });
-const chatInstance = new Chat({ id: 'catalyst', transport: chatTransport });
 
 export function CatalystChat({ open, onOpenChange }: CatalystChatProps) {
   const [input, setInput] = useState('');
@@ -59,8 +55,23 @@ export function CatalystChat({ open, onOpenChange }: CatalystChatProps) {
     loadSessions,
   } = useChatSessions();
 
-  // Use stable chat instance
-  const { messages, sendMessage, status, stop, setMessages } = useChat({ chat: chatInstance });
+  const transport = useMemo(() => new DefaultChatTransport({
+    api: '/api/chat',
+    prepareSendMessagesRequest(request) {
+      return {
+        body: {
+          messages: request.messages,
+          sessionId: currentSessionRef.current,
+          ...request.body,
+        },
+      };
+    },
+  }), []);
+
+  const { messages, sendMessage, status, stop, setMessages } = useChat({
+    id: 'catalyst-modal',
+    transport,
+  });
 
   const scrollAreaRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);

@@ -8,7 +8,6 @@ import { PanelLeftClose, PanelLeft } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useChatSessions } from '@/hooks/use-chat-sessions';
 import { createClient } from '@/lib/supabase/client';
-import { DEFAULT_MODEL_ID } from '@/lib/ai/models';
 import { deleteTrailingMessages } from '@/app/(app)/catalyst/actions';
 import { toast } from 'sonner';
 import { CatalystGreeting } from './catalyst-greeting';
@@ -18,13 +17,6 @@ import type { Attachment } from './preview-attachment';
 import { CatalystSidebar } from './catalyst-sidebar';
 import type { Vote } from '@/lib/db/schema';
 import { formatCitationDisplay } from '@/lib/utils';
-
-// Helper to get cookie value
-function getCookie(name: string): string | null {
-  if (typeof document === 'undefined') return null;
-  const match = document.cookie.match(new RegExp('(^| )' + name + '=([^;]+)'));
-  return match ? decodeURIComponent(match[2]) : null;
-}
 
 interface CatalystChatProps {
   sessionId?: string;
@@ -36,19 +28,10 @@ export function CatalystChat({ sessionId }: CatalystChatProps) {
   const [userName, setUserName] = useState<string>('');
   const [savedMessageIds, setSavedMessageIds] = useState<Set<string>>(new Set());
   const [sidebarOpen, setSidebarOpen] = useState(true);
-  const [selectedModelId, setSelectedModelId] = useState(DEFAULT_MODEL_ID);
   const [votes, setVotes] = useState<Vote[]>([]);
   const [agentMode, setAgentMode] = useState<AgentMode>('general');
   const [userId, setUserId] = useState<string>('');
   const [notes9Loading, setNotes9Loading] = useState(false);
-
-  // Load model from cookie on mount
-  useEffect(() => {
-    const savedModel = getCookie('catalyst-model');
-    if (savedModel) {
-      setSelectedModelId(savedModel);
-    }
-  }, []);
 
   const prevStatusRef = useRef<string>('ready');
   const currentSessionRef = useRef<string | null>(sessionId || null);
@@ -76,15 +59,14 @@ export function CatalystChat({ sessionId }: CatalystChatProps) {
     loadSessions,
   } = useChatSessions();
 
-  // Create transport with prepareSendMessagesRequest to include modelId dynamically
-  // This follows the Vercel Chat SDK pattern
+  // Create transport with prepareSendMessagesRequest to include sessionId
   const transport = useMemo(() => new DefaultChatTransport({
     api: '/api/chat',
     prepareSendMessagesRequest(request) {
       return {
         body: {
-          messages: request.messages,  // Include messages from request
-          modelId: currentModelRef.current,
+          messages: request.messages,
+          sessionId: currentSessionRef.current,
           ...request.body,
         },
       };
@@ -312,7 +294,7 @@ export function CatalystChat({ sessionId }: CatalystChatProps) {
         await saveMessage(sid, 'user', text);
 
         // Call Notes9 API
-        const response = await fetch(`${process.env.NEXT_PUBLIC_AI_SERVICE_URL || 'http://13.221.90.39:8000'}/agent/run`, {
+        const response = await fetch('https://z3thrlksg0.execute-api.us-east-1.amazonaws.com/agent/run', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -560,8 +542,6 @@ export function CatalystChat({ sessionId }: CatalystChatProps) {
           isLoading={isLoading}
           stop={stop}
           hasMessages={messages.length > 0}
-          selectedModelId={selectedModelId}
-          onModelChange={setSelectedModelId}
           agentMode={agentMode}
           onAgentModeChange={setAgentMode}
         />

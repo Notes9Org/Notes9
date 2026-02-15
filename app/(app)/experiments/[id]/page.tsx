@@ -10,6 +10,7 @@ import Link from 'next/link'
 import { ExperimentActions } from './experiment-actions'
 import { ExperimentTabs } from './experiment-tabs'
 
+
 type SearchParams = { tab?: string; noteId?: string }
 
 export default async function ExperimentDetailPage({
@@ -136,8 +137,8 @@ export default async function ExperimentDetailPage({
 
 
 
-      <ExperimentTabs 
-        experiment={experiment} 
+      <ExperimentTabs
+        experiment={experiment}
         initialTab={initialTab}
       />
     </div>

@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button"
 import { Plus } from 'lucide-react'
 import Link from 'next/link'
 import { ExperimentsPageContent } from './experiment-list'
+import { SetPageBreadcrumb } from "@/components/layout/breadcrumb-context"
 
 export default async function ExperimentsPage() {
   const supabase = await createClient()
@@ -28,6 +29,7 @@ export default async function ExperimentsPage() {
 
   return (
       <div className="space-y-6">
+        <SetPageBreadcrumb segments={[]} />
         {experiments && experiments.length > 0 ? (
           <ExperimentsPageContent experiments={experiments} />
         ) : (

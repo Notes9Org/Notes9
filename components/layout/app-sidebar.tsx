@@ -630,16 +630,18 @@ export function AppSidebar() {
                   </div>
                 </SidebarMenuButton>
 
-                {/* Collapse Button */}
-                <button
-                  type="button"
-                  onClick={toggleSidebarOpen}
-                  className="flex h-8 w-8 items-center justify-center rounded-md text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground transition-colors flex-shrink-0"
-                  title="Collapse sidebar"
-                  aria-label="Collapse sidebar"
-                >
-                  <PanelLeftClose className="h-4 w-4" />
-                </button>
+                {/* Collapse Button - hidden on mobile where sidebar is a sheet overlay */}
+                {!isMobile && (
+                  <button
+                    type="button"
+                    onClick={toggleSidebarOpen}
+                    className="flex h-8 w-8 items-center justify-center rounded-md text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground transition-colors flex-shrink-0"
+                    title="Collapse sidebar"
+                    aria-label="Collapse sidebar"
+                  >
+                    <PanelLeftClose className="h-4 w-4" />
+                  </button>
+                )}
               </div>
             )}
           </SidebarMenuItem>

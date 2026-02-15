@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button"
 import { Plus } from 'lucide-react'
 import Link from 'next/link'
 import { ProjectsPageContent } from './project-list'
+import { SetPageBreadcrumb } from "@/components/layout/breadcrumb-context"
 
 export default async function ProjectsPage() {
   const supabase = await createClient()
@@ -36,6 +37,7 @@ export default async function ProjectsPage() {
 
   return (
       <div className="space-y-6">
+        <SetPageBreadcrumb segments={[]} />
         {projects && projects.length > 0 ? (
           <ProjectsPageContent projects={projects} />
         ) : (

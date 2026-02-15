@@ -6,7 +6,6 @@ import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { cn } from '@/lib/utils';
 import { PreviewAttachment, type Attachment } from './preview-attachment';
-import { ModelSelector } from './model-selector';
 import { toast } from 'sonner';
 
 export type AgentMode = 'general' | 'notes9';
@@ -18,10 +17,11 @@ interface CatalystInputProps {
   isLoading: boolean;
   stop: () => void;
   hasMessages: boolean;
-  selectedModelId: string;
-  onModelChange: (modelId: string) => void;
   agentMode: AgentMode;
   onAgentModeChange: (mode: AgentMode) => void;
+  /** @deprecated Model selector hidden when using external chat API */
+  selectedModelId?: string;
+  onModelChange?: (modelId: string) => void;
 }
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
@@ -43,8 +43,6 @@ export function CatalystInput({
   isLoading,
   stop,
   hasMessages,
-  selectedModelId,
-  onModelChange,
   agentMode,
   onAgentModeChange,
 }: CatalystInputProps) {
@@ -289,16 +287,8 @@ export function CatalystInput({
               </Button>
             </div>
 
-            {/* Right - Model selector + Submit/Stop button */}
+            {/* Right - Submit/Stop button */}
             <div className="flex items-center gap-2">
-              {agentMode === 'general' && (
-                <ModelSelector
-                  selectedModelId={selectedModelId}
-                  onModelChange={onModelChange}
-                  disabled={isLoading}
-                />
-              )}
-
               {isLoading ? (
                 <Button
                   type="button"

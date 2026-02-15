@@ -7,7 +7,8 @@ import LabNotesList from "@/app/(app)/lab-notes-list/[id]/lab-notes-list"
 import { NewLabNoteDialog } from "@/app/(app)/lab-notes/new-lab-note-dialog"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
-import { Loader2, Plus } from "lucide-react"
+import { Loader2, Plus, Grid3x3, List } from "lucide-react"
+import { SetPageBreadcrumb } from "@/components/layout/breadcrumb-context"
 
 type LabNote = {
   id: string
@@ -28,6 +29,7 @@ export default function LabNotesPage() {
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [newNoteDialogOpen, setNewNoteDialogOpen] = useState(false)
+  const [viewMode, setViewMode] = useState<"grid" | "table">("grid")
 
   const fetchNotes = useCallback(async () => {
     try {
@@ -88,20 +90,43 @@ export default function LabNotesPage() {
   }
 
   return (
-    <div className="space-y-6 max-w-5xl mx-auto">
+    <div className="space-y-6">
+      <SetPageBreadcrumb segments={[]} />
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <p className="text-muted-foreground">
           Access and manage lab notes across your experiments.
         </p>
-        <Button
-          size="icon"
-          variant="ghost"
-          onClick={handleNewNote}
-          className="shrink-0 size-8 rounded-md text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
-          aria-label="New lab note"
-        >
-          <Plus className="size-4" />
-        </Button>
+        <div className="flex items-center gap-2 shrink-0">
+          <div className="inline-flex rounded-lg border p-1">
+            <Button
+              variant={viewMode === "grid" ? "secondary" : "ghost"}
+              size="sm"
+              onClick={() => setViewMode("grid")}
+              className="gap-2"
+            >
+              <Grid3x3 className="h-4 w-4" />
+              Grid
+            </Button>
+            <Button
+              variant={viewMode === "table" ? "secondary" : "ghost"}
+              size="sm"
+              onClick={() => setViewMode("table")}
+              className="gap-2"
+            >
+              <List className="h-4 w-4" />
+              Table
+            </Button>
+          </div>
+          <Button
+            size="icon"
+            variant="ghost"
+            onClick={handleNewNote}
+            className="size-8 rounded-md text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+            aria-label="New lab note"
+          >
+            <Plus className="size-4" />
+          </Button>
+        </div>
       </div>
 
       {error && (
@@ -123,7 +148,9 @@ export default function LabNotesPage() {
           isCreating={false}
           handleNewNote={handleNewNote}
           handleSelectNote={handleSelectNote}
-          borderless
+          viewMode={viewMode}
+          setViewMode={setViewMode}
+          hideToolbar
         />
       )}
 
