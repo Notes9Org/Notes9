@@ -36,9 +36,7 @@ import { cn, formatCitationDisplay } from '@/lib/utils';
 import { useChatSessions, ChatSession } from '@/hooks/use-chat-sessions';
 import { MarkdownRenderer } from '@/components/catalyst/markdown-renderer';
 import { PreviewAttachment, type Attachment } from '@/components/catalyst/preview-attachment';
-import { ModelSelector } from '@/components/catalyst/model-selector';
 import { MessageActions } from '@/components/catalyst/message-actions';
-import { DEFAULT_MODEL_ID } from '@/lib/ai/models';
 import { toast } from 'sonner';
 import { createClient } from '@/lib/supabase/client';
 import {
@@ -87,13 +85,6 @@ function getPlainTextFromMessage(msg: { content?: unknown; parts?: Array<{ type?
   return '';
 }
 
-// Helper to get cookie value
-function getCookie(name: string): string | null {
-  if (typeof document === 'undefined') return null;
-  const match = document.cookie.match(new RegExp('(^| )' + name + '=([^;]+)'));
-  return match ? decodeURIComponent(match[2]) : null;
-}
-
 const MAX_FILE_SIZE = 10 * 1024 * 1024;
 const ALLOWED_TYPES = [
   'image/jpeg',
@@ -106,7 +97,6 @@ const ALLOWED_TYPES = [
 
 export function RightSidebar() {
   const [input, setInput] = useState('');
-  const [selectedModelId, setSelectedModelId] = useState(DEFAULT_MODEL_ID);
   const [agentMode, setAgentMode] = useState<AgentMode>('general');
   const [userId, setUserId] = useState<string>('');
   const [notes9Loading, setNotes9Loading] = useState(false);
@@ -140,16 +130,6 @@ export function RightSidebar() {
     loadUserId();
   }, [supabase]);
 
-  const currentModelRef = useRef(selectedModelId);
-  useEffect(() => {
-    const savedModel = getCookie('catalyst-model');
-    if (savedModel) setSelectedModelId(savedModel);
-  }, []);
-
-  useEffect(() => {
-    currentModelRef.current = selectedModelId;
-  }, [selectedModelId]);
-
   const transport = useMemo(() => new DefaultChatTransport({
     api: '/api/chat',
     prepareSendMessagesRequest(request) {
@@ -161,7 +141,6 @@ export function RightSidebar() {
       return {
         body: {
           messages: normalizedMessages,
-          modelId: currentModelRef.current,
           sessionId: currentSessionRef.current,
           ...request.body,
         },
@@ -522,14 +501,6 @@ export function RightSidebar() {
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
-
-            {/* Model Selector */}
-            <ModelSelector
-              selectedModelId={selectedModelId}
-              onModelChange={setSelectedModelId}
-              compact
-              disabled={isLoading}
-            />
           </div>
 
           <div className="flex items-center gap-1 shrink-0">

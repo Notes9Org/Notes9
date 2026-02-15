@@ -1,8 +1,6 @@
-import { streamText, smoothStream, CoreMessage } from 'ai';
-import { createGoogleGenerativeAI } from '@ai-sdk/google';
-import { DEFAULT_MODEL_ID, getModelById } from '@/lib/ai/models';
-import { getRecentChatContext, updateChatContext, ChatMessage } from '@/lib/redis';
-import { saveChatMessage, getChatHistory } from '@/lib/db/chat';
+import { createUIMessageStream, createUIMessageStreamResponse, generateId } from 'ai';
+import { updateChatContext, ChatMessage } from '@/lib/redis';
+import { saveChatMessage } from '@/lib/db/chat';
 
 export const maxDuration = 60;
 
@@ -28,116 +26,108 @@ function normalizeContentToPlainText(raw: string): string {
   return s;
 }
 
+/** Extract plain text from a message (AI SDK format). */
+function getPlainTextFromMessage(msg: {
+  content?: unknown;
+  parts?: Array<{ type?: string; text?: string }>;
+}): string {
+  if (typeof msg.content === 'string') return normalizeContentToPlainText(msg.content);
+  if (Array.isArray(msg.parts)) {
+    const text = msg.parts
+      .filter((p) => p?.type === 'text' && typeof p.text === 'string')
+      .map((p) => p.text!)
+      .join('\n');
+    if (text) return normalizeContentToPlainText(text);
+  }
+  return normalizeContentToPlainText(JSON.stringify(msg.content ?? ''));
+}
+
 export async function POST(req: Request) {
   const body = await req.json();
   console.log('API Request Body:', JSON.stringify(body, null, 2));
-  const { messages, modelId, sessionId } = body;
+  const { messages, sessionId } = body;
 
   if (!sessionId) {
     console.error('Missing session_id. Body:', body);
     return new Response('Missing session_id', { status: 400 });
   }
 
-  // Get selected model or default
-  const selectedModelId = modelId || DEFAULT_MODEL_ID;
-  const modelConfig = getModelById(selectedModelId);
+  const baseUrl = process.env.AI_SERVICE_URL?.replace(/\/$/, '') || 'http://54.157.162.202:8000';
+  const bearerToken = process.env.AI_SERVICE_BEARER_TOKEN;
 
-  // Create Google provider with GEMINI_API_KEY
-  const google = createGoogleGenerativeAI({
-    apiKey: process.env.GEMINI_API_KEY,
-  });
-  const model = google(modelConfig?.id || DEFAULT_MODEL_ID);
+  if (!bearerToken) {
+    console.error('AI_SERVICE_BEARER_TOKEN is not configured');
+    return new Response('Chat service not configured', { status: 500 });
+  }
 
-  // 1. Extract the latest user query (always plain text for consistent context)
+  // 1. Extract the latest user query
   const lastMessage = messages[messages.length - 1];
-  let userQuery = '';
-  if (typeof lastMessage.content === 'string') {
-    userQuery = normalizeContentToPlainText(lastMessage.content);
-  }
-  if (!userQuery && Array.isArray(lastMessage.parts)) {
-    const fromParts = lastMessage.parts
-      .filter((p: { type?: string; text?: string }) => p.type === 'text' && typeof p.text === 'string')
-      .map((p: { text: string }) => normalizeContentToPlainText(p.text))
-      .join('\n');
-    if (fromParts) userQuery = fromParts;
-  }
-  if (!userQuery) {
-    userQuery = normalizeContentToPlainText(JSON.stringify(lastMessage.content || ''));
-  }
+  const userQuery = getPlainTextFromMessage(lastMessage);
 
   // 2. Persist user message immediately (DB)
-  // We don't await this to block the UI, but for correctness/safety we often should.
-  // Given the user wants robust context, let's await it to ensure it's recorded.
   await saveChatMessage(sessionId, 'user', userQuery);
 
-  // 3. Fetch recent context (Redis -> DB Fallback)
-  let contextMessages: ChatMessage[] | null = await getRecentChatContext(sessionId);
+  // 3. Build history for external API (prior turns, exclude last user message)
+  const history = messages.slice(0, -1).map((msg: { role: string; content?: unknown; parts?: Array<{ type?: string; text?: string }> }) => ({
+    role: msg.role as 'user' | 'assistant',
+    content: getPlainTextFromMessage(msg),
+  }));
 
-  if (!contextMessages) {
-    // Fallback: Fetch from DB if Redis miss (cold start)
-    contextMessages = await getChatHistory(sessionId, 10);
-  }
+  const stream = createUIMessageStream({
+    originalMessages: messages,
+    generateId,
+    execute: async ({ writer }) => {
+      try {
+        const response = await fetch(`${baseUrl}/chat`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${bearerToken}`,
+          },
+          body: JSON.stringify({
+            content: userQuery,
+            history,
+            session_id: sessionId,
+          }),
+        });
 
-  // 4. Assemble the LLM prompt (context as plain text so model never sees stringified JSON)
-  const llmMessages: CoreMessage[] = [
-    ...contextMessages.map((msg) => ({
-      role: msg.role as 'user' | 'assistant' | 'system',
-      content: normalizeContentToPlainText(msg.content),
-    })),
-    { role: 'user', content: userQuery },
-  ];
-
-  const result = streamText({
-    model,
-    system: `You are Catalyst, an AI research assistant for Notes9 - a scientific lab documentation platform.
-You help scientists with their experiments, protocols, and research documentation.
-
-Your capabilities:
-- Answer questions about experiments and protocols
-- Help with chemistry and biochemistry calculations
-- Assist with scientific writing and documentation
-- Explain complex scientific concepts
-
-Guidelines:
-- Use proper scientific terminology
-- Format chemical formulas correctly (H₂O, CO₂, CH₃COOH, etc.)
-- Be precise and accurate with scientific information
-- When unsure, acknowledge limitations
-- Keep responses clear and helpful`,
-    messages: llmMessages,
-    // Smooth streaming for better UX - chunks by word instead of token
-    experimental_transform: smoothStream({ chunking: 'word' }),
-    onFinish: async ({ response }) => {
-      // 6. Persist assistant response (full plain text so DB and client never see truncated/JSON)
-      const assistantMessage = response.messages[response.messages.length - 1];
-      if (assistantMessage.role === 'assistant') {
-        let content: string;
-        const raw = assistantMessage.content;
-        if (typeof raw === 'string') {
-          content = normalizeContentToPlainText(raw);
-        } else if (Array.isArray(raw)) {
-          const joined = (raw as Array<{ type?: string; text?: string }>)
-            .filter((p) => p?.type === 'text' && typeof p.text === 'string')
-            .map((p) => p.text!)
-            .join('');
-          content = normalizeContentToPlainText(joined);
-        } else {
-          content = normalizeContentToPlainText(JSON.stringify(raw ?? ''));
+        if (!response.ok) {
+          const errText = await response.text();
+          console.error('External chat API error:', response.status, errText);
+          writer.write({
+            type: 'error',
+            errorText: `Chat service error: ${response.status} ${errText}`,
+          });
+          return;
         }
 
-        await saveChatMessage(sessionId, 'assistant', content);
+        const data = (await response.json()) as { content?: string; role?: string };
+        const assistantContent = typeof data.content === 'string' ? data.content : String(data.content ?? '');
 
-        // 7. Update Redis sliding window
-        // We append the new user query and the new assistant response to the *existing* context
+        // Persist assistant response (DB)
+        await saveChatMessage(sessionId, 'assistant', assistantContent);
+
+        // Update Redis sliding window
         const newUpdates: ChatMessage[] = [
           { role: 'user', content: userQuery },
-          { role: 'assistant', content }
+          { role: 'assistant', content: assistantContent },
         ];
-
         await updateChatContext(sessionId, newUpdates);
+
+        // Emit text as a single chunk (external API is non-streaming)
+        const textId = generateId();
+        writer.write({ type: 'text-start', id: textId });
+        writer.write({ type: 'text-delta', id: textId, delta: assistantContent });
+        writer.write({ type: 'text-end', id: textId });
+      } catch (error) {
+        console.error('Chat proxy error:', error);
+        writer.write({
+          type: 'error',
+          errorText: error instanceof Error ? error.message : 'Chat service unavailable',
+        });
       }
-    }
+    },
   });
 
-  return result.toUIMessageStreamResponse();
+  return createUIMessageStreamResponse({ stream });
 }
