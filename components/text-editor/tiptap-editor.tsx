@@ -994,7 +994,7 @@ export const Comment = Mark.create<CommentOptions>({
   addProseMirrorPlugins() {
     return []
   },
-})
+});
 
 export function TiptapEditor({
   content = "",
@@ -1069,7 +1069,8 @@ export function TiptapEditor({
   const [isCommenting, setIsCommenting] = useState(false)
   const [commentText, setCommentText] = useState("")
   const [commentsSidebarOpen, setCommentsSidebarOpen] = useState(false)
-  const [activeCommentData, setActiveCommentData] = useState<{author: string; content: string; createdAt: number; id: string; rect: DOMRect} | null>(null)
+  /* State merge: keeping activeCommentData from origin */
+  const [activeCommentData, setActiveCommentData] = useState<{ author: string; content: string; createdAt: number; id: string; rect: DOMRect } | null>(null)
   const recognitionRef = useRef<any>(null)
   const lastFinalIndexRef = useRef<number>(0)
   const lastInterimTextRef = useRef<string>("")
@@ -2870,22 +2871,21 @@ export function TiptapEditor({
                       e.preventDefault();
                     }}
                     onClick={() => {
-                      console.log("Comment button clicked, selection empty:", editor.state.selection.empty);
-                      if (editor.isActive('comment')) {
-                        editor.chain().focus().unsetComment().run();
-                      } else if (editor.state.selection.empty) {
-                        toast.error("Please select text to comment on");
-                      } else {
+                      /* Conflict resolution: User requested to keep sidebar toggle logic */
+                      if (!editor.state.selection.empty) {
                         setIsCommenting(true);
                         editor.chain().focus().run();
+                      } else {
+                        setCommentsSidebarOpen(!commentsSidebarOpen);
                       }
                     }}
                   >
-                    <MessageSquarePlus className="h-4 w-4" />
+                    <MessageSquare className="h-4 w-4 animate-logo-subtle" />
                   </Button>
                 </TooltipTrigger>
-                <TooltipContent>Insert comment</TooltipContent>
+                <TooltipContent>Comments</TooltipContent>
               </Tooltip>
+
 
               <Tooltip>
                 <TooltipTrigger asChild>
@@ -3123,160 +3123,162 @@ export function TiptapEditor({
               </DropdownMenu>
 
               {/* AI Tools */}
-              {showAITools && (
-                <>
-                  <Separator orientation="vertical" className="h-5 shrink-0 mx-0.5" />
+              {
+                showAITools && (
+                  <>
+                    <Separator orientation="vertical" className="h-5 shrink-0 mx-0.5" />
 
-                  {/* Speech to text */}
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <Button
-                        variant={isListening ? "secondary" : "ghost"}
-                        size="sm"
-                        className="h-8 w-8 p-0 shrink-0"
-                        onClick={
-                          isListening ? stopSpeechToText : startSpeechToText
-                        }
-                      >
-                        <Mic className="h-4 w-4" />
-                      </Button>
-                    </TooltipTrigger>
-                    <TooltipContent>
-                      {isListening ? "Stop dictation" : "Start dictation"}
-                    </TooltipContent>
-                  </Tooltip>
+                    {/* Speech to text */}
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button
+                          variant={isListening ? "secondary" : "ghost"}
+                          size="sm"
+                          className="h-8 w-8 p-0 shrink-0"
+                          onClick={
+                            isListening ? stopSpeechToText : startSpeechToText
+                          }
+                        >
+                          <Mic className="h-4 w-4" />
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        {isListening ? "Stop dictation" : "Start dictation"}
+                      </TooltipContent>
+                    </Tooltip>
 
-                  {/* Cite with AI - Standalone Button */}
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="h-8 gap-1 px-2 relative overflow-hidden border-0 bg-background hover:bg-accent/50 transition-colors rainbow-border-button"
-                        onClick={aiCite}
-                        disabled={isCiteProcessing}
-                      >
-                        {isCiteProcessing ? (
-                          <Loader2 className="h-4 w-4 animate-spin relative z-10" />
-                        ) : (
-                          <FileText className="h-4 w-4 relative z-10" />
-                        )}
-                        <span className="text-xs font-medium relative z-10">Cite with AI</span>
-                      </Button>
-                    </TooltipTrigger>
-                    <TooltipContent className="max-w-xs">
-                      <p className="font-medium mb-1">Find and insert citations</p>
-                      <p className="text-xs text-muted-foreground">Select text (at least 10 characters) and click to search for relevant citations</p>
-                    </TooltipContent>
-                  </Tooltip>
+                    {/* Cite with AI - Standalone Button */}
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="h-8 gap-1 px-2 relative overflow-hidden border-0 bg-background hover:bg-accent/50 transition-colors rainbow-border-button"
+                          onClick={aiCite}
+                          disabled={isCiteProcessing}
+                        >
+                          {isCiteProcessing ? (
+                            <Loader2 className="h-4 w-4 animate-spin relative z-10" />
+                          ) : (
+                            <FileText className="h-4 w-4 relative z-10" />
+                          )}
+                          <span className="text-xs font-medium relative z-10">Cite with AI</span>
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent className="max-w-xs">
+                        <p className="font-medium mb-1">Find and insert citations</p>
+                        <p className="text-xs text-muted-foreground">Select text (at least 10 characters) and click to search for relevant citations</p>
+                      </TooltipContent>
+                    </Tooltip>
 
-                  {/* Generate Bibliography Button */}
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="h-8 gap-1 px-2"
-                        onClick={handleGenerateBibliography}
-                        disabled={isCiteProcessing}
-                      >
-                        {isCiteProcessing ? (
-                          <Loader2 className="h-4 w-4 animate-spin" />
-                        ) : (
-                          <FileText className="h-4 w-4" />
-                        )}
-                        <span className="text-xs font-medium">Bibliography</span>
-                      </Button>
-                    </TooltipTrigger>
-                    <TooltipContent>Generate formatted bibliography from citations in document</TooltipContent>
-                  </Tooltip>
+                    {/* Generate Bibliography Button */}
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="h-8 gap-1 px-2"
+                          onClick={handleGenerateBibliography}
+                          disabled={isCiteProcessing}
+                        >
+                          {isCiteProcessing ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          ) : (
+                            <FileText className="h-4 w-4" />
+                          )}
+                          <span className="text-xs font-medium">Bibliography</span>
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent>Generate formatted bibliography from citations in document</TooltipContent>
+                    </Tooltip>
 
-                  <DropdownMenu
-                    open={aiDropdownOpen}
-                    onOpenChange={setAiDropdownOpen}
-                  >
-                    <DropdownMenuTrigger asChild>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="h-8 gap-1 px-2"
-                        disabled={isAIProcessing}
-                      >
-                        {isAIProcessing ? (
-                          <Loader2 className="h-4 w-4 animate-spin" />
-                        ) : (
-                          <Sparkles className="h-4 w-4" />
-                        )}
-                        <span className="text-xs">AI</span>
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="start" className="w-56">
-                      <DropdownMenuLabel className="flex items-center gap-2">
-                        <WandSparkles className="h-4 w-4" />
-                        AI Writing Tools
-                      </DropdownMenuLabel>
-                      <DropdownMenuSeparator />
-                      <DropdownMenuItem
-                        onClick={aiImprove}
-                        disabled={isAIProcessing}
-                      >
-                        <Sparkles className="mr-2 h-4 w-4" />
-                        Improve Writing
-                      </DropdownMenuItem>
-                      <DropdownMenuItem
-                        onClick={aiContinue}
-                        disabled={isAIProcessing}
-                      >
-                        <WandSparkles className="mr-2 h-4 w-4" />
-                        Continue Writing
-                      </DropdownMenuItem>
-                      <DropdownMenuSeparator />
-                      <DropdownMenuItem
-                        onClick={aiShorter}
-                        disabled={isAIProcessing}
-                      >
-                        Make Shorter
-                      </DropdownMenuItem>
-                      <DropdownMenuItem
-                        onClick={aiLonger}
-                        disabled={isAIProcessing}
-                      >
-                        Make Longer
-                      </DropdownMenuItem>
-                      <DropdownMenuItem
-                        onClick={aiSimplify}
-                        disabled={isAIProcessing}
-                      >
-                        Simplify Language
-                      </DropdownMenuItem>
-                      <DropdownMenuItem
-                        onClick={aiGrammar}
-                        disabled={isAIProcessing}
-                      >
-                        Fix Grammar
-                      </DropdownMenuItem>
-                      <DropdownMenuSeparator />
-                      <DropdownMenuLabel className="flex items-center gap-2">
-                        <FlaskConical className="h-4 w-4" />
-                        Chemistry Tools
-                      </DropdownMenuLabel>
-                      <DropdownMenuItem
-                        onClick={aiStructure}
-                        disabled={isAIProcessing}
-                      >
-                        <FlaskConical className="mr-2 h-4 w-4" />
-                        Structure Properly
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                </>
-              )}
-            </TooltipProvider>
+                    <DropdownMenu
+                      open={aiDropdownOpen}
+                      onOpenChange={setAiDropdownOpen}
+                    >
+                      <DropdownMenuTrigger asChild>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-8 gap-1 px-2"
+                          disabled={isAIProcessing}
+                        >
+                          {isAIProcessing ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          ) : (
+                            <Sparkles className="h-4 w-4" />
+                          )}
+                          <span className="text-xs">AI</span>
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="start" className="w-56">
+                        <DropdownMenuLabel className="flex items-center gap-2">
+                          <WandSparkles className="h-4 w-4" />
+                          AI Writing Tools
+                        </DropdownMenuLabel>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem
+                          onClick={aiImprove}
+                          disabled={isAIProcessing}
+                        >
+                          <Sparkles className="mr-2 h-4 w-4" />
+                          Improve Writing
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          onClick={aiContinue}
+                          disabled={isAIProcessing}
+                        >
+                          <WandSparkles className="mr-2 h-4 w-4" />
+                          Continue Writing
+                        </DropdownMenuItem>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem
+                          onClick={aiShorter}
+                          disabled={isAIProcessing}
+                        >
+                          Make Shorter
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          onClick={aiLonger}
+                          disabled={isAIProcessing}
+                        >
+                          Make Longer
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          onClick={aiSimplify}
+                          disabled={isAIProcessing}
+                        >
+                          Simplify Language
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          onClick={aiGrammar}
+                          disabled={isAIProcessing}
+                        >
+                          Fix Grammar
+                        </DropdownMenuItem>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuLabel className="flex items-center gap-2">
+                          <FlaskConical className="h-4 w-4" />
+                          Chemistry Tools
+                        </DropdownMenuLabel>
+                        <DropdownMenuItem
+                          onClick={aiStructure}
+                          disabled={isAIProcessing}
+                        >
+                          <FlaskConical className="mr-2 h-4 w-4" />
+                          Structure Properly
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </>
+                )
+              }
+            </TooltipProvider >
 
             <div className="flex-1" />
 
 
-          </div>
+          </div >
         );
         return toolbarPortalRef?.current ? createPortal(toolbar, toolbarPortalRef.current) : toolbar;
       })()}
@@ -3533,7 +3535,6 @@ export function TiptapEditor({
             opacity: 1;
             transform: translateY(-1px) scale(1.1);
           }
-
           /* Subtle toolbar animation */
           .animate-logo-subtle {
             animation: logo-float 4s ease-in-out infinite;
@@ -3545,6 +3546,8 @@ export function TiptapEditor({
           }
         `}</style>
         </div>
+
+
 
         {/* AI Processing Indicator */}
         {
@@ -3709,7 +3712,7 @@ export function TiptapEditor({
             </DialogFooter>
           </DialogContent>
         </Dialog >
-      </div>
+      </div >
     </>
   );
 }

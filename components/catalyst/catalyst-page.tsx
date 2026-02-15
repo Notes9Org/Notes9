@@ -36,6 +36,13 @@ export function CatalystChat({ sessionId }: CatalystChatProps) {
   const prevStatusRef = useRef<string>('ready');
   const currentSessionRef = useRef<string | null>(sessionId || null);
   const hasLoadedSessionRef = useRef<string | null>(null);
+  // Use ref for model so transport can access current value without recreating
+  const currentModelRef = useRef(selectedModelId);
+
+  // Keep ref in sync with state
+  useEffect(() => {
+    currentModelRef.current = selectedModelId;
+  }, [selectedModelId]);
 
   const supabase = createClient();
 
