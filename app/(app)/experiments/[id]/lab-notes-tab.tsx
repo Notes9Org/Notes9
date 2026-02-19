@@ -27,7 +27,7 @@ import { TiptapEditor } from "@/components/text-editor/tiptap-editor"
 import { useToast } from "@/hooks/use-toast"
 import { useAutoSave } from "@/hooks/use-auto-save"
 import { SaveStatusIndicator } from "@/components/ui/save-status"
-import { Plus, FileText, Download, FileCode, Globe, Loader2, Users, ChevronLeft, ChevronRight, MoreVertical, Trash2, List, Pencil } from "lucide-react"
+import { Plus, NotebookPen, Download, FileCode, Globe, Loader2, ChevronLeft, MoreVertical, Trash2, List, Pencil } from "lucide-react"
 import {
   Table,
   TableBody,
@@ -1144,7 +1144,7 @@ export function LabNotesTab({
                                   isActive && "bg-muted font-medium"
                                 )}
                               >
-                                <FileText className="h-4 w-4 shrink-0 text-muted-foreground" />
+                                <NotebookPen className="h-4 w-4 shrink-0 text-muted-foreground" />
                                 <p className="min-w-0 truncate font-medium m-0 text-sm">
                                   {note.title || "New Lab Note"}
                                 </p>
@@ -1325,17 +1325,17 @@ export function LabNotesTab({
                             Markdown (.md)
                           </DropdownMenuItem>
                           <DropdownMenuItem onClick={downloadAsHTML}>
-                            <FileText className="h-4 w-4 mr-2" />
+                            <NotebookPen className="h-4 w-4 mr-2" />
                             HTML (.html)
                           </DropdownMenuItem>
 
                           <DropdownMenuSeparator />
                           <DropdownMenuItem onClick={downloadAsPDF}>
-                            <FileText className="h-4 w-4 mr-2" />
+                            <NotebookPen className="h-4 w-4 mr-2" />
                             PDF (.pdf)
                           </DropdownMenuItem>
                           <DropdownMenuItem onClick={downloadAsDOCX}>
-                            <FileText className="h-4 w-4 mr-2" />
+                            <NotebookPen className="h-4 w-4 mr-2" />
                             Word (.docx)
                           </DropdownMenuItem>
                         </DropdownMenuContent>

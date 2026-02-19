@@ -2,7 +2,7 @@ import { redirect } from 'next/navigation'
 import { createClient } from "@/lib/supabase/server"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { Wrench, Plus } from 'lucide-react'
+import { Microscope, Plus } from 'lucide-react'
 import Link from 'next/link'
 import { EquipmentList } from './equipment-list'
 
@@ -97,7 +97,7 @@ export default async function EquipmentPage() {
         ) : (
           <Card>
             <CardContent className="flex flex-col items-center justify-center py-12">
-              <Wrench className="h-12 w-12 text-muted-foreground mb-4" />
+              <Microscope className="h-12 w-12 text-muted-foreground mb-4" />
               <p className="text-muted-foreground mb-4">No equipment registered</p>
               <Button asChild>
                 <Link href="/equipment/new">

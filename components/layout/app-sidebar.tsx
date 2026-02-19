@@ -10,8 +10,9 @@ import {
   FolderOpen,
   FlaskConical,
   TestTube,
-  Wrench,
+  Microscope,
   FileText,
+  NotebookPen,
   BarChart3,
   Settings,
   Search,
@@ -26,6 +27,7 @@ import {
   Sparkles,
   ChevronLeft,
   PanelLeftClose,
+  PanelLeftOpen,
 } from 'lucide-react'
 import {
   Sidebar,
@@ -65,14 +67,15 @@ import { Popover, PopoverAnchor, PopoverContent } from "@/components/ui/popover"
 import { createClient } from "@/lib/supabase/client"
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
+import { Button } from "../ui/button"
 
 const navigation = [
   { name: "Dashboard", href: "/dashboard", icon: Home },
   { name: "Projects", href: "/projects", icon: Folder },
   { name: "Experiments", href: "/experiments", icon: FlaskConical },
-  { name: "Lab Notes", href: "/lab-notes", icon: FileText },
+  { name: "Lab Notes", href: "/lab-notes", icon: NotebookPen },
   { name: "Samples", href: "/samples", icon: TestTube },
-  { name: "Equipment", href: "/equipment", icon: Wrench },
+  { name: "Equipment", href: "/equipment", icon: Microscope },
   { name: "Protocols", href: "/protocols", icon: FileText },
   { name: "Literature", href: "/literature-reviews", icon: BookOpen },
   // { name: "Reports", href: "/reports", icon: BarChart3 }, // Hidden for now
@@ -594,15 +597,15 @@ export function AppSidebar() {
                 </SidebarMenuButton>
 
                 {/* Expand Button - Below logo in icon mode */}
-                <button
-                  type="button"
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="size-8 sm:size-9 text-muted-foreground shrink-0"
                   onClick={toggleSidebarOpen}
-                  className="flex h-6 w-6 items-center justify-center rounded-md text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground transition-colors"
-                  title="Expand sidebar"
                   aria-label="Expand sidebar"
                 >
-                  <ChevronDown className="h-3 w-3 -rotate-90" />
-                </button>
+                  <PanelLeftOpen className="size-4" />
+                </Button>
               </div>
             ) : (
               // Normal mode: Logo and text with collapse button on the right
@@ -632,15 +635,15 @@ export function AppSidebar() {
 
                 {/* Collapse Button - hidden on mobile where sidebar is a sheet overlay */}
                 {!isMobile && (
-                  <button
-                    type="button"
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="size-8 sm:size-9 text-muted-foreground shrink-0"
                     onClick={toggleSidebarOpen}
-                    className="flex h-8 w-8 items-center justify-center rounded-md text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground transition-colors flex-shrink-0"
-                    title="Collapse sidebar"
                     aria-label="Collapse sidebar"
                   >
                     <PanelLeftClose className="h-4 w-4" />
-                  </button>
+                  </Button>
                 )}
               </div>
             )}
@@ -690,7 +693,7 @@ export function AppSidebar() {
                           : item.type === "experiment"
                             ? FlaskConical
                             : item.type === "lab_note"
-                              ? FileText
+                              ? NotebookPen
                               : item.type === "protocol"
                                 ? FileText
                                 : TestTube
@@ -949,7 +952,7 @@ export function AppSidebar() {
                                                       : "text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
                                                   )}
                                                 >
-                                                  <FileText className="size-4 shrink-0" />
+                                                  <NotebookPen className="size-4 shrink-0" />
                                                   <span className="min-w-0 truncate">{note.title || "Untitled note"}</span>
                                                 </button>
                                               ))}
