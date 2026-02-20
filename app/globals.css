@@ -128,6 +128,7 @@
 
   /* Status colors */
   --color-success: #10b981;
+  --color-success-foreground: #ffffff;
   --color-warning: #f59e0b;
   --color-info: #3b82f6;
   --color-error: #dc2626;

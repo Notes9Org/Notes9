@@ -10,7 +10,7 @@ import { SetPageBreadcrumb } from "@/components/layout/breadcrumb-context"
 import { Plus, Users, Calendar, FlaskConical, FileText } from 'lucide-react'
 import Link from 'next/link'
 import { ProjectActions } from './project-actions'
-import { HtmlContentTruncated } from '@/components/html-content'
+import { HtmlContent, HtmlContentTruncated } from '@/components/html-content'
 
 export default async function ProjectDetailPage({
   params,
@@ -59,47 +59,30 @@ export default async function ProjectDetailPage({
         />
         {/* Header */}
         <div className="flex items-start justify-between gap-4">
-          <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-2 mb-1">
-              <h1 className="text-3xl font-bold tracking-tight">{project.name}</h1>
+          <div className="min-w-0 flex items-center gap-2 mb-1">
+            <h1 className="text-3xl font-bold tracking-tight">{project.name}</h1>
+            <Badge
+              variant={
+                project.status === "active"
+                  ? "default"
+                  : project.status === "completed"
+                  ? "secondary"
+                  : "outline"
+              }
+            >
+              {project.status}
+            </Badge>
+            {project.priority && (
               <Badge
                 variant={
-                  project.status === "active"
-                    ? "default"
-                    : project.status === "completed"
-                    ? "secondary"
+                  project.priority === "critical" || project.priority === "high"
+                    ? "destructive"
                     : "outline"
                 }
               >
-                {project.status}
+                {project.priority} priority
               </Badge>
-              {project.priority && (
-                <Badge
-                  variant={
-                    project.priority === "critical" || project.priority === "high"
-                      ? "destructive"
-                      : "outline"
-                  }
-                >
-                  {project.priority} priority
-                </Badge>
-              )}
-            </div>
-            <p className="text-muted-foreground">{project.description}</p>
-            <div className="flex items-center gap-4 mt-2 text-sm text-muted-foreground">
-              {project.start_date && (
-                <div className="flex items-center gap-1">
-                  <Calendar className="h-3 w-3" />
-                  <span>Started: {new Date(project.start_date).toLocaleDateString()}</span>
-                </div>
-              )}
-              <div className="flex items-center gap-1">
-                <Users className="h-3 w-3" />
-                <span>
-                  {Math.max(1, project.project_members?.length || 0)} {Math.max(1, project.project_members?.length || 0) === 1 ? 'team member' : 'team members'}
-                </span>
-              </div>
-            </div>
+            )}
           </div>
           <ProjectActions
             project={{
@@ -117,12 +100,16 @@ export default async function ProjectDetailPage({
 
         {/* Tabs */}
         <Tabs defaultValue="experiments" className="space-y-4">
-          <TabsList>
-            <TabsTrigger value="experiments">Experiments</TabsTrigger>
-            <TabsTrigger value="team">Team</TabsTrigger>
-            <TabsTrigger value="reports">Reports</TabsTrigger>
-            <TabsTrigger value="overview">Overview</TabsTrigger>
-          </TabsList>
+          <div className="overflow-x-auto">
+            <div className="flex justify-center min-w-max">
+              <TabsList className="gap-1 p-1 rounded-md">
+                <TabsTrigger value="overview">Overview</TabsTrigger>
+                <TabsTrigger value="experiments">Experiments</TabsTrigger>
+                <TabsTrigger value="team">Team</TabsTrigger>
+                <TabsTrigger value="reports">Reports</TabsTrigger>
+              </TabsList>
+            </div>
+          </div>
 
           <TabsContent value="experiments" className="space-y-4">
             <div className="flex items-center justify-between">
@@ -253,6 +240,14 @@ export default async function ProjectDetailPage({
           </TabsContent>
 
           <TabsContent value="overview" className="space-y-4">
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-foreground">Project Description</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <HtmlContent content={project.description} />
+              </CardContent>
+            </Card>
             <div className="grid gap-4 md:grid-cols-2">
               <Card>
                 <CardHeader>
