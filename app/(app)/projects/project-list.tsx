@@ -62,7 +62,7 @@ export function ProjectsPageContent({ projects }: { projects: Project[] }) {
               Table
             </Button>
           </div>
-          <Button asChild size="icon" variant="ghost" className="size-8 rounded-md text-muted-foreground hover:bg-muted hover:text-foreground transition-colors" aria-label="New project">
+          <Button id="tour-create-new" asChild size="icon" variant="ghost" className="size-8 rounded-md text-muted-foreground hover:bg-muted hover:text-foreground transition-colors" aria-label="New project">
             <Link href="/projects/new">
               <Plus className="size-4" />
             </Link>

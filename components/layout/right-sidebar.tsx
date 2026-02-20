@@ -458,7 +458,7 @@ export function RightSidebar() {
       <div className={cn(
         "rounded-xl border bg-card/50 shadow-sm focus-within:ring-1 focus-within:ring-ring/50 focus-within:border-ring transition-all overflow-hidden",
         isDraggingContext && "ring-2 ring-primary border-primary bg-primary/5"
-      )}>
+      )} id="tour-ai-chat">
         <textarea
           ref={inputRef}
           value={input}
@@ -483,7 +483,7 @@ export function RightSidebar() {
             {/* Mode Selector */}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="sm" className="h-7 gap-1.5 rounded-md bg-muted/50 hover:bg-muted text-muted-foreground px-2 text-xs font-medium">
+                <Button id="tour-ai-mode" variant="ghost" size="sm" className="h-7 gap-1.5 rounded-md bg-muted/50 hover:bg-muted text-muted-foreground px-2 text-xs font-medium">
                   {agentMode === 'notes9' ? (
                     <><FlaskConical className="size-3.5" /> Notes9</>
                   ) : (

@@ -298,3 +298,143 @@ mark {
   border-radius: 2px;
   padding: 0 2px;
 }
+
+/* ------------------------------------- */
+/* Notes9 Tour Guide Mascot & Overrides  */
+/* ------------------------------------- */
+
+/* Custom Researcher Theme for Driver.js */
+.driverjs-theme-researcher {
+  /* Center position override */
+  position: fixed !important;
+  top: 50% !important;
+  left: 50% !important;
+  right: auto !important;
+  bottom: auto !important;
+  transform: translate(-50%, -50%) !important;
+  margin: 0 !important;
+
+  /* Sizing and Shape */
+  width: 480px !important;
+  max-width: calc(100vw - 32px) !important;
+  border-radius: 12px !important;
+
+  /* Researcher / Sci-Trek styling (Light mode slate) */
+  background: #f8fafc !important;
+  color: #0f172a !important;
+  border: 1px solid #cbd5e1 !important;
+  box-shadow: 0 25px 50px -12px rgba(15, 23, 42, 0.25), 0 0 0 1px rgba(15, 23, 42, 0.05) !important;
+
+  padding: 24px !important;
+  z-index: 1000000000 !important;
+  font-family: var(--font-sans) !important;
+}
+
+.dark .driverjs-theme-researcher {
+  /* Dark mode deep slate */
+  background: #0f172a !important;
+  color: #f8fafc !important;
+  border: 1px solid #334155 !important;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.1) !important;
+}
+
+/* Hide the arrow entirely */
+.driverjs-theme-researcher .driver-popover-arrow {
+  display: none !important;
+}
+
+/* Title Styling */
+.driverjs-theme-researcher .driver-popover-title {
+  font-size: 1.125rem !important;
+  font-weight: 600 !important;
+  color: var(--primary) !important;
+  margin-bottom: 16px !important;
+  border-bottom: 1px solid var(--border) !important;
+  padding-bottom: 8px !important;
+}
+
+/* Base text styling */
+.driverjs-theme-researcher .driver-popover-description {
+  font-size: 0.95rem !important;
+  line-height: 1.5 !important;
+  color: var(--foreground) !important;
+  margin-bottom: 16px !important;
+}
+
+/* Group Next/Prev buttons together with Close button in footer */
+.driverjs-theme-researcher .driver-popover-footer {
+  display: flex !important;
+  justify-content: space-between !important;
+  align-items: center !important;
+  padding-top: 16px !important;
+  border-top: 1px solid var(--border) !important;
+}
+
+/* Button overrides for Driver.js default layout */
+.driverjs-theme-researcher .driver-popover-navigation-btns {
+  display: flex !important;
+  gap: 8px !important;
+  justify-content: flex-end !important;
+  align-items: center !important;
+}
+
+/* Buttons styling */
+.driverjs-theme-researcher button {
+  padding: 6px 16px !important;
+  border-radius: 6px !important;
+  font-size: 0.85rem !important;
+  font-weight: 500 !important;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
+  text-shadow: none !important;
+}
+
+.driverjs-theme-researcher .driver-popover-next-btn {
+  background-color: var(--primary) !important;
+  color: var(--primary-foreground) !important;
+  border: none !important;
+}
+
+.driverjs-theme-researcher .driver-popover-next-btn:hover {
+  opacity: 0.9 !important;
+}
+
+.driverjs-theme-researcher .driver-popover-prev-btn {
+  background-color: transparent !important;
+  color: var(--foreground) !important;
+  border: 1px solid var(--border) !important;
+}
+
+.driverjs-theme-researcher .driver-popover-prev-btn:hover {
+  background-color: var(--muted) !important;
+}
+
+.driverjs-theme-researcher .driver-popover-close-btn {
+  background-color: transparent !important;
+  color: var(--muted-foreground) !important;
+  border: none !important;
+  margin-left: 0 !important;
+}
+
+.driverjs-theme-researcher .driver-popover-close-btn:hover {
+  color: var(--foreground) !important;
+}
+
+/* Mascot Animation */
+@keyframes tour-mascot-float {
+  0% {
+    transform: translateY(0px) rotate(0deg);
+  }
+
+  50% {
+    transform: translateY(-4px) rotate(3deg);
+  }
+
+  100% {
+    transform: translateY(0px) rotate(0deg);
+  }
+}
+
+.tour-mascot-animate {
+  animation: tour-mascot-float 3s ease-in-out infinite;
+  filter: drop-shadow(0px 4px 8px rgba(0, 0, 0, 0.15));
+}

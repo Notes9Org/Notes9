@@ -654,7 +654,7 @@ export function AppSidebar() {
           <SidebarGroupContent className="relative px-2">
             <Popover open={searchQuery.length >= 2}>
               <PopoverAnchor asChild>
-                <div className="relative">
+                <div className="relative" id="tour-search">
                   <Search className="pointer-events-none absolute left-4 top-1/2 size-4 -translate-y-1/2 select-none opacity-50" />
                   <SidebarInput
                     placeholder="Search..."
@@ -728,7 +728,7 @@ export function AppSidebar() {
         {/* Main Navigation - icons only when collapsed; align centered in icon mode */}
         <SidebarGroup className={cn(isIconMode && "flex flex-col items-center")}>
           <SidebarGroupContent className={cn(isIconMode && "w-full flex flex-col items-center")}>
-            <SidebarMenu className={cn(isIconMode && "flex flex-col items-center gap-1")}>
+            <SidebarMenu className={cn(isIconMode && "flex flex-col items-center gap-1")} id="tour-main-nav">
               {navigation.map((item) => {
                 const Icon = item.icon;
                 const isActive =
