@@ -100,16 +100,12 @@ export default async function ProjectDetailPage({
 
         {/* Tabs */}
         <Tabs defaultValue="experiments" className="space-y-4">
-          <div className="overflow-x-auto">
-            <div className="flex justify-center min-w-max">
-              <TabsList className="gap-1 p-1 rounded-md">
-                <TabsTrigger value="overview">Overview</TabsTrigger>
-                <TabsTrigger value="experiments">Experiments</TabsTrigger>
-                <TabsTrigger value="team">Team</TabsTrigger>
-                <TabsTrigger value="reports">Reports</TabsTrigger>
-              </TabsList>
-            </div>
-          </div>
+          <TabsList>
+            <TabsTrigger value="overview">Overview</TabsTrigger>
+            <TabsTrigger value="experiments">Experiments</TabsTrigger>
+            <TabsTrigger value="team">Team</TabsTrigger>
+            <TabsTrigger value="reports">Reports</TabsTrigger>
+          </TabsList>
 
           <TabsContent value="experiments" className="space-y-4">
             <div className="flex items-center justify-between">

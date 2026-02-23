@@ -42,42 +42,38 @@ export function ExperimentTabs({ experiment, initialTab }: ExperimentTabsProps) 
 
   return (
     <Tabs id={`experiment-tabs-${baseId}`} defaultValue={initialTab} className="space-y-4">
-      <div className="overflow-x-auto">
-        <div className="flex justify-center min-w-max">
-          <TabsList>
-            <TabsTrigger
-              value="overview"
-              id="tab-trigger-overview"
-            >
-              Overview
-            </TabsTrigger>
-            <TabsTrigger
-              value="protocol"
-              id="tab-trigger-protocol"
-            >
-              Protocol & Assays
-            </TabsTrigger>
-            <TabsTrigger
-              value="samples"
-              id="tab-trigger-samples"
-            >
-              Samples
-            </TabsTrigger>
-            <TabsTrigger
-              value="data"
-              id="tab-trigger-data"
-            >
-              Data & Files
-            </TabsTrigger>
-            <TabsTrigger
-              value="notes"
-              id="tab-trigger-notes"
-            >
-              Lab Notes
-            </TabsTrigger>
-          </TabsList>
-        </div>
-      </div>
+      <TabsList>
+        <TabsTrigger
+          value="overview"
+          id="tab-trigger-overview"
+        >
+          Overview
+        </TabsTrigger>
+        <TabsTrigger
+          value="protocol"
+          id="tab-trigger-protocol"
+        >
+          Protocol & Assays
+        </TabsTrigger>
+        <TabsTrigger
+          value="samples"
+          id="tab-trigger-samples"
+        >
+          Samples
+        </TabsTrigger>
+        <TabsTrigger
+          value="data"
+          id="tab-trigger-data"
+        >
+          Data & Files
+        </TabsTrigger>
+        <TabsTrigger
+          value="notes"
+          id="tab-trigger-notes"
+        >
+          Lab Notes
+        </TabsTrigger>
+      </TabsList>
 
       <TabsContent value="overview" id="tab-content-overview" className="space-y-4">
         <Card>
