@@ -15,10 +15,9 @@ import { serverConfig } from '../config.js';
 import { checkPermission, onPermissionRevoked, PermissionDeniedError } from '../permissions/store.js';
 import { loadYjsState, saveYjsState } from '../persistence/postgres.js';
 import { getUserInfo } from '../auth/jwt.js';
-import type { 
-  PermissionLevel, 
-  AwarenessState,
-  User 
+import type {
+  PermissionLevel,
+  User
 } from '../shared/types/index.js';
 import type { WebSocket } from 'ws';
 
@@ -28,7 +27,7 @@ const documents = new Map<string, ManagedDocument>();
 // Map of socket -> documentId for cleanup
 const socketToDocument = new WeakMap<WebSocket, string>();
 
-interface ManagedDocument {
+export interface ManagedDocument {
   id: string;
   ydoc: Y.Doc;
   awareness: Awareness;
@@ -52,12 +51,12 @@ interface ConnectionInfo {
  */
 export async function getDocument(documentId: string): Promise<ManagedDocument> {
   let doc = documents.get(documentId);
-  
+
   if (!doc) {
     doc = await loadDocument(documentId);
     documents.set(documentId, doc);
   }
-  
+
   return doc;
 }
 
@@ -66,16 +65,16 @@ export async function getDocument(documentId: string): Promise<ManagedDocument> 
  */
 async function loadDocument(documentId: string): Promise<ManagedDocument> {
   console.log(`[Document] Loading document: ${documentId}`);
-  
+
   const ydoc = new Y.Doc();
-  
+
   // Load existing state from Postgres
   const persistedState = await loadYjsState(documentId);
   if (persistedState) {
     Y.applyUpdate(ydoc, persistedState);
     console.log(`[Document] Loaded persisted state for: ${documentId}`);
   }
-  
+
   const awareness = new Awareness(ydoc);
   const doc: ManagedDocument = {
     id: documentId,
@@ -85,29 +84,29 @@ async function loadDocument(documentId: string): Promise<ManagedDocument> {
     lastModified: Date.now(),
     isSaving: false,
   };
-  
+
   // Set up Yjs update handler
   ydoc.on('update', (update: Uint8Array, origin: unknown) => {
     doc.lastModified = Date.now();
-    
+
     // Broadcast to all connected clients except origin
     broadcastUpdate(doc, update, origin as WebSocket | undefined);
-    
+
     // Schedule persistence
     schedulePersistence(doc);
   });
-  
+
   // Set up awareness change handler
   awareness.on('update', ({ added, updated, removed }: { added: number[]; updated: number[]; removed: number[] }) => {
     const changedClients = [...added, ...updated, ...removed];
     broadcastAwareness(doc, changedClients);
   });
-  
+
   // Subscribe to permission revocations for this document
   doc.permissionUnsubscribe = onPermissionRevoked(documentId, (userId) => {
     handlePermissionRevoked(doc, userId);
   });
-  
+
   return doc;
 }
 
@@ -127,9 +126,9 @@ export async function connectToDocument(
       permissionCheck.permissionLevel
     );
   }
-  
+
   const doc = await getDocument(documentId);
-  
+
   // Store connection info
   const userInfo = getUserInfo(user);
   const connectionInfo: ConnectionInfo = {
@@ -139,12 +138,12 @@ export async function connectToDocument(
     permissionLevel: permissionCheck.permissionLevel!,
     connectedAt: new Date(),
   };
-  
+
   doc.connections.set(socket, connectionInfo);
   socketToDocument.set(socket, documentId);
-  
+
   console.log(`[Document] User ${user.id} connected to ${documentId} as ${permissionCheck.permissionLevel}`);
-  
+
   return { doc, permissionLevel: permissionCheck.permissionLevel! };
 }
 
@@ -154,17 +153,17 @@ export async function connectToDocument(
 export function disconnectFromDocument(socket: WebSocket): void {
   const documentId = socketToDocument.get(socket);
   if (!documentId) return;
-  
+
   const doc = documents.get(documentId);
   if (!doc) return;
-  
+
   const connInfo = doc.connections.get(socket);
   if (connInfo) {
     console.log(`[Document] User ${connInfo.userId} disconnected from ${documentId}`);
   }
-  
+
   doc.connections.delete(socket);
-  
+
   // If no more connections, schedule document unload
   if (doc.connections.size === 0) {
     scheduleUnload(doc);
@@ -184,14 +183,14 @@ export function applyUpdate(
   if (!connInfo) {
     throw new Error('Socket not registered with document');
   }
-  
+
   if (connInfo.permissionLevel === 'viewer') {
     throw new PermissionDeniedError(
       'Viewers cannot edit documents',
       connInfo.permissionLevel
     );
   }
-  
+
   // Apply the update (will trigger ydoc.on('update'))
   Y.applyUpdate(doc.ydoc, update, origin);
 }
@@ -206,10 +205,9 @@ export function getDocumentState(doc: ManagedDocument): Uint8Array {
 /**
  * Get awareness state for syncing to client
  */
-export function getAwarenessState(doc: ManagedDocument): Uint8Array {
-  // Encode awareness update for all clients
-  const awarenessStates = Array.from(doc.awareness.getStates().entries());
-  return new Uint8Array(); // Awareness protocol handles this separately
+export function getAwarenessState(_doc: ManagedDocument): Uint8Array {
+  // Awareness protocol handles this separately
+  return new Uint8Array();
 }
 
 /**
@@ -224,7 +222,7 @@ export function updateAwareness(
   if (!doc.connections.has(origin)) {
     throw new Error('Socket not registered with document');
   }
-  
+
   // Apply awareness update for this client.
   // Awareness update events are broadcast via doc.awareness.on('update').
   awarenessProtocol.applyAwarenessUpdate(doc.awareness, update, origin);
@@ -235,12 +233,12 @@ export function updateAwareness(
  */
 function handlePermissionRevoked(doc: ManagedDocument, userId: string): void {
   console.log(`[Document] Permission revoked for user ${userId} on ${doc.id}`);
-  
+
   // Find and disconnect all sockets for this user
   for (const [socket, connInfo] of doc.connections.entries()) {
     if (connInfo.userId === userId) {
       console.log(`[Document] Forcing disconnect for ${userId}`);
-      
+
       // Send revocation notice before closing
       if (socket.readyState === 1) { // WebSocket.OPEN
         socket.send(JSON.stringify({
@@ -249,7 +247,7 @@ function handlePermissionRevoked(doc: ManagedDocument, userId: string): void {
           timestamp: Date.now(),
         }));
       }
-      
+
       // Close socket
       socket.close(4401, 'Permission revoked');
       doc.connections.delete(socket);
@@ -270,7 +268,7 @@ function broadcastUpdate(
     payload: Array.from(update),
     timestamp: Date.now(),
   });
-  
+
   for (const [socket] of doc.connections.entries()) {
     if (socket !== origin && socket.readyState === 1) { // WebSocket.OPEN
       socket.send(message);
@@ -292,7 +290,7 @@ function broadcastAwareness(doc: ManagedDocument, clientIds: number[]): void {
     },
     timestamp: Date.now(),
   });
-  
+
   for (const [socket] of doc.connections.entries()) {
     if (socket.readyState === 1) { // WebSocket.OPEN
       socket.send(message);
@@ -307,7 +305,7 @@ function schedulePersistence(doc: ManagedDocument): void {
   if (doc.persistTimer) {
     clearTimeout(doc.persistTimer);
   }
-  
+
   doc.persistTimer = setTimeout(() => {
     persistDocument(doc);
   }, serverConfig.persistInterval);
@@ -318,18 +316,18 @@ function schedulePersistence(doc: ManagedDocument): void {
  */
 async function persistDocument(doc: ManagedDocument): Promise<void> {
   if (doc.isSaving) return;
-  
+
   doc.isSaving = true;
-  
+
   try {
     const state = Y.encodeStateAsUpdate(doc.ydoc);
-    
+
     // Check document size
     if (state.length > serverConfig.maxDocumentSize) {
       console.error(`[Document] Document ${doc.id} exceeds max size`);
       return;
     }
-    
+
     await saveYjsState(doc.id, state);
     console.log(`[Document] Persisted ${doc.id} (${state.length} bytes)`);
   } catch (err) {
@@ -350,15 +348,15 @@ function scheduleUnload(doc: ManagedDocument): void {
   if (existing) {
     clearTimeout(existing);
   }
-  
+
   // Persist immediately before potential unload
   persistDocument(doc);
-  
+
   // Schedule unload after 5 minutes of inactivity
   const timer = setTimeout(() => {
     unloadDocument(doc.id);
   }, 5 * 60 * 1000);
-  
+
   unloadTimers.set(doc.id, timer);
 }
 
@@ -368,15 +366,15 @@ function scheduleUnload(doc: ManagedDocument): void {
 async function unloadDocument(documentId: string): Promise<void> {
   const doc = documents.get(documentId);
   if (!doc) return;
-  
+
   // Don't unload if connections reconnected
   if (doc.connections.size > 0) return;
-  
+
   console.log(`[Document] Unloading document: ${documentId}`);
-  
+
   // Final persistence
   await persistDocument(doc);
-  
+
   // Clean up
   if (doc.permissionUnsubscribe) {
     doc.permissionUnsubscribe();
@@ -398,7 +396,7 @@ export function getDocumentStats(): {
   for (const doc of documents.values()) {
     totalConnections += doc.connections.size;
   }
-  
+
   return {
     documentCount: documents.size,
     totalConnections,

@@ -14,19 +14,17 @@ import { WebSocketServer, WebSocket } from 'ws';
 import type { Server } from 'http';
 import { validateToken, getUserInfo } from '../auth/jwt.js';
 import { checkPermission } from '../permissions/store.js';
-import { 
-  connectToDocument, 
-  disconnectFromDocument, 
-  applyUpdate, 
+import {
+  connectToDocument,
+  disconnectFromDocument,
+  applyUpdate,
   updateAwareness,
   getDocumentState,
   getDocument,
-  ManagedDocument 
 } from '../documents/manager.js';
-import type { 
+import type {
   WebSocketMessage,
   AuthMessagePayload,
-  CollabError,
   CollabErrorCode,
   User
 } from '../shared/types/index.js';
@@ -51,9 +49,9 @@ export function createWebSocketServer(httpServer: Server): WebSocketServer {
 
   wss.on('connection', (socket: AuthenticatedSocket) => {
     console.log('[WebSocket] New connection');
-    
+
     socket.isAuthenticated = false;
-    
+
     // Set up authentication timeout
     const authTimeout = setTimeout(() => {
       if (!socket.isAuthenticated) {
@@ -61,10 +59,10 @@ export function createWebSocketServer(httpServer: Server): WebSocketServer {
         socket.close(4401, 'Authentication timeout');
       }
     }, 10000);
-    
+
     // Set up ping/pong for connection health
     setupHeartbeat(socket);
-    
+
     socket.on('message', async (data: Buffer) => {
       try {
         const message: WebSocketMessage = JSON.parse(data.toString());
@@ -74,12 +72,12 @@ export function createWebSocketServer(httpServer: Server): WebSocketServer {
         sendError(socket, 'SERVER_ERROR', 'Failed to process message');
       }
     });
-    
+
     socket.on('close', () => {
       clearTimeout(authTimeout);
       handleDisconnect(socket);
     });
-    
+
     socket.on('error', (err) => {
       console.error('[WebSocket] Socket error:', err);
     });
@@ -105,22 +103,22 @@ async function handleMessage(
     await handleAuth(socket, message.payload as AuthMessagePayload, authTimeout);
     return;
   }
-  
+
   // All other messages require authentication
   if (!socket.isAuthenticated) {
     sendError(socket, 'UNAUTHORIZED', 'Not authenticated');
     return;
   }
-  
+
   switch (message.type) {
     case 'sync':
       await handleSync(socket, message.payload as { update: number[] });
       break;
-      
+
     case 'awareness':
       await handleAwareness(socket, message.payload as { update: number[] });
       break;
-      
+
     default:
       sendError(socket, 'SERVER_ERROR', `Unknown message type: ${message.type}`);
   }
@@ -139,18 +137,18 @@ async function handleAuth(
     socket.close(4401, 'Invalid auth payload');
     return;
   }
-  
+
   // Validate JWT
   const validation = await validateToken(payload.token);
   if (!validation.valid || !validation.user) {
-    sendError(socket, validation.error?.code || 'INVALID_TOKEN', 
-              validation.error?.message || 'Invalid token');
+    sendError(socket, validation.error?.code || 'INVALID_TOKEN',
+      validation.error?.message || 'Invalid token');
     socket.close(4401, 'Authentication failed');
     return;
   }
-  
+
   const user = validation.user;
-  
+
   // Check rate limiting (max connections per user)
   const userConnections = connectionsByUser.get(user.id) || new Set();
   if (userConnections.size >= 10) { // Max 10 concurrent connections
@@ -158,7 +156,7 @@ async function handleAuth(
     socket.close(4408, 'Rate limited');
     return;
   }
-  
+
   // Check permission to access document
   const permissionCheck = await checkPermission(payload.documentId, user.id);
   if (!permissionCheck.canRead) {
@@ -166,21 +164,21 @@ async function handleAuth(
     socket.close(4403, 'Access denied');
     return;
   }
-  
+
   // Authentication successful
   clearTimeout(authTimeout);
   socket.isAuthenticated = true;
   socket.user = user;
   socket.documentId = payload.documentId;
-  
+
   // Track connection
   userConnections.add(socket);
   connectionsByUser.set(user.id, userConnections);
-  
+
   try {
     // Connect to document
     const { doc, permissionLevel } = await connectToDocument(socket, payload.documentId, user);
-    
+
     // Send auth success with initial state
     const initialState = getDocumentState(doc);
     socket.send(JSON.stringify({
@@ -193,7 +191,7 @@ async function handleAuth(
       },
       timestamp: Date.now(),
     }));
-    
+
     console.log(`[WebSocket] User ${user.id} authenticated for document ${payload.documentId}`);
   } catch (err) {
     console.error('[WebSocket] Error connecting to document:', err);
@@ -213,12 +211,12 @@ async function handleSync(
     sendError(socket, 'SERVER_ERROR', 'Invalid connection state');
     return;
   }
-  
+
   if (!payload?.update || !Array.isArray(payload.update)) {
     sendError(socket, 'SERVER_ERROR', 'Invalid sync payload');
     return;
   }
-  
+
   try {
     const doc = await getDocument(socket.documentId);
     const update = new Uint8Array(payload.update);
@@ -243,11 +241,11 @@ async function handleAwareness(
   if (!socket.documentId) {
     return;
   }
-  
+
   if (!payload?.update || !Array.isArray(payload.update)) {
     return;
   }
-  
+
   try {
     const doc = await getDocument(socket.documentId);
     const update = new Uint8Array(payload.update);
@@ -262,15 +260,15 @@ async function handleAwareness(
  */
 function handleDisconnect(socket: AuthenticatedSocket): void {
   console.log('[WebSocket] Connection closed');
-  
+
   // Clear heartbeat
   if (socket.pingTimeout) {
     clearTimeout(socket.pingTimeout);
   }
-  
+
   // Remove from document
   disconnectFromDocument(socket);
-  
+
   // Remove from user connections tracking
   if (socket.user) {
     const userConnections = connectionsByUser.get(socket.user.id);
@@ -289,16 +287,16 @@ function handleDisconnect(socket: AuthenticatedSocket): void {
 function setupHeartbeat(socket: AuthenticatedSocket): void {
   // Expect pong within 30 seconds of ping
   const HEARTBEAT_INTERVAL = 30000;
-  
+
   socket.on('ping', () => {
     socket.pong();
   });
-  
+
   // Server-initiated ping to check client health
   const pingInterval = setInterval(() => {
     if (socket.readyState === 1) { // WebSocket.OPEN
       socket.ping();
-      
+
       // Set timeout for pong response
       socket.pingTimeout = setTimeout(() => {
         console.log('[WebSocket] Pong timeout, terminating connection');
@@ -309,13 +307,13 @@ function setupHeartbeat(socket: AuthenticatedSocket): void {
       clearInterval(pingInterval);
     }
   }, HEARTBEAT_INTERVAL);
-  
+
   socket.on('pong', () => {
     if (socket.pingTimeout) {
       clearTimeout(socket.pingTimeout);
     }
   });
-  
+
   socket.on('close', () => {
     clearInterval(pingInterval);
   });
@@ -342,8 +340,8 @@ function sendError(
  * Broadcast message to all connected clients on a document
  */
 export function broadcastToDocument(
-  documentId: string,
-  message: WebSocketMessage
+  _documentId: string,
+  _message: WebSocketMessage
 ): void {
   // This would be called by document manager for awareness updates
 }
