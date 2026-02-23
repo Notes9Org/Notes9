@@ -732,8 +732,10 @@ export interface IndentOptions {
 
 declare module '@tiptap/core' {
   interface Commands<ReturnType> {
-    setIndent: () => ReturnType;
-    unsetIndent: () => ReturnType;
+    indent: {
+      setIndent: () => ReturnType;
+      unsetIndent: () => ReturnType;
+    };
   }
 }
 
@@ -778,7 +780,7 @@ export const Indent = Extension.create<IndentOptions>({
     return {
       setIndent:
         () =>
-          ({ tr, state, dispatch, editor }) => {
+          ({ tr, state, dispatch, editor }: any) => {
             const { selection } = state;
             const { from, to } = selection;
 
@@ -790,7 +792,7 @@ export const Indent = Extension.create<IndentOptions>({
               return editor.chain().sinkListItem('listItem').run();
             }
 
-            tr.doc.nodesBetween(from, to, (node, pos) => {
+            tr.doc.nodesBetween(from, to, (node: any, pos: any) => {
               if (this.options.types.includes(node.type.name)) {
                 const indent = node.attrs.indent || 0;
                 const nextLevel =
@@ -813,7 +815,7 @@ export const Indent = Extension.create<IndentOptions>({
           },
       unsetIndent:
         () =>
-          ({ tr, state, dispatch, editor }) => {
+          ({ tr, state, dispatch, editor }: any) => {
             const { selection } = state;
             const { from, to } = selection;
 
@@ -825,7 +827,7 @@ export const Indent = Extension.create<IndentOptions>({
               return editor.chain().liftListItem('listItem').run();
             }
 
-            tr.doc.nodesBetween(from, to, (node, pos) => {
+            tr.doc.nodesBetween(from, to, (node: any, pos: any) => {
               if (this.options.types.includes(node.type.name)) {
                 const indent = node.attrs.indent || 0;
                 const prevLevel =
@@ -853,8 +855,8 @@ export const Indent = Extension.create<IndentOptions>({
 
   addKeyboardShortcuts() {
     return {
-      Tab: () => this.editor.commands.setIndent(),
-      'Shift-Tab': () => this.editor.commands.unsetIndent(),
+      Tab: () => (this.editor.commands as any).setIndent(),
+      'Shift-Tab': () => (this.editor.commands as any).unsetIndent(),
     };
   },
 });
@@ -2980,11 +2982,11 @@ export function TiptapEditor({
                   <TooltipContent>Indent</TooltipContent>
                 </Tooltip>
                 <DropdownMenuContent align="start" className="w-40">
-                  <DropdownMenuItem onClick={() => editor.chain().focus().unsetIndent().run()}>
+                  <DropdownMenuItem onClick={() => (editor.chain().focus() as any).unsetIndent().run()}>
                     <IndentDecrease className="h-4 w-4 mr-2" />
                     Decrease indent
                   </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => editor.chain().focus().setIndent().run()}>
+                  <DropdownMenuItem onClick={() => (editor.chain().focus() as any).setIndent().run()}>
                     <IndentIncrease className="h-4 w-4 mr-2" />
                     Increase indent
                   </DropdownMenuItem>

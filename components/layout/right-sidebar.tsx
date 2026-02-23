@@ -386,6 +386,81 @@ export function RightSidebar() {
     }
   };
 
+  const fetchContext = async (type: string, id: string): Promise<string | null> => {
+    try {
+      setContextLoading(true);
+      const response = await fetch(`/api/context?type=${encodeURIComponent(type)}&id=${encodeURIComponent(id)}`);
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
+        throw new Error(errorData.error || `Failed to fetch context (${response.status})`);
+      }
+      const data = await response.json();
+      return data.context;
+    } catch (error) {
+      console.error('Error fetching context:', error);
+      toast.error(error instanceof Error ? error.message : 'Failed to load context');
+      return null;
+    } finally {
+      setContextLoading(false);
+    }
+  };
+
+  const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (
+      e.dataTransfer.types.includes('application/json') ||
+      e.dataTransfer.types.includes('text/plain')
+    ) {
+      setIsDraggingContext(true);
+      e.dataTransfer.dropEffect = 'copy';
+    }
+  };
+
+  const handleDragLeave = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDraggingContext(false);
+  };
+
+  const handleDrop = async (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDraggingContext(false);
+
+    try {
+      const jsonData =
+        e.dataTransfer.getData('application/json') ||
+        e.dataTransfer.getData('text/plain');
+      if (!jsonData) return;
+
+      const data = JSON.parse(jsonData) as {
+        type?: string;
+        id?: string;
+        name?: string;
+      };
+
+      if (!data.type || !data.id) return;
+
+      const validTypes = ['project', 'experiment', 'lab_note'];
+      if (!validTypes.includes(data.type)) {
+        toast.error(`Cannot load context for type: ${data.type}`);
+        return;
+      }
+
+      const context = await fetchContext(data.type, data.id);
+      if (!context) return;
+
+      const contextPrefix = `[Context from ${data.type}: ${data.name || data.id}]\n\n${context}\n\n---\n\nMy question: `;
+      setInput(contextPrefix);
+      inputRef.current?.focus();
+      toast.success(`Loaded context for ${data.name || data.type}`);
+    } catch (error) {
+      console.error('Error handling drop:', error);
+      toast.error('Failed to process dropped item');
+    }
+  };
+
   const handleDeleteSession = useCallback((e: React.MouseEvent, sessionId: string) => {
     e.preventDefault();
     e.stopPropagation();
@@ -458,7 +533,11 @@ export function RightSidebar() {
       <div className={cn(
         "rounded-xl border bg-card/50 shadow-sm focus-within:ring-1 focus-within:ring-ring/50 focus-within:border-ring transition-all overflow-hidden",
         isDraggingContext && "ring-2 ring-primary border-primary bg-primary/5"
-      )}>
+      )}
+      onDragOver={handleDragOver}
+      onDragLeave={handleDragLeave}
+      onDrop={handleDrop}
+      >
         <textarea
           ref={inputRef}
           value={input}
@@ -471,7 +550,7 @@ export function RightSidebar() {
             }
           }}
           onKeyDown={handleKeyDown}
-          placeholder="Plan, @ for context, / for commands"
+          placeholder={isDraggingContext ? "Drop here to add context..." : contextLoading ? "Loading context..." : "Plan, @ for context, / for commands"}
           className="w-full min-h-[52px] resize-none bg-transparent px-4 py-2.5 text-sm placeholder:text-muted-foreground/60 focus:outline-none scrollbar-hide"
           disabled={isLoading || contextLoading}
           autoFocus

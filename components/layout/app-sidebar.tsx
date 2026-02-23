@@ -127,7 +127,7 @@ type SearchResultItem = {
 export function AppSidebar() {
   const pathname = usePathname()
   const router = useRouter()
-  const { setOpenMobile, isMobile, state, openMobile, open, setOpen } = useSidebar()
+  const { open, setOpen, isMobile } = useSidebar()
   const [searchQuery, setSearchQuery] = useState("")
   const [projects, setProjects] = useState<Project[]>([])
   const [user, setUser] = useState<User | null>(null)
