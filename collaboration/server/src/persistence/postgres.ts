@@ -64,7 +64,7 @@ export async function loadYjsState(documentId: string): Promise<Uint8Array | nul
     } else if (state instanceof Uint8Array) {
       return state;
     }
-    
+
     return null;
   } catch (err) {
     console.error('[Persistence] Exception loading state:', err);
@@ -142,7 +142,7 @@ export async function documentExists(documentId: string): Promise<boolean> {
 
   try {
     const { data, error } = await supabaseAdmin
-      .from('documents')
+      .from('lab_notes')
       .select('id')
       .eq('id', documentId)
       .single();
@@ -172,7 +172,7 @@ export async function getDocumentMetadata(documentId: string): Promise<DocumentM
 
   try {
     const { data, error } = await supabaseAdmin
-      .from('documents')
+      .from('lab_notes')
       .select('*')
       .eq('id', documentId)
       .single();

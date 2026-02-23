@@ -10,10 +10,13 @@ export * from './permissions.js';
 export * from './invitations.js';
 export * from './audit.js';
 
+// Re-export User from Supabase for convenience
+export type { User } from '@supabase/supabase-js';
+
 /**
  * WebSocket message types for collaboration server
  */
-export type WebSocketMessageType = 
+export type WebSocketMessageType =
   | 'auth'
   | 'auth_success'
   | 'auth_error'
@@ -73,16 +76,18 @@ export interface AwarenessState {
 /**
  * Error codes for the collaboration server
  */
-export enum CollabErrorCode {
-  UNAUTHORIZED = 'UNAUTHORIZED',
-  FORBIDDEN = 'FORBIDDEN',
-  DOCUMENT_NOT_FOUND = 'DOCUMENT_NOT_FOUND',
-  INVALID_TOKEN = 'INVALID_TOKEN',
-  TOKEN_EXPIRED = 'TOKEN_EXPIRED',
-  PERMISSION_REVOKED = 'PERMISSION_REVOKED',
-  SERVER_ERROR = 'SERVER_ERROR',
-  RATE_LIMITED = 'RATE_LIMITED',
-}
+/**
+ * Error codes for the collaboration server
+ */
+export type CollabErrorCode =
+  | 'UNAUTHORIZED'
+  | 'FORBIDDEN'
+  | 'DOCUMENT_NOT_FOUND'
+  | 'INVALID_TOKEN'
+  | 'TOKEN_EXPIRED'
+  | 'PERMISSION_REVOKED'
+  | 'SERVER_ERROR'
+  | 'RATE_LIMITED';
 
 /**
  * Error response structure
@@ -91,4 +96,15 @@ export interface CollabError {
   code: CollabErrorCode;
   message: string;
   details?: unknown;
+}
+
+/**
+ * Document (lab note) metadata from database
+ */
+export interface DocumentMetadata {
+  id: string;
+  title?: string;
+  created_by: string;
+  created_at?: string;
+  updated_at?: string;
 }

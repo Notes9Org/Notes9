@@ -10,11 +10,10 @@
 
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { serverConfig } from '../config.js';
-import type { 
-  PermissionLevel, 
-  PermissionCheck, 
-  DocumentAccess,
-  DocumentSession 
+import type {
+  PermissionLevel,
+  PermissionCheck,
+  DocumentAccess
 } from '../shared/types/index.js';
 import { canRead, canWrite, canManage } from '../shared/types/index.js';
 
@@ -46,7 +45,7 @@ export function initPermissionStore(): void {
 
   // Subscribe to realtime changes on document_access table
   subscribeToPermissionChanges();
-  
+
   console.log('[Permissions] Permission store initialized with realtime subscription');
 }
 
@@ -69,7 +68,7 @@ export async function checkPermission(
 ): Promise<PermissionCheck> {
   const cacheKey = getCacheKey(documentId, userId);
   const now = Date.now();
-  
+
   // Check cache first
   const cached = permissionCache.get(cacheKey);
   if (cached && cached.expiresAt > now) {
@@ -84,7 +83,7 @@ export async function checkPermission(
 
   // Fetch from database
   const access = await fetchPermissionFromDb(documentId, userId);
-  
+
   // Update cache
   permissionCache.set(cacheKey, {
     access,
@@ -113,9 +112,9 @@ async function fetchPermissionFromDb(
 
   try {
     const { data, error } = await supabaseAdmin
-      .from('document_access')
+      .from('lab_note_access')
       .select('*')
-      .eq('document_id', documentId)
+      .eq('lab_note_id', documentId)
       .eq('user_id', userId)
       .single();
 
@@ -145,7 +144,7 @@ export async function requirePermission(
   requiredLevel: 'read' | 'write' | 'manage'
 ): Promise<PermissionLevel> {
   const check = await checkPermission(documentId, userId);
-  
+
   let hasPermission = false;
   switch (requiredLevel) {
     case 'read':
@@ -175,7 +174,7 @@ export async function requirePermission(
 export function invalidatePermissionCache(documentId: string, userId: string): void {
   const cacheKey = getCacheKey(documentId, userId);
   permissionCache.delete(cacheKey);
-  
+
   // Notify listeners about potential revocation
   const listeners = revokeListeners.get(documentId);
   if (listeners) {
@@ -207,29 +206,30 @@ export function onPermissionRevoked(
 function subscribeToPermissionChanges(): void {
   if (!supabaseAdmin) return;
 
-  const channel = supabaseAdmin
-    .channel('document_access_changes')
+  // Subscribe and keep reference (used by Supabase internally)
+  void supabaseAdmin
+    .channel('lab_note_access_changes')
     .on(
       'postgres_changes',
       {
         event: '*', // Listen to all events (INSERT, UPDATE, DELETE)
         schema: 'public',
-        table: 'document_access',
+        table: 'lab_note_access',
       },
       (payload) => {
         console.log('[Permissions] Realtime change detected:', payload.eventType);
-        
+
         const oldRecord = payload.old as DocumentAccess | undefined;
         const newRecord = payload.new as DocumentAccess | undefined;
-        
+
         // Handle deletion (access revoked)
         if (payload.eventType === 'DELETE' && oldRecord) {
-          invalidatePermissionCache(oldRecord.document_id, oldRecord.user_id);
+          invalidatePermissionCache(oldRecord.lab_note_id, oldRecord.user_id);
         }
-        
+
         // Handle update (permission level changed)
         if (payload.eventType === 'UPDATE' && newRecord) {
-          invalidatePermissionCache(newRecord.document_id, newRecord.user_id);
+          invalidatePermissionCache(newRecord.lab_note_id, newRecord.user_id);
         }
       }
     )

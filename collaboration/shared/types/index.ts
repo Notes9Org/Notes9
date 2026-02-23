@@ -13,7 +13,7 @@ export * from './audit.js';
 /**
  * WebSocket message types for collaboration server
  */
-export type WebSocketMessageType = 
+export type WebSocketMessageType =
   | 'auth'
   | 'auth_success'
   | 'auth_error'
@@ -91,4 +91,15 @@ export interface CollabError {
   code: CollabErrorCode;
   message: string;
   details?: unknown;
+}
+
+/**
+ * Document (lab note) metadata from database
+ */
+export interface DocumentMetadata {
+  id: string;
+  title?: string;
+  created_by: string;
+  created_at?: string;
+  updated_at?: string;
 }

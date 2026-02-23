@@ -18,7 +18,7 @@ export type PermissionLevel = 'owner' | 'editor' | 'viewer';
  */
 export interface DocumentAccess {
   id: string;
-  document_id: string;
+  lab_note_id: string;
   user_id: string;
   permission_level: PermissionLevel;
   granted_by: string;

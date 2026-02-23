@@ -18,10 +18,10 @@ This folder contains the **stateful WebSocket collaboration server** for real-ti
            └───────────────────────────────┘
                       Supabase
                ┌─────────────────┐
-               │  • documents    │
-               │  • document_access
+               │  • lab_notes    │
+               │  • lab_note_access
                │  • yjs_states   │
-               │  • audit_logs   │
+               │  • lab_note_invitations
                └─────────────────┘
 ```
 
@@ -68,42 +68,36 @@ collaboration/
 Add these tables to your Supabase database:
 
 ```sql
--- Documents table (metadata only)
-create table documents (
-  id uuid primary key default gen_random_uuid(),
-  title text not null,
-  owner_id uuid references auth.users not null,
-  created_at timestamptz default now(),
-  updated_at timestamptz default now()
-);
+-- Lab notes table already exists (created by earlier migrations)
+-- lab_notes: id, title, created_by, created_at, updated_at
 
--- Document access permissions
+-- Lab note access permissions (created by 022_lab_note_collaboration.sql)
 CREATE TYPE permission_level AS ENUM ('owner', 'editor', 'viewer');
 
-create table document_access (
+CREATE TABLE lab_note_access (
   id uuid primary key default gen_random_uuid(),
-  document_id uuid references documents on delete cascade not null,
+  lab_note_id uuid references lab_notes on delete cascade not null,
   user_id uuid references auth.users not null,
   permission_level permission_level not null,
-  granted_by uuid references auth.users not null,
+  granted_by uuid references auth.users,
   granted_at timestamptz default now(),
   updated_at timestamptz default now(),
-  unique(document_id, user_id)
+  unique(lab_note_id, user_id)
 );
 
--- Yjs CRDT state storage
-create table yjs_states (
-  document_id uuid primary key references documents on delete cascade,
+-- Yjs CRDT state storage (created by 033_yjs_states_and_rls_hardening.sql)
+CREATE TABLE yjs_states (
+  document_id uuid primary key references lab_notes on delete cascade,
   state text not null, -- base64 encoded Yjs update
   updated_at timestamptz default now()
 );
 
--- Invitations (managed by Next.js)
-create table invitations (
+-- Invitations (created by 022_lab_note_collaboration.sql)
+CREATE TABLE lab_note_invitations (
   id uuid primary key default gen_random_uuid(),
-  document_id uuid references documents on delete cascade not null,
+  lab_note_id uuid references lab_notes on delete cascade not null,
   email text not null,
-  invited_by uuid references auth.users not null,
+  invited_by uuid references auth.users,
   permission_level permission_level not null,
   token text unique not null,
   status text default 'pending',
@@ -113,54 +107,61 @@ create table invitations (
   accepted_by uuid references auth.users
 );
 
--- Audit logs (managed by Next.js)
-create table audit_logs (
-  id uuid primary key default gen_random_uuid(),
-  document_id uuid references documents on delete cascade not null,
-  event_type text not null,
-  performed_by uuid references auth.users not null,
-  target_user uuid references auth.users,
-  previous_value text,
-  new_value text,
-  metadata jsonb,
-  created_at timestamptz default now()
-);
-
 -- Enable RLS
-alter table documents enable row level security;
-alter table document_access enable row level security;
-alter table yjs_states enable row level security;
+ALTER TABLE lab_note_access ENABLE ROW LEVEL SECURITY;
+ALTER TABLE lab_note_invitations ENABLE ROW LEVEL SECURITY;
+ALTER TABLE yjs_states ENABLE ROW LEVEL SECURITY;
 
--- RLS Policies
--- Documents: owners can do everything, editors/viewers can read
-CREATE POLICY "Documents: owners full access" ON documents
-  FOR ALL USING (owner_id = auth.uid());
-
-CREATE POLICY "Documents: collaborators can view" ON documents
+-- RLS Policies for lab_note_access
+-- Users can view access for notes they own or have access to
+CREATE POLICY "lab_note_access_select_policy" ON lab_note_access
   FOR SELECT USING (
     EXISTS (
-      SELECT 1 FROM document_access 
-      WHERE document_id = documents.id 
-      AND user_id = auth.uid()
+      SELECT 1 FROM lab_notes
+      WHERE lab_notes.id = lab_note_access.lab_note_id
+      AND lab_notes.created_by = auth.uid()
+    )
+    OR user_id = auth.uid()
+  );
+
+-- Only owners can manage access (includes WITH CHECK for safe updates)
+CREATE POLICY "lab_note_access_insert_policy" ON lab_note_access
+  FOR INSERT WITH CHECK (
+    EXISTS (
+      SELECT 1 FROM lab_notes
+      WHERE lab_notes.id = lab_note_id
+      AND lab_notes.created_by = auth.uid()
     )
   );
 
--- Document access: users can view their own access
-CREATE POLICY "Access: view own" ON document_access
-  FOR SELECT USING (user_id = auth.uid());
-
--- Only owners can manage access
-CREATE POLICY "Access: owners can manage" ON document_access
-  FOR ALL USING (
+CREATE POLICY "lab_note_access_update_policy" ON lab_note_access
+  FOR UPDATE
+  USING (
     EXISTS (
-      SELECT 1 FROM documents 
-      WHERE id = document_access.document_id 
-      AND owner_id = auth.uid()
+      SELECT 1 FROM lab_notes
+      WHERE lab_notes.id = lab_note_access.lab_note_id
+      AND lab_notes.created_by = auth.uid()
+    )
+  )
+  WITH CHECK (
+    EXISTS (
+      SELECT 1 FROM lab_notes
+      WHERE lab_notes.id = lab_note_access.lab_note_id
+      AND lab_notes.created_by = auth.uid()
+    )
+  );
+
+CREATE POLICY "lab_note_access_delete_policy" ON lab_note_access
+  FOR DELETE USING (
+    EXISTS (
+      SELECT 1 FROM lab_notes
+      WHERE lab_notes.id = lab_note_access.lab_note_id
+      AND lab_notes.created_by = auth.uid()
     )
   );
 
 -- Realtime for permission changes
-alter publication supabase_realtime add table document_access;
+ALTER PUBLICATION supabase_realtime ADD TABLE lab_note_access;
 ```
 
 ## Deployment
@@ -398,7 +399,7 @@ For production monitoring, integrate with:
 - Check that JWT hasn't expired
 
 **Permission denied:**
-- Verify document_access row exists
+- Verify lab_note_access row exists
 - Check that permission_level is not 'viewer' for edits
 
 **High memory usage:**
