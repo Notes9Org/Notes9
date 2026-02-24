@@ -13,7 +13,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
-import { ArrowLeft, Wrench, MapPin, Calendar, AlertTriangle, CheckCircle } from 'lucide-react'
+import { ArrowLeft, Microscope, MapPin, Calendar, AlertTriangle } from 'lucide-react'
 import Link from 'next/link'
 import { EquipmentActions } from './equipment-actions'
 
@@ -146,7 +146,7 @@ export default async function EquipmentDetailPage({
             </CardHeader>
             <CardContent className="px-4 pb-2">
               <div className="flex items-center gap-2">
-                <Wrench className="h-3.5 w-3.5 text-muted-foreground" />
+                <Microscope className="h-3.5 w-3.5 text-muted-foreground" />
                 <span className="text-sm font-medium text-foreground">
                   {equipment.manufacturer || "—"}
                 </span>
@@ -425,4 +425,3 @@ export default async function EquipmentDetailPage({
       </div>
     )
 }
-

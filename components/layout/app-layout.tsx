@@ -205,18 +205,16 @@ export function AppLayout({ children }: AppLayoutProps) {
                 )}
               </Button>
               {/* AI / Right sidebar toggle */}
-              <Button
-                variant={rightSidebarOpen ? "secondary" : "ghost"}
-                size="icon"
-                className="size-8 sm:size-9"
-                onClick={() => setRightSidebarOpen(!rightSidebarOpen)}
-              >
-                {rightSidebarOpen ? (
-                  <X className="size-4" />
-                ) : (
-                  <Sparkles className="size-4" />
+                {!rightSidebarOpen && (
+                  <Button
+                    variant={rightSidebarOpen ? "default" : "ghost"}
+                    size="icon"
+                    className="size-8 sm:size-9"
+                    onClick={() => setRightSidebarOpen(!rightSidebarOpen)}
+                  >
+                    <Sparkles className="size-4" />
+                  </Button>
                 )}
-              </Button>
             </div>
           </header>
 
@@ -235,7 +233,7 @@ export function AppLayout({ children }: AppLayoutProps) {
               <SheetHeader className="sr-only">
                 <SheetTitle>AI Assistant</SheetTitle>
               </SheetHeader>
-              <RightSidebar />
+              <RightSidebar onClose={() => setRightSidebarOpen(false)} />
             </SheetContent>
           </Sheet>
         ) : (
@@ -250,7 +248,7 @@ export function AppLayout({ children }: AppLayoutProps) {
                 className="border-l border-border overflow-hidden h-full min-h-0 flex flex-col"
                 style={{ width: rightSidebar.width, minWidth: 0 }}
               >
-                <RightSidebar />
+                <RightSidebar onClose={() => setRightSidebarOpen(false)} />
               </div>
             </div>
           )

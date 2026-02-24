@@ -14,10 +14,9 @@ import { Progress } from "@/components/ui/progress";
 import {
   FlaskConical,
   TestTube,
-  Wrench,
+  Microscope,
   FileText,
   BookOpen,
-  Activity,
   Eye,
 } from "lucide-react";
 
@@ -150,7 +149,7 @@ export default async function DashboardPage() {
             <CardTitle className="text-sm font-medium">
               Equipment Status
             </CardTitle>
-            <Wrench className="h-4 w-4 text-muted-foreground" />
+            <Microscope className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
@@ -183,7 +182,7 @@ export default async function DashboardPage() {
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
-              <Activity className="h-5 w-5" />
+              <FlaskConical className="h-5 w-5" />
               Recent Experiments
             </CardTitle>
             <CardDescription>
