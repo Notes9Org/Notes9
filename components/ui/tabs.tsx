@@ -6,17 +6,56 @@ import * as TabsPrimitive from '@radix-ui/react-tabs'
 import { cn } from '@/lib/utils'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
 
+const TabsContext = React.createContext<{
+  scrollContainerRef: React.RefObject<HTMLDivElement | null>
+} | null>(null)
+
+function scrollActiveTriggerToCenter(container: HTMLDivElement) {
+  if (container.clientWidth >= container.scrollWidth) return
+  const active = container.querySelector<HTMLElement>('[data-state="active"]')
+  if (!active) return
+  const scrollLeft =
+    active.offsetLeft -
+    container.clientWidth / 2 +
+    active.offsetWidth / 2
+  const maxScroll = container.scrollWidth - container.clientWidth
+  container.scrollTo({
+    left: Math.max(0, Math.min(scrollLeft, maxScroll)),
+    behavior: 'smooth',
+  })
+}
+
 function Tabs({
+  onValueChange,
   ...props
 }: React.ComponentProps<typeof TabsPrimitive.Root>) {
-  return <TabsPrimitive.Root {...props} />
+  const scrollContainerRef = React.useRef<HTMLDivElement>(null)
+  const handleValueChange = React.useCallback(
+    (value: string) => {
+      onValueChange?.(value)
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          const container = scrollContainerRef.current
+          if (container) scrollActiveTriggerToCenter(container)
+        })
+      })
+    },
+    [onValueChange]
+  )
+  return (
+    <TabsContext.Provider value={{ scrollContainerRef }}>
+      <TabsPrimitive.Root onValueChange={handleValueChange} {...props} />
+    </TabsContext.Provider>
+  )
 }
 
 function TabsList({
   className,
   ...props
 }: React.ComponentProps<typeof TabsPrimitive.List>) {
-  const scrollRef = React.useRef<HTMLDivElement>(null)
+  const ctx = React.useContext(TabsContext)
+  const localScrollRef = React.useRef<HTMLDivElement>(null)
+  const scrollRef = ctx?.scrollContainerRef ?? localScrollRef
   const [showLeft, setShowLeft] = React.useState(false)
   const [showRight, setShowRight] = React.useState(false)
 
@@ -46,22 +85,40 @@ function TabsList({
   React.useEffect(() => {
     const el = scrollRef.current
     if (!el) return
-  
+
     const run = () => checkScroll()
-  
+
     requestAnimationFrame(run)
-  
+
     window.addEventListener('resize', run)
     return () => window.removeEventListener('resize', run)
   }, [])
 
+  // Center the default/initial active tab on first load when list overflows
+  React.useEffect(() => {
+    if (!ctx) return
+    const el = scrollRef.current
+    if (!el) return
+    const id = requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        scrollActiveTriggerToCenter(el)
+      })
+    })
+    return () => cancelAnimationFrame(id)
+  }, [ctx])
+
   return (
     <div className="relative">
       {showLeft && (
-        <div className="absolute left-0 top-0 h-full flex items-center bg-muted pl-1 pr-1 z-10 rounded-full shadow-lg">
+        <div className="absolute left-0 top-0 h-full flex items-center pl-1 pr-1 z-10"
+          style={{
+            background: "linear-gradient(to right, var(--background) 50%, rgba(255,255,255,0))",
+            borderRadius: 0,
+          }}
+        >
           <button
             onClick={() => scroll('left')}
-            className="w-7 hover:bg-background transition flex justify-center"
+            className="w-7 h-7 transition flex justify-center items-center"
           >
             <ChevronLeft className="h-4 w-4" />
           </button>
@@ -69,10 +126,15 @@ function TabsList({
       )}
 
       {showRight && (
-        <div className="absolute right-0 top-0 h-full flex items-center bg-muted pr-1 pl-1 z-10 rounded-full shadow-lg">
+        <div className="absolute right-0 top-0 h-full flex items-center pr-1 pl-1 z-10"
+          style={{
+            background: "linear-gradient(to left, var(--background) 50%, rgba(255,255,255,0))",
+            borderRadius: 0,
+          }}
+        >
           <button
             onClick={() => scroll('right')}
-            className="w-7 hover:bg-background transition flex justify-center"
+            className="w-7 h-7 transition flex justify-center items-center"
           >
             <ChevronRight className="h-4 w-4" />
           </button>
@@ -86,7 +148,7 @@ function TabsList({
       >
         <TabsPrimitive.List
           className={cn(
-            'inline-flex min-w-max h-9 items-center bg-muted',
+            'inline-flex min-w-max h-9 items-center bg-muted rounded-md p-1 gap-1',
             className
           )}
           {...props}

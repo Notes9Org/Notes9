@@ -1,6 +1,7 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
+import { useMediaQuery } from "@/hooks/use-media-query"
 import Link from "next/link"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -36,7 +37,14 @@ interface Experiment {
 
 /** Client wrapper: single-line header (description + Grid/Table toggle + New button) + list */
 export function ExperimentsPageContent({ experiments }: { experiments: Experiment[] }) {
+  const isMobile = useMediaQuery("(max-width: 768px)")
   const [viewMode, setViewMode] = useState<"grid" | "table">("grid")
+
+  // On mobile, lock to grid view (and switch to grid when resizing to mobile)
+  useEffect(() => {
+    if (isMobile) setViewMode("grid")
+  }, [isMobile])
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
@@ -55,10 +63,12 @@ export function ExperimentsPageContent({ experiments }: { experiments: Experimen
               Grid
             </Button>
             <Button
-              variant={viewMode === "table" ? "default" : "ghost"}
+              variant={isMobile ? "ghost" : viewMode === "table" ? "default" : "ghost"}
               size="sm"
-              onClick={() => setViewMode("table")}
+              onClick={() => !isMobile && setViewMode("table")}
               className="gap-2"
+              disabled={isMobile}
+              aria-disabled={isMobile}
             >
               <List className="h-4 w-4" />
               Table
@@ -84,9 +94,11 @@ interface ExperimentListProps {
 }
 
 export function ExperimentList({ experiments, viewMode: controlledView, setViewMode: setControlledView, hideToolbar }: ExperimentListProps) {
+  const isMobile = useMediaQuery("(max-width: 768px)")
   const [internalView, setInternalView] = useState<"grid" | "table">("grid")
   const viewMode = controlledView ?? internalView
   const setViewMode = setControlledView ?? setInternalView
+  const effectiveViewMode = isMobile ? "grid" : viewMode
 
   // Helper function to get shorter status text for better display
   const getStatusDisplay = (status: string) => {
@@ -113,7 +125,7 @@ export function ExperimentList({ experiments, viewMode: controlledView, setViewM
         <div className="flex justify-end mb-4">
           <div className="inline-flex gap-1 rounded-lg border p-1">
             <Button
-              variant={viewMode === "grid" ? "default" : "ghost"}
+              variant={effectiveViewMode === "grid" ? "default" : "ghost"}
               size="sm"
               onClick={() => setViewMode("grid")}
               className="gap-2"
@@ -122,10 +134,12 @@ export function ExperimentList({ experiments, viewMode: controlledView, setViewM
               Grid
             </Button>
             <Button
-              variant={viewMode === "table" ? "default" : "ghost"}
+              variant={isMobile ? "ghost" : effectiveViewMode === "table" ? "default" : "ghost"}
               size="sm"
-              onClick={() => setViewMode("table")}
+              onClick={() => !isMobile && setViewMode("table")}
               className="gap-2"
+              disabled={isMobile}
+              aria-disabled={isMobile}
             >
               <List className="h-4 w-4" />
               Table
@@ -135,7 +149,7 @@ export function ExperimentList({ experiments, viewMode: controlledView, setViewM
       )}
 
       {/* Grid View - Use auto-fill with fixed card sizes to prevent expansion */}
-      {viewMode === "grid" && (
+      {effectiveViewMode === "grid" && (
         <div className="grid gap-4 grid-cols-[repeat(auto-fit,minmax(280px,1fr))]">
           {experiments.map((experiment) => (
             <Card key={experiment.id} className="hover:border-primary transition-colors flex flex-col min-w-0 overflow-hidden">
@@ -149,15 +163,15 @@ export function ExperimentList({ experiments, viewMode: controlledView, setViewM
                       display: '-webkit-box',
                       WebkitLineClamp: 2,
                       WebkitBoxOrient: 'vertical',
-                      wordBreak: 'break-all',
-                      overflowWrap: 'break-word'
+                      wordBreak: 'normal',
+                      overflowWrap: 'normal'
                     }}>
                       {experiment.name}
                     </CardTitle>
                     {experiment.project && (
                       <CardDescription className="text-xs min-w-0 overflow-hidden text-ellipsis" style={{
-                        wordBreak: 'break-all',
-                        overflowWrap: 'break-word'
+                        wordBreak: 'normal',
+                        overflowWrap: 'normal'
                       }}>
                         {experiment.project.name}
                       </CardDescription>
@@ -202,8 +216,8 @@ export function ExperimentList({ experiments, viewMode: controlledView, setViewM
                       display: '-webkit-box',
                       WebkitLineClamp: 2,
                       WebkitBoxOrient: 'vertical',
-                      wordBreak: 'break-all',
-                      overflowWrap: 'break-word'
+                      wordBreak: 'normal',
+                      overflowWrap: 'normal'
                     } as React.CSSProperties}
                   />
                 </div>
@@ -220,7 +234,7 @@ export function ExperimentList({ experiments, viewMode: controlledView, setViewM
       )}
 
       {/* Table View */}
-      {viewMode === "table" && (
+      {effectiveViewMode === "table" && (
         <Card>
           <CardHeader>
             <CardTitle className="text-foreground">All Experiments</CardTitle>

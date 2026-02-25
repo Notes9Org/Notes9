@@ -1,6 +1,7 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
+import { useMediaQuery } from "@/hooks/use-media-query"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -28,11 +29,18 @@ interface Equipment {
 }
 
 export function EquipmentList({ equipment }: { equipment: Equipment[] }) {
+  const isMobile = useMediaQuery("(max-width: 768px)")
   const [viewMode, setViewMode] = useState<"grid" | "table">("table")
+
+  useEffect(() => {
+    if (isMobile) setViewMode("grid")
+  }, [isMobile])
 
   if (!equipment || equipment.length === 0) {
     return null
   }
+
+  const effectiveViewMode = isMobile ? "grid" : viewMode
 
   return (
     <>
@@ -40,7 +48,7 @@ export function EquipmentList({ equipment }: { equipment: Equipment[] }) {
       <div className="flex justify-end">
         <div className="inline-flex gap-1 rounded-lg border p-1">
           <Button
-            variant={viewMode === "grid" ? "default" : "ghost"}
+            variant={effectiveViewMode === "grid" ? "default" : "ghost"}
             size="sm"
             onClick={() => setViewMode("grid")}
             className="gap-2"
@@ -49,10 +57,12 @@ export function EquipmentList({ equipment }: { equipment: Equipment[] }) {
             Grid
           </Button>
           <Button
-            variant={viewMode === "table" ? "default" : "ghost"}
+            variant={isMobile ? "ghost" : effectiveViewMode === "table" ? "default" : "ghost"}
             size="sm"
-            onClick={() => setViewMode("table")}
+            onClick={() => !isMobile && setViewMode("table")}
             className="gap-2"
+            disabled={isMobile}
+            aria-disabled={isMobile}
           >
             <List className="h-4 w-4" />
             Table
@@ -61,7 +71,7 @@ export function EquipmentList({ equipment }: { equipment: Equipment[] }) {
       </div>
 
       {/* Grid View */}
-      {viewMode === "grid" && (
+      {effectiveViewMode === "grid" && (
         <div className="grid gap-4 sm:grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
           {equipment.map((item) => (
             <Card key={item.id} className="hover:border-primary transition-colors flex flex-col">
@@ -134,7 +144,7 @@ export function EquipmentList({ equipment }: { equipment: Equipment[] }) {
       )}
 
       {/* Table View */}
-      {viewMode === "table" && (
+      {effectiveViewMode === "table" && (
         <Card>
           <CardHeader>
             <CardTitle className="text-foreground">All Equipment</CardTitle>
