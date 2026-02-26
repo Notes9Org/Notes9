@@ -112,7 +112,7 @@ function TabsList({
       {showLeft && (
         <div className="absolute left-0 top-0 h-full flex items-center pl-1 pr-1 z-10"
           style={{
-            background: "linear-gradient(to right, var(--background) 50%, rgba(255,255,255,0))",
+            background: "linear-gradient(to right, var(--background) 80%, rgba(255,255,255,0))",
             borderRadius: 0,
           }}
         >
@@ -128,7 +128,7 @@ function TabsList({
       {showRight && (
         <div className="absolute right-0 top-0 h-full flex items-center pr-1 pl-1 z-10"
           style={{
-            background: "linear-gradient(to left, var(--background) 50%, rgba(255,255,255,0))",
+            background: "linear-gradient(to left, var(--background) 80%, rgba(255,255,255,0))",
             borderRadius: 0,
           }}
         >
