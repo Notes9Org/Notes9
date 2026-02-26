@@ -75,6 +75,7 @@ import { Plugin, PluginKey } from "@tiptap/pm/state"
 import { TextSelection } from "@tiptap/pm/state"
 import { Decoration, DecorationSet } from "@tiptap/pm/view"
 import { cn } from "@/lib/utils"
+import { useAwsTranscribe } from "@/hooks/use-aws-transcribe"
 import { useCallback, useEffect, useRef, useState } from "react"
 import { createPortal } from "react-dom"
 // @ts-ignore
@@ -1057,7 +1058,6 @@ export function TiptapEditor({
   const [tableMenuOpen, setTableMenuOpen] = useState(false)
   const [tableRows, setTableRows] = useState(3)
   const [tableCols, setTableCols] = useState(3)
-  const [isListening, setIsListening] = useState(false)
   const [citationModalOpen, setCitationModalOpen] = useState(false)
   const [bibliographyModalOpen, setBibliographyModalOpen] = useState(false)
   const [foundPapers, setFoundPapers] = useState<Paper[]>([])
@@ -1070,9 +1070,50 @@ export function TiptapEditor({
   const [commentsSidebarOpen, setCommentsSidebarOpen] = useState(false)
   /* State merge: keeping activeCommentData from origin */
   const [activeCommentData, setActiveCommentData] = useState<{ author: string; content: string; createdAt: number; id: string; rect: DOMRect } | null>(null)
-  const recognitionRef = useRef<any>(null)
   const lastFinalIndexRef = useRef<number>(0)
   const lastInterimTextRef = useRef<string>("")
+  const editorRef = useRef<ReturnType<typeof useEditor> | null>(null)
+
+  const clearInterimFromEditor = useCallback(() => {
+    const ed = editorRef.current
+    if (!ed || !lastInterimTextRef.current) return
+    const currentPos = ed.state.selection.anchor
+    const interimLength = lastInterimTextRef.current.length
+    const deleteFrom = Math.max(0, currentPos - interimLength)
+    const deleteTo = currentPos
+    if (deleteFrom < deleteTo) {
+      ed.chain()
+        .focus()
+        .setTextSelection({ from: deleteFrom, to: deleteTo })
+        .deleteSelection()
+        .run()
+    }
+    lastInterimTextRef.current = ""
+  }, [])
+
+  const { start: startAwsTranscribe, stop: stopAwsTranscribe, isListening } = useAwsTranscribe({
+    onInterim: useCallback((text: string) => {
+      const ed = editorRef.current
+      if (!ed) return
+      if (lastInterimTextRef.current) clearInterimFromEditor()
+      if (text) {
+        ed.chain().focus().insertContent(text).run()
+        lastInterimTextRef.current = text
+      }
+    }, [clearInterimFromEditor]),
+    onFinal: useCallback((text: string) => {
+      const ed = editorRef.current
+      if (!ed) return
+      if (lastInterimTextRef.current) clearInterimFromEditor()
+      if (text) {
+        ed.chain().focus().insertContent(text + " ").run()
+      }
+    }, [clearInterimFromEditor]),
+    onError: useCallback((msg: string) => {
+      clearInterimFromEditor()
+      toast.error(msg || "Transcription unavailable. Check server configuration.")
+    }, [clearInterimFromEditor]),
+  })
 
   // Use ref for protocols so the mention extension always has access to current protocols
   const protocolsRef = useRef<ProtocolItem[]>(protocols)
@@ -1273,6 +1314,10 @@ export function TiptapEditor({
       },
     },
   })
+
+  useEffect(() => {
+    editorRef.current = editor
+  }, [editor])
 
   // Track active comment via DOM click events - reads data attributes directly
   useEffect(() => {
@@ -2172,6 +2217,18 @@ export function TiptapEditor({
     }
   }, [editor, title])
 
+  const startSpeechToText = useCallback(() => {
+    lastFinalIndexRef.current = 0
+    lastInterimTextRef.current = ""
+    startAwsTranscribe()
+  }, [startAwsTranscribe])
+
+  const stopSpeechToText = useCallback(() => {
+    stopAwsTranscribe()
+    clearInterimFromEditor()
+    lastFinalIndexRef.current = 0
+  }, [stopAwsTranscribe, clearInterimFromEditor])
+
   if (!editor) {
     return null
   }
@@ -2316,165 +2373,6 @@ export function TiptapEditor({
       }
     }
     input.click()
-  }
-
-  const startSpeechToText = () => {
-    const SpeechRecognition =
-      typeof window !== "undefined" &&
-      ((window as any).SpeechRecognition || (window as any).webkitSpeechRecognition)
-
-    if (!SpeechRecognition) {
-      alert("Speech recognition is not supported in this browser.")
-      return
-    }
-
-    // Reset tracking variables
-    lastFinalIndexRef.current = 0
-    lastInterimTextRef.current = ""
-
-    const recognition = new SpeechRecognition()
-    recognition.lang = "en-US"
-    recognition.interimResults = true
-    recognition.continuous = true
-
-    recognition.onresult = (event: any) => {
-      if (!editor) return
-
-      let newFinalText = ""
-      let latestInterimText = ""
-
-      // Process all results to find new final results and latest interim
-      for (let i = 0; i < event.results.length; ++i) {
-        const result = event.results[i]
-        const transcript = result[0].transcript
-
-        if (result.isFinal) {
-          // Only process final results we haven't processed yet
-          if (i >= lastFinalIndexRef.current) {
-            newFinalText += transcript + " "
-            // Update index as we go
-            lastFinalIndexRef.current = i + 1
-          }
-        } else {
-          // Track the latest interim result (last one in the array)
-          latestInterimText = transcript
-        }
-      }
-
-      // Insert new final results first (permanent)
-      if (newFinalText) {
-        // Remove interim text before inserting final
-        if (lastInterimTextRef.current) {
-          const currentPos = editor.state.selection.anchor
-          const interimLength = lastInterimTextRef.current.length
-          const deleteFrom = Math.max(0, currentPos - interimLength)
-          const deleteTo = currentPos
-
-          if (deleteFrom < deleteTo) {
-            editor.chain()
-              .focus()
-              .setTextSelection({ from: deleteFrom, to: deleteTo })
-              .deleteSelection()
-              .run()
-          }
-          lastInterimTextRef.current = ""
-        }
-
-        editor.chain().focus().insertContent(newFinalText).run()
-      }
-
-      // Update interim text only if it changed (for streaming effect)
-      if (latestInterimText && latestInterimText !== lastInterimTextRef.current) {
-        // Remove previous interim text if it exists
-        if (lastInterimTextRef.current) {
-          const currentPos = editor.state.selection.anchor
-          const interimLength = lastInterimTextRef.current.length
-          const deleteFrom = Math.max(0, currentPos - interimLength)
-          const deleteTo = currentPos
-
-          if (deleteFrom < deleteTo) {
-            editor.chain()
-              .focus()
-              .setTextSelection({ from: deleteFrom, to: deleteTo })
-              .deleteSelection()
-              .run()
-          }
-        }
-
-        // Insert new interim text
-        editor.chain().focus().insertContent(latestInterimText).run()
-        lastInterimTextRef.current = latestInterimText
-      }
-    }
-
-    recognition.onerror = (event: any) => {
-      console.error("Speech recognition error:", event.error)
-      setIsListening(false)
-      // Clean up interim text on error
-      if (lastInterimTextRef.current && editor) {
-        const currentPos = editor.state.selection.anchor
-        const interimLength = lastInterimTextRef.current.length
-        const deleteFrom = Math.max(0, currentPos - interimLength)
-        const deleteTo = currentPos
-
-        if (deleteFrom < deleteTo) {
-          editor.chain()
-            .focus()
-            .setTextSelection({ from: deleteFrom, to: deleteTo })
-            .deleteSelection()
-            .run()
-        }
-        lastInterimTextRef.current = ""
-      }
-    }
-
-    recognition.onend = () => {
-      setIsListening(false)
-      // Clean up any remaining interim text
-      if (lastInterimTextRef.current && editor) {
-        const currentPos = editor.state.selection.anchor
-        const interimLength = lastInterimTextRef.current.length
-        const deleteFrom = Math.max(0, currentPos - interimLength)
-        const deleteTo = currentPos
-
-        if (deleteFrom < deleteTo) {
-          editor.chain()
-            .focus()
-            .setTextSelection({ from: deleteFrom, to: deleteTo })
-            .deleteSelection()
-            .run()
-        }
-        lastInterimTextRef.current = ""
-      }
-      // Reset for next session
-      lastFinalIndexRef.current = 0
-    }
-
-    recognition.start()
-    recognitionRef.current = recognition
-    setIsListening(true)
-  }
-
-  const stopSpeechToText = () => {
-    recognitionRef.current?.stop()
-    setIsListening(false)
-    // Clean up interim text when manually stopped
-    if (lastInterimTextRef.current && editor) {
-      const currentPos = editor.state.selection.anchor
-      const interimLength = lastInterimTextRef.current.length
-      const deleteFrom = Math.max(0, currentPos - interimLength)
-      const deleteTo = currentPos
-
-      if (deleteFrom < deleteTo) {
-        editor.chain()
-          .focus()
-          .setTextSelection({ from: deleteFrom, to: deleteTo })
-          .deleteSelection()
-          .run()
-      }
-      lastInterimTextRef.current = ""
-    }
-    lastFinalIndexRef.current = 0
   }
 
   const removeTable = () => {
