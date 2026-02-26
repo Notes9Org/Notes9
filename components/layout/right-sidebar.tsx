@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useRef, useEffect, useCallback, useMemo, type ChangeEvent } from 'react';
+import { useRouter } from 'next/navigation';
 import { useChat } from '@ai-sdk/react';
 import { DefaultChatTransport } from 'ai';
 import { Button } from '@/components/ui/button';
@@ -33,6 +34,7 @@ import {
   Mic,
 } from 'lucide-react';
 import { cn, formatCitationDisplay } from '@/lib/utils';
+import { runAgent, Notes9ApiError } from '@/lib/notes9-api';
 import { useChatSessions, ChatSession } from '@/hooks/use-chat-sessions';
 import { MarkdownRenderer } from '@/components/catalyst/markdown-renderer';
 import { PreviewAttachment, type Attachment } from '@/components/catalyst/preview-attachment';
@@ -96,10 +98,11 @@ const ALLOWED_TYPES = [
 ];
 
 interface RightSidebarProps {
-  onClose: () => void;
+  onClose?: () => void;
 }
 
-export function RightSidebar({ onClose }: RightSidebarProps) {
+export function RightSidebar({ onClose }: RightSidebarProps = {}) {
+  const router = useRouter();
   const [input, setInput] = useState('');
   const [agentMode, setAgentMode] = useState<AgentMode>('general');
   const [userId, setUserId] = useState<string>('');
@@ -126,6 +129,8 @@ export function RightSidebar({ onClose }: RightSidebarProps) {
     setMounted(true);
   }, []);
 
+  const supabaseTokenRef = useRef<string | null>(null);
+
   useEffect(() => {
     const loadUserId = async () => {
       const { data: { user } } = await supabase.auth.getUser();
@@ -134,18 +139,30 @@ export function RightSidebar({ onClose }: RightSidebarProps) {
     loadUserId();
   }, [supabase]);
 
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      supabaseTokenRef.current = session?.access_token ?? null;
+    });
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      supabaseTokenRef.current = session?.access_token ?? null;
+    });
+    return () => subscription.unsubscribe();
+  }, [supabase]);
+
   const transport = useMemo(() => new DefaultChatTransport({
     api: '/api/chat',
     prepareSendMessagesRequest(request) {
-      // Normalize messages to plain text so request body never re-sends stringified JSON (stops double-wrap)
+      const token = supabaseTokenRef.current;
       const normalizedMessages = request.messages.map((msg: { role: string; content?: unknown; parts?: Array<{ type?: string; text?: string }> }) => {
         const plainText = getPlainTextFromMessage(msg);
         return { role: msg.role, content: plainText };
       });
       return {
+        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
         body: {
           messages: normalizedMessages,
           sessionId: currentSessionRef.current,
+          supabaseToken: token ?? undefined,
           ...request.body,
         },
       };
@@ -285,6 +302,15 @@ export function RightSidebar({ onClose }: RightSidebarProps) {
     if (agentMode === 'notes9') {
       try {
         setNotes9Loading(true);
+
+        const { data: { session } } = await supabase.auth.getSession();
+        const token = session?.access_token;
+        if (!token) {
+          toast.error('Please sign in to use Notes9');
+          router.push('/auth/login');
+          return;
+        }
+
         const userMessageId = `user-${Date.now()}`;
         const userMessage = {
           id: userMessageId,
@@ -298,20 +324,20 @@ export function RightSidebar({ onClose }: RightSidebarProps) {
         const sessionId = currentSessionRef.current!;
         await saveMessage(sessionId, 'user', text);
 
-        // Call Notes9 API
-        const response = await fetch('https://z3thrlksg0.execute-api.us-east-1.amazonaws.com/agent/run', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            history: [],
+        const history = messages.map((m) => ({
+          role: m.role,
+          content: getPlainTextFromMessage(m),
+        }));
+
+        const data = await runAgent(
+          {
             query: text,
             session_id: sessionId,
-            user_id: userId,
-          }),
-        });
-
-        if (!response.ok) throw new Error('Notes9 API request failed');
-        const data = await response.json();
+            user_id: userId || undefined,
+            history,
+          },
+          token
+        );
         let formattedAnswer = data.answer;
 
         // Citation handling...
@@ -359,6 +385,17 @@ export function RightSidebar({ onClose }: RightSidebarProps) {
         loadSessions();
       } catch (error) {
         console.error('Notes9 API error:', error);
+        if (error instanceof Notes9ApiError) {
+          if (error.status === 401) {
+            toast.error('Session expired. Please sign in again.');
+            router.push('/auth/login');
+            return;
+          }
+          if (error.status && error.status >= 500) {
+            toast.error('Service temporarily unavailable. Please try again later.');
+            return;
+          }
+        }
         toast.error('Failed to get response from Notes9');
       } finally {
         setNotes9Loading(false);
@@ -749,7 +786,7 @@ export function RightSidebar({ onClose }: RightSidebarProps) {
               <Button variant="ghost" size="icon" className="size-8 sm:size-9 text-muted-foreground" onClick={() => setIsExpanded(!isExpanded)}>
                   {isExpanded ? <Minimize2 className="size-4" /> : <Maximize2 className="size-4" />}
                 </Button>
-                <Button variant="ghost" size="icon" className="size-8 sm:size-9 text-muted-foreground" onClick={() => onClose()}>
+                <Button variant="ghost" size="icon" className="size-8 sm:size-9 text-muted-foreground" onClick={() => onClose?.()}>
                   <X className="size-4" />
                 </Button>
             </div>
