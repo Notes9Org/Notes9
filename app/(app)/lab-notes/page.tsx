@@ -6,6 +6,7 @@ import { createClient } from "@/lib/supabase/client"
 import LabNotesList from "@/app/(app)/lab-notes-list/[id]/lab-notes-list"
 import { NewLabNoteDialog } from "@/app/(app)/lab-notes/new-lab-note-dialog"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
+import { PendingInvitations } from "@/components/lab-notes/pending-invitations"
 import { Button } from "@/components/ui/button"
 import { Loader2, Plus, Grid3x3, List } from "lucide-react"
 import { SetPageBreadcrumb } from "@/components/layout/breadcrumb-context"
@@ -135,6 +136,9 @@ export default function LabNotesPage() {
           <AlertDescription>{error}</AlertDescription>
         </Alert>
       )}
+
+      {/* Pending Invitations */}
+      <PendingInvitations />
 
       {isLoading ? (
         <div className="flex items-center gap-2 text-muted-foreground">

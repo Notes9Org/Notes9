@@ -1,0 +1,31 @@
+{
+  "name": "@collab-editor/server",
+  "version": "1.0.0",
+  "description": "Stateful WebSocket collaboration server for Yjs",
+  "type": "module",
+  "main": "./dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsx watch src/index.ts",
+    "start": "node dist/index.js",
+    "typecheck": "tsc --noEmit",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.39.0",
+    "yjs": "^13.6.10",
+    "y-protocols": "^1.0.6",
+    "lib0": "^0.2.88",
+    "ws": "^8.16.0",
+    "dotenv": "^16.3.1"
+  },
+  "devDependencies": {
+    "@types/node": "^20.10.0",
+    "@types/ws": "^8.5.10",
+    "tsx": "^4.7.0",
+    "typescript": "^5.4.0"
+  },
+  "engines": {
+    "node": ">=20.11.0"
+  }
+}
