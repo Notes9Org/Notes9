@@ -11,6 +11,7 @@ import { ResizeHandle } from "@/components/ui/resize-handle"
 import { SidebarProvider, SidebarInset, useSidebar } from "@/components/ui/sidebar"
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet"
 import { useResizable } from "@/hooks/use-resizable"
+import { cn } from "@/lib/utils"
 import { Menu, X, Sparkles, ChevronRight, Sun, Moon } from 'lucide-react'
 import { useTheme } from "next-themes"
 import { useMediaQuery } from "@/hooks/use-media-query"
@@ -152,11 +153,15 @@ export function AppLayout({ children }: AppLayoutProps) {
             <div
               data-sidebar-container
               data-resizing={leftSidebar.isResizing ? 'true' : undefined}
-              className="h-full min-h-0 shrink-0 overflow-hidden"
+              className={cn(
+                "h-full min-h-0 shrink-0 overflow-hidden",
+                "data-[resizing=true]:[&_[data-slot=sidebar-gap]]:!transition-none",
+                "data-[resizing=true]:[&_[data-slot=sidebar-container]]:!transition-none"
+              )}
               style={{
                 '--sidebar-width': `${leftColumnWidth}px`,
                 width: leftColumnWidth,
-                transition: leftSidebar.isResizing ? 'none' : 'width 0.2s ease-out',
+                transition: leftSidebar.isResizing ? 'none' : 'width 0.15s cubic-bezier(0.4, 0, 0.2, 1)',
               } as React.CSSProperties}
             >
               <AppSidebar />
