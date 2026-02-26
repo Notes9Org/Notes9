@@ -17,6 +17,7 @@ import type { Attachment } from './preview-attachment';
 import { CatalystSidebar } from './catalyst-sidebar';
 import type { Vote } from '@/lib/db/schema';
 import { formatCitationDisplay } from '@/lib/utils';
+import { runAgent, Notes9ApiError } from '@/lib/notes9-api';
 
 interface CatalystChatProps {
   sessionId?: string;
@@ -36,15 +37,19 @@ export function CatalystChat({ sessionId }: CatalystChatProps) {
   const prevStatusRef = useRef<string>('ready');
   const currentSessionRef = useRef<string | null>(sessionId || null);
   const hasLoadedSessionRef = useRef<string | null>(null);
-  // Use ref for model so transport can access current value without recreating
-  const currentModelRef = useRef(selectedModelId);
-
-  // Keep ref in sync with state
-  useEffect(() => {
-    currentModelRef.current = selectedModelId;
-  }, [selectedModelId]);
+  const supabaseTokenRef = useRef<string | null>(null);
 
   const supabase = createClient();
+
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      supabaseTokenRef.current = session?.access_token ?? null;
+    });
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      supabaseTokenRef.current = session?.access_token ?? null;
+    });
+    return () => subscription.unsubscribe();
+  }, [supabase]);
 
   const {
     sessions,
@@ -59,14 +64,17 @@ export function CatalystChat({ sessionId }: CatalystChatProps) {
     loadSessions,
   } = useChatSessions();
 
-  // Create transport with prepareSendMessagesRequest to include sessionId
+  // Create transport with prepareSendMessagesRequest to include sessionId and Authorization header
   const transport = useMemo(() => new DefaultChatTransport({
     api: '/api/chat',
     prepareSendMessagesRequest(request) {
+      const token = supabaseTokenRef.current;
       return {
+        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
         body: {
           messages: request.messages,
           sessionId: currentSessionRef.current,
+          supabaseToken: token ?? undefined,
           ...request.body,
         },
       };
@@ -279,6 +287,14 @@ export function CatalystChat({ sessionId }: CatalystChatProps) {
       try {
         setNotes9Loading(true);
 
+        const { data: { session } } = await supabase.auth.getSession();
+        const token = session?.access_token;
+        if (!token) {
+          toast.error('Please sign in to use Notes9');
+          router.push('/auth/login');
+          return;
+        }
+
         // Add user message to UI immediately
         const userMessageId = `user-${Date.now()}`;
         const userMessage = {
@@ -293,25 +309,20 @@ export function CatalystChat({ sessionId }: CatalystChatProps) {
         // Save user message to DB
         await saveMessage(sid, 'user', text);
 
-        // Call Notes9 API
-        const response = await fetch('https://z3thrlksg0.execute-api.us-east-1.amazonaws.com/agent/run', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            history: [],
+        const history = messages.map((m) => ({
+          role: m.role,
+          content: getMessageContent(m),
+        }));
+
+        const data = await runAgent(
+          {
             query: text,
             session_id: sid,
-            user_id: userId,
-          }),
-        });
-
-        if (!response.ok) {
-          throw new Error('Notes9 API request failed');
-        }
-
-        const data = await response.json();
+            user_id: userId || undefined,
+            history,
+          },
+          token
+        );
 
         // Format response with citations as clickable links
         let formattedAnswer = data.answer;
@@ -371,6 +382,17 @@ export function CatalystChat({ sessionId }: CatalystChatProps) {
         loadSessions();
       } catch (error) {
         console.error('Notes9 API error:', error);
+        if (error instanceof Notes9ApiError) {
+          if (error.status === 401) {
+            toast.error('Session expired. Please sign in again.');
+            router.push('/auth/login');
+            return;
+          }
+          if (error.status && error.status >= 500) {
+            toast.error('Service temporarily unavailable. Please try again later.');
+            return;
+          }
+        }
         toast.error('Failed to get response from Notes9');
       } finally {
         setNotes9Loading(false);

@@ -31,9 +31,10 @@ export function useResizable({
     document.body.style.userSelect = 'none'
   }, [width])
 
-  const handleMouseMove = useCallback((e: MouseEvent) => {
-    if (!isResizing) return
+  const rafRef = useRef<number | null>(null)
+  const pendingWidthRef = useRef<number | null>(null)
 
+  const handleMouseMove = useCallback((e: MouseEvent) => {
     const deltaX = e.clientX - startXRef.current
     // For right sidebar, invert the delta so dragging left increases width
     const adjustedDelta = direction === 'right' ? -deltaX : deltaX
@@ -41,25 +42,45 @@ export function useResizable({
       Math.max(startWidthRef.current + adjustedDelta, minWidth),
       maxWidth
     )
-    
-    setWidth(newWidth)
-    onResize?.(newWidth)
-  }, [isResizing, minWidth, maxWidth, direction, onResize])
+    pendingWidthRef.current = newWidth
+
+    if (rafRef.current === null) {
+      rafRef.current = requestAnimationFrame(() => {
+        rafRef.current = null
+        if (pendingWidthRef.current !== null) {
+          setWidth(pendingWidthRef.current)
+          onResize?.(pendingWidthRef.current)
+        }
+      })
+    }
+  }, [minWidth, maxWidth, direction, onResize])
 
   const handleMouseUp = useCallback(() => {
+    if (rafRef.current !== null) {
+      cancelAnimationFrame(rafRef.current)
+      rafRef.current = null
+      if (pendingWidthRef.current !== null) {
+        setWidth(pendingWidthRef.current)
+        onResize?.(pendingWidthRef.current)
+      }
+    }
     setIsResizing(false)
     document.body.style.cursor = ''
     document.body.style.userSelect = ''
-  }, [])
+  }, [onResize])
 
   useEffect(() => {
     if (isResizing) {
-      document.addEventListener('mousemove', handleMouseMove)
+      document.addEventListener('mousemove', handleMouseMove, { passive: true })
       document.addEventListener('mouseup', handleMouseUp)
-      
+
       return () => {
         document.removeEventListener('mousemove', handleMouseMove)
         document.removeEventListener('mouseup', handleMouseUp)
+        if (rafRef.current !== null) {
+          cancelAnimationFrame(rafRef.current)
+          rafRef.current = null
+        }
       }
     }
   }, [isResizing, handleMouseMove, handleMouseUp])
