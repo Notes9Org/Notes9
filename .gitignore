@@ -48,6 +48,22 @@ next-env.d.ts
 *.sublime-project
 *.sublime-workspace
 
+# Python
+venv/
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+ENV/
+.venv/
+python-service/venv/
+python-service/**/__pycache__/
+*.egg-info/
+dist/
+build/
+
 # Misc
 .turbo
 scripts/000_*.sql
