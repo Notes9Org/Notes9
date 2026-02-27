@@ -1141,12 +1141,24 @@ export function TiptapEditor({
       Placeholder.configure({
         placeholder,
       }),
-      /* Link.configure({
+      Link.extend({
+        addAttributes() {
+          return {
+            ...this.parent?.(),
+            'data-paper-id': { default: null },
+            'data-paper-title': { default: null },
+            'data-paper-authors': { default: null },
+            'data-paper-year': { default: null },
+            'data-paper-journal': { default: null },
+            'data-paper-doi': { default: null },
+          }
+        },
+      }).configure({
         openOnClick: false,
         HTMLAttributes: {
           class: "text-primary underline cursor-pointer",
         },
-      }), */
+      }),
       Image.configure({
         HTMLAttributes: {
           class: "max-w-full h-auto rounded-lg",
@@ -1825,73 +1837,19 @@ export function TiptapEditor({
 
     try {
       for (const citation of citations) {
-        try {
-          // If we have stored metadata (title, paperId), try to fetch full details
-          if (citation.paperId) {
-            const bibController = new AbortController()
-            const bibTimeoutId = setTimeout(() => bibController.abort(), 60000)
-            const response = await fetch(
-              `https://z3thrlksg0.execute-api.us-east-1.amazonaws.com/citations_ddg`,
-              {
-                method: 'POST',
-                headers: {
-                  'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({ text: citation.paperId }),
-                signal: bibController.signal,
-              }
-            )
-            clearTimeout(bibTimeoutId)
-
-            if (response.ok) {
-              const data: Paper[] = await response.json()
-              console.log(`API response for citation ${citation.number}:`, data) // Debug log
-
-              if (data && data.length > 0) {
-                const paper = data[0]
-                citationMetadataMap.set(citation.number, {
-                  citationNumber: citation.number,
-                  url: citation.url,
-                  title: paper.title || citation.title || 'Unknown Title',
-                  authors: paper.authors || citation.authors || [],
-                  year: paper.year || citation.year || 0,
-                  journal: paper.journal || citation.journal || '',
-                  doi: paper.doi || citation.doi || '',
-                  paperId: paper.id?.toString() || citation.paperId
-                })
-                continue
-              }
-            }
-          }
-
-          // Fallback: use stored data from citation attributes
-          citationMetadataMap.set(citation.number, {
-            citationNumber: citation.number,
-            url: citation.url,
-            title: citation.title || 'Unknown Title',
-            authors: citation.authors || [],
-            year: citation.year || 0,
-            journal: citation.journal || '',
-            doi: citation.doi || '',
-            paperId: citation.paperId
-          })
-        } catch (error) {
-          console.error(`Failed to fetch metadata for citation ${citation.number}:`, error)
-          // Add fallback metadata using stored data
-          citationMetadataMap.set(citation.number, {
-            citationNumber: citation.number,
-            url: citation.url,
-            title: citation.title || 'Unknown Title',
-            authors: citation.authors || [],
-            year: citation.year || 0,
-            journal: citation.journal || '',
-            doi: citation.doi || '',
-            paperId: citation.paperId
-          })
-        }
+        citationMetadataMap.set(citation.number, {
+          citationNumber: citation.number,
+          url: citation.url,
+          title: citation.title || 'Unknown Title',
+          authors: citation.authors || [],
+          year: citation.year || 0,
+          journal: citation.journal || '',
+          doi: citation.doi || '',
+          paperId: citation.paperId
+        })
       }
 
-      // Store the fetched metadata and open modal
+      // Store the metadata and open modal
       setCitationMetadata(citationMetadataMap)
       setBibliographyModalOpen(true)
 
