@@ -22,7 +22,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { Edit } from "lucide-react"
+import { Pencil } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 
 const EQUIPMENT_CATEGORIES = [
@@ -109,9 +109,8 @@ export function EditEquipmentDialog({ equipment }: { equipment: any }) {
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button variant="outline" size="sm">
-          <Edit className="h-4 w-4 mr-2" />
-          Edit
+        <Button variant="ghost" size="icon" className="h-8 w-8" aria-label="Edit equipment">
+          <Pencil className="h-4 w-4" />
         </Button>
       </DialogTrigger>
       <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">

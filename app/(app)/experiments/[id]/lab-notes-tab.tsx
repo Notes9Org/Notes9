@@ -39,6 +39,13 @@ import {
 import { cn } from "@/lib/utils"
 import { getUniqueNameErrorMessage } from "@/lib/unique-name-error"
 import { useBreadcrumb } from "@/components/layout/breadcrumb-context"
+import { useMediaQuery } from "@/hooks/use-media-query"
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet"
 
 interface LabNote {
   id: string;
@@ -103,6 +110,8 @@ export function LabNotesTab({
 
   // Notebook list panel collapsed for more note-taking space (start closed)
   const [notebookPanelOpen, setNotebookPanelOpen] = useState(false);
+
+  const isMobile = useMediaQuery("(max-width: 768px)");
 
   // Rename note dialog (used from sidebar note menu)
   const [renameNoteId, setRenameNoteId] = useState<string | null>(null);
@@ -1103,15 +1112,15 @@ export function LabNotesTab({
       <div className="flex-1 min-w-0 min-h-0 flex flex-col">
         <Card className="h-full flex flex-col min-h-0 py-0 gap-0 overflow-hidden">
           <div className="flex flex-row flex-1 min-h-0 min-w-0">
-            {/* Notes list - inside card, left side */}
+            {/* Notes list - inside card, left side (hidden on mobile; use Sheet instead) */}
             <aside
               className={cn(
                 "flex shrink-0 flex-col overflow-hidden border-r border-border bg-muted/30 relative",
-                notebookPanelOpen ? "w-52 min-w-[13rem] z-10 bg-card" : "w-0 min-w-0 border-r-0 overflow-hidden"
+                !isMobile && notebookPanelOpen ? "w-52 min-w-[13rem] z-10 bg-card" : "w-0 min-w-0 border-r-0 overflow-hidden"
               )}
-              aria-hidden={!notebookPanelOpen}
+              aria-hidden={!notebookPanelOpen || isMobile}
             >
-              {notebookPanelOpen && (
+              {!isMobile && notebookPanelOpen && (
                 <div className="flex h-full min-h-0 w-52 min-w-[13rem] flex-col gap-0 p-2">
                   <div className="flex h-9 shrink-0 items-center px-1">
                     <span className="truncate text-xs font-medium text-muted-foreground">Notes</span>
@@ -1203,6 +1212,106 @@ export function LabNotesTab({
                 </div>
               )}
             </aside>
+
+            {/* Mobile: notes list in a Sheet overlay so it doesn't squeeze the editor */}
+            {isMobile && (
+              <Sheet open={notebookPanelOpen} onOpenChange={setNotebookPanelOpen}>
+                <SheetContent side="left" className="flex flex-col p-0 w-[85%] max-w-[320px] sm:max-w-sm">
+                  <SheetHeader className="p-4 pb-2">
+                    <SheetTitle>Notes</SheetTitle>
+                  </SheetHeader>
+                  <div className="flex min-h-0 flex-1 flex-col gap-0.5 overflow-auto px-2 pb-4">
+                    {notes.length > 0 ? (
+                      <ul className="flex w-full min-w-0 flex-col gap-0.5">
+                        {notes.map((note) => {
+                          const isActive = selectedNote?.id === note.id && !isCreating;
+                          const createdStr = new Date(note.created_at).toLocaleString();
+                          const updatedStr = new Date(note.updated_at).toLocaleString();
+                          return (
+                            <li key={note.id} className="group/list-item relative">
+                              <div
+                                role="button"
+                                tabIndex={0}
+                                onClick={() => {
+                                  handleSelectNote(note);
+                                  setNotebookPanelOpen(false);
+                                }}
+                                onKeyDown={(e) => {
+                                  if (e.key === "Enter" || e.key === " ") {
+                                    e.preventDefault();
+                                    handleSelectNote(note);
+                                    setNotebookPanelOpen(false);
+                                  }
+                                }}
+                                data-note-id={note.id}
+                                title={`Created: ${createdStr} · Updated: ${updatedStr}`}
+                                className={cn(
+                                  "grid w-full min-h-8 grid-cols-[auto_1fr_auto] items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm outline-none transition-colors hover:bg-muted/80",
+                                  isActive && "bg-muted font-medium"
+                                )}
+                              >
+                                <NotebookPen className="h-4 w-4 shrink-0 text-muted-foreground" />
+                                <p className="min-w-0 truncate font-medium m-0 text-sm">
+                                  {note.title || "New Lab Note"}
+                                </p>
+                                <DropdownMenu>
+                                  <DropdownMenuTrigger asChild>
+                                    <Button
+                                      variant="ghost"
+                                      size="icon"
+                                      className="size-7 shrink-0 opacity-70 hover:opacity-100"
+                                      onClick={(e) => e.stopPropagation()}
+                                      aria-label="Note options"
+                                    >
+                                      <MoreVertical className="h-3.5 w-3.5" />
+                                    </Button>
+                                  </DropdownMenuTrigger>
+                                  <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
+                                    <DropdownMenuItem onClick={(e) => { openRenameNote(e, note); setNotebookPanelOpen(false); }}>
+                                      <Pencil className="mr-2 h-4 w-4" />
+                                      Rename
+                                    </DropdownMenuItem>
+                                    <DropdownMenuSeparator />
+                                    <DropdownMenuItem
+                                      className="text-destructive focus:text-destructive"
+                                      onClick={(e) => handleDeleteNote(e, note)}
+                                    >
+                                      <Trash2 className="mr-2 h-4 w-4" />
+                                      Delete note
+                                    </DropdownMenuItem>
+                                  </DropdownMenuContent>
+                                </DropdownMenu>
+                              </div>
+                            </li>
+                          );
+                        })}
+                      </ul>
+                    ) : (
+                      <div className="flex flex-col items-center justify-center gap-2 px-2 py-6">
+                        <p className="text-center text-xs text-muted-foreground w-3/4">Create your first lab notebook by clicking "+" button</p>
+                        <Button
+                          onClick={() => {
+                            setNotebookPanelOpen(false);
+                            handleNewNote();
+                          }}
+                          variant="outline"
+                          size="sm"
+                          className="text-xs"
+                          disabled={isCreatingNew}
+                        >
+                          {isCreatingNew ? (
+                            <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
+                          ) : (
+                            <Plus className="mr-2 h-3.5 w-3.5" />
+                          )}
+                          New note
+                        </Button>
+                      </div>
+                    )}
+                  </div>
+                </SheetContent>
+              </Sheet>
+            )}
 
             {/* Editor area - header + content */}
             <div className="flex flex-1 min-w-0 min-h-0 flex-col py-4 gap-4 relative z-0">

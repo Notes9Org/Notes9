@@ -164,17 +164,19 @@ export function DataFilesTab({ experimentId }: { experimentId: string }) {
   return (
     <Card>
       <CardHeader>
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <CardTitle className="text-foreground">Data Files</CardTitle>
             <CardDescription>
               Uploaded experimental data and results
             </CardDescription>
           </div>
-          <UploadFileDialog 
-            experimentId={experimentId} 
-            onUploadComplete={fetchFiles}
-          />
+          <div className="w-full sm:w-auto">
+            <UploadFileDialog 
+              experimentId={experimentId} 
+              onUploadComplete={fetchFiles}
+            />
+          </div>
         </div>
       </CardHeader>
       <CardContent>

@@ -76,25 +76,25 @@ export default async function SampleDetailPage({
   }
 
   return (
-      <div className="space-y-6">
-        {/* Header */}
-        <div className="flex items-start justify-between">
-          <div className="flex items-start gap-4">
-            <Button variant="ghost" size="icon" asChild>
+      <div className="space-y-4 md:space-y-6">
+        {/* Header: stacked on mobile, row on desktop */}
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
+          <div className="flex items-start gap-3 min-w-0">
+            <Button variant="ghost" size="icon" asChild className="shrink-0">
               <Link href="/samples">
                 <ArrowLeft className="h-4 w-4" />
               </Link>
             </Button>
-            <div>
-              <div className="flex items-center gap-2 mb-1">
-                <h1 className="text-3xl font-bold tracking-tight text-foreground">
+            <div className="min-w-0 space-y-1">
+              <div className="flex flex-wrap items-center gap-2">
+                <h1 className="text-2xl font-bold tracking-tight text-foreground md:text-3xl">
                   {sample.sample_code}
                 </h1>
                 <Badge variant={getStatusColor(sample.status)}>
                   {sample.status}
                 </Badge>
               </div>
-              <p className="text-muted-foreground">
+              <p className="text-sm text-muted-foreground">
                 {sample.sample_type}
                 {sample.experiment && (
                   <>
@@ -114,7 +114,7 @@ export default async function SampleDetailPage({
         </div>
 
         {/* Quick Info Cards */}
-        <div className="grid gap-3 md:grid-cols-4">
+        <div className="grid gap-3 grid-cols-1 sm:grid-cols-2 md:grid-cols-4">
           <Card className="py-2">
             <CardHeader className="pb-1 pt-2 px-4">
               <CardTitle className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
@@ -204,7 +204,7 @@ export default async function SampleDetailPage({
 
                 <Separator />
 
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                   <div>
                     <h3 className="text-sm font-medium text-muted-foreground mb-1">Sample Code</h3>
                     <p className="text-sm text-foreground font-mono">{sample.sample_code}</p>
@@ -230,7 +230,7 @@ export default async function SampleDetailPage({
 
                 <Separator />
 
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                   <div>
                     <h3 className="text-sm font-medium text-muted-foreground mb-1">Created By</h3>
                     <p className="text-sm text-foreground">

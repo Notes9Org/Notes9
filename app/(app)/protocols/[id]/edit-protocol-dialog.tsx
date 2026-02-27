@@ -23,7 +23,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Switch } from "@/components/ui/switch"
-import { Edit } from "lucide-react"
+import { Pencil } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { TiptapEditor } from "@/components/text-editor/tiptap-editor"
 
@@ -98,9 +98,8 @@ export function EditProtocolDialog({ protocol }: { protocol: any }) {
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button variant="outline" size="sm">
-          <Edit className="h-4 w-4 mr-2" />
-          Edit
+        <Button variant="ghost" size="icon" className="h-8 w-8" aria-label="Edit protocol">
+          <Pencil className="h-4 w-4" />
         </Button>
       </DialogTrigger>
       <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">

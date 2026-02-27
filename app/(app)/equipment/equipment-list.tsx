@@ -13,7 +13,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
-import { Microscope, Calendar, MapPin, Eye, Grid3x3, List } from 'lucide-react'
+import { Microscope, MapPin, Eye, Grid3x3, List } from 'lucide-react'
 import Link from 'next/link'
 
 interface Equipment {
@@ -28,25 +28,33 @@ interface Equipment {
   next_maintenance_date: string | null
 }
 
-export function EquipmentList({ equipment }: { equipment: Equipment[] }) {
+interface EquipmentListProps {
+  equipment: Equipment[]
+  viewMode?: "grid" | "table"
+  setViewMode?: (mode: "grid" | "table") => void
+  hideToolbar?: boolean
+}
+
+export function EquipmentList({ equipment, viewMode: controlledView, setViewMode: setControlledView, hideToolbar }: EquipmentListProps) {
   const isMobile = useMediaQuery("(max-width: 768px)")
-  const [viewMode, setViewMode] = useState<"grid" | "table">("table")
+  const [internalView, setInternalView] = useState<"grid" | "table">("grid")
+  const viewMode = controlledView ?? internalView
+  const setViewMode = setControlledView ?? setInternalView
+  const effectiveViewMode = isMobile ? "grid" : viewMode
 
   useEffect(() => {
     if (isMobile) setViewMode("grid")
-  }, [isMobile])
+  }, [isMobile, setViewMode])
 
   if (!equipment || equipment.length === 0) {
     return null
   }
 
-  const effectiveViewMode = isMobile ? "grid" : viewMode
-
   return (
     <>
-      {/* View Toggle */}
-      <div className="flex justify-end">
-        <div className="inline-flex gap-1 rounded-lg border p-1">
+      {!hideToolbar && (
+        <div className="flex justify-end mb-4">
+          <div className="inline-flex gap-1 rounded-lg border p-1">
           <Button
             variant={effectiveViewMode === "grid" ? "default" : "ghost"}
             size="sm"
@@ -69,25 +77,25 @@ export function EquipmentList({ equipment }: { equipment: Equipment[] }) {
           </Button>
         </div>
       </div>
+      )}
 
-      {/* Grid View */}
       {effectiveViewMode === "grid" && (
-        <div className="grid gap-4 sm:grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
+        <div className="grid gap-4 grid-cols-[repeat(auto-fit,minmax(280px,1fr))]">
           {equipment.map((item) => (
-            <Card key={item.id} className="hover:border-primary transition-colors flex flex-col">
-              <CardHeader className="pb-3">
-                <div className="flex items-start justify-between gap-2">
-                  <div className="flex items-start gap-3 min-w-0 flex-1">
-                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-muted">
-                      <Microscope className="h-5 w-5" />
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <CardTitle className="text-base text-foreground truncate">
-                        {item.name}
-                      </CardTitle>
-                      <CardDescription className="truncate">{item.equipment_code}</CardDescription>
-                    </div>
+            <Card key={item.id} className="hover:border-primary transition-colors flex flex-col min-w-0 overflow-hidden">
+              <CardHeader className="pb-3 min-w-0">
+                <div className="flex items-start gap-3 min-w-0">
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10">
+                    <Microscope className="h-5 w-5 text-primary" />
                   </div>
+                  <div className="min-w-0 flex-1 space-y-1 overflow-hidden">
+                    <CardTitle className="text-base text-foreground leading-tight truncate">
+                      {item.name}
+                    </CardTitle>
+                    <CardDescription className="text-xs truncate">{item.equipment_code}</CardDescription>
+                  </div>
+                </div>
+                <div className="flex items-center justify-between pt-2 gap-2 min-w-0">
                   <Badge
                     variant={
                       item.status === "available"
@@ -98,23 +106,24 @@ export function EquipmentList({ equipment }: { equipment: Equipment[] }) {
                         ? "outline"
                         : "destructive"
                     }
-                    className="shrink-0"
+                    className="text-xs font-medium whitespace-nowrap shrink-0"
                   >
                     {item.status.replace("_", " ")}
                   </Badge>
+                  {item.next_maintenance_date && (
+                    <span className="text-xs text-muted-foreground whitespace-nowrap shrink-0 truncate max-w-24">
+                      {new Date(item.next_maintenance_date).toLocaleDateString()}
+                    </span>
+                  )}
                 </div>
               </CardHeader>
-              <CardContent className="space-y-3 flex-1 flex flex-col">
-                <div className="space-y-2 flex-1">
-                  <div className="text-sm">
-                    <p className="text-muted-foreground text-xs">Category</p>
-                    <p className="font-medium text-foreground truncate">{item.category || "N/A"}</p>
-                  </div>
+              <CardContent className="space-y-3 flex-1 flex flex-col pt-0 min-w-0">
+                <div className="space-y-2 flex-1 min-w-0">
+                  {item.category && (
+                    <p className="text-sm text-muted-foreground truncate">{item.category}</p>
+                  )}
                   {item.model && (
-                    <div className="text-sm">
-                      <p className="text-muted-foreground text-xs">Model</p>
-                      <p className="font-medium text-foreground truncate">{item.model}</p>
-                    </div>
+                    <p className="text-sm text-muted-foreground truncate">{item.model}</p>
                   )}
                   {item.location && (
                     <div className="flex items-center gap-1 text-sm text-muted-foreground">
@@ -122,19 +131,11 @@ export function EquipmentList({ equipment }: { equipment: Equipment[] }) {
                       <span className="truncate">{item.location}</span>
                     </div>
                   )}
-                  {item.next_maintenance_date && (
-                    <div className="flex items-start gap-1 text-sm text-muted-foreground">
-                      <Calendar className="h-3 w-3 shrink-0 mt-0.5" />
-                      <span className="break-words">
-                        Next: {new Date(item.next_maintenance_date).toLocaleDateString()}
-                      </span>
-                    </div>
-                  )}
                 </div>
-                <Button variant="outline" size="sm" className="w-full" asChild>
+                <Button variant="outline" size="sm" className="w-full mt-auto shrink-0" asChild>
                   <Link href={`/equipment/${item.id}`}>
                     <Eye className="h-4 w-4 mr-2" />
-                    View Details
+                    <span className="truncate">View Details</span>
                   </Link>
                 </Button>
               </CardContent>
@@ -170,7 +171,7 @@ export function EquipmentList({ equipment }: { equipment: Equipment[] }) {
                     <TableRow key={item.id}>
                       <TableCell className="font-medium text-foreground">
                         <div className="flex items-center gap-2">
-                          <Microscope className="h-4 w-4 text-muted-foreground shrink-0" />
+                          <Microscope className="h-4 w-4 text-primary shrink-0" />
                           <span className="truncate">{item.name}</span>
                         </div>
                       </TableCell>
