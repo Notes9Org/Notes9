@@ -1,12 +1,13 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
+import { useMediaQuery } from "@/hooks/use-media-query"
 import Link from "next/link"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Users, TrendingUp, Eye, Grid3x3, List, Plus } from 'lucide-react'
+import { Users, Eye, Grid3x3, List, Plus, FlaskConical } from 'lucide-react'
 
 // Format date consistently to avoid hydration mismatch between server/client locales
 const formatDate = (dateStr: string): string => {
@@ -34,7 +35,13 @@ interface Project {
 
 /** Client wrapper: single-line header (description + Grid/Table toggle + New button) + list */
 export function ProjectsPageContent({ projects }: { projects: Project[] }) {
+  const isMobile = useMediaQuery("(max-width: 768px)")
   const [viewMode, setViewMode] = useState<"grid" | "table">("grid")
+
+  useEffect(() => {
+    if (isMobile) setViewMode("grid")
+  }, [isMobile])
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
@@ -53,10 +60,12 @@ export function ProjectsPageContent({ projects }: { projects: Project[] }) {
               Grid
             </Button>
             <Button
-              variant={viewMode === "table" ? "default" : "ghost"}
+              variant={isMobile ? "ghost" : viewMode === "table" ? "default" : "ghost"}
               size="sm"
-              onClick={() => setViewMode("table")}
+              onClick={() => !isMobile && setViewMode("table")}
               className="gap-2"
+              disabled={isMobile}
+              aria-disabled={isMobile}
             >
               <List className="h-4 w-4" />
               Table
@@ -82,9 +91,11 @@ interface ProjectListProps {
 }
 
 export function ProjectList({ projects, viewMode: controlledView, setViewMode: setControlledView, hideToolbar }: ProjectListProps) {
+  const isMobile = useMediaQuery("(max-width: 768px)")
   const [internalView, setInternalView] = useState<"grid" | "table">("grid")
   const viewMode = controlledView ?? internalView
   const setViewMode = setControlledView ?? setInternalView
+  const effectiveViewMode = isMobile ? "grid" : viewMode
 
   // Helper function to get better status display
   const getStatusDisplay = (status: string) => {
@@ -121,7 +132,7 @@ export function ProjectList({ projects, viewMode: controlledView, setViewMode: s
         <div className="flex justify-end mb-4">
           <div className="inline-flex gap-1 rounded-lg border p-1">
             <Button
-              variant={viewMode === "grid" ? "default" : "ghost"}
+              variant={effectiveViewMode === "grid" ? "default" : "ghost"}
               size="sm"
               onClick={() => setViewMode("grid")}
               className="gap-2"
@@ -130,10 +141,12 @@ export function ProjectList({ projects, viewMode: controlledView, setViewMode: s
               Grid
             </Button>
             <Button
-              variant={viewMode === "table" ? "default" : "ghost"}
+              variant={isMobile ? "ghost" : effectiveViewMode === "table" ? "default" : "ghost"}
               size="sm"
-              onClick={() => setViewMode("table")}
+              onClick={() => !isMobile && setViewMode("table")}
               className="gap-2"
+              disabled={isMobile}
+              aria-disabled={isMobile}
             >
               <List className="h-4 w-4" />
               Table
@@ -143,7 +156,7 @@ export function ProjectList({ projects, viewMode: controlledView, setViewMode: s
       )}
 
       {/* Grid View - Use auto-fill with fixed card sizes to prevent expansion */}
-      {viewMode === "grid" && (
+      {effectiveViewMode === "grid" && (
         <div className="grid gap-4 grid-cols-[repeat(auto-fit,minmax(280px,1fr))]">
           {projects.map((project) => (
             <Card key={project.id} className="hover:border-primary transition-colors flex flex-col min-w-0 overflow-hidden">
@@ -153,8 +166,8 @@ export function ProjectList({ projects, viewMode: controlledView, setViewMode: s
                     display: '-webkit-box',
                     WebkitLineClamp: 2,
                     WebkitBoxOrient: 'vertical',
-                    wordBreak: 'break-all',
-                    overflowWrap: 'break-word'
+                    wordBreak: 'normal',
+                    overflowWrap: 'normal'
                   }}>
                     {project.name}
                   </CardTitle>
@@ -163,8 +176,8 @@ export function ProjectList({ projects, viewMode: controlledView, setViewMode: s
                       display: '-webkit-box',
                       WebkitLineClamp: 2,
                       WebkitBoxOrient: 'vertical',
-                      wordBreak: 'break-all',
-                      overflowWrap: 'break-word'
+                      wordBreak: 'normal',
+                      overflowWrap: 'normal'
                     }}>
                       {project.description}
                     </CardDescription>
@@ -215,7 +228,7 @@ export function ProjectList({ projects, viewMode: controlledView, setViewMode: s
                       </span>
                     </div>
                     <div className="flex items-center gap-1 text-muted-foreground min-w-0 overflow-hidden">
-                      <TrendingUp className="h-4 w-4 shrink-0" />
+                      <FlaskConical className="h-4 w-4 shrink-0" />
                       <span className="truncate text-ellipsis overflow-hidden">{project.no_of_experiments} experiments</span>
                     </div>
                   </div>
@@ -241,7 +254,7 @@ export function ProjectList({ projects, viewMode: controlledView, setViewMode: s
       )}
 
       {/* Table View */}
-      {viewMode === "table" && (
+      {effectiveViewMode === "table" && (
         <Card>
           <CardHeader>
             <CardTitle className="text-foreground">All Projects</CardTitle>
@@ -313,7 +326,7 @@ export function ProjectList({ projects, viewMode: controlledView, setViewMode: s
                       </TableCell>
                       <TableCell>
                         <div className="flex items-center gap-1">
-                          <TrendingUp className="h-4 w-4 text-muted-foreground" />
+                          <FlaskConical className="h-4 w-4 text-muted-foreground" />
                           <span>{project.no_of_experiments}</span>
                         </div>
                       </TableCell>

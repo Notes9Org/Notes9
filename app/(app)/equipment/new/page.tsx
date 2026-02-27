@@ -73,16 +73,16 @@ export default function NewEquipmentPage() {
   }
 
   return (
-      <div className="max-w-3xl mx-auto space-y-6">
-        <div className="flex items-center gap-4">
-          <Button variant="ghost" size="icon" asChild>
+      <div className="max-w-3xl mx-auto space-y-4 md:space-y-6">
+        <div className="flex items-center gap-3">
+          <Button variant="ghost" size="icon" asChild className="shrink-0">
             <Link href="/equipment">
               <ArrowLeft className="h-4 w-4" />
             </Link>
           </Button>
-          <div>
-            <h1 className="text-3xl font-bold tracking-tight text-foreground">Add Equipment</h1>
-            <p className="text-muted-foreground mt-1">
+          <div className="min-w-0">
+            <h1 className="text-2xl font-bold tracking-tight text-foreground md:text-3xl">Add Equipment</h1>
+            <p className="text-muted-foreground mt-1 text-sm">
               Register new laboratory equipment
             </p>
           </div>
@@ -277,7 +277,7 @@ export default function NewEquipmentPage() {
               )}
 
               <div className="flex gap-3">
-                <Button type="submit" disabled={isLoading}>
+                <Button type="submit" disabled={isLoading} className="w-full sm:w-auto">
                   {isLoading ? "Adding..." : "Add Equipment"}
                 </Button>
                 <Button type="button" variant="outline" asChild>

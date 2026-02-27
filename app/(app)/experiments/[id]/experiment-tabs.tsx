@@ -85,7 +85,7 @@ export function ExperimentTabs({ experiment, initialTab }: ExperimentTabsProps) 
           </CardContent>
         </Card>
 
-        <div className="grid gap-4 md:grid-cols-2">
+        <div className="grid gap-4 grid-cols-1 md:grid-cols-2">
           <Card>
             <CardHeader>
               <CardTitle className="text-foreground">Equipment Reserved</CardTitle>
@@ -126,17 +126,19 @@ export function ExperimentTabs({ experiment, initialTab }: ExperimentTabsProps) 
       </TabsContent>
 
       <TabsContent value="protocol" id="tab-content-protocol" className="space-y-4">
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h3 className="text-lg font-semibold">Linked Protocols</h3>
+            <h3 className="text-base font-semibold md:text-lg">Linked Protocols</h3>
             <p className="text-sm text-muted-foreground">
               Protocols provide detailed procedures and methods for this experiment
             </p>
           </div>
-          <LinkProtocolDialog
-            experimentId={experiment.id}
-            linkedProtocolIds={experiment.protocols.map((p: any) => p.protocol.id)}
-          />
+          <div className="w-full sm:w-auto">
+            <LinkProtocolDialog
+              experimentId={experiment.id}
+              linkedProtocolIds={experiment.protocols.map((p: any) => p.protocol.id)}
+            />
+          </div>
         </div>
 
         {experiment.protocols && experiment.protocols.length > 0 ? (

@@ -141,15 +141,15 @@ export default function NewSamplePage() {
   }
 
   return (
-      <div className="space-y-6">
+      <div className="space-y-4 md:space-y-6">
         {/* Header */}
-        <div className="flex items-center gap-4">
-          <Button variant="ghost" size="icon" onClick={handleBack}>
+        <div className="flex items-center gap-3">
+          <Button variant="ghost" size="icon" onClick={handleBack} className="shrink-0">
             <ArrowLeft className="h-4 w-4" />
           </Button>
-          <div>
-            <h1 className="text-3xl font-bold tracking-tight">Add New Sample</h1>
-            <p className="text-muted-foreground mt-1">
+          <div className="min-w-0">
+            <h1 className="text-2xl font-bold tracking-tight md:text-3xl">Add New Sample</h1>
+            <p className="text-muted-foreground mt-1 text-sm">
               Register a new sample in the inventory
             </p>
           </div>
@@ -390,7 +390,7 @@ export default function NewSamplePage() {
 
               {/* Actions */}
               <div className="flex gap-3">
-                <Button type="submit" disabled={isLoading}>
+                <Button type="submit" disabled={isLoading} className="w-full sm:w-auto">
                   {isLoading ? "Creating..." : "Create Sample"}
                 </Button>
               </div>
