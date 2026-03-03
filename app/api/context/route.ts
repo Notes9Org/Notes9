@@ -124,10 +124,10 @@ export async function GET(req: NextRequest) {
                     { status: 400 }
                 );
         }
-    } catch (error) {
+    } catch (error: any) {
         console.error('Error fetching context:', error);
         return NextResponse.json(
-            { error: 'Failed to fetch context' },
+            { error: error.message || 'Failed to fetch context' },
             { status: 500 }
         );
     }

@@ -18,10 +18,14 @@ export function useAutoSave({
   const timeoutRef = useRef<NodeJS.Timeout | undefined>(undefined)
   const paramsRef = useRef<[string, ...any[]]>([''])
   const isSavingRef = useRef<boolean>(false)
+  const hasPendingSaveRef = useRef<boolean>(false)
 
   const save = useCallback(async (content: string, ...args: any[]) => {
+    paramsRef.current = [content, ...args]
+
     if (isSavingRef.current) {
-      // If already saving, schedule another save after this one completes
+      // Save currently in-flight. Keep latest params and flush after current save finishes.
+      hasPendingSaveRef.current = true
       return
     }
 
@@ -42,6 +46,15 @@ export function useAutoSave({
       }, 5000)
     } finally {
       isSavingRef.current = false
+
+      // Flush one more save cycle with the latest queued params, if any.
+      if (hasPendingSaveRef.current) {
+        hasPendingSaveRef.current = false
+        if (paramsRef.current) {
+          // Intentionally do not await to avoid deep recursion in finally chain.
+          void save(...paramsRef.current)
+        }
+      }
     }
   }, [onSave])
 
@@ -87,4 +100,3 @@ export function useAutoSave({
     forceSave,
   }
 }
-
