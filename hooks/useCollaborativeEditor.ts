@@ -182,8 +182,7 @@ export function useCollaborativeEditor({
       sendJson({
         type: "awareness",
         payload: {
-          // Kept for server-side payload validation.
-          update: [doc.clientID],
+          clientId: doc.clientID,
           states: [[doc.clientID, localState]],
         },
         timestamp: Date.now(),
@@ -292,9 +291,20 @@ export function useCollaborativeEditor({
         }
 
         if (message.type === "permission_revoked") {
+          stopped = true;
+          authenticated = false;
+
+          if (reconnectTimerRef.current) {
+            clearTimeout(reconnectTimerRef.current);
+            reconnectTimerRef.current = null;
+          }
+
           setStatus(DISCONNECTED);
           setIsSynced(false);
-          socket.close();
+          if (wsRef.current === socket) {
+            wsRef.current = null;
+          }
+          socket.close(4401, "Permission revoked");
           return;
         }
 

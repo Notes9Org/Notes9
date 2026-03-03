@@ -45,6 +45,8 @@ interface ConnectionInfo {
   name: string;
   permissionLevel: PermissionLevel;
   connectedAt: Date;
+  awarenessClientId?: number;
+  awarenessState?: Record<string, unknown>;
 }
 
 /**
@@ -163,7 +165,14 @@ export function disconnectFromDocument(socket: WebSocket): void {
     console.log(`[Document] User ${connInfo.userId} disconnected from ${documentId}`);
   }
   
+  const hadAwarenessState =
+    typeof connInfo?.awarenessClientId === 'number' && !!connInfo?.awarenessState;
+
   doc.connections.delete(socket);
+
+  if (hadAwarenessState) {
+    broadcastAwarenessSnapshot(doc);
+  }
   
   // If no more connections, schedule document unload
   if (doc.connections.size === 0) {
@@ -217,17 +226,60 @@ export function getAwarenessState(doc: ManagedDocument): Uint8Array {
  */
 export function updateAwareness(
   doc: ManagedDocument,
-  update: Uint8Array,
+  payload: {
+    update?: Uint8Array;
+    clientId?: number;
+    states?: Array<[number, Record<string, unknown>]>;
+  },
   origin: WebSocket
 ): void {
-  // Verify socket is connected to this document
-  if (!doc.connections.has(origin)) {
+  const connInfo = doc.connections.get(origin);
+  if (!connInfo) {
     throw new Error('Socket not registered with document');
   }
-  
-  // Apply awareness update for this client.
-  // Awareness update events are broadcast via doc.awareness.on('update').
-  awarenessProtocol.applyAwarenessUpdate(doc.awareness, update, origin);
+
+  if (payload.update && payload.update.length > 0) {
+    // Backward-compatible path for binary protocol updates.
+    awarenessProtocol.applyAwarenessUpdate(doc.awareness, payload.update, origin);
+    return;
+  }
+
+  if (!payload.states || payload.states.length === 0) {
+    return;
+  }
+
+  let parsedState: [number, Record<string, unknown>] | null = null;
+  for (const item of payload.states) {
+    if (!Array.isArray(item) || item.length !== 2) {
+      continue;
+    }
+
+    const [candidateClientId, candidateState] = item;
+    if (
+      typeof candidateClientId !== 'number' ||
+      !candidateState ||
+      typeof candidateState !== 'object'
+    ) {
+      continue;
+    }
+
+    parsedState = [candidateClientId, candidateState as Record<string, unknown>];
+    break;
+  }
+
+  if (!parsedState) {
+    return;
+  }
+
+  const [clientId, state] = parsedState;
+
+  if (typeof payload.clientId === 'number' && payload.clientId !== clientId) {
+    return;
+  }
+
+  connInfo.awarenessClientId = clientId;
+  connInfo.awarenessState = state;
+  broadcastAwarenessSnapshot(doc);
 }
 
 /**
@@ -235,7 +287,8 @@ export function updateAwareness(
  */
 function handlePermissionRevoked(doc: ManagedDocument, userId: string): void {
   console.log(`[Document] Permission revoked for user ${userId} on ${doc.id}`);
-  
+  let removedAwareness = false;
+
   // Find and disconnect all sockets for this user
   for (const [socket, connInfo] of doc.connections.entries()) {
     if (connInfo.userId === userId) {
@@ -252,8 +305,15 @@ function handlePermissionRevoked(doc: ManagedDocument, userId: string): void {
       
       // Close socket
       socket.close(4401, 'Permission revoked');
+      if (typeof connInfo.awarenessClientId === 'number' && connInfo.awarenessState) {
+        removedAwareness = true;
+      }
       doc.connections.delete(socket);
     }
+  }
+
+  if (removedAwareness) {
+    broadcastAwarenessSnapshot(doc);
   }
 }
 
@@ -283,18 +343,51 @@ function broadcastUpdate(
  */
 function broadcastAwareness(doc: ManagedDocument, clientIds: number[]): void {
   const awarenessUpdate = awarenessProtocol.encodeAwarenessUpdate(doc.awareness, clientIds);
-  const awarenessStates = Array.from(doc.awareness.getStates().entries());
   const message = JSON.stringify({
     type: 'awareness_update',
     payload: {
       update: Array.from(awarenessUpdate),
-      states: awarenessStates,
+      states: getConnectionAwarenessStates(doc),
     },
     timestamp: Date.now(),
   });
   
   for (const [socket] of doc.connections.entries()) {
     if (socket.readyState === 1) { // WebSocket.OPEN
+      socket.send(message);
+    }
+  }
+}
+
+function getConnectionAwarenessStates(
+  doc: ManagedDocument
+): Array<[number, Record<string, unknown>]> {
+  const states: Array<[number, Record<string, unknown>]> = [];
+
+  for (const [, connInfo] of doc.connections.entries()) {
+    if (
+      typeof connInfo.awarenessClientId === 'number' &&
+      connInfo.awarenessState &&
+      typeof connInfo.awarenessState === 'object'
+    ) {
+      states.push([connInfo.awarenessClientId, connInfo.awarenessState]);
+    }
+  }
+
+  return states;
+}
+
+function broadcastAwarenessSnapshot(doc: ManagedDocument): void {
+  const message = JSON.stringify({
+    type: 'awareness_update',
+    payload: {
+      states: getConnectionAwarenessStates(doc),
+    },
+    timestamp: Date.now(),
+  });
+
+  for (const [socket] of doc.connections.entries()) {
+    if (socket.readyState === 1) {
       socket.send(message);
     }
   }

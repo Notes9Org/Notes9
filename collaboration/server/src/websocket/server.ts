@@ -118,7 +118,14 @@ async function handleMessage(
       break;
       
     case 'awareness':
-      await handleAwareness(socket, message.payload as { update: number[] });
+      await handleAwareness(
+        socket,
+        message.payload as {
+          update?: number[];
+          clientId?: number;
+          states?: Array<[number, Record<string, unknown>]>;
+        }
+      );
       break;
       
     default:
@@ -238,20 +245,37 @@ async function handleSync(
  */
 async function handleAwareness(
   socket: AuthenticatedSocket,
-  payload: { update: number[] }
+  payload: {
+    update?: number[];
+    clientId?: number;
+    states?: Array<[number, Record<string, unknown>]>;
+  }
 ): Promise<void> {
   if (!socket.documentId) {
     return;
   }
-  
-  if (!payload?.update || !Array.isArray(payload.update)) {
+
+  const hasBinaryUpdate = Array.isArray(payload?.update);
+  const hasStateEntries = Array.isArray(payload?.states);
+  if (!hasBinaryUpdate && !hasStateEntries) {
     return;
   }
-  
+
   try {
     const doc = await getDocument(socket.documentId);
-    const update = new Uint8Array(payload.update);
-    updateAwareness(doc, update, socket);
+    const binaryUpdate = hasBinaryUpdate
+      ? new Uint8Array(payload.update as number[])
+      : undefined;
+
+    updateAwareness(
+      doc,
+      {
+        update: binaryUpdate,
+        clientId: payload.clientId,
+        states: hasStateEntries ? payload.states : undefined,
+      },
+      socket
+    );
   } catch (err) {
     console.error('[WebSocket] Error handling awareness:', err);
   }
