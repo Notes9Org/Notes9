@@ -43,9 +43,20 @@ export async function POST(
     
     // Parse request body
     const body = await request.json().catch(() => null)
-    const { labNoteId, email, permissionLevel = 'viewer' } = body
+    if (!body || typeof body !== "object" || Array.isArray(body)) {
+      return NextResponse.json(
+        { error: "Invalid request body" },
+        { status: 400 }
+      )
+    }
+
+    const { labNoteId, email, permissionLevel = 'viewer' } = body as {
+      labNoteId?: string
+      email?: string
+      permissionLevel?: PermissionLevel
+    }
     
-    if (!labNoteId || !email) {
+    if (typeof labNoteId !== "string" || typeof email !== "string" || !labNoteId.trim() || !email.trim()) {
       return NextResponse.json(
         { error: "Lab note ID and email are required" },
         { status: 400 }

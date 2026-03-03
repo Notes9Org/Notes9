@@ -207,12 +207,8 @@ BEGIN
     RETURN jsonb_build_object('success', false, 'error', 'Invalid or expired invitation');
   END IF;
   
-  -- Check if the user's email matches the invitation email
-  IF NOT EXISTS (
-    SELECT 1 FROM profiles 
-    WHERE id = v_user_id 
-    AND email = v_invitation.email
-  ) THEN
+  -- Check if the caller's auth.users email matches the invitation email
+  IF LOWER(COALESCE(get_current_user_email(), '')) <> LOWER(v_invitation.email) THEN
     RETURN jsonb_build_object('success', false, 'error', 'Invitation email does not match your account');
   END IF;
   

@@ -10,8 +10,9 @@
  * 5. Server monitors for permission revocations
  */
 
-import { WebSocketServer, WebSocket } from 'ws';
+import { WebSocketServer, type WebSocket } from 'ws';
 import type { Server } from 'http';
+import type { User } from '@supabase/supabase-js';
 import { validateToken, getUserInfo } from '../auth/jwt.js';
 import { checkPermission } from '../permissions/store.js';
 import { 
@@ -20,15 +21,12 @@ import {
   applyUpdate, 
   updateAwareness,
   getDocumentState,
-  getDocument,
-  ManagedDocument 
+  getDocument
 } from '../documents/manager.js';
-import type { 
-  WebSocketMessage,
-  AuthMessagePayload,
-  CollabError,
+import {
   CollabErrorCode,
-  User
+  type WebSocketMessage,
+  type AuthMessagePayload
 } from '../shared/types/index.js';
 
 interface AuthenticatedSocket extends WebSocket {
@@ -71,7 +69,7 @@ export function createWebSocketServer(httpServer: Server): WebSocketServer {
         await handleMessage(socket, message, authTimeout);
       } catch (err) {
         console.error('[WebSocket] Error handling message:', err);
-        sendError(socket, 'SERVER_ERROR', 'Failed to process message');
+        sendError(socket, CollabErrorCode.SERVER_ERROR, 'Failed to process message');
       }
     });
     
@@ -108,7 +106,7 @@ async function handleMessage(
   
   // All other messages require authentication
   if (!socket.isAuthenticated) {
-    sendError(socket, 'UNAUTHORIZED', 'Not authenticated');
+    sendError(socket, CollabErrorCode.UNAUTHORIZED, 'Not authenticated');
     return;
   }
   
@@ -129,7 +127,7 @@ async function handleMessage(
       break;
       
     default:
-      sendError(socket, 'SERVER_ERROR', `Unknown message type: ${message.type}`);
+      sendError(socket, CollabErrorCode.SERVER_ERROR, `Unknown message type: ${message.type}`);
   }
 }
 
@@ -142,7 +140,7 @@ async function handleAuth(
   authTimeout: NodeJS.Timeout
 ): Promise<void> {
   if (!payload?.token || !payload?.documentId) {
-    sendError(socket, 'INVALID_TOKEN', 'Missing token or documentId');
+    sendError(socket, CollabErrorCode.INVALID_TOKEN, 'Missing token or documentId');
     socket.close(4401, 'Invalid auth payload');
     return;
   }
@@ -150,7 +148,7 @@ async function handleAuth(
   // Validate JWT
   const validation = await validateToken(payload.token);
   if (!validation.valid || !validation.user) {
-    sendError(socket, validation.error?.code || 'INVALID_TOKEN', 
+    sendError(socket, validation.error?.code || CollabErrorCode.INVALID_TOKEN, 
               validation.error?.message || 'Invalid token');
     socket.close(4401, 'Authentication failed');
     return;
@@ -161,7 +159,7 @@ async function handleAuth(
   // Check rate limiting (max connections per user)
   const userConnections = connectionsByUser.get(user.id) || new Set();
   if (userConnections.size >= 10) { // Max 10 concurrent connections
-    sendError(socket, 'RATE_LIMITED', 'Too many concurrent connections');
+    sendError(socket, CollabErrorCode.RATE_LIMITED, 'Too many concurrent connections');
     socket.close(4408, 'Rate limited');
     return;
   }
@@ -169,7 +167,7 @@ async function handleAuth(
   // Check permission to access document
   const permissionCheck = await checkPermission(payload.documentId, user.id);
   if (!permissionCheck.canRead) {
-    sendError(socket, 'FORBIDDEN', 'Access denied to document');
+    sendError(socket, CollabErrorCode.FORBIDDEN, 'Access denied to document');
     socket.close(4403, 'Access denied');
     return;
   }
@@ -204,7 +202,7 @@ async function handleAuth(
     console.log(`[WebSocket] User ${user.id} authenticated for document ${payload.documentId}`);
   } catch (err) {
     console.error('[WebSocket] Error connecting to document:', err);
-    sendError(socket, 'SERVER_ERROR', 'Failed to load document');
+    sendError(socket, CollabErrorCode.SERVER_ERROR, 'Failed to load document');
     socket.close(4401, 'Document load failed');
   }
 }
@@ -217,12 +215,12 @@ async function handleSync(
   payload: { update: number[] }
 ): Promise<void> {
   if (!socket.documentId || !socket.user) {
-    sendError(socket, 'SERVER_ERROR', 'Invalid connection state');
+    sendError(socket, CollabErrorCode.SERVER_ERROR, 'Invalid connection state');
     return;
   }
   
   if (!payload?.update || !Array.isArray(payload.update)) {
-    sendError(socket, 'SERVER_ERROR', 'Invalid sync payload');
+    sendError(socket, CollabErrorCode.SERVER_ERROR, 'Invalid sync payload');
     return;
   }
   
@@ -232,10 +230,10 @@ async function handleSync(
     applyUpdate(doc, update, socket);
   } catch (err) {
     if ((err as Error).message?.includes('Permission')) {
-      sendError(socket, 'FORBIDDEN', (err as Error).message);
+      sendError(socket, CollabErrorCode.FORBIDDEN, (err as Error).message);
     } else {
       console.error('[WebSocket] Error applying update:', err);
-      sendError(socket, 'SERVER_ERROR', 'Failed to apply update');
+      sendError(socket, CollabErrorCode.SERVER_ERROR, 'Failed to apply update');
     }
   }
 }
@@ -366,8 +364,8 @@ function sendError(
  * Broadcast message to all connected clients on a document
  */
 export function broadcastToDocument(
-  documentId: string,
-  message: WebSocketMessage
+  _documentId: string,
+  _message: WebSocketMessage
 ): void {
   // This would be called by document manager for awareness updates
 }

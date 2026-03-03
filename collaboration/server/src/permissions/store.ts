@@ -13,8 +13,7 @@ import { serverConfig } from '../config.js';
 import type { 
   PermissionLevel, 
   PermissionCheck, 
-  DocumentAccess,
-  DocumentSession 
+  DocumentAccess
 } from '../shared/types/index.js';
 import { canRead, canWrite, canManage } from '../shared/types/index.js';
 
@@ -207,7 +206,7 @@ export function onPermissionRevoked(
 function subscribeToPermissionChanges(): void {
   if (!supabaseAdmin) return;
 
-  const channel = supabaseAdmin
+  supabaseAdmin
     .channel('document_access_changes')
     .on(
       'postgres_changes',

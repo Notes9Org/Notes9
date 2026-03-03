@@ -16,9 +16,11 @@ export function useAutoSave({
   const [status, setStatus] = useState<SaveStatus>('saved')
   const [lastSaved, setLastSaved] = useState<Date | null>(null)
   const timeoutRef = useRef<NodeJS.Timeout | undefined>(undefined)
+  const retryTimeoutRef = useRef<NodeJS.Timeout | undefined>(undefined)
   const paramsRef = useRef<[string, ...any[]]>([''])
   const isSavingRef = useRef<boolean>(false)
   const hasPendingSaveRef = useRef<boolean>(false)
+  const isMountedRef = useRef<boolean>(true)
 
   const save = useCallback(async (content: string, ...args: any[]) => {
     paramsRef.current = [content, ...args]
@@ -31,17 +33,26 @@ export function useAutoSave({
 
     try {
       isSavingRef.current = true
-      setStatus('saving')
+      if (isMountedRef.current) {
+        setStatus('saving')
+      }
       await onSave(content, ...args)
-      setStatus('saved')
-      setLastSaved(new Date())
+      if (isMountedRef.current) {
+        setStatus('saved')
+        setLastSaved(new Date())
+      }
     } catch (error) {
       console.error('Auto-save error:', error)
-      setStatus('error')
+      if (isMountedRef.current) {
+        setStatus('error')
+      }
       // Retry after 5 seconds on error
-      setTimeout(() => {
-        if (paramsRef.current) {
-          save(...paramsRef.current)
+      if (retryTimeoutRef.current) {
+        clearTimeout(retryTimeoutRef.current)
+      }
+      retryTimeoutRef.current = setTimeout(() => {
+        if (isMountedRef.current && paramsRef.current) {
+          void save(...paramsRef.current)
         }
       }, 5000)
     } finally {
@@ -87,8 +98,12 @@ export function useAutoSave({
   // Cleanup on unmount
   useEffect(() => {
     return () => {
+      isMountedRef.current = false
       if (timeoutRef.current) {
         clearTimeout(timeoutRef.current)
+      }
+      if (retryTimeoutRef.current) {
+        clearTimeout(retryTimeoutRef.current)
       }
     }
   }, [])

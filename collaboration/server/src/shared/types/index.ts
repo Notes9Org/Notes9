@@ -52,6 +52,18 @@ export interface YjsState {
 }
 
 /**
+ * Document metadata row from the documents table
+ */
+export interface DocumentMetadata {
+  id: string;
+  title?: string | null;
+  created_by?: string | null;
+  created_at?: string;
+  updated_at?: string;
+  [key: string]: unknown;
+}
+
+/**
  * User awareness state (cursor, selection, etc.)
  */
 export interface AwarenessState {

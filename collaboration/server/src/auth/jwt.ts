@@ -2,12 +2,12 @@
  * JWT Authentication
  * 
  * Validates Supabase JWT tokens on WebSocket connections.
- * Uses Supabase service role to verify tokens without making API calls.
+ * Uses Supabase Auth API with a bearer token to validate users.
  */
 
-import { createClient, SupabaseClient, User } from '@supabase/supabase-js';
+import { createClient, SupabaseClient, type User } from '@supabase/supabase-js';
 import { serverConfig } from '../config.js';
-import type { CollabErrorCode } from '../shared/types/index.js';
+import { CollabErrorCode } from '../shared/types/index.js';
 
 // Service role client for token validation
 let supabaseAdmin: SupabaseClient | null = null;
@@ -38,15 +38,15 @@ export interface TokenValidationResult {
 /**
  * Validate a Supabase JWT token
  * 
- * This uses the service role to verify the token locally
- * without making a network request to Supabase Auth API.
+ * This creates a temporary client with the provided token and
+ * validates it via Supabase Auth (`auth.getUser()`), which is a network call.
  */
 export async function validateToken(token: string): Promise<TokenValidationResult> {
   if (!supabaseAdmin) {
     return {
       valid: false,
       error: {
-        code: 'SERVER_ERROR',
+        code: CollabErrorCode.SERVER_ERROR,
         message: 'Auth system not initialized',
       },
     };
@@ -56,7 +56,7 @@ export async function validateToken(token: string): Promise<TokenValidationResul
     return {
       valid: false,
       error: {
-        code: 'INVALID_TOKEN',
+        code: CollabErrorCode.INVALID_TOKEN,
         message: 'Token is missing or invalid',
       },
     };
@@ -88,7 +88,7 @@ export async function validateToken(token: string): Promise<TokenValidationResul
       return {
         valid: false,
         error: {
-          code: isExpired ? 'TOKEN_EXPIRED' : 'INVALID_TOKEN',
+          code: isExpired ? CollabErrorCode.TOKEN_EXPIRED : CollabErrorCode.INVALID_TOKEN,
           message: error?.message || 'Invalid token',
         },
       };
@@ -103,7 +103,7 @@ export async function validateToken(token: string): Promise<TokenValidationResul
     return {
       valid: false,
       error: {
-        code: 'SERVER_ERROR',
+        code: CollabErrorCode.SERVER_ERROR,
         message: 'Failed to validate token',
       },
     };

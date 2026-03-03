@@ -57,7 +57,7 @@ export async function loadYjsState(documentId: string): Promise<Uint8Array | nul
     const state = data.state;
     if (typeof state === 'string') {
       // Base64 encoded
-      return Uint8Array.from(atob(state), c => c.charCodeAt(0));
+      return new Uint8Array(Buffer.from(state, 'base64'));
     } else if (Array.isArray(state)) {
       // Byte array
       return new Uint8Array(state);
@@ -83,7 +83,7 @@ export async function saveYjsState(documentId: string, state: Uint8Array): Promi
 
   try {
     // Convert to base64 for storage
-    const base64State = btoa(String.fromCharCode(...state));
+    const base64State = Buffer.from(state).toString('base64');
 
     const { error } = await supabaseAdmin
       .from('yjs_states')

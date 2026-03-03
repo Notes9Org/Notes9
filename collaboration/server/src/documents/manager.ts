@@ -16,10 +16,9 @@ import { checkPermission, onPermissionRevoked, PermissionDeniedError } from '../
 import { loadYjsState, saveYjsState } from '../persistence/postgres.js';
 import { getUserInfo } from '../auth/jwt.js';
 import type { 
-  PermissionLevel, 
-  AwarenessState,
-  User 
+  PermissionLevel
 } from '../shared/types/index.js';
+import type { User } from '@supabase/supabase-js';
 import type { WebSocket } from 'ws';
 
 // Map of documentId -> ManagedDocument
@@ -107,7 +106,7 @@ async function loadDocument(documentId: string): Promise<ManagedDocument> {
   
   // Subscribe to permission revocations for this document
   doc.permissionUnsubscribe = onPermissionRevoked(documentId, (userId) => {
-    handlePermissionRevoked(doc, userId);
+    void handlePermissionRevoked(doc, userId);
   });
   
   return doc;
@@ -216,9 +215,11 @@ export function getDocumentState(doc: ManagedDocument): Uint8Array {
  * Get awareness state for syncing to client
  */
 export function getAwarenessState(doc: ManagedDocument): Uint8Array {
-  // Encode awareness update for all clients
-  const awarenessStates = Array.from(doc.awareness.getStates().entries());
-  return new Uint8Array(); // Awareness protocol handles this separately
+  const clientIds = Array.from(doc.awareness.getStates().keys());
+  if (clientIds.length === 0) {
+    return new Uint8Array();
+  }
+  return awarenessProtocol.encodeAwarenessUpdate(doc.awareness, clientIds);
 }
 
 /**
@@ -283,9 +284,34 @@ export function updateAwareness(
 }
 
 /**
- * Handle permission revocation - disconnect affected users
+ * Handle permission changes by re-checking access.
+ * Disconnect only when the user can no longer read the document.
  */
-function handlePermissionRevoked(doc: ManagedDocument, userId: string): void {
+async function handlePermissionRevoked(doc: ManagedDocument, userId: string): Promise<void> {
+  console.log(`[Document] Permission change detected for user ${userId} on ${doc.id}`);
+
+  try {
+    const permissionCheck = await checkPermission(doc.id, userId);
+    if (permissionCheck.canRead && permissionCheck.permissionLevel) {
+      let didUpdatePermission = false;
+      for (const [, connInfo] of doc.connections.entries()) {
+        if (connInfo.userId === userId && connInfo.permissionLevel !== permissionCheck.permissionLevel) {
+          connInfo.permissionLevel = permissionCheck.permissionLevel;
+          didUpdatePermission = true;
+        }
+      }
+
+      if (didUpdatePermission) {
+        console.log(
+          `[Document] Updated permission for ${userId} on ${doc.id} to ${permissionCheck.permissionLevel}`
+        );
+      }
+      return;
+    }
+  } catch (err) {
+    console.error('[Document] Failed to re-check permission after change; disconnecting user:', err);
+  }
+
   console.log(`[Document] Permission revoked for user ${userId} on ${doc.id}`);
   let removedAwareness = false;
 
