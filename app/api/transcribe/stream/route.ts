@@ -3,6 +3,7 @@ import {
   StartStreamTranscriptionCommand,
 } from "@aws-sdk/client-transcribe-streaming";
 
+export const runtime = "nodejs";
 export const maxDuration = 120;
 
 // AWS best practice: 50-200ms chunks. For 16kHz PCM: 100ms = 16000 * 0.1 * 2 = 3200 bytes
