@@ -12,7 +12,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
-import { Wrench, Calendar, MapPin, Eye, Grid3x3, List } from 'lucide-react'
+import { Microscope, Calendar, MapPin, Eye, Grid3x3, List } from 'lucide-react'
 import Link from 'next/link'
 
 interface Equipment {
@@ -38,9 +38,9 @@ export function EquipmentList({ equipment }: { equipment: Equipment[] }) {
     <>
       {/* View Toggle */}
       <div className="flex justify-end">
-        <div className="inline-flex rounded-lg border p-1">
+        <div className="inline-flex gap-1 rounded-lg border p-1">
           <Button
-            variant={viewMode === "grid" ? "secondary" : "ghost"}
+            variant={viewMode === "grid" ? "default" : "ghost"}
             size="sm"
             onClick={() => setViewMode("grid")}
             className="gap-2"
@@ -49,7 +49,7 @@ export function EquipmentList({ equipment }: { equipment: Equipment[] }) {
             Grid
           </Button>
           <Button
-            variant={viewMode === "table" ? "secondary" : "ghost"}
+            variant={viewMode === "table" ? "default" : "ghost"}
             size="sm"
             onClick={() => setViewMode("table")}
             className="gap-2"
@@ -69,7 +69,7 @@ export function EquipmentList({ equipment }: { equipment: Equipment[] }) {
                 <div className="flex items-start justify-between gap-2">
                   <div className="flex items-start gap-3 min-w-0 flex-1">
                     <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-muted">
-                      <Wrench className="h-5 w-5" />
+                      <Microscope className="h-5 w-5" />
                     </div>
                     <div className="min-w-0 flex-1">
                       <CardTitle className="text-base text-foreground truncate">
@@ -160,7 +160,7 @@ export function EquipmentList({ equipment }: { equipment: Equipment[] }) {
                     <TableRow key={item.id}>
                       <TableCell className="font-medium text-foreground">
                         <div className="flex items-center gap-2">
-                          <Wrench className="h-4 w-4 text-muted-foreground shrink-0" />
+                          <Microscope className="h-4 w-4 text-muted-foreground shrink-0" />
                           <span className="truncate">{item.name}</span>
                         </div>
                       </TableCell>
@@ -210,4 +210,3 @@ export function EquipmentList({ equipment }: { equipment: Equipment[] }) {
     </>
   )
 }
-

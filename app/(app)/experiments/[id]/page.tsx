@@ -9,6 +9,7 @@ import { notFound } from 'next/navigation'
 import Link from 'next/link'
 import { ExperimentActions } from './experiment-actions'
 import { ExperimentTabs } from './experiment-tabs'
+import { Badge } from '@/components/ui/badge'
 
 
 type SearchParams = { tab?: string; noteId?: string }
@@ -110,11 +111,22 @@ export default async function ExperimentDetailPage({
         ]}
       />
       {/* Header */}
-      <div className="flex items-start justify-between shrink-0">
-        <div className="space-y-1">
-          <h1 className="text-xl font-bold tracking-tight text-foreground">
+      <div className="flex items-start justify-between gap-4">
+        <div className="min-w-0 flex items-center gap-2 mb-1">
+          <h1 className="text-3xl font-bold tracking-tight">
             {experiment.name}
           </h1>
+          <Badge
+            variant={
+              experiment.status === "active"
+                ? "default"
+                : experiment.status === "completed"
+                ? "success"
+                : "outline"
+            }
+          >
+            {experiment.status}
+          </Badge>
         </div>
         <ExperimentActions
           experiment={{
@@ -132,11 +144,6 @@ export default async function ExperimentDetailPage({
           users={users || []}
         />
       </div>
-
-
-
-
-
       <ExperimentTabs
         experiment={experiment}
         initialTab={initialTab}

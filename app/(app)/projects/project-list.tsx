@@ -42,9 +42,9 @@ export function ProjectsPageContent({ projects }: { projects: Project[] }) {
           Manage your research initiatives and experiments
         </p>
         <div className="flex items-center gap-2 shrink-0">
-          <div className="inline-flex rounded-lg border p-1">
+          <div className="inline-flex gap-1 rounded-lg border p-1">
             <Button
-              variant={viewMode === "grid" ? "secondary" : "ghost"}
+              variant={viewMode === "grid" ? "default" : "ghost"}
               size="sm"
               onClick={() => setViewMode("grid")}
               className="gap-2"
@@ -53,7 +53,7 @@ export function ProjectsPageContent({ projects }: { projects: Project[] }) {
               Grid
             </Button>
             <Button
-              variant={viewMode === "table" ? "secondary" : "ghost"}
+              variant={viewMode === "table" ? "default" : "ghost"}
               size="sm"
               onClick={() => setViewMode("table")}
               className="gap-2"
@@ -119,9 +119,9 @@ export function ProjectList({ projects, viewMode: controlledView, setViewMode: s
       {/* View Toggle - only when not in header */}
       {!hideToolbar && (
         <div className="flex justify-end mb-4">
-          <div className="inline-flex rounded-lg border p-1">
+          <div className="inline-flex gap-1 rounded-lg border p-1">
             <Button
-              variant={viewMode === "grid" ? "secondary" : "ghost"}
+              variant={viewMode === "grid" ? "default" : "ghost"}
               size="sm"
               onClick={() => setViewMode("grid")}
               className="gap-2"
@@ -130,7 +130,7 @@ export function ProjectList({ projects, viewMode: controlledView, setViewMode: s
               Grid
             </Button>
             <Button
-              variant={viewMode === "table" ? "secondary" : "ghost"}
+              variant={viewMode === "table" ? "default" : "ghost"}
               size="sm"
               onClick={() => setViewMode("table")}
               className="gap-2"

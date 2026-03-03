@@ -44,9 +44,9 @@ export function ExperimentsPageContent({ experiments }: { experiments: Experimen
           Manage and track all experimental procedures
         </p>
         <div className="flex items-center gap-2 shrink-0">
-          <div className="inline-flex rounded-lg border p-1">
+          <div className="inline-flex gap-1 rounded-lg border p-1">
             <Button
-              variant={viewMode === "grid" ? "secondary" : "ghost"}
+              variant={viewMode === "grid" ? "default" : "ghost"}
               size="sm"
               onClick={() => setViewMode("grid")}
               className="gap-2"
@@ -55,7 +55,7 @@ export function ExperimentsPageContent({ experiments }: { experiments: Experimen
               Grid
             </Button>
             <Button
-              variant={viewMode === "table" ? "secondary" : "ghost"}
+              variant={viewMode === "table" ? "default" : "ghost"}
               size="sm"
               onClick={() => setViewMode("table")}
               className="gap-2"
@@ -111,9 +111,9 @@ export function ExperimentList({ experiments, viewMode: controlledView, setViewM
       {/* View Toggle - only when not in header */}
       {!hideToolbar && (
         <div className="flex justify-end mb-4">
-          <div className="inline-flex rounded-lg border p-1">
+          <div className="inline-flex gap-1 rounded-lg border p-1">
             <Button
-              variant={viewMode === "grid" ? "secondary" : "ghost"}
+              variant={viewMode === "grid" ? "default" : "ghost"}
               size="sm"
               onClick={() => setViewMode("grid")}
               className="gap-2"
@@ -122,7 +122,7 @@ export function ExperimentList({ experiments, viewMode: controlledView, setViewM
               Grid
             </Button>
             <Button
-              variant={viewMode === "table" ? "secondary" : "ghost"}
+              variant={viewMode === "table" ? "default" : "ghost"}
               size="sm"
               onClick={() => setViewMode("table")}
               className="gap-2"
@@ -246,7 +246,13 @@ export function ExperimentList({ experiments, viewMode: controlledView, setViewM
                       <TableCell className="font-medium text-foreground">
                         <div className="flex items-center gap-2">
                           <FlaskConical className="h-4 w-4 text-primary shrink-0" />
-                          <div className="max-w-[280px]">
+                          <div
+                            className="max-w-[280px]"
+                            style={{
+                              overflow: "hidden",
+                              textOverflow: "ellipsis"
+                            } as React.CSSProperties}
+                          >
                             <div className="font-semibold truncate">{experiment.name}</div>
                             <HtmlContentTruncated
                               content={experiment.description}

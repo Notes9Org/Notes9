@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useRef, useEffect, useCallback, useMemo, type ChangeEvent } from 'react';
+import { useRouter } from 'next/navigation';
 import { useChat } from '@ai-sdk/react';
 import { DefaultChatTransport } from 'ai';
 import { Button } from '@/components/ui/button';
@@ -33,6 +34,7 @@ import {
   Mic,
 } from 'lucide-react';
 import { cn, formatCitationDisplay } from '@/lib/utils';
+import { runAgent, Notes9ApiError } from '@/lib/notes9-api';
 import { useChatSessions, ChatSession } from '@/hooks/use-chat-sessions';
 import { MarkdownRenderer } from '@/components/catalyst/markdown-renderer';
 import { PreviewAttachment, type Attachment } from '@/components/catalyst/preview-attachment';
@@ -95,7 +97,12 @@ const ALLOWED_TYPES = [
   'text/plain',
 ];
 
-export function RightSidebar() {
+interface RightSidebarProps {
+  onClose?: () => void;
+}
+
+export function RightSidebar({ onClose }: RightSidebarProps = {}) {
+  const router = useRouter();
   const [input, setInput] = useState('');
   const [agentMode, setAgentMode] = useState<AgentMode>('general');
   const [userId, setUserId] = useState<string>('');
@@ -122,6 +129,8 @@ export function RightSidebar() {
     setMounted(true);
   }, []);
 
+  const supabaseTokenRef = useRef<string | null>(null);
+
   useEffect(() => {
     const loadUserId = async () => {
       const { data: { user } } = await supabase.auth.getUser();
@@ -130,18 +139,30 @@ export function RightSidebar() {
     loadUserId();
   }, [supabase]);
 
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      supabaseTokenRef.current = session?.access_token ?? null;
+    });
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      supabaseTokenRef.current = session?.access_token ?? null;
+    });
+    return () => subscription.unsubscribe();
+  }, [supabase]);
+
   const transport = useMemo(() => new DefaultChatTransport({
     api: '/api/chat',
     prepareSendMessagesRequest(request) {
-      // Normalize messages to plain text so request body never re-sends stringified JSON (stops double-wrap)
+      const token = supabaseTokenRef.current;
       const normalizedMessages = request.messages.map((msg: { role: string; content?: unknown; parts?: Array<{ type?: string; text?: string }> }) => {
         const plainText = getPlainTextFromMessage(msg);
         return { role: msg.role, content: plainText };
       });
       return {
+        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
         body: {
           messages: normalizedMessages,
           sessionId: currentSessionRef.current,
+          supabaseToken: token ?? undefined,
           ...request.body,
         },
       };
@@ -281,6 +302,15 @@ export function RightSidebar() {
     if (agentMode === 'notes9') {
       try {
         setNotes9Loading(true);
+
+        const { data: { session } } = await supabase.auth.getSession();
+        const token = session?.access_token;
+        if (!token) {
+          toast.error('Please sign in to use Notes9');
+          router.push('/auth/login');
+          return;
+        }
+
         const userMessageId = `user-${Date.now()}`;
         const userMessage = {
           id: userMessageId,
@@ -294,20 +324,20 @@ export function RightSidebar() {
         const sessionId = currentSessionRef.current!;
         await saveMessage(sessionId, 'user', text);
 
-        // Call Notes9 API
-        const response = await fetch('https://z3thrlksg0.execute-api.us-east-1.amazonaws.com/agent/run', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            history: [],
+        const history = messages.map((m) => ({
+          role: m.role,
+          content: getPlainTextFromMessage(m),
+        }));
+
+        const data = await runAgent(
+          {
             query: text,
             session_id: sessionId,
-            user_id: userId,
-          }),
-        });
-
-        if (!response.ok) throw new Error('Notes9 API request failed');
-        const data = await response.json();
+            user_id: userId || undefined,
+            history,
+          },
+          token
+        );
         let formattedAnswer = data.answer;
 
         // Citation handling...
@@ -355,6 +385,17 @@ export function RightSidebar() {
         loadSessions();
       } catch (error) {
         console.error('Notes9 API error:', error);
+        if (error instanceof Notes9ApiError) {
+          if (error.status === 401) {
+            toast.error('Session expired. Please sign in again.');
+            router.push('/auth/login');
+            return;
+          }
+          if (error.status && error.status >= 500) {
+            toast.error('Service temporarily unavailable. Please try again later.');
+            return;
+          }
+        }
         toast.error('Failed to get response from Notes9');
       } finally {
         setNotes9Loading(false);
@@ -733,17 +774,17 @@ export function RightSidebar() {
       ) : (
         <>
           {/* Header: Tab-like Navigation (History + New Chat hidden when maximized; left sidebar has them) */}
-          <header className="h-12 sm:h-14 flex items-center justify-between px-2 sm:px-3 border-b shrink-0 bg-background/50 backdrop-blur z-10 text-xs select-none">
+            <header className="h-12 sm:h-14 flex items-center justify-between px-2 sm:px-4 border-b shrink-0 bg-background/50 backdrop-blur z-10 text-xs select-none">
             <div className="flex items-center gap-1 overflow-hidden">
               {isExpanded && !expandedHistoryOpen && (
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="h-7 w-7 text-muted-foreground shrink-0"
+                  className="size-8 sm:size-9 text-muted-foreground shrink-0"
                   onClick={() => setExpandedHistoryOpen(true)}
                   aria-label="Show chat history"
                 >
-                  <History className="size-3.5" />
+                    <History className="size-4" />
                 </Button>
               )}
               {!isExpanded && (
@@ -752,15 +793,14 @@ export function RightSidebar() {
                     <div className="flex items-center gap-1">
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
-                          <button
-                            aria-label="Chat history"
-                            className={cn(
-                              "px-3 py-1.5 rounded-md flex items-center justify-center transition-colors",
-                              currentSessionId ? "bg-accent/40 text-foreground" : "text-muted-foreground hover:text-foreground hover:bg-muted/30"
-                            )}
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="size-8 sm:size-9 text-muted-foreground shrink-0"
+                              aria-label="Show chat history"
                           >
-                            <History className="size-3.5" />
-                          </button>
+                              <History className="size-4" />
+                            </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="start" className="w-[280px] max-w-[min(280px,90vw)] p-0 overflow-hidden" sideOffset={4}>
                           <div className="p-2 text-xs font-semibold text-muted-foreground/80 uppercase tracking-wider border-b shrink-0">
@@ -806,16 +846,15 @@ export function RightSidebar() {
                         </DropdownMenuContent>
                       </DropdownMenu>
 
-                      <button
+                      <Button
+                        variant="secondary"
+                        className="h-8 sm:h-9 text-muted-foreground"
                         onClick={handleNewChat}
-                        className={cn(
-                          "px-3 py-1.5 rounded-md flex items-center gap-2 transition-colors",
-                          !currentSessionId ? "bg-accent/40 text-foreground" : "text-muted-foreground hover:text-foreground hover:bg-muted/30"
-                        )}
+                        aria-label="New chat"
                       >
-                        <PenBox className="size-3.5" />
+                        <Plus className="size-4" />
                         <span>New Chat</span>
-                      </button>
+                      </Button>
                     </div>
                   </ScrollArea>
                 </>
@@ -823,9 +862,12 @@ export function RightSidebar() {
             </div>
 
             <div className="flex items-center gap-1 pl-2">
-              <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground" onClick={() => setIsExpanded(!isExpanded)}>
-                {isExpanded ? <Minimize2 className="size-3.5" /> : <Maximize2 className="size-3.5" />}
-              </Button>
+              <Button variant="ghost" size="icon" className="size-8 sm:size-9 text-muted-foreground" onClick={() => setIsExpanded(!isExpanded)}>
+                  {isExpanded ? <Minimize2 className="size-4" /> : <Maximize2 className="size-4" />}
+                </Button>
+                <Button variant="ghost" size="icon" className="size-8 sm:size-9 text-muted-foreground" onClick={() => onClose?.()}>
+                  <X className="size-4" />
+                </Button>
             </div>
           </header>
 
