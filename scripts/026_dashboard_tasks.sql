@@ -15,6 +15,10 @@ CREATE TABLE IF NOT EXISTS dashboard_tasks (
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+CREATE TRIGGER update_dashboard_tasks_updated_at
+  BEFORE UPDATE ON dashboard_tasks
+  FOR EACH ROW
+  EXECUTE FUNCTION update_updated_at_column();
 CREATE INDEX IF NOT EXISTS idx_dashboard_tasks_user_id ON dashboard_tasks(user_id);
 -- RLS: users can only see and modify their own tasks
 ALTER TABLE dashboard_tasks ENABLE ROW LEVEL SECURITY;
