@@ -27,7 +27,6 @@ import { useToast } from "@/hooks/use-toast"
 import { useRouter } from "next/navigation"
 import { Pencil, Loader2 } from "lucide-react"
 import { getUniqueNameErrorMessage } from "@/lib/unique-name-error"
-import { DatePicker } from "@/components/ui/date-picker"
 
 interface Project {
   id: string
@@ -65,12 +64,8 @@ export function EditProjectDialog({ project, asMenuItem = false, open: controlle
   const [name, setName] = useState(project.name)
   const [description, setDescription] = useState(project.description || "")
   const [priority, setPriority] = useState(project.priority || "medium")
-  const [startDate, setStartDate] = useState<Date | undefined>(
-    project.start_date ? new Date(project.start_date) : undefined
-  )
-  const [endDate, setEndDate] = useState<Date | undefined>(
-    project.end_date ? new Date(project.end_date) : undefined
-  )
+  const [startDate, setStartDate] = useState(project.start_date || "")
+  const [endDate, setEndDate] = useState(project.end_date || "")
 
   // Reset form when dialog opens
   useEffect(() => {
@@ -78,8 +73,8 @@ export function EditProjectDialog({ project, asMenuItem = false, open: controlle
       setName(project.name)
       setDescription(project.description || "")
       setPriority(project.priority || "medium")
-      setStartDate(project.start_date ? new Date(project.start_date) : undefined)
-      setEndDate(project.end_date ? new Date(project.end_date) : undefined)
+      setStartDate(project.start_date || "")
+      setEndDate(project.end_date || "")
     }
   }, [open, project])
 
@@ -102,8 +97,8 @@ export function EditProjectDialog({ project, asMenuItem = false, open: controlle
           name: name.trim(),
           description: description.trim() || null,
           priority,
-          start_date: startDate ? startDate.toISOString().split('T')[0] : null,
-          end_date: endDate ? endDate.toISOString().split('T')[0] : null,
+          start_date: startDate || null,
+          end_date: endDate || null,
           updated_at: new Date().toISOString(),
         })
         .eq("id", project.id)
@@ -191,19 +186,21 @@ export function EditProjectDialog({ project, asMenuItem = false, open: controlle
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label htmlFor="start_date">Start Date</Label>
-              <DatePicker
-                date={startDate}
-                onDateChange={setStartDate}
-                placeholder="Pick start date"
+              <Input
+                id="start_date"
+                type="date"
+                value={startDate}
+                onChange={(e) => setStartDate(e.target.value)}
                 disabled={isSaving}
               />
             </div>
             <div className="space-y-2">
               <Label htmlFor="end_date">Target End Date</Label>
-              <DatePicker
-                date={endDate}
-                onDateChange={setEndDate}
-                placeholder="Pick end date"
+              <Input
+                id="end_date"
+                type="date"
+                value={endDate}
+                onChange={(e) => setEndDate(e.target.value)}
                 disabled={isSaving}
               />
             </div>
