@@ -26,6 +26,16 @@ import {
   PopoverContent,
   PopoverAnchor,
 } from "@/components/ui/popover";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { motion } from "framer-motion";
 import {
   ListTodo,
@@ -421,6 +431,7 @@ export function TodoPanel({ initialTasks }: { initialTasks: DashboardTask[] }) {
     "medium",
   );
   const [isAdding, setIsAdding] = useState(false);
+  const [taskToDelete, setTaskToDelete] = useState<DashboardTask | null>(null);
   const editableRef = useRef<HTMLDivElement>(null);
   const mentionListRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
@@ -971,7 +982,7 @@ export function TodoPanel({ initialTasks }: { initialTasks: DashboardTask[] }) {
               setEditPriority={setEditPriority}
               onSaveEdit={(payload) => updateTask(task.id, payload)}
               onCancelEdit={() => setEditingId(null)}
-              onDelete={() => deleteTask(task.id)}
+              onDelete={() => setTaskToDelete(task)}
             />
           ))}
           {sortedCompleted.length > 0 && (
@@ -1001,7 +1012,7 @@ export function TodoPanel({ initialTasks }: { initialTasks: DashboardTask[] }) {
                   setEditPriority={setEditPriority}
                   onSaveEdit={(payload) => updateTask(task.id, payload)}
                   onCancelEdit={() => setEditingId(null)}
-                  onDelete={() => deleteTask(task.id)}
+                  onDelete={() => setTaskToDelete(task)}
                   completed
                 />
               ))}
@@ -1014,6 +1025,78 @@ export function TodoPanel({ initialTasks }: { initialTasks: DashboardTask[] }) {
           </p>
         )}
       </CardContent>
+      <AlertDialog
+        open={taskToDelete !== null}
+        onOpenChange={(open) => !open && setTaskToDelete(null)}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete task?</AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              {taskToDelete ? (
+                <span className="block text-muted-foreground text-sm">
+                  This will permanently delete &quot;
+                  <span className="inline-flex flex-wrap items-center gap-x-1 gap-y-0.5 text-foreground">
+                    {(() => {
+                      const parts = parseTitleWithPlaceholders(
+                        taskToDelete.title,
+                      );
+                      const hasMentions = parts.some((p) => p.type === "mention");
+                      if (!hasMentions && parts.length <= 1) {
+                        return (
+                          parts[0]?.type === "text"
+                            ? parts[0].value
+                            : taskToDelete.title
+                        );
+                      }
+                      return parts.map((part, i) =>
+                        part.type === "text" ? (
+                          <span key={i}>{part.value}</span>
+                        ) : (() => {
+                            const resolved =
+                              part.kind === "experiment"
+                                ? experiments.find((e) => e.id === part.id)
+                                : projects.find((p) => p.id === part.id);
+                            const name =
+                              resolved?.name ?? part.id ?? part.kind;
+                            return (
+                              <span
+                                key={i}
+                                className="inline-flex items-center gap-1 rounded-md bg-secondary px-1.5 py-0.5 text-xs text-secondary-foreground"
+                              >
+                                {part.kind === "experiment" ? (
+                                  <FlaskConical className="h-3 w-3 shrink-0" />
+                                ) : (
+                                  <FolderOpen className="h-3 w-3 shrink-0" />
+                                )}
+                                {name}
+                              </span>
+                            );
+                          })(),
+                      );
+                    })()}
+                  </span>
+                  &quot;. This action cannot be undone.
+                </span>
+              ) : null}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={async () => {
+                if (taskToDelete) {
+                  await deleteTask(taskToDelete.id);
+                  setTaskToDelete(null);
+                }
+              }}
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </Card>
   );
 }
