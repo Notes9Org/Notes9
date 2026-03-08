@@ -111,7 +111,7 @@
   --color-popover-foreground: var(--popover-foreground);
 
   --color-secondary: var(--secondary);
-  --color-secondary-foreground: #ffffff;
+  --color-secondary-foreground: var(--secondary-foreground);
 
   --color-muted: var(--muted);
   --color-muted-foreground: var(--muted-foreground);
@@ -329,4 +329,9 @@ mark {
 
 .hide-scrollbar::-webkit-scrollbar {
   display: none;             /* Chrome, Safari */
+}
+
+/* Force secondary-foreground to use runtime variable (avoids Tailwind resolving to #fff at build time) */
+.text-secondary-foreground {
+  color: var(--secondary-foreground);
 }

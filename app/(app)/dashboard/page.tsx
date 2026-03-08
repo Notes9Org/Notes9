@@ -19,6 +19,7 @@ import {
   BookOpen,
   Eye,
 } from "lucide-react";
+import { TodoPanel } from "./todo-panel";
 
 export default async function DashboardPage() {
   const supabase = await createClient();
@@ -88,6 +89,21 @@ export default async function DashboardPage() {
     )
     .order("updated_at", { ascending: false })
     .limit(3);
+
+  // Dashboard To-Do tasks (user-scoped)
+  const { data: dashboardTasks } = await supabase
+    .from("dashboard_tasks")
+    .select(
+      `
+      *,
+      experiment:experiments(id, name),
+      project:projects(id, name)
+    `
+    )
+    .eq("user_id", user.id)
+    .order("completed", { ascending: true })
+    .order("due_at", { ascending: true, nullsFirst: false })
+    .order("created_at", { ascending: false });
 
   // Calculate statistics
   const activeProjectsCount = projects?.length || 0;
@@ -176,6 +192,25 @@ export default async function DashboardPage() {
           </CardContent>
         </Card>
       </div> */}
+
+      {/* Quick Actions */}
+      <Card className="min-w-0 overflow-hidden">
+        <CardHeader>
+          <CardTitle>Quick Actions</CardTitle>
+          <CardDescription>Common tasks to get you started</CardDescription>
+        </CardHeader>
+        <CardContent className="flex flex-wrap gap-2">
+          <Link href="/projects/new">
+            <Button variant="outline">Create New Project</Button>
+          </Link>
+          <Link href="/experiments/new">
+            <Button variant="outline">Add Experiment</Button>
+          </Link>
+          <Link href="/samples/new">
+            <Button variant="outline">Record Sample</Button>
+          </Link>
+        </CardContent>
+      </Card>
 
       {/* Recent Experiments & Notes */}
       <div className="grid min-w-0 gap-4 md:grid-cols-2">
@@ -298,24 +333,10 @@ export default async function DashboardPage() {
         </Card>
       </div>
 
-      {/* Quick Actions */}
-      <Card className="min-w-0 overflow-hidden">
-        <CardHeader>
-          <CardTitle>Quick Actions</CardTitle>
-          <CardDescription>Common tasks to get you started</CardDescription>
-        </CardHeader>
-        <CardContent className="flex flex-wrap gap-2">
-          <Link href="/projects/new">
-            <Button variant="outline">Create New Project</Button>
-          </Link>
-          <Link href="/experiments/new">
-            <Button variant="outline">Add Experiment</Button>
-          </Link>
-          <Link href="/samples/new">
-            <Button variant="outline">Record Sample</Button>
-          </Link>
-        </CardContent>
-      </Card>
+      {/* To-Do Panel */}
+      <div className="grid min-w-0 gap-4">
+        <TodoPanel initialTasks={dashboardTasks ?? []} />
+      </div>
     </div>
   );
 }
