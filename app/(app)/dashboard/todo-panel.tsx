@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import {
@@ -385,6 +385,7 @@ function insertMentionIntoEditable(
 }
 
 const PRIORITY_ORDER = { high: 3, medium: 2, low: 1 };
+const TASKS_PAGE_SIZE = 50;
 const SORT_OPTIONS = [
   { value: "due_date", label: "Due date" },
   { value: "priority", label: "Priority" },
@@ -405,7 +406,10 @@ function getQueryAfterAt(text: string): { query: string; startIndex: number } {
 }
 
 export function TodoPanel({ initialTasks }: { initialTasks: DashboardTask[] }) {
+  const supabase = useMemo(() => createClient(), []);
   const [tasks, setTasks] = useState<DashboardTask[]>(initialTasks);
+  const [hasMoreTasks, setHasMoreTasks] = useState(false);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [segments, setSegments] = useState<NewTaskSegment[]>([
     { type: "text", value: "" },
   ]);
@@ -424,12 +428,6 @@ export function TodoPanel({ initialTasks }: { initialTasks: DashboardTask[] }) {
   >([]);
   const [projects, setProjects] = useState<{ id: string; name: string }[]>([]);
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [editTitle, setEditTitle] = useState("");
-  const [editDueDateStr, setEditDueDateStr] = useState("");
-  const [editTimeStr, setEditTimeStr] = useState("");
-  const [editPriority, setEditPriority] = useState<"low" | "medium" | "high">(
-    "medium",
-  );
   const [isAdding, setIsAdding] = useState(false);
   const [taskToDelete, setTaskToDelete] = useState<DashboardTask | null>(null);
   const editableRef = useRef<HTMLDivElement>(null);
@@ -437,7 +435,6 @@ export function TodoPanel({ initialTasks }: { initialTasks: DashboardTask[] }) {
   const { toast } = useToast();
 
   const fetchTasks = useCallback(async () => {
-    const supabase = createClient();
     const {
       data: { user },
     } = await supabase.auth.getUser();
@@ -448,17 +445,48 @@ export function TodoPanel({ initialTasks }: { initialTasks: DashboardTask[] }) {
       .eq("user_id", user.id)
       .order("completed", { ascending: true })
       .order("due_at", { ascending: true, nullsFirst: false })
-      .order("created_at", { ascending: false });
-    if (data) setTasks(data as DashboardTask[]);
-  }, []);
+      .order("created_at", { ascending: false })
+      .range(0, TASKS_PAGE_SIZE - 1);
+    if (data) {
+      setTasks(data as DashboardTask[]);
+      setHasMoreTasks(data.length === TASKS_PAGE_SIZE);
+    }
+  }, [supabase]);
 
   useEffect(() => {
     fetchTasks();
   }, [fetchTasks]);
 
+  const loadMoreTasks = useCallback(async () => {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user || isLoadingMore || !hasMoreTasks) return;
+    setIsLoadingMore(true);
+    try {
+      const from = tasks.length;
+      const to = from + TASKS_PAGE_SIZE - 1;
+      const { data } = await supabase
+        .from("dashboard_tasks")
+        .select("*")
+        .eq("user_id", user.id)
+        .order("completed", { ascending: true })
+        .order("due_at", { ascending: true, nullsFirst: false })
+        .order("created_at", { ascending: false })
+        .range(from, to);
+      if (data?.length) {
+        setTasks((prev) => [...prev, ...(data as DashboardTask[])]);
+        setHasMoreTasks(data.length === TASKS_PAGE_SIZE);
+      } else {
+        setHasMoreTasks(false);
+      }
+    } finally {
+      setIsLoadingMore(false);
+    }
+  }, [supabase, tasks.length, hasMoreTasks, isLoadingMore]);
+
   useEffect(() => {
     const loadMentionables = async () => {
-      const supabase = createClient();
       const [expRes, projRes] = await Promise.all([
         supabase.from("experiments").select("id, name").order("name"),
         supabase.from("projects").select("id, name").order("name"),
@@ -467,7 +495,7 @@ export function TodoPanel({ initialTasks }: { initialTasks: DashboardTask[] }) {
       if (projRes.data) setProjects(projRes.data);
     };
     loadMentionables();
-  }, []);
+  }, [supabase]);
 
   const mentionItems: MentionItem[] = [
     ...experiments.map((e) => ({
@@ -547,7 +575,6 @@ export function TodoPanel({ initialTasks }: { initialTasks: DashboardTask[] }) {
     if (!title.trim()) return;
     setIsAdding(true);
     try {
-      const supabase = createClient();
       const {
         data: { user },
       } = await supabase.auth.getUser();
@@ -594,7 +621,6 @@ export function TodoPanel({ initialTasks }: { initialTasks: DashboardTask[] }) {
   };
 
   const toggleComplete = async (task: DashboardTask) => {
-    const supabase = createClient();
     const completed = !task.completed;
     const { error } = await supabase
       .from("dashboard_tasks")
@@ -636,7 +662,6 @@ export function TodoPanel({ initialTasks }: { initialTasks: DashboardTask[] }) {
   ) => {
     const trimmed = payload.title.trim();
     if (!trimmed) return;
-    const supabase = createClient();
     const { error } = await supabase
       .from("dashboard_tasks")
       .update({
@@ -670,7 +695,6 @@ export function TodoPanel({ initialTasks }: { initialTasks: DashboardTask[] }) {
   };
 
   const deleteTask = async (taskId: string) => {
-    const supabase = createClient();
     const { error } = await supabase
       .from("dashboard_tasks")
       .delete()
@@ -688,25 +712,6 @@ export function TodoPanel({ initialTasks }: { initialTasks: DashboardTask[] }) {
 
   const startEdit = (task: DashboardTask) => {
     setEditingId(task.id);
-    setEditTitle(task.title);
-    if (task.due_at) {
-      const d = new Date(task.due_at);
-      const y = d.getFullYear();
-      const mo = d.getMonth() + 1;
-      const day = d.getDate();
-      setEditDueDateStr(
-        `${y}-${String(mo).padStart(2, "0")}-${String(day).padStart(2, "0")}`,
-      );
-      const h = d.getHours();
-      const m = d.getMinutes();
-      setEditTimeStr(
-        `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`,
-      );
-    } else {
-      setEditDueDateStr("");
-      setEditTimeStr("");
-    }
-    setEditPriority(task.priority);
   };
 
   const incomplete = tasks.filter((t) => !t.completed);
@@ -970,16 +975,8 @@ export function TodoPanel({ initialTasks }: { initialTasks: DashboardTask[] }) {
               projects={projects}
               formatDue={formatDue}
               isEditing={editingId === task.id}
-              editTitle={editTitle}
-              setEditTitle={setEditTitle}
               onToggleComplete={() => toggleComplete(task)}
               onStartEdit={() => startEdit(task)}
-              editDueDateStr={editDueDateStr}
-              editTimeStr={editTimeStr}
-              editPriority={editPriority}
-              setEditDueDateStr={setEditDueDateStr}
-              setEditTimeStr={setEditTimeStr}
-              setEditPriority={setEditPriority}
               onSaveEdit={(payload) => updateTask(task.id, payload)}
               onCancelEdit={() => setEditingId(null)}
               onDelete={() => setTaskToDelete(task)}
@@ -1000,16 +997,8 @@ export function TodoPanel({ initialTasks }: { initialTasks: DashboardTask[] }) {
                   projects={projects}
                   formatDue={formatDue}
                   isEditing={editingId === task.id}
-                  editTitle={editTitle}
-                  setEditTitle={setEditTitle}
                   onToggleComplete={() => toggleComplete(task)}
                   onStartEdit={() => startEdit(task)}
-                  editDueDateStr={editDueDateStr}
-                  editTimeStr={editTimeStr}
-                  editPriority={editPriority}
-                  setEditDueDateStr={setEditDueDateStr}
-                  setEditTimeStr={setEditTimeStr}
-                  setEditPriority={setEditPriority}
                   onSaveEdit={(payload) => updateTask(task.id, payload)}
                   onCancelEdit={() => setEditingId(null)}
                   onDelete={() => setTaskToDelete(task)}
@@ -1019,6 +1008,18 @@ export function TodoPanel({ initialTasks }: { initialTasks: DashboardTask[] }) {
             </>
           )}
         </motion.div>
+        {hasMoreTasks && (
+          <div className="flex justify-center pt-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={loadMoreTasks}
+              disabled={isLoadingMore}
+            >
+              {isLoadingMore ? "Loading…" : "Load more"}
+            </Button>
+          </div>
+        )}
         {tasks.length === 0 && (
           <p className="text-sm text-muted-foreground py-4 text-center">
             No tasks yet. Add one above.
@@ -1108,16 +1109,8 @@ function TaskRow({
   projects,
   formatDue,
   isEditing,
-  editTitle,
-  setEditTitle,
   onToggleComplete,
   onStartEdit,
-  editDueDateStr,
-  editTimeStr,
-  editPriority,
-  setEditDueDateStr,
-  setEditTimeStr,
-  setEditPriority,
   onSaveEdit,
   onCancelEdit,
   onDelete,
@@ -1129,16 +1122,8 @@ function TaskRow({
   projects: { id: string; name: string }[];
   formatDue: (due: string | null) => string | null;
   isEditing: boolean;
-  editTitle: string;
-  setEditTitle: (s: string) => void;
   onToggleComplete: () => void;
   onStartEdit: () => void;
-  editDueDateStr: string;
-  editTimeStr: string;
-  editPriority: "low" | "medium" | "high";
-  setEditDueDateStr: (s: string) => void;
-  setEditTimeStr: (s: string) => void;
-  setEditPriority: (p: "low" | "medium" | "high") => void;
   onSaveEdit: (payload: {
     title: string;
     due_at: string | null;
@@ -1149,6 +1134,30 @@ function TaskRow({
   completed?: boolean;
 }) {
   const editEditableRef = useRef<HTMLDivElement>(null);
+  const [editTitle, setEditTitle] = useState("");
+  const [editDueDateStr, setEditDueDateStr] = useState("");
+  const [editTimeStr, setEditTimeStr] = useState("");
+  const [editPriority, setEditPriority] = useState<
+    "low" | "medium" | "high"
+  >("medium");
+
+  useEffect(() => {
+    if (!isEditing) return;
+    setEditTitle(task.title);
+    if (task.due_at) {
+      const d = new Date(task.due_at);
+      setEditDueDateStr(
+        `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`,
+      );
+      setEditTimeStr(
+        `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`,
+      );
+    } else {
+      setEditDueDateStr("");
+      setEditTimeStr("");
+    }
+    setEditPriority(task.priority);
+  }, [isEditing, task.id, task.title, task.due_at, task.priority]);
 
   useEffect(() => {
     if (
