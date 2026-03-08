@@ -615,28 +615,6 @@ export function TodoPanel({ initialTasks }: { initialTasks: DashboardTask[] }) {
     );
   };
 
-  const updateTaskTitle = async (taskId: string, newTitle: string) => {
-    const trimmed = newTitle.trim();
-    if (!trimmed) return;
-    const supabase = createClient();
-    const { error } = await supabase
-      .from("dashboard_tasks")
-      .update({ title: trimmed, updated_at: new Date().toISOString() })
-      .eq("id", taskId);
-    if (error) {
-      toast({
-        title: "Error",
-        description: error.message,
-        variant: "destructive",
-      });
-      return;
-    }
-    setTasks((prev) =>
-      prev.map((t) => (t.id === taskId ? { ...t, title: trimmed } : t)),
-    );
-    setEditingId(null);
-  };
-
   const updateTask = async (
     taskId: string,
     payload: {
@@ -702,7 +680,12 @@ export function TodoPanel({ initialTasks }: { initialTasks: DashboardTask[] }) {
     setEditTitle(task.title);
     if (task.due_at) {
       const d = new Date(task.due_at);
-      setEditDueDateStr(d.toISOString().slice(0, 10));
+      const y = d.getFullYear();
+      const mo = d.getMonth() + 1;
+      const day = d.getDate();
+      setEditDueDateStr(
+        `${y}-${String(mo).padStart(2, "0")}-${String(day).padStart(2, "0")}`,
+      );
       const h = d.getHours();
       const m = d.getMinutes();
       setEditTimeStr(
@@ -986,15 +969,7 @@ export function TodoPanel({ initialTasks }: { initialTasks: DashboardTask[] }) {
               setEditDueDateStr={setEditDueDateStr}
               setEditTimeStr={setEditTimeStr}
               setEditPriority={setEditPriority}
-              onSaveEdit={(titleOrPayload) => {
-                if (titleOrPayload && typeof titleOrPayload === "object")
-                  updateTask(task.id, titleOrPayload);
-                else
-                  updateTaskTitle(
-                    task.id,
-                    (titleOrPayload as string) ?? editTitle,
-                  );
-              }}
+              onSaveEdit={(payload) => updateTask(task.id, payload)}
               onCancelEdit={() => setEditingId(null)}
               onDelete={() => deleteTask(task.id)}
             />
@@ -1024,15 +999,7 @@ export function TodoPanel({ initialTasks }: { initialTasks: DashboardTask[] }) {
                   setEditDueDateStr={setEditDueDateStr}
                   setEditTimeStr={setEditTimeStr}
                   setEditPriority={setEditPriority}
-                  onSaveEdit={(titleOrPayload) => {
-                    if (titleOrPayload && typeof titleOrPayload === "object")
-                      updateTask(task.id, titleOrPayload);
-                    else
-                      updateTaskTitle(
-                        task.id,
-                        (titleOrPayload as string) ?? editTitle,
-                      );
-                  }}
+                  onSaveEdit={(payload) => updateTask(task.id, payload)}
                   onCancelEdit={() => setEditingId(null)}
                   onDelete={() => deleteTask(task.id)}
                   completed
@@ -1089,15 +1056,11 @@ function TaskRow({
   setEditDueDateStr: (s: string) => void;
   setEditTimeStr: (s: string) => void;
   setEditPriority: (p: "low" | "medium" | "high") => void;
-  onSaveEdit: (
-    titleOrPayload?:
-      | string
-      | {
-          title: string;
-          due_at: string | null;
-          priority: "low" | "medium" | "high";
-        },
-  ) => void;
+  onSaveEdit: (payload: {
+    title: string;
+    due_at: string | null;
+    priority: "low" | "medium" | "high";
+  }) => void;
   onCancelEdit: () => void;
   onDelete: () => void;
   completed?: boolean;
