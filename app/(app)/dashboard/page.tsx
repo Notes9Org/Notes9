@@ -93,13 +93,7 @@ export default async function DashboardPage() {
   // Dashboard To-Do tasks (user-scoped)
   const { data: dashboardTasks } = await supabase
     .from("dashboard_tasks")
-    .select(
-      `
-      *,
-      experiment:experiments(id, name),
-      project:projects(id, name)
-    `
-    )
+    .select("*")
     .eq("user_id", user.id)
     .order("completed", { ascending: true })
     .order("due_at", { ascending: true, nullsFirst: false })

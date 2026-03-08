@@ -385,6 +385,10 @@ function getQueryAfterAt(text: string): { query: string; startIndex: number } {
   const lastAt = text.lastIndexOf("@");
   if (lastAt === -1) return { query: "", startIndex: -1 };
   const after = text.slice(lastAt + 1);
+  // If there's a space immediately after "@", treat this as no active mention.
+  if (after.startsWith(" ")) {
+    return { query: "", startIndex: -1 };
+  }
   const space = after.indexOf(" ");
   const query = space === -1 ? after : after.slice(0, space);
   return { query, startIndex: lastAt };
@@ -1290,11 +1294,16 @@ function TaskRow({
                   </span>
                 </div>
                 <div className="flex items-center gap-2 flex-wrap">
-                  {formatDue(task.due_at) && (
-                    <span className="text-xs text-muted-foreground">
-                      {formatDue(task.due_at)}
-                    </span>
-                  )}
+                  {(() => {
+                    const formattedDue = formatDue(task.due_at);
+                    return (
+                      formattedDue && (
+                        <span className="text-xs text-muted-foreground">
+                          {formattedDue}
+                        </span>
+                      )
+                    );
+                  })()}
                   <Badge
                     variant={task.priority === "high" ? "default" : "secondary"}
                     className={cn(

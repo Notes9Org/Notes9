@@ -2,6 +2,7 @@
 -- Each task belongs to a user; optional due datetime and priority.
 -- Experiment/project refs are stored inline in title as {{experiment:<id>}} / {{project:<id>}}.
 
+CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 CREATE TABLE IF NOT EXISTS dashboard_tasks (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   user_id UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
@@ -14,6 +15,7 @@ CREATE TABLE IF NOT EXISTS dashboard_tasks (
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+CREATE INDEX IF NOT EXISTS idx_dashboard_tasks_user_id ON dashboard_tasks(user_id);
 -- RLS: users can only see and modify their own tasks
 ALTER TABLE dashboard_tasks ENABLE ROW LEVEL SECURITY;
 
@@ -27,7 +29,8 @@ CREATE POLICY "Users can insert their own dashboard tasks"
 
 CREATE POLICY "Users can update their own dashboard tasks"
   ON dashboard_tasks FOR UPDATE
-  USING (user_id = auth.uid());
+  USING (user_id = auth.uid())
+  WITH CHECK (user_id = auth.uid());
 
 CREATE POLICY "Users can delete their own dashboard tasks"
   ON dashboard_tasks FOR DELETE
