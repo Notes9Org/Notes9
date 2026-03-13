@@ -14,12 +14,12 @@ import { Progress } from "@/components/ui/progress";
 import {
   FlaskConical,
   TestTube,
-  Wrench,
+  Microscope,
   FileText,
   BookOpen,
-  Activity,
   Eye,
 } from "lucide-react";
+import { TodoPanel } from "./todo-panel";
 
 export default async function DashboardPage() {
   const supabase = await createClient();
@@ -90,6 +90,15 @@ export default async function DashboardPage() {
     .order("updated_at", { ascending: false })
     .limit(3);
 
+  // Dashboard To-Do tasks (user-scoped)
+  const { data: dashboardTasks } = await supabase
+    .from("dashboard_tasks")
+    .select("*")
+    .eq("user_id", user.id)
+    .order("completed", { ascending: true })
+    .order("due_at", { ascending: true, nullsFirst: false })
+    .order("created_at", { ascending: false });
+
   // Calculate statistics
   const activeProjectsCount = projects?.length || 0;
   const runningExperimentsCount = experiments?.length || 0;
@@ -102,10 +111,10 @@ export default async function DashboardPage() {
   const pendingReportsCount = reports?.length || 0;
 
   return (
-    <div className="space-y-6">
+    <div className="min-w-0 space-y-4 md:space-y-6">
       {/* Welcome Section */}
       <div>
-        <h1 className="text-3xl font-bold tracking-tight">
+        <h1 className="text-2xl font-bold tracking-tight md:text-3xl">
           Hello, {profile?.first_name || "User"}
         </h1>
         <p className="text-muted-foreground mt-1">
@@ -150,7 +159,7 @@ export default async function DashboardPage() {
             <CardTitle className="text-sm font-medium">
               Equipment Status
             </CardTitle>
-            <Wrench className="h-4 w-4 text-muted-foreground" />
+            <Microscope className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
@@ -178,12 +187,31 @@ export default async function DashboardPage() {
         </Card>
       </div> */}
 
+      {/* Quick Actions */}
+      <Card className="min-w-0 overflow-hidden">
+        <CardHeader>
+          <CardTitle>Quick Actions</CardTitle>
+          <CardDescription>Common tasks to get you started</CardDescription>
+        </CardHeader>
+        <CardContent className="flex flex-wrap gap-2">
+          <Link href="/projects/new">
+            <Button variant="outline">Create New Project</Button>
+          </Link>
+          <Link href="/experiments/new">
+            <Button variant="outline">Add Experiment</Button>
+          </Link>
+          <Link href="/samples/new">
+            <Button variant="outline">Record Sample</Button>
+          </Link>
+        </CardContent>
+      </Card>
+
       {/* Recent Experiments & Notes */}
-      <div className="grid gap-4 md:grid-cols-2">
-        <Card>
+      <div className="grid min-w-0 gap-4 md:grid-cols-2">
+        <Card className="min-w-0 overflow-hidden">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
-              <Activity className="h-5 w-5" />
+              <FlaskConical className="h-5 w-5" />
               Recent Experiments
             </CardTitle>
             <CardDescription>
@@ -195,14 +223,14 @@ export default async function DashboardPage() {
               recentExperiments.map((exp) => (
                 <div key={exp.id} className="space-y-2">
                   <div className="flex items-start justify-between gap-2">
-                    <div className="space-y-1 flex-1 min-w-0">
+                    <div className="space-y-1.25 flex-1 min-w-0">
                       <p className="text-sm font-medium leading-none truncate">
                         {exp.name}
                       </p>
-                      <p className="text-xs text-muted-foreground">
+                      <p className="text-xs text-muted-foreground break-words">
                         {exp.project?.name || "No project"}
                       </p>
-                      <p className="text-xs text-muted-foreground">
+                      <p className="text-xs text-muted-foreground break-words">
                         {exp.assigned_to
                           ? `${exp.assigned_to.first_name} ${exp.assigned_to.last_name}`
                           : "Unassigned"}
@@ -241,7 +269,7 @@ export default async function DashboardPage() {
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="min-w-0 overflow-hidden">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <BookOpen className="h-5 w-5" />
@@ -257,11 +285,11 @@ export default async function DashboardPage() {
                   className="pb-4 border-b last:border-0 last:pb-0"
                 >
                   <div className="flex items-start justify-between gap-2">
-                    <div className="space-y-1 flex-1 min-w-0">
+                    <div className="space-y-1.25 flex-1 min-w-0">
                       <p className="text-sm font-medium leading-none truncate">
                         {note.title}
                       </p>
-                      <p className="text-xs text-muted-foreground">
+                      <p className="text-xs text-muted-foreground break-words">
                         {note.experiment?.name || "No experiment"}
                         {note.experiment?.project?.name &&
                           ` · ${note.experiment.project.name}`}
@@ -299,24 +327,10 @@ export default async function DashboardPage() {
         </Card>
       </div>
 
-      {/* Quick Actions */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Quick Actions</CardTitle>
-          <CardDescription>Common tasks to get you started</CardDescription>
-        </CardHeader>
-        <CardContent className="flex flex-wrap gap-2">
-          <Link href="/projects/new">
-            <Button variant="outline">Create New Project</Button>
-          </Link>
-          <Link href="/experiments/new">
-            <Button variant="outline">Add Experiment</Button>
-          </Link>
-          <Link href="/samples/new">
-            <Button variant="outline">Record Sample</Button>
-          </Link>
-        </CardContent>
-      </Card>
+      {/* To-Do Panel */}
+      <div className="grid min-w-0 gap-4">
+        <TodoPanel initialTasks={dashboardTasks ?? []} />
+      </div>
     </div>
   );
 }

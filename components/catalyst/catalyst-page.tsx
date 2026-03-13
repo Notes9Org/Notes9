@@ -38,6 +38,16 @@ export function CatalystChat({ sessionId }: CatalystChatProps) {
 
   const supabase = createClient();
 
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      supabaseTokenRef.current = session?.access_token ?? null;
+    });
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      supabaseTokenRef.current = session?.access_token ?? null;
+    });
+    return () => subscription.unsubscribe();
+  }, [supabase]);
+
   const {
     sessions,
     currentSessionId,
@@ -51,14 +61,17 @@ export function CatalystChat({ sessionId }: CatalystChatProps) {
     loadSessions,
   } = useChatSessions();
 
-  // Create transport with prepareSendMessagesRequest to include sessionId
+  // Create transport with prepareSendMessagesRequest to include sessionId and Authorization header
   const transport = useMemo(() => new DefaultChatTransport({
     api: '/api/chat',
     prepareSendMessagesRequest(request) {
+      const token = supabaseTokenRef.current;
       return {
+        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
         body: {
           messages: request.messages,
           sessionId: currentSessionRef.current,
+          supabaseToken: token ?? undefined,
           ...request.body,
         },
       };
@@ -270,6 +283,14 @@ export function CatalystChat({ sessionId }: CatalystChatProps) {
     if (agentMode === 'biomni' || agentMode === 'notes9') {
       try {
         setNotes9Loading(true);
+
+        const { data: { session } } = await supabase.auth.getSession();
+        const token = session?.access_token;
+        if (!token) {
+          toast.error('Please sign in to use Notes9');
+          router.push('/auth/login');
+          return;
+        }
 
         // Add user message to UI immediately
         const userMessageId = `user-${Date.now()}`;

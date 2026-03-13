@@ -13,7 +13,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
-import { ArrowLeft, Wrench, MapPin, Calendar, AlertTriangle, CheckCircle } from 'lucide-react'
+import { ArrowLeft, Microscope, MapPin, Calendar, AlertTriangle } from 'lucide-react'
 import Link from 'next/link'
 import { EquipmentActions } from './equipment-actions'
 
@@ -84,18 +84,18 @@ export default async function EquipmentDetailPage({
   }
 
   return (
-      <div className="space-y-6">
-        {/* Header */}
-        <div className="flex items-start justify-between">
-          <div className="flex items-start gap-4">
-            <Button variant="ghost" size="icon" asChild>
+      <div className="space-y-4 md:space-y-6">
+        {/* Header: stacked on mobile, row on desktop */}
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
+          <div className="flex items-start gap-3 min-w-0">
+            <Button variant="ghost" size="icon" asChild className="shrink-0">
               <Link href="/equipment">
                 <ArrowLeft className="h-4 w-4" />
               </Link>
             </Button>
-            <div>
-              <div className="flex items-center gap-2 mb-1">
-                <h1 className="text-3xl font-bold tracking-tight text-foreground">
+            <div className="min-w-0 space-y-1">
+              <div className="flex flex-wrap items-center gap-2">
+                <h1 className="text-2xl font-bold tracking-tight text-foreground md:text-3xl">
                   {equipment.name}
                 </h1>
                 <Badge
@@ -112,7 +112,7 @@ export default async function EquipmentDetailPage({
                   {equipment.status.replace("_", " ")}
                 </Badge>
               </div>
-              <p className="text-muted-foreground">
+              <p className="text-sm text-muted-foreground">
                 {equipment.equipment_code} • {equipment.category || "Uncategorized"}
               </p>
             </div>
@@ -121,7 +121,7 @@ export default async function EquipmentDetailPage({
         </div>
 
         {/* Quick Info Cards */}
-        <div className="grid gap-3 md:grid-cols-4">
+        <div className="grid gap-3 grid-cols-1 sm:grid-cols-2 md:grid-cols-4">
           <Card className="py-2">
             <CardHeader className="pb-1 pt-2 px-4">
               <CardTitle className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
@@ -146,7 +146,7 @@ export default async function EquipmentDetailPage({
             </CardHeader>
             <CardContent className="px-4 pb-2">
               <div className="flex items-center gap-2">
-                <Wrench className="h-3.5 w-3.5 text-muted-foreground" />
+                <Microscope className="h-3.5 w-3.5 text-muted-foreground" />
                 <span className="text-sm font-medium text-foreground">
                   {equipment.manufacturer || "—"}
                 </span>
@@ -425,4 +425,3 @@ export default async function EquipmentDetailPage({
       </div>
     )
 }
-

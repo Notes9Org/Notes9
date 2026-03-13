@@ -9,6 +9,7 @@ import { notFound } from 'next/navigation'
 import Link from 'next/link'
 import { ExperimentActions } from './experiment-actions'
 import { ExperimentTabs } from './experiment-tabs'
+import { Badge } from '@/components/ui/badge'
 
 
 type SearchParams = { tab?: string; noteId?: string }
@@ -102,19 +103,32 @@ export default async function ExperimentDetailPage({
   }
 
   return (
-    <div className="flex flex-col gap-6 min-h-0 flex-1">
+    <div className="flex flex-col gap-4 md:gap-6 min-h-0 flex-1">
       <SetPageBreadcrumb
         segments={[
           { label: experiment.project, href: `/projects/${experiment.projectId}` },
           { label: experiment.name },
         ]}
       />
-      {/* Header */}
-      <div className="flex items-start justify-between shrink-0">
-        <div className="space-y-1">
-          <h1 className="text-xl font-bold tracking-tight text-foreground">
+      {/* Header: stacked on mobile, row on desktop (matches project detail) */}
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
+        <div className="min-w-0 space-y-2">
+          <h1 className="text-2xl font-bold tracking-tight md:text-3xl">
             {experiment.name}
           </h1>
+          <div className="flex flex-wrap items-center gap-2">
+            <Badge
+              variant={
+                experiment.status === "active"
+                  ? "default"
+                  : experiment.status === "completed"
+                  ? "success"
+                  : "outline"
+              }
+            >
+              {experiment.status}
+            </Badge>
+          </div>
         </div>
         <ExperimentActions
           experiment={{
@@ -132,11 +146,6 @@ export default async function ExperimentDetailPage({
           users={users || []}
         />
       </div>
-
-
-
-
-
       <ExperimentTabs
         experiment={experiment}
         initialTab={initialTab}

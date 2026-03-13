@@ -1,6 +1,7 @@
 'use client'
 
 import * as React from 'react'
+import { usePathname } from 'next/navigation'
 import { Slot } from '@radix-ui/react-slot'
 import { cva, VariantProps } from 'class-variance-authority'
 import { PanelLeftIcon } from 'lucide-react'
@@ -67,7 +68,18 @@ function SidebarProvider({
   onOpenChange?: (open: boolean) => void
 }) {
   const isMobile = useIsMobile()
+  const pathname = usePathname()
   const [openMobile, setOpenMobile] = React.useState(false)
+  const prevPathnameRef = React.useRef<string | null>(null)
+
+  // Close mobile drawer when route changes (e.g. user taps a nav link)
+  React.useEffect(() => {
+    if (pathname == null) return
+    if (prevPathnameRef.current != null && prevPathnameRef.current !== pathname) {
+      setOpenMobile(false)
+    }
+    prevPathnameRef.current = pathname
+  }, [pathname])
 
   // This is the internal state of the sidebar.
   // We use openProp and setOpenProp for control from outside the component.
@@ -187,7 +199,7 @@ function Sidebar({
           data-sidebar="sidebar"
           data-slot="sidebar"
           data-mobile="true"
-          className="bg-sidebar text-sidebar-foreground w-(--sidebar-width) p-0 [&>button]:hidden"
+          className="bg-sidebar text-sidebar-foreground w-(--sidebar-width) p-0"
           style={
             {
               '--sidebar-width': SIDEBAR_WIDTH_MOBILE,
