@@ -1,6 +1,6 @@
 "use client"
 
-import { ReactNode, useState, useEffect } from "react"
+import { ReactNode, useState, useEffect, useRef, useCallback } from "react"
 import { usePathname } from "next/navigation"
 import Link from "next/link"
 import { AppSidebar } from "./app-sidebar"
@@ -11,6 +11,7 @@ import { ResizeHandle } from "@/components/ui/resize-handle"
 import { SidebarProvider, SidebarInset, useSidebar } from "@/components/ui/sidebar"
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet"
 import { useResizable } from "@/hooks/use-resizable"
+import { cn } from "@/lib/utils"
 import { Menu, X, Sparkles, ChevronRight, Sun, Moon } from 'lucide-react'
 import { useTheme } from "next-themes"
 import { useMediaQuery } from "@/hooks/use-media-query"
@@ -36,12 +37,58 @@ function getHeaderTitle(pathname: string): string {
   return "Notes9"
 }
 
+const MOBILE_BREADCRUMB_MAX_LABEL_LENGTH = 18
+
+function shortenLabel(label: string, maxLen: number = MOBILE_BREADCRUMB_MAX_LABEL_LENGTH): string {
+  if (label.length <= maxLen) return label
+  return label.slice(0, maxLen - 1) + "…"
+}
+
 function HeaderTitle() {
   const pathname = usePathname()
   const { segments } = useBreadcrumb()
+  const isMobile = useMediaQuery("(max-width: 768px)")
+  const scrollRef = useRef<HTMLElement>(null)
+  const [scrollState, setScrollState] = useState({ canScrollLeft: false, canScrollRight: false })
   const fallbackTitle = getHeaderTitle(pathname ?? "")
 
   const filtered = segments.filter((s) => s.label !== "Dashboard")
+
+  const updateScrollState = useCallback(() => {
+    const el = scrollRef.current
+    if (!el) return
+    const { scrollLeft, scrollWidth, clientWidth } = el
+    const canScrollLeft = scrollLeft > 2
+    const canScrollRight = scrollLeft < scrollWidth - clientWidth - 2
+    setScrollState((prev) =>
+      prev.canScrollLeft !== canScrollLeft || prev.canScrollRight !== canScrollRight
+        ? { canScrollLeft, canScrollRight }
+        : prev
+    )
+  }, [])
+
+  useEffect(() => {
+    if (!isMobile || filtered.length === 0) return
+    const el = scrollRef.current
+    if (!el) return
+    // Scroll to the right so current page (end) is visible; user can scroll left to see rest
+    el.scrollLeft = el.scrollWidth - el.clientWidth
+    updateScrollState()
+  }, [isMobile, filtered, updateScrollState])
+
+  useEffect(() => {
+    if (!isMobile || filtered.length === 0) return
+    const el = scrollRef.current
+    if (!el) return
+    el.addEventListener("scroll", updateScrollState)
+    const ro = new ResizeObserver(updateScrollState)
+    ro.observe(el)
+    return () => {
+      el.removeEventListener("scroll", updateScrollState)
+      ro.disconnect()
+    }
+  }, [isMobile, filtered.length, updateScrollState])
+
   if (filtered.length === 0) {
     return (
       <h1 className="text-base sm:text-lg font-semibold truncate min-w-0">
@@ -50,17 +97,63 @@ function HeaderTitle() {
     )
   }
 
+  // Mobile: scrollable breadcrumb (hidden scrollbar), shortened labels, scrolled to the right by default, side gradients when scrollable
+  if (isMobile) {
+    const fullPathAria = filtered.map((s) => s.label).join(" › ")
+    return (
+      <div className="relative min-w-0 flex-1 flex">
+        {scrollState.canScrollLeft && (
+          <div
+            aria-hidden
+            className="pointer-events-none absolute left-0 top-0 bottom-0 w-6 shrink-0 z-[1] bg-gradient-to-r from-background to-transparent"
+          />
+        )}
+        {scrollState.canScrollRight && (
+          <div
+            aria-hidden
+            className="pointer-events-none absolute right-0 top-0 bottom-0 w-6 shrink-0 z-[1] bg-gradient-to-l from-background to-transparent"
+          />
+        )}
+        <nav
+          ref={scrollRef}
+          aria-label={`Breadcrumb: ${fullPathAria}`}
+          className="flex flex-nowrap items-center gap-1.5 text-sm text-muted-foreground min-w-0 flex-1 overflow-x-auto overflow-y-hidden scroll-smooth hide-scrollbar"
+        >
+          {filtered.map((seg, i) => (
+            <span key={i} className="inline-flex items-center gap-1.5 shrink-0">
+              {i > 0 && <ChevronRight className="size-3.5 shrink-0" aria-hidden />}
+              {seg.href ? (
+                <Link
+                  href={seg.href}
+                  className="transition-colors hover:text-foreground whitespace-nowrap"
+                  title={seg.label}
+                >
+                  {shortenLabel(seg.label)}
+                </Link>
+              ) : (
+                <span className="font-normal text-foreground whitespace-nowrap" title={seg.label}>
+                  {shortenLabel(seg.label)}
+                </span>
+              )}
+            </span>
+          ))}
+        </nav>
+      </div>
+    )
+  }
+
+  // Desktop: full breadcrumb path
   return (
-    <nav aria-label="breadcrumb" className="flex flex-wrap items-center gap-1.5 text-sm text-muted-foreground sm:gap-2.5 min-w-0 truncate">
+    <nav aria-label="breadcrumb" className="flex flex-nowrap items-center gap-1.5 text-sm text-muted-foreground sm:gap-2.5 min-w-0 overflow-hidden">
       {filtered.map((seg, i) => (
-        <span key={i} className="inline-flex items-center gap-1.5 shrink-0">
+        <span key={i} className="inline-flex items-center gap-1.5 shrink-0 min-w-0">
           {i > 0 && <ChevronRight className="size-3.5 shrink-0" aria-hidden />}
           {seg.href ? (
-            <Link href={seg.href} className="transition-colors hover:text-foreground truncate">
+            <Link href={seg.href} className="transition-colors hover:text-foreground truncate min-w-0 block">
               {seg.label}
             </Link>
           ) : (
-            <span className="font-normal text-foreground truncate">{seg.label}</span>
+            <span className="font-normal text-foreground truncate min-w-0 block">{seg.label}</span>
           )}
         </span>
       ))}
@@ -152,11 +245,15 @@ export function AppLayout({ children }: AppLayoutProps) {
             <div
               data-sidebar-container
               data-resizing={leftSidebar.isResizing ? 'true' : undefined}
-              className="h-full min-h-0 shrink-0 overflow-hidden"
+              className={cn(
+                "h-full min-h-0 shrink-0 overflow-hidden",
+                "data-[resizing=true]:[&_[data-slot=sidebar-gap]]:!transition-none",
+                "data-[resizing=true]:[&_[data-slot=sidebar-container]]:!transition-none"
+              )}
               style={{
                 '--sidebar-width': `${leftColumnWidth}px`,
                 width: leftColumnWidth,
-                transition: leftSidebar.isResizing ? 'none' : 'width 0.2s ease-out',
+                transition: leftSidebar.isResizing ? 'none' : 'width 0.15s cubic-bezier(0.4, 0, 0.2, 1)',
               } as React.CSSProperties}
             >
               <AppSidebar />
@@ -205,24 +302,22 @@ export function AppLayout({ children }: AppLayoutProps) {
                 )}
               </Button>
               {/* AI / Right sidebar toggle */}
-              <Button
-                variant={rightSidebarOpen ? "secondary" : "ghost"}
-                size="icon"
-                className="size-8 sm:size-9"
-                onClick={() => setRightSidebarOpen(!rightSidebarOpen)}
-              >
-                {rightSidebarOpen ? (
-                  <X className="size-4" />
-                ) : (
-                  <Sparkles className="size-4" />
+                {!rightSidebarOpen && (
+                  <Button
+                    variant={rightSidebarOpen ? "default" : "ghost"}
+                    size="icon"
+                    className="size-8 sm:size-9"
+                    onClick={() => setRightSidebarOpen(!rightSidebarOpen)}
+                  >
+                    <Sparkles className="size-4" />
+                  </Button>
                 )}
-              </Button>
             </div>
           </header>
 
           {/* Main Content */}
-          <main className="flex-1 overflow-auto p-3 sm:p-4 md:p-6">
-            <div className="w-full">
+          <main className="flex-1 overflow-auto p-3 sm:p-4 md:p-6 min-w-0">
+            <div className="w-full min-w-0">
               {children}
             </div>
           </main>
@@ -231,11 +326,14 @@ export function AppLayout({ children }: AppLayoutProps) {
         {/* Right Sidebar - Sheet on mobile, panel on desktop */}
         {isMobile ? (
           <Sheet open={rightSidebarOpen} onOpenChange={setRightSidebarOpen}>
-            <SheetContent side="right" className="w-full sm:w-[340px] p-0">
+            <SheetContent
+              side="right"
+              className="w-full max-w-full p-0 data-[state=open]:duration-300 data-[state=closed]:duration-200"
+            >
               <SheetHeader className="sr-only">
                 <SheetTitle>AI Assistant</SheetTitle>
               </SheetHeader>
-              <RightSidebar />
+              <RightSidebar onClose={() => setRightSidebarOpen(false)} />
             </SheetContent>
           </Sheet>
         ) : (
@@ -250,7 +348,7 @@ export function AppLayout({ children }: AppLayoutProps) {
                 className="border-l border-border overflow-hidden h-full min-h-0 flex flex-col"
                 style={{ width: rightSidebar.width, minWidth: 0 }}
               >
-                <RightSidebar />
+                <RightSidebar onClose={() => setRightSidebarOpen(false)} />
               </div>
             </div>
           )

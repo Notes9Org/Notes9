@@ -4,6 +4,8 @@ import { saveChatMessage } from '@/lib/db/chat';
 
 export const maxDuration = 60;
 
+const NOTES9_API_BASE = process.env.NEXT_PUBLIC_NOTES9_API_URL?.replace(/\/$/, '') || '';
+
 /** Unwrap stringified JSON parts (e.g. [{"type":"text","text":"..."}]) to plain text. Handles double/triple wrapping. */
 function normalizeContentToPlainText(raw: string): string {
   let s = raw?.trim() ?? '';
@@ -44,8 +46,10 @@ function getPlainTextFromMessage(msg: {
 
 export async function POST(req: Request) {
   const body = await req.json();
-  console.log('API Request Body:', JSON.stringify(body, null, 2));
-  const { messages, sessionId } = body;
+  const { messages, sessionId, supabaseToken: bodyToken } = body;
+  console.log('API Request Body:', JSON.stringify({ ...body, supabaseToken: bodyToken ? '[REDACTED]' : undefined }, null, 2));
+  const headerToken = req.headers.get('Authorization')?.replace(/^Bearer\s+/i, '').trim();
+  const supabaseToken = bodyToken || headerToken;
 
   if (!sessionId) {
     console.error('Missing session_id. Body:', body);
@@ -54,10 +58,16 @@ export async function POST(req: Request) {
 
   const baseUrl = process.env.AI_SERVICE_URL?.replace(/\/$/, '') || 'http://54.157.162.202:8000';
   const bearerToken = process.env.AI_SERVICE_BEARER_TOKEN;
+  const useNotes9Fallback = !bearerToken && supabaseToken && NOTES9_API_BASE;
 
-  if (!bearerToken) {
-    console.error('AI_SERVICE_BEARER_TOKEN is not configured');
-    return new Response('Chat service not configured', { status: 500 });
+  if (!bearerToken && !useNotes9Fallback) {
+    console.error('AI_SERVICE_BEARER_TOKEN is not configured and no Supabase token provided');
+    return new Response(
+      JSON.stringify({
+        error: 'Chat service not configured. Use Notes9 mode or set AI_SERVICE_BEARER_TOKEN.',
+      }),
+      { status: 503, headers: { 'Content-Type': 'application/json' } }
+    );
   }
 
   // 1. Extract the latest user query
@@ -78,31 +88,61 @@ export async function POST(req: Request) {
     generateId,
     execute: async ({ writer }) => {
       try {
-        const response = await fetch(`${baseUrl}/chat`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${bearerToken}`,
-          },
-          body: JSON.stringify({
-            content: userQuery,
-            history,
-            session_id: sessionId,
-          }),
-        });
+        let assistantContent: string;
 
-        if (!response.ok) {
-          const errText = await response.text();
-          console.error('External chat API error:', response.status, errText);
-          writer.write({
-            type: 'error',
-            errorText: `Chat service error: ${response.status} ${errText}`,
+        if (useNotes9Fallback) {
+          const response = await fetch(`${NOTES9_API_BASE}/chat`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${supabaseToken}`,
+            },
+            body: JSON.stringify({
+              content: userQuery,
+              history,
+              session_id: sessionId,
+            }),
           });
-          return;
-        }
 
-        const data = (await response.json()) as { content?: string; role?: string };
-        const assistantContent = typeof data.content === 'string' ? data.content : String(data.content ?? '');
+          if (!response.ok) {
+            const errText = await response.text();
+            console.error('Notes9 chat API error:', response.status, errText);
+            writer.write({
+              type: 'error',
+              errorText: `Chat service error: ${response.status} ${errText}`,
+            });
+            return;
+          }
+
+          const data = (await response.json()) as { content?: string; role?: string };
+          assistantContent = typeof data.content === 'string' ? data.content : String(data.content ?? '');
+        } else {
+          const response = await fetch(`${baseUrl}/chat`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${bearerToken}`,
+            },
+            body: JSON.stringify({
+              content: userQuery,
+              history,
+              session_id: sessionId,
+            }),
+          });
+
+          if (!response.ok) {
+            const errText = await response.text();
+            console.error('External chat API error:', response.status, errText);
+            writer.write({
+              type: 'error',
+              errorText: `Chat service error: ${response.status} ${errText}`,
+            });
+            return;
+          }
+
+          const data = (await response.json()) as { content?: string; role?: string };
+          assistantContent = typeof data.content === 'string' ? data.content : String(data.content ?? '');
+        }
 
         // Persist assistant response (DB)
         await saveChatMessage(sessionId, 'assistant', assistantContent);

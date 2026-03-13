@@ -10,7 +10,7 @@ import { SetPageBreadcrumb } from "@/components/layout/breadcrumb-context"
 import { Plus, Users, Calendar, FlaskConical, FileText } from 'lucide-react'
 import Link from 'next/link'
 import { ProjectActions } from './project-actions'
-import { HtmlContentTruncated } from '@/components/html-content'
+import { HtmlContent, HtmlContentTruncated } from '@/components/html-content'
 
 export default async function ProjectDetailPage({
   params,
@@ -50,18 +50,18 @@ export default async function ProjectDetailPage({
   }
 
   return (
-      <div className="space-y-6">
+      <div className="space-y-4 md:space-y-6">
         <SetPageBreadcrumb
           segments={[
             { label: "Projects", href: "/projects" },
             { label: project.name },
           ]}
         />
-        {/* Header */}
-        <div className="flex items-start justify-between gap-4">
-          <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-2 mb-1">
-              <h1 className="text-3xl font-bold tracking-tight">{project.name}</h1>
+        {/* Header: stacked on mobile, row on desktop */}
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
+          <div className="min-w-0 space-y-2">
+            <h1 className="text-2xl font-bold tracking-tight md:text-3xl">{project.name}</h1>
+            <div className="flex flex-wrap items-center gap-2">
               <Badge
                 variant={
                   project.status === "active"
@@ -81,24 +81,10 @@ export default async function ProjectDetailPage({
                       : "outline"
                   }
                 >
-                  {project.priority} priority
+                  <span className="hidden sm:inline">{project.priority} priority</span>
+                  <span className="sm:hidden">{project.priority}</span>
                 </Badge>
               )}
-            </div>
-            <p className="text-muted-foreground">{project.description}</p>
-            <div className="flex items-center gap-4 mt-2 text-sm text-muted-foreground">
-              {project.start_date && (
-                <div className="flex items-center gap-1">
-                  <Calendar className="h-3 w-3" />
-                  <span>Started: {new Date(project.start_date).toLocaleDateString()}</span>
-                </div>
-              )}
-              <div className="flex items-center gap-1">
-                <Users className="h-3 w-3" />
-                <span>
-                  {Math.max(1, project.project_members?.length || 0)} {Math.max(1, project.project_members?.length || 0) === 1 ? 'team member' : 'team members'}
-                </span>
-              </div>
             </div>
           </div>
           <ProjectActions
@@ -118,16 +104,16 @@ export default async function ProjectDetailPage({
         {/* Tabs */}
         <Tabs defaultValue="experiments" className="space-y-4">
           <TabsList>
+            <TabsTrigger value="overview">Overview</TabsTrigger>
             <TabsTrigger value="experiments">Experiments</TabsTrigger>
             <TabsTrigger value="team">Team</TabsTrigger>
             <TabsTrigger value="reports">Reports</TabsTrigger>
-            <TabsTrigger value="overview">Overview</TabsTrigger>
           </TabsList>
 
           <TabsContent value="experiments" className="space-y-4">
-            <div className="flex items-center justify-between">
-              <h2 className="text-xl font-semibold">Experiments</h2>
-              <Button asChild>
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <h2 className="text-lg font-semibold md:text-xl">Experiments</h2>
+              <Button asChild className="w-full sm:w-auto">
                 <Link href={`/experiments/new?project=${id}`}>
                   <Plus className="h-4 w-4 mr-2" />
                   New Experiment
@@ -191,9 +177,9 @@ export default async function ProjectDetailPage({
           </TabsContent>
 
           <TabsContent value="team" className="space-y-4">
-            <div className="flex items-center justify-between">
-              <h2 className="text-xl font-semibold">Team Members</h2>
-              <Button>
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <h2 className="text-lg font-semibold md:text-xl">Team Members</h2>
+              <Button className="w-full sm:w-auto">
                 <Plus className="h-4 w-4 mr-2" />
                 Add Member
               </Button>
@@ -232,9 +218,9 @@ export default async function ProjectDetailPage({
           </TabsContent>
 
           <TabsContent value="reports" className="space-y-4">
-            <div className="flex items-center justify-between">
-              <h2 className="text-xl font-semibold">Project Reports</h2>
-              <Button>
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <h2 className="text-lg font-semibold md:text-xl">Project Reports</h2>
+              <Button className="w-full sm:w-auto">
                 <Plus className="h-4 w-4 mr-2" />
                 Generate Report
               </Button>
@@ -253,7 +239,15 @@ export default async function ProjectDetailPage({
           </TabsContent>
 
           <TabsContent value="overview" className="space-y-4">
-            <div className="grid gap-4 md:grid-cols-2">
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-foreground">Project Description</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <HtmlContent content={project.description} />
+              </CardContent>
+            </Card>
+            <div className="grid gap-4 grid-cols-1 md:grid-cols-2">
               <Card>
                 <CardHeader>
                   <CardTitle>Project Progress</CardTitle>
@@ -267,7 +261,7 @@ export default async function ProjectDetailPage({
                     </div>
                     <Progress value={75} />
                   </div>
-                  <div className="grid grid-cols-2 gap-4 text-sm">
+                  <div className="grid grid-cols-2 gap-3 sm:gap-4 text-sm">
                     <div>
                       <p className="text-muted-foreground">Total Experiments</p>
                       <p className="text-2xl font-bold">{project.experiments?.length || 0}</p>
@@ -288,7 +282,7 @@ export default async function ProjectDetailPage({
                   <CardDescription>Key information</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
-                  <div className="grid grid-cols-2 gap-4 text-sm">
+                  <div className="grid grid-cols-2 gap-3 sm:gap-4 text-sm">
                     <div>
                       <p className="text-muted-foreground">Status</p>
                       <Badge className="mt-1">{project.status}</Badge>
