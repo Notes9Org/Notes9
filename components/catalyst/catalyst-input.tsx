@@ -1,14 +1,14 @@
 'use client';
 
 import { useRef, useEffect, useState, useCallback, type ChangeEvent } from 'react';
-import { ArrowUp, Square, Paperclip, Clock, X, Globe, FlaskConical } from 'lucide-react';
+import { ArrowUp, Square, Paperclip, Clock, X, Globe, Dna, FlaskConical } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { cn } from '@/lib/utils';
 import { PreviewAttachment, type Attachment } from './preview-attachment';
 import { toast } from 'sonner';
 
-export type AgentMode = 'general' | 'notes9';
+export type AgentMode = 'general' | 'biomni' | 'notes9';
 
 interface CatalystInputProps {
   input: string;
@@ -203,6 +203,20 @@ export function CatalystInput({
             >
               <FlaskConical className="size-3.5" />
               Notes9
+            </Button>
+            <Button
+              type="button"
+              variant={agentMode === 'biomni' ? 'default' : 'ghost'}
+              size="sm"
+              className={cn(
+                'h-8 gap-2 text-xs font-medium transition-all',
+                agentMode === 'biomni' && 'bg-primary text-primary-foreground'
+              )}
+              onClick={() => onAgentModeChange('biomni')}
+              disabled={isLoading}
+            >
+              <Dna className="size-3.5" />
+              Biomni
             </Button>
             <Button
               type="button"

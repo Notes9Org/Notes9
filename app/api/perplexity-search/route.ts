@@ -107,16 +107,14 @@ Focus on peer-reviewed papers, preprints from reputable sources (arXiv, bioRxiv,
         ],
         max_tokens: 2000,
         temperature: 0.2, // Low temperature for factual responses
-        return_citations: true,
-        search_domain_filter: ['arxiv.org', 'doi.org', 'pubmed.ncbi.nlm.nih.gov', 'biorxiv.org', 'medrxiv.org', 'ncbi.nlm.nih.gov', 'semanticscholar.org', 'google.com', 'scholar.google.com'],
       }),
     });
 
     if (!response.ok) {
       const errorData = await response.text();
-      console.error('Perplexity API error:', errorData);
+      console.error(`Perplexity API error (${response.status}):`, errorData);
       return NextResponse.json(
-        { error: 'Failed to fetch results from Perplexity' },
+        { error: `Perplexity API error (${response.status}): ${errorData}` },
         { status: response.status }
       );
     }

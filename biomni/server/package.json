@@ -1,0 +1,22 @@
+{
+  "name": "notes9-biomni-server",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx src/index.ts",
+    "build": "tsc -p tsconfig.json && mkdir -p dist/agent && cp src/agent/runner.py dist/agent/runner.py",
+    "start": "node dist/index.js",
+    "build:lambda": "tsc -p tsconfig.lambda.json && mkdir -p dist/lambda/agent && cp src/agent/runner.py dist/lambda/agent/runner.py"
+  },
+  "dependencies": {
+    "@aws-sdk/client-s3": "^3.996.0",
+    "@aws-sdk/s3-request-presigner": "^3.996.0",
+    "dotenv": "^17.2.3",
+    "zod": "3.25.76"
+  },
+  "devDependencies": {
+    "@types/node": "^24.5.2",
+    "tsx": "^4.21.0",
+    "typescript": "^5.9.3"
+  }
+}

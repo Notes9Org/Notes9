@@ -16,7 +16,6 @@ import { CatalystInput, type AgentMode } from './catalyst-input';
 import type { Attachment } from './preview-attachment';
 import { CatalystSidebar } from './catalyst-sidebar';
 import type { Vote } from '@/lib/db/schema';
-import { formatCitationDisplay } from '@/lib/utils';
 
 interface CatalystChatProps {
   sessionId?: string;
@@ -36,13 +35,6 @@ export function CatalystChat({ sessionId }: CatalystChatProps) {
   const prevStatusRef = useRef<string>('ready');
   const currentSessionRef = useRef<string | null>(sessionId || null);
   const hasLoadedSessionRef = useRef<string | null>(null);
-  // Use ref for model so transport can access current value without recreating
-  const currentModelRef = useRef(selectedModelId);
-
-  // Keep ref in sync with state
-  useEffect(() => {
-    currentModelRef.current = selectedModelId;
-  }, [selectedModelId]);
 
   const supabase = createClient();
 
@@ -274,8 +266,8 @@ export function CatalystChat({ sessionId }: CatalystChatProps) {
       router.push(`/catalyst/${sid}`);
     }
 
-    // Handle Notes9 mode
-    if (agentMode === 'notes9') {
+    // Handle Biomni mode (includes legacy notes9 mode value)
+    if (agentMode === 'biomni' || agentMode === 'notes9') {
       try {
         setNotes9Loading(true);
 
@@ -293,61 +285,36 @@ export function CatalystChat({ sessionId }: CatalystChatProps) {
         // Save user message to DB
         await saveMessage(sid, 'user', text);
 
-        // Call Notes9 API
-        const response = await fetch('https://z3thrlksg0.execute-api.us-east-1.amazonaws.com/agent/run', {
+        // Call Biomni proxy API
+        const response = await fetch('/api/biomni', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
+            task: text,
             history: [],
-            query: text,
             session_id: sid,
             user_id: userId,
           }),
         });
 
         if (!response.ok) {
-          throw new Error('Notes9 API request failed');
+          const errorData = await response.json().catch(() => ({}));
+          throw new Error(
+            typeof errorData.error === 'string'
+              ? errorData.error
+              : 'Biomni API request failed'
+          );
         }
 
         const data = await response.json();
-
-        // Format response with citations as clickable links
-        let formattedAnswer = data.answer;
-        if (data.citations && data.citations.length > 0) {
-          formattedAnswer += '\n\n**References:**\n';
-          data.citations.forEach((citation: any, index: number) => {
-            const sourceId = citation.source_id;
-            const sourceType = citation.source_type;
-
-            let route = '';
-            switch (sourceType) {
-              case 'literature_review':
-                route = `/literature-reviews/${sourceId}`;
-                break;
-              case 'protocol':
-                route = `/protocols/${sourceId}`;
-                break;
-              case 'project':
-                route = `/projects/${sourceId}`;
-                break;
-              case 'lab_note':
-              case 'report':
-              default:
-                route = '';
-            }
-
-            const displayText = formatCitationDisplay(citation);
-            const sourceLabel = sourceType.replace('_', ' ');
-
-            if (route) {
-              formattedAnswer += `\n[${index + 1}] [View ${sourceLabel}](${route}): ${displayText}`;
-            } else {
-              formattedAnswer += `\n[${index + 1}] ${sourceLabel}: ${displayText}`;
-            }
-          });
-        }
+        const formattedAnswer =
+          typeof data.result === 'string'
+            ? data.result
+            : typeof data.answer === 'string'
+              ? data.answer
+              : 'No response returned from Biomni.';
 
         // Add assistant message to UI
         const assistantMessageId = `assistant-${Date.now()}`;
@@ -370,8 +337,8 @@ export function CatalystChat({ sessionId }: CatalystChatProps) {
 
         loadSessions();
       } catch (error) {
-        console.error('Notes9 API error:', error);
-        toast.error('Failed to get response from Notes9');
+        console.error('Biomni API error:', error);
+        toast.error('Failed to get response from Biomni');
       } finally {
         setNotes9Loading(false);
       }

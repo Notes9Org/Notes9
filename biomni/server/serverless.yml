@@ -1,0 +1,50 @@
+service: biomni-server
+
+provider:
+  name: aws
+  runtime: python3.11
+  stage: ${opt:stage, 'dev'}
+  region: ${opt:region, 'us-east-1'}
+  memorySize: 10240
+  timeout: 900
+  environment:
+    GOOGLE_API_KEY: ${env:GOOGLE_API_KEY}
+    BIOMNI_DATA_PATH: ${env:BIOMNI_DATA_PATH}
+    BIOMNI_GEMINI_MODEL: ${env:BIOMNI_GEMINI_MODEL}
+    BIOMNI_GEMINI_REASONING_MODEL: ${env:BIOMNI_GEMINI_REASONING_MODEL}
+    AWS_REGION: ${self:provider.region}
+    AWS_ACCESS_KEY_ID: ${env:AWS_ACCESS_KEY_ID}
+    AWS_SECRET_ACCESS_KEY: ${env:AWS_SECRET_ACCESS_KEY}
+  iam:
+    role:
+      statements:
+        - Effect: Allow
+          Action:
+            - s3:GetObject
+            - s3:PutObject
+            - s3:ListBucket
+          Resource:
+            - arn:aws:s3:::${env:BIOMNI_DATA_PATH}
+            - arn:aws:s3:::${env:BIOMNI_DATA_PATH}/*
+
+functions:
+  biomniHandler:
+    handler: dist/lambda.handler
+    events:
+      - httpApi:
+          path: /{proxy+}
+          method: ANY
+      - httpApi:
+          path: /
+          method: ANY
+
+plugins:
+  - serverless-python-requirements
+
+custom:
+  pythonRequirements:
+    layerName: biomni-python-layer
+    includeRuntime: true
+    defaultPythonVersion: "3.11"
+    useStaticCache: true
+    cacheLocation: .serverless

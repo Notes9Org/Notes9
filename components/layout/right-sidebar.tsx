@@ -24,6 +24,7 @@ import {
   Paperclip,
   Globe,
   FlaskConical,
+  Dna,
   PenBox,
   MoreHorizontal,
   Trash2,
@@ -32,7 +33,7 @@ import {
   X,
   Mic,
 } from 'lucide-react';
-import { cn, formatCitationDisplay } from '@/lib/utils';
+import { cn } from '@/lib/utils';
 import { useChatSessions, ChatSession } from '@/hooks/use-chat-sessions';
 import { MarkdownRenderer } from '@/components/catalyst/markdown-renderer';
 import { PreviewAttachment, type Attachment } from '@/components/catalyst/preview-attachment';
@@ -46,7 +47,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 
-type AgentMode = 'general' | 'notes9';
+type AgentMode = 'general' | 'biomni' | 'notes9';
 
 /** Unwrap stringified JSON parts to plain text (handles double/triple wrapping). Used so request body always sends plain text. */
 function normalizeMessageContentToPlainText(raw: string): string {
@@ -278,7 +279,7 @@ export function RightSidebar() {
       updateSessionTitle(currentSessionRef.current, title);
     }
 
-    if (agentMode === 'notes9') {
+    if (agentMode === 'biomni' || agentMode === 'notes9') {
       try {
         setNotes9Loading(true);
         const userMessageId = `user-${Date.now()}`;
@@ -294,53 +295,34 @@ export function RightSidebar() {
         const sessionId = currentSessionRef.current!;
         await saveMessage(sessionId, 'user', text);
 
-        // Call Notes9 API
-        const response = await fetch('https://z3thrlksg0.execute-api.us-east-1.amazonaws.com/agent/run', {
+        // Call Biomni proxy API
+        const response = await fetch('/api/biomni', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
+            task: text,
             history: [],
-            query: text,
             session_id: sessionId,
             user_id: userId,
           }),
         });
 
-        if (!response.ok) throw new Error('Notes9 API request failed');
-        const data = await response.json();
-        let formattedAnswer = data.answer;
-
-        // Citation handling...
-        if (data.citations && data.citations.length > 0) {
-          formattedAnswer += '\n\n**References:**\n';
-          data.citations.forEach((citation: any, index: number) => {
-            const sourceId = citation.source_id;
-            const sourceType = citation.source_type;
-            let route = '';
-            switch (sourceType) {
-              case 'literature_review':
-                route = `/literature-reviews/${sourceId}`;
-                break;
-              case 'protocol':
-                route = `/protocols/${sourceId}`;
-                break;
-              case 'project':
-                route = `/projects/${sourceId}`;
-                break;
-              case 'lab_note':
-              case 'report':
-              default:
-                route = '';
-            }
-            const displayText = formatCitationDisplay(citation);
-            const sourceLabel = sourceType.replace('_', ' ');
-            if (route) {
-              formattedAnswer += `\n[${index + 1}] [View ${sourceLabel}](${route}): ${displayText}`;
-            } else {
-              formattedAnswer += `\n[${index + 1}] ${sourceLabel}: ${displayText}`;
-            }
-          });
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({}));
+          throw new Error(
+            typeof errorData.error === 'string'
+              ? errorData.error
+              : 'Biomni API request failed'
+          );
         }
+
+        const data = await response.json();
+        const formattedAnswer =
+          typeof data.result === 'string'
+            ? data.result
+            : typeof data.answer === 'string'
+              ? data.answer
+              : 'No response returned from Biomni.';
 
         const assistantMessageId = `assistant-${Date.now()}`;
         const assistantMessage = {
@@ -354,8 +336,8 @@ export function RightSidebar() {
         await saveMessage(sessionId, 'assistant', formattedAnswer);
         loadSessions();
       } catch (error) {
-        console.error('Notes9 API error:', error);
-        toast.error('Failed to get response from Notes9');
+        console.error('Biomni API error:', error);
+        toast.error('Failed to get response from Biomni');
       } finally {
         setNotes9Loading(false);
       }
@@ -565,18 +547,23 @@ export function RightSidebar() {
                 <Button variant="ghost" size="sm" className="h-7 gap-1.5 rounded-md bg-muted/50 hover:bg-muted text-muted-foreground px-2 text-xs font-medium">
                   {agentMode === 'notes9' ? (
                     <><FlaskConical className="size-3.5" /> Notes9</>
+                  ) : agentMode === 'biomni' ? (
+                    <><Dna className="size-3.5" /> Biomni</>
                   ) : (
                     <><Globe className="size-3.5" /> General</>
                   )}
                   <ChevronDown className="size-3 opacity-50" />
                 </Button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="start" className="w-[150px]">
+              <DropdownMenuContent align="start" className="w-[170px]">
                 <DropdownMenuItem onClick={() => setAgentMode('general')} className="gap-2 text-xs">
                   <Globe className="size-3.5" /> General
                 </DropdownMenuItem>
                 <DropdownMenuItem onClick={() => setAgentMode('notes9')} className="gap-2 text-xs">
                   <FlaskConical className="size-3.5" /> Notes9
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => setAgentMode('biomni')} className="gap-2 text-xs">
+                  <Dna className="size-3.5" /> Biomni
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
