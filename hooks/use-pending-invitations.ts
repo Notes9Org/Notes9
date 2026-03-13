@@ -8,7 +8,7 @@ export interface PendingInvitation {
   id: string
   lab_note_id: string
   email: string
-  invited_by: string
+  invited_by: string | null
   permission_level: 'editor' | 'viewer'
   status: string
   expires_at: string
@@ -91,7 +91,7 @@ export function usePendingInvitations() {
 
       const normalized = invitations.map((inv) => ({
         ...inv,
-        inviter: inviterMap.get(inv.invited_by) ?? null,
+        inviter: inv.invited_by ? inviterMap.get(inv.invited_by) ?? null : null,
       }))
 
       setInvitations(normalized)

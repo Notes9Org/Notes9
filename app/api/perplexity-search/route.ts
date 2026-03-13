@@ -114,7 +114,7 @@ Focus on peer-reviewed papers, preprints from reputable sources (arXiv, bioRxiv,
       const errorData = await response.text();
       console.error(`Perplexity API error (${response.status}):`, errorData);
       return NextResponse.json(
-        { error: `Perplexity API error (${response.status}): ${errorData}` },
+        { error: `Perplexity API error (${response.status}). Please try again later.` },
         { status: response.status }
       );
     }

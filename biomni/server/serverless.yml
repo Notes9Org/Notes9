@@ -10,6 +10,8 @@ provider:
   environment:
     GOOGLE_API_KEY: ${env:GOOGLE_API_KEY}
     BIOMNI_DATA_PATH: ${env:BIOMNI_DATA_PATH}
+    BIOMNI_DATA_BUCKET: ${env:BIOMNI_DATA_BUCKET}
+    BIOMNI_DATA_PREFIX: ${env:BIOMNI_DATA_PREFIX, ''}
     BIOMNI_GEMINI_MODEL: ${env:BIOMNI_GEMINI_MODEL}
     BIOMNI_GEMINI_REASONING_MODEL: ${env:BIOMNI_GEMINI_REASONING_MODEL}
     AWS_REGION: ${self:provider.region}
@@ -24,8 +26,8 @@ provider:
             - s3:PutObject
             - s3:ListBucket
           Resource:
-            - arn:aws:s3:::${env:BIOMNI_DATA_PATH}
-            - arn:aws:s3:::${env:BIOMNI_DATA_PATH}/*
+            - arn:aws:s3:::${env:BIOMNI_DATA_BUCKET}
+            - arn:aws:s3:::${env:BIOMNI_DATA_BUCKET}/${env:BIOMNI_DATA_PREFIX, ''}*
 
 functions:
   biomniHandler:

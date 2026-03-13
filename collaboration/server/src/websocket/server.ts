@@ -14,6 +14,7 @@ import { WebSocketServer, WebSocket } from 'ws';
 import type { Server } from 'http';
 import { validateToken, getUserInfo } from '../auth/jwt.js';
 import { checkPermission } from '../permissions/store.js';
+import { serverConfig } from '../config.js';
 import {
   connectToDocument,
   disconnectFromDocument,
@@ -151,7 +152,7 @@ async function handleAuth(
 
   // Check rate limiting (max connections per user)
   const userConnections = connectionsByUser.get(user.id) || new Set();
-  if (userConnections.size >= 10) { // Max 10 concurrent connections
+  if (userConnections.size >= serverConfig.maxConnectionsPerUser) {
     sendError(socket, 'RATE_LIMITED', 'Too many concurrent connections');
     socket.close(4408, 'Rate limited');
     return;

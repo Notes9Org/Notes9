@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { createClient } from '@/lib/supabase/server';
 
 interface BiomniRequest {
   task: string;
   history?: Array<{ role: 'user' | 'assistant'; content: string }>;
   session_id?: string;
-  user_id?: string;
   timeout?: number;
 }
 
@@ -40,6 +40,16 @@ function getBiomniBaseUrl(): string | null {
   return raw.replace(/\/$/, '');
 }
 
+const USER_RATE_LIMIT_WINDOW_MS = 60_000;
+const USER_RATE_LIMIT_MAX_REQUESTS = 60;
+
+type UserRateLimitEntry = {
+  count: number;
+  resetAt: number;
+};
+
+const userRateLimit = new Map<string, UserRateLimitEntry>();
+
 export async function POST(request: NextRequest) {
   const baseUrl = getBiomniBaseUrl();
   const bearerToken = process.env.BIOMNI_API_BEARER_TOKEN ?? process.env.BIOMNI_API_KEY;
@@ -49,6 +59,26 @@ export async function POST(request: NextRequest) {
     1_000,
     600_000
   );
+  const supabase = await createClient();
+  const {
+    data: { user },
+    error: authError,
+  } = await supabase.auth.getUser();
+
+  if (authError || !user) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
+  const now = Date.now();
+  const existingEntry = userRateLimit.get(user.id);
+  if (!existingEntry || existingEntry.resetAt <= now) {
+    userRateLimit.set(user.id, { count: 1, resetAt: now + USER_RATE_LIMIT_WINDOW_MS });
+  } else if (existingEntry.count >= USER_RATE_LIMIT_MAX_REQUESTS) {
+    return NextResponse.json({ error: 'Too many requests' }, { status: 429 });
+  } else {
+    existingEntry.count += 1;
+    userRateLimit.set(user.id, existingEntry);
+  }
 
   if (!baseUrl) {
     return NextResponse.json(
@@ -87,7 +117,7 @@ export async function POST(request: NextRequest) {
         task: body.task.trim(),
         history: Array.isArray(body.history) ? body.history : [],
         session_id: body.session_id,
-        user_id: body.user_id,
+        user_id: user.id,
         timeout: body.timeout,
       }),
     });
@@ -140,7 +170,7 @@ export async function POST(request: NextRequest) {
     console.error('Biomni proxy error:', error);
     return NextResponse.json(
       {
-        error: error instanceof Error ? error.message : 'Biomni service unavailable',
+        error: 'Biomni service unavailable',
       },
       { status: 502 }
     );

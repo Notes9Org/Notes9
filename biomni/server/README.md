@@ -52,6 +52,7 @@ pnpm --dir biomni/server start
 - If `BIOMNI_DATA_PATH` is `s3://...`, the server syncs objects to `BIOMNI_S3_LOCAL_CACHE_DIR`.
 - Cache refresh interval is controlled with `BIOMNI_S3_CACHE_TTL_SECONDS`.
 - Set `BIOMNI_S3_SYNC_ON_EVERY_TASK=true` to force refresh on every request.
+- For `serverless.yml` IAM policies, also set `BIOMNI_DATA_BUCKET` and optional `BIOMNI_DATA_PREFIX`.
 
 ## Security defaults
 - Protect endpoints with `BIOMNI_API_KEY`.

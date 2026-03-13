@@ -1,5 +1,7 @@
 -- Invitations, collaborators, and audit log tables for email-based collaboration
 
+create extension if not exists "pgcrypto";
+
 create table if not exists invitations (
   id uuid primary key default gen_random_uuid(),
   doc_id uuid not null,

@@ -167,6 +167,7 @@ export function useCollaborativeEditor({
 
     let stopped = false;
     let authenticated = false;
+    let shouldReconnect = true;
 
     const syncAwarenessState = () => {
       setAwareness(toAwarenessStates(awarenessMap));
@@ -292,8 +293,13 @@ export function useCollaborativeEditor({
         }
 
         if (message.type === "permission_revoked") {
+          shouldReconnect = false;
           setStatus(DISCONNECTED);
           setIsSynced(false);
+          if (reconnectTimerRef.current) {
+            clearTimeout(reconnectTimerRef.current);
+            reconnectTimerRef.current = null;
+          }
           socket.close();
           return;
         }
@@ -310,7 +316,10 @@ export function useCollaborativeEditor({
         setStatus(DISCONNECTED);
         setIsSynced(false);
 
-        if (!stopped) {
+        if (!stopped && shouldReconnect) {
+          if (reconnectTimerRef.current) {
+            clearTimeout(reconnectTimerRef.current);
+          }
           reconnectTimerRef.current = setTimeout(connect, 1500);
         }
       };
@@ -329,6 +338,7 @@ export function useCollaborativeEditor({
     return () => {
       stopped = true;
       authenticated = false;
+      shouldReconnect = false;
 
       if (reconnectTimerRef.current) {
         clearTimeout(reconnectTimerRef.current);
