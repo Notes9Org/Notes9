@@ -15,6 +15,12 @@ CREATE TABLE IF NOT EXISTS public.yjs_states (
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+DROP TRIGGER IF EXISTS update_yjs_states_updated_at ON public.yjs_states;
+CREATE TRIGGER update_yjs_states_updated_at
+  BEFORE UPDATE ON public.yjs_states
+  FOR EACH ROW
+  EXECUTE FUNCTION update_updated_at_column();
+
 ALTER TABLE yjs_states ENABLE ROW LEVEL SECURITY;
 
 -- Only the collaboration server (service role) accesses yjs_states directly.
@@ -62,7 +68,7 @@ CREATE POLICY "lab_note_invitations_update_policy" ON lab_note_invitations FOR U
       AND lab_notes.created_by = auth.uid()
     )
     -- Or user is the invited person accepting their own invitation
-    OR lab_note_invitations.email = get_current_user_email()
+    OR lower(trim(lab_note_invitations.email)) = lower(trim(get_current_user_email()))
   )
   WITH CHECK (
     -- Owner can update invitations for notes they own
@@ -73,7 +79,7 @@ CREATE POLICY "lab_note_invitations_update_policy" ON lab_note_invitations FOR U
     )
     -- Invited user can only update their own invitation (email must remain theirs,
     -- and lab_note_id must stay the same — enforced by requiring ownership OR email match)
-    OR lab_note_invitations.email = get_current_user_email()
+    OR lower(trim(lab_note_invitations.email)) = lower(trim(get_current_user_email()))
   );
 
 -- ============================================================
@@ -142,4 +148,4 @@ BEGIN
     'permission_level', v_invitation.permission_level
   );
 END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
