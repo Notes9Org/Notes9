@@ -17,7 +17,7 @@ import type { Attachment } from './preview-attachment';
 import { CatalystSidebar } from './catalyst-sidebar';
 import type { Vote } from '@/lib/db/schema';
 import { formatCitationDisplay } from '@/lib/utils';
-import { runAgent, Notes9ApiError } from '@/lib/notes9-api';
+import { useAgentStream } from '@/hooks/use-agent-stream';
 
 interface CatalystChatProps {
   sessionId?: string;
@@ -89,6 +89,7 @@ export function CatalystChat({ sessionId }: CatalystChatProps) {
     experimental_throttle: 100,
   });
 
+  const agentStream = useAgentStream();
   const isLoading = status === 'streaming' || status === 'submitted' || notes9Loading;
 
   // Load user profile
@@ -284,74 +285,71 @@ export function CatalystChat({ sessionId }: CatalystChatProps) {
 
     // Handle Notes9 mode
     if (agentMode === 'notes9') {
-      try {
-        setNotes9Loading(true);
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+      if (!token) {
+        toast.error('Please sign in to use Notes9');
+        router.push('/auth/login');
+        return;
+      }
 
-        const { data: { session } } = await supabase.auth.getSession();
-        const token = session?.access_token;
-        if (!token) {
-          toast.error('Please sign in to use Notes9');
-          router.push('/auth/login');
-          return;
-        }
+      // Add user message to UI immediately
+      const userMessageId = `user-${Date.now()}`;
+      const userMessage = {
+        id: userMessageId,
+        role: 'user' as const,
+        content: text,
+        parts: [{ type: 'text' as const, text }],
+        createdAt: new Date(),
+      };
+      setMessages((prev) => [...prev, userMessage]);
 
-        // Add user message to UI immediately
-        const userMessageId = `user-${Date.now()}`;
-        const userMessage = {
-          id: userMessageId,
-          role: 'user' as const,
-          content: text,
-          parts: [{ type: 'text' as const, text }],
-          createdAt: new Date(),
-        };
-        setMessages((prev) => [...prev, userMessage]);
+      // Save user message to DB
+      await saveMessage(sid, 'user', text);
 
-        // Save user message to DB
-        await saveMessage(sid, 'user', text);
+      const history = messages.map((m) => ({
+        role: m.role,
+        content: getMessageContent(m),
+      }));
 
-        const history = messages.map((m) => ({
-          role: m.role,
-          content: getMessageContent(m),
-        }));
+      setNotes9Loading(true);
+      const { donePayload, error } = await agentStream.runStream(
+        {
+          query: text,
+          session_id: sid,
+          history,
+        },
+        token
+      );
+      setNotes9Loading(false);
 
-        const data = await runAgent(
-          {
-            query: text,
-            session_id: sid,
-            user_id: userId || undefined,
-            history,
-          },
-          token
-        );
-
-        // Format response with citations as clickable links
-        let formattedAnswer = data.answer;
-        if (data.citations && data.citations.length > 0) {
+      if (donePayload) {
+        let formattedAnswer = donePayload.answer;
+        if (donePayload.citations && donePayload.citations.length > 0) {
           formattedAnswer += '\n\n**References:**\n';
-          data.citations.forEach((citation: any, index: number) => {
-            const sourceId = citation.source_id;
+          donePayload.citations.forEach((citation, index) => {
             const sourceType = citation.source_type;
-
             let route = '';
             switch (sourceType) {
               case 'literature_review':
-                route = `/literature-reviews/${sourceId}`;
+                route = `/literature-reviews/${citation.source_id}`;
                 break;
               case 'protocol':
-                route = `/protocols/${sourceId}`;
+                route = `/protocols/${citation.source_id}`;
                 break;
               case 'project':
-                route = `/projects/${sourceId}`;
+                route = `/projects/${citation.source_id}`;
                 break;
               case 'lab_note':
               case 'report':
               default:
                 route = '';
             }
-
-            const displayText = formatCitationDisplay(citation);
+            const displayText = formatCitationDisplay({
+              ...citation,
+              excerpt: citation.excerpt ?? undefined,
+            });
             const sourceLabel = sourceType.replace('_', ' ');
-
             if (route) {
               formattedAnswer += `\n[${index + 1}] [View ${sourceLabel}](${route}): ${displayText}`;
             } else {
@@ -360,7 +358,6 @@ export function CatalystChat({ sessionId }: CatalystChatProps) {
           });
         }
 
-        // Add assistant message to UI
         const assistantMessageId = `assistant-${Date.now()}`;
         const assistantMessage = {
           id: assistantMessageId,
@@ -371,31 +368,16 @@ export function CatalystChat({ sessionId }: CatalystChatProps) {
         };
         setMessages((prev) => [...prev, assistantMessage]);
 
-        // Save assistant message to DB
         await saveMessage(sid, 'assistant', formattedAnswer);
 
-        // Update session title if first exchange
         if (messages.length === 0) {
           await updateSessionTitle(sid, text.slice(0, 50) || 'New conversation');
         }
 
         loadSessions();
-      } catch (error) {
-        console.error('Notes9 API error:', error);
-        if (error instanceof Notes9ApiError) {
-          if (error.status === 401) {
-            toast.error('Session expired. Please sign in again.');
-            router.push('/auth/login');
-            return;
-          }
-          if (error.status && error.status >= 500) {
-            toast.error('Service temporarily unavailable. Please try again later.');
-            return;
-          }
-        }
-        toast.error('Failed to get response from Notes9');
-      } finally {
-        setNotes9Loading(false);
+        agentStream.reset();
+      } else if (error) {
+        toast.error(error);
       }
       return;
     }
@@ -552,6 +534,20 @@ export function CatalystChat({ sessionId }: CatalystChatProps) {
               votes={votes}
               onEditMessage={handleEditMessage}
               onRegenerate={handleRegenerate}
+              notes9Stream={
+                agentMode === 'notes9' &&
+                (notes9Loading || agentStream.isStreaming || agentStream.error) &&
+                messages.at(-1)?.role === 'user'
+                  ? {
+                      thinkingSteps: agentStream.thinkingSteps,
+                      sql: agentStream.sql,
+                      ragChunks: agentStream.ragChunks,
+                      streamedAnswer: agentStream.streamedAnswer,
+                      donePayload: agentStream.donePayload,
+                      error: agentStream.error,
+                    }
+                  : null
+              }
             />
           )}
         </div>
@@ -562,7 +558,11 @@ export function CatalystChat({ sessionId }: CatalystChatProps) {
           setInput={setInput}
           onSubmit={onSubmit}
           isLoading={isLoading}
-          stop={stop}
+          stop={
+            notes9Loading && agentStream.isStreaming
+              ? () => agentStream.abort()
+              : stop
+          }
           hasMessages={messages.length > 0}
           agentMode={agentMode}
           onAgentModeChange={setAgentMode}

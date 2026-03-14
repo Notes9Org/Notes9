@@ -34,7 +34,8 @@ import {
   Mic,
 } from 'lucide-react';
 import { cn, formatCitationDisplay } from '@/lib/utils';
-import { runAgent, Notes9ApiError } from '@/lib/notes9-api';
+import { useAgentStream } from '@/hooks/use-agent-stream';
+import { AgentStreamReply } from '@/components/catalyst/agent-stream-reply';
 import { useChatSessions, ChatSession } from '@/hooks/use-chat-sessions';
 import { MarkdownRenderer } from '@/components/catalyst/markdown-renderer';
 import { PreviewAttachment, type Attachment } from '@/components/catalyst/preview-attachment';
@@ -187,6 +188,8 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
     deleteSession,
   } = useChatSessions();
 
+  const agentStream = useAgentStream();
+
   const MAX_PAST_CHATS = 5;
   const pastChatsToShow = showAllPastChats ? sessions : sessions.slice(0, MAX_PAST_CHATS);
   const hasMorePastChats = sessions.length > MAX_PAST_CHATS;
@@ -200,7 +203,7 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages]);
+  }, [messages, agentStream.thinkingSteps, agentStream.streamedAnswer, agentStream.donePayload]);
 
   const uploadFile = useCallback(async (file: File): Promise<Attachment | null> => {
     try {
@@ -300,69 +303,69 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
     }
 
     if (agentMode === 'notes9') {
-      try {
-        setNotes9Loading(true);
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+      if (!token) {
+        toast.error('Please sign in to use Notes9');
+        router.push('/auth/login');
+        return;
+      }
 
-        const { data: { session } } = await supabase.auth.getSession();
-        const token = session?.access_token;
-        if (!token) {
-          toast.error('Please sign in to use Notes9');
-          router.push('/auth/login');
-          return;
-        }
+      const userMessageId = `user-${Date.now()}`;
+      const userMessage = {
+        id: userMessageId,
+        role: 'user' as const,
+        content: text,
+        parts: [{ type: 'text' as const, text }],
+        createdAt: new Date(),
+      };
+      setMessages((prev) => [...prev, userMessage]);
 
-        const userMessageId = `user-${Date.now()}`;
-        const userMessage = {
-          id: userMessageId,
-          role: 'user' as const,
-          content: text,
-          parts: [{ type: 'text' as const, text }],
-          createdAt: new Date(),
-        };
-        setMessages((prev) => [...prev, userMessage]);
+      const sessionId = currentSessionRef.current!;
+      await saveMessage(sessionId, 'user', text);
 
-        const sessionId = currentSessionRef.current!;
-        await saveMessage(sessionId, 'user', text);
+      const history = messages.map((m) => ({
+        role: m.role,
+        content: getPlainTextFromMessage(m),
+      }));
 
-        const history = messages.map((m) => ({
-          role: m.role,
-          content: getPlainTextFromMessage(m),
-        }));
+      setNotes9Loading(true);
+      const { donePayload, error } = await agentStream.runStream(
+        {
+          query: text,
+          session_id: sessionId,
+          history,
+        },
+        token
+      );
+      setNotes9Loading(false);
 
-        const data = await runAgent(
-          {
-            query: text,
-            session_id: sessionId,
-            user_id: userId || undefined,
-            history,
-          },
-          token
-        );
-        let formattedAnswer = data.answer;
-
-        // Citation handling...
-        if (data.citations && data.citations.length > 0) {
+      if (donePayload) {
+        let formattedAnswer = donePayload.answer;
+        if (donePayload.citations && donePayload.citations.length > 0) {
           formattedAnswer += '\n\n**References:**\n';
-          data.citations.forEach((citation: any, index: number) => {
-            const sourceId = citation.source_id;
+          donePayload.citations.forEach((citation, index) => {
             const sourceType = citation.source_type;
             let route = '';
             switch (sourceType) {
               case 'literature_review':
-                route = `/literature-reviews/${sourceId}`;
+                route = `/literature-reviews/${citation.source_id}`;
                 break;
               case 'protocol':
-                route = `/protocols/${sourceId}`;
+                route = `/protocols/${citation.source_id}`;
                 break;
               case 'project':
-                route = `/projects/${sourceId}`;
+                route = `/projects/${citation.source_id}`;
                 break;
               case 'lab_note':
               case 'report':
               default:
                 route = '';
             }
-            const displayText = formatCitationDisplay(citation);
+            const displayText = formatCitationDisplay({
+              ...citation,
+              excerpt: citation.excerpt ?? undefined,
+            });
             const sourceLabel = sourceType.replace('_', ' ');
             if (route) {
               formattedAnswer += `\n[${index + 1}] [View ${sourceLabel}](${route}): ${displayText}`;
@@ -383,22 +386,9 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
         setMessages((prev) => [...prev, assistantMessage]);
         await saveMessage(sessionId, 'assistant', formattedAnswer);
         loadSessions();
-      } catch (error) {
-        console.error('Notes9 API error:', error);
-        if (error instanceof Notes9ApiError) {
-          if (error.status === 401) {
-            toast.error('Session expired. Please sign in again.');
-            router.push('/auth/login');
-            return;
-          }
-          if (error.status && error.status >= 500) {
-            toast.error('Service temporarily unavailable. Please try again later.');
-            return;
-          }
-        }
-        toast.error('Failed to get response from Notes9');
-      } finally {
-        setNotes9Loading(false);
+        agentStream.reset();
+      } else if (error) {
+        toast.error(error);
       }
       return;
     }
@@ -550,7 +540,12 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
             </Button>
 
             {isLoading ? (
-              <Button size="icon" variant="secondary" className="size-7 rounded-sm animate-pulse" onClick={stop}>
+              <Button
+                size="icon"
+                variant="secondary"
+                className="size-7 rounded-sm animate-pulse"
+                onClick={() => (notes9Loading && agentStream.isStreaming ? agentStream.abort() : stop())}
+              >
                 <Square className="size-3 fill-current" />
               </Button>
             ) : (
@@ -913,7 +908,29 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
                           </div>
                         );
                       })}
-                      {isLoading && messages.at(-1)?.role === 'user' && (
+                      {agentMode === 'notes9' &&
+                        (notes9Loading || agentStream.isStreaming || agentStream.error) &&
+                        messages.at(-1)?.role === 'user' && (
+                        <div className="flex gap-4 w-full justify-start">
+                          <div className="size-7 shrink-0 flex items-center justify-center rounded-full bg-background border shadow-sm mt-1">
+                            <Sparkles className="size-3.5 text-primary animate-pulse" />
+                          </div>
+                          <div className="flex-1 min-w-0 max-w-[85%]">
+                            <AgentStreamReply
+                              thinkingSteps={agentStream.thinkingSteps}
+                              sql={agentStream.sql}
+                              ragChunks={agentStream.ragChunks}
+                              streamedAnswer={agentStream.streamedAnswer}
+                              donePayload={agentStream.donePayload}
+                              error={agentStream.error}
+                              compact
+                            />
+                          </div>
+                        </div>
+                      )}
+                      {isLoading &&
+                        !(notes9Loading || agentStream.isStreaming || agentStream.error) &&
+                        messages.at(-1)?.role === 'user' && (
                         <div className="flex gap-3 items-center justify-start w-full">
                           <div className="size-7 shrink-0 flex items-center justify-center rounded-full bg-background border shadow-sm">
                             <Sparkles className="size-3.5 text-primary animate-pulse" />
