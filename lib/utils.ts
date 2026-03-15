@@ -23,9 +23,12 @@ function truncateExcerpt(text: string, maxLen: number): string {
   return slice.slice(0, cut).trim() + '...'
 }
 
-/** Format AI citation excerpt into a clean reference line (e.g. "**Project update** – planning, medium priority (no dates)"). */
+/** Format AI citation excerpt into a clean reference line (e.g. "**Project update** – planning, medium priority (no dates)").
+ *  Prefers display_label or source_name (per Notes9 API) then name/title. */
 export function formatCitationDisplay(citation: {
   excerpt?: string
+  display_label?: string
+  source_name?: string
   name?: string
   title?: string
   status?: string
@@ -35,8 +38,9 @@ export function formatCitationDisplay(citation: {
 }): string {
   const raw = citation.excerpt ?? ''
 
-  // Use structured fields if the API provides them (name or title for lab notes, etc.)
-  const displayName = citation.name ?? citation.title ?? ''
+  // Use structured fields if the API provides them (display_label/source_name per Notes9, or name/title for lab notes)
+  const displayName =
+    citation.display_label ?? citation.source_name ?? citation.name ?? citation.title ?? ''
   if (displayName !== '') {
     const status = citation.status ?? ''
     const priority = citation.priority ?? ''
