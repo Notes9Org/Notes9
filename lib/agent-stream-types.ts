@@ -39,7 +39,7 @@ export interface TokenPayload {
   text: string;
 }
 
-/** SSE event: done – final response (same shape as /agent/run citations) */
+/** SSE event: done – final response (same shape as /notes9/run citations) */
 export interface Citation {
   source_type: string;
   source_id?: string;

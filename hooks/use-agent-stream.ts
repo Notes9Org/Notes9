@@ -10,7 +10,7 @@ import type {
   ErrorPayload,
 } from '@/lib/agent-stream-types';
 
-/** Request shape for POST /agent/stream (same as /agent/run). */
+/** Request shape for POST /notes9/stream (same as /notes9/run). */
 export interface AgentStreamParams {
   query: string;
   session_id: string;

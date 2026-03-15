@@ -60,7 +60,7 @@ Use this for general Q&A without the full agent (no SQL/RAG pipeline).
 
 ## 3. Agent run API (one-shot answer)
 
-**Endpoint:** `POST /agent/run`
+**Endpoint:** `POST /notes9/run`
 
 Full pipeline: normalize → router → SQL/RAG → summarizer → judge → final answer. One request, one JSON response.
 
@@ -140,8 +140,8 @@ Full pipeline: normalize → router → SQL/RAG → summarizer → judge → fin
 
 ## 4. Agent stream API (SSE)
 
-**Endpoint:** `POST /agent/stream`  
-**Request body:** Same as `/agent/run` (e.g. `query`, `session_id`, `history`, `options`).  
+**Endpoint:** `POST /notes9/stream`  
+**Request body:** Same as `/notes9/run` (e.g. `query`, `session_id`, `history`, `options`).  
 **Response:** `Content-Type: text/event-stream`. Use `EventSource` or `fetch` + stream reader; parse SSE lines (`event:` and `data:`).
 
 ### SSE event format
@@ -240,7 +240,7 @@ or
 }
 ```
 
-- **Display:** Same as Section 3: set final answer, citations, confidence, tool_used. If you were appending `token` events, you can replace the streamed text with `answer` or keep it if it matches.
+- **Display:** Same as Section 3: set final answer, citations, confidence, tool_used. If you were appending `token` events, you can replace the streamed text with `answer` or keep it if it matches. (Payload shape matches `/notes9/run`.)
 
 **6. `error`**
 
@@ -260,7 +260,7 @@ or
 
 ### Suggested streaming UI flow
 
-1. Send `POST /agent/stream` with body and `Authorization: Bearer <token>`.
+1. Send `POST /notes9/stream` with body and `Authorization: Bearer <token>`.
 2. Parse SSE: on `thinking` → update status text; on `token` → append to buffer and show live answer; on `sql`/`rag_chunks` → optional debug/sources.
 3. On `done` → set final `answer`, `citations`, `confidence`, `tool_used` and stop loading.
 4. On `error` → show `data.error`, stop loading.
@@ -297,8 +297,8 @@ Use the same pattern for Chat and Agent: check `response.ok`, then parse JSON an
 | Use case              | Endpoint             | Input                               | Output / display                    |
 |-----------------------|----------------------|-------------------------------------|-------------------------------------|
 | Simple chat           | `POST /chat`         | `content`, `session_id`, `history`  | `content`, `role` → append message  |
-| One-shot agent answer | `POST /agent/run`    | `query`, `session_id`, `history`, `options` | `answer`, `citations`, `confidence`, `tool_used` |
-| Streaming agent       | `POST /agent/stream` | Same as run                         | SSE: `thinking`, `token`, `sql`, `rag_chunks`, `done`, `error`, `ping` |
+| One-shot agent answer | `POST /notes9/run`    | `query`, `session_id`, `history`, `options` | `answer`, `citations`, `confidence`, `tool_used` |
+| Streaming agent       | `POST /notes9/stream` | Same as run                         | SSE: `thinking`, `token`, `sql`, `rag_chunks`, `done`, `error`, `ping` |
 
 - **Auth:** `Authorization: Bearer <access_token>` (Supabase JWT).  
 - **Confidence:** 0.0–1.0; `tool_used`: `sql` \| `rag` \| `hybrid` \| `none`.  

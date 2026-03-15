@@ -11,7 +11,7 @@ Use this to connect the UI to the Notes9 agent streaming endpoint and render thi
 | Item | Value |
 |------|--------|
 | **Method** | `POST` |
-| **Path** | `/agent/stream` (e.g. `https://your-api/agent/stream`) |
+| **Path** | `/notes9/stream` (e.g. `https://your-api/notes9/stream`) |
 | **Auth** | Bearer token (e.g. `Authorization: Bearer <access_token>`) |
 | **Content-Type** | `application/json` |
 | **Response** | `text/event-stream` (SSE) |
@@ -232,7 +232,7 @@ Keep-alive (sent when the stream is idle for a while). Optional to handle.
 ## Example: parsing the stream (TypeScript)
 
 ```ts
-const response = await fetch(`${API_BASE}/agent/stream`, {
+const response = await fetch(`${API_BASE}/notes9/stream`, {
   method: "POST",
   headers: {
     "Content-Type": "application/json",
@@ -299,7 +299,7 @@ while (true) {
 
 ## Summary for the UI repo
 
-- **POST** `/agent/stream` with **Bearer** auth and JSON body: `{ query, session_id, history?, options? }`.
+- **POST** `/notes9/stream` with **Bearer** auth and JSON body: `{ query, session_id, history?, options? }`.
 - **Parse SSE:** `event` + `data` (JSON).
 - **Events:** `thinking` (steps + optional `sql`) → `sql` (query) → `rag_chunks` (chunks) → `token` (streaming answer) → `done` (final answer + citations) or `error`.
 - **UI:** Show "Calling SQL" + SQL from `sql`/`thinking`, "Calling RAG" + list from `rag_chunks`, stream text from `token`, then finalize with `done`.

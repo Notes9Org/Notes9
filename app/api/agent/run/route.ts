@@ -26,7 +26,7 @@ export async function POST(req: Request) {
   }
 
   try {
-    const response = await fetch(`${NOTES9_API_BASE}/agent/run`, {
+    const response = await fetch(`${NOTES9_API_BASE}/notes9/run`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
