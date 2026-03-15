@@ -41,40 +41,35 @@ export function ExperimentTabs({ experiment, initialTab }: ExperimentTabsProps) 
   }
 
   return (
-    <Tabs id={`experiment-tabs-${baseId}`} defaultValue={initialTab} className="flex flex-col gap-3 min-h-0 flex-1">
-      <TabsList className="flex flex-wrap gap-1 bg-muted/10 p-1 rounded-md">
+    <Tabs id={`experiment-tabs-${baseId}`} defaultValue={initialTab} className="space-y-4">
+      <TabsList>
         <TabsTrigger
           value="overview"
           id="tab-trigger-overview"
-          className="px-2.5 py-1.25 rounded-md text-[12px] font-medium text-muted-foreground data-[state=active]:bg-foreground data-[state=active]:text-background transition-colors"
         >
           Overview
         </TabsTrigger>
         <TabsTrigger
           value="protocol"
           id="tab-trigger-protocol"
-          className="px-2.5 py-1.25 rounded-md text-[12px] font-medium text-muted-foreground data-[state=active]:bg-foreground data-[state=active]:text-background transition-colors"
         >
           Protocol & Assays
         </TabsTrigger>
         <TabsTrigger
           value="samples"
           id="tab-trigger-samples"
-          className="px-2.5 py-1.25 rounded-md text-[12px] font-medium text-muted-foreground data-[state=active]:bg-foreground data-[state=active]:text-background transition-colors"
         >
           Samples
         </TabsTrigger>
         <TabsTrigger
           value="data"
           id="tab-trigger-data"
-          className="px-2.5 py-1.25 rounded-md text-[12px] font-medium text-muted-foreground data-[state=active]:bg-foreground data-[state=active]:text-background transition-colors"
         >
           Data & Files
         </TabsTrigger>
         <TabsTrigger
           value="notes"
           id="tab-trigger-notes"
-          className="px-2.5 py-1.25 rounded-md text-[12px] font-medium text-muted-foreground data-[state=active]:bg-foreground data-[state=active]:text-background transition-colors"
         >
           Lab Notes
         </TabsTrigger>
@@ -90,7 +85,7 @@ export function ExperimentTabs({ experiment, initialTab }: ExperimentTabsProps) 
           </CardContent>
         </Card>
 
-        <div className="grid gap-4 md:grid-cols-2">
+        <div className="grid gap-4 grid-cols-1 md:grid-cols-2">
           <Card>
             <CardHeader>
               <CardTitle className="text-foreground">Equipment Reserved</CardTitle>
@@ -131,17 +126,19 @@ export function ExperimentTabs({ experiment, initialTab }: ExperimentTabsProps) 
       </TabsContent>
 
       <TabsContent value="protocol" id="tab-content-protocol" className="space-y-4">
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h3 className="text-lg font-semibold">Linked Protocols</h3>
+            <h3 className="text-base font-semibold md:text-lg">Linked Protocols</h3>
             <p className="text-sm text-muted-foreground">
               Protocols provide detailed procedures and methods for this experiment
             </p>
           </div>
-          <LinkProtocolDialog
-            experimentId={experiment.id}
-            linkedProtocolIds={experiment.protocols.map((p: any) => p.protocol.id)}
-          />
+          <div className="w-full sm:w-auto">
+            <LinkProtocolDialog
+              experimentId={experiment.id}
+              linkedProtocolIds={experiment.protocols.map((p: any) => p.protocol.id)}
+            />
+          </div>
         </div>
 
         {experiment.protocols && experiment.protocols.length > 0 ? (

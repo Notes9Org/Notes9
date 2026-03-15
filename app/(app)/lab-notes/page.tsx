@@ -1,6 +1,7 @@
 "use client"
 
 import { useCallback, useEffect, useState } from "react"
+import { useMediaQuery } from "@/hooks/use-media-query"
 import { useRouter } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
 import LabNotesList from "@/app/(app)/lab-notes-list/[id]/lab-notes-list"
@@ -29,7 +30,12 @@ export default function LabNotesPage() {
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [newNoteDialogOpen, setNewNoteDialogOpen] = useState(false)
+  const isMobile = useMediaQuery("(max-width: 768px)")
   const [viewMode, setViewMode] = useState<"grid" | "table">("grid")
+
+  useEffect(() => {
+    if (isMobile) setViewMode("grid")
+  }, [isMobile])
 
   const fetchNotes = useCallback(async () => {
     try {
@@ -97,9 +103,9 @@ export default function LabNotesPage() {
           Access and manage lab notes across your experiments.
         </p>
         <div className="flex items-center gap-2 shrink-0">
-          <div className="inline-flex rounded-lg border p-1">
+          <div className="inline-flex gap-1 rounded-lg border p-1">
             <Button
-              variant={viewMode === "grid" ? "secondary" : "ghost"}
+              variant={viewMode === "grid" ? "default" : "ghost"}
               size="sm"
               onClick={() => setViewMode("grid")}
               className="gap-2"
@@ -108,10 +114,12 @@ export default function LabNotesPage() {
               Grid
             </Button>
             <Button
-              variant={viewMode === "table" ? "secondary" : "ghost"}
+              variant={isMobile ? "ghost" : viewMode === "table" ? "default" : "ghost"}
               size="sm"
-              onClick={() => setViewMode("table")}
+              onClick={() => !isMobile && setViewMode("table")}
               className="gap-2"
+              disabled={isMobile}
+              aria-disabled={isMobile}
             >
               <List className="h-4 w-4" />
               Table
@@ -162,4 +170,3 @@ export default function LabNotesPage() {
     </div>
   )
 }
-

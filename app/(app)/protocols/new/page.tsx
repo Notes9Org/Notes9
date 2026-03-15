@@ -93,17 +93,17 @@ export default function NewProtocolPage() {
   }
 
   return (
-      <div className="space-y-6">
+      <div className="space-y-4 md:space-y-6">
         {/* Header */}
-        <div className="flex items-center gap-4">
-          <Button variant="ghost" size="icon" asChild>
+        <div className="flex items-center gap-3">
+          <Button variant="ghost" size="icon" asChild className="shrink-0">
             <Link href="/protocols">
               <ArrowLeft className="h-4 w-4" />
             </Link>
           </Button>
-          <div>
-            <h1 className="text-3xl font-bold tracking-tight">Create New Protocol</h1>
-            <p className="text-muted-foreground mt-1">
+          <div className="min-w-0">
+            <h1 className="text-2xl font-bold tracking-tight md:text-3xl">Create New Protocol</h1>
+            <p className="text-muted-foreground mt-1 text-sm">
               Add a new Standard Operating Procedure (SOP)
             </p>
           </div>
@@ -243,7 +243,7 @@ export default function NewProtocolPage() {
                 >
                   Cancel
                 </Button>
-                <Button type="submit" disabled={isLoading}>
+                <Button type="submit" disabled={isLoading} className="w-full sm:w-auto">
                   {isLoading ? "Creating..." : "Create Protocol"}
                 </Button>
               </div>

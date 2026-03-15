@@ -27,16 +27,16 @@ export default async function LiteratureReviewsPage() {
     .order("created_at", { ascending: false })
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
+    <div className="space-y-4 md:space-y-6">
+      {/* Header: stacked on mobile */}
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight text-foreground">Literature Reviews</h1>
-          <p className="text-muted-foreground mt-1">
+          <h1 className="text-2xl font-bold tracking-tight text-foreground md:text-3xl">Literature Reviews</h1>
+          <p className="text-muted-foreground mt-1 text-sm">
             Search papers and manage your reference library
           </p>
         </div>
-        <Button asChild>
+        <Button asChild className="w-full sm:w-auto">
           <Link href="/literature-reviews/new">
             <Plus className="h-4 w-4 mr-2" />
             Add Reference
