@@ -11,5 +11,5 @@ export function MarketingParticles() {
         return null
     }
 
-    return <InteractiveParticles />
+    return <InteractiveParticles variant="marketing" />
 }

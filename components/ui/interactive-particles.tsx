@@ -4,10 +4,10 @@ import { useEffect, useRef } from "react"
 import { useTheme } from "next-themes"
 import { cn } from "@/lib/utils"
 
-export function InteractiveParticles({ className }: { className?: string }) {
+export function InteractiveParticles({ className, variant = "default" }: { className?: string; variant?: "default" | "marketing" }) {
     const canvasRef = useRef<HTMLCanvasElement>(null)
     const mouseRef = useRef({ x: -1000, y: -1000 })
-    const { resolvedTheme } = useTheme() // Use resolvedTheme for better accuracy
+    const { resolvedTheme } = useTheme()
 
     useEffect(() => {
         const canvas = canvasRef.current
@@ -21,28 +21,13 @@ export function InteractiveParticles({ className }: { className?: string }) {
         let animationFrameId: number
         let particles: Particle[] = []
 
-        // Theme-dependent colors - Professional Scientific Palette
-        const particleColors = isDarkMode
-            ? [
-                "rgba(60, 180, 255, 0.8)",  // Bright Blue
-                "rgba(50, 220, 200, 0.8)",  // Teal/Cyan
-                "rgba(180, 100, 255, 0.8)", // Soft Purple
-                "rgba(220, 220, 255, 0.8)", // White-ish Blue
-                "rgba(100, 150, 255, 0.8)", // Azure
-            ]
-            : [
-                "rgba(30, 58, 138, 0.8)",   // Navy Blue
-                "rgba(13, 148, 136, 0.8)",  // Teal
-                "rgba(88, 28, 135, 0.8)",   // Deep Purple
-                "rgba(71, 85, 105, 0.8)",   // Slate
-                "rgba(37, 99, 235, 0.8)",   // Royal Blue
-            ]
+        const particleColors = variant === "marketing"
+            ? (isDarkMode ? ["212, 132, 90", "168, 158, 142", "180, 120, 80"] : ["155, 71, 34", "160, 140, 110", "120, 90, 60"])
+            : (isDarkMode ? ["148, 163, 184", "100, 116, 139", "71, 85, 105"] : ["100, 116, 139", "148, 163, 184", "203, 213, 225"])
 
-        const connectionColor = isDarkMode
-            ? "150, 150, 170" // Muted cool gray
-            : "100, 116, 139" // Slate gray
-
-
+        const connectionColor = variant === "marketing"
+            ? (isDarkMode ? "168, 158, 142" : "160, 140, 110")
+            : (isDarkMode ? "148, 163, 184" : "148, 163, 184")
 
         class Particle {
             x: number
@@ -53,49 +38,44 @@ export function InteractiveParticles({ className }: { className?: string }) {
             vy: number
             size: number
             color: string
+            alpha: number
 
             constructor(w: number, h: number) {
                 this.originX = Math.random() * w
                 this.originY = Math.random() * h
                 this.x = this.originX
                 this.y = this.originY
-                this.vx = (Math.random() - 0.5) * 0.5
-                this.vy = (Math.random() - 0.5) * 0.5
-                this.size = Math.random() * 3 + 2
+                this.vx = (Math.random() - 0.5) * 0.12
+                this.vy = (Math.random() - 0.5) * 0.12
+                this.size = Math.random() * 1.2 + 0.5
+                this.alpha = isDarkMode ? 0.06 + Math.random() * 0.08 : 0.03 + Math.random() * 0.05
                 this.color = particleColors[Math.floor(Math.random() * particleColors.length)]
             }
 
-            update(mouse: { x: number; y: number }, w: number, h: number) {
+            update(mouse: { x: number; y: number }) {
                 const dxHome = this.originX - this.x
                 const dyHome = this.originY - this.y
-
-                this.vx += dxHome * 0.01
-                this.vy += dyHome * 0.01
+                this.vx += dxHome * 0.004
+                this.vy += dyHome * 0.004
 
                 const dxMouse = mouse.x - this.x
                 const dyMouse = mouse.y - this.y
                 const distMouse = Math.sqrt(dxMouse * dxMouse + dyMouse * dyMouse)
-                const mouseRange = 300
-
-                if (distMouse < mouseRange) {
-                    const force = (mouseRange - distMouse) / mouseRange
+                if (distMouse < 120) {
+                    const force = (120 - distMouse) / 120
                     const angle = Math.atan2(dyMouse, dxMouse)
-                    this.vx += Math.cos(angle) * force * 0.08
-                    this.vy += Math.sin(angle) * force * 0.08
+                    this.vx += Math.cos(angle) * force * 0.01
+                    this.vy += Math.sin(angle) * force * 0.01
                 }
 
-                this.vx += (Math.random() - 0.5) * 0.02
-                this.vy += (Math.random() - 0.5) * 0.02
-
-                this.vx *= 0.92
-                this.vy *= 0.92
-
+                this.vx *= 0.96
+                this.vy *= 0.96
                 this.x += this.vx
                 this.y += this.vy
             }
 
             draw(context: CanvasRenderingContext2D) {
-                context.fillStyle = this.color
+                context.fillStyle = `rgba(${this.color}, ${this.alpha})`
                 context.beginPath()
                 context.arc(this.x, this.y, this.size, 0, Math.PI * 2)
                 context.fill()
@@ -113,8 +93,7 @@ export function InteractiveParticles({ className }: { className?: string }) {
 
         const initParticles = () => {
             particles = []
-            // Reduce count slightly as clusters are larger visually
-            const particleCount = Math.floor((canvas.width * canvas.height) / 4000)
+            const particleCount = Math.max(18, Math.floor((canvas.width * canvas.height) / 22000))
             for (let i = 0; i < particleCount; i++) {
                 particles.push(new Particle(canvas.width, canvas.height))
             }
@@ -124,20 +103,20 @@ export function InteractiveParticles({ className }: { className?: string }) {
             ctx.clearRect(0, 0, canvas.width, canvas.height)
 
             particles.forEach(p => {
-                p.update(mouseRef.current, canvas.width, canvas.height)
+                p.update(mouseRef.current)
                 p.draw(ctx)
             })
 
-            ctx.lineWidth = 1
+            ctx.lineWidth = 0.5
             for (let i = 0; i < particles.length; i++) {
                 for (let j = i + 1; j < particles.length; j++) {
                     const dx = particles[i].x - particles[j].x
                     const dy = particles[i].y - particles[j].y
                     const distance = Math.sqrt(dx * dx + dy * dy)
-                    const connectDist = 160
 
-                    if (distance < connectDist) {
-                        const opacity = (1 - (distance / connectDist)) * 0.6
+                    if (distance < 100) {
+                        const maxOpacity = isDarkMode ? 0.06 : 0.035
+                        const opacity = (1 - (distance / 100)) * maxOpacity
                         ctx.strokeStyle = `rgba(${connectionColor}, ${opacity})`
                         ctx.beginPath()
                         ctx.moveTo(particles[i].x, particles[i].y)
@@ -151,15 +130,11 @@ export function InteractiveParticles({ className }: { className?: string }) {
         }
 
         const handleMouseMove = (e: MouseEvent) => {
-            mouseRef.current = {
-                x: e.clientX,
-                y: e.clientY
-            }
+            mouseRef.current = { x: e.clientX, y: e.clientY }
         }
 
         window.addEventListener("resize", resize)
         window.addEventListener("mousemove", handleMouseMove)
-
         resize()
         animate()
 
@@ -168,13 +143,12 @@ export function InteractiveParticles({ className }: { className?: string }) {
             window.removeEventListener("mousemove", handleMouseMove)
             cancelAnimationFrame(animationFrameId)
         }
-    }, [resolvedTheme])
+    }, [resolvedTheme, variant])
 
     return (
         <canvas
             ref={canvasRef}
-            className={cn("pointer-events-none fixed inset-0 z-0", className)}
+            className={cn("pointer-events-none fixed inset-0 z-0 opacity-50 dark:opacity-60", className)}
         />
     )
 }
-

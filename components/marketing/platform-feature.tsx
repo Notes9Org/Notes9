@@ -34,14 +34,14 @@ export function PlatformFeature({
     return (
         <section className={cn("py-24 overflow-hidden", index % 2 === 1 ? "bg-muted/30 border-y border-border/40" : "bg-background")}>
             <div className="container mx-auto px-4 sm:px-6 lg:px-8">
-                <div className={cn("grid grid-cols-1 lg:grid-cols-2 gap-12 lg:gap-24 items-center")}>
+                <div className={cn("grid grid-cols-1 gap-12 lg:grid-cols-2 lg:items-stretch lg:gap-24")}>
                     {/* Text Content */}
                     <motion.div
                         initial={{ opacity: 0, x: isImageRight ? -20 : 20 }}
                         whileInView={{ opacity: 1, x: 0 }}
                         transition={{ duration: 0.5, delay: 0.2 }}
                         viewport={{ once: true }}
-                        className={cn("space-y-8", !isImageRight && "lg:order-2")}
+                        className={cn("flex h-full flex-col justify-start space-y-8", !isImageRight && "lg:order-2")}
                     >
                         <div className="space-y-6">
                             <div className={cn(
@@ -85,7 +85,7 @@ export function PlatformFeature({
                         whileInView={{ opacity: 1, scale: 1, rotateY: 0 }}
                         transition={{ duration: 0.8, type: "spring", bounce: 0.2 }}
                         viewport={{ once: true }}
-                        className={cn("relative mx-auto w-full max-w-[600px] perspective-1000", !isImageRight && "lg:order-1")}
+                        className={cn("relative mx-auto flex h-full w-full max-w-[600px] items-start perspective-1000", !isImageRight && "lg:order-1")}
                     >
                         {/* Background Image (The "Tab") */}
                         {images.length > 1 && (
