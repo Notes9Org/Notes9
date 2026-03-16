@@ -6,11 +6,12 @@ import Link from "next/link"
 
 const footerLinks = {
   product: [
-    { name: "Platform Overview", href: "/platform" },
-    // Removed placeholder links
+    { name: "Platform", href: "/platform" },
+    { name: "Pricing", href: "/pricing" },
+    { name: "Resources", href: "/resources" },
   ],
   company: [
-    { name: "About Us", href: "/about" },
+    { name: "About", href: "/about" },
     { name: "Privacy Policy", href: "/privacy" },
     { name: "Terms of Service", href: "/terms" },
   ],
@@ -18,10 +19,9 @@ const footerLinks = {
 
 export function Footer() {
   return (
-    <footer className="bg-muted/30 border-t border-border">
+    <footer className="border-t border-border/60 bg-muted/20">
       <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-12 sm:py-16">
         <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mb-12">
-          {/* Company Info */}
           <div className="md:col-span-1">
             <Link href="/" className="flex items-center space-x-3 mb-4">
               <div className="w-8 h-8 relative">
@@ -29,35 +29,30 @@ export function Footer() {
                   src="/notes9-logo.png"
                   alt="Notes9 Logo"
                   fill
-                  className="object-contain dark:hidden"
-                />
-                <Image
-                  src="/Dark mode_Notes9_logo.png"
-                  alt="Notes9 Logo"
-                  fill
-                  className="hidden dark:block object-contain scale-[1.75]"
+                  className="object-contain dark:invert dark:brightness-110 dark:contrast-125"
                 />
               </div>
               <span className="text-xl font-bold text-foreground tracking-tight">Notes9</span>
             </Link>
 
             <p className="text-foreground/80 mb-6 text-sm leading-relaxed">
-              Empowering researchers worldwide with agentic intelligence that accelerates daily research tasks.
+              Workflow-aware software for research teams that need better continuity across literature, execution, memory, and reporting.
             </p>
 
             <div className="space-y-2 text-sm text-foreground/80">
               <div className="flex items-center space-x-2">
                 <MapPin className="h-4 w-4" />
-                <span>USA</span>
+                <span>Distributed team · United States & United Kingdom</span>
               </div>
               <div className="flex items-center space-x-2">
                 <Mail className="h-4 w-4" />
-                <span>admin@notes9.com</span>
+                <a href="mailto:admin@notes9.com" className="transition-colors hover:text-foreground">
+                  admin@notes9.com
+                </a>
               </div>
             </div>
           </div>
 
-          {/* Links */}
           <div className="md:col-span-2 flex justify-start md:justify-end gap-16">
             <div>
               <h3 className="font-semibold text-foreground mb-4">Product</h3>
@@ -87,9 +82,10 @@ export function Footer() {
           </div>
         </div>
 
-        {/* Bottom Section */}
-        <div className="border-t border-border pt-8 text-center md:text-left">
-          <span className="text-sm text-foreground/80">© 2025 Notes9, Inc. All rights reserved.</span>
+        <div className="border-t border-border/60 pt-8 text-center md:text-left">
+          <span className="text-sm text-foreground/80">
+            Notes9 is built by a multidisciplinary team spanning scientific research, AI systems, and product engineering.
+          </span>
         </div>
       </div>
     </footer>
