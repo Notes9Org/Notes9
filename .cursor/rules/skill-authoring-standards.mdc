@@ -1,0 +1,33 @@
+---
+description: Standards for creating project-scoped agent skills and SKILL.md files
+globs: .cursor/skills/**/SKILL.md
+alwaysApply: false
+---
+
+# Skill Authoring Standards
+
+## Metadata
+
+- `name` must be lowercase with hyphens.
+- `description` must state both:
+  - what the skill does
+  - when the skill should be used
+- Write descriptions in third person.
+
+## Skill Body
+
+- Start with objective and required inputs.
+- Define outputs and quality checks clearly.
+- Keep steps deterministic where consistency matters.
+- Keep `SKILL.md` concise; move deep detail to nearby reference files.
+
+## Terminology and Safety
+
+- Use consistent marketing terminology across skills.
+- Separate observed facts from assumptions.
+- Enforce claim guardrails for external-facing marketing outputs.
+
+## Cross-File Organization
+
+- Place supporting documents close to the skill folder.
+- Keep links shallow (one level deep) for reliable lookup.

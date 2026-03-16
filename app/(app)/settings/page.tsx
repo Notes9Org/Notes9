@@ -19,6 +19,7 @@ import {
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { LogOut, Sun, Moon, Monitor, Loader2 } from 'lucide-react'
 import { ChangePasswordDialog } from "@/components/change-password-dialog"
+import { DataTransferPanel } from "@/components/settings/data-transfer-panel"
 import { useToast } from "@/hooks/use-toast"
 
 export default function SettingsPage() {
@@ -210,6 +211,7 @@ export default function SettingsPage() {
             <TabsTrigger value="profile">Profile</TabsTrigger>
             <TabsTrigger value="account">Account</TabsTrigger>
             <TabsTrigger value="preferences">Preferences</TabsTrigger>
+            <TabsTrigger value="data">Data</TabsTrigger>
           </TabsList>
 
           <TabsContent value="profile" className="space-y-4">
@@ -429,6 +431,10 @@ export default function SettingsPage() {
               </div>
             </CardContent>
           </Card>
+        </TabsContent>
+
+        <TabsContent value="data" className="space-y-4">
+          <DataTransferPanel />
         </TabsContent>
       </Tabs>
     </div>

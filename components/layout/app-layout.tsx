@@ -241,7 +241,6 @@ export function AppLayout({ children }: AppLayoutProps) {
             '--sidebar-width-icon': '3rem',
           } as React.CSSProperties}
         >
-          {/* Left Sidebar - Desktop: inline resizable panel, Mobile: uses Sidebar's built-in Sheet */}
           {!isMobile ? (
             <div className="flex shrink-0 h-full min-h-0">
               <div
@@ -270,40 +269,34 @@ export function AppLayout({ children }: AppLayoutProps) {
               )}
             </div>
           ) : (
-            /* On mobile, AppSidebar renders its own Sheet overlay via the Sidebar component */
             <AppSidebar />
           )}
 
-        {/* Main Content Area */}
-        <SidebarInset className="flex flex-col overflow-hidden flex-1 min-w-0">
-          {/* Top Bar */}
-          <header className="h-12 sm:h-14 border-b border-border flex items-center justify-between px-3 sm:px-4 shrink-0">
-            <div className="flex items-center gap-2 min-w-0 flex-1 truncate">
-              {/* Hamburger menu for mobile - uses sidebar context */}
-              <MobileMenuButton />
-              <div className="min-w-0 flex-1 truncate">
-                <HeaderTitle />
+          <SidebarInset className="flex flex-col overflow-hidden flex-1 min-w-0">
+            <header className="h-12 sm:h-14 border-b border-border flex items-center justify-between px-3 sm:px-4 shrink-0">
+              <div className="flex items-center gap-2 min-w-0 flex-1 truncate">
+                <MobileMenuButton />
+                <div className="min-w-0 flex-1 truncate">
+                  <HeaderTitle />
+                </div>
               </div>
-            </div>
 
-            <div className="flex items-center gap-1 sm:gap-2">
-              {/* Theme toggle: one click toggles dark ↔ light (client-only to avoid hydration mismatch) */}
-              <Button
-                variant="ghost"
-                size="icon"
-                className="size-8 sm:size-9"
-                onClick={toggleTheme}
-                aria-label={themeMounted && resolvedTheme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
-              >
-                {!themeMounted ? (
-                  <Moon className="size-4" />
-                ) : resolvedTheme === "dark" ? (
-                  <Sun className="size-4" />
-                ) : (
-                  <Moon className="size-4" />
-                )}
-              </Button>
-              {/* AI / Right sidebar toggle */}
+              <div className="flex items-center gap-1 sm:gap-2">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="size-8 sm:size-9"
+                  onClick={toggleTheme}
+                  aria-label={themeMounted && resolvedTheme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
+                >
+                  {!themeMounted ? (
+                    <Moon className="size-4" />
+                  ) : resolvedTheme === "dark" ? (
+                    <Sun className="size-4" />
+                  ) : (
+                    <Moon className="size-4" />
+                  )}
+                </Button>
                 {!rightSidebarOpen && (
                   <Button
                     variant={rightSidebarOpen ? "default" : "ghost"}
@@ -314,45 +307,42 @@ export function AppLayout({ children }: AppLayoutProps) {
                     <Sparkles className="size-4" />
                   </Button>
                 )}
-            </div>
-          </header>
-
-          {/* Main Content */}
-          <main className="flex-1 overflow-auto p-3 sm:p-4 md:p-6 min-w-0">
-            <div className="w-full min-w-0">
-              {children}
-            </div>
-          </main>
-        </SidebarInset>
-
-        {/* Right Sidebar - Sheet on mobile, panel on desktop */}
-        {isMobile ? (
-          <Sheet open={rightSidebarOpen} onOpenChange={setRightSidebarOpen}>
-            <SheetContent
-              side="right"
-              className="w-full max-w-full p-0 data-[state=open]:duration-300 data-[state=closed]:duration-200"
-            >
-              <SheetHeader className="sr-only">
-                <SheetTitle>AI Assistant</SheetTitle>
-              </SheetHeader>
-              <RightSidebar onClose={() => setRightSidebarOpen(false)} />
-            </SheetContent>
-          </Sheet>
-        ) : (
-          rightSidebarOpen && (
-            <div className="flex shrink-0 h-full min-h-0">
-              <ResizeHandle
-                onMouseDown={rightSidebar.handleMouseDown}
-                isResizing={rightSidebar.isResizing}
-                position="left"
-              />
-              <div
-                className="border-l border-border overflow-hidden h-full min-h-0 flex flex-col"
-                style={{ width: rightSidebar.width, minWidth: 0 }}
-              >
-                <RightSidebar onClose={() => setRightSidebarOpen(false)} />
               </div>
-            </div>
+            </header>
+
+            <main className="flex-1 overflow-auto p-3 sm:p-4 md:p-6 min-w-0">
+              <div className="w-full min-w-0">{children}</div>
+            </main>
+          </SidebarInset>
+
+          {isMobile ? (
+            <Sheet open={rightSidebarOpen} onOpenChange={setRightSidebarOpen}>
+              <SheetContent
+                side="right"
+                className="w-full max-w-full p-0 data-[state=open]:duration-300 data-[state=closed]:duration-200"
+              >
+                <SheetHeader className="sr-only">
+                  <SheetTitle>AI Assistant</SheetTitle>
+                </SheetHeader>
+                <RightSidebar onClose={() => setRightSidebarOpen(false)} />
+              </SheetContent>
+            </Sheet>
+          ) : (
+            rightSidebarOpen && (
+              <div className="flex shrink-0 h-full min-h-0">
+                <ResizeHandle
+                  onMouseDown={rightSidebar.handleMouseDown}
+                  isResizing={rightSidebar.isResizing}
+                  position="left"
+                />
+                <div
+                  className="border-l border-border overflow-hidden h-full min-h-0 flex flex-col"
+                  style={{ width: rightSidebar.width, minWidth: 0 }}
+                >
+                  <RightSidebar onClose={() => setRightSidebarOpen(false)} />
+                </div>
+              </div>
+            )
           )}
         </div>
       </SidebarProvider>
