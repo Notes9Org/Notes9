@@ -2,7 +2,8 @@
 
 ## 1. Base URL and authentication
 
-- **Base URL:** Your backend (e.g. `https://your-api-domain.com` or `http://localhost:8000`).
+- **Base URL:** `https://cyplpzwhgszj7adrhy6tcuodzy0wmzdk.lambda-url.us-east-1.on.aws`
+- **Stability:** This Function URL is stable across deployments and only changes if the Lambda or its Function URL is recreated.
 - **CORS:** Backend uses `CORS_ORIGINS` (default `*`). Set it in backend `.env` if you need specific origins.
 - **Auth:** All AI endpoints use **Supabase Auth JWT**:
   - Header: `Authorization: Bearer <access_token>`
@@ -240,7 +241,7 @@ or
 }
 ```
 
-- **Display:** Same as Section 3: set final answer, citations, confidence, tool_used. If you were appending `token` events, you can replace the streamed text with `answer` or keep it if it matches. (Payload shape matches `/notes9/run`.)
+- **Display:** Same as Section 3: set final answer, citations, confidence, tool_used. If you were appending `token` events, you can replace the streamed text with `answer` or keep it if it matches.
 
 **6. `error`**
 
@@ -294,11 +295,11 @@ Use the same pattern for Chat and Agent: check `response.ok`, then parse JSON an
 
 ## 6. Quick reference
 
-| Use case              | Endpoint             | Input                               | Output / display                    |
-|-----------------------|----------------------|-------------------------------------|-------------------------------------|
-| Simple chat           | `POST /chat`         | `content`, `session_id`, `history`  | `content`, `role` → append message  |
-| One-shot agent answer | `POST /notes9/run`    | `query`, `session_id`, `history`, `options` | `answer`, `citations`, `confidence`, `tool_used` |
-| Streaming agent       | `POST /notes9/stream` | Same as run                         | SSE: `thinking`, `token`, `sql`, `rag_chunks`, `done`, `error`, `ping` |
+| Use case              | Endpoint               | Input                               | Output / display                    |
+|-----------------------|------------------------|-------------------------------------|-------------------------------------|
+| Simple chat           | `POST /chat`           | `content`, `session_id`, `history`  | `content`, `role` → append message  |
+| One-shot agent answer | `POST /notes9/run`     | `query`, `session_id`, `history`, `options` | `answer`, `citations`, `confidence`, `tool_used` |
+| Streaming agent       | `POST /notes9/stream`  | Same as run                         | SSE: `thinking`, `token`, `sql`, `rag_chunks`, `done`, `error`, `ping` |
 
 - **Auth:** `Authorization: Bearer <access_token>` (Supabase JWT).  
 - **Confidence:** 0.0–1.0; `tool_used`: `sql` \| `rag` \| `hybrid` \| `none`.  
