@@ -36,6 +36,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
+import { CollaboratorsDialog } from "@/components/lab-notes/collaborators-dialog"
 import { cn } from "@/lib/utils"
 import { getUniqueNameErrorMessage } from "@/lib/unique-name-error"
 import { useBreadcrumb } from "@/components/layout/breadcrumb-context"
@@ -1451,6 +1452,12 @@ export function LabNotesTab({
                       </DropdownMenu>
                     )}
                     {/* Share Button - Google Docs style */}
+                    {!isCreating && selectedNote && (
+                      <CollaboratorsDialog
+                        labNoteId={selectedNote.id}
+                        labNoteTitle={selectedNote.title}
+                      />
+                    )}
 
                     {/* Publish button temporarily hidden */}
                     {/* {!isCreating && selectedNote && (
