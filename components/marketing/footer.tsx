@@ -42,7 +42,7 @@ export function Footer() {
             <div className="space-y-2 text-sm text-foreground/80">
               <div className="flex items-center space-x-2">
                 <MapPin className="h-4 w-4" />
-                <span>Distributed team · United States & United Kingdom</span>
+                <span>Distributed team · India, United States & United Kingdom</span>
               </div>
               <div className="flex items-center space-x-2">
                 <Mail className="h-4 w-4" />
