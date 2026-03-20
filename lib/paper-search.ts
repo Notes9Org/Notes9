@@ -1,5 +1,14 @@
 import { SearchPaper } from '@/types/paper-search';
 
+function decodeXml(value: string) {
+  return value
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&amp;/g, "&")
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'");
+}
+
 // PubMed API Integration
 export async function searchPubMed(query: string): Promise<SearchPaper[]> {
   try {
@@ -33,15 +42,17 @@ export async function searchPubMed(query: string): Promise<SearchPaper[]> {
       
       // Extract title
       const titleMatch = article.match(/<ArticleTitle>(.*?)<\/ArticleTitle>/);
-      const title = titleMatch ? titleMatch[1].replace(/<[^>]*>/g, '') : 'Untitled Paper';
+      const title = titleMatch ? decodeXml(titleMatch[1].replace(/<[^>]*>/g, '')) : 'Untitled Paper';
       
       // Extract abstract
       const abstractMatch = article.match(/<AbstractText[^>]*>(.*?)<\/AbstractText>/);
-      const abstract = abstractMatch ? abstractMatch[1].replace(/<[^>]*>/g, '') : 'No abstract available.';
+      const abstract = abstractMatch ? decodeXml(abstractMatch[1].replace(/<[^>]*>/g, '')) : 'No abstract available.';
       
       // Extract DOI
       const doiMatch = article.match(/<ArticleId IdType="doi">(.*?)<\/ArticleId>/);
       const doi = doiMatch ? doiMatch[1] : undefined;
+      const pmcidMatch = article.match(/<ArticleId IdType="pmc">(PMC\d+)<\/ArticleId>/i);
+      const pmcid = pmcidMatch ? pmcidMatch[1] : undefined;
       
       // Extract PMID
       const pmidMatch = article.match(/<PMID[^>]*>(.*?)<\/PMID>/);
@@ -80,7 +91,8 @@ export async function searchPubMed(query: string): Promise<SearchPaper[]> {
         journal,
         doi,
         pmid,
-        isOpenAccess: false, // Will be determined by checking PMC
+        pdfUrl: pmcid ? `https://pmc.ncbi.nlm.nih.gov/articles/${pmcid}/pdf/` : undefined,
+        isOpenAccess: Boolean(pmcid),
         source: 'PubMed',
       });
     }
@@ -116,6 +128,12 @@ export async function searchPreprints(query: string): Promise<SearchPaper[]> {
       const authors = art.authorString
         ? art.authorString.split(', ').slice(0, 5)
         : ['Unknown Author'];
+      const pdfUrl =
+        art.fullTextUrlList?.fullTextUrl?.find?.((entry: any) =>
+          String(entry.documentStyle || '').toLowerCase() === 'pdf'
+        )?.url ||
+        art.fullTextUrl ||
+        undefined;
 
       // Detect specific preprint server
       let source: 'BioRxiv' | 'MedRxiv' | 'Preprint' = 'Preprint';
@@ -130,6 +148,7 @@ export async function searchPreprints(query: string): Promise<SearchPaper[]> {
         year,
         journal,
         doi,
+        pdfUrl,
         isOpenAccess: true, // Preprints are typically open access
         source,
       });
@@ -158,6 +177,5 @@ export async function searchPapers(query: string): Promise<SearchPaper[]> {
     return [];
   }
 }
-
 
 

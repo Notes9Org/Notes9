@@ -245,6 +245,35 @@
   }
 }
 
+.n9-pdf-text-layer {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  line-height: 1;
+  forced-color-adjust: none;
+  z-index: 2;
+  opacity: 1;
+}
+
+.n9-pdf-text-layer span,
+.n9-pdf-text-layer br {
+  position: absolute;
+  white-space: pre;
+  transform-origin: 0% 0%;
+  color: transparent !important;
+  -webkit-text-fill-color: transparent;
+  -webkit-text-stroke: 0 transparent;
+  text-shadow: none;
+  background: transparent;
+  cursor: text;
+  user-select: text;
+  caret-color: transparent;
+}
+
+.n9-pdf-text-layer ::selection {
+  background: rgb(59 130 246 / 0.28);
+}
+
 * {
   border-color: var(--border);
 }

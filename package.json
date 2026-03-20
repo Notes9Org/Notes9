@@ -130,6 +130,7 @@
     "@types/react-dom": "^19",
     "baseline-browser-mapping": "^2.10.0",
     "dotenv": "^17.2.3",
+    "eslint": "^10.0.3",
     "postcss": "^8.5",
     "tailwindcss": "^4.1.9",
     "tsx": "^4.21.0",

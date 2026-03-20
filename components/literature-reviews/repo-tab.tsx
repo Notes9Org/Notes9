@@ -13,7 +13,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
-import { BookOpen, ExternalLink, Plus, Search, Star } from "lucide-react";
+import { BookOpen, ExternalLink, FileText, Plus, Search, Star } from "lucide-react";
 import Link from "next/link";
 import { LiteratureDetailModal } from "./literature-detail-modal";
 
@@ -26,6 +26,8 @@ interface LiteratureReview {
   doi: string | null;
   status: string;
   relevance_rating: number | null;
+  pdf_storage_path?: string | null;
+  pdf_file_name?: string | null;
   project: { id: string; name: string } | null;
   experiment: { id: string; name: string } | null;
   created_by_profile: { first_name: string; last_name: string } | null;
@@ -159,6 +161,12 @@ export function RepoTab({ literatureReviews }: RepoTabProps) {
                           >
                             <ExternalLink className="h-3 w-3" />
                           </a>
+                        </div>
+                      )}
+                      {lit.pdf_storage_path && (
+                        <div className="mt-1 flex items-center gap-1 text-xs text-[var(--n9-accent)]">
+                          <FileText className="h-3 w-3" />
+                          PDF attached
                         </div>
                       )}
                     </TableCell>

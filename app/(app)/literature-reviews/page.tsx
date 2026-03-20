@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button"
 import { Plus } from 'lucide-react'
 import Link from 'next/link'
 import { LiteratureTabs } from '@/components/literature-reviews/literature-tabs'
+import { UploadLiteraturePdfDialog } from "@/components/literature-reviews/upload-literature-pdf-dialog"
 
 export default async function LiteratureReviewsPage() {
   const supabase = await createClient()
@@ -36,12 +37,15 @@ export default async function LiteratureReviewsPage() {
             Search papers and manage your reference library
           </p>
         </div>
-        <Button asChild className="w-full sm:w-auto">
-          <Link href="/literature-reviews/new">
-            <Plus className="h-4 w-4 mr-2" />
-            Add Reference
-          </Link>
-        </Button>
+        <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
+          <UploadLiteraturePdfDialog literatureReviews={(literatureReviews ?? []) as any} />
+          <Button asChild className="w-full sm:w-auto">
+            <Link href="/literature-reviews/new">
+              <Plus className="h-4 w-4 mr-2" />
+              Add Reference
+            </Link>
+          </Button>
+        </div>
       </div>
 
       {/* Tabs */}
