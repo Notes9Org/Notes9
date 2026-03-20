@@ -105,12 +105,7 @@ interface RightSidebarProps {
   onClose?: () => void;
 }
 
-interface RightSidebarProps {
-  onClose?: () => void;
-}
-
-export function RightSidebar({ onClose }: RightSidebarProps = {}{ onClose }: RightSidebarProps = {}) {
-  const router = useRouter();
+export function RightSidebar({ onClose }: RightSidebarProps = {}) {
   const router = useRouter();
   const pathname = usePathname();
   const [input, setInput] = useState('');
