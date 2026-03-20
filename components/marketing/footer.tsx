@@ -1,8 +1,8 @@
 "use client"
 
 import { Mail, MapPin } from "lucide-react"
-import Image from "next/image"
 import Link from "next/link"
+import { Notes9Brand } from "@/components/brand/notes9-brand"
 
 const footerLinks = {
   product: [
@@ -24,15 +24,7 @@ export function Footer() {
         <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mb-12">
           <div className="md:col-span-1">
             <Link href="/" className="flex items-center space-x-3 mb-4">
-              <div className="w-8 h-8 relative">
-                <Image
-                  src="/notes9-logo.png"
-                  alt="Notes9 Logo"
-                  fill
-                  className="object-contain dark:invert dark:brightness-110 dark:contrast-125"
-                />
-              </div>
-              <span className="text-xl font-bold text-foreground tracking-tight">Notes9</span>
+              <Notes9Brand textClassName="h-8 w-auto" />
             </Link>
 
             <p className="text-foreground/80 mb-6 text-sm leading-relaxed">
@@ -42,7 +34,7 @@ export function Footer() {
             <div className="space-y-2 text-sm text-foreground/80">
               <div className="flex items-center space-x-2">
                 <MapPin className="h-4 w-4" />
-                <span>Distributed team · United States & United Kingdom</span>
+                <span>Distributed team · India, United States & United Kingdom</span>
               </div>
               <div className="flex items-center space-x-2">
                 <Mail className="h-4 w-4" />

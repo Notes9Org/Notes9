@@ -91,6 +91,7 @@ export default function LabNotesPage() {
   const handleSelectNote = (note: LabNote) => {
     setSelectedNote(note)
     if (note.experiment_id) {
+      window.dispatchEvent(new CustomEvent("notes9:navigation-start", { detail: { label: note.experiment_name || "Experiment", href: `/experiments/${note.experiment_id}`, kind: "experiments" } }))
       router.push(`/experiments/${note.experiment_id}?noteId=${note.id}`)
     }
   }

@@ -1,0 +1,26 @@
+---
+description: Standards for writing and maintaining Cursor rule files in this project
+globs: .cursor/rules/**/*.mdc
+alwaysApply: false
+---
+
+# Rule Authoring Standards
+
+## Frontmatter Requirements
+
+- Include `description`, `globs`, and `alwaysApply`.
+- Default to file-scoped rules (`alwaysApply: false`) unless global behavior is truly required.
+- Keep glob patterns specific to avoid accidental broad activation.
+
+## Writing Guidelines
+
+- Keep one concern per rule file.
+- Use short, actionable instructions.
+- Prefer concrete examples over abstract guidance.
+- Keep rule content concise and easy to scan.
+
+## Maintenance
+
+- Update rules when project workflow changes.
+- Remove stale or conflicting instructions promptly.
+- Do not duplicate the same instruction across multiple rules unless scopes differ intentionally.

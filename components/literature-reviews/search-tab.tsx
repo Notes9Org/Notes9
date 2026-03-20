@@ -2,12 +2,13 @@
 
 import { SearchPaper } from '@/types/paper-search';
 import { Input } from '@/components/ui/input';
-import { Search, Loader2, BookOpen, Sparkles, Database } from 'lucide-react';
+import { Search, BookOpen, Sparkles, Database } from 'lucide-react';
 import { PaperSearchCard } from './paper-search-card';
 import { PerplexitySearchCard } from './perplexity-search-card';
 import { useState } from 'react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
+import { Notes9MascotLoader } from '@/components/brand/notes9-mascot-loader';
 
 interface PerplexityPaper {
   rank: number;
@@ -209,11 +210,15 @@ export function SearchTab({
 
       {/* Loading State */}
       {isLoading && (
-        <div className="flex flex-col items-center justify-center py-12">
-          <Loader2 className="h-8 w-8 text-primary animate-spin mb-4" />
-          <p className="text-muted-foreground">
-            {aiMode ? 'AI is searching papers...' : 'Searching databases...'}
-          </p>
+        <div className="py-12">
+          <Notes9MascotLoader
+            title={aiMode ? 'Notes9 AI is searching' : 'Searching literature'}
+            description={
+              aiMode
+                ? 'The mascot is reviewing web results and packaging the strongest papers first.'
+                : 'The mascot is scanning connected databases for the most relevant papers.'
+            }
+          />
         </div>
       )}
 

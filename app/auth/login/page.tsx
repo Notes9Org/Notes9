@@ -14,9 +14,10 @@ import { Label } from "@/components/ui/label"
 import Link from "next/link"
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useState, useEffect, Suspense } from "react"
-import Image from "next/image"
 import { Separator } from "@/components/ui/separator"
 import { InteractiveParticles } from "@/components/ui/interactive-particles"
+import { Notes9Brand } from "@/components/brand/notes9-brand"
+import { FlaskConical } from "lucide-react"
 
 function LoginForm() {
   const [email, setEmail] = useState("")
@@ -114,20 +115,21 @@ function LoginForm() {
 
       <div className="w-full max-w-md relative z-10">
         <div className="flex flex-col gap-6">
-          <div className="flex flex-col items-center gap-2 text-center">
-            <Image
-              src="/notes9-logo.png"
-              alt="Notes9 Logo"
-              width={60}
-              height={60}
-            />
-            <h1 className="text-2xl font-bold">Welcome to Notes9</h1>
-            <p className="text-sm text-muted-foreground">
-              Research Lab Management
-            </p>
+          <div className="flex flex-col items-center gap-3 text-center">
+            <div className="inline-flex items-center gap-2 rounded-full border border-border/70 bg-card/80 px-3 py-1 text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground shadow-sm backdrop-blur-sm">
+              <FlaskConical className="size-3.5 text-primary/80" />
+              Research workspace access
+            </div>
+            <Notes9Brand stacked iconClassName="h-[56px] w-[56px]" textClassName="h-9 w-auto" />
+            <div className="space-y-1">
+              <h1 className="text-2xl font-bold">Continue your research</h1>
+              <p className="text-sm text-muted-foreground">
+                Sign in to open your workspace, notes, experiments, and literature in one place.
+              </p>
+            </div>
           </div>
 
-          <Card>
+          <Card className="border-border/70 bg-card/92 shadow-[0_24px_60px_-32px_rgba(44,36,24,0.28)] backdrop-blur-sm">
             <CardHeader>
               <CardTitle className="text-xl">Sign In</CardTitle>
               <CardDescription>
@@ -239,7 +241,16 @@ function LoginForm() {
                     className="w-full"
                     disabled={isLoading}
                   >
-                    {isLoading ? "Signing in..." : "Sign In"}
+                    {isLoading ? (
+                      <span className="inline-flex items-center gap-2">
+                        <img
+                          src="/notes9-loading-transparent.apng"
+                          alt="Signing in"
+                          className="h-6 w-auto object-contain"
+                        />
+                        Signing in...
+                      </span>
+                    ) : "Sign In"}
                   </Button>
                 </div>
                 <div className="mt-4 text-center text-sm">

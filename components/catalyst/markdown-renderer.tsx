@@ -17,7 +17,7 @@ interface MarkdownRendererProps {
 
 export function MarkdownRenderer({ content, className }: MarkdownRendererProps) {
   return (
-    <div className={cn('prose prose-sm dark:prose-invert max-w-none text-foreground prose-headings:text-foreground prose-p:text-foreground prose-li:text-foreground [&_.katex]:text-inherit [&_.katex-display]:my-2', 'prose-p:my-1.5 prose-p:leading-relaxed prose-ul:my-1 prose-ol:my-1 prose-li:my-0', className)}>
+    <div className={cn('prose prose-sm dark:prose-invert max-w-none text-foreground prose-headings:text-foreground prose-p:text-foreground prose-li:text-foreground [&_.katex]:text-inherit [&_.katex-display]:my-2', 'prose-p:my-1 prose-p:leading-[1.45] prose-ul:my-1 prose-ol:my-1 prose-li:my-0 leading-[1.45]', className)}>
     <ReactMarkdown
       remarkPlugins={[remarkGfm, remarkMath]}
       rehypePlugins={[rehypeHighlight, rehypeKatex]}
@@ -29,7 +29,7 @@ export function MarkdownRenderer({ content, className }: MarkdownRendererProps) 
           
           return isInline ? (
             <code
-              className="bg-muted px-1.5 py-0.5 rounded text-sm font-mono"
+              className="bg-muted px-1.5 py-0.5 rounded text-[0.9em] font-mono"
               {...props}
             >
               {children}
@@ -98,7 +98,7 @@ export function MarkdownRenderer({ content, className }: MarkdownRendererProps) 
         // Custom paragraph (readable spacing and line height)
         p({ children, ...props }) {
           return (
-            <p className="my-1.5 leading-relaxed text-foreground" {...props}>
+            <p className="my-1 leading-[1.45] text-foreground" {...props}>
               {children}
             </p>
           );
@@ -106,7 +106,7 @@ export function MarkdownRenderer({ content, className }: MarkdownRendererProps) 
         // Custom headings (tighter spacing)
         h1({ children, ...props }) {
           return (
-            <h1 className="text-xl font-bold mt-3 mb-1" {...props}>
+            <h1 className="text-xl font-bold mt-2.5 mb-1" {...props}>
               {children}
             </h1>
           );
@@ -120,7 +120,7 @@ export function MarkdownRenderer({ content, className }: MarkdownRendererProps) 
         },
         h3({ children, ...props }) {
           return (
-            <h3 className="text-base font-semibold mt-2 mb-0.5" {...props}>
+            <h3 className="text-base font-semibold mt-1.5 mb-0.5" {...props}>
               {children}
             </h3>
           );
@@ -167,4 +167,3 @@ export function MarkdownRenderer({ content, className }: MarkdownRendererProps) 
     </div>
   );
 }
-

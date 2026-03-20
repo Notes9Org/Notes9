@@ -1,7 +1,5 @@
 'use client';
 
-import { Sparkles } from 'lucide-react';
-
 interface CatalystGreetingProps {
   userName: string;
 }
@@ -31,8 +29,12 @@ export function CatalystGreeting({ userName }: CatalystGreetingProps) {
         {/* Animated Icon */}
         <div className="mb-6 inline-flex items-center justify-center">
           <div className="relative">
-            <div className="absolute inset-0 animate-pulse rounded-full bg-gradient-to-r from-orange-400 to-pink-500 opacity-20 blur-xl" />
-            <Sparkles className="relative size-10 text-orange-500" />
+            <div className="absolute inset-x-[12%] inset-y-[16%] rounded-[2.5rem] bg-black/32 blur-3xl dark:bg-black/40" />
+            <img
+              src="/notes9-loading-transparent.apng"
+              alt="Catalyst AI mascot"
+              className="relative z-10 h-auto w-[144px] object-contain"
+            />
           </div>
         </div>
 
@@ -69,4 +71,3 @@ function SuggestedAction({ icon, label }: { icon: string; label: string }) {
     </button>
   );
 }
-

@@ -35,6 +35,7 @@ const ALLOWED_TYPES = [
   'text/csv',
   'application/json',
 ];
+const MAX_CHAT_CHARS = 4096;
 
 export function CatalystInput({
   input,
@@ -51,10 +52,25 @@ export function CatalystInput({
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [uploadQueue, setUploadQueue] = useState<string[]>([]);
 
+  const resizeTextarea = useCallback(() => {
+    const textarea = textareaRef.current;
+    if (!textarea) return;
+    textarea.style.height = 'auto';
+    if (!input.trim()) {
+      textarea.style.height = '52px';
+      return;
+    }
+    textarea.style.height = `${Math.min(textarea.scrollHeight, 200)}px`;
+  }, [input]);
+
   // Auto-focus on mount
   useEffect(() => {
     textareaRef.current?.focus();
   }, []);
+
+  useEffect(() => {
+    resizeTextarea();
+  }, [input, isLoading, resizeTextarea]);
 
   const uploadFile = useCallback(async (file: File): Promise<Attachment | null> => {
     try {
@@ -173,6 +189,7 @@ export function CatalystInput({
     onSubmit(input, attachments.length > 0 ? attachments : undefined);
     setInput('');
     setAttachments([]);
+    requestAnimationFrame(() => resizeTextarea());
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -249,6 +266,7 @@ export function CatalystInput({
             placeholder="How can I help you today?"
             className="min-h-[52px] max-h-[200px] resize-none border-0 bg-transparent px-4 pt-4 pb-14 text-base focus-visible:ring-0 focus-visible:ring-offset-0"
             disabled={isLoading}
+            maxLength={MAX_CHAT_CHARS}
           />
 
           {/* Hidden file input */}
@@ -315,9 +333,12 @@ export function CatalystInput({
       </form>
 
       {/* Helper text */}
-      <p className="mt-2 text-center text-xs text-muted-foreground">
-        Paste images or click <Paperclip className="inline size-3" /> to attach files
-      </p>
+      <div className="mt-2 flex items-center justify-between gap-3 text-xs text-muted-foreground">
+        <p>
+          Paste images or click <Paperclip className="inline size-3" /> to attach files
+        </p>
+        <span>{input.length}/{MAX_CHAT_CHARS}</span>
+      </div>
     </div>
   );
 }

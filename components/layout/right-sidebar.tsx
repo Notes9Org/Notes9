@@ -1,7 +1,8 @@
 'use client';
 
+import Image from 'next/image';
 import { useState, useRef, useEffect, useCallback, useMemo, type ChangeEvent } from 'react';
-import { useRouter } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { useChat } from '@ai-sdk/react';
 import { DefaultChatTransport } from 'ai';
 import { Button } from '@/components/ui/button';
@@ -40,6 +41,7 @@ import { useChatSessions, ChatSession } from '@/hooks/use-chat-sessions';
 import { MarkdownRenderer } from '@/components/catalyst/markdown-renderer';
 import { PreviewAttachment, type Attachment } from '@/components/catalyst/preview-attachment';
 import { MessageActions } from '@/components/catalyst/message-actions';
+import { Notes9VideoLoader } from '@/components/brand/notes9-video-loader';
 import { toast } from 'sonner';
 import { createClient } from '@/lib/supabase/client';
 import {
@@ -97,6 +99,7 @@ const ALLOWED_TYPES = [
   'application/pdf',
   'text/plain',
 ];
+const MAX_CHAT_CHARS = 4096;
 
 interface RightSidebarProps {
   onClose?: () => void;
@@ -104,6 +107,7 @@ interface RightSidebarProps {
 
 export function RightSidebar({ onClose }: RightSidebarProps = {}) {
   const router = useRouter();
+  const pathname = usePathname();
   const [input, setInput] = useState('');
   const [agentMode, setAgentMode] = useState<AgentMode>('general');
   const [userId, setUserId] = useState<string>('');
@@ -119,6 +123,18 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
   const [isExpanded, setIsExpanded] = useState(false);
   const [expandedHistoryOpen, setExpandedHistoryOpen] = useState(true);
   const [showAllPastChats, setShowAllPastChats] = useState(false);
+  const previousPathnameRef = useRef(pathname);
+
+  const resizeInput = useCallback((reset = false) => {
+    const textarea = inputRef.current;
+    if (!textarea) return;
+    textarea.style.height = 'auto';
+    if (reset || !textarea.value.trim()) {
+      textarea.style.height = '52px';
+      return;
+    }
+    textarea.style.height = `${Math.min(textarea.scrollHeight, 300)}px`;
+  }, []);
 
   // Cursor-like UI States
   // If messages.length === 0 => "New Chat View" (Input at top/center, Past Chats at bottom)
@@ -203,7 +219,18 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages, agentStream.thinkingSteps, agentStream.streamedAnswer, agentStream.donePayload]);
+  }, [messages, agentStream.thinkingSteps, agentStream.streamedAnswer, agentStream.donePayload, agentStream.thinkingSteps, agentStream.streamedAnswer, agentStream.donePayload, agentStream.thinkingSteps, agentStream.streamedAnswer, agentStream.donePayload]);
+
+  useEffect(() => {
+    resizeInput();
+  }, [input, isLoading, resizeInput]);
+
+  useEffect(() => {
+    if (previousPathnameRef.current !== pathname && isExpanded) {
+      setIsExpanded(false);
+    }
+    previousPathnameRef.current = pathname;
+  }, [pathname, isExpanded]);
 
   const uploadFile = useCallback(async (file: File): Promise<Attachment | null> => {
     try {
@@ -284,6 +311,7 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
     const currentAttachments = [...attachments];
     setInput('');
     setAttachments([]);
+    requestAnimationFrame(() => resizeInput(true));
 
     const isFirstMessageInSession = messages.length === 0;
     if (!currentSessionRef.current) {
@@ -409,6 +437,10 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
   };
 
   const handleNewChat = async () => {
+    if (isLoading) {
+      toast.error('Wait for the current response to finish before switching chats.');
+      return;
+    }
     const sessionId = await createSession();
     if (sessionId) {
       currentSessionRef.current = sessionId;
@@ -429,6 +461,10 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
   }, [currentSessionId, deleteSession, setMessages]);
 
   const loadSession = (sessionId: string) => {
+    if (isLoading) {
+      toast.error('Wait for the current response to finish before switching chats.');
+      return;
+    }
     setCurrentSessionId(sessionId);
     currentSessionRef.current = sessionId;
     loadMessages(sessionId).then((msgs) => {
@@ -489,23 +525,20 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
       <div className={cn(
         "rounded-xl border bg-card/50 shadow-sm focus-within:ring-1 focus-within:ring-ring/50 focus-within:border-ring transition-all overflow-hidden",
         isDraggingContext && "ring-2 ring-primary border-primary bg-primary/5"
-      )}>
+      )} id="tour-ai-chat">
         <textarea
           ref={inputRef}
           value={input}
           onChange={(e) => {
             setInput(e.target.value);
-            // Auto-resize
-            if (inputRef.current) {
-              inputRef.current.style.height = 'auto';
-              inputRef.current.style.height = `${Math.min(inputRef.current.scrollHeight, 300)}px`;
-            }
+            resizeInput();
           }}
           onKeyDown={handleKeyDown}
           placeholder="Plan, @ for context, / for commands"
           className="w-full min-h-[52px] resize-none bg-transparent px-4 py-2.5 text-sm placeholder:text-muted-foreground/60 focus:outline-none scrollbar-hide"
           disabled={isLoading || contextLoading}
           autoFocus
+          maxLength={MAX_CHAT_CHARS}
         />
 
         {/* Bottom Toolbar */}
@@ -514,7 +547,7 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
             {/* Mode Selector */}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="sm" className="h-7 gap-1.5 rounded-md bg-muted/50 hover:bg-muted text-muted-foreground px-2 text-xs font-medium">
+                <Button id="tour-ai-mode" variant="ghost" size="sm" className="h-7 gap-1.5 rounded-md bg-muted/50 hover:bg-muted text-muted-foreground px-2 text-xs font-medium">
                   {agentMode === 'notes9' ? (
                     <><FlaskConical className="size-3.5" /> Notes9</>
                   ) : (
@@ -535,6 +568,9 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
           </div>
 
           <div className="flex items-center gap-1 shrink-0">
+            <span className="mr-1 hidden text-[11px] text-muted-foreground sm:inline">
+              {input.length}/{MAX_CHAT_CHARS}
+            </span>
             <Button size="icon" variant="ghost" className="size-7 text-muted-foreground hover:text-foreground" onClick={() => fileInputRef.current?.click()} disabled={isLoading}>
               <Paperclip className="size-4" />
             </Button>
@@ -675,7 +711,7 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
 
   return (
     <div className={cn(
-      "flex flex-col bg-background border-l min-h-0 overflow-hidden",
+      "flex flex-col bg-background border-l border-border/45 min-h-0 overflow-hidden shadow-[-2px_0_18px_-16px_rgba(44,36,24,0.22)] dark:shadow-[-2px_0_18px_-16px_rgba(0,0,0,0.45)]",
       isExpanded
         ? "fixed top-0 right-0 bottom-0 left-[var(--sidebar-width,0px)] z-50 w-auto h-full transition-none"
         : "h-full w-full min-w-0 transition-none"
@@ -690,7 +726,7 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
       ) : (
         <>
           {/* Header: Tab-like Navigation (History + New Chat hidden when maximized; left sidebar has them) */}
-            <header className="h-12 sm:h-14 flex items-center justify-between px-2 sm:px-4 border-b shrink-0 bg-background/50 backdrop-blur z-10 text-xs select-none">
+            <header className="h-12 sm:h-14 flex items-center justify-between px-2 sm:px-4 border-b border-border/40 shrink-0 bg-[color:var(--n9-header-bg)]/80 backdrop-blur-md z-10 text-xs select-none">
             <div className="flex items-center gap-1 overflow-hidden">
               {isExpanded && !expandedHistoryOpen && (
                 <Button
@@ -718,12 +754,12 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
                               <History className="size-4" />
                             </Button>
                         </DropdownMenuTrigger>
-                        <DropdownMenuContent align="start" className="w-[280px] max-w-[min(280px,90vw)] p-0 overflow-hidden" sideOffset={4}>
+                        <DropdownMenuContent align="start" className="flex w-[280px] max-w-[min(280px,90vw)] flex-col p-0 overflow-hidden" sideOffset={4}>
                           <div className="p-2 text-xs font-semibold text-muted-foreground/80 uppercase tracking-wider border-b shrink-0">
                             History
                           </div>
-                          <ScrollArea className="max-h-[280px] overflow-hidden">
-                            <div className="p-1 min-w-0">
+                          <ScrollArea className="h-[280px] w-full overflow-hidden">
+                            <div className="min-w-max p-1">
                               {sessions.length === 0 ? (
                                 <div className="py-6 text-center text-muted-foreground text-xs">No history yet.</div>
                               ) : (
@@ -735,7 +771,7 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
                                       className={cn(
                                         "flex-1 min-w-0 flex items-center justify-between gap-2 px-3 py-2 text-left text-sm rounded-md transition-colors overflow-hidden",
                                         currentSessionId === session.id
-                                          ? "bg-accent text-accent-foreground"
+                                          ? "bg-[color:var(--ai-soft)] text-foreground"
                                           : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
                                       )}
                                     >
@@ -861,10 +897,14 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
               {messages.length === 0 ? (
                 // --- Empty State: input at bottom; full screen = compact bar, narrow = full input card ---
                 <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
-                  <div className="flex-1 flex flex-col items-center justify-center px-4">
-                    <div className="relative mb-2">
-                      <div className="absolute inset-0 animate-pulse rounded-full bg-gradient-to-r from-orange-400 to-pink-500 opacity-25 blur-xl" />
-                      <Sparkles className="relative size-8 text-orange-500" />
+                <div className="flex-1 flex flex-col items-center justify-center px-4">
+                    <div className="relative mb-3">
+                      <div className="absolute inset-x-[12%] inset-y-[16%] rounded-[2.5rem] bg-black/32 blur-3xl dark:bg-black/40" />
+                      <img
+                        src="/notes9-loading-transparent.apng"
+                        alt="Catalyst AI mascot"
+                        className="relative z-10 h-auto w-[138px] object-contain"
+                      />
                     </div>
                     <h2 className="text-lg font-bold tracking-tight bg-gradient-to-r from-orange-500 to-pink-600 bg-clip-text text-transparent">
                       Catalyst AI
@@ -893,12 +933,18 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
                         return (
                           <div key={message.id} className={cn('group/message flex gap-4 w-full', message.role === 'user' ? 'justify-end' : 'justify-start')}>
                             {message.role === 'assistant' && (
-                              <div className="size-7 shrink-0 flex items-center justify-center rounded-full bg-background border shadow-sm mt-1">
-                                <Sparkles className="size-3.5 text-primary" />
+                            <div className="mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-full border border-border/60 bg-[rgba(124,82,52,0.05)] shadow-sm dark:bg-background dark:border-border">
+                                <Image
+                                  src="/notes9-mascot-ghost-transparent.png"
+                                  alt="Notes9 assistant"
+                                  width={18}
+                                  height={18}
+                                  className="size-[18px] object-contain [filter:sepia(0.42)_saturate(1.06)_hue-rotate(-12deg)_brightness(0.84)] dark:[filter:none]"
+                                />
                               </div>
                             )}
                             <div className={cn("flex flex-col min-w-0 max-w-[85%]", message.role === 'user' ? "items-end" : "items-start")}>
-                              <div className={cn("text-sm leading-relaxed whitespace-pre-wrap break-words overflow-visible", message.role === 'user' ? "bg-primary/5 text-foreground px-4 py-2.5 rounded-2xl rounded-tr-sm" : "prose prose-sm dark:prose-invert max-w-none min-w-0 text-foreground")}>
+                              <div className={cn("text-sm leading-[1.45] whitespace-pre-wrap break-words overflow-visible", message.role === 'user' ? "bg-primary/5 text-foreground px-4 py-2.5 rounded-2xl rounded-tr-sm" : "prose prose-sm dark:prose-invert max-w-none min-w-0 text-foreground")}>
                                 {message.role === 'user' ? content : <MarkdownRenderer content={content} className="text-sm text-foreground" />}
                               </div>
                               <div className="mt-1 opacity-0 group-hover/message:opacity-100 transition-opacity px-1">
@@ -931,11 +977,20 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
                       {isLoading &&
                         !(notes9Loading || agentStream.isStreaming || agentStream.error) &&
                         messages.at(-1)?.role === 'user' && (
-                        <div className="flex gap-3 items-center justify-start w-full">
-                          <div className="size-7 shrink-0 flex items-center justify-center rounded-full bg-background border shadow-sm">
-                            <Sparkles className="size-3.5 text-primary animate-pulse" />
-                          </div>
-                          <div className="text-sm text-muted-foreground italic">Thinking...</div>
+                        <div className="flex w-full justify-start">
+                          <Notes9VideoLoader
+                            className="max-w-[320px]"
+                            compact
+                            size="sm"
+                            horizontal
+                            title="Generating with Notes9"
+                            captions={[
+                              "Pulling together your current lab context.",
+                              "Drafting the next answer carefully.",
+                              "Checking citations and keeping the thread coherent.",
+                            ]}
+                            label="Generating with Notes9"
+                          />
                         </div>
                       )}
                       <div ref={messagesEndRef} className="h-4" />

@@ -2,8 +2,6 @@
 
 import { cn } from "@/lib/utils"
 import { motion } from "framer-motion"
-import { LucideIcon } from "lucide-react"
-import Image from "next/image"
 
 export const BentoGrid = ({
     className,
@@ -15,7 +13,7 @@ export const BentoGrid = ({
     return (
         <div
             className={cn(
-                "grid md:auto-rows-[18rem] grid-cols-1 md:grid-cols-3 gap-4 max-w-7xl mx-auto ",
+                "grid md:auto-rows-[18rem] grid-cols-1 md:grid-cols-3 gap-4 max-w-7xl mx-auto",
                 className
             )}
         >
@@ -39,22 +37,22 @@ export const BentoGridItem = ({
 }) => {
     return (
         <motion.div
-            initial={{ opacity: 0, y: 20 }}
+            initial={{ opacity: 0, y: 16 }}
             whileInView={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.5 }}
+            transition={{ duration: 0.4 }}
             viewport={{ once: true }}
             className={cn(
-                "row-span-1 rounded-3xl group/bento hover:shadow-xl transition duration-200 shadow-input dark:shadow-none p-4 dark:bg-black dark:border-white/[0.2] bg-white border border-transparent justify-between flex flex-col space-y-4",
+                "row-span-1 flex h-full flex-col justify-between space-y-4 overflow-hidden rounded-2xl border border-border/50 bg-card/80 p-5 backdrop-blur-sm transition-shadow duration-300 hover:shadow-md dark:bg-card/60",
                 className
             )}
         >
             {header}
-            <div className="group-hover/bento:translate-x-2 transition duration-200">
+            <div>
                 {icon}
-                <div className="font-sans font-bold text-neutral-600 dark:text-neutral-200 mb-2 mt-2">
+                <div className="mb-2 mt-3 text-lg font-semibold text-foreground">
                     {title}
                 </div>
-                <div className="font-sans font-normal text-neutral-600 text-xs dark:text-neutral-300">
+                <div className="text-sm leading-6 text-muted-foreground">
                     {description}
                 </div>
             </div>
