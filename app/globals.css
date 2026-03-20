@@ -28,12 +28,16 @@
   --popover-foreground: #2c2418;
   --primary: #965034;
   --primary-foreground: #fff8f2;
-  --secondary: #f4eee6;
-  --secondary-foreground: #3e3223;
-  --muted: #f5f0e9;
+  --secondary: #d6e0d0;
+  --secondary-foreground: #243425;
+  --tertiary: #e9c6b5;
+  --tertiary-foreground: #5b372a;
+  --neutral: #f3eadc;
+  --neutral-foreground: #4b3a2b;
+  --muted: #f3eadc;
   --muted-foreground: #7a6f60;
-  --accent: #faf1eb;
-  --accent-foreground: #6f3318;
+  --accent: #e9c6b5;
+  --accent-foreground: #5b372a;
   --destructive: oklch(0.577 0.245 27.325);
   --border: #e8ded3;
   --input: #f8f3ec;
@@ -47,7 +51,7 @@
   --sidebar-foreground: #2c2418;
   --sidebar-primary: #9b4722;
   --sidebar-primary-foreground: #fff8f2;
-  --sidebar-accent: #f6efe7;
+  --sidebar-accent: #f3eadc;
   --sidebar-accent-foreground: #3e3223;
   --sidebar-border: #e6ddd1;
   --sidebar-ring: #c88a67;
@@ -72,14 +76,18 @@
   --primary: #d4845a;
   --primary-foreground: #1a1714;
 
-  --secondary: #2c251d;
-  --secondary-foreground: var(--foreground);
+  --secondary: #2a3629;
+  --secondary-foreground: #eef4ea;
+  --tertiary: #6b4b3f;
+  --tertiary-foreground: #f6ebe3;
+  --neutral: #2b241d;
+  --neutral-foreground: #f1e8dd;
 
-  --muted: #2c261f;
+  --muted: #2b241d;
   --muted-foreground: #a89e8e;
 
-  --accent: rgba(212, 132, 90, 0.14);
-  --accent-foreground: var(--foreground);
+  --accent: rgba(233, 198, 181, 0.16);
+  --accent-foreground: #f6ebe3;
   --destructive: oklch(0.7 0.19 25);
   --destructive-foreground: oklch(0.98 0 0);
   --border: rgba(245, 240, 232, 0.1);
@@ -94,7 +102,7 @@
   --sidebar-foreground: #f5f0e8;
   --sidebar-primary: #d4845a;
   --sidebar-primary-foreground: #1a1714;
-  --sidebar-accent: #2b241c;
+  --sidebar-accent: #342b23;
   --sidebar-accent-foreground: #f5f0e8;
   --sidebar-border: rgba(245, 240, 232, 0.1);
   --sidebar-ring: #b96f48;
@@ -126,14 +134,14 @@
 
   --color-secondary: var(--secondary);
   --color-secondary-foreground: var(--secondary-foreground);
-  --color-secondary: var(--secondary);
-  --color-secondary-foreground: var(--secondary-foreground);
+  --color-tertiary: var(--tertiary);
+  --color-tertiary-foreground: var(--tertiary-foreground);
+  --color-neutral: var(--neutral);
+  --color-neutral-foreground: var(--neutral-foreground);
 
   --color-muted: var(--muted);
   --color-muted-foreground: var(--muted-foreground);
 
-  --color-accent: var(--accent);
-  --color-accent-foreground: var(--accent-foreground);
   --color-accent: var(--accent);
   --color-accent-foreground: var(--accent-foreground);
 
