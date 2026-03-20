@@ -4,6 +4,7 @@ import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { ModeToggle } from "@/components/mode-toggle"
 import { Menu, X } from "lucide-react"
+import Image from "next/image"
 import Link from "next/link"
 import { Notes9Brand } from "@/components/brand/notes9-brand"
 
