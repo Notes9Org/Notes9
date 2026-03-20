@@ -1,6 +1,8 @@
 'use client';
 
+import Image from 'next/image';
 import { useState, useRef, useEffect, useCallback, useMemo, type ChangeEvent } from 'react';
+import { usePathname, useRouter } from 'next/navigation';
 import { useChat } from '@ai-sdk/react';
 import { DefaultChatTransport } from 'ai';
 import { Button } from '@/components/ui/button';
@@ -33,10 +35,13 @@ import {
   Mic,
 } from 'lucide-react';
 import { cn, formatCitationDisplay } from '@/lib/utils';
+import { useAgentStream } from '@/hooks/use-agent-stream';
+import { AgentStreamReply } from '@/components/catalyst/agent-stream-reply';
 import { useChatSessions, ChatSession } from '@/hooks/use-chat-sessions';
 import { MarkdownRenderer } from '@/components/catalyst/markdown-renderer';
 import { PreviewAttachment, type Attachment } from '@/components/catalyst/preview-attachment';
 import { MessageActions } from '@/components/catalyst/message-actions';
+import { Notes9VideoLoader } from '@/components/brand/notes9-video-loader';
 import { toast } from 'sonner';
 import { createClient } from '@/lib/supabase/client';
 import {
@@ -94,8 +99,15 @@ const ALLOWED_TYPES = [
   'application/pdf',
   'text/plain',
 ];
+const MAX_CHAT_CHARS = 4096;
 
-export function RightSidebar() {
+interface RightSidebarProps {
+  onClose?: () => void;
+}
+
+export function RightSidebar({ onClose }: RightSidebarProps = {}) {
+  const router = useRouter();
+  const pathname = usePathname();
   const [input, setInput] = useState('');
   const [agentMode, setAgentMode] = useState<AgentMode>('general');
   const [userId, setUserId] = useState<string>('');
@@ -111,6 +123,18 @@ export function RightSidebar() {
   const [isExpanded, setIsExpanded] = useState(false);
   const [expandedHistoryOpen, setExpandedHistoryOpen] = useState(true);
   const [showAllPastChats, setShowAllPastChats] = useState(false);
+  const previousPathnameRef = useRef(pathname);
+
+  const resizeInput = useCallback((reset = false) => {
+    const textarea = inputRef.current;
+    if (!textarea) return;
+    textarea.style.height = 'auto';
+    if (reset || !textarea.value.trim()) {
+      textarea.style.height = '52px';
+      return;
+    }
+    textarea.style.height = `${Math.min(textarea.scrollHeight, 300)}px`;
+  }, []);
 
   // Cursor-like UI States
   // If messages.length === 0 => "New Chat View" (Input at top/center, Past Chats at bottom)
@@ -122,6 +146,8 @@ export function RightSidebar() {
     setMounted(true);
   }, []);
 
+  const supabaseTokenRef = useRef<string | null>(null);
+
   useEffect(() => {
     const loadUserId = async () => {
       const { data: { user } } = await supabase.auth.getUser();
@@ -130,18 +156,30 @@ export function RightSidebar() {
     loadUserId();
   }, [supabase]);
 
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      supabaseTokenRef.current = session?.access_token ?? null;
+    });
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      supabaseTokenRef.current = session?.access_token ?? null;
+    });
+    return () => subscription.unsubscribe();
+  }, [supabase]);
+
   const transport = useMemo(() => new DefaultChatTransport({
     api: '/api/chat',
     prepareSendMessagesRequest(request) {
-      // Normalize messages to plain text so request body never re-sends stringified JSON (stops double-wrap)
+      const token = supabaseTokenRef.current;
       const normalizedMessages = request.messages.map((msg: { role: string; content?: unknown; parts?: Array<{ type?: string; text?: string }> }) => {
         const plainText = getPlainTextFromMessage(msg);
         return { role: msg.role, content: plainText };
       });
       return {
+        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
         body: {
           messages: normalizedMessages,
           sessionId: currentSessionRef.current,
+          supabaseToken: token ?? undefined,
           ...request.body,
         },
       };
@@ -166,6 +204,8 @@ export function RightSidebar() {
     deleteSession,
   } = useChatSessions();
 
+  const agentStream = useAgentStream();
+
   const MAX_PAST_CHATS = 5;
   const pastChatsToShow = showAllPastChats ? sessions : sessions.slice(0, MAX_PAST_CHATS);
   const hasMorePastChats = sessions.length > MAX_PAST_CHATS;
@@ -179,7 +219,18 @@ export function RightSidebar() {
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages]);
+  }, [messages, agentStream.thinkingSteps, agentStream.streamedAnswer, agentStream.donePayload, agentStream.thinkingSteps, agentStream.streamedAnswer, agentStream.donePayload]);
+
+  useEffect(() => {
+    resizeInput();
+  }, [input, isLoading, resizeInput]);
+
+  useEffect(() => {
+    if (previousPathnameRef.current !== pathname && isExpanded) {
+      setIsExpanded(false);
+    }
+    previousPathnameRef.current = pathname;
+  }, [pathname, isExpanded]);
 
   const uploadFile = useCallback(async (file: File): Promise<Attachment | null> => {
     try {
@@ -260,6 +311,7 @@ export function RightSidebar() {
     const currentAttachments = [...attachments];
     setInput('');
     setAttachments([]);
+    requestAnimationFrame(() => resizeInput(true));
 
     const isFirstMessageInSession = messages.length === 0;
     if (!currentSessionRef.current) {
@@ -279,60 +331,69 @@ export function RightSidebar() {
     }
 
     if (agentMode === 'notes9') {
-      try {
-        setNotes9Loading(true);
-        const userMessageId = `user-${Date.now()}`;
-        const userMessage = {
-          id: userMessageId,
-          role: 'user' as const,
-          content: text,
-          parts: [{ type: 'text' as const, text }],
-          createdAt: new Date(),
-        };
-        setMessages((prev) => [...prev, userMessage]);
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+      if (!token) {
+        toast.error('Please sign in to use Notes9');
+        router.push('/auth/login');
+        return;
+      }
 
-        const sessionId = currentSessionRef.current!;
-        await saveMessage(sessionId, 'user', text);
+      const userMessageId = `user-${Date.now()}`;
+      const userMessage = {
+        id: userMessageId,
+        role: 'user' as const,
+        content: text,
+        parts: [{ type: 'text' as const, text }],
+        createdAt: new Date(),
+      };
+      setMessages((prev) => [...prev, userMessage]);
 
-        // Call Notes9 API
-        const response = await fetch('https://z3thrlksg0.execute-api.us-east-1.amazonaws.com/agent/run', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            history: [],
-            query: text,
-            session_id: sessionId,
-            user_id: userId,
-          }),
-        });
+      const sessionId = currentSessionRef.current!;
+      await saveMessage(sessionId, 'user', text);
 
-        if (!response.ok) throw new Error('Notes9 API request failed');
-        const data = await response.json();
-        let formattedAnswer = data.answer;
+      const history = messages.map((m) => ({
+        role: m.role,
+        content: getPlainTextFromMessage(m),
+      }));
 
-        // Citation handling...
-        if (data.citations && data.citations.length > 0) {
+      setNotes9Loading(true);
+      const { donePayload, error } = await agentStream.runStream(
+        {
+          query: text,
+          session_id: sessionId,
+          history,
+        },
+        token
+      );
+      setNotes9Loading(false);
+
+      if (donePayload) {
+        let formattedAnswer = donePayload.answer;
+        if (donePayload.citations && donePayload.citations.length > 0) {
           formattedAnswer += '\n\n**References:**\n';
-          data.citations.forEach((citation: any, index: number) => {
-            const sourceId = citation.source_id;
+          donePayload.citations.forEach((citation, index) => {
             const sourceType = citation.source_type;
             let route = '';
             switch (sourceType) {
               case 'literature_review':
-                route = `/literature-reviews/${sourceId}`;
+                route = `/literature-reviews/${citation.source_id}`;
                 break;
               case 'protocol':
-                route = `/protocols/${sourceId}`;
+                route = `/protocols/${citation.source_id}`;
                 break;
               case 'project':
-                route = `/projects/${sourceId}`;
+                route = `/projects/${citation.source_id}`;
                 break;
               case 'lab_note':
               case 'report':
               default:
                 route = '';
             }
-            const displayText = formatCitationDisplay(citation);
+            const displayText = formatCitationDisplay({
+              ...citation,
+              excerpt: citation.excerpt ?? undefined,
+            });
             const sourceLabel = sourceType.replace('_', ' ');
             if (route) {
               formattedAnswer += `\n[${index + 1}] [View ${sourceLabel}](${route}): ${displayText}`;
@@ -353,11 +414,9 @@ export function RightSidebar() {
         setMessages((prev) => [...prev, assistantMessage]);
         await saveMessage(sessionId, 'assistant', formattedAnswer);
         loadSessions();
-      } catch (error) {
-        console.error('Notes9 API error:', error);
-        toast.error('Failed to get response from Notes9');
-      } finally {
-        setNotes9Loading(false);
+        agentStream.reset();
+      } else if (error) {
+        toast.error(error);
       }
       return;
     }
@@ -378,6 +437,10 @@ export function RightSidebar() {
   };
 
   const handleNewChat = async () => {
+    if (isLoading) {
+      toast.error('Wait for the current response to finish before switching chats.');
+      return;
+    }
     const sessionId = await createSession();
     if (sessionId) {
       currentSessionRef.current = sessionId;
@@ -398,6 +461,10 @@ export function RightSidebar() {
   }, [currentSessionId, deleteSession, setMessages]);
 
   const loadSession = (sessionId: string) => {
+    if (isLoading) {
+      toast.error('Wait for the current response to finish before switching chats.');
+      return;
+    }
     setCurrentSessionId(sessionId);
     currentSessionRef.current = sessionId;
     loadMessages(sessionId).then((msgs) => {
@@ -458,23 +525,20 @@ export function RightSidebar() {
       <div className={cn(
         "rounded-xl border bg-card/50 shadow-sm focus-within:ring-1 focus-within:ring-ring/50 focus-within:border-ring transition-all overflow-hidden",
         isDraggingContext && "ring-2 ring-primary border-primary bg-primary/5"
-      )}>
+      )} id="tour-ai-chat">
         <textarea
           ref={inputRef}
           value={input}
           onChange={(e) => {
             setInput(e.target.value);
-            // Auto-resize
-            if (inputRef.current) {
-              inputRef.current.style.height = 'auto';
-              inputRef.current.style.height = `${Math.min(inputRef.current.scrollHeight, 300)}px`;
-            }
+            resizeInput();
           }}
           onKeyDown={handleKeyDown}
           placeholder="Plan, @ for context, / for commands"
           className="w-full min-h-[52px] resize-none bg-transparent px-4 py-2.5 text-sm placeholder:text-muted-foreground/60 focus:outline-none scrollbar-hide"
           disabled={isLoading || contextLoading}
           autoFocus
+          maxLength={MAX_CHAT_CHARS}
         />
 
         {/* Bottom Toolbar */}
@@ -483,7 +547,7 @@ export function RightSidebar() {
             {/* Mode Selector */}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="sm" className="h-7 gap-1.5 rounded-md bg-muted/50 hover:bg-muted text-muted-foreground px-2 text-xs font-medium">
+                <Button id="tour-ai-mode" variant="ghost" size="sm" className="h-7 gap-1.5 rounded-md bg-muted/50 hover:bg-muted text-muted-foreground px-2 text-xs font-medium">
                   {agentMode === 'notes9' ? (
                     <><FlaskConical className="size-3.5" /> Notes9</>
                   ) : (
@@ -504,12 +568,20 @@ export function RightSidebar() {
           </div>
 
           <div className="flex items-center gap-1 shrink-0">
+            <span className="mr-1 hidden text-[11px] text-muted-foreground sm:inline">
+              {input.length}/{MAX_CHAT_CHARS}
+            </span>
             <Button size="icon" variant="ghost" className="size-7 text-muted-foreground hover:text-foreground" onClick={() => fileInputRef.current?.click()} disabled={isLoading}>
               <Paperclip className="size-4" />
             </Button>
 
             {isLoading ? (
-              <Button size="icon" variant="secondary" className="size-7 rounded-sm animate-pulse" onClick={stop}>
+              <Button
+                size="icon"
+                variant="secondary"
+                className="size-7 rounded-sm animate-pulse"
+                onClick={() => (notes9Loading && agentStream.isStreaming ? agentStream.abort() : stop())}
+              >
                 <Square className="size-3 fill-current" />
               </Button>
             ) : (
@@ -639,7 +711,7 @@ export function RightSidebar() {
 
   return (
     <div className={cn(
-      "flex flex-col bg-background border-l min-h-0 overflow-hidden",
+      "flex flex-col bg-background border-l border-border/45 min-h-0 overflow-hidden shadow-[-2px_0_18px_-16px_rgba(44,36,24,0.22)] dark:shadow-[-2px_0_18px_-16px_rgba(0,0,0,0.45)]",
       isExpanded
         ? "fixed top-0 right-0 bottom-0 left-[var(--sidebar-width,0px)] z-50 w-auto h-full transition-none"
         : "h-full w-full min-w-0 transition-none"
@@ -654,17 +726,17 @@ export function RightSidebar() {
       ) : (
         <>
           {/* Header: Tab-like Navigation (History + New Chat hidden when maximized; left sidebar has them) */}
-          <header className="h-12 sm:h-14 flex items-center justify-between px-2 sm:px-3 border-b shrink-0 bg-background/50 backdrop-blur z-10 text-xs select-none">
+            <header className="h-12 sm:h-14 flex items-center justify-between px-2 sm:px-4 border-b border-border/40 shrink-0 bg-[color:var(--n9-header-bg)]/80 backdrop-blur-md z-10 text-xs select-none">
             <div className="flex items-center gap-1 overflow-hidden">
               {isExpanded && !expandedHistoryOpen && (
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="h-7 w-7 text-muted-foreground shrink-0"
+                  className="size-8 sm:size-9 text-muted-foreground shrink-0"
                   onClick={() => setExpandedHistoryOpen(true)}
                   aria-label="Show chat history"
                 >
-                  <History className="size-3.5" />
+                    <History className="size-4" />
                 </Button>
               )}
               {!isExpanded && (
@@ -673,22 +745,21 @@ export function RightSidebar() {
                     <div className="flex items-center gap-1">
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
-                          <button
-                            aria-label="Chat history"
-                            className={cn(
-                              "px-3 py-1.5 rounded-md flex items-center justify-center transition-colors",
-                              currentSessionId ? "bg-accent/40 text-foreground" : "text-muted-foreground hover:text-foreground hover:bg-muted/30"
-                            )}
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="size-8 sm:size-9 text-muted-foreground shrink-0"
+                              aria-label="Show chat history"
                           >
-                            <History className="size-3.5" />
-                          </button>
+                              <History className="size-4" />
+                            </Button>
                         </DropdownMenuTrigger>
-                        <DropdownMenuContent align="start" className="w-[280px] max-w-[min(280px,90vw)] p-0 overflow-hidden" sideOffset={4}>
+                        <DropdownMenuContent align="start" className="flex w-[280px] max-w-[min(280px,90vw)] flex-col p-0 overflow-hidden" sideOffset={4}>
                           <div className="p-2 text-xs font-semibold text-muted-foreground/80 uppercase tracking-wider border-b shrink-0">
                             History
                           </div>
-                          <ScrollArea className="max-h-[280px] overflow-hidden">
-                            <div className="p-1 min-w-0">
+                          <ScrollArea className="h-[280px] w-full overflow-hidden">
+                            <div className="min-w-max p-1">
                               {sessions.length === 0 ? (
                                 <div className="py-6 text-center text-muted-foreground text-xs">No history yet.</div>
                               ) : (
@@ -700,7 +771,7 @@ export function RightSidebar() {
                                       className={cn(
                                         "flex-1 min-w-0 flex items-center justify-between gap-2 px-3 py-2 text-left text-sm rounded-md transition-colors overflow-hidden",
                                         currentSessionId === session.id
-                                          ? "bg-accent text-accent-foreground"
+                                          ? "bg-[color:var(--ai-soft)] text-foreground"
                                           : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
                                       )}
                                     >
@@ -727,16 +798,15 @@ export function RightSidebar() {
                         </DropdownMenuContent>
                       </DropdownMenu>
 
-                      <button
+                      <Button
+                        variant="secondary"
+                        className="h-8 sm:h-9 text-muted-foreground"
                         onClick={handleNewChat}
-                        className={cn(
-                          "px-3 py-1.5 rounded-md flex items-center gap-2 transition-colors",
-                          !currentSessionId ? "bg-accent/40 text-foreground" : "text-muted-foreground hover:text-foreground hover:bg-muted/30"
-                        )}
+                        aria-label="New chat"
                       >
-                        <PenBox className="size-3.5" />
+                        <Plus className="size-4" />
                         <span>New Chat</span>
-                      </button>
+                      </Button>
                     </div>
                   </ScrollArea>
                 </>
@@ -744,9 +814,12 @@ export function RightSidebar() {
             </div>
 
             <div className="flex items-center gap-1 pl-2">
-              <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground" onClick={() => setIsExpanded(!isExpanded)}>
-                {isExpanded ? <Minimize2 className="size-3.5" /> : <Maximize2 className="size-3.5" />}
-              </Button>
+              <Button variant="ghost" size="icon" className="size-8 sm:size-9 text-muted-foreground" onClick={() => setIsExpanded(!isExpanded)}>
+                  {isExpanded ? <Minimize2 className="size-4" /> : <Maximize2 className="size-4" />}
+                </Button>
+                <Button variant="ghost" size="icon" className="size-8 sm:size-9 text-muted-foreground" onClick={() => onClose?.()}>
+                  <X className="size-4" />
+                </Button>
             </div>
           </header>
 
@@ -824,10 +897,14 @@ export function RightSidebar() {
               {messages.length === 0 ? (
                 // --- Empty State: input at bottom; full screen = compact bar, narrow = full input card ---
                 <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
-                  <div className="flex-1 flex flex-col items-center justify-center px-4">
-                    <div className="relative mb-2">
-                      <div className="absolute inset-0 animate-pulse rounded-full bg-gradient-to-r from-orange-400 to-pink-500 opacity-25 blur-xl" />
-                      <Sparkles className="relative size-8 text-orange-500" />
+                <div className="flex-1 flex flex-col items-center justify-center px-4">
+                    <div className="relative mb-3">
+                      <div className="absolute inset-x-[12%] inset-y-[16%] rounded-[2.5rem] bg-black/32 blur-3xl dark:bg-black/40" />
+                      <img
+                        src="/notes9-loading-transparent.apng"
+                        alt="Catalyst AI mascot"
+                        className="relative z-10 h-auto w-[138px] object-contain"
+                      />
                     </div>
                     <h2 className="text-lg font-bold tracking-tight bg-gradient-to-r from-orange-500 to-pink-600 bg-clip-text text-transparent">
                       Catalyst AI
@@ -856,12 +933,18 @@ export function RightSidebar() {
                         return (
                           <div key={message.id} className={cn('group/message flex gap-4 w-full', message.role === 'user' ? 'justify-end' : 'justify-start')}>
                             {message.role === 'assistant' && (
-                              <div className="size-7 shrink-0 flex items-center justify-center rounded-full bg-background border shadow-sm mt-1">
-                                <Sparkles className="size-3.5 text-primary" />
+                            <div className="mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-full border border-border/60 bg-[rgba(124,82,52,0.05)] shadow-sm dark:bg-background dark:border-border">
+                                <Image
+                                  src="/notes9-mascot-ghost-transparent.png"
+                                  alt="Notes9 assistant"
+                                  width={18}
+                                  height={18}
+                                  className="size-[18px] object-contain [filter:sepia(0.42)_saturate(1.06)_hue-rotate(-12deg)_brightness(0.84)] dark:[filter:none]"
+                                />
                               </div>
                             )}
                             <div className={cn("flex flex-col min-w-0 max-w-[85%]", message.role === 'user' ? "items-end" : "items-start")}>
-                              <div className={cn("text-sm leading-relaxed whitespace-pre-wrap break-words overflow-visible", message.role === 'user' ? "bg-primary/5 text-foreground px-4 py-2.5 rounded-2xl rounded-tr-sm" : "prose prose-sm dark:prose-invert max-w-none min-w-0 text-foreground")}>
+                              <div className={cn("text-sm leading-[1.45] whitespace-pre-wrap break-words overflow-visible", message.role === 'user' ? "bg-primary/5 text-foreground px-4 py-2.5 rounded-2xl rounded-tr-sm" : "prose prose-sm dark:prose-invert max-w-none min-w-0 text-foreground")}>
                                 {message.role === 'user' ? content : <MarkdownRenderer content={content} className="text-sm text-foreground" />}
                               </div>
                               <div className="mt-1 opacity-0 group-hover/message:opacity-100 transition-opacity px-1">
@@ -871,12 +954,43 @@ export function RightSidebar() {
                           </div>
                         );
                       })}
-                      {isLoading && messages.at(-1)?.role === 'user' && (
-                        <div className="flex gap-3 items-center justify-start w-full">
-                          <div className="size-7 shrink-0 flex items-center justify-center rounded-full bg-background border shadow-sm">
+                      {agentMode === 'notes9' &&
+                        (notes9Loading || agentStream.isStreaming || agentStream.error) &&
+                        messages.at(-1)?.role === 'user' && (
+                        <div className="flex gap-4 w-full justify-start">
+                          <div className="size-7 shrink-0 flex items-center justify-center rounded-full bg-background border shadow-sm mt-1">
                             <Sparkles className="size-3.5 text-primary animate-pulse" />
                           </div>
-                          <div className="text-sm text-muted-foreground italic">Thinking...</div>
+                          <div className="flex-1 min-w-0 max-w-[85%]">
+                            <AgentStreamReply
+                              thinkingSteps={agentStream.thinkingSteps}
+                              sql={agentStream.sql}
+                              ragChunks={agentStream.ragChunks}
+                              streamedAnswer={agentStream.streamedAnswer}
+                              donePayload={agentStream.donePayload}
+                              error={agentStream.error}
+                              compact
+                            />
+                          </div>
+                        </div>
+                      )}
+                      {isLoading &&
+                        !(notes9Loading || agentStream.isStreaming || agentStream.error) &&
+                        messages.at(-1)?.role === 'user' && (
+                        <div className="flex w-full justify-start">
+                          <Notes9VideoLoader
+                            className="max-w-[320px]"
+                            compact
+                            size="sm"
+                            horizontal
+                            title="Generating with Notes9"
+                            captions={[
+                              "Pulling together your current lab context.",
+                              "Drafting the next answer carefully.",
+                              "Checking citations and keeping the thread coherent.",
+                            ]}
+                            label="Generating with Notes9"
+                          />
                         </div>
                       )}
                       <div ref={messagesEndRef} className="h-4" />

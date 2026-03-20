@@ -13,8 +13,8 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import Link from "next/link"
 import { useState } from "react"
-import Image from "next/image"
 import { ArrowLeft, Mail } from "lucide-react"
+import { Notes9Brand } from "@/components/brand/notes9-brand"
 
 export default function ForgotPasswordPage() {
   const [email, setEmail] = useState("")
@@ -49,12 +49,7 @@ export default function ForgotPasswordPage() {
         <div className="w-full max-w-md">
           <div className="flex flex-col gap-6">
             <div className="flex flex-col items-center gap-2 text-center">
-              <Image 
-                src="/notes9-logo.png" 
-                alt="Notes9 Logo" 
-                width={60} 
-                height={60}
-              />
+              <Notes9Brand stacked iconClassName="h-[60px] w-[60px]" textClassName="h-10 w-auto" />
               <h1 className="text-2xl font-bold">Check Your Email</h1>
             </div>
             
@@ -98,12 +93,7 @@ export default function ForgotPasswordPage() {
       <div className="w-full max-w-md">
         <div className="flex flex-col gap-6">
           <div className="flex flex-col items-center gap-2 text-center">
-            <Image 
-              src="/notes9-logo.png" 
-              alt="Notes9 Logo" 
-              width={60} 
-              height={60}
-            />
+            <Notes9Brand stacked iconClassName="h-[60px] w-[60px]" textClassName="h-10 w-auto" />
             <h1 className="text-2xl font-bold">Reset Password</h1>
             <p className="text-sm text-muted-foreground">
               Enter your email to receive a reset link

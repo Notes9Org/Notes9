@@ -7,7 +7,9 @@ import { cn } from '@/lib/utils';
 import { MarkdownRenderer } from './markdown-renderer';
 import { MessageActions } from './message-actions';
 import { MessageEditor } from './message-editor';
+import { AgentStreamReply } from './agent-stream-reply';
 import type { Vote } from '@/lib/db/schema';
+import type { ThinkingPayload, RagChunksPayload, DonePayload } from '@/lib/agent-stream-types';
 
 interface CatalystMessagesProps {
   messages: UIMessage[];
@@ -17,6 +19,15 @@ interface CatalystMessagesProps {
   votes?: Vote[];
   onEditMessage?: (messageId: string, newContent: string) => Promise<void>;
   onRegenerate?: () => void;
+  /** When Notes9 stream is active, show AgentStreamReply instead of generic thinking indicator */
+  notes9Stream?: {
+    thinkingSteps: ThinkingPayload[];
+    sql: string | null;
+    ragChunks: RagChunksPayload | null;
+    streamedAnswer: string;
+    donePayload: DonePayload | null;
+    error: string | null;
+  } | null;
 }
 
 export function CatalystMessages({
@@ -27,15 +38,16 @@ export function CatalystMessages({
   votes = [],
   onEditMessage,
   onRegenerate,
+  notes9Stream,
 }: CatalystMessagesProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const endRef = useRef<HTMLDivElement>(null);
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
 
-  // Auto-scroll to bottom
+  // Auto-scroll to bottom when messages or stream updates
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages]);
+  }, [messages, notes9Stream]);
 
   const getVoteForMessage = useCallback(
     (messageId: string): Vote | undefined => {
@@ -54,7 +66,7 @@ export function CatalystMessages({
   return (
     <div ref={scrollRef} className="h-full overflow-y-auto">
       <div className="mx-auto max-w-3xl px-4 py-6">
-        <div className="flex flex-col gap-6">
+        <div className="flex flex-col gap-4">
           {messages.map((message, index) => {
             const isEditing = editingMessageId === message.id;
             const content = getMessageContent(message);
@@ -71,8 +83,8 @@ export function CatalystMessages({
               >
                 {/* Assistant Avatar */}
                 {message.role === 'assistant' && (
-                  <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-orange-400 to-pink-500 text-white shadow-sm">
-                    <Sparkles className="size-4" />
+                  <div className="mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-orange-400 to-pink-500 text-white shadow-sm">
+                    <Sparkles className="size-3.5" />
                   </div>
                 )}
 
@@ -97,7 +109,7 @@ export function CatalystMessages({
                     <>
                       <div
                         className={cn(
-                          'rounded-2xl px-4 py-3 text-sm',
+                          'rounded-2xl px-4 py-2.5 text-sm leading-[1.45]',
                           message.role === 'user'
                             ? 'bg-primary text-primary-foreground'
                             : 'bg-transparent'
@@ -134,21 +146,39 @@ export function CatalystMessages({
             );
           })}
 
-          {/* Thinking indicator */}
-          {isLoading && messages.at(-1)?.role === 'user' && (
-            <div className="flex w-full gap-3 justify-start">
-              <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-orange-400 to-pink-500 text-white shadow-sm">
-                <Sparkles className="size-4 animate-pulse" />
+          {/* Thinking indicator or Notes9 agent stream */}
+          {(isLoading || notes9Stream) && messages.at(-1)?.role === 'user' && (
+            notes9Stream ? (
+              <div className="flex w-full gap-3 justify-start">
+                <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-orange-400 to-pink-500 text-white shadow-sm">
+                  <Sparkles className="size-4 animate-pulse" />
+                </div>
+                <div className="flex-1 min-w-0 max-w-full">
+                  <AgentStreamReply
+                    thinkingSteps={notes9Stream.thinkingSteps}
+                    sql={notes9Stream.sql}
+                    ragChunks={notes9Stream.ragChunks}
+                    streamedAnswer={notes9Stream.streamedAnswer}
+                    donePayload={notes9Stream.donePayload}
+                    error={notes9Stream.error}
+                  />
+                </div>
               </div>
-              <div className="flex items-center gap-1 text-muted-foreground text-sm">
-                <span>Thinking</span>
-                <span className="inline-flex">
-                  <span className="animate-bounce [animation-delay:0ms]">.</span>
-                  <span className="animate-bounce [animation-delay:150ms]">.</span>
-                  <span className="animate-bounce [animation-delay:300ms]">.</span>
-                </span>
+            ) : (
+              <div className="flex w-full gap-3 justify-start">
+                <div className="mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-orange-400 to-pink-500 text-white shadow-sm">
+                  <Sparkles className="size-3.5 animate-pulse" />
+                </div>
+                <div className="flex items-center gap-1 text-muted-foreground text-sm">
+                  <span>Thinking</span>
+                  <span className="inline-flex">
+                    <span className="animate-bounce [animation-delay:0ms]">.</span>
+                    <span className="animate-bounce [animation-delay:150ms]">.</span>
+                    <span className="animate-bounce [animation-delay:300ms]">.</span>
+                  </span>
+                </div>
               </div>
-            </div>
+            )
           )}
 
           <div ref={endRef} />

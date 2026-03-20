@@ -4,54 +4,74 @@ import { Header } from "@/components/marketing/header"
 import { Footer } from "@/components/marketing/footer"
 import { AcademicHero } from "@/components/marketing/academic-hero"
 import { StatusSection } from "@/components/marketing/status-section"
-import { FeaturesSection } from "@/components/marketing/features-section"
+import { ProductShowcase } from "@/components/marketing/video-showcase"
 import { DifferentiationSection } from "@/components/marketing/differentiation-section"
 import { ContactForm } from "@/components/marketing/contact-form"
+import { FloatingPageMenu } from "@/components/marketing/floating-page-menu"
 
 import { InteractiveParticles } from "@/components/ui/interactive-particles"
 
 import "@/styles/marketing.css"
-import { Inter, JetBrains_Mono } from "next/font/google"
+import { DM_Sans, DM_Serif_Display } from "next/font/google"
 
-// Using Inter for a more standard academic/professional look, keeping JetBrains for code/technical feel.
-const inter = Inter({
+const dmSans = DM_Sans({
   subsets: ["latin"],
-  variable: "--font-inter",
+  variable: "--font-dm-sans",
 })
 
-const jetbrainsMono = JetBrains_Mono({
+const dmSerif = DM_Serif_Display({
+  weight: "400",
   subsets: ["latin"],
-  variable: "--font-jetbrains-mono",
+  variable: "--font-dm-serif",
 })
 
-export default async function HomePage() {
+export default async function HomePage({
+  searchParams,
+}: {
+  searchParams: Promise<{ [key: string]: string | string[] | undefined }>
+}) {
+  const params = await searchParams
+  const code = params.code
+
+  // Handle OAuth redirect falling back to root
+  // If we have a code, forward to the callback handler
+  if (code && typeof code === 'string') {
+    return redirect(`/auth/callback?code=${code}`)
+  }
+
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
 
-  // If authenticated, redirect to dashboard
   if (user) {
     redirect("/dashboard")
   }
 
-  // If not authenticated, show landing page with marketing theme
   return (
-    <div className={`marketing-theme ${inter.variable} ${jetbrainsMono.variable} font-sans min-h-screen flex flex-col bg-background text-foreground relative overflow-hidden`}>
-      <InteractiveParticles />
+    <div className={`marketing-theme ${dmSans.variable} ${dmSerif.variable} font-sans min-h-screen flex flex-col bg-background text-foreground relative overflow-hidden`}>
+      <InteractiveParticles variant="marketing" />
+      <div className="marketing-mesh pointer-events-none absolute inset-0 opacity-[0.15] dark:opacity-[0.08]" />
       <div className="relative z-10 flex flex-col min-h-screen">
         <Header />
+        <FloatingPageMenu />
         <main className="flex-1">
           <AcademicHero />
           <StatusSection />
-          <FeaturesSection />
+          <ProductShowcase />
           <DifferentiationSection />
-          <section className="container mx-auto px-4 py-24">
-            <div className="max-w-4xl mx-auto text-center mb-12">
-              <h2 className="text-3xl font-bold tracking-tight mb-4">Ready to Transform Your Research?</h2>
-              <p className="text-muted-foreground text-lg">
-                Join leading labs in automating data workflows and accelerating discovery.
-              </p>
+          <section id="contact">
+            <div className="container mx-auto px-4 py-24 sm:px-6 lg:px-8">
+              <div className="mx-auto max-w-2xl text-center">
+                <h2 className="font-serif text-3xl tracking-tight text-foreground sm:text-4xl">
+                  Get in touch
+                </h2>
+                <p className="mt-4 text-lg leading-7 text-muted-foreground">
+                  Tell us about your lab and where friction shows up today.
+                </p>
+              </div>
+              <div className="mx-auto mt-10 max-w-2xl">
+                <ContactForm />
+              </div>
             </div>
-            <ContactForm />
           </section>
         </main>
         <Footer />

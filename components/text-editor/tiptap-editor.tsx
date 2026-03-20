@@ -75,6 +75,7 @@ import { Plugin, PluginKey } from "@tiptap/pm/state"
 import { TextSelection } from "@tiptap/pm/state"
 import { Decoration, DecorationSet } from "@tiptap/pm/view"
 import { cn } from "@/lib/utils"
+import { useAwsTranscribe } from "@/hooks/use-aws-transcribe"
 import { useCallback, useEffect, useRef, useState } from "react"
 import { createPortal } from "react-dom"
 // @ts-ignore
@@ -108,14 +109,13 @@ import { ChemistryHighlight } from "./extensions/chemistry-highlight"
 import "katex/dist/katex.min.css"
 
 interface Paper {
-  id: string
+  id: number
   title: string
   authors: string[]
-  year: number
+  year: number | null
   journal: string
-  abstract: string
-  url: string
-  source: string
+  source_url: string
+  doi: string
 }
 
 interface CitationMetadata {
@@ -125,7 +125,7 @@ interface CitationMetadata {
   authors: string[]
   year: number
   journal: string
-  source: string
+  doi: string
   paperId: string
 }
 
@@ -1058,7 +1058,6 @@ export function TiptapEditor({
   const [tableMenuOpen, setTableMenuOpen] = useState(false)
   const [tableRows, setTableRows] = useState(3)
   const [tableCols, setTableCols] = useState(3)
-  const [isListening, setIsListening] = useState(false)
   const [citationModalOpen, setCitationModalOpen] = useState(false)
   const [bibliographyModalOpen, setBibliographyModalOpen] = useState(false)
   const [foundPapers, setFoundPapers] = useState<Paper[]>([])
@@ -1071,9 +1070,50 @@ export function TiptapEditor({
   const [commentsSidebarOpen, setCommentsSidebarOpen] = useState(false)
   /* State merge: keeping activeCommentData from origin */
   const [activeCommentData, setActiveCommentData] = useState<{ author: string; content: string; createdAt: number; id: string; rect: DOMRect } | null>(null)
-  const recognitionRef = useRef<any>(null)
   const lastFinalIndexRef = useRef<number>(0)
   const lastInterimTextRef = useRef<string>("")
+  const editorRef = useRef<ReturnType<typeof useEditor> | null>(null)
+
+  const clearInterimFromEditor = useCallback(() => {
+    const ed = editorRef.current
+    if (!ed || !lastInterimTextRef.current) return
+    const currentPos = ed.state.selection.anchor
+    const interimLength = lastInterimTextRef.current.length
+    const deleteFrom = Math.max(0, currentPos - interimLength)
+    const deleteTo = currentPos
+    if (deleteFrom < deleteTo) {
+      ed.chain()
+        .focus()
+        .setTextSelection({ from: deleteFrom, to: deleteTo })
+        .deleteSelection()
+        .run()
+    }
+    lastInterimTextRef.current = ""
+  }, [])
+
+  const { start: startAwsTranscribe, stop: stopAwsTranscribe, isListening } = useAwsTranscribe({
+    onInterim: useCallback((text: string) => {
+      const ed = editorRef.current
+      if (!ed) return
+      if (lastInterimTextRef.current) clearInterimFromEditor()
+      if (text) {
+        ed.chain().focus().insertContent(text).run()
+        lastInterimTextRef.current = text
+      }
+    }, [clearInterimFromEditor]),
+    onFinal: useCallback((text: string) => {
+      const ed = editorRef.current
+      if (!ed) return
+      if (lastInterimTextRef.current) clearInterimFromEditor()
+      if (text) {
+        ed.chain().focus().insertContent(text + " ").run()
+      }
+    }, [clearInterimFromEditor]),
+    onError: useCallback((msg: string) => {
+      clearInterimFromEditor()
+      toast.error(msg || "Transcription unavailable. Check server configuration.")
+    }, [clearInterimFromEditor]),
+  })
 
   // Use ref for protocols so the mention extension always has access to current protocols
   const protocolsRef = useRef<ProtocolItem[]>(protocols)
@@ -1101,12 +1141,24 @@ export function TiptapEditor({
       Placeholder.configure({
         placeholder,
       }),
-      /* Link.configure({
+      Link.extend({
+        addAttributes() {
+          return {
+            ...this.parent?.(),
+            'data-paper-id': { default: null },
+            'data-paper-title': { default: null },
+            'data-paper-authors': { default: null },
+            'data-paper-year': { default: null },
+            'data-paper-journal': { default: null },
+            'data-paper-doi': { default: null },
+          }
+        },
+      }).configure({
         openOnClick: false,
         HTMLAttributes: {
           class: "text-primary underline cursor-pointer",
         },
-      }), */
+      }),
       Image.configure({
         HTMLAttributes: {
           class: "max-w-full h-auto rounded-lg",
@@ -1274,6 +1326,10 @@ export function TiptapEditor({
       },
     },
   })
+
+  useEffect(() => {
+    editorRef.current = editor
+  }, [editor])
 
   // Track active comment via DOM click events - reads data attributes directly
   useEffect(() => {
@@ -1514,26 +1570,31 @@ export function TiptapEditor({
     try {
       setIsCiteProcessing(true)
 
-      // Call the literature search API with limit=3
+      // Call the citation search API
+      const controller = new AbortController()
+      const timeoutId = setTimeout(() => controller.abort(), 60000)
       const response = await fetch(
-        `https://z3thrlksg0.execute-api.us-east-1.amazonaws.com/literature/search?q=${encodeURIComponent(selectedText)}&limit=3`,
+        `https://z3thrlksg0.execute-api.us-east-1.amazonaws.com/citations_ddg`,
         {
-          method: 'GET',
+          method: 'POST',
           headers: {
-            'Accept': 'application/json',
+            'Content-Type': 'application/json',
           },
+          body: JSON.stringify({ text: selectedText }),
+          signal: controller.signal,
         }
       )
+      clearTimeout(timeoutId)
 
       if (!response.ok) {
-        throw new Error('Literature search failed')
+        throw new Error('Citation search failed')
       }
 
-      const data = await response.json()
+      const data: Paper[] = await response.json()
 
-      if (data.papers && data.papers.length > 0) {
+      if (data && data.length > 0) {
         // Store papers and open modal
-        setFoundPapers(data.papers)
+        setFoundPapers(data)
         setSelectedPapers(new Set())
         setCitationInsertPosition(to)
         setCitationModalOpen(true)
@@ -1583,13 +1644,13 @@ export function TiptapEditor({
       return {
         pos: citationInsertPosition,
         number: 0, // Will be assigned later
-        url: paper?.url || '',
-        paperId: paper?.id || '',
+        url: paper?.source_url || '',
+        paperId: paper?.id?.toString() || '',
         title: paper?.title || '',
         authors: paper?.authors || [],
         year: paper?.year || 0,
         journal: paper?.journal || '',
-        source: paper?.source || ''
+        doi: paper?.doi || ''
       }
     })
 
@@ -1609,7 +1670,7 @@ export function TiptapEditor({
         // Store paper metadata in data attributes for later bibliography generation
         // Encode complex data as JSON to preserve arrays
         const authorsJson = JSON.stringify(newCit.authors || []).replace(/"/g, '&quot;')
-        const citationHtml = `<a href="${newCit.url}" data-paper-id="${newCit.paperId}" data-paper-title="${newCit.title.replace(/"/g, '&quot;')}" data-paper-authors="${authorsJson}" data-paper-year="${newCit.year}" data-paper-journal="${(newCit.journal || '').replace(/"/g, '&quot;')}" data-paper-source="${newCit.source}" target="_blank" rel="noopener noreferrer">[${finalNumber}]</a>`
+        const citationHtml = `<a href="${newCit.url}" data-paper-id="${newCit.paperId}" data-paper-title="${newCit.title.replace(/"/g, '&quot;')}" data-paper-authors="${authorsJson}" data-paper-year="${newCit.year}" data-paper-journal="${(newCit.journal || '').replace(/"/g, '&quot;')}" data-paper-doi="${newCit.doi || ''}" target="_blank" rel="noopener noreferrer">[${finalNumber}]</a>`
         console.log('Citation HTML being inserted:', citationHtml) // Debug log
         citationText += citationHtml
       } else {
@@ -1712,7 +1773,7 @@ export function TiptapEditor({
     const html = editor.getHTML()
 
     // Parse citations more flexibly - attributes can be in any order
-    const citations: { number: number; url: string; paperId: string; title: string; source: string; authors: string[]; year: number; journal: string }[] = []
+    const citations: { number: number; url: string; paperId: string; title: string; doi: string; authors: string[]; year: number; journal: string }[] = []
 
     // Find all citation links
     const linkRegex = /<a[^>]*>\[(\d+)\]<\/a>/g
@@ -1726,7 +1787,7 @@ export function TiptapEditor({
       const hrefMatch = fullTag.match(/href="([^"]*)"/)
       const paperIdMatch = fullTag.match(/data-paper-id="([^"]*)"/)
       const paperTitleMatch = fullTag.match(/data-paper-title="([^"]*)"/)
-      const paperSourceMatch = fullTag.match(/data-paper-source="([^"]*)"/)
+      const paperSourceMatch = fullTag.match(/data-paper-doi="([^"]*)"/)
       const paperAuthorsMatch = fullTag.match(/data-paper-authors="([^"]*)"/)
       const paperYearMatch = fullTag.match(/data-paper-year="([^"]*)"/)
       const paperJournalMatch = fullTag.match(/data-paper-journal="([^"]*)"/)
@@ -1748,7 +1809,7 @@ export function TiptapEditor({
           url: hrefMatch[1],
           paperId: paperIdMatch ? paperIdMatch[1] : '',
           title: paperTitleMatch ? paperTitleMatch[1].replace(/&quot;/g, '"') : '',
-          source: paperSourceMatch ? paperSourceMatch[1] : '',
+          doi: paperSourceMatch ? paperSourceMatch[1] : '',
           authors: authors,
           year: paperYearMatch ? parseInt(paperYearMatch[1]) || 0 : 0,
           journal: paperJournalMatch ? paperJournalMatch[1].replace(/&quot;/g, '"') : ''
@@ -1776,68 +1837,19 @@ export function TiptapEditor({
 
     try {
       for (const citation of citations) {
-        try {
-          // If we have stored metadata (title, paperId), try to fetch full details
-          if (citation.paperId) {
-            const response = await fetch(
-              `https://z3thrlksg0.execute-api.us-east-1.amazonaws.com/literature/search?q=${encodeURIComponent(citation.paperId)}&limit=1`,
-              {
-                method: 'GET',
-                headers: {
-                  'Accept': 'application/json',
-                },
-              }
-            )
-
-            if (response.ok) {
-              const data = await response.json()
-              console.log(`API response for citation ${citation.number}:`, data) // Debug log
-
-              if (data.papers && data.papers.length > 0) {
-                const paper = data.papers[0]
-                citationMetadataMap.set(citation.number, {
-                  citationNumber: citation.number,
-                  url: citation.url,
-                  title: paper.title || citation.title || 'Unknown Title',
-                  authors: paper.authors || citation.authors || [],
-                  year: paper.year || citation.year || 0,
-                  journal: paper.journal || citation.journal || '',
-                  source: paper.source || citation.source || '',
-                  paperId: paper.id || citation.paperId
-                })
-                continue
-              }
-            }
-          }
-
-          // Fallback: use stored data from citation attributes
-          citationMetadataMap.set(citation.number, {
-            citationNumber: citation.number,
-            url: citation.url,
-            title: citation.title || 'Unknown Title',
-            authors: citation.authors || [],
-            year: citation.year || 0,
-            journal: citation.journal || '',
-            source: citation.source || '',
-            paperId: citation.paperId
-          })
-        } catch (error) {
-          console.error(`Failed to fetch metadata for citation ${citation.number}:`, error)
-          // Add fallback metadata using stored data
-          citationMetadataMap.set(citation.number, {
-            citationNumber: citation.number,
-            url: citation.url,
-            title: citation.title || 'Unknown Title',
-            authors: citation.authors || [],
-            year: citation.year || 0,
-            journal: citation.journal || '',
-            source: citation.source || '',
-            paperId: citation.paperId
-          })
-        }
+        citationMetadataMap.set(citation.number, {
+          citationNumber: citation.number,
+          url: citation.url,
+          title: citation.title || 'Unknown Title',
+          authors: citation.authors || [],
+          year: citation.year || 0,
+          journal: citation.journal || '',
+          doi: citation.doi || '',
+          paperId: citation.paperId
+        })
       }
 
-      // Store the fetched metadata and open modal
+      // Store the metadata and open modal
       setCitationMetadata(citationMetadataMap)
       setBibliographyModalOpen(true)
 
@@ -2163,6 +2175,18 @@ export function TiptapEditor({
     }
   }, [editor, title])
 
+  const startSpeechToText = useCallback(() => {
+    lastFinalIndexRef.current = 0
+    lastInterimTextRef.current = ""
+    startAwsTranscribe()
+  }, [startAwsTranscribe])
+
+  const stopSpeechToText = useCallback(() => {
+    stopAwsTranscribe()
+    clearInterimFromEditor()
+    lastFinalIndexRef.current = 0
+  }, [stopAwsTranscribe, clearInterimFromEditor])
+
   if (!editor) {
     return null
   }
@@ -2307,165 +2331,6 @@ export function TiptapEditor({
       }
     }
     input.click()
-  }
-
-  const startSpeechToText = () => {
-    const SpeechRecognition =
-      typeof window !== "undefined" &&
-      ((window as any).SpeechRecognition || (window as any).webkitSpeechRecognition)
-
-    if (!SpeechRecognition) {
-      alert("Speech recognition is not supported in this browser.")
-      return
-    }
-
-    // Reset tracking variables
-    lastFinalIndexRef.current = 0
-    lastInterimTextRef.current = ""
-
-    const recognition = new SpeechRecognition()
-    recognition.lang = "en-US"
-    recognition.interimResults = true
-    recognition.continuous = true
-
-    recognition.onresult = (event: any) => {
-      if (!editor) return
-
-      let newFinalText = ""
-      let latestInterimText = ""
-
-      // Process all results to find new final results and latest interim
-      for (let i = 0; i < event.results.length; ++i) {
-        const result = event.results[i]
-        const transcript = result[0].transcript
-
-        if (result.isFinal) {
-          // Only process final results we haven't processed yet
-          if (i >= lastFinalIndexRef.current) {
-            newFinalText += transcript + " "
-            // Update index as we go
-            lastFinalIndexRef.current = i + 1
-          }
-        } else {
-          // Track the latest interim result (last one in the array)
-          latestInterimText = transcript
-        }
-      }
-
-      // Insert new final results first (permanent)
-      if (newFinalText) {
-        // Remove interim text before inserting final
-        if (lastInterimTextRef.current) {
-          const currentPos = editor.state.selection.anchor
-          const interimLength = lastInterimTextRef.current.length
-          const deleteFrom = Math.max(0, currentPos - interimLength)
-          const deleteTo = currentPos
-
-          if (deleteFrom < deleteTo) {
-            editor.chain()
-              .focus()
-              .setTextSelection({ from: deleteFrom, to: deleteTo })
-              .deleteSelection()
-              .run()
-          }
-          lastInterimTextRef.current = ""
-        }
-
-        editor.chain().focus().insertContent(newFinalText).run()
-      }
-
-      // Update interim text only if it changed (for streaming effect)
-      if (latestInterimText && latestInterimText !== lastInterimTextRef.current) {
-        // Remove previous interim text if it exists
-        if (lastInterimTextRef.current) {
-          const currentPos = editor.state.selection.anchor
-          const interimLength = lastInterimTextRef.current.length
-          const deleteFrom = Math.max(0, currentPos - interimLength)
-          const deleteTo = currentPos
-
-          if (deleteFrom < deleteTo) {
-            editor.chain()
-              .focus()
-              .setTextSelection({ from: deleteFrom, to: deleteTo })
-              .deleteSelection()
-              .run()
-          }
-        }
-
-        // Insert new interim text
-        editor.chain().focus().insertContent(latestInterimText).run()
-        lastInterimTextRef.current = latestInterimText
-      }
-    }
-
-    recognition.onerror = (event: any) => {
-      console.error("Speech recognition error:", event.error)
-      setIsListening(false)
-      // Clean up interim text on error
-      if (lastInterimTextRef.current && editor) {
-        const currentPos = editor.state.selection.anchor
-        const interimLength = lastInterimTextRef.current.length
-        const deleteFrom = Math.max(0, currentPos - interimLength)
-        const deleteTo = currentPos
-
-        if (deleteFrom < deleteTo) {
-          editor.chain()
-            .focus()
-            .setTextSelection({ from: deleteFrom, to: deleteTo })
-            .deleteSelection()
-            .run()
-        }
-        lastInterimTextRef.current = ""
-      }
-    }
-
-    recognition.onend = () => {
-      setIsListening(false)
-      // Clean up any remaining interim text
-      if (lastInterimTextRef.current && editor) {
-        const currentPos = editor.state.selection.anchor
-        const interimLength = lastInterimTextRef.current.length
-        const deleteFrom = Math.max(0, currentPos - interimLength)
-        const deleteTo = currentPos
-
-        if (deleteFrom < deleteTo) {
-          editor.chain()
-            .focus()
-            .setTextSelection({ from: deleteFrom, to: deleteTo })
-            .deleteSelection()
-            .run()
-        }
-        lastInterimTextRef.current = ""
-      }
-      // Reset for next session
-      lastFinalIndexRef.current = 0
-    }
-
-    recognition.start()
-    recognitionRef.current = recognition
-    setIsListening(true)
-  }
-
-  const stopSpeechToText = () => {
-    recognitionRef.current?.stop()
-    setIsListening(false)
-    // Clean up interim text when manually stopped
-    if (lastInterimTextRef.current && editor) {
-      const currentPos = editor.state.selection.anchor
-      const interimLength = lastInterimTextRef.current.length
-      const deleteFrom = Math.max(0, currentPos - interimLength)
-      const deleteTo = currentPos
-
-      if (deleteFrom < deleteTo) {
-        editor.chain()
-          .focus()
-          .setTextSelection({ from: deleteFrom, to: deleteTo })
-          .deleteSelection()
-          .run()
-      }
-      lastInterimTextRef.current = ""
-    }
-    lastFinalIndexRef.current = 0
   }
 
   const removeTable = () => {
@@ -3601,14 +3466,9 @@ export function TiptapEditor({
                             {year}
                           </p>
                         )}
-                        {paper.abstract && (
-                          <p className="text-xs text-muted-foreground line-clamp-2 mb-2">
-                            {paper.abstract}
-                          </p>
-                        )}
-                        {paper.url && (
+                        {paper.source_url && (
                           <a
-                            href={paper.url}
+                            href={paper.source_url}
                             target="_blank"
                             rel="noopener noreferrer"
                             onClick={(e) => e.stopPropagation()}

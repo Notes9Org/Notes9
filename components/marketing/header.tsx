@@ -4,99 +4,64 @@ import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { ModeToggle } from "@/components/mode-toggle"
 import { Menu, X } from "lucide-react"
-import Image from "next/image"
 import Link from "next/link"
+import { Notes9Brand } from "@/components/brand/notes9-brand"
 
 export function Header() {
   const [isMenuOpen, setIsMenuOpen] = useState(false)
 
   return (
-    <header className="sticky top-0 z-50 w-full bg-background/80 backdrop-blur-md border-b border-border">
+    <header className="sticky top-0 z-50 w-full border-b border-border/60 bg-[var(--n9-header-bg)] shadow-[0_10px_30px_-24px_rgba(0,0,0,0.28)] backdrop-blur-xl">
+    <header className="sticky top-0 z-50 w-full border-b border-border/60 bg-[var(--n9-header-bg)] shadow-[0_10px_30px_-24px_rgba(0,0,0,0.28)] backdrop-blur-xl">
       <div className="container mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex h-16 items-center justify-between">
-          <Link href="/" className="flex items-center space-x-3">
-            <div className="w-8 h-8 relative">
+        <div className="flex h-16 items-center">
+          <Link href="/" className="flex items-center space-x-3 shrink-0">
+            <div className="relative h-8 w-8 shrink-0">
               <Image
                 src="/notes9-logo.png"
                 alt="Notes9 Logo"
                 fill
-                className="object-contain dark:hidden"
-                priority
-              />
-              <Image
-                src="/Dark mode_Notes9_logo.png"
-                alt="Notes9 Logo"
-                fill
-                className="hidden dark:block object-contain scale-[1.75]"
+                className="object-contain dark:invert dark:brightness-110 dark:contrast-125"
                 priority
               />
             </div>
             <span className="text-xl font-bold text-foreground tracking-tight">Notes9</span>
           </Link>
 
-          {/* Desktop Navigation */}
-          <nav className="hidden lg:flex items-center space-x-8">
-            <Link href="/platform" className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">
-              Platform Features
-            </Link>
-            <Link href="/about" className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">
-              About
-            </Link>
-            <Link href="/resources" className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">
-              Resources
-            </Link>
-          </nav>
+          <div className="hidden flex-1 lg:block" />
 
-          {/* Desktop CTAs */}
-          <div className="hidden lg:flex items-center space-x-3">
+          <div className="hidden lg:flex items-center space-x-3 shrink-0">
             <Button variant="ghost" size="sm" asChild>
               <Link href="/auth/login">Sign In</Link>
             </Button>
-            <Button size="sm" asChild>
-              <Link href="/auth/sign-up">
-                Request Access
-              </Link>
+            <Button
+              size="sm"
+              asChild
+              className="rounded-full bg-[var(--n9-accent)] px-5 text-white shadow-[0_12px_40px_-12px_var(--n9-accent-glow)] hover:bg-[var(--n9-accent-hover)]"
+            >
+              <Link href="/#contact">Request a demo</Link>
             </Button>
             <ModeToggle />
           </div>
 
-          {/* Mobile menu button */}
-          <button className="lg:hidden text-foreground" onClick={() => setIsMenuOpen(!isMenuOpen)}>
+          <button className="lg:hidden ml-auto text-foreground" onClick={() => setIsMenuOpen(!isMenuOpen)}>
             {isMenuOpen ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
           </button>
         </div>
 
-        {/* Mobile Navigation */}
         {isMenuOpen && (
-          <div className="lg:hidden py-4 border-t border-border">
+          <div className="lg:hidden py-4 border-t border-border/60">
             <nav className="flex flex-col space-y-4">
-              <Link
-                href="/platform"
-                className="text-base font-medium text-foreground px-4 py-2 hover:bg-muted rounded-md"
-                onClick={() => setIsMenuOpen(false)}
-              >
-                Platform Features
-              </Link>
-              <Link
-                href="/about"
-                className="text-base font-medium text-foreground px-4 py-2 hover:bg-muted rounded-md"
-                onClick={() => setIsMenuOpen(false)}
-              >
-                About
-              </Link>
-              <Link
-                href="/resources"
-                className="text-base font-medium text-foreground px-4 py-2 hover:bg-muted rounded-md"
-                onClick={() => setIsMenuOpen(false)}
-              >
-                Resources
-              </Link>
               <div className="flex flex-col space-y-3 pt-4 px-4">
                 <Button variant="outline" size="sm" className="w-full justify-center" asChild>
                   <Link href="/auth/login">Sign In</Link>
                 </Button>
-                <Button size="sm" className="w-full justify-center" asChild>
-                  <Link href="/auth/sign-up">Request Access</Link>
+                <Button
+                  size="sm"
+                  className="w-full justify-center rounded-full bg-[var(--n9-accent)] text-white hover:bg-[var(--n9-accent-hover)]"
+                  asChild
+                >
+                  <Link href="/#contact">Request a demo</Link>
                 </Button>
                 <div className="flex justify-center pt-2">
                   <ModeToggle />

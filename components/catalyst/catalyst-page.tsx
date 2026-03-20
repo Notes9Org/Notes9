@@ -17,6 +17,7 @@ import type { Attachment } from './preview-attachment';
 import { CatalystSidebar } from './catalyst-sidebar';
 import type { Vote } from '@/lib/db/schema';
 import { formatCitationDisplay } from '@/lib/utils';
+import { useAgentStream } from '@/hooks/use-agent-stream';
 
 interface CatalystChatProps {
   sessionId?: string;
@@ -36,15 +37,19 @@ export function CatalystChat({ sessionId }: CatalystChatProps) {
   const prevStatusRef = useRef<string>('ready');
   const currentSessionRef = useRef<string | null>(sessionId || null);
   const hasLoadedSessionRef = useRef<string | null>(null);
-  // Use ref for model so transport can access current value without recreating
-  const currentModelRef = useRef(selectedModelId);
-
-  // Keep ref in sync with state
-  useEffect(() => {
-    currentModelRef.current = selectedModelId;
-  }, [selectedModelId]);
+  const supabaseTokenRef = useRef<string | null>(null);
 
   const supabase = createClient();
+
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      supabaseTokenRef.current = session?.access_token ?? null;
+    });
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      supabaseTokenRef.current = session?.access_token ?? null;
+    });
+    return () => subscription.unsubscribe();
+  }, [supabase]);
 
   const {
     sessions,
@@ -59,14 +64,17 @@ export function CatalystChat({ sessionId }: CatalystChatProps) {
     loadSessions,
   } = useChatSessions();
 
-  // Create transport with prepareSendMessagesRequest to include sessionId
+  // Create transport with prepareSendMessagesRequest to include sessionId and Authorization header
   const transport = useMemo(() => new DefaultChatTransport({
     api: '/api/chat',
     prepareSendMessagesRequest(request) {
+      const token = supabaseTokenRef.current;
       return {
+        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
         body: {
           messages: request.messages,
           sessionId: currentSessionRef.current,
+          supabaseToken: token ?? undefined,
           ...request.body,
         },
       };
@@ -81,6 +89,7 @@ export function CatalystChat({ sessionId }: CatalystChatProps) {
     experimental_throttle: 100,
   });
 
+  const agentStream = useAgentStream();
   const isLoading = status === 'streaming' || status === 'submitted' || notes9Loading;
 
   // Load user profile
@@ -224,6 +233,10 @@ export function CatalystChat({ sessionId }: CatalystChatProps) {
   }, [status]);
 
   const handleNewChat = useCallback(async () => {
+    if (isLoading) {
+      toast.error('Wait for the current response to finish before switching chats.');
+      return;
+    }
     setMessages([]);
     setSavedMessageIds(new Set());
     currentSessionRef.current = null;
@@ -235,17 +248,21 @@ export function CatalystChat({ sessionId }: CatalystChatProps) {
       hasLoadedSessionRef.current = newSessionId;
       router.push(`/catalyst/${newSessionId}`);
     }
-  }, [createSession, setMessages, router]);
+  }, [createSession, isLoading, setMessages, router]);
 
   const handleSelectSession = useCallback(
     (sid: string) => {
+      if (isLoading) {
+        toast.error('Wait for the current response to finish before switching chats.');
+        return;
+      }
       setMessages([]);
       setSavedMessageIds(new Set());
       hasLoadedSessionRef.current = null;
       setCurrentSessionId(sid);
       router.push(`/catalyst/${sid}`);
     },
-    [setCurrentSessionId, setMessages, router]
+    [isLoading, setCurrentSessionId, setMessages, router]
   );
 
   const handleDeleteSession = useCallback(
@@ -276,71 +293,71 @@ export function CatalystChat({ sessionId }: CatalystChatProps) {
 
     // Handle Notes9 mode
     if (agentMode === 'notes9') {
-      try {
-        setNotes9Loading(true);
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+      if (!token) {
+        toast.error('Please sign in to use Notes9');
+        router.push('/auth/login');
+        return;
+      }
 
-        // Add user message to UI immediately
-        const userMessageId = `user-${Date.now()}`;
-        const userMessage = {
-          id: userMessageId,
-          role: 'user' as const,
-          content: text,
-          parts: [{ type: 'text' as const, text }],
-          createdAt: new Date(),
-        };
-        setMessages((prev) => [...prev, userMessage]);
+      // Add user message to UI immediately
+      const userMessageId = `user-${Date.now()}`;
+      const userMessage = {
+        id: userMessageId,
+        role: 'user' as const,
+        content: text,
+        parts: [{ type: 'text' as const, text }],
+        createdAt: new Date(),
+      };
+      setMessages((prev) => [...prev, userMessage]);
 
-        // Save user message to DB
-        await saveMessage(sid, 'user', text);
+      // Save user message to DB
+      await saveMessage(sid, 'user', text);
 
-        // Call Notes9 API
-        const response = await fetch('https://z3thrlksg0.execute-api.us-east-1.amazonaws.com/agent/run', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            history: [],
-            query: text,
-            session_id: sid,
-            user_id: userId,
-          }),
-        });
+      const history = messages.map((m) => ({
+        role: m.role,
+        content: getMessageContent(m),
+      }));
 
-        if (!response.ok) {
-          throw new Error('Notes9 API request failed');
-        }
+      setNotes9Loading(true);
+      const { donePayload, error } = await agentStream.runStream(
+        {
+          query: text,
+          session_id: sid,
+          history,
+        },
+        token
+      );
+      setNotes9Loading(false);
 
-        const data = await response.json();
-
-        // Format response with citations as clickable links
-        let formattedAnswer = data.answer;
-        if (data.citations && data.citations.length > 0) {
+      if (donePayload) {
+        let formattedAnswer = donePayload.answer;
+        if (donePayload.citations && donePayload.citations.length > 0) {
           formattedAnswer += '\n\n**References:**\n';
-          data.citations.forEach((citation: any, index: number) => {
-            const sourceId = citation.source_id;
+          donePayload.citations.forEach((citation, index) => {
             const sourceType = citation.source_type;
-
             let route = '';
             switch (sourceType) {
               case 'literature_review':
-                route = `/literature-reviews/${sourceId}`;
+                route = `/literature-reviews/${citation.source_id}`;
                 break;
               case 'protocol':
-                route = `/protocols/${sourceId}`;
+                route = `/protocols/${citation.source_id}`;
                 break;
               case 'project':
-                route = `/projects/${sourceId}`;
+                route = `/projects/${citation.source_id}`;
                 break;
               case 'lab_note':
               case 'report':
               default:
                 route = '';
             }
-
-            const displayText = formatCitationDisplay(citation);
+            const displayText = formatCitationDisplay({
+              ...citation,
+              excerpt: citation.excerpt ?? undefined,
+            });
             const sourceLabel = sourceType.replace('_', ' ');
-
             if (route) {
               formattedAnswer += `\n[${index + 1}] [View ${sourceLabel}](${route}): ${displayText}`;
             } else {
@@ -349,7 +366,6 @@ export function CatalystChat({ sessionId }: CatalystChatProps) {
           });
         }
 
-        // Add assistant message to UI
         const assistantMessageId = `assistant-${Date.now()}`;
         const assistantMessage = {
           id: assistantMessageId,
@@ -360,20 +376,16 @@ export function CatalystChat({ sessionId }: CatalystChatProps) {
         };
         setMessages((prev) => [...prev, assistantMessage]);
 
-        // Save assistant message to DB
         await saveMessage(sid, 'assistant', formattedAnswer);
 
-        // Update session title if first exchange
         if (messages.length === 0) {
           await updateSessionTitle(sid, text.slice(0, 50) || 'New conversation');
         }
 
         loadSessions();
-      } catch (error) {
-        console.error('Notes9 API error:', error);
-        toast.error('Failed to get response from Notes9');
-      } finally {
-        setNotes9Loading(false);
+        agentStream.reset();
+      } else if (error) {
+        toast.error(error);
       }
       return;
     }
@@ -530,6 +542,20 @@ export function CatalystChat({ sessionId }: CatalystChatProps) {
               votes={votes}
               onEditMessage={handleEditMessage}
               onRegenerate={handleRegenerate}
+              notes9Stream={
+                agentMode === 'notes9' &&
+                (notes9Loading || agentStream.isStreaming || agentStream.error) &&
+                messages.at(-1)?.role === 'user'
+                  ? {
+                      thinkingSteps: agentStream.thinkingSteps,
+                      sql: agentStream.sql,
+                      ragChunks: agentStream.ragChunks,
+                      streamedAnswer: agentStream.streamedAnswer,
+                      donePayload: agentStream.donePayload,
+                      error: agentStream.error,
+                    }
+                  : null
+              }
             />
           )}
         </div>
@@ -540,7 +566,11 @@ export function CatalystChat({ sessionId }: CatalystChatProps) {
           setInput={setInput}
           onSubmit={onSubmit}
           isLoading={isLoading}
-          stop={stop}
+          stop={
+            notes9Loading && agentStream.isStreaming
+              ? () => agentStream.abort()
+              : stop
+          }
           hasMessages={messages.length > 0}
           agentMode={agentMode}
           onAgentModeChange={setAgentMode}

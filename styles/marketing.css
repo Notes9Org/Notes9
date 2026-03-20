@@ -1,4 +1,43 @@
-/* 
- * Marketing theme overrides removed to allow global theme toggle support.
- * Original styles were enforcing dark mode and custom gradients.
+/*
+ * Marketing-only theme: cream background + terracotta accent.
+ * Applied via .marketing-theme class. Main app uses default theme.
  */
+.marketing-theme {
+  --background: #FAF7F2;
+  --foreground: #2C2418;
+  --card: #FFFFFF;
+  --card-foreground: #2C2418;
+  --muted: #F3EDE4;
+  --muted-foreground: #7A6F60;
+  --border: #E5DDD0;
+  --n9-accent: #9B4722;
+  --n9-accent-hover: #7E3A1B;
+  --n9-accent-light: #FBF0EA;
+  --n9-accent-glow: rgba(155, 71, 34, 0.4);
+  --n9-header-bg: rgba(247, 240, 231, 0.9);
+}
+
+/* Dark mode: when html has .dark */
+.dark .marketing-theme {
+  --background: #1A1714;
+  --foreground: #F5F0E8;
+  --card: #252018;
+  --card-foreground: #F5F0E8;
+  --muted: #2E2820;
+  --muted-foreground: #A89E8E;
+  --border: rgba(245, 240, 232, 0.1);
+  --n9-accent: #D4845A;
+  --n9-accent-hover: #C07650;
+  --n9-accent-light: rgba(212, 132, 90, 0.1);
+  --n9-accent-glow: rgba(212, 132, 90, 0.35);
+  --n9-header-bg: rgba(34, 29, 24, 0.86);
+}
+
+/* Subtle grid mesh - cream tint */
+.marketing-theme .marketing-mesh {
+  background-image: url("data:image/svg+xml,%3Csvg width='40' height='40' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M0 20h40M20 0v40' stroke='%23C4B8A5' stroke-width='0.3' fill='none'/%3E%3C/svg%3E");
+}
+
+.dark .marketing-theme .marketing-mesh {
+  background-image: url("data:image/svg+xml,%3Csvg width='40' height='40' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M0 20h40M20 0v40' stroke='%234a4540' stroke-width='0.25' fill='none'/%3E%3C/svg%3E");
+}

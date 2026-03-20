@@ -22,7 +22,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { Edit } from "lucide-react"
+import { Pencil } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 
 const SAMPLE_TYPES = [
@@ -126,9 +126,8 @@ export function EditSampleDialog({ sample }: { sample: any }) {
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button variant="outline" size="sm">
-          <Edit className="h-4 w-4 mr-2" />
-          Edit
+        <Button variant="ghost" size="icon" className="h-8 w-8" aria-label="Edit sample">
+          <Pencil className="h-4 w-4" />
         </Button>
       </DialogTrigger>
       <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">

@@ -19,6 +19,7 @@ import {
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { LogOut, Sun, Moon, Monitor, Loader2 } from 'lucide-react'
 import { ChangePasswordDialog } from "@/components/change-password-dialog"
+import { DataTransferPanel } from "@/components/settings/data-transfer-panel"
 import { useToast } from "@/hooks/use-toast"
 
 export default function SettingsPage() {
@@ -190,17 +191,17 @@ export default function SettingsPage() {
 
   if (loading) {
     return (
-        <div className="flex items-center justify-center h-64">
-          <p className="text-muted-foreground">Loading...</p>
-        </div>
-      )
+      <div className="flex items-center justify-center h-64">
+        <p className="text-muted-foreground">Loading...</p>
+      </div>
+    )
   }
 
   return (
-      <div className="max-w-4xl mx-auto space-y-6">
+      <div className="max-w-4xl mx-auto space-y-4 md:space-y-6">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Settings</h1>
-          <p className="text-muted-foreground mt-1">
+          <h1 className="text-2xl font-bold tracking-tight md:text-3xl">Settings</h1>
+          <p className="text-muted-foreground mt-1 text-sm">
             Manage your account and preferences
           </p>
         </div>
@@ -210,6 +211,7 @@ export default function SettingsPage() {
             <TabsTrigger value="profile">Profile</TabsTrigger>
             <TabsTrigger value="account">Account</TabsTrigger>
             <TabsTrigger value="preferences">Preferences</TabsTrigger>
+            <TabsTrigger value="data">Data</TabsTrigger>
           </TabsList>
 
           <TabsContent value="profile" className="space-y-4">
@@ -318,96 +320,123 @@ export default function SettingsPage() {
           </TabsContent>
 
           <TabsContent value="account" className="space-y-4">
-            <Card>
-              <CardHeader>
-                <CardTitle>Account Settings</CardTitle>
-                <CardDescription>
-                  Manage your account security
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-6">
-                <div className="space-y-2">
-                  <ChangePasswordDialog>
-                    <Button variant="outline">Change Password</Button>
-                  </ChangePasswordDialog>
-                </div>
+          <Card>
+            <CardHeader>
+              <CardTitle>Account Settings</CardTitle>
+              <CardDescription>
+                Manage your account security
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              <div className="space-y-2">
+                <ChangePasswordDialog>
+                  <Button variant="outline">Change Password</Button>
+                </ChangePasswordDialog>
+              </div>
 
-                <div className="pt-6 border-t">
-                  <h3 className="font-semibold mb-2">Sign Out</h3>
-                  <p className="text-sm text-muted-foreground mb-4">
-                    Sign out from your account on this device
+              <div className="pt-6 border-t">
+                <h3 className="font-semibold mb-2">Legal & Privacy</h3>
+                <p className="text-sm text-muted-foreground mb-4">
+                  View our terms and privacy policy
+                </p>
+                <Button variant="outline" asChild>
+                  <a href="/privacy" target="_blank" rel="noopener noreferrer">
+                    View Terms & Privacy Policy
+                  </a>
+                </Button>
+              </div>
+
+              <div className="pt-6 border-t">
+                <h3 className="font-semibold mb-2">Sign Out</h3>
+                <p className="text-sm text-muted-foreground mb-4">
+                  Sign out from your account on this device
+                </p>
+                <Button variant="destructive" onClick={handleSignOut}>
+                  <LogOut className="h-4 w-4 mr-2" />
+                  Sign Out
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="preferences" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle>Preferences</CardTitle>
+              <CardDescription>
+                Customize your Notes9 experience
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="font-medium">Theme</p>
+                  <p className="text-sm text-muted-foreground">
+                    Choose your preferred color theme
                   </p>
-                  <Button variant="destructive" onClick={handleSignOut}>
-                    <LogOut className="h-4 w-4 mr-2" />
-                    Sign Out
-                  </Button>
                 </div>
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          <TabsContent value="preferences" className="space-y-4">
-            <Card>
-              <CardHeader>
-                <CardTitle>Preferences</CardTitle>
-                <CardDescription>
-                  Customize your Notes9 experience
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="font-medium">Theme</p>
-                    <p className="text-sm text-muted-foreground">
-                      Choose your preferred color theme
-                    </p>
+                {mounted && (
+                  <div className="flex gap-2">
+                    <Button
+                      variant={theme === "light" ? "default" : "outline"}
+                      size="sm"
+                      onClick={() => setTheme("light")}
+                    >
+                      <Sun className="h-4 w-4 mr-2" />
+                      Light
+                    </Button>
+                    <Button
+                      variant={theme === "dark" ? "default" : "outline"}
+                      size="sm"
+                      onClick={() => setTheme("dark")}
+                    >
+                      <Moon className="h-4 w-4 mr-2" />
+                      Dark
+                    </Button>
+                    <Button
+                      variant={theme === "system" ? "default" : "outline"}
+                      size="sm"
+                      onClick={() => setTheme("system")}
+                    >
+                      <Monitor className="h-4 w-4 mr-2" />
+                      System
+                    </Button>
                   </div>
-                  {mounted && (
-                    <div className="flex gap-2">
-                      <Button
-                        variant={theme === "light" ? "default" : "outline"}
-                        size="sm"
-                        onClick={() => setTheme("light")}
-                      >
-                        <Sun className="h-4 w-4 mr-2" />
-                        Light
-                      </Button>
-                      <Button
-                        variant={theme === "dark" ? "default" : "outline"}
-                        size="sm"
-                        onClick={() => setTheme("dark")}
-                      >
-                        <Moon className="h-4 w-4 mr-2" />
-                        Dark
-                      </Button>
-                      <Button
-                        variant={theme === "system" ? "default" : "outline"}
-                        size="sm"
-                        onClick={() => setTheme("system")}
-                      >
-                        <Monitor className="h-4 w-4 mr-2" />
-                        System
-                      </Button>
-                    </div>
-                  )}
-                </div>
+                )}
+              </div>
 
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="font-medium">Email Notifications</p>
-                    <p className="text-sm text-muted-foreground">
-                      Receive email updates about your experiments
-                    </p>
-                  </div>
-                  <Button variant="outline" size="sm">
-                    Configure
-                  </Button>
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="font-medium">Email Notifications</p>
+                  <p className="text-sm text-muted-foreground">
+                    Receive email updates about your experiments
+                  </p>
                 </div>
+                <Button variant="outline" size="sm">
+                  Configure
+                </Button>
+              </div>
 
-              </CardContent>
-            </Card>
-          </TabsContent>
-        </Tabs>
-      </div>
-    )
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="font-medium">Default View</p>
+                  <p className="text-sm text-muted-foreground">
+                    Set your preferred dashboard layout
+                  </p>
+                </div>
+                <Button variant="outline" size="sm">
+                  Configure
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="data" className="space-y-4">
+          <DataTransferPanel />
+        </TabsContent>
+      </Tabs>
+    </div>
+  )
 }

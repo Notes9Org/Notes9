@@ -14,8 +14,8 @@ import { Label } from "@/components/ui/label"
 import Link from "next/link"
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useState, useEffect, Suspense } from "react"
-import Image from "next/image"
 import { ArrowLeft, CheckCircle } from "lucide-react"
+import { Notes9Brand } from "@/components/brand/notes9-brand"
 
 function ResetPasswordForm() {
   const [password, setPassword] = useState("")
@@ -71,12 +71,7 @@ function ResetPasswordForm() {
         <div className="w-full max-w-md">
           <div className="flex flex-col gap-6">
             <div className="flex flex-col items-center gap-2 text-center">
-              <Image
-                src="/notes9-logo.png"
-                alt="Notes9 Logo"
-                width={60}
-                height={60}
-              />
+              <Notes9Brand stacked iconClassName="h-[60px] w-[60px]" textClassName="h-10 w-auto" />
               <h1 className="text-2xl font-bold">Password Updated</h1>
             </div>
 
@@ -119,12 +114,7 @@ function ResetPasswordForm() {
       <div className="w-full max-w-md">
         <div className="flex flex-col gap-6">
           <div className="flex flex-col items-center gap-2 text-center">
-            <Image
-              src="/notes9-logo.png"
-              alt="Notes9 Logo"
-              width={60}
-              height={60}
-            />
+            <Notes9Brand stacked iconClassName="h-[60px] w-[60px]" textClassName="h-10 w-auto" />
             <h1 className="text-2xl font-bold">Set New Password</h1>
             <p className="text-sm text-muted-foreground">
               Enter your new password below
