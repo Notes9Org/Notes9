@@ -19,6 +19,21 @@ const RESEARCH_FUN_FACTS = [
   "Literature retrieval gets easier when keywords, methods, and findings are stored in one workflow.",
 ]
 
+function isMarketingPath(path: string | null | undefined) {
+  if (!path) return false
+  if (path === "/") return true
+  return (
+    path.startsWith("/about") ||
+    path.startsWith("/platform") ||
+    path.startsWith("/pricing") ||
+    path.startsWith("/resources") ||
+    path.startsWith("/docs") ||
+    path.startsWith("/marketing") ||
+    path.startsWith("/privacy") ||
+    path.startsWith("/terms")
+  )
+}
+
 function getActionLabel(target: HTMLElement) {
   const source = target.closest("a,button") as HTMLElement | null
   const rawLabel =
@@ -208,6 +223,10 @@ export function NavigationLoader() {
         
         // Only show loader for internal navigation (not external links or new tabs)
         if (href && href.startsWith("/") && targetAttr !== "_blank") {
+          const destinationPath = href.split("?")[0]?.split("#")[0] || href
+          if (isMarketingPath(pathname) && isMarketingPath(destinationPath)) {
+            return
+          }
           if (href === "/auth/login" || href.startsWith("/auth/login?")) {
             return
           }
