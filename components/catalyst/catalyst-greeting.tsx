@@ -33,7 +33,7 @@ export function CatalystGreeting({ userName }: CatalystGreetingProps) {
             <img
               src="/notes9-loading-transparent.apng"
               alt="Catalyst AI mascot"
-              className="relative z-10 h-auto w-[144px] object-contain"
+              className="relative z-10 h-auto w-[144px] object-contain [filter:sepia(0.2)_saturate(0.78)_hue-rotate(-8deg)_brightness(0.5)_contrast(1.48)] dark:[filter:none]"
             />
           </div>
         </div>

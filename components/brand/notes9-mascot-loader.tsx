@@ -22,7 +22,7 @@ export function Notes9MascotLoader({
           <img
             src="/notes9-mascot-ghost-transparent.png"
             alt="Notes9 mascot"
-            className="tour-mascot-animate relative z-10 h-auto w-full object-contain [filter:brightness(0.94)_contrast(1.18)] dark:[filter:brightness(0.96)_contrast(1.14)]"
+            className="tour-mascot-animate relative z-10 h-auto w-full object-contain [filter:sepia(0.22)_saturate(0.76)_hue-rotate(-10deg)_brightness(0.48)_contrast(1.54)] dark:[filter:brightness(0.96)_contrast(1.14)]"
           />
         </picture>
       </div>

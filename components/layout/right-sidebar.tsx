@@ -771,7 +771,7 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
                                       className={cn(
                                         "flex-1 min-w-0 flex items-center justify-between gap-2 px-3 py-2 text-left text-sm rounded-md transition-colors overflow-hidden",
                                         currentSessionId === session.id
-                                          ? "bg-[color:var(--ai-soft)] text-foreground"
+                                          ? "bg-sidebar-accent text-sidebar-accent-foreground"
                                           : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
                                       )}
                                     >
@@ -854,7 +854,7 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
                   {/* List - same structure as lab notes */}
                   <div className="flex min-h-0 flex-1 flex-col gap-1 overflow-auto">
                     {sessions.length === 0 ? (
-                      <div className="px-2 py-6 text-center text-sidebar-foreground/70 text-xs">No previous conversations.</div>
+                    <div className="px-2 py-6 text-center text-sidebar-foreground/70 text-xs">No previous conversations.</div>
                     ) : (
                       <ul className="flex w-full min-w-0 flex-col gap-0.5">
                         {sessions.map((session) => (
@@ -903,7 +903,7 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
                       <img
                         src="/notes9-loading-transparent.apng"
                         alt="Catalyst AI mascot"
-                        className="relative z-10 h-auto w-[138px] object-contain"
+                        className="relative z-10 h-auto w-[138px] object-contain [filter:sepia(0.2)_saturate(0.78)_hue-rotate(-8deg)_brightness(0.5)_contrast(1.48)] dark:[filter:none]"
                       />
                     </div>
                     <h2 className="text-lg font-bold tracking-tight bg-gradient-to-r from-orange-500 to-pink-600 bg-clip-text text-transparent">
@@ -933,13 +933,13 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
                         return (
                           <div key={message.id} className={cn('group/message flex gap-4 w-full', message.role === 'user' ? 'justify-end' : 'justify-start')}>
                             {message.role === 'assistant' && (
-                            <div className="mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-full border border-border/60 bg-[rgba(124,82,52,0.05)] shadow-sm dark:bg-background dark:border-border">
+                          <div className="mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-full border border-border/60 bg-[rgba(124,82,52,0.05)] shadow-sm dark:bg-background dark:border-border">
                                 <Image
                                   src="/notes9-mascot-ghost-transparent.png"
                                   alt="Notes9 assistant"
                                   width={18}
                                   height={18}
-                                  className="size-[18px] object-contain [filter:sepia(0.42)_saturate(1.06)_hue-rotate(-12deg)_brightness(0.84)] dark:[filter:none]"
+                                  className="size-[18px] object-contain [filter:sepia(0.24)_saturate(0.82)_hue-rotate(-8deg)_brightness(0.42)_contrast(1.58)] dark:[filter:none]"
                                 />
                               </div>
                             )}

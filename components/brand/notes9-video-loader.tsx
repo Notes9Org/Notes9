@@ -64,7 +64,7 @@ function Mascot({ compact }: { compact: boolean }) {
         <img
           src="/notes9-mascot-ghost-transparent.png"
           alt="Notes9 mascot"
-          className="loader-mascot-tone relative z-10 h-auto w-full object-contain [filter:brightness(0.94)_contrast(1.18)] drop-shadow-[0_10px_18px_rgba(82,46,28,0.20)] dark:[filter:brightness(0.96)_contrast(1.14)] dark:drop-shadow-[0_10px_18px_rgba(0,0,0,0.28)]"
+          className="loader-mascot-tone relative z-10 h-auto w-full object-contain [filter:sepia(0.22)_saturate(0.76)_hue-rotate(-10deg)_brightness(0.48)_contrast(1.54)] drop-shadow-[0_10px_18px_rgba(66,34,20,0.28)] dark:[filter:brightness(0.96)_contrast(1.14)] dark:drop-shadow-[0_10px_18px_rgba(0,0,0,0.28)]"
         />
       </picture>
     </div>
