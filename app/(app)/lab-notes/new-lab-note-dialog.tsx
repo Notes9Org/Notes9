@@ -173,6 +173,7 @@ export function NewLabNoteDialog({
         title: "Lab note created",
         description: `"${noteTitle}" is linked to ${selectedExperiment?.name} in ${selectedProject?.name}.`,
       })
+      window.dispatchEvent(new CustomEvent("notes9:navigation-start", { detail: { label: selectedExperiment?.name || "Experiment", href: `/experiments/${selectedExperimentId}`, kind: "experiments" } }))
       router.push(`/experiments/${selectedExperimentId}?tab=notes&noteId=${data.id}`)
     } catch (err: unknown) {
       const e = err as { code?: string; message?: string }

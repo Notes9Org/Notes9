@@ -233,6 +233,10 @@ export function CatalystChat({ sessionId }: CatalystChatProps) {
   }, [status]);
 
   const handleNewChat = useCallback(async () => {
+    if (isLoading) {
+      toast.error('Wait for the current response to finish before switching chats.');
+      return;
+    }
     setMessages([]);
     setSavedMessageIds(new Set());
     currentSessionRef.current = null;
@@ -244,17 +248,21 @@ export function CatalystChat({ sessionId }: CatalystChatProps) {
       hasLoadedSessionRef.current = newSessionId;
       router.push(`/catalyst/${newSessionId}`);
     }
-  }, [createSession, setMessages, router]);
+  }, [createSession, isLoading, setMessages, router]);
 
   const handleSelectSession = useCallback(
     (sid: string) => {
+      if (isLoading) {
+        toast.error('Wait for the current response to finish before switching chats.');
+        return;
+      }
       setMessages([]);
       setSavedMessageIds(new Set());
       hasLoadedSessionRef.current = null;
       setCurrentSessionId(sid);
       router.push(`/catalyst/${sid}`);
     },
-    [setCurrentSessionId, setMessages, router]
+    [isLoading, setCurrentSessionId, setMessages, router]
   );
 
   const handleDeleteSession = useCallback(

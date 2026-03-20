@@ -1,0 +1,35 @@
+---
+description: Standards for docs/marketing campaign documents and output consistency
+globs: docs/marketing/**/*.md
+alwaysApply: false
+---
+
+# Marketing Docs Standards
+
+## Required Sections
+
+Marketing workflow documents should include:
+
+- Objective
+- Inputs
+- Outputs
+- Risks and assumptions
+- Next actions
+
+## Platform-Specific Content Rules
+
+- Distinguish Reddit and LinkedIn tactics explicitly.
+- Include channel-fit rationale for each recommendation.
+- Keep CTA style aligned to platform norms.
+
+## Evidence and Compliance
+
+- Mark evidence source for competitor or trend claims.
+- Avoid unverified quantitative statements.
+- Avoid medical overclaiming language.
+
+## Readability
+
+- Use short headers and structured bullets.
+- Keep templates practical and fillable.
+- Prefer reusable checklist-oriented formats.

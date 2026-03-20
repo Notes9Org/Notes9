@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation"
 import Link from "next/link"
 import { AppSidebar } from "./app-sidebar"
 import { RightSidebar } from "./right-sidebar"
+import { AppTour } from "@/components/tour/app-tour"
 import { BreadcrumbProvider, useBreadcrumb } from "./breadcrumb-context"
 import { Button } from "@/components/ui/button"
 import { ResizeHandle } from "@/components/ui/resize-handle"
@@ -232,6 +233,7 @@ export function AppLayout({ children }: AppLayoutProps) {
   return (
     <BreadcrumbProvider>
       <SidebarProvider defaultOpen={!isMobile} open={sidebarOpen} onOpenChange={setSidebarOpen}>
+        <AppTour />
         <div
         className="flex h-screen w-full overflow-hidden bg-background"
         style={{
@@ -272,17 +274,14 @@ export function AppLayout({ children }: AppLayoutProps) {
           <AppSidebar />
         )}
 
-        {/* Main Content Area */}
-        <SidebarInset className="flex flex-col overflow-hidden flex-1 min-w-0">
-          {/* Top Bar */}
-          <header className="h-12 sm:h-14 border-b border-border flex items-center justify-between px-3 sm:px-4 shrink-0">
-            <div className="flex items-center gap-2 min-w-0 flex-1 truncate">
-              {/* Hamburger menu for mobile - uses sidebar context */}
-              <MobileMenuButton />
-              <div className="min-w-0 flex-1 truncate">
-                <HeaderTitle />
+          <SidebarInset className="flex flex-col overflow-hidden flex-1 min-w-0">
+            <header className="h-12 sm:h-14 border-b border-border/45 bg-[var(--n9-header-bg)] flex items-center justify-between px-3 sm:px-4 shrink-0 backdrop-blur-md">
+              <div className="flex items-center gap-2 min-w-0 flex-1 truncate">
+                <MobileMenuButton />
+                <div className="min-w-0 flex-1 truncate">
+                  <HeaderTitle />
+                </div>
               </div>
-            </div>
 
             <div className="flex items-center gap-1 sm:gap-2">
               {/* Theme toggle: one click toggles dark ↔ light (client-only to avoid hydration mismatch) */}

@@ -36,17 +36,17 @@ export default async function ProjectsPage() {
   }))
 
   return (
-      <div className="space-y-6">
-        <SetPageBreadcrumb segments={[]} />
-        {projects && projects.length > 0 ? (
-          <ProjectsPageContent projects={projects} />
-        ) : (
-          <>
+    <div className="space-y-6">
+      <SetPageBreadcrumb segments={[]} />
+      {projects && projects.length > 0 ? (
+        <ProjectsPageContent projects={projects} />
+      ) : (
+        <>
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
             <p className="text-muted-foreground">
               Manage your research initiatives and experiments
             </p>
-            <Button asChild size="icon" variant="ghost" className="shrink-0 size-8 rounded-md text-muted-foreground hover:bg-muted hover:text-foreground transition-colors" aria-label="New project">
+            <Button id="tour-create-new" asChild size="icon" variant="ghost" className="shrink-0 size-8 rounded-md text-muted-foreground hover:bg-muted hover:text-foreground transition-colors" aria-label="New project">
               <Link href="/projects/new">
                 <Plus className="size-4" />
               </Link>
@@ -55,7 +55,7 @@ export default async function ProjectsPage() {
           <Card>
             <CardContent className="flex flex-col items-center justify-center py-12">
               <p className="text-muted-foreground mb-4">No projects yet</p>
-              <Button asChild>
+              <Button asChild id="tour-create-new">
                 <Link href="/projects/new">
                   <Plus className="h-4 w-4 mr-2" />
                   Create First Project
@@ -63,8 +63,8 @@ export default async function ProjectsPage() {
               </Button>
             </CardContent>
           </Card>
-          </>
-        )}
-      </div>
-    )
+        </>
+      )}
+    </div>
+  )
 }

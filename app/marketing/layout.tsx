@@ -1,17 +1,6 @@
 import { Header } from "@/components/marketing/header"
 import { Footer } from "@/components/marketing/footer"
 // Removed marketing.css to avoid conflicting "startup/glass" styles
-import { Inter, JetBrains_Mono } from "next/font/google"
-
-const inter = Inter({
-  subsets: ["latin"],
-  variable: "--font-inter",
-})
-
-const jetbrainsMono = JetBrains_Mono({
-  subsets: ["latin"],
-  variable: "--font-jetbrains-mono",
-})
 
 import { MarketingParticles } from "@/components/marketing/marketing-particles"
 

@@ -66,6 +66,7 @@ import {
 import { Popover, PopoverAnchor, PopoverContent } from "@/components/ui/popover"
 import { createClient } from "@/lib/supabase/client"
 import { cn } from "@/lib/utils"
+import { Notes9Brand } from "@/components/brand/notes9-brand"
 import { toast } from "sonner"
 import { Button } from "../ui/button"
 
@@ -104,12 +105,18 @@ interface Project {
 }
 
 interface User {
+  id?: string
   email: string
   user_metadata: {
     first_name?: string
     last_name?: string
     full_name?: string
   }
+}
+
+interface UserProfile {
+  first_name?: string | null
+  last_name?: string | null
 }
 
 interface Counts {
@@ -134,6 +141,7 @@ export function AppSidebar() {
   const [searchQuery, setSearchQuery] = useState("")
   const [projects, setProjects] = useState<Project[]>([])
   const [user, setUser] = useState<User | null>(null)
+  const [userProfile, setUserProfile] = useState<UserProfile | null>(null)
   const [counts, setCounts] = useState<Counts>({ projects: 0, experiments: 0, samples: 0, literature: 0 })
   const [loading, setLoading] = useState(true)
   const [mounted, setMounted] = useState(false)
@@ -209,7 +217,7 @@ export function AppSidebar() {
         // Verify user has a profile with organization
         const { data: userProfile, error: profileCheckError } = await supabase
           .from("profiles")
-          .select("id, organization_id")
+          .select("id, organization_id, first_name, last_name")
           .eq("id", currentUser.id)
           .single()
 
@@ -337,7 +345,7 @@ export function AppSidebar() {
               if (createProfileError.message?.includes('duplicate') || createProfileError.code === '23505') {
                 const { data: existingProfile } = await supabase
                   .from("profiles")
-                  .select("id, organization_id")
+                  .select("id, organization_id, first_name, last_name")
                   .eq("id", currentUser.id)
                   .single()
 
@@ -361,7 +369,7 @@ export function AppSidebar() {
             // Retry fetching profile
             const { data: retryProfile } = await supabase
               .from("profiles")
-              .select("id, organization_id")
+              .select("id, organization_id, first_name, last_name")
               .eq("id", currentUser.id)
               .single()
 
@@ -390,6 +398,11 @@ export function AppSidebar() {
           setLoading(false)
           return
         }
+
+        setUserProfile({
+          first_name: userProfileData.first_name ?? null,
+          last_name: userProfileData.last_name ?? null,
+        })
 
         // Fetch projects for this organization (all statuses)
         const { data: projectsData, error: projectsError } = await supabase
@@ -534,6 +547,12 @@ export function AppSidebar() {
           fetchData()
         }
       )
+      .on('postgres_changes',
+        { event: '*', schema: 'public', table: 'profiles' },
+        () => {
+          fetchData()
+        }
+      )
       .subscribe()
 
     return () => {
@@ -548,16 +567,22 @@ export function AppSidebar() {
 
   const getUserInitials = () => {
     if (!user) return "U"
-    const firstName = user.user_metadata?.first_name || ""
-    const lastName = user.user_metadata?.last_name || ""
+    const firstName = userProfile?.first_name || user.user_metadata?.first_name || ""
+    const lastName = userProfile?.last_name || user.user_metadata?.last_name || ""
     if (firstName && lastName) {
       return `${firstName[0]}${lastName[0]}`.toUpperCase()
+    }
+    if (firstName) {
+      return firstName[0].toUpperCase()
     }
     return user.email?.[0]?.toUpperCase() || "U"
   }
 
   const getUserDisplayName = () => {
     if (!user) return "User"
+    if (userProfile?.first_name || userProfile?.last_name) {
+      return [userProfile.first_name, userProfile.last_name].filter(Boolean).join(" ")
+    }
     return user.user_metadata?.full_name ||
       (user.user_metadata?.first_name && user.user_metadata?.last_name
         ? `${user.user_metadata.first_name} ${user.user_metadata.last_name}`
@@ -568,7 +593,7 @@ export function AppSidebar() {
     <Sidebar
       variant="sidebar"
       collapsible="icon"
-      className="transition-all duration-200 ease-in-out"
+      className="shadow-[2px_0_18px_-16px_rgba(44,36,24,0.22)] transition-all duration-200 ease-in-out dark:shadow-[2px_0_18px_-16px_rgba(0,0,0,0.45)]"
     >
       {/* Header with Workspace Dropdown */}
       <SidebarHeader className="p-2">
@@ -580,18 +605,11 @@ export function AppSidebar() {
                 <SidebarMenuButton size="lg" className="h-10 w-10 p-0">
                   <div className="flex aspect-square size-8 items-center justify-center rounded-lg overflow-hidden">
                     <Image
-                      src="/notes9-logo.png"
+                      src="/notes9-logo-mark-transparent.png"
                       alt="Notes9 Logo"
                       width={32}
                       height={32}
-                      className="size-8 object-contain dark:hidden"
-                    />
-                    <Image
-                      src="/Dark mode_Notes9_logo.png"
-                      alt="Notes9 Logo"
-                      width={32}
-                      height={32}
-                      className="hidden dark:block size-8 object-contain scale-[1.75]"
+                      className="size-8 object-contain dark:invert dark:brightness-125"
                     />
                   </div>
                 </SidebarMenuButton>
@@ -611,26 +629,12 @@ export function AppSidebar() {
               // Normal mode: Logo and text with collapse button on the right
               <div className="flex items-center gap-2">
                 <SidebarMenuButton size="lg" className="flex-1 min-w-0">
-                  <div className="flex aspect-square size-8 items-center justify-center rounded-lg overflow-hidden">
-                    <Image
-                      src="/notes9-logo.png"
-                      alt="Notes9 Logo"
-                      width={32}
-                      height={32}
-                      className="size-8 object-contain dark:hidden"
-                    />
-                    <Image
-                      src="/Dark mode_Notes9_logo.png"
-                      alt="Notes9 Logo"
-                      width={32}
-                      height={32}
-                      className="hidden dark:block size-8 object-contain scale-[1.75]"
-                    />
-                  </div>
-                  <div className="grid flex-1 text-left text-sm leading-tight min-w-0">
-                    <span className="truncate font-semibold">Notes9</span>
-                    <span className="truncate text-xs">Research Lab</span>
-                  </div>
+                  <Notes9Brand
+                    showIcon
+                    iconClassName="h-6 w-6"
+                    textClassName="h-5 w-auto"
+                    withTagline
+                  />
                 </SidebarMenuButton>
 
                 {/* Collapse Button - hidden on mobile where sidebar is a sheet overlay */}
@@ -657,7 +661,7 @@ export function AppSidebar() {
           <SidebarGroupContent className="relative px-2">
             <Popover open={searchQuery.length >= 2}>
               <PopoverAnchor asChild>
-                <div className="relative">
+                <div className="relative" id="tour-search">
                   <Search className="pointer-events-none absolute left-4 top-1/2 size-4 -translate-y-1/2 select-none opacity-50" />
                   <SidebarInput
                     placeholder="Search..."
@@ -731,7 +735,7 @@ export function AppSidebar() {
         {/* Main Navigation - icons only when collapsed; align centered in icon mode */}
         <SidebarGroup className={cn(isIconMode && "flex flex-col items-center")}>
           <SidebarGroupContent className={cn(isIconMode && "w-full flex flex-col items-center")}>
-            <SidebarMenu className={cn(isIconMode && "flex flex-col items-center gap-1")}>
+            <SidebarMenu className={cn(isIconMode && "flex flex-col items-center gap-1")} id="tour-main-nav">
               {navigation.map((item) => {
                 const Icon = item.icon;
                 const isActive =
@@ -906,7 +910,10 @@ export function AppSidebar() {
                                               />
                                             </button>
                                             <button
-                                              onClick={() => router.push(`/experiments/${exp.id}`)}
+                                              onClick={() => {
+                                                window.dispatchEvent(new CustomEvent("notes9:navigation-start", { detail: { label: exp.name, href: `/experiments/${exp.id}`, kind: "experiments" } }))
+                                                router.push(`/experiments/${exp.id}`)
+                                              }}
                                               draggable
                                               onDragStart={(e) => {
                                                 e.stopPropagation();
@@ -933,7 +940,10 @@ export function AppSidebar() {
                                               {exp.lab_notes.map((note) => (
                                                 <button
                                                   key={note.id}
-                                                  onClick={() => router.push(`/experiments/${exp.id}?tab=notes&noteId=${note.id}`)}
+                                                  onClick={() => {
+                                                    window.dispatchEvent(new CustomEvent("notes9:navigation-start", { detail: { label: note.title || exp.name, href: `/experiments/${exp.id}?tab=notes&noteId=${note.id}`, kind: "notes" } }))
+                                                    router.push(`/experiments/${exp.id}?tab=notes&noteId=${note.id}`)
+                                                  }}
                                                   draggable
                                                   onDragStart={(e) => {
                                                     e.stopPropagation();

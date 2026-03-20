@@ -4,6 +4,8 @@
   "private": true,
   "scripts": {
     "build": "next build",
+    "capture:screenshots": "tsx scripts/capture-screenshots.ts",
+    "record:workflow": "tsx scripts/record-workflow.ts",
     "dev": "next dev",
     "lint": "eslint .",
     "start": "next start"
@@ -75,6 +77,7 @@
     "cmdk": "1.0.4",
     "date-fns": "4.1.0",
     "docx": "^9.5.1",
+    "driver.js": "^1.4.0",
     "embla-carousel-react": "8.5.1",
     "file-saver": "^2.0.5",
     "framer-motion": "^12.23.24",
