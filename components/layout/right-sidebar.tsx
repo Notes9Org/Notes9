@@ -105,7 +105,12 @@ interface RightSidebarProps {
   onClose?: () => void;
 }
 
-export function RightSidebar({ onClose }: RightSidebarProps = {}) {
+interface RightSidebarProps {
+  onClose?: () => void;
+}
+
+export function RightSidebar({ onClose }: RightSidebarProps = {}{ onClose }: RightSidebarProps = {}) {
+  const router = useRouter();
   const router = useRouter();
   const pathname = usePathname();
   const [input, setInput] = useState('');
@@ -219,7 +224,7 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages, agentStream.thinkingSteps, agentStream.streamedAnswer, agentStream.donePayload, agentStream.thinkingSteps, agentStream.streamedAnswer, agentStream.donePayload]);
+  }, [messages, agentStream.thinkingSteps, agentStream.streamedAnswer, agentStream.donePayload, agentStream.thinkingSteps, agentStream.streamedAnswer, agentStream.donePayload, agentStream.thinkingSteps, agentStream.streamedAnswer, agentStream.donePayload]);
 
   useEffect(() => {
     resizeInput();

@@ -146,9 +146,10 @@ export function CatalystMessages({
             );
           })}
 
-          {/* Thinking indicator or Notes9 agent stream */}
-          {(isLoading || notes9Stream) && messages.at(-1)?.role === 'user' && (
+          {/* Thinking indicator or Notes9 agent stream or Notes9 agent stream */}
+          {((isLoading || notes9Stream) || notes9Stream) && messages.at(-1)?.role === 'user' && (
             notes9Stream ? (
+              notes9Stream ? (
               <div className="flex w-full gap-3 justify-start">
                 <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-orange-400 to-pink-500 text-white shadow-sm">
                   <Sparkles className="size-4 animate-pulse" />
@@ -166,18 +167,35 @@ export function CatalystMessages({
               </div>
             ) : (
               <div className="flex w-full gap-3 justify-start">
+                  <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-orange-400 to-pink-500 text-white shadow-sm">
+                    <Sparkles className="size-4 animate-pulse" />
+                  </div>
+                <div className="flex-1 min-w-0 max-w-full">
+                  <AgentStreamReply
+                    thinkingSteps={notes9Stream.thinkingSteps}
+                    sql={notes9Stream.sql}
+                    ragChunks={notes9Stream.ragChunks}
+                    streamedAnswer={notes9Stream.streamedAnswer}
+                    donePayload={notes9Stream.donePayload}
+                    error={notes9Stream.error}
+                  />
+                </div>
+              </div>
+            ) : (
+              <div className="flex w-full gap-3 justify-start">
                 <div className="mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-orange-400 to-pink-500 text-white shadow-sm">
                   <Sparkles className="size-3.5 animate-pulse" />
                 </div>
-                <div className="flex items-center gap-1 text-muted-foreground text-sm">
-                  <span>Thinking</span>
-                  <span className="inline-flex">
-                    <span className="animate-bounce [animation-delay:0ms]">.</span>
-                    <span className="animate-bounce [animation-delay:150ms]">.</span>
-                    <span className="animate-bounce [animation-delay:300ms]">.</span>
-                  </span>
+                  <div className="flex items-center gap-1 text-muted-foreground text-sm">
+                    <span>Thinking</span>
+                    <span className="inline-flex">
+                      <span className="animate-bounce [animation-delay:0ms]">.</span>
+                      <span className="animate-bounce [animation-delay:150ms]">.</span>
+                      <span className="animate-bounce [animation-delay:300ms]">.</span>
+                    </span>
+                  </div>
                 </div>
-              </div>
+            )
             )
           )}
 

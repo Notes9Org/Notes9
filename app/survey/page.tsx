@@ -2,7 +2,6 @@
 
 import { InteractiveParticles } from "@/components/ui/interactive-particles"
 import { ModeToggle } from "@/components/mode-toggle"
-import { Notes9Brand } from "@/components/brand/notes9-brand"
 
 export default function SurveyPage() {
   return (
@@ -26,7 +25,12 @@ export default function SurveyPage() {
             rel="noopener noreferrer"
             className="inline-flex items-center gap-2 mx-auto mb-2 hover:opacity-80 transition-opacity"
           >
-            <Notes9Brand textClassName="h-10 w-auto" />
+            <img
+              src="/notes9-logo.png"
+              alt="Notes9"
+              className="h-10"
+            />
+            <span className="text-xl font-bold">Notes9</span>
           </a>
           <h1 className="text-2xl font-bold">ELN Experience Survey</h1>
           <p className="text-sm text-muted-foreground mt-1">

@@ -1,6 +1,9 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 @import "../styles/tiptap.css";
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "../styles/tiptap.css";
 
 @custom-variant dark (&:is(.dark *));
 
@@ -123,10 +126,14 @@
 
   --color-secondary: var(--secondary);
   --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
 
   --color-muted: var(--muted);
   --color-muted-foreground: var(--muted-foreground);
 
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
   --color-accent: var(--accent);
   --color-accent-foreground: var(--accent-foreground);
 
@@ -247,7 +254,9 @@ body {
   color: var(--foreground);
   font-family: var(--font-family-body);
   font-feature-settings:
+   
     "rlig" 1,
+   
     "calt" 1;
 }
 
