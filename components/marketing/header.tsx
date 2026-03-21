@@ -15,7 +15,7 @@ export function Header() {
       <div className="container mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex h-16 items-center">
           <Link href="/" className="flex items-center space-x-3 shrink-0">
-            <Notes9Brand textClassName="h-8 w-auto" />
+            <Notes9Brand showIcon textClassName="h-8 w-auto" />
           </Link>
 
           <div className="hidden flex-1 lg:block" />

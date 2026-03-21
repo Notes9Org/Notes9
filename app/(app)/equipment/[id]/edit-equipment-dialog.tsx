@@ -24,6 +24,7 @@ import {
 } from "@/components/ui/select"
 import { Pencil } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
+import { DATE_ORDER_ERROR, isEndDateBeforeStartDate } from "@/lib/date-order"
 
 const EQUIPMENT_CATEGORIES = [
   "Analytical Instruments",
@@ -57,9 +58,18 @@ export function EditEquipmentDialog({ equipment }: { equipment: any }) {
     purchase_date: equipment.purchase_date || "",
     notes: equipment.notes || "",
   })
+  const hasInvalidDateOrder = isEndDateBeforeStartDate(formData.purchase_date, formData.next_maintenance_date)
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    if (hasInvalidDateOrder) {
+      toast({
+        title: "Validation Error",
+        description: `${DATE_ORDER_ERROR} Please select a maintenance date later than the purchase date.`,
+        variant: "destructive",
+      })
+      return
+    }
     setIsLoading(true)
 
     try {
@@ -263,6 +273,7 @@ export function EditEquipmentDialog({ equipment }: { equipment: any }) {
               <Input
                 id="next_maintenance_date"
                 type="date"
+                min={formData.purchase_date || undefined}
                 value={formData.next_maintenance_date}
                 onChange={(e) =>
                   setFormData({ ...formData, next_maintenance_date: e.target.value })
@@ -270,6 +281,12 @@ export function EditEquipmentDialog({ equipment }: { equipment: any }) {
               />
             </div>
           </div>
+
+          {hasInvalidDateOrder && (
+            <div className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">
+              {DATE_ORDER_ERROR} Please select a maintenance date later than the purchase date.
+            </div>
+          )}
 
           {/* Notes */}
           <div className="space-y-2">
@@ -304,4 +321,3 @@ export function EditEquipmentDialog({ equipment }: { equipment: any }) {
     </Dialog>
   )
 }
-

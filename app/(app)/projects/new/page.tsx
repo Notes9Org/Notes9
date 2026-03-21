@@ -18,6 +18,7 @@ import {
 } from "@/components/ui/select"
 import { ArrowLeft } from 'lucide-react'
 import { getUniqueNameErrorMessage } from "@/lib/unique-name-error"
+import { DATE_ORDER_ERROR, isEndDateBeforeStartDate } from "@/lib/date-order"
 
 export default function NewProjectPage() {
   const router = useRouter()
@@ -32,9 +33,14 @@ export default function NewProjectPage() {
     start_date: "",
     end_date: "",
   })
+  const hasInvalidDateOrder = isEndDateBeforeStartDate(formData.start_date, formData.end_date)
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    if (hasInvalidDateOrder) {
+      setError(DATE_ORDER_ERROR)
+      return
+    }
     setIsLoading(true)
     setError(null)
 
@@ -171,6 +177,7 @@ export default function NewProjectPage() {
                   <Input
                     id="end_date"
                     type="date"
+                    min={formData.start_date || undefined}
                     value={formData.end_date}
                     onChange={(e) =>
                       setFormData({ ...formData, end_date: e.target.value })
@@ -178,6 +185,12 @@ export default function NewProjectPage() {
                   />
                 </div>
               </div>
+
+              {hasInvalidDateOrder && (
+                <div className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">
+                  {DATE_ORDER_ERROR} Please select a later date than the start date.
+                </div>
+              )}
 
               {error && (
                 <div className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">

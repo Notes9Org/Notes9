@@ -20,6 +20,7 @@ import { countWordsFromHtml } from "@/components/ui/textarea-with-word-count"
 import { cn } from "@/lib/utils"
 import { ArrowLeft } from 'lucide-react'
 import { getUniqueNameErrorMessage } from "@/lib/unique-name-error"
+import { DATE_ORDER_ERROR, isEndDateBeforeStartDate } from "@/lib/date-order"
 
 function NewExperimentForm() {
   const router = useRouter()
@@ -41,6 +42,7 @@ function NewExperimentForm() {
     start_date: "",
     completion_date: "",
   })
+  const hasInvalidDateOrder = isEndDateBeforeStartDate(formData.start_date, formData.completion_date)
 
   useEffect(() => {
     const fetchData = async () => {
@@ -71,6 +73,10 @@ function NewExperimentForm() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    if (hasInvalidDateOrder) {
+      setError(`${DATE_ORDER_ERROR} Please select a later date than the start date.`)
+      return
+    }
     const descWords = countWordsFromHtml(formData.description)
     if (descWords > 1000) {
       setError(`Description must be 1000 words or fewer (currently ${descWords} words).`)
@@ -262,12 +268,19 @@ function NewExperimentForm() {
                 <Input
                   id="completion_date"
                   type="date"
+                  min={formData.start_date || undefined}
                   value={formData.completion_date}
                   onChange={(e) =>
                     setFormData({ ...formData, completion_date: e.target.value })
                   }
                 />
               </div>
+
+              {hasInvalidDateOrder && (
+                <div className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">
+                  {DATE_ORDER_ERROR} Please select a later date than the start date.
+                </div>
+              )}
 
               {error && (
                 <div className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">
