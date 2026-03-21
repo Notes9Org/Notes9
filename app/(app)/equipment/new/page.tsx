@@ -17,6 +17,7 @@ import {
 } from "@/components/ui/select"
 import { ArrowLeft } from 'lucide-react'
 import Link from 'next/link'
+import { DATE_ORDER_ERROR, isEndDateBeforeStartDate } from "@/lib/date-order"
 
 export default function NewEquipmentPage() {
   const router = useRouter()
@@ -36,9 +37,14 @@ export default function NewEquipmentPage() {
     purchase_date: "",
     notes: "",
   })
+  const hasInvalidDateOrder = isEndDateBeforeStartDate(formData.purchase_date, formData.next_maintenance_date)
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    if (hasInvalidDateOrder) {
+      setError(`${DATE_ORDER_ERROR} Please select a maintenance date later than the purchase date.`)
+      return
+    }
     setIsLoading(true)
     setError(null)
 
@@ -261,6 +267,7 @@ export default function NewEquipmentPage() {
                   <Input
                     id="next_maintenance_date"
                     type="date"
+                    min={formData.purchase_date || undefined}
                     value={formData.next_maintenance_date}
                     onChange={(e) =>
                       setFormData({ ...formData, next_maintenance_date: e.target.value })
@@ -269,6 +276,12 @@ export default function NewEquipmentPage() {
                   />
                 </div>
               </div>
+
+              {hasInvalidDateOrder && (
+                <div className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">
+                  {DATE_ORDER_ERROR} Please select a maintenance date later than the purchase date.
+                </div>
+              )}
 
               {error && (
                 <div className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">

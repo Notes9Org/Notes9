@@ -767,16 +767,20 @@ export function AppSidebar() {
                       asChild
                       isActive={isActive}
                       tooltip={isIconMode ? item.name : undefined}
+                      className="group transition-all duration-150 rounded-full hover:text-[var(--accent-foreground)] hover:bg-gradient-to-r hover:from-[var(--primary)]/50 hover:via-[var(--accent)] hover:to-[var(--accent)]/35 active:scale-[0.985] data-[active=true]:text-[var(--accent-foreground)]"
                     >
-                      <Link href={item.href}>
-                        <Icon />
-                        <span className={cn(isIconMode && "hidden")}>
-                          {item.name}
-                        </span>
+                      <Link
+                        href={item.href}
+                        className="flex w-full items-center gap-3 rounded-full px-3 py-2 text-sm transition-colors duration-150"
+                      >
+                        <Icon className="size-4" />
+                        <span className={cn("truncate", isActive && "font-semibold")}>{item.name}</span>
                       </Link>
                     </SidebarMenuButton>
                     {badge !== null && !isIconMode && (
-                      <SidebarMenuBadge>{badge}</SidebarMenuBadge>
+                    <SidebarMenuBadge className="bg-[var(--accent)]/35 text-[var(--accent-foreground)]">
+                      {badge}
+                    </SidebarMenuBadge>
                     )}
                   </SidebarMenuItem>
                 );
@@ -852,7 +856,7 @@ export function AppSidebar() {
                                     asChild
                                     isActive={mounted && pathname === `/projects/${project.id}`}
                                     tooltip={project.name}
-                                    className="min-w-0 flex-1 gap-2 pl-0"
+                                    className="min-w-0 flex-1 gap-2 pl-0 rounded-full transition-all duration-150 hover:text-[var(--accent-foreground)] hover:bg-gradient-to-r hover:from-[var(--primary)]/50 hover:via-[var(--accent)] hover:to-[var(--accent)]/35 active:scale-[0.985] data-[active=true]:text-[var(--accent-foreground)]"
                                   >
                                     <Link
                                       href={`/projects/${project.id}`}
@@ -866,8 +870,11 @@ export function AppSidebar() {
                                         e.dataTransfer.effectAllowed = 'copy';
                                       }}
                                       onClick={(e) => e.stopPropagation()}
+                                      className="w-full"
                                     >
-                                      <span className="truncate">{project.name}</span>
+                                      <span className={cn("truncate", mounted && pathname === `/projects/${project.id}` && "font-semibold")}>
+                                        {project.name}
+                                      </span>
                                     </Link>
                                   </SidebarMenuButton>
                                   <button
@@ -925,10 +932,10 @@ export function AppSidebar() {
                                                 e.dataTransfer.effectAllowed = 'copy';
                                               }}
                                               className={cn(
-                                                "min-w-0 flex-1 rounded-md px-2 py-1.5 text-left text-sm truncate cursor-grab active:cursor-grabbing transition-colors",
+                                                "min-w-0 flex-1 rounded-full px-3 py-1.5 text-left text-sm truncate cursor-grab active:cursor-grabbing transition-all duration-150",
                                                 pathname === `/experiments/${exp.id}`
-                                                  ? "font-medium text-sidebar-accent-foreground bg-sidebar-accent"
-                                                  : "text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+                                                  ? "font-semibold text-[var(--accent-foreground)] bg-[var(--accent)]/35"
+                                                  : "text-sidebar-foreground/70 hover:text-[var(--accent-foreground)] hover:bg-gradient-to-r hover:from-[var(--primary)]/50 hover:via-[var(--accent)] hover:to-[var(--accent)]/35 active:scale-[0.985]"
                                               )}
                                             >
                                               {exp.name}
@@ -956,10 +963,10 @@ export function AppSidebar() {
                                                     e.dataTransfer.effectAllowed = 'copy';
                                                   }}
                                                   className={cn(
-                                                    "flex w-full min-w-0 items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs truncate cursor-grab active:cursor-grabbing transition-colors [&>svg]:size-4 [&>svg]:shrink-0",
+                                                    "flex w-full min-w-0 items-center gap-2 rounded-full px-3 py-1.5 text-left text-xs truncate cursor-grab active:cursor-grabbing transition-all duration-150 [&>svg]:size-4 [&>svg]:shrink-0",
                                                     pathname.startsWith(`/experiments/${exp.id}`)
-                                                      ? "bg-sidebar-accent text-sidebar-accent-foreground font-medium"
-                                                      : "text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+                                                      ? "font-semibold text-[var(--accent-foreground)] bg-[var(--accent)]/35"
+                                                      : "text-sidebar-foreground/70 hover:text-[var(--accent-foreground)] hover:bg-gradient-to-r hover:from-[var(--primary)]/42 hover:via-[var(--accent)]/92 hover:to-[var(--accent)]/32 active:scale-[0.985]"
                                                   )}
                                                 >
                                                   <NotebookPen className="size-4 shrink-0" />

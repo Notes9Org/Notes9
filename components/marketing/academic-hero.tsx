@@ -107,7 +107,9 @@ export function AcademicHero() {
     if (!api) return
     onSelect(api)
     api.on("select", onSelect)
-    return () => api.off("select", onSelect)
+    return () => {
+      api.off("select", onSelect)
+    }
   }, [api, onSelect])
 
   useEffect(() => {
