@@ -4,7 +4,6 @@ import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { ModeToggle } from "@/components/mode-toggle"
 import { Menu, X } from "lucide-react"
-import Image from "next/image"
 import Link from "next/link"
 import { Notes9Brand } from "@/components/brand/notes9-brand"
 
@@ -16,16 +15,7 @@ export function Header() {
       <div className="container mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex h-16 items-center">
           <Link href="/" className="flex items-center space-x-3 shrink-0">
-            <div className="relative h-8 w-8 shrink-0">
-              <Image
-                src="/notes9-logo.png"
-                alt="Notes9 Logo"
-                fill
-                className="object-contain dark:invert dark:brightness-110 dark:contrast-125"
-                priority
-              />
-            </div>
-            <span className="text-xl font-bold text-foreground tracking-tight">Notes9</span>
+            <Notes9Brand textClassName="h-8 w-auto" />
           </Link>
 
           <div className="hidden flex-1 lg:block" />
