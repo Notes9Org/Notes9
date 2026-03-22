@@ -1,10 +1,23 @@
 'use client'
 
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
+import { useRouter } from 'next/navigation'
+import { createClient } from "@/lib/supabase/client"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
+import { Checkbox } from "@/components/ui/checkbox"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
 import {
   Table,
   TableBody,
@@ -13,8 +26,9 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
-import { BookOpen, ExternalLink, FileText, Plus, Search, Star } from "lucide-react";
+import { BookOpen, ExternalLink, FileText, Plus, Search, Star, Trash2 } from "lucide-react";
 import Link from "next/link";
+import { toast } from "sonner";
 import { LiteratureDetailModal } from "./literature-detail-modal";
 
 interface LiteratureReview {
@@ -38,11 +52,16 @@ interface RepoTabProps {
 }
 
 export function RepoTab({ literatureReviews }: RepoTabProps) {
+  const router = useRouter();
   const [selectedLiteratureId, setSelectedLiteratureId] = useState<
     string | null
   >(null);
   const [modalOpen, setModalOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [deleteTarget, setDeleteTarget] = useState<LiteratureReview | null>(null);
+  const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   const handleOpenModal = (id: string) => {
     setSelectedLiteratureId(id);
@@ -79,7 +98,7 @@ export function RepoTab({ literatureReviews }: RepoTabProps) {
   };
 
   // Filter literature reviews based on search query
-  const filteredLiteratureReviews = literatureReviews?.filter((lit) => {
+  const filteredLiteratureReviews = useMemo(() => literatureReviews?.filter((lit) => {
     if (!searchQuery.trim()) return true;
 
     const query = searchQuery.toLowerCase();
@@ -100,7 +119,58 @@ export function RepoTab({ literatureReviews }: RepoTabProps) {
       projectName.includes(query) ||
       experimentName.includes(query)
     );
-  });
+  }), [literatureReviews, searchQuery]);
+
+  const visibleIds = filteredLiteratureReviews?.map((lit) => lit.id) || [];
+  const allVisibleSelected =
+    visibleIds.length > 0 && visibleIds.every((id) => selectedIds.includes(id));
+  const someVisibleSelected =
+    visibleIds.some((id) => selectedIds.includes(id)) && !allVisibleSelected;
+
+  const toggleSelected = (id: string, checked: boolean) => {
+    setSelectedIds((current) =>
+      checked ? [...current, id] : current.filter((selectedId) => selectedId !== id)
+    );
+  };
+
+  const toggleSelectAllVisible = (checked: boolean) => {
+    setSelectedIds((current) => {
+      if (checked) {
+        return Array.from(new Set([...current, ...visibleIds]));
+      }
+
+      return current.filter((id) => !visibleIds.includes(id));
+    });
+  };
+
+  const deleteLiterature = async (ids: string[]) => {
+    if (ids.length === 0) return;
+
+    setIsDeleting(true);
+
+    try {
+      const supabase = createClient();
+      const { error } = await supabase.from("literature_reviews").delete().in("id", ids);
+
+      if (error) throw error;
+
+      setSelectedIds((current) => current.filter((id) => !ids.includes(id)));
+      setDeleteTarget(null);
+      setBulkDeleteOpen(false);
+
+      toast.success(
+        ids.length === 1
+          ? "Literature reference deleted"
+          : `${ids.length} literature references deleted`
+      );
+
+      router.refresh();
+    } catch (error: any) {
+      toast.error(error.message || "Failed to delete literature references");
+    } finally {
+      setIsDeleting(false);
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -118,14 +188,37 @@ export function RepoTab({ literatureReviews }: RepoTabProps) {
       {/* Literature Table */}
       <Card>
         <CardHeader>
-          <CardTitle className="text-foreground">All References</CardTitle>
-          <CardDescription>Saved research papers and citations</CardDescription>
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <CardTitle className="text-foreground">All References</CardTitle>
+              <CardDescription>Saved research papers and citations</CardDescription>
+            </div>
+            <div className="flex items-center gap-2">
+              {selectedIds.length > 0 && (
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  onClick={() => setBulkDeleteOpen(true)}
+                >
+                  <Trash2 className="mr-2 h-4 w-4" />
+                  Delete Selected ({selectedIds.length})
+                </Button>
+              )}
+            </div>
+          </div>
         </CardHeader>
         <CardContent>
           {filteredLiteratureReviews && filteredLiteratureReviews.length > 0 ? (
             <Table>
               <TableHeader>
                 <TableRow>
+                  <TableHead className="w-[48px]">
+                    <Checkbox
+                      checked={allVisibleSelected ? true : someVisibleSelected ? "indeterminate" : false}
+                      onCheckedChange={(checked) => toggleSelectAllVisible(checked === true)}
+                      aria-label="Select all visible references"
+                    />
+                  </TableHead>
                   <TableHead className="w-[350px]">Title</TableHead>
                   <TableHead className="w-[200px]">Authors</TableHead>
                   <TableHead className="w-[150px]">Journal & Year</TableHead>
@@ -138,6 +231,13 @@ export function RepoTab({ literatureReviews }: RepoTabProps) {
               <TableBody>
                 {filteredLiteratureReviews.map((lit) => (
                   <TableRow key={lit.id}>
+                    <TableCell>
+                      <Checkbox
+                        checked={selectedIds.includes(lit.id)}
+                        onCheckedChange={(checked) => toggleSelected(lit.id, checked === true)}
+                        aria-label={`Select ${lit.title}`}
+                      />
+                    </TableCell>
                     <TableCell>
                       <button
                         onClick={() => handleOpenModal(lit.id)}
@@ -219,13 +319,24 @@ export function RepoTab({ literatureReviews }: RepoTabProps) {
                       )}
                     </TableCell>
                     <TableCell className="text-right">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => handleOpenModal(lit.id)}
-                      >
-                        View
-                      </Button>
+                      <div className="flex items-center justify-end gap-1">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleOpenModal(lit.id)}
+                        >
+                          View
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="text-muted-foreground hover:bg-red-50 hover:text-red-500 dark:hover:bg-red-950/40 dark:hover:text-red-300"
+                          onClick={() => setDeleteTarget(lit)}
+                          aria-label={`Delete ${lit.title}`}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
                     </TableCell>
                   </TableRow>
                 ))}
@@ -262,6 +373,67 @@ export function RepoTab({ literatureReviews }: RepoTabProps) {
         open={modalOpen}
         onOpenChange={setModalOpen}
       />
+
+      <AlertDialog
+        open={Boolean(deleteTarget)}
+        onOpenChange={(open) => {
+          if (!open) setDeleteTarget(null);
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete literature reference?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {deleteTarget ? (
+                <>
+                  This will permanently delete <strong>{deleteTarget.title}</strong>.
+                  This action cannot be undone.
+                </>
+              ) : null}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isDeleting}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(event) => {
+                event.preventDefault();
+                if (deleteTarget) {
+                  void deleteLiterature([deleteTarget.id]);
+                }
+              }}
+              disabled={isDeleting}
+              className="bg-red-500 text-white hover:bg-red-600 dark:bg-red-300 dark:text-red-950 dark:hover:bg-red-200"
+            >
+              {isDeleting ? "Deleting..." : "Delete Reference"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={bulkDeleteOpen} onOpenChange={setBulkDeleteOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete selected references?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will permanently delete {selectedIds.length} selected literature
+              reference{selectedIds.length === 1 ? "" : "s"}. This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isDeleting}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(event) => {
+                event.preventDefault();
+                void deleteLiterature(selectedIds);
+              }}
+              disabled={isDeleting || selectedIds.length === 0}
+              className="bg-red-500 text-white hover:bg-red-600 dark:bg-red-300 dark:text-red-950 dark:hover:bg-red-200"
+            >
+              {isDeleting ? "Deleting..." : `Delete Selected (${selectedIds.length})`}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
