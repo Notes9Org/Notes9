@@ -110,15 +110,15 @@ function TabsList({
   return (
     <div className="relative">
       {showLeft && (
-        <div className="absolute left-0 top-0 h-full flex items-center pl-1 pr-1 z-10"
+        <div className="absolute left-1 top-1 z-10 flex h-7 items-center pr-1"
           style={{
             background: "linear-gradient(to right, var(--background) 80%, rgba(255,255,255,0))",
-            borderRadius: 0,
+            borderRadius: 6,
           }}
         >
           <button
             onClick={() => scroll('left')}
-            className="w-7 h-7 transition flex justify-center items-center"
+            className="flex h-7 w-7 items-center justify-center rounded-md border border-border/60 bg-background/85 shadow-sm transition hover:bg-background"
           >
             <ChevronLeft className="h-4 w-4" />
           </button>
@@ -126,15 +126,15 @@ function TabsList({
       )}
 
       {showRight && (
-        <div className="absolute right-0 top-0 h-full flex items-center pr-1 pl-1 z-10"
+        <div className="absolute right-1 top-1 z-10 flex h-7 items-center pl-1"
           style={{
             background: "linear-gradient(to left, var(--background) 80%, rgba(255,255,255,0))",
-            borderRadius: 0,
+            borderRadius: 6,
           }}
         >
           <button
             onClick={() => scroll('right')}
-            className="w-7 h-7 transition flex justify-center items-center"
+            className="flex h-7 w-7 items-center justify-center rounded-md border border-border/60 bg-background/85 shadow-sm transition hover:bg-background"
           >
             <ChevronRight className="h-4 w-4" />
           </button>

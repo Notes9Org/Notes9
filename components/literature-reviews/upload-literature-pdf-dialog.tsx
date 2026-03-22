@@ -27,6 +27,8 @@ import type { AnalyzePdfResponse, LiteraturePdfExtractedMetadata, LiteratureReco
 
 interface UploadLiteraturePdfDialogProps {
   literatureReviews: LiteratureRecordSummary[]
+  projects?: { id: string; name: string }[]
+  experiments?: { id: string; name: string; project_id: string }[]
   currentLiterature?: LiteratureRecordSummary | null
   triggerLabel?: string
 }
@@ -42,11 +44,15 @@ function draftFromMetadata(metadata: LiteraturePdfExtractedMetadata): NewLiterat
     abstract: metadata.abstract ?? "",
     personal_notes: "",
     url: metadata.url ?? "",
+    project_id: "",
+    experiment_id: "",
   }
 }
 
 export function UploadLiteraturePdfDialog({
   literatureReviews,
+  projects = [],
+  experiments = [],
   currentLiterature = null,
   triggerLabel = "Upload PDF",
 }: UploadLiteraturePdfDialogProps) {
@@ -160,6 +166,8 @@ export function UploadLiteraturePdfDialog({
                 publication_year: createDraft.publication_year
                   ? Number.parseInt(createDraft.publication_year, 10)
                   : null,
+                project_id: createDraft.project_id || null,
+                experiment_id: createDraft.experiment_id || null,
               }
             : undefined,
         tempUploadPath: analysis.tempUploadPath,
@@ -291,6 +299,8 @@ export function UploadLiteraturePdfDialog({
                   value={createDraft}
                   onChange={setCreateDraft}
                   extractedMetadata={analysis.extractedMetadata}
+                  projects={projects}
+                  experiments={experiments}
                 />
               </div>
             )}

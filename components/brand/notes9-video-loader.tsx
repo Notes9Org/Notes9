@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { BookOpen, ClipboardList, FlaskConical, Microscope, NotebookPen, Search, Sparkles, TestTube2 } from "lucide-react"
+import { BookOpen, ClipboardList, FlaskConical, Microscope, Network, NotebookPen, Search, Sparkles, TestTube2 } from "lucide-react"
 import { cn } from "@/lib/utils"
 
 export type Notes9LoaderVariant =
@@ -15,6 +15,7 @@ export type Notes9LoaderVariant =
   | "equipment"
   | "notes"
   | "protocols"
+  | "research-map"
 
 interface Notes9VideoLoaderProps {
   className?: string
@@ -192,6 +193,23 @@ function NotesScene({ compact, horizontal, protocol = false }: { compact: boolea
   )
 }
 
+function ResearchMapScene({ compact, horizontal }: { compact: boolean; horizontal: boolean }) {
+  return (
+    <SceneShell compact={compact} horizontal={horizontal}>
+      <div className="absolute inset-0 rounded-full bg-[radial-gradient(circle_at_50%_70%,rgba(92,54,34,0.18),rgba(92,54,34,0.07)_48%,transparent_68%)] dark:bg-[radial-gradient(circle_at_50%_70%,rgba(0,0,0,0.30),rgba(0,0,0,0.10)_48%,transparent_68%)]" />
+      <div className="absolute bottom-4 left-1/2 z-0 flex -translate-x-1/2 flex-col items-center gap-1.5">
+        <Network className={cn("loader-research-icon text-primary/62", compact ? "size-8" : "size-10")} />
+        <div className="flex items-center gap-2">
+          <span className="size-2 rounded-full bg-primary/35" />
+          <span className="size-2 rounded-full bg-primary/55" />
+          <span className="size-2 rounded-full bg-primary/35" />
+        </div>
+      </div>
+      <Mascot compact={compact} />
+    </SceneShell>
+  )
+}
+
 export function Notes9VideoLoader({
   className,
   label = "Notes9 is loading",
@@ -229,6 +247,7 @@ export function Notes9VideoLoader({
     if (variant === "equipment") return <EquipmentScene compact={compact || size === "sm"} horizontal={horizontal} />
     if (variant === "notes") return <NotesScene compact={compact || size === "sm"} horizontal={horizontal} />
     if (variant === "protocols") return <NotesScene compact={compact || size === "sm"} horizontal={horizontal} protocol />
+    if (variant === "research-map") return <ResearchMapScene compact={compact || size === "sm"} horizontal={horizontal} />
     return <DefaultScene compact={compact || size === "sm"} horizontal={horizontal} />
   }
 

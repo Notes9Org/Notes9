@@ -47,6 +47,7 @@ function getActionLabel(target: HTMLElement) {
 
 function inferLoaderVariant(actionLabel: string, href?: string | null): Notes9LoaderVariant {
   const source = `${href ?? ""} ${actionLabel}`.toLowerCase()
+  if (source.includes("/research-map") || source.includes("research map")) return "research-map"
   if (source.includes("protocol")) return "protocols"
   if (source.includes("literature") || source.includes("paper") || source.includes("book")) return "literature"
   if (source.includes("search")) return "search"
@@ -71,14 +72,16 @@ function buildLoaderCopy(actionLabel: string, variant: Notes9LoaderVariant) {
           : variant === "experiments"
             ? "Opening Experiments"
             : variant === "samples"
-              ? "Opening Samples"
+            ? "Opening Samples"
               : variant === "equipment"
                 ? "Opening Equipment"
-            : variant === "protocols"
-              ? "Opening Protocols"
-            : variant === "notes"
-              ? "Opening Lab Notes"
-              : "Loading Notes9"
+                : variant === "research-map"
+                  ? "Opening Research Map"
+                  : variant === "protocols"
+                    ? "Opening Protocols"
+                    : variant === "notes"
+                      ? "Opening Lab Notes"
+                      : "Loading Notes9"
 
   const variantCaptions =
     variant === "literature"
@@ -123,19 +126,25 @@ function buildLoaderCopy(actionLabel: string, variant: Notes9LoaderVariant) {
                   "Instrument visibility improves when status, location, and history stay connected.",
                   "Equipment context helps teams plan runs without checking multiple systems.",
                 ]
-            : variant === "protocols"
-              ? [
-                  "Mascot is writing protocol steps beside the notebook.",
-                  "Protocol clarity reduces ambiguity before experiments begin.",
-                  "Well-defined methods make repeats more reliable.",
-                ]
-            : variant === "notes"
-              ? [
-                  "Mascot is opening the lab notebook and setting the page.",
-                  "Well-kept notes preserve rationale, not just results.",
-                  "Documentation is most useful when it stays close to execution.",
-                ]
-              : RESEARCH_FUN_FACTS
+              : variant === "research-map"
+                ? [
+                    "Mascot is tracing the links between your projects, experiments, protocols, and papers.",
+                    "Research maps are most useful when the connections stay visible, not just the individual records.",
+                    "Linked entities make it easier to follow how evidence and execution fit together.",
+                  ]
+                : variant === "protocols"
+                  ? [
+                      "Mascot is writing protocol steps beside the notebook.",
+                      "Protocol clarity reduces ambiguity before experiments begin.",
+                      "Well-defined methods make repeats more reliable.",
+                    ]
+                  : variant === "notes"
+                    ? [
+                        "Mascot is opening the lab notebook and setting the page.",
+                        "Well-kept notes preserve rationale, not just results.",
+                        "Documentation is most useful when it stays close to execution.",
+                      ]
+                    : RESEARCH_FUN_FACTS
 
   if (!actionLabel) {
     return {

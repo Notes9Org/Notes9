@@ -11,7 +11,7 @@ interface PaperSearchCardProps {
   paper: SearchPaper;
   onStage?: (paper: SearchPaper) => void;
   onSave?: (paper: SearchPaper) => Promise<void>;
-  onDownloadToRepository?: (paper: SearchPaper) => Promise<void>;
+  onSaveToRepository?: (paper: SearchPaper) => Promise<void>;
   onRemove?: (paperId: string) => void;
   isStaged?: boolean;
   isSaving?: boolean;
@@ -19,7 +19,7 @@ interface PaperSearchCardProps {
   compact?: boolean;
 }
 
-export function PaperSearchCard({ paper, onStage, onSave, onDownloadToRepository, onRemove, isStaged = false, isSaving = false, hideActions = false, compact = false }: PaperSearchCardProps) {
+export function PaperSearchCard({ paper, onStage, onSave, onSaveToRepository, onRemove, isStaged = false, isSaving = false, hideActions = false, compact = false }: PaperSearchCardProps) {
   const [isExpanded, setIsExpanded] = useState(false);
 
   const getSourceColor = (source: string) => {
@@ -175,18 +175,6 @@ export function PaperSearchCard({ paper, onStage, onSave, onDownloadToRepository
                     <Database size={14} />
                   )}
                 </Button>
-                {paper.isOpenAccess && paper.pdfUrl && onDownloadToRepository && (
-                  <Button
-                    variant="secondary"
-                    size="icon"
-                    onClick={() => onDownloadToRepository(paper)}
-                    disabled={isSaving}
-                    title="Download to repository"
-                    aria-label="Download to repository"
-                  >
-                    <Download size={14} />
-                  </Button>
-                )}
               </>
             )}
             
@@ -207,16 +195,16 @@ export function PaperSearchCard({ paper, onStage, onSave, onDownloadToRepository
                     <Plus size={14} />
                   )}
                 </Button>
-                {paper.isOpenAccess && paper.pdfUrl && onDownloadToRepository && (
+                {onSaveToRepository && (
                   <Button
                     variant="secondary"
                     size="icon"
-                    onClick={() => onDownloadToRepository(paper)}
+                    onClick={() => onSaveToRepository(paper)}
                     disabled={isSaving}
-                    title="Download to repository"
-                    aria-label="Download to repository"
+                    title="Save to repository"
+                    aria-label="Save to repository"
                   >
-                    <Download size={14} />
+                    <Database size={14} />
                   </Button>
                 )}
               </>
