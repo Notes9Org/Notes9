@@ -84,7 +84,16 @@ export function LiteratureTabs({ literatureReviews }: LiteratureTabsProps) {
       const result = await savePaperToRepository(paper)
       
       if (result.success) {
-        toast.success('Paper saved to repository')
+        if (result.warning) {
+          toast.success('Paper saved to repository')
+          toast.warning(result.warning)
+        } else {
+          toast.success(
+            paper.isOpenAccess && paper.pdfUrl
+              ? 'Paper and PDF saved to repository'
+              : 'Paper saved to repository'
+          )
+        }
         // Remove from staging after successful save
         setStagedPapers(stagedPapers.filter(p => p.id !== paper.id))
         // Refresh the page to update the repository tab
@@ -130,6 +139,7 @@ export function LiteratureTabs({ literatureReviews }: LiteratureTabsProps) {
           onSearch={handleSearch}
           onStagePaper={handleStagePaper}
           isPaperStaged={isPaperStaged}
+          onDownloadToRepository={handleSavePaper}
         />
       </TabsContent>
 

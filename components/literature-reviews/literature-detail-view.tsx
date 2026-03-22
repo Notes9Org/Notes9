@@ -12,12 +12,15 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   BookOpen,
   Calendar,
+  FileText,
   Star,
   ExternalLink,
   Link as LinkIcon,
 } from "lucide-react";
 import Link from "next/link";
 import { LiteratureReviewActions } from "@/app/(app)/literature-reviews/[id]/literature-review-actions";
+import { UploadLiteraturePdfDialog } from "@/components/literature-reviews/upload-literature-pdf-dialog";
+import { LiteraturePdfPanel } from "@/components/literature-reviews/literature-pdf-panel";
 
 interface LiteratureData {
   id: string;
@@ -36,6 +39,15 @@ interface LiteratureData {
   volume: string | null;
   issue: string | null;
   pages: string | null;
+  pdf_file_url: string | null;
+  pdf_file_name: string | null;
+  pdf_file_size: number | null;
+  pdf_file_type: string | null;
+  pdf_storage_path: string | null;
+  pdf_uploaded_at: string | null;
+  pdf_checksum: string | null;
+  pdf_match_source: string | null;
+  pdf_metadata: Record<string, unknown> | null;
   created_at: string;
   project: { id: string; name: string } | null;
   experiment: { id: string; name: string } | null;
@@ -243,6 +255,7 @@ export function LiteratureDetailView({
       <Tabs defaultValue="overview" className="space-y-4">
         <TabsList>
           <TabsTrigger value="overview">Overview</TabsTrigger>
+          <TabsTrigger value="pdf">PDF</TabsTrigger>
           <TabsTrigger value="citation">Citation</TabsTrigger>
           <TabsTrigger value="linked">Linked Research</TabsTrigger>
         </TabsList>
@@ -380,6 +393,74 @@ export function LiteratureDetailView({
               </CardContent>
             </Card>
           )}
+        </TabsContent>
+
+        <TabsContent value="pdf" className="space-y-4">
+          <Card>
+            <CardHeader className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+              <div>
+                <CardTitle>Paper PDF</CardTitle>
+                <CardDescription>
+                  Upload the paper PDF, view it inline, and keep highlights or notes attached to this reference.
+                </CardDescription>
+              </div>
+              <UploadLiteraturePdfDialog
+                literatureReviews={[
+                  {
+                    id: literature.id,
+                    title: literature.title,
+                    authors: literature.authors,
+                    journal: literature.journal,
+                    publication_year: literature.publication_year,
+                    doi: literature.doi,
+                    pmid: literature.pmid,
+                    pdf_storage_path: literature.pdf_storage_path,
+                    pdf_file_name: literature.pdf_file_name,
+                  },
+                ]}
+                currentLiterature={{
+                  id: literature.id,
+                  title: literature.title,
+                  authors: literature.authors,
+                  journal: literature.journal,
+                  publication_year: literature.publication_year,
+                  doi: literature.doi,
+                  pmid: literature.pmid,
+                  pdf_storage_path: literature.pdf_storage_path,
+                  pdf_file_name: literature.pdf_file_name,
+                }}
+                triggerLabel={literature.pdf_storage_path ? "Replace PDF" : "Upload PDF"}
+              />
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {literature.pdf_storage_path ? (
+                <>
+                  <div className="flex flex-wrap items-center gap-3 rounded-lg border bg-muted/30 p-3 text-sm text-muted-foreground">
+                    <div className="flex items-center gap-2 text-foreground">
+                      <FileText className="h-4 w-4" />
+                      {literature.pdf_file_name || "Attached PDF"}
+                    </div>
+                    {literature.pdf_uploaded_at && (
+                      <span>Uploaded {formatDate(literature.pdf_uploaded_at)}</span>
+                    )}
+                    {literature.pdf_match_source && (
+                      <Badge variant="outline">{literature.pdf_match_source}</Badge>
+                    )}
+                  </div>
+                  {literature.pdf_file_url && (
+                    <LiteraturePdfPanel literatureId={literature.id} pdfUrl={literature.pdf_file_url} />
+                  )}
+                </>
+              ) : (
+                <div className="rounded-lg border border-dashed px-6 py-10 text-center">
+                  <FileText className="mx-auto h-10 w-10 text-muted-foreground" />
+                  <p className="mt-4 text-sm text-muted-foreground">
+                    No PDF is attached yet. Upload the paper PDF to read and annotate it inside Notes9.
+                  </p>
+                </div>
+              )}
+            </CardContent>
+          </Card>
         </TabsContent>
 
         <TabsContent value="citation" className="space-y-4">

@@ -767,14 +767,13 @@ export function AppSidebar() {
                       asChild
                       isActive={isActive}
                       tooltip={isIconMode ? item.name : undefined}
-                      className="group transition-all duration-150 rounded-full hover:text-[var(--accent-foreground)] hover:bg-gradient-to-r hover:from-[var(--primary)]/50 hover:via-[var(--accent)] hover:to-[var(--accent)]/35 active:scale-[0.985] data-[active=true]:text-[var(--accent-foreground)]"
+                      className="group transition-all duration-150 hover:bg-sidebar-foreground/22 hover:text-sidebar-foreground active:scale-[0.985] active:bg-sidebar-foreground/28 dark:hover:bg-sidebar-accent dark:hover:text-sidebar-accent-foreground dark:active:scale-[0.985] dark:active:bg-sidebar-accent/95 data-[active=true]:bg-transparent data-[active=true]:text-sidebar-foreground"
                     >
-                      <Link
-                        href={item.href}
-                        className="flex w-full items-center gap-3 rounded-full px-3 py-2 text-sm transition-colors duration-150"
-                      >
-                        <Icon className="size-4" />
-                        <span className={cn("truncate", isActive && "font-semibold")}>{item.name}</span>
+                      <Link href={item.href}>
+                        <Icon />
+                        <span className={cn(isIconMode && "hidden")}>
+                          <span className={cn("truncate", isActive && "font-semibold")}>{item.name}</span>
+                        </span>
                       </Link>
                     </SidebarMenuButton>
                     {badge !== null && !isIconMode && (
@@ -856,7 +855,7 @@ export function AppSidebar() {
                                     asChild
                                     isActive={mounted && pathname === `/projects/${project.id}`}
                                     tooltip={project.name}
-                                    className="min-w-0 flex-1 gap-2 pl-0 rounded-full transition-all duration-150 hover:text-[var(--accent-foreground)] hover:bg-gradient-to-r hover:from-[var(--primary)]/50 hover:via-[var(--accent)] hover:to-[var(--accent)]/35 active:scale-[0.985] data-[active=true]:text-[var(--accent-foreground)]"
+                                    className="group min-w-0 flex-1 gap-2 pl-0 transition-all duration-150 hover:bg-sidebar-foreground/22 hover:text-sidebar-foreground active:scale-[0.985] active:bg-sidebar-foreground/28 dark:hover:bg-sidebar-accent dark:hover:text-sidebar-accent-foreground dark:active:scale-[0.985] dark:active:bg-sidebar-accent/95 data-[active=true]:bg-transparent data-[active=true]:text-sidebar-foreground"
                                   >
                                     <Link
                                       href={`/projects/${project.id}`}
@@ -872,7 +871,12 @@ export function AppSidebar() {
                                       onClick={(e) => e.stopPropagation()}
                                       className="w-full"
                                     >
-                                      <span className={cn("truncate", mounted && pathname === `/projects/${project.id}` && "font-semibold")}>
+                                      <span
+                                        className={cn(
+                                          "truncate",
+                                          mounted && pathname === `/projects/${project.id}` && "font-semibold"
+                                        )}
+                                      >
                                         {project.name}
                                       </span>
                                     </Link>
@@ -932,13 +936,15 @@ export function AppSidebar() {
                                                 e.dataTransfer.effectAllowed = 'copy';
                                               }}
                                               className={cn(
-                                                "min-w-0 flex-1 rounded-full px-3 py-1.5 text-left text-sm truncate cursor-grab active:cursor-grabbing transition-all duration-150",
+                                                "group min-w-0 flex-1 rounded-md px-2 py-1.5 text-left text-sm truncate cursor-grab active:cursor-grabbing transition-all duration-150",
                                                 pathname === `/experiments/${exp.id}`
-                                                  ? "font-semibold text-[var(--accent-foreground)] bg-[var(--accent)]/35"
-                                                  : "text-sidebar-foreground/70 hover:text-[var(--accent-foreground)] hover:bg-gradient-to-r hover:from-[var(--primary)]/50 hover:via-[var(--accent)] hover:to-[var(--accent)]/35 active:scale-[0.985]"
+                                                  ? "text-sidebar-foreground"
+                                                  : "text-sidebar-foreground/70 hover:bg-sidebar-foreground/22 hover:text-sidebar-foreground active:scale-[0.985] active:bg-sidebar-foreground/28 dark:hover:bg-sidebar-accent dark:hover:text-sidebar-accent-foreground dark:active:scale-[0.985] dark:active:bg-sidebar-accent/95"
                                               )}
                                             >
-                                              {exp.name}
+                                              <span className={cn("truncate", pathname === `/experiments/${exp.id}` && "font-semibold")}>
+                                                {exp.name}
+                                              </span>
                                             </button>
                                           </div>
 
@@ -963,14 +969,16 @@ export function AppSidebar() {
                                                     e.dataTransfer.effectAllowed = 'copy';
                                                   }}
                                                   className={cn(
-                                                    "flex w-full min-w-0 items-center gap-2 rounded-full px-3 py-1.5 text-left text-xs truncate cursor-grab active:cursor-grabbing transition-all duration-150 [&>svg]:size-4 [&>svg]:shrink-0",
+                                                    "group flex w-full min-w-0 items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs truncate cursor-grab active:cursor-grabbing transition-all duration-150 [&>svg]:size-4 [&>svg]:shrink-0",
                                                     pathname.startsWith(`/experiments/${exp.id}`)
-                                                      ? "font-semibold text-[var(--accent-foreground)] bg-[var(--accent)]/35"
-                                                      : "text-sidebar-foreground/70 hover:text-[var(--accent-foreground)] hover:bg-gradient-to-r hover:from-[var(--primary)]/42 hover:via-[var(--accent)]/92 hover:to-[var(--accent)]/32 active:scale-[0.985]"
+                                                      ? "text-sidebar-foreground"
+                                                      : "text-sidebar-foreground/70 hover:bg-sidebar-foreground/22 hover:text-sidebar-foreground active:scale-[0.985] active:bg-sidebar-foreground/28 dark:hover:bg-sidebar-accent dark:hover:text-sidebar-accent-foreground dark:active:scale-[0.985] dark:active:bg-sidebar-accent/95"
                                                   )}
                                                 >
                                                   <NotebookPen className="size-4 shrink-0" />
-                                                  <span className="min-w-0 truncate">{note.title || "Untitled note"}</span>
+                                                  <span className={cn("min-w-0 truncate", pathname.startsWith(`/experiments/${exp.id}`) && "font-semibold")}>
+                                                    {note.title || "Untitled note"}
+                                                  </span>
                                                 </button>
                                               ))}
                                             </div>

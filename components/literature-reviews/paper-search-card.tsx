@@ -4,20 +4,22 @@ import { SearchPaper } from '@/types/paper-search';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
-import { ExternalLink, FileText, Lock, Unlock, ChevronDown, ChevronUp, Plus, Check, Database, X, Loader2 } from 'lucide-react';
+import { Download, ExternalLink, FileText, Lock, Unlock, ChevronDown, ChevronUp, Plus, Check, Database, X, Loader2 } from 'lucide-react';
 import { useState } from 'react';
 
 interface PaperSearchCardProps {
   paper: SearchPaper;
   onStage?: (paper: SearchPaper) => void;
   onSave?: (paper: SearchPaper) => Promise<void>;
+  onDownloadToRepository?: (paper: SearchPaper) => Promise<void>;
   onRemove?: (paperId: string) => void;
   isStaged?: boolean;
   isSaving?: boolean;
   hideActions?: boolean;
+  compact?: boolean;
 }
 
-export function PaperSearchCard({ paper, onStage, onSave, onRemove, isStaged = false, isSaving = false, hideActions = false }: PaperSearchCardProps) {
+export function PaperSearchCard({ paper, onStage, onSave, onDownloadToRepository, onRemove, isStaged = false, isSaving = false, hideActions = false, compact = false }: PaperSearchCardProps) {
   const [isExpanded, setIsExpanded] = useState(false);
 
   const getSourceColor = (source: string) => {
@@ -46,7 +48,7 @@ export function PaperSearchCard({ paper, onStage, onSave, onRemove, isStaged = f
 
   return (
     <Card className="hover:shadow-md transition-shadow">
-      <CardContent className="p-5">
+      <CardContent className={compact ? "p-4" : "p-5"}>
         <div className="flex items-start justify-between gap-4 mb-3">
           <div className="flex items-center gap-2 flex-wrap">
             <Badge variant="outline" className={`text-xs ${getSourceColor(paper.source)}`}>
@@ -78,7 +80,7 @@ export function PaperSearchCard({ paper, onStage, onSave, onRemove, isStaged = f
           </div>
         </div>
 
-        <h3 className="text-lg font-semibold text-foreground mb-2 leading-tight">
+        <h3 className={`${compact ? 'text-base' : 'text-lg'} font-semibold text-foreground mb-2 leading-tight`}>
           {paper.title}
         </h3>
 
@@ -123,18 +125,23 @@ export function PaperSearchCard({ paper, onStage, onSave, onRemove, isStaged = f
         {!hideActions && (
           <div className="flex items-center gap-3 pt-3 border-t">
             {externalLink && (
-              <Button variant="outline" size="sm" asChild>
-                <a href={externalLink} target="_blank" rel="noopener noreferrer">
-                  <ExternalLink size={14} className="mr-2" />
-                  View Source
+              <Button variant="outline" size="icon" asChild title="View source">
+                <a href={externalLink} target="_blank" rel="noopener noreferrer" aria-label="View source">
+                  <ExternalLink size={14} />
                 </a>
               </Button>
             )}
             {paper.pdfUrl && (
-              <Button variant="outline" size="sm" asChild>
-                <a href={paper.pdfUrl} target="_blank" rel="noopener noreferrer">
-                  <FileText size={14} className="mr-2" />
-                  PDF
+              <Button variant="outline" size="icon" asChild title="Open PDF">
+                <a href={paper.pdfUrl} target="_blank" rel="noopener noreferrer" aria-label="Open PDF">
+                  <FileText size={14} />
+                </a>
+              </Button>
+            )}
+            {paper.isOpenAccess && paper.pdfUrl && (
+              <Button variant="outline" size="icon" asChild title="Download PDF">
+                <a href={paper.pdfUrl} target="_blank" rel="noopener noreferrer" download aria-label="Download PDF">
+                  <Download size={14} />
                 </a>
               </Button>
             )}
@@ -146,54 +153,73 @@ export function PaperSearchCard({ paper, onStage, onSave, onRemove, isStaged = f
               <>
                 <Button
                   variant="outline"
-                  size="sm"
+                  size="icon"
                   onClick={() => onRemove(paper.id)}
                   className="hover:bg-destructive hover:text-destructive-foreground"
+                  title="Close staged paper"
+                  aria-label="Close staged paper"
                 >
-                  <X size={14} className="mr-2" />
-                  Remove from Staging
+                  <X size={14} />
                 </Button>
                 <Button
                   variant="default"
-                  size="sm"
+                  size="icon"
                   onClick={() => onSave(paper)}
                   disabled={isSaving}
+                  title="Save to repository"
+                  aria-label="Save to repository"
                 >
                   {isSaving ? (
-                    <>
-                      <Loader2 size={14} className="mr-2 animate-spin" />
-                      Saving...
-                    </>
+                    <Loader2 size={14} className="animate-spin" />
                   ) : (
-                    <>
-                      <Database size={14} className="mr-2" />
-                      Save to Repository
-                    </>
+                    <Database size={14} />
                   )}
                 </Button>
+                {paper.isOpenAccess && paper.pdfUrl && onDownloadToRepository && (
+                  <Button
+                    variant="secondary"
+                    size="icon"
+                    onClick={() => onDownloadToRepository(paper)}
+                    disabled={isSaving}
+                    title="Download to repository"
+                    aria-label="Download to repository"
+                  >
+                    <Download size={14} />
+                  </Button>
+                )}
               </>
             )}
             
             {/* Search mode actions */}
             {onStage && (
-              <Button
-                variant={isStaged ? "secondary" : "default"}
-                size="sm"
-                onClick={() => onStage(paper)}
-                disabled={isStaged}
-              >
-                {isStaged ? (
-                  <>
-                    <Check size={14} className="mr-2" />
-                    Staged
-                  </>
-                ) : (
-                  <>
-                    <Plus size={14} className="mr-2" />
-                    Stage
-                  </>
+              <>
+                <Button
+                  variant={isStaged ? "secondary" : "default"}
+                  size="icon"
+                  onClick={() => onStage(paper)}
+                  disabled={isStaged}
+                  title={isStaged ? "Already staged" : "Stage paper"}
+                  aria-label={isStaged ? "Already staged" : "Stage paper"}
+                >
+                  {isStaged ? (
+                    <Check size={14} />
+                  ) : (
+                    <Plus size={14} />
+                  )}
+                </Button>
+                {paper.isOpenAccess && paper.pdfUrl && onDownloadToRepository && (
+                  <Button
+                    variant="secondary"
+                    size="icon"
+                    onClick={() => onDownloadToRepository(paper)}
+                    disabled={isSaving}
+                    title="Download to repository"
+                    aria-label="Download to repository"
+                  >
+                    <Download size={14} />
+                  </Button>
                 )}
-              </Button>
+              </>
             )}
           </div>
         )}
