@@ -24,13 +24,43 @@ const jetbrainsMono = JetBrains_Mono({
 export const metadata: Metadata = {
   title: 'Notes9 - Research Lab Management',
   description: 'Professional laboratory research and experiment management platform',
+  metadataBase: new URL('https://notes9.com'),
   generator: 'v0.app',
+  applicationName: 'Notes9',
+  alternates: {
+    canonical: '/',
+  },
   icons: {
     icon: [
       { url: '/notes9-logo-favicon.png', sizes: 'any', type: 'image/png' },
+      { url: '/icon.png', sizes: '32x32', type: 'image/png' },
     ],
     shortcut: '/notes9-logo-favicon.png',
-    apple: '/notes9-logo-favicon.png',
+    apple: [
+      { url: '/apple-icon.png', sizes: '180x180', type: 'image/png' },
+    ],
+  },
+  manifest: '/manifest.webmanifest',
+  openGraph: {
+    type: 'website',
+    url: 'https://notes9.com',
+    title: 'Notes9 - Research Lab Management',
+    description: 'Professional laboratory research and experiment management platform',
+    siteName: 'Notes9',
+    images: [
+      {
+        url: '/notes9-logo.png',
+        width: 1200,
+        height: 630,
+        alt: 'Notes9',
+      },
+    ],
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: 'Notes9 - Research Lab Management',
+    description: 'Professional laboratory research and experiment management platform',
+    images: ['/notes9-logo.png'],
   },
 }
 
