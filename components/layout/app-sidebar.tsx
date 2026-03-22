@@ -42,7 +42,6 @@ import {
   SidebarInput,
   SidebarMenu,
   SidebarMenuAction,
-  SidebarMenuBadge,
   SidebarMenuButton,
   SidebarMenuItem,
   SidebarMenuSub,
@@ -121,13 +120,6 @@ interface UserProfile {
   last_name?: string | null
 }
 
-interface Counts {
-  projects: number
-  experiments: number
-  samples: number
-  literature: number
-}
-
 type SearchResultItem = {
   id: string
   type: "project" | "experiment" | "lab_note" | "protocol" | "sample"
@@ -144,7 +136,6 @@ export function AppSidebar() {
   const [projects, setProjects] = useState<Project[]>([])
   const [user, setUser] = useState<User | null>(null)
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null)
-  const [counts, setCounts] = useState<Counts>({ projects: 0, experiments: 0, samples: 0, literature: 0 })
   const [loading, setLoading] = useState(true)
   const [mounted, setMounted] = useState(false)
   const [openProjects, setOpenProjects] = useState<Record<string, boolean>>({})
@@ -477,60 +468,6 @@ export function AppSidebar() {
           setProjects(Object.values(projMap))
         }
 
-        // Fetch counts for badges
-        const [
-          { count: projectCount, error: projectCountError },
-          { count: experimentCount, error: experimentCountError },
-          { count: sampleCount, error: sampleCountError },
-          { count: literatureCount, error: literatureCountError }
-        ] = await Promise.all([
-          supabase.from("projects").select("*", { count: "exact", head: true }),
-          supabase.from("experiments").select("*", { count: "exact", head: true }),
-          supabase.from("samples").select("*", { count: "exact", head: true }),
-          supabase.from("literature_reviews").select("*", { count: "exact", head: true })
-        ])
-
-        // Log any count errors but don't block the UI
-        if (projectCountError) {
-          console.error("Error fetching project count:", {
-            message: projectCountError.message,
-            details: projectCountError.details,
-            hint: projectCountError.hint,
-            code: projectCountError.code,
-          })
-        }
-        if (experimentCountError) {
-          console.error("Error fetching experiment count:", {
-            message: experimentCountError.message,
-            details: experimentCountError.details,
-            hint: experimentCountError.hint,
-            code: experimentCountError.code,
-          })
-        }
-        if (sampleCountError) {
-          console.error("Error fetching sample count:", {
-            message: sampleCountError.message,
-            details: sampleCountError.details,
-            hint: sampleCountError.hint,
-            code: sampleCountError.code,
-          })
-        }
-        if (literatureCountError) {
-          console.error("Error fetching literature count:", {
-            message: literatureCountError.message,
-            details: literatureCountError.details,
-            hint: literatureCountError.hint,
-            code: literatureCountError.code,
-          })
-        }
-
-        setCounts({
-          projects: projectCount || 0,
-          experiments: experimentCount || 0,
-          samples: sampleCount || 0,
-          literature: literatureCount || 0
-        })
-
       } catch (error) {
         console.error("Error loading sidebar data:", error)
       } finally {
@@ -745,24 +682,6 @@ export function AppSidebar() {
                   (pathname === item.href ||
                     pathname.startsWith(item.href + "/"));
 
-                // Only show badge for these items and only if count > 0
-                let badge: number | null = null;
-                if (item.name === "Projects" && counts.projects > 0) {
-                  badge = counts.projects;
-                } else if (
-                  item.name === "Experiments" &&
-                  counts.experiments > 0
-                ) {
-                  badge = counts.experiments;
-                } else if (item.name === "Samples" && counts.samples > 0) {
-                  badge = counts.samples;
-                } else if (
-                  item.name === "Literature" &&
-                  counts.literature > 0
-                ) {
-                  badge = counts.literature;
-                }
-
                 return (
                   <SidebarMenuItem key={item.name}>
                     <SidebarMenuButton
@@ -778,11 +697,6 @@ export function AppSidebar() {
                         </span>
                       </Link>
                     </SidebarMenuButton>
-                    {badge !== null && !isIconMode && (
-                    <SidebarMenuBadge className="bg-[var(--accent)]/35 text-[var(--accent-foreground)]">
-                      {badge}
-                    </SidebarMenuBadge>
-                    )}
                   </SidebarMenuItem>
                 );
               })}
@@ -885,7 +799,7 @@ export function AppSidebar() {
                                   </SidebarMenuButton>
                                   <button
                                     type="button"
-                                    className="flex h-5 min-w-[1.25rem] shrink-0 items-center justify-center rounded-md text-xs font-medium tabular-nums text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground transition-colors"
+                                    className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground transition-colors"
                                     onClick={() =>
                                       setOpenProjects((prev) => ({
                                         ...prev,
@@ -894,7 +808,12 @@ export function AppSidebar() {
                                     }
                                     aria-label={isProjectOpen ? "Collapse project" : "Expand project"}
                                   >
-                                    {project.experiment_count ?? 0}
+                                    <ChevronDown
+                                      className={cn(
+                                        "size-4 transition-transform duration-200",
+                                        isProjectOpen ? "rotate-180" : "rotate-0"
+                                      )}
+                                    />
                                   </button>
                                 </div>
 

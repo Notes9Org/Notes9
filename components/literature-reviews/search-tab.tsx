@@ -14,7 +14,6 @@ interface SearchTabProps {
   onSearch: () => void
   onStagePaper: (paper: SearchPaper) => void
   isPaperStaged: (paperId: string) => boolean
-  onDownloadToRepository: (paper: SearchPaper) => Promise<void>
 }
 
 export function SearchTab({
@@ -26,7 +25,6 @@ export function SearchTab({
   onSearch,
   onStagePaper,
   isPaperStaged,
-  onDownloadToRepository,
 }: SearchTabProps) {
   const handleSearch = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -111,7 +109,6 @@ export function SearchTab({
                 paper={paper}
                 onStage={onStagePaper}
                 isStaged={isPaperStaged(paper.id)}
-                onDownloadToRepository={onDownloadToRepository}
               />
             ))}
           </div>

@@ -46,8 +46,31 @@ export default async function HomePage({
     redirect("/dashboard")
   }
 
+  const organizationJsonLd = {
+    "@context": "https://schema.org",
+    "@type": "Organization",
+    name: "Notes9",
+    url: "https://notes9.com",
+    logo: "https://notes9.com/notes9-logo.png",
+  }
+
+  const websiteJsonLd = {
+    "@context": "https://schema.org",
+    "@type": "WebSite",
+    name: "Notes9",
+    url: "https://notes9.com",
+  }
+
   return (
     <div className={`marketing-theme ${dmSans.variable} ${dmSerif.variable} font-sans min-h-screen flex flex-col bg-background text-foreground relative overflow-hidden`}>
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(organizationJsonLd) }}
+      />
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(websiteJsonLd) }}
+      />
       <InteractiveParticles variant="marketing" />
       <div className="marketing-mesh pointer-events-none absolute inset-0 opacity-[0.15] dark:opacity-[0.08]" />
       <div className="relative z-10 flex flex-col min-h-screen">

@@ -23,18 +23,20 @@ interface FinalizePayload {
   action: FinalizeAction
   saveMode: SaveMode
   literatureId?: string
-  newRecordData?: {
-    title?: string
-    authors?: string
-    journal?: string
-    publication_year?: number | null
+    newRecordData?: {
+      title?: string
+      authors?: string
+      journal?: string
+      publication_year?: number | null
     doi?: string
     pmid?: string
     abstract?: string
-    personal_notes?: string
-    url?: string
-    keywords?: string[]
-  }
+      personal_notes?: string
+      url?: string
+      keywords?: string[]
+      project_id?: string | null
+      experiment_id?: string | null
+    }
   tempUploadPath: string
   fileName: string
   checksum: string
@@ -113,6 +115,8 @@ export async function POST(request: Request) {
           personal_notes: clampText(record.personal_notes, "personal_notes"),
           url: clampText(record.url, "url"),
           keywords: Array.isArray(record.keywords) ? record.keywords.slice(0, 20) : null,
+          project_id: record.project_id || null,
+          experiment_id: record.experiment_id || null,
           status: "saved",
           created_by: user.id,
           organization_id: organizationId,

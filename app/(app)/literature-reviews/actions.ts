@@ -68,7 +68,13 @@ async function attachOpenAccessPdf(params: {
   }
 }
 
-export async function savePaperToRepository(paper: SearchPaper) {
+export async function savePaperToRepository(
+  paper: SearchPaper,
+  options?: {
+    projectId?: string | null
+    experimentId?: string | null
+  }
+) {
   try {
     const supabase = await createClient()
     const { data: { user } } = await supabase.auth.getUser()
@@ -114,6 +120,8 @@ export async function savePaperToRepository(paper: SearchPaper) {
         doi: normalizedDoi || null,
         pmid: paper.pmid || null,
         abstract: paper.abstract,
+        project_id: options?.projectId || null,
+        experiment_id: options?.experimentId || null,
         status: "saved",
         created_by: user.id,
         organization_id: profile?.organization_id,

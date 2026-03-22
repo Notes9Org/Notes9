@@ -27,6 +27,32 @@ export default async function LiteratureReviewsPage() {
     `)
     .order("created_at", { ascending: false })
 
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("organization_id")
+    .eq("id", user.id)
+    .single()
+
+  const organizationId = profile?.organization_id
+
+  const { data: projects = [] } = organizationId
+    ? await supabase
+        .from("projects")
+        .select("id, name")
+        .eq("organization_id", organizationId)
+        .order("name")
+    : { data: [] as { id: string; name: string }[] }
+
+  const projectIds = projects.map((project) => project.id)
+  const { data: experiments = [] } =
+    organizationId && projectIds.length > 0
+      ? await supabase
+          .from("experiments")
+          .select("id, name, project_id")
+          .in("project_id", projectIds)
+          .order("name")
+      : { data: [] as { id: string; name: string; project_id: string }[] }
+
   return (
     <div className="space-y-4 md:space-y-6">
       {/* Header: stacked on mobile */}
@@ -38,7 +64,11 @@ export default async function LiteratureReviewsPage() {
           </p>
         </div>
         <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
-          <UploadLiteraturePdfDialog literatureReviews={(literatureReviews ?? []) as any} />
+          <UploadLiteraturePdfDialog
+            literatureReviews={(literatureReviews ?? []) as any}
+            projects={projects}
+            experiments={experiments}
+          />
           <Button asChild className="w-full sm:w-auto">
             <Link href="/literature-reviews/new">
               <Plus className="h-4 w-4 mr-2" />
@@ -49,7 +79,11 @@ export default async function LiteratureReviewsPage() {
       </div>
 
       {/* Tabs */}
-      <LiteratureTabs literatureReviews={literatureReviews} />
+      <LiteratureTabs
+        literatureReviews={literatureReviews}
+        projects={projects}
+        experiments={experiments}
+      />
     </div>
   )
 }
