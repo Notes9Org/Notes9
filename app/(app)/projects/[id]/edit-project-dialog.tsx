@@ -27,6 +27,7 @@ import { useToast } from "@/hooks/use-toast"
 import { useRouter } from "next/navigation"
 import { Pencil, Loader2 } from "lucide-react"
 import { getUniqueNameErrorMessage } from "@/lib/unique-name-error"
+import { DATE_ORDER_ERROR, isEndDateBeforeStartDate } from "@/lib/date-order"
 
 interface Project {
   id: string
@@ -66,6 +67,7 @@ export function EditProjectDialog({ project, asMenuItem = false, open: controlle
   const [priority, setPriority] = useState(project.priority || "medium")
   const [startDate, setStartDate] = useState(project.start_date || "")
   const [endDate, setEndDate] = useState(project.end_date || "")
+  const hasInvalidDateOrder = isEndDateBeforeStartDate(startDate, endDate)
 
   // Reset form when dialog opens
   useEffect(() => {
@@ -83,6 +85,14 @@ export function EditProjectDialog({ project, asMenuItem = false, open: controlle
       toast({
         title: "Validation Error",
         description: "Project name is required.",
+        variant: "destructive",
+      })
+      return
+    }
+    if (hasInvalidDateOrder) {
+      toast({
+        title: "Validation Error",
+        description: `${DATE_ORDER_ERROR} Please select a later date than the start date.`,
         variant: "destructive",
       })
       return
@@ -199,12 +209,19 @@ export function EditProjectDialog({ project, asMenuItem = false, open: controlle
               <Input
                 id="end_date"
                 type="date"
+                min={startDate || undefined}
                 value={endDate}
                 onChange={(e) => setEndDate(e.target.value)}
                 disabled={isSaving}
               />
             </div>
           </div>
+
+          {hasInvalidDateOrder && (
+            <div className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">
+              {DATE_ORDER_ERROR} Please select a later date than the start date.
+            </div>
+          )}
 
           {/* Description */}
           <div className="space-y-2">

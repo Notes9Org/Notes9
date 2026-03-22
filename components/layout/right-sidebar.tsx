@@ -6,7 +6,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import { useChat } from '@ai-sdk/react';
 import { DefaultChatTransport } from 'ai';
 import { Button } from '@/components/ui/button';
-import { ScrollArea } from '@/components/ui/scroll-area';
+import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 import {
   Tooltip,
@@ -44,6 +44,8 @@ import { MessageActions } from '@/components/catalyst/message-actions';
 import { Notes9VideoLoader } from '@/components/brand/notes9-video-loader';
 import { toast } from 'sonner';
 import { createClient } from '@/lib/supabase/client';
+import { useResizable } from '@/hooks/use-resizable';
+import { ResizeHandle } from '@/components/ui/resize-handle';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -124,6 +126,12 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
   const [expandedHistoryOpen, setExpandedHistoryOpen] = useState(true);
   const [showAllPastChats, setShowAllPastChats] = useState(false);
   const previousPathnameRef = useRef(pathname);
+  const historySidebar = useResizable({
+    initialWidth: 224,
+    minWidth: 208,
+    maxWidth: 420,
+    direction: 'left',
+  });
 
   const resizeInput = useCallback((reset = false) => {
     const textarea = inputRef.current;
@@ -754,7 +762,7 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
                               <History className="size-4" />
                             </Button>
                         </DropdownMenuTrigger>
-                        <DropdownMenuContent align="start" className="flex w-[280px] max-w-[min(280px,90vw)] flex-col p-0 overflow-hidden" sideOffset={4}>
+                        <DropdownMenuContent align="start" className="flex w-[290px] max-w-[min(290px,calc(100vw-2rem))] flex-col p-0 overflow-hidden" sideOffset={4}>
                           <div className="p-2 text-xs font-semibold text-muted-foreground/80 uppercase tracking-wider border-b shrink-0">
                             History
                           </div>
@@ -764,18 +772,28 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
                                 <div className="py-6 text-center text-muted-foreground text-xs">No history yet.</div>
                               ) : (
                                 sessions.map(session => (
-                                  <div key={session.id} className="flex items-center gap-1 group/hist w-full min-w-0 rounded-md">
+                                  <div key={session.id} className="group/hist relative flex w-full min-w-max items-center overflow-hidden rounded-md pr-1">
                                     <button
                                       type="button"
                                       onClick={() => loadSession(session.id)}
                                       className={cn(
-                                        "flex-1 min-w-0 flex items-center justify-between gap-2 px-3 py-2 text-left text-sm rounded-md transition-colors overflow-hidden",
+                                        "flex min-w-max max-w-full items-center justify-between gap-3 overflow-hidden rounded-md px-2 py-1.5 pr-12 text-left text-sm transition-colors",
                                         currentSessionId === session.id
-                                          ? "bg-[color:var(--ai-soft)] text-foreground"
-                                          : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
+                                          ? "bg-sidebar-accent text-sidebar-accent-foreground"
+                                          : "text-muted-foreground hover:text-foreground"
                                       )}
                                     >
-                                      <span className="truncate min-w-0 flex-1">{session.title || 'New conversation'}</span>
+                                      <span
+                                        className={cn(
+                                          "block whitespace-nowrap rounded-full px-2.5 py-1 transition-colors",
+                                          currentSessionId === session.id
+                                            ? "bg-sidebar-accent-foreground/12 text-sidebar-accent-foreground"
+                                            : "group-hover/hist:bg-gradient-to-r group-hover/hist:from-[var(--primary)]/28 group-hover/hist:via-[var(--accent)]/85 group-hover/hist:to-[var(--accent)]/32"
+                                        )}
+                                        title={session.title || 'New conversation'}
+                                      >
+                                        {session.title || 'New conversation'}
+                                      </span>
                                       <span className="text-[10px] shrink-0 opacity-70">
                                         {new Date(session.updated_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
                                       </span>
@@ -784,7 +802,10 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
                                       type="button"
                                       variant="ghost"
                                       size="icon"
-                                      className="h-7 w-7 shrink-0 text-muted-foreground hover:text-destructive flex-shrink-0"
+                                      className={cn(
+                                        "absolute right-1 top-1/2 z-10 h-7 w-7 -translate-y-1/2 rounded-full border border-border/35 bg-background/82 text-destructive shadow-sm backdrop-blur-md transition-opacity hover:bg-background hover:text-destructive",
+                                        currentSessionId === session.id ? "opacity-100" : "opacity-0 group-hover/hist:opacity-100"
+                                      )}
                                       onClick={(e) => handleDeleteSession(e, session.id)}
                                       aria-label="Delete chat"
                                     >
@@ -794,6 +815,7 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
                                 ))
                               )}
                             </div>
+                            <ScrollBar orientation="horizontal" />
                           </ScrollArea>
                         </DropdownMenuContent>
                       </DropdownMenu>
@@ -827,7 +849,14 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
           <div className={cn("flex-1 flex min-h-0 overflow-hidden", isExpanded ? "flex-row" : "flex-col")}>
             {/* Full-screen only: left sidebar with previous conversations (lab-notes-style, toggleable) */}
             {isExpanded && expandedHistoryOpen && (
-              <aside className="w-56 flex-shrink-0 flex flex-col overflow-hidden border-r border-border bg-sidebar transition-[width] duration-200 ease-in-out min-h-0">
+              <>
+                <aside
+                  className="flex-shrink-0 flex flex-col overflow-hidden border-r border-border bg-sidebar transition-[width] duration-200 ease-in-out min-h-0"
+                  style={{
+                    width: historySidebar.width,
+                    transition: historySidebar.isResizing ? 'none' : 'width 0.15s cubic-bezier(0.4, 0, 0.2, 1)',
+                  }}
+                >
                 <div className="flex h-full min-h-0 flex-col gap-1 p-2">
                   {/* Header row - back arrow to hide history (like lab notes collapse) */}
                   <div className="flex h-8 shrink-0 items-center gap-2 rounded-md px-2 text-xs font-medium text-sidebar-foreground/70">
@@ -852,11 +881,11 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
                     </Button>
                   </div>
                   {/* List - same structure as lab notes */}
-                  <div className="flex min-h-0 flex-1 flex-col gap-1 overflow-auto">
+                  <ScrollArea className="min-h-0 flex-1 overflow-hidden">
                     {sessions.length === 0 ? (
-                      <div className="px-2 py-6 text-center text-sidebar-foreground/70 text-xs">No previous conversations.</div>
+                    <div className="px-2 py-6 text-center text-sidebar-foreground/70 text-xs">No previous conversations.</div>
                     ) : (
-                      <ul className="flex w-full min-w-0 flex-col gap-0.5">
+                      <ul className="flex min-w-max flex-col gap-0.5 pr-1">
                         {sessions.map((session) => (
                           <li key={session.id} className="group/row relative">
                             <div
@@ -865,18 +894,30 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
                               onClick={() => loadSession(session.id)}
                               onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); loadSession(session.id); } }}
                               className={cn(
-                                "grid w-full min-h-9 grid-cols-[auto_1fr_auto] items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm outline-none transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
+                                "grid min-h-9 min-w-max grid-cols-[auto_1fr_auto] items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm outline-none transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
                                 currentSessionId === session.id && "bg-sidebar-accent font-medium text-sidebar-accent-foreground"
                               )}
                             >
                               <span className="flex size-8 shrink-0 items-center justify-center text-[10px] text-sidebar-foreground/70 tabular-nums whitespace-nowrap" aria-hidden>
                                 {formatSessionTime(session.updated_at)}
                               </span>
-                              <span className="min-w-0 truncate font-medium block">{session.title || 'New conversation'}</span>
+                              <span
+                                className={cn(
+                                  "block whitespace-nowrap rounded-full px-2.5 py-1 font-medium transition-colors",
+                                  currentSessionId === session.id
+                                    ? "bg-sidebar-accent-foreground/12 text-sidebar-accent-foreground"
+                                    : "group-hover/row:bg-gradient-to-r group-hover/row:from-[var(--primary)]/28 group-hover/row:via-[var(--accent)]/85 group-hover/row:to-[var(--accent)]/32"
+                                )}
+                              >
+                                {session.title || 'New conversation'}
+                              </span>
                               <Button
                                 variant="ghost"
                                 size="icon"
-                                className="size-8 shrink-0 opacity-70 hover:opacity-100 text-sidebar-foreground/70 hover:text-destructive"
+                                className={cn(
+                                  "size-8 shrink-0 text-sidebar-foreground/70 transition-opacity hover:text-destructive",
+                                  currentSessionId === session.id ? "opacity-100" : "opacity-0 group-hover/row:opacity-100"
+                                )}
                                 onClick={(e) => handleDeleteSession(e, session.id)}
                                 aria-label="Delete chat"
                               >
@@ -887,9 +928,17 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
                         ))}
                       </ul>
                     )}
-                  </div>
+                    <ScrollBar orientation="horizontal" />
+                  </ScrollArea>
                 </div>
               </aside>
+              <ResizeHandle
+                onMouseDown={historySidebar.handleMouseDown}
+                isResizing={historySidebar.isResizing}
+                position="right"
+                className="z-10 shrink-0 bg-border/10 hover:bg-border/35"
+              />
+              </>
             )}
 
             {/* Main chat area (narrow: only this; full screen: right side) */}
@@ -903,7 +952,7 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
                       <img
                         src="/notes9-loading-transparent.apng"
                         alt="Catalyst AI mascot"
-                        className="relative z-10 h-auto w-[138px] object-contain"
+                        className="relative z-10 h-auto w-[138px] object-contain [filter:sepia(0.2)_saturate(0.78)_hue-rotate(-8deg)_brightness(0.5)_contrast(1.48)] dark:[filter:none]"
                       />
                     </div>
                     <h2 className="text-lg font-bold tracking-tight bg-gradient-to-r from-orange-500 to-pink-600 bg-clip-text text-transparent">
@@ -933,13 +982,13 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
                         return (
                           <div key={message.id} className={cn('group/message flex gap-4 w-full', message.role === 'user' ? 'justify-end' : 'justify-start')}>
                             {message.role === 'assistant' && (
-                            <div className="mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-full border border-border/60 bg-[rgba(124,82,52,0.05)] shadow-sm dark:bg-background dark:border-border">
+                          <div className="mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-full border border-border/60 bg-[rgba(124,82,52,0.05)] shadow-sm dark:bg-background dark:border-border">
                                 <Image
                                   src="/notes9-mascot-ghost-transparent.png"
                                   alt="Notes9 assistant"
                                   width={18}
                                   height={18}
-                                  className="size-[18px] object-contain [filter:sepia(0.42)_saturate(1.06)_hue-rotate(-12deg)_brightness(0.84)] dark:[filter:none]"
+                                  className="size-[18px] object-contain [filter:sepia(0.24)_saturate(0.82)_hue-rotate(-8deg)_brightness(0.42)_contrast(1.58)] dark:[filter:none]"
                                 />
                               </div>
                             )}

@@ -30,6 +30,7 @@ import { cn } from "@/lib/utils"
 import { useRouter } from "next/navigation"
 import { Pencil, Loader2 } from "lucide-react"
 import { getUniqueNameErrorMessage } from "@/lib/unique-name-error"
+import { DATE_ORDER_ERROR, isEndDateBeforeStartDate } from "@/lib/date-order"
 
 interface Experiment {
   id: string
@@ -82,6 +83,7 @@ export function EditExperimentDialog({
   const [status, setStatus] = useState(experiment.status)
   const [startDate, setStartDate] = useState(experiment.start_date || "")
   const [completionDate, setCompletionDate] = useState(experiment.completion_date || "")
+  const hasInvalidDateOrder = isEndDateBeforeStartDate(startDate, completionDate)
   const [projectId, setProjectId] = useState(experiment.project_id)
   const [assignedTo, setAssignedTo] = useState(experiment.assigned_to || "")
 
@@ -113,6 +115,14 @@ export function EditExperimentDialog({
       toast({
         title: "Description too long",
         description: `Description must be 1000 words or fewer (currently ${descWords} words).`,
+        variant: "destructive",
+      })
+      return
+    }
+    if (hasInvalidDateOrder) {
+      toast({
+        title: "Validation Error",
+        description: `${DATE_ORDER_ERROR} Please select a later date than the start date.`,
         variant: "destructive",
       })
       return
@@ -276,12 +286,19 @@ export function EditExperimentDialog({
               <Input
                 id="completion_date"
                 type="date"
+                min={startDate || undefined}
                 value={completionDate}
                 onChange={(e) => setCompletionDate(e.target.value)}
                 disabled={isSaving}
               />
             </div>
           </div>
+
+          {hasInvalidDateOrder && (
+            <div className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">
+              {DATE_ORDER_ERROR} Please select a later date than the start date.
+            </div>
+          )}
 
           {/* Description */}
           <div className="space-y-2">

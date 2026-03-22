@@ -777,7 +777,9 @@ export function AppSidebar() {
                       </Link>
                     </SidebarMenuButton>
                     {badge !== null && !isIconMode && (
-                      <SidebarMenuBadge>{badge}</SidebarMenuBadge>
+                    <SidebarMenuBadge className="bg-[var(--accent)]/35 text-[var(--accent-foreground)]">
+                      {badge}
+                    </SidebarMenuBadge>
                     )}
                   </SidebarMenuItem>
                 );
@@ -867,6 +869,7 @@ export function AppSidebar() {
                                         e.dataTransfer.effectAllowed = 'copy';
                                       }}
                                       onClick={(e) => e.stopPropagation()}
+                                      className="w-full"
                                     >
                                       <span
                                         className={cn(

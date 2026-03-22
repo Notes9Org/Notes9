@@ -42,7 +42,7 @@ export function CatalystSidebar({
             <img
               src="/notes9-loading-transparent.apng"
               alt="Catalyst AI mascot"
-              className="relative z-10 h-auto w-[112px] object-contain"
+              className="relative z-10 h-auto w-[112px] object-contain [filter:sepia(0.2)_saturate(0.78)_hue-rotate(-8deg)_brightness(0.5)_contrast(1.48)] dark:[filter:none]"
             />
           </div>
           <span className="text-sm font-semibold bg-gradient-to-r from-orange-500 to-pink-600 bg-clip-text text-transparent">
