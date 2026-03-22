@@ -38,7 +38,7 @@ export default async function ExperimentsPage() {
               <p className="text-muted-foreground">
                 Manage and track all experimental procedures
               </p>
-              <Button asChild size="icon" variant="ghost" className="shrink-0 size-8 rounded-md text-muted-foreground hover:bg-muted hover:text-foreground transition-colors" aria-label="New experiment">
+              <Button id="tour-create-experiment" asChild size="icon" variant="ghost" className="shrink-0 size-8 rounded-md text-muted-foreground hover:bg-muted hover:text-foreground transition-colors" aria-label="New experiment">
                 <Link href="/experiments/new">
                   <Plus className="size-4" />
                 </Link>
@@ -47,7 +47,7 @@ export default async function ExperimentsPage() {
             <Card>
               <CardContent className="flex flex-col items-center justify-center py-12">
                 <p className="text-muted-foreground mb-4">No experiments yet</p>
-                <Button asChild>
+                <Button id="tour-create-experiment" asChild>
                   <Link href="/experiments/new">
                     <Plus className="h-4 w-4 mr-2" />
                     Create First Experiment

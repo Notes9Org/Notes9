@@ -4,9 +4,9 @@ import { useEffect, useState } from "react"
 import { usePathname } from "next/navigation"
 import { Notes9LoaderVariant, Notes9VideoLoader } from "@/components/brand/notes9-video-loader"
 
-const MIN_LOADER_DURATION_MS = 4200
-const MAX_LOADER_DURATION_MS = 18000
-const AUTH_MAX_LOADER_DURATION_MS = 10 * 60 * 1000
+const MIN_LOADER_DURATION_MS = 350
+const MAX_LOADER_DURATION_MS = 8000
+const AUTH_MAX_LOADER_DURATION_MS = 12000
 
 const RESEARCH_FUN_FACTS = [
   "Researchers often spend more time finding prior context than rewriting the final paragraph.",
