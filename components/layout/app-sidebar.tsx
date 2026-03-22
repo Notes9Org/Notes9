@@ -767,7 +767,7 @@ export function AppSidebar() {
                       asChild
                       isActive={isActive}
                       tooltip={isIconMode ? item.name : undefined}
-                      className="group transition-all duration-150 hover:bg-sidebar-foreground/22 hover:text-sidebar-foreground active:scale-[0.985] active:bg-sidebar-foreground/28 dark:hover:bg-sidebar-accent dark:hover:text-sidebar-accent-foreground dark:active:scale-[0.985] dark:active:bg-sidebar-accent/95 data-[active=true]:bg-transparent data-[active=true]:text-sidebar-foreground"
+                      className="group transition-all duration-150 hover:bg-[color:color-mix(in_oklab,var(--background)_78%,var(--primary)_22%)] hover:text-sidebar-foreground active:scale-[0.985] active:bg-[color:color-mix(in_oklab,var(--background)_70%,var(--primary)_30%)] dark:hover:bg-sidebar-accent dark:hover:text-sidebar-accent-foreground dark:active:scale-[0.985] dark:active:bg-sidebar-accent/90 data-[active=true]:bg-transparent data-[active=true]:text-sidebar-foreground"
                     >
                       <Link href={item.href}>
                         <Icon />
@@ -853,7 +853,7 @@ export function AppSidebar() {
                                     asChild
                                     isActive={mounted && pathname === `/projects/${project.id}`}
                                     tooltip={project.name}
-                                    className="group min-w-0 flex-1 gap-2 pl-0 transition-all duration-150 hover:bg-sidebar-foreground/22 hover:text-sidebar-foreground active:scale-[0.985] active:bg-sidebar-foreground/28 dark:hover:bg-sidebar-accent dark:hover:text-sidebar-accent-foreground dark:active:scale-[0.985] dark:active:bg-sidebar-accent/95 data-[active=true]:bg-transparent data-[active=true]:text-sidebar-foreground"
+                                    className="group min-w-0 flex-1 gap-2 pl-0 transition-all duration-150 hover:bg-[color:color-mix(in_oklab,var(--background)_78%,var(--primary)_22%)] hover:text-sidebar-foreground active:scale-[0.985] active:bg-[color:color-mix(in_oklab,var(--background)_70%,var(--primary)_30%)] dark:hover:bg-sidebar-accent dark:hover:text-sidebar-accent-foreground dark:active:scale-[0.985] dark:active:bg-sidebar-accent/90 data-[active=true]:bg-transparent data-[active=true]:text-sidebar-foreground"
                                   >
                                     <Link
                                       href={`/projects/${project.id}`}
@@ -936,7 +936,7 @@ export function AppSidebar() {
                                                 "group min-w-0 flex-1 rounded-md px-2 py-1.5 text-left text-sm truncate cursor-grab active:cursor-grabbing transition-all duration-150",
                                                 pathname === `/experiments/${exp.id}`
                                                   ? "text-sidebar-foreground"
-                                                  : "text-sidebar-foreground/70 hover:bg-sidebar-foreground/22 hover:text-sidebar-foreground active:scale-[0.985] active:bg-sidebar-foreground/28 dark:hover:bg-sidebar-accent dark:hover:text-sidebar-accent-foreground dark:active:scale-[0.985] dark:active:bg-sidebar-accent/95"
+                                                  : "text-sidebar-foreground/70 hover:bg-[color:color-mix(in_oklab,var(--background)_78%,var(--primary)_22%)] hover:text-sidebar-foreground active:scale-[0.985] active:bg-[color:color-mix(in_oklab,var(--background)_70%,var(--primary)_30%)] dark:hover:bg-sidebar-accent dark:hover:text-sidebar-accent-foreground dark:active:scale-[0.985] dark:active:bg-sidebar-accent/90"
                                               )}
                                             >
                                               <span className={cn("truncate", pathname === `/experiments/${exp.id}` && "font-semibold")}>
@@ -969,7 +969,7 @@ export function AppSidebar() {
                                                     "group flex w-full min-w-0 items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs truncate cursor-grab active:cursor-grabbing transition-all duration-150 [&>svg]:size-4 [&>svg]:shrink-0",
                                                     pathname.startsWith(`/experiments/${exp.id}`)
                                                       ? "text-sidebar-foreground"
-                                                      : "text-sidebar-foreground/70 hover:bg-sidebar-foreground/22 hover:text-sidebar-foreground active:scale-[0.985] active:bg-sidebar-foreground/28 dark:hover:bg-sidebar-accent dark:hover:text-sidebar-accent-foreground dark:active:scale-[0.985] dark:active:bg-sidebar-accent/95"
+                                                      : "text-sidebar-foreground/70 hover:bg-[color:color-mix(in_oklab,var(--background)_78%,var(--primary)_22%)] hover:text-sidebar-foreground active:scale-[0.985] active:bg-[color:color-mix(in_oklab,var(--background)_70%,var(--primary)_30%)] dark:hover:bg-sidebar-accent dark:hover:text-sidebar-accent-foreground dark:active:scale-[0.985] dark:active:bg-sidebar-accent/90"
                                                   )}
                                                 >
                                                   <NotebookPen className="size-4 shrink-0" />
