@@ -255,27 +255,42 @@
 
 .n9-pdf-text-layer {
   position: absolute;
+  text-align: initial;
   inset: 0;
-  overflow: hidden;
+  overflow: clip;
   line-height: 1;
+  -webkit-text-size-adjust: none;
+  text-size-adjust: none;
   forced-color-adjust: none;
+  transform-origin: 0 0;
+  caret-color: CanvasText;
   z-index: 2;
   opacity: 1;
 }
 
-.n9-pdf-text-layer span,
-.n9-pdf-text-layer br {
+.n9-pdf-text-layer :is(span, br) {
   position: absolute;
   white-space: pre;
   transform-origin: 0% 0%;
   color: transparent !important;
   -webkit-text-fill-color: transparent;
-  -webkit-text-stroke: 0 transparent;
-  text-shadow: none;
-  background: transparent;
   cursor: text;
   user-select: text;
-  caret-color: transparent;
+}
+
+.n9-pdf-text-layer > :not(.markedContent),
+.n9-pdf-text-layer .markedContent span:not(.markedContent) {
+  z-index: 1;
+}
+
+.n9-pdf-text-layer span.markedContent {
+  top: 0;
+  height: 0;
+}
+
+.n9-pdf-text-layer span[role="img"] {
+  user-select: none;
+  cursor: default;
 }
 
 .n9-pdf-text-layer ::selection {

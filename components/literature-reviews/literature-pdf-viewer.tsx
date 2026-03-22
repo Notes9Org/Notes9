@@ -132,9 +132,11 @@ export function LiteraturePdfViewer({ pdfUrl, annotations, onCreateAnnotation }:
       canvas.style.height = `${viewport.height}px`
       pageContainer.style.width = `${viewport.width}px`
       pageContainer.style.height = `${viewport.height}px`
+      pageContainer.style.setProperty("--scale-factor", `${viewport.scale}`)
       textLayerContainer.replaceChildren()
       textLayerContainer.style.width = `${viewport.width}px`
       textLayerContainer.style.height = `${viewport.height}px`
+      textLayerContainer.style.setProperty("--scale-factor", `${viewport.scale}`)
       setViewportSize({ width: viewport.width, height: viewport.height })
 
       await page.render({ canvasContext: context, viewport }).promise
@@ -379,7 +381,7 @@ export function LiteraturePdfViewer({ pdfUrl, annotations, onCreateAnnotation }:
             }}
           >
             <canvas ref={canvasRef} className="absolute inset-0 block bg-white" />
-            <div ref={textLayerRef} className="n9-pdf-text-layer absolute inset-0 overflow-hidden" />
+            <div ref={textLayerRef} className="n9-pdf-text-layer textLayer absolute inset-0 overflow-hidden" />
             {pageAnnotations.map((annotation) =>
               annotation.rects?.map((rect, index) => (
                 <div
@@ -447,11 +449,11 @@ export function LiteraturePdfViewer({ pdfUrl, annotations, onCreateAnnotation }:
         open={composerState.open}
         onOpenChange={(open) => setComposerState((current) => ({ ...current, open, content: open ? current.content : "" }))}
       >
-        <DialogContent className="max-h-[90vh] max-w-[min(96vw,1100px)] overflow-y-auto">
+        <DialogContent className="flex max-h-[92vh] w-[min(99vw,1440px)] max-w-[min(99vw,1440px)] flex-col overflow-hidden">
           <DialogHeader>
             <DialogTitle>{composerState.type === "comment" ? "Add comment" : "Add note"}</DialogTitle>
           </DialogHeader>
-          <div className="space-y-4">
+          <div className="flex-1 space-y-4 overflow-y-auto pr-1">
             {composerState.quoteText && (
               <div className="rounded-md border bg-muted/40 p-3 text-sm text-muted-foreground">
                 {composerState.quoteText}
@@ -467,7 +469,7 @@ export function LiteraturePdfViewer({ pdfUrl, annotations, onCreateAnnotation }:
               title={composerState.type}
             />
           </div>
-          <DialogFooter>
+          <DialogFooter className="shrink-0 border-t pt-4 sm:justify-end">
             <Button variant="outline" onClick={() => setComposerState((current) => ({ ...current, open: false, content: "" }))}>
               Cancel
             </Button>
