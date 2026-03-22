@@ -204,6 +204,19 @@ export function AppLayout({ children }: AppLayoutProps) {
     }
   }, [isMobile])
 
+  useEffect(() => {
+    const openSidebar = () => setRightSidebarOpen(true)
+    const closeSidebar = () => setRightSidebarOpen(false)
+
+    window.addEventListener("notes9:tour-open-ai-sidebar", openSidebar)
+    window.addEventListener("notes9:tour-close-ai-sidebar", closeSidebar)
+
+    return () => {
+      window.removeEventListener("notes9:tour-open-ai-sidebar", openSidebar)
+      window.removeEventListener("notes9:tour-close-ai-sidebar", closeSidebar)
+    }
+  }, [])
+
   // Left sidebar: open/collapsed drives column width; when open, width is resizable. Start open (expanded) so sidebar comes open when the app loads.
   const [sidebarOpen, setSidebarOpen] = useState(true)
 
@@ -286,6 +299,7 @@ export function AppLayout({ children }: AppLayoutProps) {
             <div className="flex items-center gap-1 sm:gap-2">
               {/* Theme toggle: one click toggles dark ↔ light (client-only to avoid hydration mismatch) */}
               <Button
+                id="tour-theme-toggle"
                 variant="ghost"
                 size="icon"
                 className="size-8 sm:size-9"
@@ -303,6 +317,7 @@ export function AppLayout({ children }: AppLayoutProps) {
               {/* AI / Right sidebar toggle */}
                 {!rightSidebarOpen && (
                   <Button
+                    id="tour-ai-toggle"
                     variant={rightSidebarOpen ? "default" : "ghost"}
                     size="icon"
                     className="size-8 sm:size-9"

@@ -74,7 +74,7 @@ export function ExperimentsPageContent({ experiments }: { experiments: Experimen
               Table
             </Button>
           </div>
-          <Button asChild size="icon" variant="ghost" className="size-8 rounded-md text-muted-foreground hover:bg-muted hover:text-foreground transition-colors" aria-label="New experiment">
+          <Button id="tour-create-experiment" asChild size="icon" variant="ghost" className="size-8 rounded-md text-muted-foreground hover:bg-muted hover:text-foreground transition-colors" aria-label="New experiment">
             <Link href="/experiments/new">
               <Plus className="size-4" />
             </Link>

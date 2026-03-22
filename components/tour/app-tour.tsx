@@ -1,200 +1,325 @@
 "use client"
 
-import { useEffect, useState } from "react"
-import { driver } from "driver.js"
+import { useEffect, useRef, useState } from "react"
+import { useRouter } from "next/navigation"
+import { driver, type Driver, type PopoverDOM } from "driver.js"
 import "driver.js/dist/driver.css"
-import { useTheme } from "next-themes"
+import { createClient } from "@/lib/supabase/client"
+
+type TourStatus = "completed" | "skipped"
+
+const TOUR_COMPLETED_KEY = "notes9_tour_completed"
+const TOUR_SKIPPED_KEY = "notes9_tour_skipped"
+
+const waitForElement = async (selector: string, timeoutMs = 6000) => {
+  const startedAt = Date.now()
+
+  while (Date.now() - startedAt < timeoutMs) {
+    if (document.querySelector(selector)) {
+      return true
+    }
+
+    await new Promise((resolve) => window.setTimeout(resolve, 120))
+  }
+
+  return false
+}
 
 export function AppTour() {
-    const [mounted, setMounted] = useState(false)
-    const { resolvedTheme } = useTheme()
+  const [mounted, setMounted] = useState(false)
+  const router = useRouter()
+  const driverRef = useRef<Driver | null>(null)
+  const dismissalStatusRef = useRef<TourStatus | null>(null)
+  const persistenceInFlightRef = useRef(false)
+  const suppressDestroyPersistenceRef = useRef(false)
 
-    useEffect(() => {
-        setMounted(true)
-    }, [])
+  useEffect(() => {
+    setMounted(true)
+  }, [])
 
-    useEffect(() => {
-        if (!mounted) return
+  useEffect(() => {
+    if (!mounted) return
 
-        // Check if user has already seen the tour
-        const hasSeenTour = localStorage.getItem("notes9_tour_completed")
-        if (hasSeenTour) return
+    let cancelled = false
+    let timer: number | null = null
+    const supabase = createClient()
+    suppressDestroyPersistenceRef.current = false
 
-        const isDarkMode = resolvedTheme === "dark"
+    const renderMascot = (htmlContent: string) => `
+      <div style="display:flex;gap:12px;align-items:flex-start;margin-top:8px;">
+        <img src="/notes9-mascot.png" class="tour-mascot-animate" alt="Notes9 Mascot" style="width:52px;height:52px;object-fit:contain;flex-shrink:0;border-radius:50%;" />
+        <div style="font-size:14px;line-height:1.45;">${htmlContent}</div>
+      </div>
+    `
 
-        const renderMascot = (htmlContent: string) => `
-            <div style="display: flex; gap: 12px; align-items: flex-start; margin-top: 8px;">
-                <img src="/notes9-mascot.png" class="tour-mascot-animate" alt="Notes9 Mascot" style="width: 52px; height: 52px; object-fit: contain; flex-shrink: 0; border-radius: 50%;" />
-                <div style="font-size: 14px; line-height: 1.5;">${htmlContent}</div>
-            </div>
-        `
+    const persistTourStatus = async (userId: string, status: TourStatus) => {
+      if (persistenceInFlightRef.current) return
+      persistenceInFlightRef.current = true
 
-        const driverObj = driver({
-            showProgress: true,
-            animate: true,
-            smoothScroll: true,
-            showButtons: ["next", "previous", "close"],
-            allowClose: false,
-            overlayOpacity: 0.65,
-            popoverClass: "driverjs-theme-researcher",
-            steps: [
-                {
-                    popover: {
-                        title: "Notes9 Research Workspace",
-                        description: renderMascot("Welcome to your digital laboratory notebook! I'll be your guide. Let's take a brief tour to familiarize you with the core layout."),
-                        side: "top",
-                        align: "center"
-                    }
-                },
-                {
-                    element: "#tour-main-nav",
-                    popover: {
-                        title: "Unified Workspace",
-                        description: renderMascot(`Your entire lab flow is here. 
-                        <ul style="margin-top: 8px; margin-bottom: 0; padding-left: 20px; list-style-type: disc;">
-                            <li><b>Projects</b>: High-level initiatives</li>
-                            <li><b>Experiments</b>: Scientific procedures inside projects</li>
-                            <li><b>Lab Notes</b>: Daily observations and raw data</li>
-                            <li><b>Inventory</b>: Centralized Samples & Equipment</li>
-                        </ul>`),
-                        side: "right",
-                        align: "start"
-                    }
-                },
-                {
-                    element: "a[href='/projects']",
-                    popover: {
-                        title: "1. Projects (Start Here)",
-                        description: renderMascot("Everything in Notes9 follows a strict hierarchy. <b>You must create a Project first.</b> Projects act as the high-level parent containers for all your subsequent research."),
-                        side: "right",
-                        align: "center"
-                    }
-                },
-                {
-                    element: "a[href='/experiments']",
-                    popover: {
-                        title: "2. Experiments",
-                        description: renderMascot("Once you have a Project, you can create Experiments inside it. Log structured procedures, parameters, and results specifically tied to that parent Project."),
-                        side: "right",
-                        align: "center"
-                    }
-                },
-                {
-                    element: "a[href='/lab-notes']",
-                    popover: {
-                        title: "3. Lab Notes",
-                        description: renderMascot("Finally, use Lab Notes for your daily observations tied to an Experiment! <br/><br/><b>Features include:</b><br/>• <b>Cite with AI:</b> Instantly query and cite literature.<br/>• <b>Protocol Linking:</b> Embed reusable SOPs directly.<br/>• <b>Commenting:</b> Collaborate with inline text highlights."),
-                        side: "right",
-                        align: "center"
-                    }
-                },
-                {
-                    element: "a[href='/samples']",
-                    popover: {
-                        title: "Samples",
-                        description: renderMascot("Manage your biological, chemical, and physical inventory. Track physical locations and sample lineage."),
-                        side: "right",
-                        align: "center"
-                    }
-                },
-                {
-                    element: "a[href='/equipment']",
-                    popover: {
-                        title: "Equipment",
-                        description: renderMascot("Log instruments, track maintenance schedules, and book usage times directly tied to your experiments."),
-                        side: "right",
-                        align: "center"
-                    }
-                },
-                {
-                    element: "a[href='/protocols']",
-                    popover: {
-                        title: "Protocols",
-                        description: renderMascot("Standard Operating Procedures (SOPs). Define repeatable steps and reuse them across different experiments."),
-                        side: "right",
-                        align: "center"
-                    }
-                },
-                {
-                    element: "a[href='/literature-reviews']",
-                    popover: {
-                        title: "Literature Reviews",
-                        description: renderMascot("Search for millions of Open Access papers, add them to your library, and have me summarize or extract data directly from them."),
-                        side: "right",
-                        align: "center"
-                    }
-                },
-                {
-                    element: "#tour-search",
-                    popover: {
-                        title: "Global Discovery",
-                        description: renderMascot("Quickly locate any Document, Sample, or Experiment across your entire workspace. Just press <b>Cmd+K</b> anywhere to jump here."),
-                        side: "right",
-                        align: "start"
-                    }
-                },
-                {
-                    element: "#tour-create-new",
-                    popover: {
-                        title: "Start Organizing",
-                        description: renderMascot("Click here to create your first Project. You can create new entities directly from their respective tracking pages."),
-                        side: "bottom",
-                        align: "end"
-                    }
-                },
-                {
-                    element: "#tour-ai-toggle",
-                    popover: {
-                        title: "Intelligent Assistant",
-                        description: renderMascot("Click this sparkles icon to toggle my intelligent AI sidebar! I can analyze your notes, help design experiments, and query literature."),
-                        side: "bottom",
-                        align: "end"
-                    }
-                },
-                {
-                    element: "#tour-ai-chat",
-                    popover: {
-                        title: "Context-Aware AI Chat",
-                        description: renderMascot("Ask complex biomedical questions, upload attachments for extraction, or instruct me to draft protocols directly into the editor."),
-                        side: "left",
-                        align: "end"
-                    }
-                },
-                {
-                    element: "#tour-ai-mode",
-                    popover: {
-                        title: "Specialized Agents",
-                        description: renderMascot("Toggle between <b>General</b> mode for broad web-search capabilities, and <b>Notes9</b> mode to rely strictly on your lab's proprietary data and uploaded papers."),
-                        side: "top",
-                        align: "start"
-                    }
-                },
-                {
-                    element: "#tour-theme-toggle",
-                    popover: {
-                        title: "Personalized Environment",
-                        description: renderMascot("Toggle between light and dark modes. Everything is set up for you—enjoy standardizing your research with Notes9!"),
-                        side: "bottom",
-                        align: "end"
-                    }
-                }
-            ],
-            onDestroyStarted: () => {
-                localStorage.setItem("notes9_tour_completed", "true")
-                driverObj.destroy()
-            }
-        })
+      const timestamp = new Date().toISOString()
+      const updates =
+        status === "completed"
+          ? { notes9_tour_completed_at: timestamp }
+          : { notes9_tour_skipped_at: timestamp }
 
-        // Slight delay to ensure DOM is fully rendered and animations settle before tour starts
-        const timer = setTimeout(() => {
-            driverObj.drive()
-        }, 1200)
+      try {
+        await supabase.from("profiles").update(updates).eq("id", userId)
+      } finally {
+        persistenceInFlightRef.current = false
+      }
+    }
 
-        return () => {
-            clearTimeout(timer)
-            driverObj.destroy()
+    const finalizeTour = async (userId: string, status: TourStatus) => {
+      dismissalStatusRef.current = status
+
+      if (status === "completed") {
+        localStorage.setItem(TOUR_COMPLETED_KEY, "true")
+        localStorage.removeItem(TOUR_SKIPPED_KEY)
+      } else {
+        localStorage.setItem(TOUR_SKIPPED_KEY, "true")
+      }
+
+      await persistTourStatus(userId, status)
+      driverRef.current?.destroy()
+    }
+
+    const navigateAndAdvance = async (href: string, selector: string) => {
+      router.push(href)
+      const found = await waitForElement(selector)
+      if (cancelled) return
+
+      if (found) {
+        driverRef.current?.moveNext()
+        window.requestAnimationFrame(() => driverRef.current?.refresh())
+        return
+      }
+
+      driverRef.current?.moveNext()
+    }
+
+    const injectSkipButton = (popover: PopoverDOM, userId: string) => {
+      const footerButtons = popover.footerButtons
+      if (!footerButtons || footerButtons.querySelector("[data-tour-skip-button='true']")) return
+
+      const skipButton = document.createElement("button")
+      skipButton.type = "button"
+      skipButton.dataset.tourSkipButton = "true"
+      skipButton.textContent = "Skip tour"
+      skipButton.className = "driver-popover-btn"
+      skipButton.style.marginRight = "auto"
+      skipButton.style.marginLeft = "12px"
+      skipButton.style.opacity = "0.85"
+      skipButton.style.minHeight = "36px"
+      skipButton.style.padding = "0 14px"
+      skipButton.style.display = "inline-flex"
+      skipButton.style.alignItems = "center"
+      skipButton.onclick = () => {
+        void finalizeTour(userId, "skipped")
+      }
+      footerButtons.prepend(skipButton)
+    }
+
+    const startTour = async () => {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser()
+
+      if (!user || cancelled) return
+
+      const { data: profile, error } = await supabase
+        .from("profiles")
+        .select("notes9_tour_completed_at, notes9_tour_skipped_at")
+        .eq("id", user.id)
+        .single()
+
+      const shouldSuppressTour =
+        (!error && Boolean(profile?.notes9_tour_completed_at || profile?.notes9_tour_skipped_at)) ||
+        localStorage.getItem(TOUR_COMPLETED_KEY) === "true" ||
+        localStorage.getItem(TOUR_SKIPPED_KEY) === "true"
+
+      if (shouldSuppressTour || cancelled) return
+
+      window.dispatchEvent(new Event("notes9:tour-open-ai-sidebar"))
+
+      const steps = [
+        {
+          popover: {
+            title: "Welcome to Notes9",
+            description: renderMascot("This quick onboarding tour shows you the core research flow: start with a project, add experiments inside it, capture notes, and use the AI sidebar without losing context."),
+            side: "top" as const,
+            align: "center" as const,
+            nextBtnText: "Start tour",
+          },
+        },
+        {
+          element: "#tour-main-nav",
+          popover: {
+            title: "Your research workspace",
+            description: renderMascot("The left navigation follows the structure of a real lab workflow. You will usually move from <b>Projects</b> to <b>Experiments</b>, then into <b>Lab Notes</b>, protocols, inventory, and literature."),
+            side: "right" as const,
+            align: "start" as const,
+          },
+        },
+        {
+          element: "a[href='/projects']",
+          popover: {
+            title: "Projects come first",
+            description: renderMascot("Projects are the top-level containers for each research effort. Create one first so Notes9 has a home for the experiments and notes that follow."),
+            side: "right" as const,
+            align: "center" as const,
+            onNextClick: () => {
+              void navigateAndAdvance("/projects", "#tour-create-project")
+            },
+          },
+        },
+        {
+          element: "#tour-create-project",
+          popover: {
+            title: "Create a project here",
+            description: renderMascot("This is the entry point for a new project. Once a project exists, you can organize experiments, assign collaborators, and keep the whole study grouped together."),
+            side: "bottom" as const,
+            align: "end" as const,
+            onNextClick: () => {
+              void navigateAndAdvance("/experiments", "a[href='/experiments']")
+            },
+          },
+        },
+        {
+          element: "a[href='/experiments']",
+          popover: {
+            title: "Experiments live inside projects",
+            description: renderMascot("Experiments capture the specific procedures and study runs inside a project. Notes9 keeps them linked so your structure stays clear as the work grows."),
+            side: "right" as const,
+            align: "center" as const,
+          },
+        },
+        {
+          element: "#tour-create-experiment",
+          popover: {
+            title: "Create an experiment here",
+            description: renderMascot("Use this button after your project exists. Each experiment can then connect to protocols, samples, equipment usage, and lab notes."),
+            side: "bottom" as const,
+            align: "end" as const,
+          },
+        },
+        {
+          element: "a[href='/lab-notes']",
+          popover: {
+            title: "Capture the work in lab notes",
+            description: renderMascot("Lab Notes are where your daily observations, inline comments, linked protocols, and AI-assisted writing come together during active research."),
+            side: "right" as const,
+            align: "center" as const,
+          },
+        },
+        {
+          element: "a[href='/protocols']",
+          popover: {
+            title: "Reuse protocols across studies",
+            description: renderMascot("Protocols hold your repeatable SOP-style steps so experiments can stay standardized instead of rewriting the same process each time."),
+            side: "right" as const,
+            align: "center" as const,
+          },
+        },
+        {
+          element: "a[href='/literature-reviews']",
+          popover: {
+            title: "Keep literature close to the work",
+            description: renderMascot("The literature area helps you collect papers, read PDFs, and connect evidence directly back into your Notes9 workflow."),
+            side: "right" as const,
+            align: "center" as const,
+          },
+        },
+        {
+          element: "#tour-search",
+          popover: {
+            title: "Search across the workspace",
+            description: renderMascot("Global search lets you jump quickly to projects, experiments, notes, and inventory from anywhere in the app."),
+            side: "right" as const,
+            align: "start" as const,
+          },
+        },
+        {
+          element: "#tour-ai-chat",
+          onHighlightStarted: () => {
+            window.dispatchEvent(new Event("notes9:tour-open-ai-sidebar"))
+          },
+          popover: {
+            title: "Your AI sidebar stays open during onboarding",
+            description: renderMascot("The AI assistant is already open for your first tour so you can see where to ask questions, attach context, and get help without losing your place."),
+            side: "left" as const,
+            align: "end" as const,
+          },
+        },
+        {
+          element: "#tour-ai-mode",
+          onHighlightStarted: () => {
+            window.dispatchEvent(new Event("notes9:tour-open-ai-sidebar"))
+          },
+          popover: {
+            title: "Choose the right AI mode",
+            description: renderMascot("Use <b>General</b> for broad research help and web-aware tasks. Switch to <b>Notes9</b> when you want the assistant to stay grounded in your workspace context and uploaded materials."),
+            side: "top" as const,
+            align: "start" as const,
+          },
+        },
+        {
+          element: "#tour-theme-toggle",
+          popover: {
+            title: "You are ready to work",
+            description: renderMascot("That is the core workflow: create a project, add experiments, document the work, and use the AI sidebar to stay productive. You can switch themes here any time."),
+            side: "bottom" as const,
+            align: "end" as const,
+            doneBtnText: "Finish tour",
+            onNextClick: () => {
+              void finalizeTour(user.id, "completed")
+            },
+          },
+        },
+      ]
+
+      const driverObj = driver({
+        showProgress: true,
+        animate: true,
+        smoothScroll: true,
+        showButtons: ["next", "previous"],
+        allowClose: false,
+        overlayOpacity: 0.65,
+        popoverClass: "driverjs-theme-researcher",
+        nextBtnText: "Next",
+        prevBtnText: "Back",
+        doneBtnText: "Finish tour",
+        onPopoverRender: (popover) => injectSkipButton(popover, user.id),
+        onDestroyStarted: () => {
+          if (suppressDestroyPersistenceRef.current) return
+          if (dismissalStatusRef.current) return
+          dismissalStatusRef.current = "skipped"
+          localStorage.setItem(TOUR_SKIPPED_KEY, "true")
+          void persistTourStatus(user.id, "skipped")
+        },
+        steps,
+      })
+
+      driverRef.current = driverObj
+
+      timer = window.setTimeout(() => {
+        if (!cancelled) {
+          driverObj.drive()
         }
-    }, [mounted, resolvedTheme])
+      }, 900)
+    }
 
-    return null
+    void startTour()
+
+    return () => {
+      cancelled = true
+      if (timer !== null) {
+        window.clearTimeout(timer)
+      }
+      suppressDestroyPersistenceRef.current = true
+      driverRef.current?.destroy()
+      driverRef.current = null
+    }
+  }, [mounted, router])
+
+  return null
 }
