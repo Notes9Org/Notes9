@@ -24,6 +24,7 @@ import {
   Package,
   Users,
   BookOpen,
+  Network,
   Sparkles,
   ChevronLeft,
   PanelLeftClose,
@@ -79,6 +80,7 @@ const navigation = [
   { name: "Equipment", href: "/equipment", icon: Microscope },
   { name: "Protocols", href: "/protocols", icon: FileText },
   { name: "Literature", href: "/literature-reviews", icon: BookOpen },
+  { name: "Research map", href: "/research-map", icon: Network },
   // { name: "Reports", href: "/reports", icon: BarChart3 }, // Hidden for now
 ]
 

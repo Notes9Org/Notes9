@@ -26,6 +26,7 @@ const ROUTE_TITLES: { path: string; title: string }[] = [
   { path: "/equipment", title: "Equipment" },
   { path: "/protocols", title: "Protocols" },
   { path: "/literature-reviews", title: "Literature" },
+  { path: "/research-map", title: "Research map" },
   { path: "/settings", title: "Settings" },
   { path: "/", title: "Dashboard" },
 ]
@@ -329,9 +330,9 @@ export function AppLayout({ children }: AppLayoutProps) {
             </div>
           </header>
 
-          {/* Main Content */}
-          <main className="flex-1 overflow-auto p-3 sm:p-4 md:p-6 min-w-0">
-            <div className="w-full min-w-0">
+          {/* Main Content — flex column so routes can use h-full / flex-1 (e.g. research map) */}
+          <main className="flex min-h-0 flex-1 flex-col overflow-auto p-3 sm:p-4 md:p-6 min-w-0">
+            <div className="flex min-h-0 w-full min-w-0 flex-1 flex-col">
               {children}
             </div>
           </main>
