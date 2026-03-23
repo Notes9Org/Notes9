@@ -16,8 +16,11 @@ import { CatalystInput, type AgentMode } from './catalyst-input';
 import type { Attachment } from './preview-attachment';
 import { CatalystSidebar } from './catalyst-sidebar';
 import type { Vote } from '@/lib/db/schema';
-import { formatCitationDisplay } from '@/lib/utils';
 import { useAgentStream } from '@/hooks/use-agent-stream';
+import {
+  formatNotes9AssistantMarkdown,
+  isPersistedChatMessageId,
+} from '@/lib/notes9-chat-format';
 
 interface CatalystChatProps {
   sessionId?: string;
@@ -31,10 +34,12 @@ export function CatalystChat({ sessionId }: CatalystChatProps) {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [votes, setVotes] = useState<Vote[]>([]);
   const [agentMode, setAgentMode] = useState<AgentMode>('general');
+  const [webSearchEnabled, setWebSearchEnabled] = useState(true);
   const [userId, setUserId] = useState<string>('');
   const [notes9Loading, setNotes9Loading] = useState(false);
 
   const prevStatusRef = useRef<string>('ready');
+  const webSearchEnabledRef = useRef(true);
   const currentSessionRef = useRef<string | null>(sessionId || null);
   const hasLoadedSessionRef = useRef<string | null>(null);
   const supabaseTokenRef = useRef<string | null>(null);
@@ -50,6 +55,10 @@ export function CatalystChat({ sessionId }: CatalystChatProps) {
     });
     return () => subscription.unsubscribe();
   }, [supabase]);
+
+  useEffect(() => {
+    webSearchEnabledRef.current = webSearchEnabled;
+  }, [webSearchEnabled]);
 
   const {
     sessions,
@@ -75,6 +84,7 @@ export function CatalystChat({ sessionId }: CatalystChatProps) {
           messages: request.messages,
           sessionId: currentSessionRef.current,
           supabaseToken: token ?? undefined,
+          webSearch: webSearchEnabledRef.current,
           ...request.body,
         },
       };
@@ -312,8 +322,18 @@ export function CatalystChat({ sessionId }: CatalystChatProps) {
       };
       setMessages((prev) => [...prev, userMessage]);
 
-      // Save user message to DB
-      await saveMessage(sid, 'user', text);
+      const savedUser = await saveMessage(sid, 'user', text);
+      if (savedUser) {
+        setSavedMessageIds((prev) => new Set(prev).add(savedUser.id));
+        setMessages((prev) => {
+          const next = [...prev];
+          const last = next[next.length - 1];
+          if (last?.role === 'user' && last.id === userMessageId) {
+            next[next.length - 1] = { ...last, id: savedUser.id };
+          }
+          return next;
+        });
+      }
 
       const history = messages.map((m) => ({
         role: m.role,
@@ -332,39 +352,7 @@ export function CatalystChat({ sessionId }: CatalystChatProps) {
       setNotes9Loading(false);
 
       if (donePayload) {
-        let formattedAnswer = donePayload.answer;
-        if (donePayload.citations && donePayload.citations.length > 0) {
-          formattedAnswer += '\n\n**References:**\n';
-          donePayload.citations.forEach((citation, index) => {
-            const sourceType = citation.source_type;
-            let route = '';
-            switch (sourceType) {
-              case 'literature_review':
-                route = `/literature-reviews/${citation.source_id}`;
-                break;
-              case 'protocol':
-                route = `/protocols/${citation.source_id}`;
-                break;
-              case 'project':
-                route = `/projects/${citation.source_id}`;
-                break;
-              case 'lab_note':
-              case 'report':
-              default:
-                route = '';
-            }
-            const displayText = formatCitationDisplay({
-              ...citation,
-              excerpt: citation.excerpt ?? undefined,
-            });
-            const sourceLabel = sourceType.replace('_', ' ');
-            if (route) {
-              formattedAnswer += `\n[${index + 1}] [View ${sourceLabel}](${route}): ${displayText}`;
-            } else {
-              formattedAnswer += `\n[${index + 1}] ${sourceLabel}: ${displayText}`;
-            }
-          });
-        }
+        const formattedAnswer = formatNotes9AssistantMarkdown(donePayload);
 
         const assistantMessageId = `assistant-${Date.now()}`;
         const assistantMessage = {
@@ -376,7 +364,18 @@ export function CatalystChat({ sessionId }: CatalystChatProps) {
         };
         setMessages((prev) => [...prev, assistantMessage]);
 
-        await saveMessage(sid, 'assistant', formattedAnswer);
+        const savedAsst = await saveMessage(sid, 'assistant', formattedAnswer);
+        if (savedAsst) {
+          setSavedMessageIds((prev) => new Set(prev).add(savedAsst.id));
+          setMessages((prev) => {
+            const next = [...prev];
+            const last = next[next.length - 1];
+            if (last?.role === 'assistant' && last.id === assistantMessageId) {
+              next[next.length - 1] = { ...last, id: savedAsst.id };
+            }
+            return next;
+          });
+        }
 
         if (messages.length === 0) {
           await updateSessionTitle(sid, text.slice(0, 50) || 'New conversation');
@@ -423,33 +422,28 @@ export function CatalystChat({ sessionId }: CatalystChatProps) {
     return 'content' in message ? String(message.content) : '';
   };
 
-  // Handle editing a message (deletes trailing messages and regenerates)
-  // Following exact Vercel Chat SDK pattern:
-  // 1. Delete trailing messages from DB (at and after this message's timestamp)
-  // 2. Update UI to keep messages up to the edited one (with new content)
-  // 3. Call regenerate() to re-send the last user message
+  // Edit user message: trim thread, persist, then re-run General (regenerate) or Notes9 agent.
   const handleEditMessage = useCallback(
     async (messageId: string, newContent: string) => {
       const messageIndex = messages.findIndex((m) => m.id === messageId);
       if (messageIndex === -1) return;
 
-      // Only delete from DB if this message was saved (has a valid UUID from DB)
-      if (savedMessageIds.has(messageId)) {
-        // Step 1: Delete trailing messages from DB (this message and all after it)
+      if (isPersistedChatMessageId(messageId)) {
         await deleteTrailingMessages({ id: messageId });
-
-        // Remove deleted IDs from savedMessageIds
         const newSavedIds = new Set<string>();
         for (let i = 0; i < messageIndex; i++) {
-          const msg = messages[i];
-          if (savedMessageIds.has(msg.id)) {
-            newSavedIds.add(msg.id);
+          if (isPersistedChatMessageId(messages[i].id)) {
+            newSavedIds.add(messages[i].id);
           }
         }
         setSavedMessageIds(newSavedIds);
       }
 
-      // Step 2: Update UI - keep messages before this one, add edited message
+      const history = messages.slice(0, messageIndex).map((m) => ({
+        role: m.role,
+        content: getMessageContent(m),
+      }));
+
       setMessages((currentMessages) => {
         const index = currentMessages.findIndex((m) => m.id === messageId);
         if (index !== -1) {
@@ -462,36 +456,194 @@ export function CatalystChat({ sessionId }: CatalystChatProps) {
         return currentMessages;
       });
 
-      // Step 3: Regenerate - re-send the last user message to get new AI response
+      const sid = currentSessionRef.current;
+      if (!sid) return;
+
+      if (agentMode === 'notes9') {
+        const {
+          data: { session },
+        } = await supabase.auth.getSession();
+        const token = session?.access_token;
+        if (!token) {
+          toast.error('Please sign in to use Notes9');
+          return;
+        }
+
+        const savedUser = await saveMessage(sid, 'user', newContent);
+        if (savedUser) {
+          setSavedMessageIds((prev) => new Set(prev).add(savedUser.id));
+          setMessages((curr) => {
+            const idx = curr.findIndex((m) => m.id === messageId);
+            if (idx === -1) return curr;
+            return [
+              ...curr.slice(0, idx),
+              {
+                ...curr[idx],
+                id: savedUser.id,
+                parts: [{ type: 'text' as const, text: newContent }],
+              },
+            ];
+          });
+        }
+
+        setNotes9Loading(true);
+        const { donePayload, error } = await agentStream.runStream(
+          { query: newContent, session_id: sid, history },
+          token
+        );
+        setNotes9Loading(false);
+
+        if (donePayload) {
+          const formattedAnswer = formatNotes9AssistantMarkdown(donePayload);
+          const assistantMessageId = `assistant-${Date.now()}`;
+          setMessages((prev) => [
+            ...prev,
+            {
+              id: assistantMessageId,
+              role: 'assistant' as const,
+              content: formattedAnswer,
+              parts: [{ type: 'text' as const, text: formattedAnswer }],
+              createdAt: new Date(),
+            },
+          ]);
+          const savedAsst = await saveMessage(sid, 'assistant', formattedAnswer);
+          if (savedAsst) {
+            setSavedMessageIds((prev) => new Set(prev).add(savedAsst.id));
+            setMessages((prev) => {
+              const next = [...prev];
+              const last = next[next.length - 1];
+              if (last?.role === 'assistant' && last.id === assistantMessageId) {
+                next[next.length - 1] = { ...last, id: savedAsst.id };
+              }
+              return next;
+            });
+          }
+          loadSessions();
+          agentStream.reset();
+        } else if (error) {
+          toast.error(error);
+        }
+        return;
+      }
+
       regenerate();
     },
-    [messages, savedMessageIds, setMessages, regenerate]
+    [
+      messages,
+      getMessageContent,
+      setMessages,
+      regenerate,
+      agentMode,
+      supabase,
+      saveMessage,
+      loadSessions,
+      agentStream,
+    ]
   );
 
-  // Handle regenerating the last response
-  // Following Vercel Chat SDK pattern - just calls regenerate()
   const handleRegenerate = useCallback(async () => {
     if (messages.length < 2) return;
 
-    // Find the last assistant message to delete from DB
-    const lastAssistantIndex = messages.findLastIndex((m) => m.role === 'assistant');
-    if (lastAssistantIndex === -1) return;
+    const sid = currentSessionRef.current;
+    if (!sid) return;
 
-    const lastAssistantMessage = messages[lastAssistantIndex];
+    if (agentMode === 'notes9') {
+      const lastAssistantIndex = messages.findLastIndex((m) => m.role === 'assistant');
+      if (lastAssistantIndex === -1) return;
+      const lastUserMessage = messages[lastAssistantIndex - 1];
+      if (lastUserMessage?.role !== 'user') return;
 
-    // Delete from DB if it was saved
-    if (savedMessageIds.has(lastAssistantMessage.id)) {
-      await deleteTrailingMessages({ id: lastAssistantMessage.id });
+      const lastAssistantMessage = messages[lastAssistantIndex];
+      if (isPersistedChatMessageId(lastAssistantMessage.id)) {
+        await deleteTrailingMessages({ id: lastAssistantMessage.id });
+        setSavedMessageIds((prev) => {
+          const next = new Set(prev);
+          next.delete(lastAssistantMessage.id);
+          return next;
+        });
+      }
 
-      // Update savedMessageIds - remove the assistant message
-      const newSavedIds = new Set(savedMessageIds);
-      newSavedIds.delete(lastAssistantMessage.id);
-      setSavedMessageIds(newSavedIds);
+      setMessages((curr) => curr.slice(0, lastAssistantIndex));
+
+      const query = getMessageContent(lastUserMessage);
+      const history = messages.slice(0, lastAssistantIndex - 1).map((m) => ({
+        role: m.role,
+        content: getMessageContent(m),
+      }));
+
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+      const token = session?.access_token;
+      if (!token) {
+        toast.error('Please sign in to use Notes9');
+        return;
+      }
+
+      setNotes9Loading(true);
+      const { donePayload, error } = await agentStream.runStream(
+        { query, session_id: sid, history },
+        token
+      );
+      setNotes9Loading(false);
+
+      if (donePayload) {
+        const formattedAnswer = formatNotes9AssistantMarkdown(donePayload);
+        const assistantMessageId = `assistant-${Date.now()}`;
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: assistantMessageId,
+            role: 'assistant' as const,
+            content: formattedAnswer,
+            parts: [{ type: 'text' as const, text: formattedAnswer }],
+            createdAt: new Date(),
+          },
+        ]);
+        const savedAsst = await saveMessage(sid, 'assistant', formattedAnswer);
+        if (savedAsst) {
+          setSavedMessageIds((prev) => new Set(prev).add(savedAsst.id));
+          setMessages((prev) => {
+            const next = [...prev];
+            const last = next[next.length - 1];
+            if (last?.role === 'assistant' && last.id === assistantMessageId) {
+              next[next.length - 1] = { ...last, id: savedAsst.id };
+            }
+            return next;
+          });
+        }
+        loadSessions();
+        agentStream.reset();
+      } else if (error) {
+        toast.error(error);
+      }
+      return;
     }
 
-    // Call regenerate - this removes the last assistant response and re-sends the user message
+    const lastAssistantIndex = messages.findLastIndex((m) => m.role === 'assistant');
+    if (lastAssistantIndex === -1) return;
+    const lastAssistantMessage = messages[lastAssistantIndex];
+
+    if (isPersistedChatMessageId(lastAssistantMessage.id)) {
+      await deleteTrailingMessages({ id: lastAssistantMessage.id });
+      setSavedMessageIds((prev) => {
+        const next = new Set(prev);
+        next.delete(lastAssistantMessage.id);
+        return next;
+      });
+    }
+
     regenerate();
-  }, [messages, savedMessageIds, regenerate]);
+  }, [
+    messages,
+    getMessageContent,
+    regenerate,
+    agentMode,
+    supabase,
+    saveMessage,
+    loadSessions,
+    agentStream,
+  ]);
 
   return (
     <div className="flex h-full">
@@ -542,6 +694,16 @@ export function CatalystChat({ sessionId }: CatalystChatProps) {
               votes={votes}
               onEditMessage={handleEditMessage}
               onRegenerate={handleRegenerate}
+              onStop={
+                isLoading
+                  ? notes9Loading
+                    ? () => {
+                        agentStream.abort();
+                        agentStream.reset();
+                      }
+                    : stop
+                  : undefined
+              }
               notes9Stream={
                 agentMode === 'notes9' &&
                 (notes9Loading || agentStream.isStreaming || agentStream.error) &&
@@ -567,13 +729,18 @@ export function CatalystChat({ sessionId }: CatalystChatProps) {
           onSubmit={onSubmit}
           isLoading={isLoading}
           stop={
-            notes9Loading && agentStream.isStreaming
-              ? () => agentStream.abort()
+            notes9Loading
+              ? () => {
+                  agentStream.abort();
+                  agentStream.reset();
+                }
               : stop
           }
           hasMessages={messages.length > 0}
           agentMode={agentMode}
           onAgentModeChange={setAgentMode}
+          webSearchEnabled={webSearchEnabled}
+          onWebSearchEnabledChange={setWebSearchEnabled}
         />
       </div>
     </div>

@@ -26,11 +26,11 @@ function truncateExcerpt(text: string, maxLen: number): string {
 /** Format AI citation excerpt into a clean reference line (e.g. "**Project update** – planning, medium priority (no dates)").
  *  Prefers display_label or source_name (per Notes9 API) then name/title. */
 export function formatCitationDisplay(citation: {
-  excerpt?: string
-  display_label?: string
-  source_name?: string
-  name?: string
-  title?: string
+  excerpt?: string | null
+  display_label?: string | null
+  source_name?: string | null
+  name?: string | null
+  title?: string | null
   status?: string
   priority?: string
   start_date?: string | null

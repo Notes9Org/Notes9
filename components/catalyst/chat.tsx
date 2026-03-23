@@ -12,7 +12,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { Send, Square, Sparkles, PanelLeftClose, PanelLeft } from 'lucide-react';
+import { Send, Square, Sparkles, PanelLeftClose, PanelLeft, Globe } from 'lucide-react';
+import { Switch } from '@/components/ui/switch';
 import { useChatSessions } from '@/hooks/use-chat-sessions';
 import { ChatHistory } from './chat-history';
 import { ChatMessage } from './chat-message';
@@ -35,8 +36,10 @@ export function CatalystChat({ open, onOpenChange }: CatalystChatProps) {
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [isRegenerating, setIsRegenerating] = useState(false);
   const [savedMessageIds, setSavedMessageIds] = useState<Set<string>>(new Set());
+  const [webSearchEnabled, setWebSearchEnabled] = useState(true);
 
   const prevStatusRef = useRef<string>('ready');
+  const webSearchEnabledRef = useRef(true);
   const currentSessionRef = useRef<string | null>(null);
   const hasLoadedSessionRef = useRef<string | null>(null);
   const supabaseTokenRef = useRef<string | null>(null);
@@ -52,6 +55,10 @@ export function CatalystChat({ open, onOpenChange }: CatalystChatProps) {
     });
     return () => subscription.unsubscribe();
   }, [supabase]);
+
+  useEffect(() => {
+    webSearchEnabledRef.current = webSearchEnabled;
+  }, [webSearchEnabled]);
 
   const {
     sessions,
@@ -76,6 +83,7 @@ export function CatalystChat({ open, onOpenChange }: CatalystChatProps) {
           messages: request.messages,
           sessionId: currentSessionRef.current,
           supabaseToken: token ?? undefined,
+          webSearch: webSearchEnabledRef.current,
           ...request.body,
         },
       };
@@ -401,7 +409,16 @@ export function CatalystChat({ open, onOpenChange }: CatalystChatProps) {
               </ScrollArea>
 
               {/* Input Area */}
-              <div className="border-t p-4 shrink-0">
+              <div className="border-t p-4 shrink-0 space-y-2">
+                <div className="flex items-center justify-end gap-2 px-0.5">
+                  <Globe className="size-3.5 shrink-0 text-muted-foreground" aria-hidden />
+                  <Switch
+                    checked={webSearchEnabled}
+                    onCheckedChange={setWebSearchEnabled}
+                    disabled={isLoading}
+                    aria-label="Web search"
+                  />
+                </div>
                 <form onSubmit={onSubmit} className="flex gap-2">
                   <Textarea
                     ref={textareaRef}

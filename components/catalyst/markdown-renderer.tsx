@@ -1,12 +1,12 @@
 'use client';
 
+import { cn } from '@/lib/utils';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import remarkMath from 'remark-math';
 import rehypeHighlight from 'rehype-highlight';
 import rehypeKatex from 'rehype-katex';
 import Link from 'next/link';
-import { cn } from '@/lib/utils';
 import 'highlight.js/styles/github-dark.css';
 import 'katex/dist/katex.min.css';
 
@@ -17,7 +17,16 @@ interface MarkdownRendererProps {
 
 export function MarkdownRenderer({ content, className }: MarkdownRendererProps) {
   return (
-    <div className={cn('prose prose-sm dark:prose-invert max-w-none text-foreground prose-headings:text-foreground prose-p:text-foreground prose-li:text-foreground [&_.katex]:text-inherit [&_.katex-display]:my-2', 'prose-p:my-1 prose-p:leading-[1.45] prose-ul:my-1 prose-ol:my-1 prose-li:my-0 leading-[1.45]', className)}>
+    <div
+      className={cn(
+        'notes9-md prose prose-sm dark:prose-invert max-w-none text-foreground prose-headings:text-foreground prose-p:text-foreground prose-li:text-foreground [&_.katex]:text-inherit [&_.katex-display]:my-2',
+        // Disable typography defaults that stack with our component margins
+        'prose-p:my-0 prose-ul:my-0 prose-ol:my-0 prose-li:my-0 prose-hr:my-0 leading-[1.45]',
+        '[&_li>p]:!my-0 [&_li>p]:leading-[1.45]',
+        '[&_p:has(>strong:only-child)+ul]:!mt-0 [&_p:has(>strong:only-child)+ol]:!mt-0',
+        className
+      )}
+    >
     <ReactMarkdown
       remarkPlugins={[remarkGfm, remarkMath]}
       rehypePlugins={[rehypeHighlight, rehypeKatex]}
@@ -80,28 +89,53 @@ export function MarkdownRenderer({ content, className }: MarkdownRendererProps) 
             </a>
           );
         },
-        // Custom list styling (tighter spacing)
+        // Custom list styling — no space-y (GFM <li><p> already got margin until we zero it above)
         ul({ children, ...props }) {
           return (
-            <ul className="list-disc list-inside space-y-0.5 my-1" {...props}>
+            <ul
+              className="list-disc list-outside space-y-0 !my-0 mb-0 mt-0 pl-4 marker:text-muted-foreground [&:not(:first-child)]:mt-1"
+              {...props}
+            >
               {children}
             </ul>
           );
         },
         ol({ children, ...props }) {
           return (
-            <ol className="list-decimal list-inside space-y-0.5 my-1" {...props}>
+            <ol
+              className="list-decimal list-outside space-y-0 !my-0 mb-0 mt-0 pl-4 marker:text-muted-foreground [&:not(:first-child)]:mt-1"
+              {...props}
+            >
               {children}
             </ol>
           );
         },
-        // Custom paragraph (readable spacing and line height)
+        li({ children, ...props }) {
+          return (
+            <li className="!my-0 py-0 leading-[1.45] [&>p]:!my-0" {...props}>
+              {children}
+            </li>
+          );
+        },
+        // Paragraphs: tight stack; **Section** lines (single <strong>) hug the list below
         p({ children, ...props }) {
           return (
-            <p className="my-1 leading-[1.45] text-foreground" {...props}>
+            <p
+              className={cn(
+                'leading-[1.45] text-foreground',
+                'mt-0 mb-1 last:mb-0',
+                '[&:has(>strong:only-child)]:mb-0',
+                '[&:has(>strong:only-child)]:mt-1',
+                'first:[&:has(>strong:only-child)]:mt-0'
+              )}
+              {...props}
+            >
               {children}
             </p>
           );
+        },
+        hr({ ...props }) {
+          return <hr className="my-2 border-border" {...props} />;
         },
         // Custom headings (tighter spacing)
         h1({ children, ...props }) {
@@ -113,14 +147,14 @@ export function MarkdownRenderer({ content, className }: MarkdownRendererProps) 
         },
         h2({ children, ...props }) {
           return (
-            <h2 className="text-lg font-semibold mt-2 mb-1" {...props}>
+            <h2 className="text-lg font-semibold mt-2 mb-0.5" {...props}>
               {children}
             </h2>
           );
         },
         h3({ children, ...props }) {
           return (
-            <h3 className="text-base font-semibold mt-1.5 mb-0.5" {...props}>
+            <h3 className="text-base font-semibold mt-1.5 mb-0.5 first:mt-0" {...props}>
               {children}
             </h3>
           );

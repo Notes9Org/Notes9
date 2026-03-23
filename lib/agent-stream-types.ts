@@ -39,22 +39,32 @@ export interface TokenPayload {
   text: string;
 }
 
-/** SSE event: done – final response (same shape as /notes9/run citations) */
-export interface Citation {
+/** Grounding item: POST /notes9 returns `resources[]` (aligned with POST /chat). */
+export interface GroundingResource {
+  display_label?: string | null;
   source_type: string;
-  source_id?: string;
-  source_name?: string;
-  display_label?: string;
-  chunk_id?: string | null;
-  relevance: number;
+  source_name?: string | null;
+  relevance?: number;
   excerpt?: string | null;
+  source_id?: string | null;
+  chunk_id?: string | null;
 }
 
+/** @deprecated Use GroundingResource; kept for imports that still say Citation */
+export type Citation = GroundingResource;
+
+/** Final agent response (POST /notes9 non-stream and SSE `done` when streaming is enabled upstream). */
 export interface DonePayload {
-  answer: string;
-  citations: Citation[];
-  confidence: number;
-  tool_used: 'sql' | 'rag' | 'hybrid' | 'none';
+  role?: string;
+  /** Primary answer text (same key as POST /chat). */
+  content: string;
+  /** Alias for legacy clients; mirrors `content` when normalized on the client. */
+  answer?: string;
+  resources?: GroundingResource[];
+  /** Legacy / streaming shape; prefer `resources`. */
+  citations?: GroundingResource[];
+  confidence?: number;
+  tool_used?: 'sql' | 'rag' | 'hybrid' | 'none';
   debug?: Record<string, unknown> | null;
 }
 

@@ -2,8 +2,9 @@
 
 import { useEffect, useRef, useState, useCallback } from 'react';
 import type { UIMessage } from 'ai';
-import { Sparkles } from 'lucide-react';
+import { Sparkles, Square } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { Button } from '@/components/ui/button';
 import { MarkdownRenderer } from './markdown-renderer';
 import { MessageActions } from './message-actions';
 import { MessageEditor } from './message-editor';
@@ -19,6 +20,8 @@ interface CatalystMessagesProps {
   votes?: Vote[];
   onEditMessage?: (messageId: string, newContent: string) => Promise<void>;
   onRegenerate?: () => void;
+  /** Stop an in-flight model request (same as input stop). */
+  onStop?: () => void;
   /** When Notes9 stream is active, show AgentStreamReply instead of generic thinking indicator */
   notes9Stream?: {
     thinkingSteps: ThinkingPayload[];
@@ -38,6 +41,7 @@ export function CatalystMessages({
   votes = [],
   onEditMessage,
   onRegenerate,
+  onStop,
   notes9Stream,
 }: CatalystMessagesProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -72,6 +76,10 @@ export function CatalystMessages({
             const content = getMessageContent(message);
             const isLastAssistant =
               message.role === 'assistant' && index === messages.length - 1;
+            const isLastUserAwaitingReply =
+              isLoading &&
+              message.role === 'user' &&
+              index === messages.length - 1;
 
             return (
               <div
@@ -129,7 +137,8 @@ export function CatalystMessages({
                         messageRole={message.role as 'user' | 'assistant'}
                         messageContent={content}
                         vote={getVoteForMessage(message.id)}
-                        isLoading={isLoading}
+                        userEditDisabled={isLastUserAwaitingReply}
+                        regenerateDisabled={isLoading && isLastAssistant}
                         onEdit={
                           message.role === 'user' && onEditMessage
                             ? () => setEditingMessageId(message.id)
@@ -153,7 +162,21 @@ export function CatalystMessages({
                 <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-orange-400 to-pink-500 text-white shadow-sm">
                   <Sparkles className="size-4 animate-pulse" />
                 </div>
-                <div className="flex-1 min-w-0 max-w-full">
+                <div className="flex-1 min-w-0 max-w-full space-y-2">
+                  {onStop && (
+                    <div className="flex justify-end">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="h-7 gap-1.5 text-xs"
+                        onClick={onStop}
+                      >
+                        <Square className="size-2.5 fill-current" />
+                        Stop
+                      </Button>
+                    </div>
+                  )}
                   <AgentStreamReply
                     thinkingSteps={notes9Stream.thinkingSteps}
                     sql={notes9Stream.sql}
@@ -169,13 +192,27 @@ export function CatalystMessages({
                 <div className="mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-orange-400 to-pink-500 text-white shadow-sm">
                   <Sparkles className="size-3.5 animate-pulse" />
                 </div>
-                <div className="flex items-center gap-1 text-muted-foreground text-sm">
-                  <span>Thinking</span>
-                  <span className="inline-flex">
-                    <span className="animate-bounce [animation-delay:0ms]">.</span>
-                    <span className="animate-bounce [animation-delay:150ms]">.</span>
-                    <span className="animate-bounce [animation-delay:300ms]">.</span>
+                <div className="flex flex-wrap items-center gap-2 text-muted-foreground text-sm">
+                  <span className="flex items-center gap-1">
+                    <span>Thinking</span>
+                    <span className="inline-flex">
+                      <span className="animate-bounce [animation-delay:0ms]">.</span>
+                      <span className="animate-bounce [animation-delay:150ms]">.</span>
+                      <span className="animate-bounce [animation-delay:300ms]">.</span>
+                    </span>
                   </span>
+                  {onStop && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="h-7 gap-1.5 text-xs"
+                      onClick={onStop}
+                    >
+                      <Square className="size-2.5 fill-current" />
+                      Stop
+                    </Button>
+                  )}
                 </div>
               </div>
             )
