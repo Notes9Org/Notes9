@@ -1,18 +1,7 @@
 "use client"
 
-import { useEffect, useRef, useState } from "react"
-import {
-  ChevronLeft,
-  ChevronRight,
-  Copy,
-  ExternalLink,
-  Highlighter,
-  Loader2,
-  MessageSquarePlus,
-  StickyNote,
-  ZoomIn,
-  ZoomOut,
-} from "lucide-react"
+import { useCallback, useEffect, useRef, useState, type MutableRefObject } from "react"
+import { Copy, ExternalLink, Highlighter, Loader2, StickyNote, ZoomIn, ZoomOut } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import {
@@ -40,111 +29,55 @@ interface LiteraturePdfViewerProps {
   }) => Promise<void>
 }
 
-export function LiteraturePdfViewer({ pdfUrl, annotations, onCreateAnnotation }: LiteraturePdfViewerProps) {
-  const { toast } = useToast()
+type PdfSelectionState = {
+  pageNumber: number
+  text: string
+  rects: Array<{ top: number; left: number; width: number; height: number }>
+  anchor: { x: number; y: number }
+  toolbarX: number
+  toolbarY: number
+}
+
+type ComposerState = {
+  open: boolean
+  pageNumber: number
+  quoteText: string | null
+  rects: Array<{ top: number; left: number; width: number; height: number }> | null
+  anchor: Record<string, unknown> | null
+  content: string
+}
+
+function LiteraturePdfPageBlock({
+  pageNumber,
+  pdfDocument,
+  fitScale,
+  zoom,
+  pageAnnotations,
+  selectionState,
+  onSelectionChangeRef,
+  onPagePointerDown,
+  onCopySelection,
+  onHighlightSelection,
+  onNoteSelection,
+}: {
+  pageNumber: number
+  pdfDocument: any
+  fitScale: number
+  zoom: number
+  pageAnnotations: LiteraturePdfAnnotation[]
+  selectionState: PdfSelectionState | null
+  onSelectionChangeRef: MutableRefObject<(pageNum: number, next: PdfSelectionState | null) => void>
+  onPagePointerDown: (pageNum: number, relative: { x: number; y: number }) => void
+  onCopySelection: () => void
+  onHighlightSelection: () => void
+  onNoteSelection: () => void
+}) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
   const textLayerRef = useRef<HTMLDivElement | null>(null)
-  const surfaceRef = useRef<HTMLDivElement | null>(null)
   const pageRef = useRef<HTMLDivElement | null>(null)
-  const viewportFrameRef = useRef<HTMLDivElement | null>(null)
   const renderTaskRef = useRef<any>(null)
   const textLayerTaskRef = useRef<any>(null)
-  const [pdfDocument, setPdfDocument] = useState<any>(null)
-  const [pageCount, setPageCount] = useState(0)
-  const [pageNumber, setPageNumber] = useState(1)
-  const [zoom, setZoom] = useState(1)
-  const [fitScale, setFitScale] = useState(1)
-  const [isLoading, setIsLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
   const [viewportSize, setViewportSize] = useState({ width: 0, height: 0 })
-  const [selectionState, setSelectionState] = useState<{
-    text: string
-    rects: Array<{ top: number; left: number; width: number; height: number }>
-    anchor: { x: number; y: number }
-    toolbarX: number
-    toolbarY: number
-  } | null>(null)
-  const [lastPointer, setLastPointer] = useState<{ x: number; y: number } | null>(null)
-  const [composerState, setComposerState] = useState<{
-    open: boolean
-    type: "comment" | "note"
-    quoteText: string | null
-    rects: Array<{ top: number; left: number; width: number; height: number }> | null
-    anchor: Record<string, unknown> | null
-    content: string
-  }>({
-    open: false,
-    type: "comment",
-    quoteText: null,
-    rects: null,
-    anchor: null,
-    content: "",
-  })
-
-  useEffect(() => {
-    let isActive = true
-    setIsLoading(true)
-    setError(null)
-
-    async function load() {
-      try {
-        const pdfjsLib: any = await import("pdfjs-dist/legacy/build/pdf.mjs")
-        if (!pdfjsLib.GlobalWorkerOptions.workerPort) {
-          pdfjsLib.GlobalWorkerOptions.workerPort = new Worker(
-            new URL("pdfjs-dist/build/pdf.worker.min.mjs", import.meta.url),
-            { type: "module" }
-          )
-        }
-
-        const task = pdfjsLib.getDocument(pdfUrl)
-        const document = await task.promise
-        if (!isActive) return
-        setPdfDocument(document)
-        setPageCount(document.numPages ?? 0)
-      } catch (loadError) {
-        console.error(loadError)
-        if (isActive) setError("Failed to render this PDF.")
-      } finally {
-        if (isActive) setIsLoading(false)
-      }
-    }
-
-    load()
-    return () => {
-      isActive = false
-    }
-  }, [pdfUrl])
-
-  useEffect(() => {
-    if (!pdfDocument || !viewportFrameRef.current) return
-
-    let cancelled = false
-    let resizeObserver: ResizeObserver | null = null
-
-    const updateFitScale = async () => {
-      if (!pdfDocument || !viewportFrameRef.current) return
-      const page = await pdfDocument.getPage(pageNumber)
-      if (cancelled || !viewportFrameRef.current) return
-
-      const baseViewport = page.getViewport({ scale: 1 })
-      const frameWidth = Math.max(320, viewportFrameRef.current.clientWidth - 32)
-      const nextFitScale = frameWidth / baseViewport.width
-
-      setFitScale(Math.max(0.6, Math.min(2.2, nextFitScale)))
-    }
-
-    updateFitScale().catch(console.error)
-
-    resizeObserver = new ResizeObserver(() => {
-      updateFitScale().catch(console.error)
-    })
-    resizeObserver.observe(viewportFrameRef.current)
-
-    return () => {
-      cancelled = true
-      resizeObserver?.disconnect()
-    }
-  }, [pageNumber, pdfDocument])
 
   useEffect(() => {
     let isActive = true
@@ -152,7 +85,6 @@ export function LiteraturePdfViewer({ pdfUrl, annotations, onCreateAnnotation }:
 
     async function render() {
       if (!pdfDocument || !canvasRef.current || !textLayerRef.current) return
-      setSelectionState(null)
       const page = await pdfDocument.getPage(pageNumber)
       const scale = fitScale * zoom
       const viewport = page.getViewport({ scale })
@@ -209,7 +141,6 @@ export function LiteraturePdfViewer({ pdfUrl, annotations, onCreateAnnotation }:
         return
       }
       console.error(renderError)
-      setError("Failed to render this PDF page.")
     })
 
     return () => {
@@ -222,18 +153,13 @@ export function LiteraturePdfViewer({ pdfUrl, annotations, onCreateAnnotation }:
     }
   }, [fitScale, pageNumber, pdfDocument, zoom])
 
-  const clearSelection = () => {
-    setSelectionState(null)
-    window.getSelection()?.removeAllRanges()
-  }
-
-  const handlePointerUp = () => {
+  const handlePointerUp = useCallback(() => {
     window.setTimeout(() => {
       const selection = window.getSelection()
       const textLayerContainer = textLayerRef.current
       const pageContainer = pageRef.current
       if (!selection || !textLayerContainer || !pageContainer || selection.rangeCount === 0) {
-        setSelectionState(null)
+        onSelectionChangeRef.current(pageNumber, null)
         return
       }
 
@@ -248,7 +174,7 @@ export function LiteraturePdfViewer({ pdfUrl, annotations, onCreateAnnotation }:
         !textLayerContainer.contains(anchorNode) ||
         !textLayerContainer.contains(focusNode)
       ) {
-        setSelectionState(null)
+        onSelectionChangeRef.current(pageNumber, null)
         return
       }
 
@@ -264,12 +190,13 @@ export function LiteraturePdfViewer({ pdfUrl, annotations, onCreateAnnotation }:
         }))
 
       if (rects.length === 0) {
-        setSelectionState(null)
+        onSelectionChangeRef.current(pageNumber, null)
         return
       }
 
       const focusRect = range.getBoundingClientRect()
-      setSelectionState({
+      onSelectionChangeRef.current(pageNumber, {
+        pageNumber,
         text,
         rects,
         anchor: {
@@ -280,55 +207,279 @@ export function LiteraturePdfViewer({ pdfUrl, annotations, onCreateAnnotation }:
         toolbarY: focusRect.top - pageRect.top - 44,
       })
     }, 0)
-  }
+  }, [onSelectionChangeRef, pageNumber])
 
-  const openComposer = (type: "comment" | "note") => {
-    if (type === "comment" && !selectionState) return
+  return (
+    <div className="mb-6 last:mb-0">
+      <div
+        ref={pageRef}
+        data-pdf-page={pageNumber}
+        className="relative overflow-hidden rounded border bg-white shadow-sm"
+        style={{
+          width: viewportSize.width || undefined,
+          height: viewportSize.height || undefined,
+        }}
+        onMouseUp={handlePointerUp}
+        onMouseDown={(event) => {
+          const el = pageRef.current
+          if (!el) return
+          const rect = el.getBoundingClientRect()
+          onPagePointerDown(pageNumber, {
+            x: (event.clientX - rect.left) / rect.width,
+            y: (event.clientY - rect.top) / rect.height,
+          })
+        }}
+      >
+        <canvas ref={canvasRef} className="absolute inset-0 block bg-white" />
+        <div ref={textLayerRef} className="n9-pdf-text-layer textLayer absolute inset-0 overflow-hidden" />
+        {pageAnnotations.map((annotation) =>
+          annotation.rects?.map((rect, index) => (
+            <div
+              key={`${annotation.id}-${index}`}
+              className={`pointer-events-none absolute z-[1] rounded-sm ${
+                annotation.type === "comment"
+                  ? "bg-sky-300/22 shadow-[inset_0_0_0_1px_rgba(14,165,233,0.45)]"
+                  : annotation.type === "note"
+                    ? "bg-lime-300/20 shadow-[inset_0_0_0_1px_rgba(132,204,22,0.45)]"
+                    : "bg-amber-300/28 shadow-[inset_0_0_0_1px_rgba(251,191,36,0.5)]"
+              }`}
+              style={{
+                left: `${rect.left * 100}%`,
+                top: `${rect.top * 100}%`,
+                width: `${rect.width * 100}%`,
+                height: `${rect.height * 100}%`,
+              }}
+            />
+          ))
+        )}
+        {pageAnnotations
+          .filter((annotation) => !annotation.rects?.length && annotation.anchor)
+          .map((annotation) => {
+            const anchor = annotation.anchor as { x?: number; y?: number }
+            return (
+              <div
+                key={annotation.id}
+                className="pointer-events-none absolute flex h-6 w-6 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border border-lime-500/70 bg-lime-200/90 text-lime-900 shadow"
+                style={{
+                  left: `${(anchor.x ?? 0.5) * 100}%`,
+                  top: `${(anchor.y ?? 0.1) * 100}%`,
+                }}
+              >
+                <StickyNote className="h-3.5 w-3.5" />
+              </div>
+            )
+          })}
+        {selectionState?.pageNumber === pageNumber && (
+          <div
+            className="absolute z-20 flex items-center gap-1 rounded-full border bg-background/95 p-1 shadow-lg"
+            style={{
+              left: selectionState.toolbarX,
+              top: Math.max(8, selectionState.toolbarY),
+              transform: "translateX(-50%)",
+              maxWidth: "calc(100vw - 2rem)",
+            }}
+          >
+            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={onCopySelection} title="Copy">
+              <Copy className="h-4 w-4" />
+            </Button>
+            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={onHighlightSelection} title="Highlight">
+              <Highlighter className="h-4 w-4" />
+            </Button>
+            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={onNoteSelection} title="Note">
+              <StickyNote className="h-4 w-4" />
+            </Button>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+export function LiteraturePdfViewer({ pdfUrl, annotations, onCreateAnnotation }: LiteraturePdfViewerProps) {
+  const { toast } = useToast()
+  const viewportFrameRef = useRef<HTMLDivElement | null>(null)
+  const loadMoreSentinelRef = useRef<HTMLDivElement | null>(null)
+  const [pdfDocument, setPdfDocument] = useState<any>(null)
+  const [pageCount, setPageCount] = useState(0)
+  const [renderedEndPage, setRenderedEndPage] = useState(1)
+  const [zoom, setZoom] = useState(1)
+  const [fitScale, setFitScale] = useState(1)
+  const [isLoading, setIsLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [selectionState, setSelectionState] = useState<PdfSelectionState | null>(null)
+  const [lastPointer, setLastPointer] = useState<{ pageNumber: number; x: number; y: number } | null>(null)
+  const [composerState, setComposerState] = useState<ComposerState>({
+    open: false,
+    pageNumber: 1,
+    quoteText: null,
+    rects: null,
+    anchor: null,
+    content: "",
+  })
+
+  const onSelectionChangeRef = useRef((pageNum: number, next: PdfSelectionState | null) => {
+    setSelectionState((current) => {
+      if (next === null) {
+        if (current?.pageNumber === pageNum) return null
+        return current
+      }
+      return next
+    })
+  })
+
+  useEffect(() => {
+    let isActive = true
+    setIsLoading(true)
+    setError(null)
+    setRenderedEndPage(1)
+
+    async function load() {
+      try {
+        const pdfjsLib: any = await import("pdfjs-dist/legacy/build/pdf.mjs")
+        if (!pdfjsLib.GlobalWorkerOptions.workerPort) {
+          pdfjsLib.GlobalWorkerOptions.workerPort = new Worker(
+            new URL("pdfjs-dist/build/pdf.worker.min.mjs", import.meta.url),
+            { type: "module" }
+          )
+        }
+
+        const task = pdfjsLib.getDocument(pdfUrl)
+        const document = await task.promise
+        if (!isActive) return
+        setPdfDocument(document)
+        const n = document.numPages ?? 0
+        setPageCount(n)
+        setRenderedEndPage(n > 0 ? Math.min(3, n) : 1)
+      } catch (loadError) {
+        console.error(loadError)
+        if (isActive) setError("Failed to render this PDF.")
+      } finally {
+        if (isActive) setIsLoading(false)
+      }
+    }
+
+    load()
+    return () => {
+      isActive = false
+    }
+  }, [pdfUrl])
+
+  useEffect(() => {
+    if (!pdfDocument || !viewportFrameRef.current) return
+
+    let cancelled = false
+    let resizeObserver: ResizeObserver | null = null
+
+    const updateFitScale = async () => {
+      if (!pdfDocument || !viewportFrameRef.current) return
+      const page = await pdfDocument.getPage(1)
+      if (cancelled || !viewportFrameRef.current) return
+
+      const baseViewport = page.getViewport({ scale: 1 })
+      const frameWidth = Math.max(320, viewportFrameRef.current.clientWidth - 32)
+      const nextFitScale = frameWidth / baseViewport.width
+
+      setFitScale(Math.max(0.6, Math.min(2.2, nextFitScale)))
+    }
+
+    updateFitScale().catch(console.error)
+
+    resizeObserver = new ResizeObserver(() => {
+      updateFitScale().catch(console.error)
+    })
+    resizeObserver.observe(viewportFrameRef.current)
+
+    return () => {
+      cancelled = true
+      resizeObserver?.disconnect()
+    }
+  }, [pdfDocument])
+
+  useEffect(() => {
+    const root = viewportFrameRef.current
+    const target = loadMoreSentinelRef.current
+    if (!root || !target || pageCount <= 0 || renderedEndPage >= pageCount) return
+
+    const io = new IntersectionObserver(
+      (entries) => {
+        if (entries[0]?.isIntersecting) {
+          setRenderedEndPage((p) => Math.min(pageCount, p + 2))
+        }
+      },
+      { root, rootMargin: "320px", threshold: 0 }
+    )
+    io.observe(target)
+    return () => io.disconnect()
+  }, [pageCount, renderedEndPage])
+
+  const clearSelection = useCallback(() => {
+    setSelectionState(null)
+    window.getSelection()?.removeAllRanges()
+  }, [])
+
+  useEffect(() => {
+    clearSelection()
+  }, [fitScale, zoom, clearSelection])
+
+  const openNoteComposerFromSelection = useCallback(() => {
+    if (!selectionState) return
     setComposerState({
       open: true,
-      type,
-      quoteText: type === "comment" ? selectionState?.text ?? null : null,
-      rects: type === "comment" ? selectionState?.rects ?? null : null,
-      anchor:
-        type === "comment"
-          ? selectionState?.anchor ?? null
-          : {
-              x: lastPointer?.x ?? 0.5,
-              y: lastPointer?.y ?? 0.08,
-            },
+      pageNumber: selectionState.pageNumber,
+      quoteText: selectionState.text,
+      rects: selectionState.rects,
+      anchor: selectionState.anchor,
       content: "",
     })
-  }
+  }, [selectionState])
 
-  const createSelectionAnnotation = async (type: "highlight" | "comment" | "note") => {
-    if (!selectionState) return
-    try {
-      if (type === "comment" || type === "note") {
-        openComposer(type)
-        return
+  const openNoteComposerFromPage = useCallback(() => {
+    const pageNumber = lastPointer?.pageNumber ?? 1
+    setComposerState({
+      open: true,
+      pageNumber,
+      quoteText: null,
+      rects: null,
+      anchor: {
+        x: lastPointer?.x ?? 0.5,
+        y: lastPointer?.y ?? 0.08,
+      },
+      content: "",
+    })
+  }, [lastPointer])
+
+  const createSelectionAnnotation = useCallback(
+    async (type: "highlight" | "note") => {
+      if (!selectionState) return
+      try {
+        if (type === "note") {
+          openNoteComposerFromSelection()
+          return
+        }
+
+        await onCreateAnnotation({
+          type,
+          page_number: selectionState.pageNumber,
+          quote_text: selectionState.text,
+          comment_text: null,
+          color: "#fde68a",
+          rects: selectionState.rects,
+          anchor: selectionState.anchor,
+        })
+        clearSelection()
+        toast({ title: `${type[0].toUpperCase()}${type.slice(1)} saved` })
+      } catch (creationError: any) {
+        toast({
+          title: `Failed to save ${type}`,
+          description: creationError.message,
+          variant: "destructive",
+        })
       }
+    },
+    [clearSelection, onCreateAnnotation, openNoteComposerFromSelection, selectionState, toast]
+  )
 
-      await onCreateAnnotation({
-        type,
-        page_number: pageNumber,
-        quote_text: selectionState.text,
-        comment_text: null,
-        color: "#fde68a",
-        rects: selectionState.rects,
-        anchor: selectionState.anchor,
-      })
-      clearSelection()
-      toast({ title: `${type[0].toUpperCase()}${type.slice(1)} saved` })
-    } catch (creationError: any) {
-      toast({
-        title: `Failed to save ${type}`,
-        description: creationError.message,
-        variant: "destructive",
-      })
-    }
-  }
-
-  const copySelection = async () => {
+  const copySelection = useCallback(async () => {
     if (!selectionState) return
     try {
       await navigator.clipboard.writeText(selectionState.text)
@@ -340,53 +491,52 @@ export function LiteraturePdfViewer({ pdfUrl, annotations, onCreateAnnotation }:
         variant: "destructive",
       })
     }
-  }
-
-  const createPageNote = async () => {
-    openComposer("note")
-  }
+  }, [selectionState, toast])
 
   const saveComposer = async () => {
     if (!composerState.content.trim()) return
 
     try {
       await onCreateAnnotation({
-        type: composerState.type,
-        page_number: pageNumber,
+        type: "note",
+        page_number: composerState.pageNumber,
         quote_text: composerState.quoteText,
         comment_text: composerState.content,
-        color: composerState.type === "comment" ? "#bfdbfe" : "#d9f99d",
+        color: "#d9f99d",
         rects: composerState.rects,
         anchor: composerState.anchor,
       })
       setComposerState((current) => ({ ...current, open: false, content: "" }))
       clearSelection()
-      toast({ title: `${composerState.type === "comment" ? "Comment" : "Note"} saved` })
+      toast({ title: "Note saved" })
     } catch (creationError: any) {
       toast({
-        title: `Failed to save ${composerState.type}`,
+        title: "Failed to save note",
         description: creationError.message,
         variant: "destructive",
       })
     }
   }
 
-  const pageAnnotations = annotations.filter((annotation) => annotation.page_number === pageNumber)
+  const onPagePointerDown = useCallback((pageNumber: number, relative: { x: number; y: number }) => {
+    setLastPointer({ pageNumber, ...relative })
+  }, [])
+
+  const pageNumbers = Array.from({ length: Math.min(renderedEndPage, pageCount) }, (_, i) => i + 1)
 
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-2 rounded-lg border bg-background/80 p-2 sm:p-3">
-        <Button variant="outline" size="sm" className="h-8 px-2.5 sm:h-9 sm:px-3" onClick={() => setPageNumber((current) => Math.max(1, current - 1))} disabled={pageNumber <= 1}>
-          <ChevronLeft className="mr-2 h-4 w-4" />
-          Prev
-        </Button>
         <div className="text-xs text-muted-foreground sm:text-sm">
-          Page {pageNumber} of {pageCount || "—"}
+          {pageCount > 0 ? (
+            <>
+              Pages 1–{Math.min(renderedEndPage, pageCount)} of {pageCount}
+              {renderedEndPage < pageCount ? " · scroll for more" : ""}
+            </>
+          ) : (
+            "—"
+          )}
         </div>
-        <Button variant="outline" size="sm" className="h-8 px-2.5 sm:h-9 sm:px-3" onClick={() => setPageNumber((current) => Math.min(pageCount, current + 1))} disabled={!pageCount || pageNumber >= pageCount}>
-          Next
-          <ChevronRight className="ml-2 h-4 w-4" />
-        </Button>
         <div className="flex w-full items-center justify-end gap-2 sm:ml-auto sm:w-auto">
           <Button variant="outline" size="icon" className="h-8 w-8 sm:h-9 sm:w-9" onClick={() => setZoom((current) => Math.max(0.75, current - 0.1))}>
             <ZoomOut className="h-4 w-4" />
@@ -395,7 +545,7 @@ export function LiteraturePdfViewer({ pdfUrl, annotations, onCreateAnnotation }:
           <Button variant="outline" size="icon" className="h-8 w-8 sm:h-9 sm:w-9" onClick={() => setZoom((current) => Math.min(3, current + 0.1))}>
             <ZoomIn className="h-4 w-4" />
           </Button>
-          <Button variant="outline" size="icon" className="h-8 w-8 sm:h-9 sm:w-9" onClick={createPageNote} title="Add note">
+          <Button variant="outline" size="icon" className="h-8 w-8 sm:h-9 sm:w-9" onClick={openNoteComposerFromPage} title="Add note">
             <StickyNote className="h-4 w-4" />
           </Button>
           <Button variant="outline" size="sm" className="h-8 px-2.5 text-xs sm:h-9 sm:px-3 sm:text-sm" asChild>
@@ -407,125 +557,58 @@ export function LiteraturePdfViewer({ pdfUrl, annotations, onCreateAnnotation }:
         </div>
       </div>
 
-      <div ref={viewportFrameRef} className="relative overflow-auto rounded-lg border bg-muted/30 p-2 sm:p-4">
+      <div
+        ref={viewportFrameRef}
+        className="relative max-h-[min(80vh,56rem)] overflow-auto rounded-lg border bg-muted/30 p-2 sm:p-4"
+      >
         {isLoading && (
           <div className="flex min-h-[24rem] items-center justify-center">
             <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
           </div>
         )}
         {error && !isLoading && (
-          <div className="flex min-h-[24rem] items-center justify-center text-sm text-destructive">
-            {error}
-          </div>
+          <div className="flex min-h-[24rem] items-center justify-center text-sm text-destructive">{error}</div>
         )}
-        <div
-          ref={surfaceRef}
-          className={`${isLoading || error ? "hidden" : "block"} relative mx-auto w-fit max-w-full`}
-          onMouseUp={handlePointerUp}
-          onMouseDown={(event) => {
-            const rect = event.currentTarget.getBoundingClientRect()
-            setLastPointer({
-              x: (event.clientX - rect.left) / rect.width,
-              y: (event.clientY - rect.top) / rect.height,
-            })
-          }}
-        >
-          <div
-            ref={pageRef}
-            className="relative overflow-hidden rounded border bg-white shadow-sm"
-            style={{
-              width: viewportSize.width || undefined,
-              height: viewportSize.height || undefined,
-            }}
-          >
-            <canvas ref={canvasRef} className="absolute inset-0 block bg-white" />
-            <div ref={textLayerRef} className="n9-pdf-text-layer textLayer absolute inset-0 overflow-hidden" />
-            {pageAnnotations.map((annotation) =>
-              annotation.rects?.map((rect, index) => (
-                <div
-                  key={`${annotation.id}-${index}`}
-                  className={`pointer-events-none absolute z-[1] rounded-sm ${
-                    annotation.type === "comment"
-                      ? "bg-sky-300/22 shadow-[inset_0_0_0_1px_rgba(14,165,233,0.45)]"
-                      : annotation.type === "note"
-                        ? "bg-lime-300/20 shadow-[inset_0_0_0_1px_rgba(132,204,22,0.45)]"
-                        : "bg-amber-300/28 shadow-[inset_0_0_0_1px_rgba(251,191,36,0.5)]"
-                  }`}
-                  style={{
-                    left: `${rect.left * 100}%`,
-                    top: `${rect.top * 100}%`,
-                    width: `${rect.width * 100}%`,
-                    height: `${rect.height * 100}%`,
-                  }}
-                />
-              ))
-            )}
-            {pageAnnotations
-              .filter((annotation) => !annotation.rects?.length && annotation.anchor)
-              .map((annotation) => {
-                const anchor = annotation.anchor as { x?: number; y?: number }
-                return (
-                  <div
-                    key={annotation.id}
-                  className="pointer-events-none absolute flex h-6 w-6 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border border-lime-500/70 bg-lime-200/90 text-lime-900 shadow"
-                  style={{
-                      left: `${(anchor.x ?? 0.5) * 100}%`,
-                      top: `${(anchor.y ?? 0.1) * 100}%`,
-                  }}
-                >
-                  <StickyNote className="h-3.5 w-3.5" />
-                  </div>
-                )
-              })}
-          </div>
-          {selectionState && (
-            <div
-              className="absolute z-20 flex items-center gap-1 rounded-full border bg-background/95 p-1 shadow-lg"
-              style={{
-                left: selectionState.toolbarX,
-                top: Math.max(8, selectionState.toolbarY),
-                transform: "translateX(-50%)",
-                maxWidth: "calc(100vw - 2rem)",
-              }}
-            >
-              <Button variant="ghost" size="icon" className="h-8 w-8" onClick={copySelection} title="Copy">
-                <Copy className="h-4 w-4" />
-              </Button>
-              <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => createSelectionAnnotation("highlight")} title="Highlight">
-                <Highlighter className="h-4 w-4" />
-              </Button>
-              <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => createSelectionAnnotation("comment")} title="Comment">
-                <MessageSquarePlus className="h-4 w-4" />
-              </Button>
-              <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => createSelectionAnnotation("note")} title="Note">
-                <StickyNote className="h-4 w-4" />
-              </Button>
-            </div>
+        <div className={`${isLoading || error ? "hidden" : "block"} relative mx-auto w-fit max-w-full`}>
+          {pageNumbers.map((num) => (
+            <LiteraturePdfPageBlock
+              key={num}
+              pageNumber={num}
+              pdfDocument={pdfDocument}
+              fitScale={fitScale}
+              zoom={zoom}
+              pageAnnotations={annotations.filter((a) => a.page_number === num)}
+              selectionState={selectionState}
+              onSelectionChangeRef={onSelectionChangeRef}
+              onPagePointerDown={onPagePointerDown}
+              onCopySelection={copySelection}
+              onHighlightSelection={() => createSelectionAnnotation("highlight")}
+              onNoteSelection={() => createSelectionAnnotation("note")}
+            />
+          ))}
+          {pageCount > 0 && renderedEndPage < pageCount && (
+            <div ref={loadMoreSentinelRef} className="h-8 w-full shrink-0" aria-hidden />
           )}
         </div>
       </div>
-      <Dialog
-        open={composerState.open}
-        onOpenChange={(open) => setComposerState((current) => ({ ...current, open, content: open ? current.content : "" }))}
-      >
+
+      <Dialog open={composerState.open} onOpenChange={(open) => setComposerState((current) => ({ ...current, open, content: open ? current.content : "" }))}>
         <DialogContent className="flex max-h-[92vh] w-[min(99vw,1440px)] max-w-[min(99vw,1440px)] flex-col overflow-hidden">
           <DialogHeader>
-            <DialogTitle>{composerState.type === "comment" ? "Add comment" : "Add note"}</DialogTitle>
+            <DialogTitle>Add note</DialogTitle>
           </DialogHeader>
           <div className="flex-1 space-y-4 overflow-y-auto pr-1">
             {composerState.quoteText && (
-              <div className="rounded-md border bg-muted/40 p-3 text-sm text-muted-foreground">
-                {composerState.quoteText}
-              </div>
+              <div className="rounded-md border bg-muted/40 p-3 text-sm text-muted-foreground">{composerState.quoteText}</div>
             )}
             <TiptapEditor
               content={composerState.content}
               onChange={(content) => setComposerState((current) => ({ ...current, content }))}
-              placeholder={composerState.type === "comment" ? "Write your comment..." : "Write your note..."}
+              placeholder="Write your note..."
               minHeight="220px"
               showAITools={false}
               hideToolbar={false}
-              title={composerState.type}
+              title="note"
             />
           </div>
           <DialogFooter className="shrink-0 border-t pt-4 sm:justify-end">
