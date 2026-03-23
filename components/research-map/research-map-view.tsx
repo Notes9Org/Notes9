@@ -364,7 +364,14 @@ function ResearchMapCanvas() {
   const onNodeDoubleClick = useCallback(
     (_: React.MouseEvent, node: Node) => {
       const href = (node.data as ResearchEntityNodeData)?.href
-      if (href) router.push(href)
+      const kind = (node.data as ResearchEntityNodeData)?.kind
+      if (!href) return
+      if (kind === "literature") {
+        const separator = href.includes("?") ? "&" : "?"
+        router.push(`${href}${separator}tab=pdf`)
+        return
+      }
+      router.push(href)
     },
     [router],
   )

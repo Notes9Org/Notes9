@@ -55,6 +55,10 @@ import {
   Underline as UnderlineIcon,
   Subscript as SubscriptIcon,
   Superscript as SuperscriptIcon,
+  AlignLeft,
+  AlignCenter,
+  AlignRight,
+  AlignJustify,
   Type,
   Paintbrush,
   MessageSquarePlus,
@@ -775,7 +779,7 @@ export const Indent = Extension.create<IndentOptions>({
     ];
   },
 
-  addCommands() {
+  addCommands(): any {
     return {
       setIndent:
         () =>
@@ -857,6 +861,177 @@ export const Indent = Extension.create<IndentOptions>({
       Tab: () => this.editor.commands.setIndent(),
       'Shift-Tab': () => this.editor.commands.unsetIndent(),
     };
+  },
+});
+
+export interface AlignmentOptions {
+  textTypes: string[];
+  verticalTypes: string[];
+  defaultTextAlign: "left" | "center" | "right" | "justify";
+  defaultVerticalAlign: "top" | "middle" | "bottom";
+}
+
+declare module '@tiptap/core' {
+  interface Commands<ReturnType> {
+    setTextAlign: (alignment: "left" | "center" | "right" | "justify") => ReturnType;
+    unsetTextAlign: () => ReturnType;
+    setVerticalAlign: (alignment: "top" | "middle" | "bottom") => ReturnType;
+    unsetVerticalAlign: () => ReturnType;
+  }
+}
+
+export const Alignment = Extension.create<AlignmentOptions>({
+  name: "alignment",
+
+  addOptions() {
+    return {
+      textTypes: ["paragraph", "heading", "tableCell", "tableHeader"],
+      verticalTypes: ["tableCell", "tableHeader"],
+      defaultTextAlign: "left",
+      defaultVerticalAlign: "top",
+    };
+  },
+
+  addGlobalAttributes() {
+    return [
+      {
+        types: this.options.textTypes,
+        attributes: {
+          textAlign: {
+            default: this.options.defaultTextAlign,
+            parseHTML: (element: HTMLElement) =>
+              (element.style.textAlign as "left" | "center" | "right" | "justify" | "") ||
+              this.options.defaultTextAlign,
+            renderHTML: (attributes: Record<string, any>) => {
+              if (
+                !attributes.textAlign ||
+                attributes.textAlign === this.options.defaultTextAlign
+              ) {
+                return {};
+              }
+
+              return {
+                style: `text-align: ${attributes.textAlign}`,
+              };
+            },
+          },
+        },
+      },
+      {
+        types: this.options.verticalTypes,
+        attributes: {
+          verticalAlign: {
+            default: this.options.defaultVerticalAlign,
+            parseHTML: (element: HTMLElement) =>
+              (element.style.verticalAlign as "top" | "middle" | "bottom" | "") ||
+              this.options.defaultVerticalAlign,
+            renderHTML: (attributes: Record<string, any>) => {
+              if (
+                !attributes.verticalAlign ||
+                attributes.verticalAlign === this.options.defaultVerticalAlign
+              ) {
+                return {};
+              }
+
+              return {
+                style: `vertical-align: ${attributes.verticalAlign}`,
+              };
+            },
+          },
+        },
+      },
+    ];
+  },
+
+  addCommands() {
+    const updateNodesInSelection = (
+      state: any,
+      tr: any,
+      types: string[],
+      updater: (attrs: Record<string, any>) => Record<string, any>
+    ) => {
+      const { from, to } = state.selection;
+      let changed = false;
+
+      tr.doc.nodesBetween(from, to, (node: any, pos: number) => {
+        if (types.includes(node.type.name)) {
+          tr.setNodeMarkup(pos, undefined, updater(node.attrs));
+          changed = true;
+        }
+      });
+
+      return changed;
+    };
+
+    return {
+      setTextAlign:
+        (alignment: "left" | "center" | "right" | "justify") =>
+          ({ state, tr, dispatch }: { state: any; tr: any; dispatch: any }) => {
+            const changed = updateNodesInSelection(
+              state,
+              tr,
+              this.options.textTypes,
+              (attrs) => ({ ...attrs, textAlign: alignment })
+            );
+
+            if (changed && dispatch) {
+              dispatch(tr);
+            }
+
+            return changed;
+          },
+      unsetTextAlign:
+        () =>
+          ({ state, tr, dispatch }: { state: any; tr: any; dispatch: any }) => {
+            const changed = updateNodesInSelection(
+              state,
+              tr,
+              this.options.textTypes,
+              (attrs) => ({ ...attrs, textAlign: this.options.defaultTextAlign })
+            );
+
+            if (changed && dispatch) {
+              dispatch(tr);
+            }
+
+            return changed;
+          },
+      setVerticalAlign:
+        (alignment: "top" | "middle" | "bottom") =>
+          ({ state, tr, dispatch }: { state: any; tr: any; dispatch: any }) => {
+            const changed = updateNodesInSelection(
+              state,
+              tr,
+              this.options.verticalTypes,
+              (attrs) => ({ ...attrs, verticalAlign: alignment })
+            );
+
+            if (changed && dispatch) {
+              dispatch(tr);
+            }
+
+            return changed;
+          },
+      unsetVerticalAlign:
+        () =>
+          ({ state, tr, dispatch }: { state: any; tr: any; dispatch: any }) => {
+            const changed = updateNodesInSelection(
+              state,
+              tr,
+              this.options.verticalTypes,
+              (attrs) => ({
+                ...attrs,
+                verticalAlign: this.options.defaultVerticalAlign,
+              })
+            );
+
+            if (changed && dispatch) {
+              dispatch(tr);
+            }
+
+            return changed;
+          },
+    } as any;
   },
 });
 
@@ -1070,6 +1245,7 @@ export function TiptapEditor({
   const [commentsSidebarOpen, setCommentsSidebarOpen] = useState(false)
   /* State merge: keeping activeCommentData from origin */
   const [activeCommentData, setActiveCommentData] = useState<{ author: string; content: string; createdAt: number; id: string; rect: DOMRect } | null>(null)
+  const [, setToolbarSyncTick] = useState(0)
   const lastFinalIndexRef = useRef<number>(0)
   const lastInterimTextRef = useRef<string>("")
   const editorRef = useRef<ReturnType<typeof useEditor> | null>(null)
@@ -1191,6 +1367,7 @@ export function TiptapEditor({
       Superscript,
       ChemicalFormula,
       ChemistryHighlight,
+      Alignment,
       ProtocolMention.configure({
         HTMLAttributes: {
           class: "mention-protocol",
@@ -1218,6 +1395,7 @@ export function TiptapEditor({
       onChange?.(editor.getHTML())
     },
     onSelectionUpdate: ({ editor }) => {
+      setToolbarSyncTick((current) => current + 1)
       if (editor.state.selection.empty) {
         setIsCommenting(false)
       }
@@ -2348,6 +2526,94 @@ export function TiptapEditor({
     setTableMenuOpen(false)
   }
 
+  const updateAlignmentInSelection = (
+    types: string[],
+    updater: (attrs: Record<string, any>) => Record<string, any>
+  ) => {
+    const { state, view } = editor
+    const { tr, selection } = state
+    const { from, to } = selection
+    let changed = false
+
+    if (selection.empty) {
+      const { $from } = selection
+      for (let depth = $from.depth; depth >= 0; depth--) {
+        const node = $from.node(depth)
+        if (!types.includes(node.type.name)) continue
+
+        const pos = depth === 0 ? 0 : $from.before(depth)
+        tr.setNodeMarkup(pos, undefined, updater(node.attrs))
+        changed = true
+        break
+      }
+    } else {
+      tr.doc.nodesBetween(from, to, (node: any, pos: number) => {
+        if (types.includes(node.type.name)) {
+          tr.setNodeMarkup(pos, undefined, updater(node.attrs))
+          changed = true
+        }
+      })
+    }
+
+    if (changed) {
+      view.dispatch(tr)
+    }
+
+    return changed
+  }
+
+  const applyTextAlign = (alignment: "left" | "center" | "right" | "justify") => {
+    editor.chain().focus().run()
+    updateAlignmentInSelection(
+      ["paragraph", "heading", "tableCell", "tableHeader"],
+      (attrs) => ({ ...attrs, textAlign: alignment })
+    )
+  }
+
+  const applyVerticalAlign = (alignment: "top" | "middle" | "bottom") => {
+    editor.chain().focus().run()
+    updateAlignmentInSelection(
+      ["tableCell", "tableHeader"],
+      (attrs) => ({ ...attrs, verticalAlign: alignment })
+    )
+  }
+
+  const currentTextAlign =
+    editor.getAttributes("paragraph").textAlign ||
+    editor.getAttributes("heading").textAlign ||
+    editor.getAttributes("tableCell").textAlign ||
+    editor.getAttributes("tableHeader").textAlign ||
+    "left"
+
+  const currentVerticalAlign =
+    editor.getAttributes("tableCell").verticalAlign ||
+    editor.getAttributes("tableHeader").verticalAlign ||
+    "top"
+
+  const inTable = editor.isActive("table")
+  const currentParagraphStyle = editor.isActive("heading", { level: 1 })
+    ? "Heading 1"
+    : editor.isActive("heading", { level: 2 })
+      ? "Heading 2"
+      : editor.isActive("heading", { level: 3 })
+        ? "Heading 3"
+        : "Paragraph"
+
+  const currentFontFamily = editor.getAttributes("textStyle").fontFamily || "var(--font-work-sans), Work Sans, sans-serif"
+  const currentFontFamilyLabel = (() => {
+    const font = editor.getAttributes("textStyle").fontFamily
+    if (!font) return "Work Sans"
+    if (font.includes("Times New Roman")) return "Times New Roman"
+    if (font.includes("Courier New")) return "Courier New"
+    if (font.includes("Comic Sans MS")) return "Comic Sans MS"
+    if (font.includes("Trebuchet MS")) return "Trebuchet MS"
+    if (font.includes("Lucida Sans Unicode")) return "Lucida Sans"
+    if (font.includes("Verdana")) return "Verdana"
+    if (font.includes("Georgia")) return "Georgia"
+    if (font.includes("Arial")) return "Arial"
+    return font.split(",")[0].replace(/['"]/g, "")
+  })()
+
   return (
     <>
       {/* Toolbar - outside the editor card, or portaled to toolbarPortalRef when provided */}
@@ -2394,7 +2660,7 @@ export function TiptapEditor({
                       <Button variant="ghost" size="sm" className="h-8 gap-1.5 px-2 shrink-0">
                         <Type className="h-4 w-4 shrink-0" />
                         <span className="text-xs max-w-[4rem] truncate">
-                          {editor.isActive("heading", { level: 1 }) ? "Heading 1" : editor.isActive("heading", { level: 2 }) ? "Heading 2" : editor.isActive("heading", { level: 3 }) ? "Heading 3" : "Normal text"}
+                          {currentParagraphStyle}
                         </span>
                         <ChevronDown className="h-4 w-4 shrink-0 opacity-70" />
                       </Button>
@@ -2426,8 +2692,8 @@ export function TiptapEditor({
                   <TooltipTrigger asChild>
                     <DropdownMenuTrigger asChild>
                       <Button variant="ghost" size="sm" className="h-8 gap-1.5 px-2 min-w-[7rem] justify-between shrink-0">
-                        <span className="text-xs truncate max-w-[5.5rem]" style={{ fontFamily: editor.getAttributes("textStyle").fontFamily || "inherit" }}>
-                          {editor.getAttributes("textStyle").fontFamily || "Default"}
+                        <span className="text-xs truncate max-w-[5.5rem]" style={{ fontFamily: currentFontFamily }}>
+                          {currentFontFamilyLabel}
                         </span>
                         <ChevronDown className="h-4 w-4 shrink-0 opacity-70" />
                       </Button>
@@ -2843,6 +3109,81 @@ export function TiptapEditor({
                   <DropdownMenuItem onClick={() => editor.chain().focus().setIndent().run()}>
                     <IndentIncrease className="h-4 w-4 mr-2" />
                     Increase indent
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+
+              <DropdownMenu>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <DropdownMenuTrigger asChild>
+                      <Button variant="ghost" size="sm" className="h-8 w-8 p-0 shrink-0">
+                        {currentTextAlign === "center" ? (
+                          <AlignCenter className="h-4 w-4" />
+                        ) : currentTextAlign === "right" ? (
+                          <AlignRight className="h-4 w-4" />
+                        ) : currentTextAlign === "justify" ? (
+                          <AlignJustify className="h-4 w-4" />
+                        ) : (
+                          <AlignLeft className="h-4 w-4" />
+                        )}
+                      </Button>
+                    </DropdownMenuTrigger>
+                  </TooltipTrigger>
+                  <TooltipContent>Alignment</TooltipContent>
+                </Tooltip>
+                <DropdownMenuContent align="start" className="w-48">
+                  <DropdownMenuLabel>Text alignment</DropdownMenuLabel>
+                  <DropdownMenuItem
+                    onClick={() => applyTextAlign("left")}
+                    className={cn(currentTextAlign === "left" && "bg-accent")}
+                  >
+                    <AlignLeft className="mr-2 h-4 w-4" />
+                    Left
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onClick={() => applyTextAlign("center")}
+                    className={cn(currentTextAlign === "center" && "bg-accent")}
+                  >
+                    <AlignCenter className="mr-2 h-4 w-4" />
+                    Center
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onClick={() => applyTextAlign("right")}
+                    className={cn(currentTextAlign === "right" && "bg-accent")}
+                  >
+                    <AlignRight className="mr-2 h-4 w-4" />
+                    Right
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onClick={() => applyTextAlign("justify")}
+                    className={cn(currentTextAlign === "justify" && "bg-accent")}
+                  >
+                    <AlignJustify className="mr-2 h-4 w-4" />
+                    Justify
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuLabel>Cell vertical alignment</DropdownMenuLabel>
+                  <DropdownMenuItem
+                    disabled={!inTable}
+                    onClick={() => applyVerticalAlign("top")}
+                    className={cn(currentVerticalAlign === "top" && "bg-accent")}
+                  >
+                    Top
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    disabled={!inTable}
+                    onClick={() => applyVerticalAlign("middle")}
+                    className={cn(currentVerticalAlign === "middle" && "bg-accent")}
+                  >
+                    Middle
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    disabled={!inTable}
+                    onClick={() => applyVerticalAlign("bottom")}
+                    className={cn(currentVerticalAlign === "bottom" && "bg-accent")}
+                  >
+                    Bottom
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
@@ -3295,7 +3636,6 @@ export function TiptapEditor({
             color: var(--foreground);
             background: var(--card);
             border: 1px solid var(--border);
-            /* box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.2); */
             position: relative;
           }
           .ProseMirror table td,

@@ -63,6 +63,7 @@ interface LiteratureDetailViewProps {
   showBreadcrumb?: boolean;
   showActions?: boolean;
   onRefresh?: () => void;
+  initialTab?: "overview" | "pdf" | "citation" | "linked";
 }
 
 export function LiteratureDetailView({
@@ -70,6 +71,7 @@ export function LiteratureDetailView({
   showBreadcrumb = true,
   showActions = true,
   onRefresh,
+  initialTab = "overview",
 }: LiteratureDetailViewProps) {
   const formatDate = (date: string | null) => {
     if (!date) return "—";
@@ -252,7 +254,7 @@ export function LiteratureDetailView({
       </div>
 
       {/* Tabs */}
-      <Tabs defaultValue="overview" className="space-y-4">
+      <Tabs defaultValue={initialTab} className="space-y-4">
         <TabsList>
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="pdf">PDF</TabsTrigger>

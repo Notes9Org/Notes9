@@ -16,6 +16,7 @@ import {
 import { ArrowLeft, FileText, Calendar, Package, CheckCircle } from 'lucide-react'
 import Link from 'next/link'
 import { ProtocolActions } from './protocol-actions'
+import { ProtocolEditor } from './protocol-editor'
 
 export default async function ProtocolDetailPage({
   params,
@@ -172,20 +173,7 @@ export default async function ProtocolDetailPage({
           </TabsList>
 
           <TabsContent value="content" className="space-y-4">
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-foreground">Standard Operating Procedure</CardTitle>
-                <CardDescription>
-                  {protocol.description || "No description provided"}
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div 
-                  className="prose prose-invert max-w-none text-foreground"
-                  dangerouslySetInnerHTML={{ __html: protocol.content }}
-                />
-              </CardContent>
-            </Card>
+            <ProtocolEditor protocol={protocol} />
           </TabsContent>
 
           <TabsContent value="usage" className="space-y-4">
@@ -323,4 +311,3 @@ export default async function ProtocolDetailPage({
       </div>
     )
 }
-

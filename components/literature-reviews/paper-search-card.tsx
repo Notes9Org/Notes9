@@ -138,14 +138,6 @@ export function PaperSearchCard({ paper, onStage, onSave, onSaveToRepository, on
                 </a>
               </Button>
             )}
-            {paper.isOpenAccess && paper.pdfUrl && (
-              <Button variant="outline" size="icon" asChild title="Download PDF">
-                <a href={paper.pdfUrl} target="_blank" rel="noopener noreferrer" download aria-label="Download PDF">
-                  <Download size={14} />
-                </a>
-              </Button>
-            )}
-            
             <div className="flex-1"></div>
             
             {/* Staging mode actions */}

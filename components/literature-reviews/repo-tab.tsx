@@ -9,6 +9,13 @@ import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import { Checkbox } from "@/components/ui/checkbox"
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
+import {
   AlertDialog,
   AlertDialogAction,
   AlertDialogCancel,
@@ -49,22 +56,32 @@ interface LiteratureReview {
 
 interface RepoTabProps {
   literatureReviews: LiteratureReview[] | null;
+  projects: { id: string; name: string }[];
+  experiments: { id: string; name: string; project_id: string }[];
 }
 
-export function RepoTab({ literatureReviews }: RepoTabProps) {
+export function RepoTab({
+  literatureReviews,
+  projects,
+  experiments,
+}: RepoTabProps) {
   const router = useRouter();
   const [selectedLiteratureId, setSelectedLiteratureId] = useState<
     string | null
   >(null);
+  const [selectedTab, setSelectedTab] = useState<"overview" | "pdf" | "citation" | "linked">("overview");
   const [modalOpen, setModalOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [deleteTarget, setDeleteTarget] = useState<LiteratureReview | null>(null);
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [selectedProjectId, setSelectedProjectId] = useState<string>("all");
+  const [selectedExperimentId, setSelectedExperimentId] = useState<string>("all");
 
-  const handleOpenModal = (id: string) => {
+  const handleOpenModal = (id: string, tab: "overview" | "pdf" | "citation" | "linked" = "overview") => {
     setSelectedLiteratureId(id);
+    setSelectedTab(tab);
     setModalOpen(true);
   };
 
@@ -97,29 +114,64 @@ export function RepoTab({ literatureReviews }: RepoTabProps) {
     );
   };
 
+  const filteredExperiments = useMemo(
+    () =>
+      selectedProjectId === "all"
+        ? experiments
+        : experiments.filter((experiment) => experiment.project_id === selectedProjectId),
+    [experiments, selectedProjectId]
+  );
+
   // Filter literature reviews based on search query
-  const filteredLiteratureReviews = useMemo(() => literatureReviews?.filter((lit) => {
-    if (!searchQuery.trim()) return true;
+  const filteredLiteratureReviews = useMemo(
+    () =>
+      literatureReviews?.filter((lit) => {
+        const matchesSearch = (() => {
+          if (!searchQuery.trim()) return true;
 
-    const query = searchQuery.toLowerCase();
-    const title = lit.title?.toLowerCase() || "";
-    const authors = lit.authors?.toLowerCase() || "";
-    const journal = lit.journal?.toLowerCase() || "";
-    const doi = lit.doi?.toLowerCase() || "";
-    const status = lit.status?.toLowerCase() || "";
-    const projectName = lit.project?.name?.toLowerCase() || "";
-    const experimentName = lit.experiment?.name?.toLowerCase() || "";
+          const query = searchQuery.toLowerCase();
+          const title = lit.title?.toLowerCase() || "";
+          const authors = lit.authors?.toLowerCase() || "";
+          const journal = lit.journal?.toLowerCase() || "";
+          const doi = lit.doi?.toLowerCase() || "";
+          const status = lit.status?.toLowerCase() || "";
+          const projectName = lit.project?.name?.toLowerCase() || "";
+          const experimentName = lit.experiment?.name?.toLowerCase() || "";
 
-    return (
-      title.includes(query) ||
-      authors.includes(query) ||
-      journal.includes(query) ||
-      doi.includes(query) ||
-      status.includes(query) ||
-      projectName.includes(query) ||
-      experimentName.includes(query)
-    );
-  }), [literatureReviews, searchQuery]);
+          return (
+            title.includes(query) ||
+            authors.includes(query) ||
+            journal.includes(query) ||
+            doi.includes(query) ||
+            status.includes(query) ||
+            projectName.includes(query) ||
+            experimentName.includes(query)
+          );
+        })();
+
+        const matchesProject =
+          selectedProjectId === "all" || lit.project?.id === selectedProjectId;
+        const matchesExperiment =
+          selectedExperimentId === "all" || lit.experiment?.id === selectedExperimentId;
+
+        return (
+          matchesSearch &&
+          matchesProject &&
+          matchesExperiment
+        );
+      }),
+    [
+      literatureReviews,
+      searchQuery,
+      selectedExperimentId,
+      selectedProjectId,
+    ]
+  );
+
+  const clearFilters = () => {
+    setSelectedProjectId("all");
+    setSelectedExperimentId("all");
+  };
 
   const visibleIds = filteredLiteratureReviews?.map((lit) => lit.id) || [];
   const allVisibleSelected =
@@ -175,14 +227,64 @@ export function RepoTab({ literatureReviews }: RepoTabProps) {
   return (
     <div className="space-y-6">
       {/* Search */}
-      <div className="relative max-w-md">
-        <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
-        <Input
-          placeholder="Search literature..."
-          className="pl-9 text-foreground"
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-        />
+      <div className="space-y-3">
+        <div className="relative max-w-md">
+          <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+          <Input
+            placeholder="Search literature..."
+            className="pl-9 text-foreground"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+          />
+        </div>
+
+        <div className="flex flex-col gap-3 lg:flex-row lg:flex-wrap lg:items-center">
+          <Select
+            value={selectedProjectId}
+            onValueChange={(value) => {
+              setSelectedProjectId(value);
+              setSelectedExperimentId("all");
+            }}
+          >
+            <SelectTrigger className="w-full lg:w-[180px]">
+              <SelectValue placeholder="Project" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All projects</SelectItem>
+              {projects.map((project) => (
+                <SelectItem key={project.id} value={project.id}>
+                  {project.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
+          <Select
+            value={selectedExperimentId}
+            onValueChange={setSelectedExperimentId}
+          >
+            <SelectTrigger className="w-full lg:w-[180px]">
+              <SelectValue placeholder="Experiment" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All experiments</SelectItem>
+              {filteredExperiments.map((experiment) => (
+                <SelectItem key={experiment.id} value={experiment.id}>
+                  {experiment.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
+          <Button
+            variant="ghost"
+            size="sm"
+            className="lg:ml-auto"
+            onClick={clearFilters}
+          >
+            Clear filters
+          </Button>
+        </div>
       </div>
 
       {/* Literature Table */}
@@ -264,10 +366,14 @@ export function RepoTab({ literatureReviews }: RepoTabProps) {
                         </div>
                       )}
                       {lit.pdf_storage_path && (
-                        <div className="mt-1 flex items-center gap-1 text-xs text-[var(--n9-accent)]">
+                        <button
+                          type="button"
+                          onClick={() => handleOpenModal(lit.id, "pdf")}
+                          className="mt-1 flex items-center gap-1 text-xs text-[var(--n9-accent)] hover:underline"
+                        >
                           <FileText className="h-3 w-3" />
                           PDF attached
-                        </div>
+                        </button>
                       )}
                     </TableCell>
                     <TableCell className="text-sm text-foreground">
@@ -330,7 +436,7 @@ export function RepoTab({ literatureReviews }: RepoTabProps) {
                         <Button
                           variant="ghost"
                           size="icon"
-                          className="text-muted-foreground hover:bg-red-50 hover:text-red-500 dark:hover:bg-red-950/40 dark:hover:text-red-300"
+                          className="text-muted-foreground hover:bg-rose-50 hover:text-rose-400 dark:hover:bg-rose-950/40 dark:hover:text-rose-300"
                           onClick={() => setDeleteTarget(lit)}
                           aria-label={`Delete ${lit.title}`}
                         >
@@ -372,6 +478,7 @@ export function RepoTab({ literatureReviews }: RepoTabProps) {
         literatureId={selectedLiteratureId}
         open={modalOpen}
         onOpenChange={setModalOpen}
+        initialTab={selectedTab}
       />
 
       <AlertDialog
@@ -402,7 +509,7 @@ export function RepoTab({ literatureReviews }: RepoTabProps) {
                 }
               }}
               disabled={isDeleting}
-              className="bg-red-500 text-white hover:bg-red-600 dark:bg-red-300 dark:text-red-950 dark:hover:bg-red-200"
+              className="bg-rose-300 text-rose-950 hover:bg-rose-400 dark:bg-rose-300 dark:text-rose-950 dark:hover:bg-rose-200"
             >
               {isDeleting ? "Deleting..." : "Delete Reference"}
             </AlertDialogAction>
@@ -427,7 +534,7 @@ export function RepoTab({ literatureReviews }: RepoTabProps) {
                 void deleteLiterature(selectedIds);
               }}
               disabled={isDeleting || selectedIds.length === 0}
-              className="bg-red-500 text-white hover:bg-red-600 dark:bg-red-300 dark:text-red-950 dark:hover:bg-red-200"
+              className="bg-rose-300 text-rose-950 hover:bg-rose-400 dark:bg-rose-300 dark:text-rose-950 dark:hover:bg-rose-200"
             >
               {isDeleting ? "Deleting..." : `Delete Selected (${selectedIds.length})`}
             </AlertDialogAction>

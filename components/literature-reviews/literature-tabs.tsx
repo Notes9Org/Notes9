@@ -64,7 +64,11 @@ interface LiteratureTabsProps {
   experiments: { id: string; name: string; project_id: string }[]
 }
 
-export function LiteratureTabs({ literatureReviews, projects, experiments }: LiteratureTabsProps) {
+export function LiteratureTabs({
+  literatureReviews,
+  projects,
+  experiments,
+}: LiteratureTabsProps) {
   const router = useRouter()
   
   // Lift search state to parent to persist across tab switches
@@ -238,7 +242,11 @@ export function LiteratureTabs({ literatureReviews, projects, experiments }: Lit
       </TabsContent>
 
       <TabsContent value="repo" className="mt-6">
-        <RepoTab literatureReviews={literatureReviews} />
+        <RepoTab
+          literatureReviews={literatureReviews}
+          projects={projects}
+          experiments={experiments}
+        />
       </TabsContent>
 
       <Dialog

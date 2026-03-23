@@ -46,10 +46,14 @@ export function LiteraturePdfViewer({ pdfUrl, annotations, onCreateAnnotation }:
   const textLayerRef = useRef<HTMLDivElement | null>(null)
   const surfaceRef = useRef<HTMLDivElement | null>(null)
   const pageRef = useRef<HTMLDivElement | null>(null)
+  const viewportFrameRef = useRef<HTMLDivElement | null>(null)
+  const renderTaskRef = useRef<any>(null)
+  const textLayerTaskRef = useRef<any>(null)
   const [pdfDocument, setPdfDocument] = useState<any>(null)
   const [pageCount, setPageCount] = useState(0)
   const [pageNumber, setPageNumber] = useState(1)
-  const [scale, setScale] = useState(1.3)
+  const [zoom, setZoom] = useState(1)
+  const [fitScale, setFitScale] = useState(1)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [viewportSize, setViewportSize] = useState({ width: 0, height: 0 })
@@ -112,6 +116,37 @@ export function LiteraturePdfViewer({ pdfUrl, annotations, onCreateAnnotation }:
   }, [pdfUrl])
 
   useEffect(() => {
+    if (!pdfDocument || !viewportFrameRef.current) return
+
+    let cancelled = false
+    let resizeObserver: ResizeObserver | null = null
+
+    const updateFitScale = async () => {
+      if (!pdfDocument || !viewportFrameRef.current) return
+      const page = await pdfDocument.getPage(pageNumber)
+      if (cancelled || !viewportFrameRef.current) return
+
+      const baseViewport = page.getViewport({ scale: 1 })
+      const frameWidth = Math.max(320, viewportFrameRef.current.clientWidth - 32)
+      const nextFitScale = frameWidth / baseViewport.width
+
+      setFitScale(Math.max(0.6, Math.min(2.2, nextFitScale)))
+    }
+
+    updateFitScale().catch(console.error)
+
+    resizeObserver = new ResizeObserver(() => {
+      updateFitScale().catch(console.error)
+    })
+    resizeObserver.observe(viewportFrameRef.current)
+
+    return () => {
+      cancelled = true
+      resizeObserver?.disconnect()
+    }
+  }, [pageNumber, pdfDocument])
+
+  useEffect(() => {
     let isActive = true
     let textLayer: any = null
 
@@ -119,15 +154,17 @@ export function LiteraturePdfViewer({ pdfUrl, annotations, onCreateAnnotation }:
       if (!pdfDocument || !canvasRef.current || !textLayerRef.current) return
       setSelectionState(null)
       const page = await pdfDocument.getPage(pageNumber)
+      const scale = fitScale * zoom
       const viewport = page.getViewport({ scale })
       const canvas = canvasRef.current
       const textLayerContainer = textLayerRef.current
       const pageContainer = pageRef.current
       const context = canvas.getContext("2d")
+      const outputScale = Math.max(1, Math.min(3, window.devicePixelRatio || 1.5))
 
       if (!context || !pageContainer) return
-      canvas.width = viewport.width
-      canvas.height = viewport.height
+      canvas.width = Math.floor(viewport.width * outputScale)
+      canvas.height = Math.floor(viewport.height * outputScale)
       canvas.style.width = `${viewport.width}px`
       canvas.style.height = `${viewport.height}px`
       pageContainer.style.width = `${viewport.width}px`
@@ -139,7 +176,14 @@ export function LiteraturePdfViewer({ pdfUrl, annotations, onCreateAnnotation }:
       textLayerContainer.style.setProperty("--scale-factor", `${viewport.scale}`)
       setViewportSize({ width: viewport.width, height: viewport.height })
 
-      await page.render({ canvasContext: context, viewport }).promise
+      renderTaskRef.current?.cancel?.()
+      textLayerTaskRef.current?.cancel?.()
+      context.setTransform(1, 0, 0, 1, 0, 0)
+      context.clearRect(0, 0, canvas.width, canvas.height)
+      context.setTransform(outputScale, 0, 0, outputScale, 0, 0)
+      const renderTask = page.render({ canvasContext: context, viewport })
+      renderTaskRef.current = renderTask
+      await renderTask.promise
       const pdfjsLib: any = await import("pdfjs-dist/legacy/build/pdf.mjs")
       textLayer = new pdfjsLib.TextLayer({
         textContentSource: page.streamTextContent({
@@ -149,20 +193,34 @@ export function LiteraturePdfViewer({ pdfUrl, annotations, onCreateAnnotation }:
         container: textLayerContainer,
         viewport,
       })
+      textLayerTaskRef.current = textLayer
       await textLayer.render()
       if (!isActive) return
     }
 
     render().catch((renderError) => {
+      const message = String(renderError?.message || renderError || "")
+      const name = String(renderError?.name || "")
+      if (
+        name === "AbortException" ||
+        message.includes("cancelled") ||
+        message.includes("multiple render() operations")
+      ) {
+        return
+      }
       console.error(renderError)
       setError("Failed to render this PDF page.")
     })
 
     return () => {
       isActive = false
+      renderTaskRef.current?.cancel?.()
+      renderTaskRef.current = null
+      textLayerTaskRef.current?.cancel?.()
+      textLayerTaskRef.current = null
       textLayer?.cancel?.()
     }
-  }, [pageNumber, pdfDocument, scale])
+  }, [fitScale, pageNumber, pdfDocument, zoom])
 
   const clearSelection = () => {
     setSelectionState(null)
@@ -317,30 +375,30 @@ export function LiteraturePdfViewer({ pdfUrl, annotations, onCreateAnnotation }:
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center gap-2 rounded-lg border bg-background/80 p-3">
-        <Button variant="outline" size="sm" onClick={() => setPageNumber((current) => Math.max(1, current - 1))} disabled={pageNumber <= 1}>
+      <div className="flex flex-wrap items-center gap-2 rounded-lg border bg-background/80 p-2 sm:p-3">
+        <Button variant="outline" size="sm" className="h-8 px-2.5 sm:h-9 sm:px-3" onClick={() => setPageNumber((current) => Math.max(1, current - 1))} disabled={pageNumber <= 1}>
           <ChevronLeft className="mr-2 h-4 w-4" />
           Prev
         </Button>
-        <div className="text-sm text-muted-foreground">
+        <div className="text-xs text-muted-foreground sm:text-sm">
           Page {pageNumber} of {pageCount || "—"}
         </div>
-        <Button variant="outline" size="sm" onClick={() => setPageNumber((current) => Math.min(pageCount, current + 1))} disabled={!pageCount || pageNumber >= pageCount}>
+        <Button variant="outline" size="sm" className="h-8 px-2.5 sm:h-9 sm:px-3" onClick={() => setPageNumber((current) => Math.min(pageCount, current + 1))} disabled={!pageCount || pageNumber >= pageCount}>
           Next
           <ChevronRight className="ml-2 h-4 w-4" />
         </Button>
-        <div className="ml-auto flex items-center gap-2">
-          <Button variant="outline" size="icon" onClick={() => setScale((current) => Math.max(0.75, current - 0.1))}>
+        <div className="flex w-full items-center justify-end gap-2 sm:ml-auto sm:w-auto">
+          <Button variant="outline" size="icon" className="h-8 w-8 sm:h-9 sm:w-9" onClick={() => setZoom((current) => Math.max(0.75, current - 0.1))}>
             <ZoomOut className="h-4 w-4" />
           </Button>
-          <div className="w-16 text-center text-sm text-muted-foreground">{Math.round(scale * 100)}%</div>
-          <Button variant="outline" size="icon" onClick={() => setScale((current) => Math.min(3, current + 0.1))}>
+          <div className="w-14 text-center text-xs text-muted-foreground sm:w-16 sm:text-sm">{Math.round(fitScale * zoom * 100)}%</div>
+          <Button variant="outline" size="icon" className="h-8 w-8 sm:h-9 sm:w-9" onClick={() => setZoom((current) => Math.min(3, current + 0.1))}>
             <ZoomIn className="h-4 w-4" />
           </Button>
-          <Button variant="outline" size="icon" onClick={createPageNote} title="Add note">
+          <Button variant="outline" size="icon" className="h-8 w-8 sm:h-9 sm:w-9" onClick={createPageNote} title="Add note">
             <StickyNote className="h-4 w-4" />
           </Button>
-          <Button variant="outline" size="sm" asChild>
+          <Button variant="outline" size="sm" className="h-8 px-2.5 text-xs sm:h-9 sm:px-3 sm:text-sm" asChild>
             <a href={pdfUrl} target="_blank" rel="noopener noreferrer">
               <ExternalLink className="mr-2 h-4 w-4" />
               Open
@@ -349,7 +407,7 @@ export function LiteraturePdfViewer({ pdfUrl, annotations, onCreateAnnotation }:
         </div>
       </div>
 
-      <div className="relative overflow-auto rounded-lg border bg-muted/30 p-4">
+      <div ref={viewportFrameRef} className="relative overflow-auto rounded-lg border bg-muted/30 p-2 sm:p-4">
         {isLoading && (
           <div className="flex min-h-[24rem] items-center justify-center">
             <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
@@ -362,7 +420,7 @@ export function LiteraturePdfViewer({ pdfUrl, annotations, onCreateAnnotation }:
         )}
         <div
           ref={surfaceRef}
-          className={`${isLoading || error ? "hidden" : "block"} relative mx-auto w-fit`}
+          className={`${isLoading || error ? "hidden" : "block"} relative mx-auto w-fit max-w-full`}
           onMouseUp={handlePointerUp}
           onMouseDown={(event) => {
             const rect = event.currentTarget.getBoundingClientRect()
@@ -427,6 +485,7 @@ export function LiteraturePdfViewer({ pdfUrl, annotations, onCreateAnnotation }:
                 left: selectionState.toolbarX,
                 top: Math.max(8, selectionState.toolbarY),
                 transform: "translateX(-50%)",
+                maxWidth: "calc(100vw - 2rem)",
               }}
             >
               <Button variant="ghost" size="icon" className="h-8 w-8" onClick={copySelection} title="Copy">
