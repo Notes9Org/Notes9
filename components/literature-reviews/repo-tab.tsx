@@ -69,6 +69,7 @@ export function RepoTab({
   const [selectedLiteratureId, setSelectedLiteratureId] = useState<
     string | null
   >(null);
+  const [selectedTab, setSelectedTab] = useState<"overview" | "pdf" | "citation" | "linked">("overview");
   const [modalOpen, setModalOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
@@ -78,8 +79,9 @@ export function RepoTab({
   const [selectedProjectId, setSelectedProjectId] = useState<string>("all");
   const [selectedExperimentId, setSelectedExperimentId] = useState<string>("all");
 
-  const handleOpenModal = (id: string) => {
+  const handleOpenModal = (id: string, tab: "overview" | "pdf" | "citation" | "linked" = "overview") => {
     setSelectedLiteratureId(id);
+    setSelectedTab(tab);
     setModalOpen(true);
   };
 
@@ -364,10 +366,14 @@ export function RepoTab({
                         </div>
                       )}
                       {lit.pdf_storage_path && (
-                        <div className="mt-1 flex items-center gap-1 text-xs text-[var(--n9-accent)]">
+                        <button
+                          type="button"
+                          onClick={() => handleOpenModal(lit.id, "pdf")}
+                          className="mt-1 flex items-center gap-1 text-xs text-[var(--n9-accent)] hover:underline"
+                        >
                           <FileText className="h-3 w-3" />
                           PDF attached
-                        </div>
+                        </button>
                       )}
                     </TableCell>
                     <TableCell className="text-sm text-foreground">
@@ -472,6 +478,7 @@ export function RepoTab({
         literatureId={selectedLiteratureId}
         open={modalOpen}
         onOpenChange={setModalOpen}
+        initialTab={selectedTab}
       />
 
       <AlertDialog

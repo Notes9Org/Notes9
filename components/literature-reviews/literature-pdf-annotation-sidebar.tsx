@@ -1,22 +1,27 @@
 "use client"
 
-import { Loader2, MessageSquareText, StickyNote, Trash2 } from "lucide-react"
+import { Loader2, MessageSquareText, StickyNote, Trash2, X } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { useToast } from "@/hooks/use-toast"
+import { cn } from "@/lib/utils"
 import type { LiteraturePdfAnnotation } from "@/types/literature-pdf"
 
 interface LiteraturePdfAnnotationSidebarProps {
   annotations: LiteraturePdfAnnotation[]
   loading: boolean
   onDeleteAnnotation: (annotationId: string) => Promise<void>
+  className?: string
+  onClose?: () => void
 }
 
 export function LiteraturePdfAnnotationSidebar({
   annotations,
   loading,
   onDeleteAnnotation,
+  className,
+  onClose,
 }: LiteraturePdfAnnotationSidebarProps) {
   const { toast } = useToast()
 
@@ -34,12 +39,19 @@ export function LiteraturePdfAnnotationSidebar({
   }
 
   return (
-    <div className="space-y-4 rounded-lg border bg-background/70 p-4">
-      <div>
-        <h3 className="font-semibold text-foreground">Highlights and Notes</h3>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Select text in the reader to highlight or comment. Use the note icon in the toolbar for page notes.
-        </p>
+    <div className={cn("space-y-4 rounded-lg border bg-background/88 p-4 backdrop-blur-sm", className)}>
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <h3 className="font-semibold text-foreground">Highlights and Notes</h3>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Select text in the reader to highlight or comment. Use the note icon in the toolbar for page notes.
+          </p>
+        </div>
+        {onClose ? (
+          <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0" onClick={onClose} aria-label="Close annotations panel">
+            <X className="h-4 w-4" />
+          </Button>
+        ) : null}
       </div>
 
       <div className="rounded-md border">

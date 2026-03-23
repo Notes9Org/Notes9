@@ -15,12 +15,14 @@ interface LiteratureDetailModalProps {
   literatureId: string | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  initialTab?: "overview" | "pdf" | "citation" | "linked";
 }
 
 export function LiteratureDetailModal({
   literatureId,
   open,
   onOpenChange,
+  initialTab = "overview",
 }: LiteratureDetailModalProps) {
   const [literature, setLiterature] = useState<any>(null);
   const [loading, setLoading] = useState(false);
@@ -78,6 +80,9 @@ export function LiteratureDetailModal({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="!max-w-7xl max-h-[90vh] overflow-y-auto pt-12">
+        <DialogHeader className="sr-only">
+          <DialogTitle>{literature?.title || "Literature details"}</DialogTitle>
+        </DialogHeader>
         {loading && (
           <div className="flex items-center justify-center py-12">
             <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
@@ -96,6 +101,7 @@ export function LiteratureDetailModal({
             showBreadcrumb={false}
             showActions={true}
             onRefresh={fetchLiterature}
+            initialTab={initialTab}
           />
         )}
       </DialogContent>

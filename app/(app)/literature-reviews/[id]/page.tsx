@@ -5,10 +5,19 @@ import { LiteratureDetailView } from '@/components/literature-reviews/literature
 
 export default async function LiteratureReviewDetailPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>
+  searchParams?: Promise<{ tab?: string }>
 }) {
   const { id } = await params
+  const resolvedSearch = searchParams ? await searchParams : {}
+  const initialTab =
+    resolvedSearch.tab === "pdf" ||
+    resolvedSearch.tab === "citation" ||
+    resolvedSearch.tab === "linked"
+      ? resolvedSearch.tab
+      : "overview"
   const supabase = await createClient()
 
   const {
@@ -47,7 +56,12 @@ export default async function LiteratureReviewDetailPage({
         ]}
       />
       {/* Literature Detail */}
-      <LiteratureDetailView literature={literature} showBreadcrumb={false} showActions={true} />
+      <LiteratureDetailView
+        literature={literature}
+        showBreadcrumb={false}
+        showActions={true}
+        initialTab={initialTab}
+      />
     </div>
   )
 }
