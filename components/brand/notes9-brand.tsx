@@ -5,6 +5,8 @@ interface Notes9BrandProps {
   className?: string
   iconClassName?: string
   textClassName?: string
+  /** Applied to the inline “N · mark · tes9” row */
+  wordmarkClassName?: string
   stacked?: boolean
   showIcon?: boolean
   withTagline?: boolean
@@ -53,6 +55,16 @@ function getWordmarkMetrics(textClassName?: string) {
     }
   }
 
+  if (/(?:^|\s)h-8(?:\s|$)/.test(textClassName)) {
+    return {
+      text: "text-[2.34rem]",
+      mascot: "h-[1.3rem] w-[1.3rem]",
+      baseline: "items-end",
+      extra: "tracking-[-0.01em]",
+      textNudgeY: "translate-y-[0.30em]",
+    }
+  }
+
   return {
     text: "text-[2.34rem]",
     mascot: "h-[1.55rem] w-[1.55rem]",
@@ -66,6 +78,7 @@ export function Notes9Brand({
   className,
   iconClassName,
   textClassName,
+  wordmarkClassName,
   stacked = false,
   showIcon = false,
   withTagline = false,
@@ -89,6 +102,7 @@ export function Notes9Brand({
             metrics.baseline,
             metrics.text,
             metrics.extra,
+            wordmarkClassName,
           )}
         >
           <span aria-hidden="true" className={metrics.textNudgeY}>N</span>
@@ -108,7 +122,7 @@ export function Notes9Brand({
           <span aria-hidden="true" className={metrics.textNudgeY}>tes9</span>
         </div>
         {withTagline ? (
-          <span className="block truncate text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
+          <span className="mt-0.5 block truncate text-[11px] font-medium uppercase leading-normal tracking-[0.18em] text-muted-foreground">
             Research Lab
           </span>
         ) : null}
