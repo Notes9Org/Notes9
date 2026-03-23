@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
-import { Copy, Check, RefreshCw, Sparkles } from 'lucide-react';
+import { Copy, Check, RefreshCw } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { MarkdownRenderer } from './markdown-renderer';
 
@@ -51,8 +51,13 @@ export function ChatMessage({
       {/* Assistant Avatar */}
       {!isUser && (
         <Avatar className="size-8 shrink-0">
+          <AvatarImage
+            src="/notes9-logo-mark-transparent.png"
+            alt=""
+            className="object-contain p-1.5 dark:invert dark:brightness-125"
+          />
           <AvatarFallback className="bg-primary/10 text-primary">
-            <Sparkles className="size-4" />
+            <span className="notes9-mascot-mask size-[18px]" aria-hidden />
           </AvatarFallback>
         </Avatar>
       )}
@@ -136,4 +141,3 @@ export function ChatMessage({
     </div>
   );
 }
-

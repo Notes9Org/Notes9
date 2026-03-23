@@ -11,6 +11,57 @@ interface Notes9BrandProps {
   hrefLabel?: string
 }
 
+function getWordmarkMetrics(textClassName?: string) {
+  if (!textClassName) {
+    return {
+      text: "text-[2.34rem]",
+      mascot: "h-[1.55rem] w-[1.55rem]",
+      baseline: "items-end",
+      extra: "tracking-[-0.01em]",
+      textNudgeY: "translate-y-[0.18em]",
+    }
+  }
+
+  if (textClassName.includes("h-10")) {
+    return {
+      text: "text-[3.1rem]",
+      mascot: "h-[2.05rem] w-[2.05rem]",
+      baseline: "items-end",
+      extra: "tracking-[-0.01em]",
+      textNudgeY: "translate-y-[0.18em]",
+    }
+  }
+
+  if (textClassName.includes("h-9")) {
+    return {
+      text: "text-[2.74rem]",
+      mascot: "h-[1.8rem] w-[1.8rem]",
+      baseline: "items-end",
+      extra: "tracking-[-0.01em]",
+      textNudgeY: "translate-y-[0.18em]",
+    }
+  }
+
+  if (textClassName.includes("h-5")) {
+    return {
+      text: "text-[1.82rem]",
+      mascot: "h-[1.1rem] w-[1.1rem]",
+      baseline: "items-end",
+      extra: "tracking-[0em]",
+      // Sidebar compact wordmark: sit "N" / "tes9" lower vs. the mark for optical balance
+      textNudgeY: "translate-y-[0.32em]",
+    }
+  }
+
+  return {
+    text: "text-[2.34rem]",
+    mascot: "h-[1.55rem] w-[1.55rem]",
+    baseline: "items-end",
+    extra: "tracking-[-0.01em]",
+    textNudgeY: "translate-y-[0.18em]",
+  }
+}
+
 export function Notes9Brand({
   className,
   iconClassName,
@@ -20,46 +71,42 @@ export function Notes9Brand({
   withTagline = false,
   hrefLabel = "Notes9",
 }: Notes9BrandProps) {
+  const metrics = getWordmarkMetrics(textClassName)
+
   return (
     <div
       aria-label={hrefLabel}
       className={cn(
-        "flex min-w-0 items-center gap-3",
+        "flex min-w-0 items-center",
         stacked && "flex-col text-center",
         className,
       )}
     >
-      {stacked || showIcon ? (
-        <div className={cn("relative h-9 w-9 shrink-0", iconClassName)}>
-          <Image
-            src="/notes9-logo-mark-transparent.png"
-            alt="Notes9 logo"
-            fill
-            sizes="(max-width: 768px) 36px, 48px"
-            className="object-contain dark:invert dark:brightness-125"
-            priority
-          />
-        </div>
-      ) : null}
       <div className={cn("min-w-0", stacked && "flex flex-col items-center")}>
-        <Image
-          src="/notes9-wordmark-transparent.png"
-          alt="Notes9"
-          width={493}
-          height={139}
-          sizes="(max-width: 768px) 180px, 240px"
-          className={cn("block h-8 w-auto object-contain dark:hidden", textClassName)}
-          priority
-        />
-        <Image
-          src="/notes9-wordmark-dark.png"
-          alt="Notes9"
-          width={493}
-          height={139}
-          sizes="(max-width: 768px) 180px, 240px"
-          className={cn("hidden h-8 w-auto object-contain dark:block", textClassName)}
-          priority
-        />
+        <div
+          className={cn(
+            "inline-flex min-w-0 font-sans font-semibold leading-none text-foreground",
+            metrics.baseline,
+            metrics.text,
+            metrics.extra,
+          )}
+        >
+          <span aria-hidden="true" className={metrics.textNudgeY}>N</span>
+          <span className="sr-only">o</span>
+          <span
+            aria-hidden="true"
+            className={cn("relative mx-[0.02em] inline-flex shrink-0 items-center justify-center self-end translate-y-[-0.03em]", metrics.mascot)}
+          >
+            <Image
+              src="/notes9-logo-mark-transparent.png"
+              alt=""
+              fill
+              sizes="40px"
+              className="object-contain dark:invert dark:brightness-125"
+            />
+          </span>
+          <span aria-hidden="true" className={metrics.textNudgeY}>tes9</span>
+        </div>
         {withTagline ? (
           <span className="block truncate text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
             Research Lab

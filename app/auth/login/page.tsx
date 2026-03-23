@@ -244,9 +244,9 @@ function LoginForm() {
                     {isLoading ? (
                       <span className="inline-flex items-center gap-2">
                         <img
-                          src="/notes9-loading-transparent.apng"
+                          src="/notes9-mascot-ui.png"
                           alt="Signing in"
-                          className="h-6 w-auto object-contain"
+                          className="h-4 w-auto object-contain"
                         />
                         Signing in...
                       </span>

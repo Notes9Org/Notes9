@@ -41,6 +41,7 @@ import { useChatSessions, ChatSession } from '@/hooks/use-chat-sessions';
 import { MarkdownRenderer } from '@/components/catalyst/markdown-renderer';
 import { PreviewAttachment, type Attachment } from '@/components/catalyst/preview-attachment';
 import { MessageActions } from '@/components/catalyst/message-actions';
+import { Notes9LoaderGif } from '@/components/brand/notes9-loader-gif';
 import { Notes9VideoLoader } from '@/components/brand/notes9-video-loader';
 import { toast } from 'sonner';
 import { createClient } from '@/lib/supabase/client';
@@ -885,7 +886,7 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
                     {sessions.length === 0 ? (
                     <div className="px-2 py-6 text-center text-sidebar-foreground/70 text-xs">No previous conversations.</div>
                     ) : (
-                      <ul className="flex min-w-max flex-col gap-0.5 pr-1">
+                      <ul className="flex min-w-0 flex-col gap-0.5 pr-1">
                         {sessions.map((session) => (
                           <li key={session.id} className="group/row relative">
                             <div
@@ -894,7 +895,7 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
                               onClick={() => loadSession(session.id)}
                               onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); loadSession(session.id); } }}
                               className={cn(
-                                "grid min-h-9 min-w-max grid-cols-[auto_1fr_auto] items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm outline-none transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
+                                "grid min-h-9 min-w-0 grid-cols-[auto_1fr_auto] items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm outline-none transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
                                 currentSessionId === session.id && "bg-sidebar-accent font-medium text-sidebar-accent-foreground"
                               )}
                             >
@@ -903,11 +904,12 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
                               </span>
                               <span
                                 className={cn(
-                                  "block whitespace-nowrap rounded-full px-2.5 py-1 font-medium transition-colors",
+                                  "block truncate rounded-full px-2.5 py-1 font-medium transition-colors",
                                   currentSessionId === session.id
                                     ? "bg-sidebar-accent-foreground/12 text-sidebar-accent-foreground"
                                     : "group-hover/row:bg-gradient-to-r group-hover/row:from-[var(--primary)]/28 group-hover/row:via-[var(--accent)]/85 group-hover/row:to-[var(--accent)]/32"
                                 )}
+                                title={session.title || 'New conversation'}
                               >
                                 {session.title || 'New conversation'}
                               </span>
@@ -948,12 +950,7 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
                 <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
                 <div className="flex-1 flex flex-col items-center justify-center px-4">
                     <div className="relative mb-3">
-                      <div className="absolute inset-x-[12%] inset-y-[16%] rounded-[2.5rem] bg-black/32 blur-3xl dark:bg-black/40" />
-                      <img
-                        src="/notes9-loading-transparent.apng"
-                        alt="Catalyst AI mascot"
-                        className="relative z-10 h-auto w-[138px] object-contain [filter:sepia(0.2)_saturate(0.78)_hue-rotate(-8deg)_brightness(0.5)_contrast(1.48)] dark:[filter:none]"
-                      />
+                      <Notes9LoaderGif alt="Catalyst AI loader" widthPx={64} />
                     </div>
                     <h2 className="text-lg font-bold tracking-tight bg-gradient-to-r from-orange-500 to-pink-600 bg-clip-text text-transparent">
                       Catalyst AI
@@ -983,13 +980,15 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
                           <div key={message.id} className={cn('group/message flex gap-4 w-full', message.role === 'user' ? 'justify-end' : 'justify-start')}>
                             {message.role === 'assistant' && (
                           <div className="mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-full border border-border/60 bg-[rgba(124,82,52,0.05)] shadow-sm dark:bg-background dark:border-border">
-                                <Image
-                                  src="/notes9-mascot-ghost-transparent.png"
-                                  alt="Notes9 assistant"
-                                  width={18}
-                                  height={18}
-                                  className="size-[18px] object-contain [filter:sepia(0.24)_saturate(0.82)_hue-rotate(-8deg)_brightness(0.42)_contrast(1.58)] dark:[filter:none]"
-                                />
+                                <div className="relative size-[18px] shrink-0" aria-hidden>
+                                  <Image
+                                    src="/notes9-logo-mark-transparent.png"
+                                    alt=""
+                                    fill
+                                    sizes="18px"
+                                    className="object-contain dark:invert dark:brightness-125"
+                                  />
+                                </div>
                               </div>
                             )}
                             <div className={cn("flex flex-col min-w-0 max-w-[85%]", message.role === 'user' ? "items-end" : "items-start")}>
@@ -1028,8 +1027,9 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
                         messages.at(-1)?.role === 'user' && (
                         <div className="flex w-full justify-start">
                           <Notes9VideoLoader
-                            className="max-w-[320px]"
+                            className="max-w-[280px]"
                             compact
+                            inline
                             size="sm"
                             horizontal
                             title="Generating with Notes9"
