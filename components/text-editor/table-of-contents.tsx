@@ -128,41 +128,49 @@ export function TableOfContents({ editor, className }: TableOfContentsProps) {
     return (
         <div
             className={cn(
-                "absolute right-4 top-1/2 -translate-y-1/2 z-40 pointer-events-none flex flex-col items-end gap-1.5",
+                "group absolute right-4 top-1/2 -translate-y-1/2 z-40 pointer-events-none",
                 className
             )}
         >
-            {items.map((item) => {
-                const isActive = activeId === item.id
-                return (
-                    <button
-                        key={item.id}
-                        onClick={() => onItemClick(item.pos)}
-                        className="group relative flex items-center justify-end h-4 outline-none pointer-events-auto"
-                    >
-                        {/* Label - strictly visible on hover per user request */}
-                        <span
-                            className={cn(
-                                "mr-4 text-[11px] font-medium text-muted-foreground whitespace-nowrap opacity-0 group-hover:opacity-100 transition-all duration-200 translate-x-2 group-hover:translate-x-0 pointer-events-none",
-                                isActive && "text-primary font-bold", // Keep color but not visibility
-                                item.level === 1 && !isActive && "text-foreground font-semibold",
-                                item.level === 3 && "text-[10px]"
-                            )}
-                        >
-                            {item.text}
-                        </span>
+            <div className="pointer-events-auto w-fit max-w-[280px] rounded-none border-0 bg-transparent p-0 shadow-none backdrop-blur-none transition-all duration-300 group-hover:rounded-2xl group-hover:border group-hover:border-border/60 group-hover:bg-background/68 group-hover:p-2.5 group-hover:shadow-[0_12px_32px_rgba(44,36,24,0.12)] group-hover:backdrop-blur-md supports-[backdrop-filter]:group-hover:bg-background/56 dark:group-hover:border-border/70 dark:group-hover:bg-card/70">
+                <div className="flex flex-col items-end gap-1.5">
+                    {items.map((item) => {
+                        const isActive = activeId === item.id
+                        return (
+                            <button
+                                key={item.id}
+                                onClick={() => onItemClick(item.pos)}
+                                className={cn(
+                                    "peer relative flex w-fit max-w-full items-center justify-end rounded-full px-2 py-1 outline-none transition-colors duration-200",
+                                    "group-hover:hover:bg-card/80 dark:group-hover:hover:bg-background/35",
+                                    "group-hover:bg-card/55 dark:group-hover:bg-background/20",
+                                    isActive && "group-hover:bg-card/90 dark:group-hover:bg-background/40"
+                                )}
+                            >
+                                <span
+                                    className={cn(
+                                        "mr-3 max-w-0 truncate text-[11px] font-medium whitespace-nowrap opacity-0 transition-all duration-300 group-hover:max-w-[210px] group-hover:opacity-100",
+                                        isActive && "text-primary font-bold",
+                                        !isActive && "text-muted-foreground group-hover:text-foreground",
+                                        item.level === 1 && !isActive && "text-foreground font-semibold",
+                                        item.level === 3 && "text-[10px]"
+                                    )}
+                                >
+                                    {item.text}
+                                </span>
 
-                        {/* Bar - always visible, width based on level */}
-                        <div
-                            className={cn(
-                                "h-[2px] rounded-full bg-border transition-all duration-300",
-                                isActive ? "bg-primary w-10 shadow-[0_0_8px_rgba(var(--primary),0.5)]" : "group-hover:bg-primary",
-                                !isActive && (item.level === 1 ? "w-8" : item.level === 2 ? "w-5" : "w-3")
-                            )}
-                        />
-                    </button>
-                )
-            })}
+                                <div
+                                    className={cn(
+                                        "h-[2px] shrink-0 rounded-full bg-border transition-all duration-300",
+                                        isActive ? "bg-primary w-10 shadow-[0_0_8px_rgba(150,80,52,0.28)]" : "group-hover:bg-primary",
+                                        !isActive && (item.level === 1 ? "w-8" : item.level === 2 ? "w-5" : "w-3")
+                                    )}
+                                />
+                            </button>
+                        )
+                    })}
+                </div>
+            </div>
         </div>
     )
 }
