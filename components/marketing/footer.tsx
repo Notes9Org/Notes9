@@ -24,7 +24,7 @@ export function Footer() {
         <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mb-12">
           <div className="md:col-span-1">
             <Link href="/" className="flex items-center space-x-3 mb-4">
-              <Notes9Brand textClassName="h-8 w-auto" />
+              <Notes9Brand showIcon textClassName="h-8 w-auto" />
             </Link>
 
             <p className="text-foreground/80 mb-6 text-sm leading-relaxed">

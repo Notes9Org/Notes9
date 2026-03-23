@@ -567,7 +567,10 @@ export function AppSidebar() {
             ) : (
               // Normal mode: Logo and text with collapse button on the right
               <div className="flex items-center gap-2">
-                <SidebarMenuButton size="lg" className="flex-1 min-w-0">
+                <SidebarMenuButton
+                  size="lg"
+                  className="h-auto min-h-12 flex-1 min-w-0 overflow-visible py-2"
+                >
                   <Notes9Brand
                     showIcon
                     iconClassName="h-6 w-6"

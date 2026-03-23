@@ -132,8 +132,8 @@ export function ProductShowcase() {
                 </CarouselItem>
               ))}
             </CarouselContent>
-            <CarouselPrevious className="-left-2 border-border bg-background/95 hover:bg-muted md:-left-4" />
-            <CarouselNext className="-right-2 border-border bg-background/95 hover:bg-muted md:-right-4" />
+            <CarouselPrevious className="-left-4 border-border bg-background/95 hover:bg-muted sm:-left-6 md:-left-10" />
+            <CarouselNext className="-right-4 border-border bg-background/95 hover:bg-muted sm:-right-6 md:-right-10" />
           </Carousel>
 
           <div className="mt-8 flex justify-center gap-2">

@@ -297,7 +297,8 @@ export function NavigationLoader() {
       <div className="fixed inset-0 z-[9999] flex items-center justify-center pointer-events-none animate-in fade-in duration-300">
         {loaderVariant === "auth" ? (
           <Notes9VideoLoader
-            size="lg"
+            compact
+            size="sm"
             variant="default"
             title={loaderTitle}
             captions={[]}
@@ -305,7 +306,8 @@ export function NavigationLoader() {
           />
         ) : (
           <Notes9VideoLoader
-            size="lg"
+            compact
+            size="sm"
             variant={loaderVariant}
             title={loaderTitle}
             captions={loaderCaptions}

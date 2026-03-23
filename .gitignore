@@ -1,6 +1,7 @@
 # Dependencies
 node_modules/
 venv/
+.venv-mascot/
 .pnp
 .pnp.js
 .pnpm-store/

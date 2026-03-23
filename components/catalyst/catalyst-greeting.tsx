@@ -1,5 +1,7 @@
 'use client';
 
+import { Notes9LoaderGif } from '@/components/brand/notes9-loader-gif';
+
 interface CatalystGreetingProps {
   userName: string;
 }
@@ -29,12 +31,7 @@ export function CatalystGreeting({ userName }: CatalystGreetingProps) {
         {/* Animated Icon */}
         <div className="mb-6 inline-flex items-center justify-center">
           <div className="relative">
-            <div className="absolute inset-x-[12%] inset-y-[16%] rounded-[2.5rem] bg-black/32 blur-3xl dark:bg-black/40" />
-            <img
-              src="/notes9-loading-transparent.apng"
-              alt="Catalyst AI mascot"
-              className="relative z-10 h-auto w-[144px] object-contain [filter:sepia(0.2)_saturate(0.78)_hue-rotate(-8deg)_brightness(0.5)_contrast(1.48)] dark:[filter:none]"
-            />
+            <Notes9LoaderGif alt="Catalyst AI loader" widthPx={72} />
           </div>
         </div>
 

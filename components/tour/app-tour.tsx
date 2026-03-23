@@ -47,7 +47,7 @@ export function AppTour() {
 
     const renderMascot = (htmlContent: string) => `
       <div style="display:flex;gap:12px;align-items:flex-start;margin-top:8px;">
-        <img src="/notes9-mascot.png" class="tour-mascot-animate" alt="Notes9 Mascot" style="width:52px;height:52px;object-fit:contain;flex-shrink:0;border-radius:50%;" />
+        <img src="/notes9-mascot-ui.png" class="tour-mascot-animate" alt="Notes9 Mascot" style="width:52px;height:52px;object-fit:contain;flex-shrink:0;border-radius:50%;" />
         <div style="font-size:14px;line-height:1.45;">${htmlContent}</div>
       </div>
     `
