@@ -1,6 +1,14 @@
 "use client"
 
-import { useCallback, useEffect, useRef, useState, type MutableRefObject } from "react"
+import {
+  forwardRef,
+  useCallback,
+  useEffect,
+  useImperativeHandle,
+  useRef,
+  useState,
+  type MutableRefObject,
+} from "react"
 import { Copy, ExternalLink, Highlighter, Loader2, StickyNote, ZoomIn, ZoomOut } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
@@ -14,6 +22,10 @@ import {
 import { TiptapEditor } from "@/components/text-editor/tiptap-editor"
 import { useToast } from "@/hooks/use-toast"
 import type { LiteraturePdfAnnotation } from "@/types/literature-pdf"
+
+export type LiteraturePdfViewerHandle = {
+  scrollToAnnotation: (annotation: LiteraturePdfAnnotation) => void
+}
 
 interface LiteraturePdfViewerProps {
   pdfUrl: string
@@ -59,6 +71,7 @@ function LiteraturePdfPageBlock({
   onCopySelection,
   onHighlightSelection,
   onNoteSelection,
+  focusedAnnotationId,
 }: {
   pageNumber: number
   pdfDocument: any
@@ -71,6 +84,7 @@ function LiteraturePdfPageBlock({
   onCopySelection: () => void
   onHighlightSelection: () => void
   onNoteSelection: () => void
+  focusedAnnotationId: string | null
 }) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
   const textLayerRef = useRef<HTMLDivElement | null>(null)
@@ -236,13 +250,14 @@ function LiteraturePdfPageBlock({
           annotation.rects?.map((rect, index) => (
             <div
               key={`${annotation.id}-${index}`}
-              className={`pointer-events-none absolute z-[1] rounded-sm ${
+              data-pdf-annotation-target={annotation.id}
+              className={`pointer-events-none absolute z-[1] rounded-sm transition-shadow duration-300 ${
                 annotation.type === "comment"
                   ? "bg-sky-300/22 shadow-[inset_0_0_0_1px_rgba(14,165,233,0.45)]"
                   : annotation.type === "note"
                     ? "bg-lime-300/20 shadow-[inset_0_0_0_1px_rgba(132,204,22,0.45)]"
                     : "bg-amber-300/28 shadow-[inset_0_0_0_1px_rgba(251,191,36,0.5)]"
-              }`}
+              } ${focusedAnnotationId === annotation.id ? "z-[4] ring-2 ring-primary ring-offset-2 ring-offset-white dark:ring-offset-zinc-950" : ""}`}
               style={{
                 left: `${rect.left * 100}%`,
                 top: `${rect.top * 100}%`,
@@ -259,7 +274,10 @@ function LiteraturePdfPageBlock({
             return (
               <div
                 key={annotation.id}
-                className="pointer-events-none absolute flex h-6 w-6 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border border-lime-500/70 bg-lime-200/90 text-lime-900 shadow"
+                data-pdf-annotation-target={annotation.id}
+                className={`pointer-events-none absolute flex h-6 w-6 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border border-lime-500/70 bg-lime-200/90 text-lime-900 shadow transition-shadow duration-300 ${
+                  focusedAnnotationId === annotation.id ? "z-[4] ring-2 ring-primary ring-offset-2 ring-offset-white dark:ring-offset-zinc-950" : ""
+                }`}
                 style={{
                   left: `${(anchor.x ?? 0.5) * 100}%`,
                   top: `${(anchor.y ?? 0.1) * 100}%`,
@@ -295,13 +313,47 @@ function LiteraturePdfPageBlock({
   )
 }
 
-export function LiteraturePdfViewer({ pdfUrl, annotations, onCreateAnnotation }: LiteraturePdfViewerProps) {
+/** Top edge of `element` within `scrollContainer`'s scrollable content (matches scrollTop coordinates). */
+function elementTopInScrollContent(element: HTMLElement, scrollContainer: HTMLElement): number {
+  return (
+    element.getBoundingClientRect().top -
+    scrollContainer.getBoundingClientRect().top +
+    scrollContainer.scrollTop
+  )
+}
+
+function normalizeRect(r: { top: number; left: number; width: number; height: number }) {
+  return {
+    top: Number(r.top),
+    left: Number(r.left),
+    width: Number(r.width),
+    height: Number(r.height),
+  }
+}
+
+/** Vertical center (px from top of page box) of the union of normalized 0–1 rects. */
+function highlightCenterYWithinPage(
+  rects: Array<{ top: number; left: number; width: number; height: number }>,
+  pageHeightPx: number
+): number {
+  const n = rects.map(normalizeRect)
+  const minTop = Math.min(...n.map((r) => r.top))
+  const maxBottom = Math.max(...n.map((r) => r.top + r.height))
+  const midFrac = (minTop + maxBottom) / 2
+  return midFrac * pageHeightPx
+}
+
+export const LiteraturePdfViewer = forwardRef<LiteraturePdfViewerHandle, LiteraturePdfViewerProps>(
+  function LiteraturePdfViewer({ pdfUrl, annotations, onCreateAnnotation }, ref) {
   const { toast } = useToast()
   const viewportFrameRef = useRef<HTMLDivElement | null>(null)
   const loadMoreSentinelRef = useRef<HTMLDivElement | null>(null)
+  const focusClearTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [pdfDocument, setPdfDocument] = useState<any>(null)
   const [pageCount, setPageCount] = useState(0)
   const [renderedEndPage, setRenderedEndPage] = useState(1)
+  const [navigateRequest, setNavigateRequest] = useState<LiteraturePdfAnnotation | null>(null)
+  const [focusedAnnotationId, setFocusedAnnotationId] = useState<string | null>(null)
   const [zoom, setZoom] = useState(1)
   const [fitScale, setFitScale] = useState(1)
   const [isLoading, setIsLoading] = useState(true)
@@ -326,6 +378,18 @@ export function LiteraturePdfViewer({ pdfUrl, annotations, onCreateAnnotation }:
       return next
     })
   })
+
+  useImperativeHandle(ref, () => ({
+    scrollToAnnotation(annotation: LiteraturePdfAnnotation) {
+      if (focusClearTimeoutRef.current) {
+        clearTimeout(focusClearTimeoutRef.current)
+        focusClearTimeoutRef.current = null
+      }
+      setFocusedAnnotationId(null)
+      setRenderedEndPage((p) => Math.max(p, annotation.page_number))
+      setNavigateRequest(annotation)
+    },
+  }))
 
   useEffect(() => {
     let isActive = true
@@ -411,6 +475,63 @@ export function LiteraturePdfViewer({ pdfUrl, annotations, onCreateAnnotation }:
     io.observe(target)
     return () => io.disconnect()
   }, [pageCount, renderedEndPage])
+
+  useEffect(() => {
+    if (!navigateRequest || !viewportFrameRef.current) return
+    const ann = navigateRequest
+    if (renderedEndPage < ann.page_number) return
+
+    let cancelled = false
+    let attempts = 0
+
+    const run = () => {
+      if (cancelled) return
+      attempts += 1
+      const frame = viewportFrameRef.current
+      if (!frame) return
+      const pageEl = frame.querySelector(`[data-pdf-page="${ann.page_number}"]`) as HTMLElement | null
+      if (!pageEl || pageEl.offsetHeight < 2) {
+        if (attempts < 55) requestAnimationFrame(run)
+        return
+      }
+
+      const markers = pageEl.querySelectorAll(`[data-pdf-annotation-target="${CSS.escape(ann.id)}"]`)
+      if (markers.length > 0) {
+        const mid = markers[Math.floor((markers.length - 1) / 2)] as HTMLElement
+        mid.scrollIntoView({ behavior: "smooth", block: "center", inline: "nearest" })
+      } else {
+        const rects = ann.rects
+        const anchor = ann.anchor as { y?: number } | undefined
+        const pageHeight = pageEl.getBoundingClientRect().height
+        let yWithinPagePx: number
+        if (rects && rects.length > 0) {
+          yWithinPagePx = highlightCenterYWithinPage(rects, pageHeight)
+        } else if (typeof anchor?.y === "number") {
+          yWithinPagePx = anchor.y * pageHeight
+        } else {
+          yWithinPagePx = 0.22 * pageHeight
+        }
+
+        const pageTop = elementTopInScrollContent(pageEl, frame)
+        const margin = Math.min(120, frame.clientHeight * 0.28)
+        const desiredTop = pageTop + yWithinPagePx - margin
+        const maxScroll = Math.max(0, frame.scrollHeight - frame.clientHeight)
+        frame.scrollTo({ top: Math.max(0, Math.min(desiredTop, maxScroll)), behavior: "smooth" })
+      }
+
+      setFocusedAnnotationId(ann.id)
+      setNavigateRequest(null)
+      focusClearTimeoutRef.current = setTimeout(() => {
+        setFocusedAnnotationId(null)
+        focusClearTimeoutRef.current = null
+      }, 2600)
+    }
+
+    requestAnimationFrame(() => requestAnimationFrame(run))
+    return () => {
+      cancelled = true
+    }
+  }, [navigateRequest, renderedEndPage])
 
   const clearSelection = useCallback(() => {
     setSelectionState(null)
@@ -559,6 +680,7 @@ export function LiteraturePdfViewer({ pdfUrl, annotations, onCreateAnnotation }:
 
       <div
         ref={viewportFrameRef}
+        data-literature-pdf-viewport
         className="relative max-h-[min(80vh,56rem)] overflow-auto rounded-lg border bg-muted/30 p-2 sm:p-4"
       >
         {isLoading && (
@@ -584,6 +706,7 @@ export function LiteraturePdfViewer({ pdfUrl, annotations, onCreateAnnotation }:
               onCopySelection={copySelection}
               onHighlightSelection={() => createSelectionAnnotation("highlight")}
               onNoteSelection={() => createSelectionAnnotation("note")}
+              focusedAnnotationId={focusedAnnotationId}
             />
           ))}
           {pageCount > 0 && renderedEndPage < pageCount && (
@@ -621,4 +744,6 @@ export function LiteraturePdfViewer({ pdfUrl, annotations, onCreateAnnotation }:
       </Dialog>
     </div>
   )
-}
+})
+
+LiteraturePdfViewer.displayName = "LiteraturePdfViewer"

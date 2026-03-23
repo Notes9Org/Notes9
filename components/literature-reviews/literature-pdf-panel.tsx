@@ -1,12 +1,16 @@
 "use client"
 
-import { useEffect, useState } from "react"
-import { FileText, PanelRightOpen } from "lucide-react"
+import { useCallback, useEffect, useRef, useState } from "react"
+import { ChevronDown, FileText, PanelRightOpen } from "lucide-react"
 
 import { LiteraturePdfAnnotationSidebar } from "@/components/literature-reviews/literature-pdf-annotation-sidebar"
-import { LiteraturePdfViewer } from "@/components/literature-reviews/literature-pdf-viewer"
+import {
+  LiteraturePdfViewer,
+  type LiteraturePdfViewerHandle,
+} from "@/components/literature-reviews/literature-pdf-viewer"
 import { useToast } from "@/hooks/use-toast"
 import { Button } from "@/components/ui/button"
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 import { cn } from "@/lib/utils"
 import type { LiteraturePdfAnnotation } from "@/types/literature-pdf"
 
@@ -19,7 +23,19 @@ export function LiteraturePdfPanel({ literatureId, pdfUrl }: LiteraturePdfPanelP
   const { toast } = useToast()
   const [annotations, setAnnotations] = useState<LiteraturePdfAnnotation[]>([])
   const [loadingAnnotations, setLoadingAnnotations] = useState(true)
-  const [sidebarOpen, setSidebarOpen] = useState(false)
+  const [annotationsOpen, setAnnotationsOpen] = useState(false)
+  const viewerRef = useRef<LiteraturePdfViewerHandle>(null)
+
+  const handleNavigateToAnnotation = useCallback((annotation: LiteraturePdfAnnotation) => {
+    setAnnotationsOpen(true)
+    window.setTimeout(() => {
+      document.querySelector("[data-literature-pdf-viewport]")?.scrollIntoView({
+        behavior: "smooth",
+        block: "nearest",
+      })
+      viewerRef.current?.scrollToAnnotation(annotation)
+    }, 100)
+  }, [])
 
   const loadAnnotations = async () => {
     setLoadingAnnotations(true)
@@ -74,52 +90,60 @@ export function LiteraturePdfPanel({ literatureId, pdfUrl }: LiteraturePdfPanelP
   }
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between gap-3">
+    <Collapsible open={annotationsOpen} onOpenChange={setAnnotationsOpen}>
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
-          <FileText className="h-4 w-4" />
+          <FileText className="h-4 w-4 shrink-0" />
           Reader
         </div>
-        <Button
-          variant="outline"
-          size="sm"
-          className="gap-2"
-          onClick={() => setSidebarOpen((current) => !current)}
-        >
-          <PanelRightOpen className="h-4 w-4" />
-          Highlights & Notes
-        </Button>
+        <CollapsibleTrigger asChild>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="gap-2"
+            aria-expanded={annotationsOpen}
+          >
+            <PanelRightOpen className="h-4 w-4 shrink-0" />
+            Highlights &amp; notes
+            <ChevronDown
+              className={cn("h-4 w-4 shrink-0 transition-transform duration-200", annotationsOpen && "rotate-180")}
+            />
+          </Button>
+        </CollapsibleTrigger>
       </div>
 
       <div
         className={cn(
-          "relative overflow-hidden xl:grid xl:items-start xl:gap-6",
-          sidebarOpen ? "xl:grid-cols-[minmax(0,1fr)_22rem]" : "xl:grid-cols-[minmax(0,1fr)_0rem]"
+          "mt-4 grid min-w-0 gap-6",
+          annotationsOpen && "xl:grid-cols-[minmax(0,1fr)_minmax(17.5rem,22rem)] xl:items-start"
         )}
       >
-        <div className="min-w-0">
-          <LiteraturePdfViewer pdfUrl={pdfUrl} annotations={annotations} onCreateAnnotation={createAnnotation} />
+        <div className="min-h-0 min-w-0">
+          <LiteraturePdfViewer
+            ref={viewerRef}
+            pdfUrl={pdfUrl}
+            annotations={annotations}
+            onCreateAnnotation={createAnnotation}
+          />
         </div>
 
-        <LiteraturePdfAnnotationSidebar
-          annotations={annotations}
-          loading={loadingAnnotations}
-          onDeleteAnnotation={deleteAnnotation}
-          onClose={() => setSidebarOpen(false)}
+        <CollapsibleContent
+          id="literature-pdf-annotations"
           className={cn(
-            "fixed inset-y-0 right-0 z-30 w-[min(92vw,22rem)] rounded-none border-l border-y-0 bg-background/94 shadow-2xl transition-transform duration-300 xl:static xl:w-[22rem] xl:self-stretch xl:rounded-lg xl:border xl:shadow-lg",
-            sidebarOpen ? "translate-x-0 xl:translate-x-0" : "translate-x-full xl:hidden"
+            "min-w-0 overflow-hidden",
+            "xl:data-[state=open]:sticky xl:data-[state=open]:top-24 xl:data-[state=open]:z-10 xl:data-[state=open]:self-start"
           )}
-        />
-        {sidebarOpen ? (
-          <button
-            type="button"
-            aria-label="Close annotations overlay"
-            className="fixed inset-0 z-20 bg-black/20 xl:hidden"
-            onClick={() => setSidebarOpen(false)}
+        >
+          <LiteraturePdfAnnotationSidebar
+            annotations={annotations}
+            loading={loadingAnnotations}
+            onDeleteAnnotation={deleteAnnotation}
+            onClose={() => setAnnotationsOpen(false)}
+            onNavigateToAnnotation={handleNavigateToAnnotation}
           />
-        ) : null}
+        </CollapsibleContent>
       </div>
-    </div>
+    </Collapsible>
   )
 }
