@@ -42,8 +42,9 @@ export default async function LiteratureReviewsPage() {
         .eq("organization_id", organizationId)
         .order("name")
     : { data: [] as { id: string; name: string }[] }
+  const safeProjects = projects ?? []
 
-  const projectIds = projects.map((project) => project.id)
+  const projectIds = safeProjects.map((project) => project.id)
   const { data: experiments = [] } =
     organizationId && projectIds.length > 0
       ? await supabase
@@ -52,6 +53,7 @@ export default async function LiteratureReviewsPage() {
           .in("project_id", projectIds)
           .order("name")
       : { data: [] as { id: string; name: string; project_id: string }[] }
+  const safeExperiments = experiments ?? []
 
   return (
     <div className="space-y-4 md:space-y-6">
@@ -66,8 +68,8 @@ export default async function LiteratureReviewsPage() {
         <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
           <UploadLiteraturePdfDialog
             literatureReviews={(literatureReviews ?? []) as any}
-            projects={projects}
-            experiments={experiments}
+            projects={safeProjects}
+            experiments={safeExperiments}
           />
           <Button asChild className="w-full sm:w-auto">
             <Link href="/literature-reviews/new">
@@ -81,8 +83,8 @@ export default async function LiteratureReviewsPage() {
       {/* Tabs */}
       <LiteratureTabs
         literatureReviews={literatureReviews}
-        projects={projects}
-        experiments={experiments}
+        projects={safeProjects}
+        experiments={safeExperiments}
       />
     </div>
   )
