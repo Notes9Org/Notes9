@@ -70,7 +70,10 @@ export interface MessageActionsProps {
   messageRole: 'user' | 'assistant';
   messageContent: string;
   vote?: Vote;
-  isLoading?: boolean;
+  /** When true, disables edit on this user message (e.g. last user turn while a reply is generating). */
+  userEditDisabled?: boolean;
+  /** When true, disables regenerate on this assistant message. */
+  regenerateDisabled?: boolean;
   onEdit?: () => void;
   onRegenerate?: () => void;
   compact?: boolean;
@@ -82,16 +85,13 @@ function PureMessageActions({
   messageRole,
   messageContent,
   vote,
-  isLoading = false,
+  userEditDisabled = false,
+  regenerateDisabled = false,
   onEdit,
   onRegenerate,
   compact = false,
 }: MessageActionsProps) {
   const [isCopied, setIsCopied] = useState(false);
-
-  if (isLoading) {
-    return null;
-  }
 
   const handleCopy = async () => {
     if (!messageContent) {
@@ -160,7 +160,11 @@ function PureMessageActions({
         )}
       >
         {onEdit && (
-          <ActionButton tooltip="Edit message" onClick={onEdit}>
+          <ActionButton
+            tooltip={userEditDisabled ? 'Wait for the reply to finish' : 'Edit message'}
+            onClick={onEdit}
+            disabled={userEditDisabled}
+          >
             <Pencil className={compact ? 'size-3' : 'size-3.5'} />
           </ActionButton>
         )}
@@ -192,7 +196,11 @@ function PureMessageActions({
       </ActionButton>
 
       {onRegenerate && (
-        <ActionButton tooltip="Regenerate" onClick={onRegenerate}>
+        <ActionButton
+          tooltip={regenerateDisabled ? 'Wait for the reply to finish' : 'Regenerate'}
+          onClick={onRegenerate}
+          disabled={regenerateDisabled}
+        >
           <RotateCcw className={compact ? 'size-3' : 'size-3.5'} />
         </ActionButton>
       )}
@@ -220,7 +228,8 @@ function PureMessageActions({
 
 export const MessageActions = memo(PureMessageActions, (prevProps, nextProps) => {
   if (prevProps.vote?.isUpvoted !== nextProps.vote?.isUpvoted) return false;
-  if (prevProps.isLoading !== nextProps.isLoading) return false;
+  if (prevProps.userEditDisabled !== nextProps.userEditDisabled) return false;
+  if (prevProps.regenerateDisabled !== nextProps.regenerateDisabled) return false;
   if (prevProps.messageContent !== nextProps.messageContent) return false;
   return true;
 });

@@ -25,7 +25,8 @@ import {
   Plus,
   Paperclip,
   Globe,
-  FlaskConical,
+  MessageSquare,
+  NotebookPen,
   PenBox,
   MoreHorizontal,
   Trash2,
@@ -34,8 +35,14 @@ import {
   X,
   Mic,
 } from 'lucide-react';
-import { cn, formatCitationDisplay } from '@/lib/utils';
+import { cn } from '@/lib/utils';
+import {
+  formatNotes9AssistantMarkdown,
+  isPersistedChatMessageId,
+} from '@/lib/notes9-chat-format';
 import { useAgentStream } from '@/hooks/use-agent-stream';
+import { deleteTrailingMessages } from '@/app/(app)/catalyst/actions';
+import { MessageEditor } from '@/components/catalyst/message-editor';
 import { AgentStreamReply } from '@/components/catalyst/agent-stream-reply';
 import { useChatSessions, ChatSession } from '@/hooks/use-chat-sessions';
 import { MarkdownRenderer } from '@/components/catalyst/markdown-renderer';
@@ -52,6 +59,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { Switch } from '@/components/ui/switch';
 
 type AgentMode = 'general' | 'notes9';
 
@@ -112,6 +120,9 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
   const pathname = usePathname();
   const [input, setInput] = useState('');
   const [agentMode, setAgentMode] = useState<AgentMode>('general');
+  const [webSearchEnabled, setWebSearchEnabled] = useState(true);
+  const [savedMessageIds, setSavedMessageIds] = useState<Set<string>>(() => new Set());
+  const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
   const [userId, setUserId] = useState<string>('');
   const [notes9Loading, setNotes9Loading] = useState(false);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -155,6 +166,11 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
   }, []);
 
   const supabaseTokenRef = useRef<string | null>(null);
+  const webSearchEnabledRef = useRef(true);
+
+  useEffect(() => {
+    webSearchEnabledRef.current = webSearchEnabled;
+  }, [webSearchEnabled]);
 
   useEffect(() => {
     const loadUserId = async () => {
@@ -188,6 +204,7 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
           messages: normalizedMessages,
           sessionId: currentSessionRef.current,
           supabaseToken: token ?? undefined,
+          webSearch: webSearchEnabledRef.current,
           ...request.body,
         },
       };
@@ -358,7 +375,18 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
       setMessages((prev) => [...prev, userMessage]);
 
       const sessionId = currentSessionRef.current!;
-      await saveMessage(sessionId, 'user', text);
+      const savedUser = await saveMessage(sessionId, 'user', text);
+      if (savedUser) {
+        setSavedMessageIds((prev) => new Set(prev).add(savedUser.id));
+        setMessages((prev) => {
+          const next = [...prev];
+          const last = next[next.length - 1];
+          if (last?.role === 'user' && last.id === userMessageId) {
+            next[next.length - 1] = { ...last, id: savedUser.id };
+          }
+          return next;
+        });
+      }
 
       const history = messages.map((m) => ({
         role: m.role,
@@ -377,39 +405,7 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
       setNotes9Loading(false);
 
       if (donePayload) {
-        let formattedAnswer = donePayload.answer;
-        if (donePayload.citations && donePayload.citations.length > 0) {
-          formattedAnswer += '\n\n**References:**\n';
-          donePayload.citations.forEach((citation, index) => {
-            const sourceType = citation.source_type;
-            let route = '';
-            switch (sourceType) {
-              case 'literature_review':
-                route = `/literature-reviews/${citation.source_id}`;
-                break;
-              case 'protocol':
-                route = `/protocols/${citation.source_id}`;
-                break;
-              case 'project':
-                route = `/projects/${citation.source_id}`;
-                break;
-              case 'lab_note':
-              case 'report':
-              default:
-                route = '';
-            }
-            const displayText = formatCitationDisplay({
-              ...citation,
-              excerpt: citation.excerpt ?? undefined,
-            });
-            const sourceLabel = sourceType.replace('_', ' ');
-            if (route) {
-              formattedAnswer += `\n[${index + 1}] [View ${sourceLabel}](${route}): ${displayText}`;
-            } else {
-              formattedAnswer += `\n[${index + 1}] ${sourceLabel}: ${displayText}`;
-            }
-          });
-        }
+        const formattedAnswer = formatNotes9AssistantMarkdown(donePayload);
 
         const assistantMessageId = `assistant-${Date.now()}`;
         const assistantMessage = {
@@ -420,7 +416,18 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
           createdAt: new Date(),
         };
         setMessages((prev) => [...prev, assistantMessage]);
-        await saveMessage(sessionId, 'assistant', formattedAnswer);
+        const savedAsst = await saveMessage(sessionId, 'assistant', formattedAnswer);
+        if (savedAsst) {
+          setSavedMessageIds((prev) => new Set(prev).add(savedAsst.id));
+          setMessages((prev) => {
+            const next = [...prev];
+            const last = next[next.length - 1];
+            if (last?.role === 'assistant' && last.id === assistantMessageId) {
+              next[next.length - 1] = { ...last, id: savedAsst.id };
+            }
+            return next;
+          });
+        }
         loadSessions();
         agentStream.reset();
       } else if (error) {
@@ -436,6 +443,214 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
     if (text.trim()) parts.push({ type: 'text', text });
     await sendMessage({ parts });
   };
+
+  const handleEditMessage = useCallback(
+    async (messageId: string, newContent: string) => {
+      const messageIndex = messages.findIndex((m) => m.id === messageId);
+      if (messageIndex === -1) return;
+
+      if (isPersistedChatMessageId(messageId)) {
+        await deleteTrailingMessages({ id: messageId });
+        const newSavedIds = new Set<string>();
+        for (let i = 0; i < messageIndex; i++) {
+          if (isPersistedChatMessageId(messages[i].id)) {
+            newSavedIds.add(messages[i].id);
+          }
+        }
+        setSavedMessageIds(newSavedIds);
+      }
+
+      const history = messages.slice(0, messageIndex).map((m) => ({
+        role: m.role,
+        content: getPlainTextFromMessage(m),
+      }));
+
+      setMessages((currentMessages) => {
+        const index = currentMessages.findIndex((m) => m.id === messageId);
+        if (index !== -1) {
+          const updatedMessage = {
+            ...currentMessages[index],
+            parts: [{ type: 'text' as const, text: newContent }],
+          };
+          return [...currentMessages.slice(0, index), updatedMessage];
+        }
+        return currentMessages;
+      });
+
+      const sid = currentSessionRef.current;
+      if (!sid) return;
+
+      if (agentMode === 'notes9') {
+        const { data: { session } } = await supabase.auth.getSession();
+        const token = session?.access_token;
+        if (!token) {
+          toast.error('Please sign in to use Notes9');
+          return;
+        }
+
+        const savedUser = await saveMessage(sid, 'user', newContent);
+        if (savedUser) {
+          setSavedMessageIds((prev) => new Set(prev).add(savedUser.id));
+          setMessages((curr) => {
+            const idx = curr.findIndex((m) => m.id === messageId);
+            if (idx === -1) return curr;
+            return [
+              ...curr.slice(0, idx),
+              {
+                ...curr[idx],
+                id: savedUser.id,
+                parts: [{ type: 'text' as const, text: newContent }],
+              },
+            ];
+          });
+        }
+
+        setNotes9Loading(true);
+        const { donePayload, error } = await agentStream.runStream(
+          { query: newContent, session_id: sid, history },
+          token
+        );
+        setNotes9Loading(false);
+
+        if (donePayload) {
+          const formattedAnswer = formatNotes9AssistantMarkdown(donePayload);
+          const assistantMessageId = `assistant-${Date.now()}`;
+          setMessages((prev) => [
+            ...prev,
+            {
+              id: assistantMessageId,
+              role: 'assistant' as const,
+              content: formattedAnswer,
+              parts: [{ type: 'text' as const, text: formattedAnswer }],
+              createdAt: new Date(),
+            },
+          ]);
+          const savedAsst = await saveMessage(sid, 'assistant', formattedAnswer);
+          if (savedAsst) {
+            setSavedMessageIds((prev) => new Set(prev).add(savedAsst.id));
+            setMessages((prev) => {
+              const next = [...prev];
+              const last = next[next.length - 1];
+              if (last?.role === 'assistant' && last.id === assistantMessageId) {
+                next[next.length - 1] = { ...last, id: savedAsst.id };
+              }
+              return next;
+            });
+          }
+          loadSessions();
+          agentStream.reset();
+        } else if (error) {
+          toast.error(error);
+        }
+        return;
+      }
+
+      regenerate();
+    },
+    [messages, setMessages, regenerate, agentMode, supabase, saveMessage, loadSessions, agentStream]
+  );
+
+  const handleRegenerate = useCallback(async () => {
+    if (messages.length < 2) return;
+
+    const sid = currentSessionRef.current;
+    if (!sid) return;
+
+    if (agentMode === 'notes9') {
+      const lastAssistantIndex = messages.findLastIndex((m) => m.role === 'assistant');
+      if (lastAssistantIndex === -1) return;
+      const lastUserMessage = messages[lastAssistantIndex - 1];
+      if (lastUserMessage?.role !== 'user') return;
+
+      const lastAssistantMessage = messages[lastAssistantIndex];
+      if (isPersistedChatMessageId(lastAssistantMessage.id)) {
+        await deleteTrailingMessages({ id: lastAssistantMessage.id });
+        setSavedMessageIds((prev) => {
+          const next = new Set(prev);
+          next.delete(lastAssistantMessage.id);
+          return next;
+        });
+      }
+
+      setMessages((curr) => curr.slice(0, lastAssistantIndex));
+
+      const query = getPlainTextFromMessage(lastUserMessage);
+      const history = messages.slice(0, lastAssistantIndex - 1).map((m) => ({
+        role: m.role,
+        content: getPlainTextFromMessage(m),
+      }));
+
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+      if (!token) {
+        toast.error('Please sign in to use Notes9');
+        return;
+      }
+
+      setNotes9Loading(true);
+      const { donePayload, error } = await agentStream.runStream(
+        { query, session_id: sid, history },
+        token
+      );
+      setNotes9Loading(false);
+
+      if (donePayload) {
+        const formattedAnswer = formatNotes9AssistantMarkdown(donePayload);
+        const assistantMessageId = `assistant-${Date.now()}`;
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: assistantMessageId,
+            role: 'assistant' as const,
+            content: formattedAnswer,
+            parts: [{ type: 'text' as const, text: formattedAnswer }],
+            createdAt: new Date(),
+          },
+        ]);
+        const savedAsst = await saveMessage(sid, 'assistant', formattedAnswer);
+        if (savedAsst) {
+          setSavedMessageIds((prev) => new Set(prev).add(savedAsst.id));
+          setMessages((prev) => {
+            const next = [...prev];
+            const last = next[next.length - 1];
+            if (last?.role === 'assistant' && last.id === assistantMessageId) {
+              next[next.length - 1] = { ...last, id: savedAsst.id };
+            }
+            return next;
+          });
+        }
+        loadSessions();
+        agentStream.reset();
+      } else if (error) {
+        toast.error(error);
+      }
+      return;
+    }
+
+    const lastAssistantIndex = messages.findLastIndex((m) => m.role === 'assistant');
+    if (lastAssistantIndex === -1) return;
+    const lastAssistantMessage = messages[lastAssistantIndex];
+
+    if (isPersistedChatMessageId(lastAssistantMessage.id)) {
+      await deleteTrailingMessages({ id: lastAssistantMessage.id });
+      setSavedMessageIds((prev) => {
+        const next = new Set(prev);
+        next.delete(lastAssistantMessage.id);
+        return next;
+      });
+    }
+
+    regenerate();
+  }, [messages, regenerate, agentMode, supabase, saveMessage, loadSessions, agentStream]);
+
+  const handleStopRequest = useCallback(() => {
+    if (notes9Loading) {
+      agentStream.abort();
+      agentStream.reset();
+    } else {
+      stop();
+    }
+  }, [notes9Loading, agentStream, stop]);
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -454,6 +669,7 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
       currentSessionRef.current = sessionId;
       setMessages([]);
       setAttachments([]);
+      setSavedMessageIds(new Set());
     }
   };
 
@@ -501,6 +717,7 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
         };
       });
       setMessages(chatMessages);
+      setSavedMessageIds(new Set(msgs.map((m) => m.id)));
 
       // If session has no meaningful title but has messages, set title from first user message
       const session = sessions.find((s) => s.id === sessionId);
@@ -557,22 +774,34 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
               <DropdownMenuTrigger asChild>
                 <Button id="tour-ai-mode" variant="ghost" size="sm" className="h-7 gap-1.5 rounded-md bg-muted/50 hover:bg-muted text-muted-foreground px-2 text-xs font-medium">
                   {agentMode === 'notes9' ? (
-                    <><FlaskConical className="size-3.5" /> Notes9</>
+                    <><NotebookPen className="size-3.5" /> Notes9</>
                   ) : (
-                    <><Globe className="size-3.5" /> General</>
+                    <><MessageSquare className="size-3.5" /> General</>
                   )}
                   <ChevronDown className="size-3 opacity-50" />
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="start" className="w-[150px]">
                 <DropdownMenuItem onClick={() => setAgentMode('general')} className="gap-2 text-xs">
-                  <Globe className="size-3.5" /> General
+                  <MessageSquare className="size-3.5" /> General
                 </DropdownMenuItem>
                 <DropdownMenuItem onClick={() => setAgentMode('notes9')} className="gap-2 text-xs">
-                  <FlaskConical className="size-3.5" /> Notes9
+                  <NotebookPen className="size-3.5" /> Notes9
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
+            {agentMode === 'general' && (
+              <div className="flex items-center gap-1.5 shrink-0 pl-2 ml-1 border-l border-border/50">
+                <Globe className="size-3.5 text-muted-foreground" aria-hidden />
+                <Switch
+                  checked={webSearchEnabled}
+                  onCheckedChange={setWebSearchEnabled}
+                  disabled={isLoading}
+                  className="scale-90"
+                  aria-label="Web search"
+                />
+              </div>
+            )}
           </div>
 
           <div className="flex items-center gap-1 shrink-0">
@@ -588,7 +817,7 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
                 size="icon"
                 variant="secondary"
                 className="size-7 rounded-sm animate-pulse"
-                onClick={() => (notes9Loading && agentStream.isStreaming ? agentStream.abort() : stop())}
+                onClick={handleStopRequest}
               >
                 <Square className="size-3 fill-current" />
               </Button>
@@ -979,6 +1208,11 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
                       {messages.map((message, index) => {
                         const content = getMessageContent(message);
                         const isLastAssistant = message.role === 'assistant' && index === messages.length - 1;
+                        const isLastUserAwaitingReply =
+                          isLoading &&
+                          message.role === 'user' &&
+                          index === messages.length - 1;
+                        const isEditing = editingMessageId === message.id;
                         return (
                           <div key={message.id} className={cn('group/message flex gap-4 w-full', message.role === 'user' ? 'justify-end' : 'justify-start')}>
                             {message.role === 'assistant' && (
@@ -993,12 +1227,40 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
                               </div>
                             )}
                             <div className={cn("flex flex-col min-w-0 max-w-[85%]", message.role === 'user' ? "items-end" : "items-start")}>
-                              <div className={cn("text-sm leading-[1.45] whitespace-pre-wrap break-words overflow-visible", message.role === 'user' ? "bg-primary/5 text-foreground px-4 py-2.5 rounded-2xl rounded-tr-sm" : "prose prose-sm dark:prose-invert max-w-none min-w-0 text-foreground")}>
-                                {message.role === 'user' ? content : <MarkdownRenderer content={content} className="text-sm text-foreground" />}
-                              </div>
-                              <div className="mt-1 opacity-0 group-hover/message:opacity-100 transition-opacity px-1">
-                                <MessageActions sessionId={currentSessionId} messageId={message.id} messageRole={message.role as 'user' | 'assistant'} messageContent={content} isLoading={isLoading} onRegenerate={isLastAssistant ? () => regenerate() : undefined} compact />
-                              </div>
+                              {isEditing ? (
+                                <MessageEditor
+                                  messageId={message.id}
+                                  initialContent={content}
+                                  setMode={(mode) => {
+                                    if (mode === 'view') setEditingMessageId(null);
+                                  }}
+                                  onSave={handleEditMessage}
+                                  compact
+                                />
+                              ) : (
+                                <>
+                                  <div className={cn("text-sm leading-[1.45] whitespace-pre-wrap break-words overflow-visible", message.role === 'user' ? "bg-primary/5 text-foreground px-4 py-2.5 rounded-2xl rounded-tr-sm" : "min-w-0 text-foreground")}>
+                                    {message.role === 'user' ? content : <MarkdownRenderer content={content} className="text-sm text-foreground" />}
+                                  </div>
+                                  <div className="mt-1 opacity-0 group-hover/message:opacity-100 transition-opacity px-1">
+                                    <MessageActions
+                                      sessionId={currentSessionId}
+                                      messageId={message.id}
+                                      messageRole={message.role as 'user' | 'assistant'}
+                                      messageContent={content}
+                                      userEditDisabled={isLastUserAwaitingReply}
+                                      regenerateDisabled={isLoading && isLastAssistant}
+                                      onEdit={
+                                        message.role === 'user'
+                                          ? () => setEditingMessageId(message.id)
+                                          : undefined
+                                      }
+                                      onRegenerate={isLastAssistant ? handleRegenerate : undefined}
+                                      compact
+                                    />
+                                  </div>
+                                </>
+                              )}
                             </div>
                           </div>
                         );
@@ -1010,7 +1272,19 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
                           <div className="size-7 shrink-0 flex items-center justify-center rounded-full bg-background border shadow-sm mt-1">
                             <Sparkles className="size-3.5 text-primary animate-pulse" />
                           </div>
-                          <div className="flex-1 min-w-0 max-w-[85%]">
+                          <div className="flex-1 min-w-0 max-w-[85%] space-y-2">
+                            <div className="flex justify-end">
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                className="h-7 gap-1.5 text-xs"
+                                onClick={handleStopRequest}
+                              >
+                                <Square className="size-2.5 fill-current" />
+                                Stop
+                              </Button>
+                            </div>
                             <AgentStreamReply
                               thinkingSteps={agentStream.thinkingSteps}
                               sql={agentStream.sql}
@@ -1026,19 +1300,28 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
                       {isLoading &&
                         !(notes9Loading || agentStream.isStreaming || agentStream.error) &&
                         messages.at(-1)?.role === 'user' && (
-                        <div className="flex w-full justify-start">
+                        <div className="flex w-full flex-col gap-2 justify-start">
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            className="h-7 w-fit gap-1.5 text-xs"
+                            onClick={handleStopRequest}
+                          >
+                            <Square className="size-2.5 fill-current" />
+                            Stop
+                          </Button>
                           <Notes9VideoLoader
                             className="max-w-[320px]"
                             compact
                             size="sm"
                             horizontal
-                            title="Generating with Notes9"
+                            title="Generating response"
                             captions={[
-                              "Pulling together your current lab context.",
-                              "Drafting the next answer carefully.",
-                              "Checking citations and keeping the thread coherent.",
+                              "Working on your request.",
+                              "This may take a few seconds.",
                             ]}
-                            label="Generating with Notes9"
+                            label="Generating response"
                           />
                         </div>
                       )}

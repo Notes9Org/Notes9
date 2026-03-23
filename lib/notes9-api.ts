@@ -1,18 +1,27 @@
+import { buildNotes9AgentRequestBody } from '@/lib/notes9-agent-request';
+import {
+  buildGeneralChatNotes9UpstreamBody,
+  type GeneralChatHistoryItem,
+} from '@/lib/general-chat-request';
+
 const API_BASE = process.env.NEXT_PUBLIC_NOTES9_API_URL || '';
 
 /** Use server proxy to avoid CORS when calling from browser. */
 const AGENT_PROXY = '/api/agent/run';
 
+/** POST /notes9 — same top-level keys as chat plus agent fields. */
 export interface AgentResponse {
-  answer: string;
-  citations: {
+  role: string;
+  content: string;
+  resources?: {
+    display_label?: string;
     source_type: string;
-    source_id: string;
+    source_name?: string | null;
     relevance: number;
-    excerpt?: string;
+    excerpt?: string | null;
   }[];
-  confidence: number;
-  tool_used: 'sql' | 'rag' | 'hybrid';
+  confidence?: number;
+  tool_used?: 'sql' | 'rag' | 'hybrid' | 'none';
 }
 
 export interface ChatResponse {
@@ -71,8 +80,9 @@ export async function runAgent(
   params: {
     query: string;
     session_id: string;
-    user_id?: string;
     history?: HistoryMessage[];
+    options?: { debug?: boolean; max_retries?: number };
+    scope?: object | null;
   },
   token: string
 ): Promise<AgentResponse> {
@@ -82,7 +92,7 @@ export async function runAgent(
       'Content-Type': 'application/json',
       Authorization: `Bearer ${token}`,
     },
-    body: JSON.stringify(params),
+    body: JSON.stringify(buildNotes9AgentRequestBody(params)),
   });
   if (!res.ok) {
     const errText = await res.text();
@@ -105,6 +115,8 @@ export async function chat(
     content: string;
     session_id: string;
     history?: HistoryMessage[];
+    web_search?: 'on' | 'off';
+    response_format?: 'text' | 'json';
   },
   token: string
 ): Promise<ChatResponse> {
@@ -112,7 +124,15 @@ export async function chat(
     '/chat',
     {
       method: 'POST',
-      body: JSON.stringify(params),
+      body: JSON.stringify(
+        buildGeneralChatNotes9UpstreamBody({
+          content: params.content,
+          session_id: params.session_id,
+          history: (params.history ?? []) as GeneralChatHistoryItem[],
+          web_search: params.web_search ?? 'off',
+          response_format: params.response_format,
+        })
+      ),
     },
     token
   );

@@ -16,9 +16,9 @@ interface AgentStreamReplyProps {
   compact?: boolean;
 }
 
-function getCitationRoute(citation: { source_type: string; source_id?: string }): string {
+function getCitationRoute(citation: { source_type: string; source_id?: string | null }): string {
   const id = citation.source_id;
-  if (!id) return '';
+  if (id == null || id === '') return '';
   switch (citation.source_type) {
     case 'literature_review':
       return `/literature-reviews/${id}`;
@@ -49,7 +49,12 @@ export function AgentStreamReply({
   error,
   compact = false,
 }: AgentStreamReplyProps) {
-  const displayAnswer = donePayload?.answer ?? streamedAnswer;
+  const displayAnswer =
+    donePayload?.content ?? donePayload?.answer ?? streamedAnswer;
+  const grounding =
+    donePayload?.resources?.length
+      ? donePayload.resources
+      : donePayload?.citations ?? [];
 
   if (error) {
     return (
@@ -139,7 +144,7 @@ export function AgentStreamReply({
       {/* Answer with optional confidence and tool_used (per Notes9 API) */}
       {(displayAnswer || (!donePayload && streamedAnswer === '')) && (
         <div className="space-y-2">
-          <div className="rounded-2xl px-4 py-3 text-sm prose prose-sm dark:prose-invert max-w-none">
+          <div className="rounded-2xl px-4 py-3 text-sm text-foreground">
             {displayAnswer ? (
               <MarkdownRenderer content={displayAnswer} />
             ) : (
@@ -171,13 +176,13 @@ export function AgentStreamReply({
       )}
 
       {/* Citations (from done payload); use display_label or source_name as title */}
-      {donePayload?.citations && donePayload.citations.length > 0 && (
+      {grounding.length > 0 && (
         <div className="rounded-lg border border-border/50 px-3 py-2">
           <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2">
             References
           </p>
           <ul className="space-y-1.5 text-sm">
-            {donePayload.citations.map((citation, index) => {
+            {grounding.map((citation, index) => {
               const route = getCitationRoute(citation);
               const displayText = formatCitationDisplay({
                 ...citation,

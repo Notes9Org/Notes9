@@ -1,9 +1,18 @@
 'use client';
 
 import { useRef, useEffect, useState, useCallback, type ChangeEvent } from 'react';
-import { ArrowUp, Square, Paperclip, Clock, X, Globe, FlaskConical } from 'lucide-react';
+import {
+  ArrowUp,
+  Square,
+  Paperclip,
+  Clock,
+  Globe,
+  MessageSquare,
+  NotebookPen,
+} from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
+import { Switch } from '@/components/ui/switch';
 import { cn } from '@/lib/utils';
 import { PreviewAttachment, type Attachment } from './preview-attachment';
 import { toast } from 'sonner';
@@ -19,6 +28,9 @@ interface CatalystInputProps {
   hasMessages: boolean;
   agentMode: AgentMode;
   onAgentModeChange: (mode: AgentMode) => void;
+  /** General mode only: enable web-grounded answers (default on). */
+  webSearchEnabled: boolean;
+  onWebSearchEnabledChange: (enabled: boolean) => void;
   /** @deprecated Model selector hidden when using external chat API */
   selectedModelId?: string;
   onModelChange?: (modelId: string) => void;
@@ -46,6 +58,8 @@ export function CatalystInput({
   hasMessages,
   agentMode,
   onAgentModeChange,
+  webSearchEnabled,
+  onWebSearchEnabledChange,
 }: CatalystInputProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -218,7 +232,7 @@ export function CatalystInput({
               onClick={() => onAgentModeChange('notes9')}
               disabled={isLoading}
             >
-              <FlaskConical className="size-3.5" />
+              <NotebookPen className="size-3.5" />
               Notes9
             </Button>
             <Button
@@ -232,10 +246,22 @@ export function CatalystInput({
               onClick={() => onAgentModeChange('general')}
               disabled={isLoading}
             >
-              <Globe className="size-3.5" />
+              <MessageSquare className="size-3.5" />
               General
             </Button>
           </div>
+
+          {agentMode === 'general' && (
+            <div className="flex items-center justify-end gap-2 px-3 py-2 border-b border-border/50 bg-muted/10">
+              <Globe className="size-3.5 shrink-0 text-muted-foreground" aria-hidden />
+              <Switch
+                checked={webSearchEnabled}
+                onCheckedChange={onWebSearchEnabledChange}
+                disabled={isLoading}
+                aria-label="Web search"
+              />
+            </div>
+          )}
 
           {/* Attachment Previews */}
           {(attachments.length > 0 || uploadQueue.length > 0) && (

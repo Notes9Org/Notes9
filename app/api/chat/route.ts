@@ -1,6 +1,15 @@
 import { createUIMessageStream, createUIMessageStreamResponse, generateId } from 'ai';
 import { updateChatContext, ChatMessage } from '@/lib/redis';
 import { saveChatMessage } from '@/lib/db/chat';
+import {
+  appendSourcesMarkdownSection,
+  assistantContentFromNotes9ChatPayload,
+  extractSourceListFromChatPayload,
+} from '@/lib/chat-response-sources';
+import {
+  buildGeneralChatLegacyUpstreamBody,
+  buildGeneralChatNotes9UpstreamBody,
+} from '@/lib/general-chat-request';
 
 export const maxDuration = 60;
 
@@ -46,7 +55,13 @@ function getPlainTextFromMessage(msg: {
 
 export async function POST(req: Request) {
   const body = await req.json();
-  const { messages, sessionId, supabaseToken: bodyToken } = body;
+  const { messages, sessionId, supabaseToken: bodyToken, webSearch } = body;
+  const webSearchOn = webSearch === true;
+  const rawResponseFormat = body.response_format ?? body.responseFormat;
+  const notes9ResponseFormat =
+    rawResponseFormat === 'json' || rawResponseFormat === 'text'
+      ? rawResponseFormat
+      : undefined;
   console.log('API Request Body:', JSON.stringify({ ...body, supabaseToken: bodyToken ? '[REDACTED]' : undefined }, null, 2));
   const headerToken = req.headers.get('Authorization')?.replace(/^Bearer\s+/i, '').trim();
   const supabaseToken = bodyToken || headerToken;
@@ -97,11 +112,15 @@ export async function POST(req: Request) {
               'Content-Type': 'application/json',
               Authorization: `Bearer ${supabaseToken}`,
             },
-            body: JSON.stringify({
-              content: userQuery,
-              history,
-              session_id: sessionId,
-            }),
+            body: JSON.stringify(
+              buildGeneralChatNotes9UpstreamBody({
+                content: userQuery,
+                session_id: sessionId,
+                history,
+                web_search: webSearchOn ? 'on' : 'off',
+                response_format: notes9ResponseFormat,
+              })
+            ),
           });
 
           if (!response.ok) {
@@ -114,8 +133,21 @@ export async function POST(req: Request) {
             return;
           }
 
-          const data = (await response.json()) as { content?: string; role?: string };
-          assistantContent = typeof data.content === 'string' ? data.content : String(data.content ?? '');
+          const data = (await response.json()) as Record<string, unknown> & {
+            content?: string;
+            role?: string;
+          };
+          assistantContent = assistantContentFromNotes9ChatPayload(data);
+          const sources = extractSourceListFromChatPayload(data);
+          const searchedWebFlag = data.searched_web === true;
+          if (webSearchOn && sources.length === 0 && !searchedWebFlag) {
+            console.warn(
+              '[chat] web_search=on but upstream JSON had no sources/resources/citations and searched_web was not true'
+            );
+          }
+          assistantContent = appendSourcesMarkdownSection(assistantContent, sources, {
+            searchedWeb: searchedWebFlag,
+          });
         } else {
           const response = await fetch(`${baseUrl}/chat`, {
             method: 'POST',
@@ -123,11 +155,14 @@ export async function POST(req: Request) {
               'Content-Type': 'application/json',
               Authorization: `Bearer ${bearerToken}`,
             },
-            body: JSON.stringify({
-              content: userQuery,
-              history,
-              session_id: sessionId,
-            }),
+            body: JSON.stringify(
+              buildGeneralChatLegacyUpstreamBody({
+                content: userQuery,
+                session_id: sessionId,
+                history,
+                webSearchOn,
+              })
+            ),
           });
 
           if (!response.ok) {
@@ -140,8 +175,16 @@ export async function POST(req: Request) {
             return;
           }
 
-          const data = (await response.json()) as { content?: string; role?: string };
-          assistantContent = typeof data.content === 'string' ? data.content : String(data.content ?? '');
+          const data = (await response.json()) as Record<string, unknown> & {
+            content?: string;
+            role?: string;
+          };
+          assistantContent = assistantContentFromNotes9ChatPayload(data);
+          const sources = extractSourceListFromChatPayload(data);
+          const searchedWebFlag = data.searched_web === true;
+          assistantContent = appendSourcesMarkdownSection(assistantContent, sources, {
+            searchedWeb: searchedWebFlag,
+          });
         }
 
         // Persist assistant response (DB)
