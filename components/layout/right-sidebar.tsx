@@ -438,6 +438,16 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
     await sendMessage({ parts });
   };
 
+  /** Stops Notes9 agent stream or useChat streaming; keep in sync when merging `main` (composer stop control). */
+  const handleStopRequest = useCallback(() => {
+    if (notes9Loading) {
+      agentStream.abort();
+      agentStream.reset();
+    } else {
+      stop();
+    }
+  }, [notes9Loading, agentStream, stop]);
+
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
@@ -550,8 +560,8 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
           maxLength={MAX_CHAT_CHARS}
         />
 
-        {/* Bottom Toolbar */}
-        <div className="flex items-center justify-between gap-2 px-2 pb-2 mt-1 min-h-[28px]">
+        {/* Bottom Toolbar — merge: keep `min-h-9` on this row and the trailing `h-9 … justify-end` wrapper so stop/send stay aligned (main used `min-h-[28px]` + `rounded-sm` stop; do not restore those here). */}
+        <div className="mt-1 flex min-h-9 items-center justify-between gap-2 px-2 pb-2">
           <div className="flex items-center gap-2 min-w-0 flex-1 overflow-hidden">
             {/* Mode Selector */}
             <DropdownMenu>
@@ -576,25 +586,45 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
             </DropdownMenu>
           </div>
 
-          <div className="flex items-center gap-1 shrink-0">
+          <div className="flex h-9 shrink-0 items-center justify-end gap-1">
             <span className="mr-1 hidden text-[11px] text-muted-foreground sm:inline">
               {input.length}/{MAX_CHAT_CHARS}
             </span>
-            <Button size="icon" variant="ghost" className="size-7 text-muted-foreground hover:text-foreground" onClick={() => fileInputRef.current?.click()} disabled={isLoading}>
+            <Button
+              type="button"
+              size="icon"
+              variant="ghost"
+              className="size-7 text-muted-foreground hover:text-foreground"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={isLoading}
+            >
               <Paperclip className="size-4" />
             </Button>
 
             {isLoading ? (
               <Button
+                type="button"
                 size="icon"
                 variant="secondary"
-                className="size-7 rounded-sm animate-pulse"
-                onClick={() => (notes9Loading && agentStream.isStreaming ? agentStream.abort() : stop())}
+                className="size-7 animate-pulse"
+                aria-label="Stop generating"
+                title="Stop generating"
+                onClick={handleStopRequest}
               >
                 <Square className="size-3 fill-current" />
               </Button>
             ) : (
-              <Button size="icon" variant="ghost" className={cn("size-7 text-muted-foreground hover:text-primary transition-colors", (input.trim() || attachments.length > 0) && "text-primary")} onClick={(e) => handleSubmit(e as any)} disabled={(!input.trim() && attachments.length === 0) || isUploading}>
+              <Button
+                type="button"
+                size="icon"
+                variant="ghost"
+                className={cn(
+                  "size-7 text-muted-foreground transition-colors hover:text-primary",
+                  (input.trim() || attachments.length > 0) && "text-primary",
+                )}
+                onClick={(e) => handleSubmit(e as any)}
+                disabled={(!input.trim() && attachments.length === 0) || isUploading}
+              >
                 <ArrowUp className="size-4" />
               </Button>
             )}
