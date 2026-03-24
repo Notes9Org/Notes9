@@ -31,9 +31,11 @@ interface PaperActionsProps {
     title: string
     status: string
   }
+  /** After successful delete or status update (e.g. refresh hub tabs). */
+  onAfterMutation?: () => void
 }
 
-export function PaperActions({ paper }: PaperActionsProps) {
+export function PaperActions({ paper, onAfterMutation }: PaperActionsProps) {
   const router = useRouter()
   const [deleteOpen, setDeleteOpen] = useState(false)
 
@@ -41,6 +43,7 @@ export function PaperActions({ paper }: PaperActionsProps) {
     if (IS_PAPERS_MOCKED) {
       updateMockPaper(paper.id, { status })
       toast.success(`Status updated to ${status.replace("_", " ")}`)
+      onAfterMutation?.()
       router.refresh()
       return
     }
@@ -56,6 +59,7 @@ export function PaperActions({ paper }: PaperActionsProps) {
       return
     }
     toast.success(`Status updated to ${status.replace("_", " ")}`)
+    onAfterMutation?.()
     router.refresh()
   }
 
@@ -63,6 +67,7 @@ export function PaperActions({ paper }: PaperActionsProps) {
     if (IS_PAPERS_MOCKED) {
       deleteMockPaper(paper.id)
       toast.success("Paper deleted")
+      onAfterMutation?.()
       router.push("/papers")
       return
     }
@@ -78,6 +83,7 @@ export function PaperActions({ paper }: PaperActionsProps) {
       return
     }
     toast.success("Paper deleted")
+    onAfterMutation?.()
     router.push("/papers")
   }
 
