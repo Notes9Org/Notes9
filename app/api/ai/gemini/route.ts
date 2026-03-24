@@ -58,6 +58,11 @@ CRITICAL RULES:
       case 'structure':
         userPrompt = `Analyze this text and format all chemical compounds, formulas, and structures properly with correct notation (subscripts, superscripts, arrows, Greek letters). If it's a chemical equation, balance it if needed. Return ONLY the formatted text without any introductory phrases:\n\n${selectedText}`
         break
+      case 'chat':
+        // Free-form chat — the caller provides the full prompt including system instructions
+        systemPrompt = ''
+        userPrompt = prompt || selectedText
+        break
       default:
         userPrompt = prompt || selectedText
     }

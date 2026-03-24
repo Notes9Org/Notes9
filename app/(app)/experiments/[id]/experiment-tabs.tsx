@@ -10,6 +10,7 @@ import { LabNotesTab } from './lab-notes-tab'
 import { DataFilesTab } from './data-files-tab'
 import { LinkProtocolDialog } from './link-protocol-dialog'
 import { ProtocolCard } from './protocol-card'
+import { ExperimentStepsTab } from './experiment-steps-tab'
 import Link from 'next/link'
 
 interface ExperimentTabsProps {
@@ -48,6 +49,12 @@ export function ExperimentTabs({ experiment, initialTab }: ExperimentTabsProps) 
           id="tab-trigger-overview"
         >
           Overview
+        </TabsTrigger>
+        <TabsTrigger
+          value="steps"
+          id="tab-trigger-steps"
+        >
+          Steps
         </TabsTrigger>
         <TabsTrigger
           value="protocol"
@@ -123,6 +130,10 @@ export function ExperimentTabs({ experiment, initialTab }: ExperimentTabsProps) 
             </CardContent>
           </Card>
         </div>
+      </TabsContent>
+
+      <TabsContent value="steps" id="tab-content-steps" className="space-y-4">
+        <ExperimentStepsTab experimentId={experiment.id} />
       </TabsContent>
 
       <TabsContent value="protocol" id="tab-content-protocol" className="space-y-4">

@@ -247,3 +247,32 @@
   position: relative !important;
   z-index: 1 !important;
 }
+
+
+/* KaTeX Math Styles */
+.ProseMirror .tiptap-mathematics-render {
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+  border-radius: 3px;
+  padding: 1px 3px;
+}
+
+.ProseMirror .tiptap-mathematics-render:hover {
+  background: rgba(59, 130, 246, 0.08);
+}
+
+.ProseMirror .tiptap-mathematics-render--editable {
+  cursor: pointer;
+}
+
+.ProseMirror .tiptap-mathematics-render[data-type="block-math"] {
+  display: block;
+  margin: 1rem 0;
+  padding: 12px;
+  text-align: center;
+}
+
+.dark .ProseMirror .tiptap-mathematics-render:hover {
+  background: rgba(59, 130, 246, 0.15);
+}
+
