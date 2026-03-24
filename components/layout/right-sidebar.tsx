@@ -729,8 +729,8 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
       <input ref={fileInputRef} type="file" multiple accept={ALLOWED_TYPES.join(',')} className="hidden" onChange={handleFileSelect} disabled={isLoading || isUploading} />
 
       {!mounted ? (
-        <div className="flex-1 flex items-center justify-center">
-          <Sparkles className="size-6 text-muted-foreground/50 animate-pulse" />
+        <div className="flex flex-1 items-center justify-center">
+          <Sparkles className="size-6 -translate-y-[5px] text-muted-foreground/50 animate-pulse" />
         </div>
       ) : (
         <>
@@ -1006,7 +1006,7 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
                         (notes9Loading || agentStream.isStreaming || agentStream.error) &&
                         messages.at(-1)?.role === 'user' && (
                         <div className="flex gap-4 w-full justify-start">
-                          <div className="size-7 shrink-0 flex items-center justify-center rounded-full bg-background border shadow-sm mt-1">
+                          <div className="size-7 shrink-0 flex items-center justify-center rounded-full bg-background border shadow-sm mt-1 -translate-y-[5px]">
                             <Sparkles className="size-3.5 text-primary animate-pulse" />
                           </div>
                           <div className="flex-1 min-w-0 max-w-[85%]">

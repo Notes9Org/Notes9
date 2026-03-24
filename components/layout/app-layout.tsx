@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation"
 import Link from "next/link"
 import { AppSidebar } from "./app-sidebar"
 import { RightSidebar } from "./right-sidebar"
-import { AppTour } from "@/components/tour/app-tour"
+import { AppTour, requestPageHelp } from "@/components/tour/app-tour"
 import { BreadcrumbProvider, useBreadcrumb } from "./breadcrumb-context"
 import { Button } from "@/components/ui/button"
 import { ResizeHandle } from "@/components/ui/resize-handle"
@@ -13,7 +13,7 @@ import { SidebarProvider, SidebarInset, useSidebar } from "@/components/ui/sideb
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet"
 import { useResizable } from "@/hooks/use-resizable"
 import { cn } from "@/lib/utils"
-import { Menu, X, Sparkles, ChevronRight, Sun, Moon } from 'lucide-react'
+import { Menu, X, Sparkles, ChevronRight, Sun, Moon, CircleHelp } from 'lucide-react'
 import { useTheme } from "next-themes"
 import { useMediaQuery } from "@/hooks/use-media-query"
 
@@ -184,6 +184,7 @@ function MobileMenuButton() {
 }
 
 export function AppLayout({ children }: AppLayoutProps) {
+  const pathname = usePathname()
   const { setTheme, resolvedTheme } = useTheme()
   const [rightSidebarOpen, setRightSidebarOpen] = useState(false)
   const [themeMounted, setThemeMounted] = useState(false)
@@ -298,6 +299,17 @@ export function AppLayout({ children }: AppLayoutProps) {
               </div>
 
             <div className="flex items-center gap-1 sm:gap-2">
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="size-8 sm:size-9 text-muted-foreground hover:text-foreground"
+                onClick={() => requestPageHelp(pathname ?? "/dashboard")}
+                aria-label="Help: tour this page"
+                title="Help: short tour for this page"
+              >
+                <CircleHelp className="size-4" />
+              </Button>
               {/* Theme toggle: one click toggles dark ↔ light (client-only to avoid hydration mismatch) */}
               <Button
                 id="tour-theme-toggle"
