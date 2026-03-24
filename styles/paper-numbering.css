@@ -1,0 +1,78 @@
+/**
+ * Auto-numbering for academic paper mode.
+ *
+ * Applied when the editor wrapper has [data-paper-mode].
+ * Uses CSS counters to number sections (h2, h3), figures, and tables
+ * so the author sees numbering while writing — matching LaTeX output.
+ */
+
+/* Reset all counters on the ProseMirror root */
+[data-paper-mode] .ProseMirror {
+  counter-reset: section subsection figure-num table-num;
+}
+
+/* ── Section numbering (h2 = section, h3 = subsection) ── */
+
+[data-paper-mode] .ProseMirror h2 {
+  counter-increment: section;
+  counter-reset: subsection;
+}
+
+[data-paper-mode] .ProseMirror h2::before {
+  content: counter(section) ". ";
+  font-weight: inherit;
+}
+
+[data-paper-mode] .ProseMirror h3 {
+  counter-increment: subsection;
+}
+
+[data-paper-mode] .ProseMirror h3::before {
+  content: counter(section) "." counter(subsection) " ";
+  font-weight: inherit;
+}
+
+/* h1 is the paper title — no numbering */
+[data-paper-mode] .ProseMirror h1::before {
+  content: none;
+}
+
+/* ── Figure numbering (images) ── */
+
+[data-paper-mode] .ProseMirror img {
+  counter-increment: figure-num;
+}
+
+/* Caption-like label below images */
+[data-paper-mode] .ProseMirror img + br,
+[data-paper-mode] .ProseMirror img::after {
+  /* CSS ::after doesn't work on <img> (void element), so we use a
+     wrapper approach via the node view or a sibling. For now the
+     numbering counter is maintained and the LaTeX export uses it. */
+}
+
+/* ── Table numbering ── */
+
+[data-paper-mode] .ProseMirror table {
+  counter-increment: table-num;
+}
+
+/* ── Visual indicator that numbering is active ── */
+
+[data-paper-mode] .ProseMirror h2,
+[data-paper-mode] .ProseMirror h3 {
+  position: relative;
+}
+
+/* Subtle left-border accent on numbered sections */
+[data-paper-mode] .ProseMirror h2 {
+  border-left: 3px solid hsl(var(--primary) / 0.3);
+  padding-left: 0.75rem;
+  margin-left: -0.75rem;
+}
+
+[data-paper-mode] .ProseMirror h3 {
+  border-left: 2px solid hsl(var(--primary) / 0.15);
+  padding-left: 0.75rem;
+  margin-left: -0.75rem;
+}

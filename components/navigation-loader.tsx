@@ -49,7 +49,8 @@ function inferLoaderVariant(actionLabel: string, href?: string | null): Notes9Lo
   const source = `${href ?? ""} ${actionLabel}`.toLowerCase()
   if (source.includes("/research-map") || source.includes("research map")) return "research-map"
   if (source.includes("protocol")) return "protocols"
-  if (source.includes("literature") || source.includes("paper") || source.includes("book")) return "literature"
+  if (source.includes("literature") || source.includes("book")) return "literature"
+  if (source.includes("writing") || source.includes("/papers")) return "writing"
   if (source.includes("search")) return "search"
   if (source.includes("/projects") || source.includes("project")) return "projects"
   if (source.includes("/experiments") || source.includes("experiment")) return "experiments"
@@ -63,6 +64,8 @@ function buildLoaderCopy(actionLabel: string, variant: Notes9LoaderVariant) {
   const variantTitle =
     variant === "literature"
       ? "Opening Literature"
+      : variant === "writing"
+        ? "Opening Writing"
       : variant === "auth"
         ? "Opening Sign In"
       : variant === "search"
@@ -90,6 +93,12 @@ function buildLoaderCopy(actionLabel: string, variant: Notes9LoaderVariant) {
           "Context improves when evidence stays linked to the work.",
           "Structured literature review reduces repeated searching later.",
         ]
+      : variant === "writing"
+        ? [
+            "Mascot is setting up the writing desk and sharpening the pen.",
+            "Clear structure helps ideas flow from outline to finished draft.",
+            "Good writing starts when notes, citations, and context stay connected.",
+          ]
       : variant === "auth"
         ? [
             "Mascot is preparing your secure workspace access.",

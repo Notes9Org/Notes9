@@ -61,6 +61,8 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Switch } from '@/components/ui/switch';
+import { usePaperAI } from '@/contexts/paper-ai-context';
+import { PaperAIPanel } from '@/components/text-editor/paper-ai-panel';
 
 type AgentMode = 'general' | 'notes9';
 
@@ -119,6 +121,7 @@ interface RightSidebarProps {
 export function RightSidebar({ onClose }: RightSidebarProps = {}) {
   const router = useRouter();
   const pathname = usePathname();
+  const paperAI = usePaperAI();
   const [input, setInput] = useState('');
   const [agentMode, setAgentMode] = useState<AgentMode>('general');
   const [webSearchEnabled, setWebSearchEnabled] = useState(true);
@@ -982,6 +985,16 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
         <div className="flex flex-1 items-center justify-center">
           <Sparkles className="size-6 -translate-y-[5px] text-muted-foreground/50 animate-pulse" />
         </div>
+      ) : paperAI?.isActive ? (
+        <PaperAIPanel
+          open
+          embedded
+          onClose={() => onClose?.()}
+          paperContent={paperAI.paperContent}
+          onInsert={paperAI.onInsert}
+          paperTitle={paperAI.paperTitle}
+          getEditorContext={paperAI.getEditorContext}
+        />
       ) : (
         <>
           {/* Header: Tab-like Navigation (History + New Chat hidden when maximized; left sidebar has them) */}

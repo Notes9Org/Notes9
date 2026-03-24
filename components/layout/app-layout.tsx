@@ -7,6 +7,7 @@ import { AppSidebar } from "./app-sidebar"
 import { RightSidebar } from "./right-sidebar"
 import { AppTour, requestPageHelp } from "@/components/tour/app-tour"
 import { BreadcrumbProvider, useBreadcrumb } from "./breadcrumb-context"
+import { PaperAIProvider, usePaperAI } from "@/contexts/paper-ai-context"
 import { Button } from "@/components/ui/button"
 import { ResizeHandle } from "@/components/ui/resize-handle"
 import { SidebarProvider, SidebarInset, useSidebar } from "@/components/ui/sidebar"
@@ -26,6 +27,7 @@ const ROUTE_TITLES: { path: string; title: string }[] = [
   { path: "/equipment", title: "Equipment" },
   { path: "/protocols", title: "Protocols" },
   { path: "/literature-reviews", title: "Literature" },
+  { path: "/papers", title: "Writing" },
   { path: "/research-map", title: "Research map" },
   { path: "/settings", title: "Settings" },
   { path: "/", title: "Dashboard" },
@@ -183,6 +185,40 @@ function MobileMenuButton() {
   )
 }
 
+function AIToggleButton({ onClick }: { onClick: () => void }) {
+  const paperAI = usePaperAI()
+  const isPaper = paperAI?.isActive
+
+  if (isPaper) {
+    return (
+      <Button
+        id="tour-ai-toggle"
+        variant="ghost"
+        size="sm"
+        className="h-8 sm:h-9 gap-1.5 px-3 bg-gradient-to-r from-blue-500/10 via-violet-500/10 to-purple-500/10 hover:from-blue-500/20 hover:via-violet-500/20 hover:to-purple-500/20 border border-blue-500/20"
+        onClick={onClick}
+      >
+        <Sparkles className="size-3.5 text-violet-500" />
+        <span className="text-xs font-bold bg-gradient-to-r from-blue-600 to-violet-600 dark:from-blue-400 dark:to-violet-400 bg-clip-text text-transparent">
+          Write with AI
+        </span>
+      </Button>
+    )
+  }
+
+  return (
+    <Button
+      id="tour-ai-toggle"
+      variant="ghost"
+      size="icon"
+      className="size-8 sm:size-9"
+      onClick={onClick}
+    >
+      <Sparkles className="size-4" />
+    </Button>
+  )
+}
+
 export function AppLayout({ children }: AppLayoutProps) {
   const pathname = usePathname()
   const { setTheme, resolvedTheme } = useTheme()
@@ -247,6 +283,7 @@ export function AppLayout({ children }: AppLayoutProps) {
 
   return (
     <BreadcrumbProvider>
+      <PaperAIProvider>
       <SidebarProvider defaultOpen={!isMobile} open={sidebarOpen} onOpenChange={setSidebarOpen}>
         <AppTour />
         <div
@@ -329,15 +366,7 @@ export function AppLayout({ children }: AppLayoutProps) {
               </Button>
               {/* AI / Right sidebar toggle */}
                 {!rightSidebarOpen && (
-                  <Button
-                    id="tour-ai-toggle"
-                    variant={rightSidebarOpen ? "default" : "ghost"}
-                    size="icon"
-                    className="size-8 sm:size-9"
-                    onClick={() => setRightSidebarOpen(!rightSidebarOpen)}
-                  >
-                    <Sparkles className="size-4" />
-                  </Button>
+                  <AIToggleButton onClick={() => setRightSidebarOpen(true)} />
                 )}
             </div>
           </header>
@@ -382,6 +411,7 @@ export function AppLayout({ children }: AppLayoutProps) {
         )}
         </div>
       </SidebarProvider>
+      </PaperAIProvider>
     </BreadcrumbProvider>
   )
 }

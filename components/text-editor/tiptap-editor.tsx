@@ -82,6 +82,7 @@ import { cn } from "@/lib/utils"
 import { useAwsTranscribe } from "@/hooks/use-aws-transcribe"
 import { useCallback, useEffect, useRef, useState } from "react"
 import { createPortal } from "react-dom"
+import "@/styles/inline-diff.css"
 // @ts-ignore
 import * as mammoth from "mammoth"
 import { toast } from "sonner"
@@ -146,8 +147,20 @@ interface TiptapEditorProps {
   onAutoSave?: (content: string) => Promise<void>
   protocols?: ProtocolItem[]
   labNotes?: LabNoteItem[]
+  /** Enable KaTeX math equation support (inline & block) */
+  enableMath?: boolean
+  /** Enable academic paper mode (auto-numbered sections, figures, tables) */
+  paperMode?: boolean
   /** When set, the toolbar is rendered into this container (e.g. card header) instead of above the editor. */
   toolbarPortalRef?: React.RefObject<HTMLDivElement | null>
+  /** Callback fired when the editor instance is ready (or changes). Useful for parent components that need direct editor access. */
+  onEditorReady?: (editor: ReturnType<typeof useEditor>) => void
+  /** HTML content to show as an inline diff widget at the cursor position */
+  inlineDiffHtml?: string | null
+  /** Called when user accepts the inline diff */
+  onAcceptInlineDiff?: () => void
+  /** Called when user dismisses the inline diff */
+  onDismissInlineDiff?: () => void
 }
 
 // Extension to support background color for table cells
@@ -1183,7 +1196,13 @@ export function TiptapEditor({
   hideToolbar = false,
   protocols = [],
   labNotes = [],
+  enableMath = false,
+  paperMode = false,
   toolbarPortalRef,
+  onEditorReady,
+  inlineDiffHtml,
+  onAcceptInlineDiff,
+  onDismissInlineDiff,
 }: TiptapEditorProps & { hideToolbar?: boolean }) {
   const [activeTable, setActiveTable] = useState<HTMLTableElement | null>(null)
   const [editorContainer, setEditorContainer] = useState<HTMLElement | null>(null)
@@ -1361,7 +1380,35 @@ export function TiptapEditor({
       TableRow,
       ExtendedTableHeader,
       ExtendedTableCell,
-      Mathematics.configure({}),
+      ...(enableMath ? [Mathematics.configure({
+        inlineOptions: {
+          onClick: (node: any, pos: number) => {
+            const latex = prompt('Edit inline equation:', node.attrs.latex)
+            if (latex !== null) {
+              editorRef.current?.chain().setNodeSelection(pos).updateInlineMath({ latex }).focus().run()
+            }
+          },
+        },
+        blockOptions: {
+          onClick: (node: any, pos: number) => {
+            const latex = prompt('Edit block equation:', node.attrs.latex)
+            if (latex !== null) {
+              editorRef.current?.chain().setNodeSelection(pos).updateBlockMath({ latex }).focus().run()
+            }
+          },
+        },
+        katexOptions: {
+          throwOnError: false,
+          macros: {
+            '\\RR': '\\mathbb{R}',
+            '\\ZZ': '\\mathbb{Z}',
+            '\\NN': '\\mathbb{N}',
+            '\\QQ': '\\mathbb{Q}',
+            '\\CC': '\\mathbb{C}',
+            '\\deg': '°',
+          },
+        },
+      })] : []),
       // Underline,
       Subscript,
       Superscript,
@@ -1507,7 +1554,101 @@ export function TiptapEditor({
 
   useEffect(() => {
     editorRef.current = editor
+    if (editor) onEditorReady?.(editor)
   }, [editor])
+
+  // Inline diff widget — render a DOM element at the cursor position when inlineDiffHtml is set
+  useEffect(() => {
+    if (!editor || !editorContainer) return
+    // Clean up any existing widget
+    const existing = editorContainer.querySelector('.inline-diff-widget')
+    if (existing) existing.remove()
+
+    if (!inlineDiffHtml) return
+
+    // Get the cursor position in the DOM
+    const { state } = editor
+    const { selection } = state
+    const pos = selection.anchor
+
+    // Create the widget element
+    const widget = document.createElement('div')
+    widget.className = 'inline-diff-widget'
+    widget.contentEditable = 'false'
+
+    // Header
+    const header = document.createElement('div')
+    header.className = 'inline-diff-header'
+    header.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.376 3.622a1 1 0 0 1 3.002 3.002L7.368 18.635a2 2 0 0 1-.855.506l-2.872.838a.5.5 0 0 1-.62-.62l.838-2.872a2 2 0 0 1 .506-.855z"/></svg><span>AI Suggestion</span><span class="diff-badge">Insert</span>`
+    widget.appendChild(header)
+
+    // Body — render the HTML content
+    const body = document.createElement('div')
+    body.className = 'inline-diff-body'
+    body.innerHTML = inlineDiffHtml
+    widget.appendChild(body)
+
+    // Actions bar
+    const actions = document.createElement('div')
+    actions.className = 'inline-diff-actions'
+
+    const acceptBtn = document.createElement('button')
+    acceptBtn.className = 'accept-btn'
+    acceptBtn.innerHTML = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg> Accept`
+    acceptBtn.addEventListener('click', (e) => {
+      e.preventDefault()
+      e.stopPropagation()
+      onAcceptInlineDiff?.()
+    })
+
+    const discardBtn = document.createElement('button')
+    discardBtn.className = 'discard-btn'
+    discardBtn.innerHTML = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg> Discard`
+    discardBtn.addEventListener('click', (e) => {
+      e.preventDefault()
+      e.stopPropagation()
+      onDismissInlineDiff?.()
+    })
+
+    actions.appendChild(acceptBtn)
+    actions.appendChild(discardBtn)
+    widget.appendChild(actions)
+
+    // Insert the widget into the editor DOM at the cursor position
+    try {
+      const domAtPos = editor.view.domAtPos(pos)
+      const parentNode = domAtPos.node as HTMLElement
+      if (parentNode.nodeType === Node.TEXT_NODE) {
+        // Insert after the text node's parent element
+        const parentEl = parentNode.parentElement
+        if (parentEl) {
+          parentEl.after(widget)
+        }
+      } else if (parentNode.nodeType === Node.ELEMENT_NODE) {
+        // Insert as a child or after the element
+        const childNodes = parentNode.childNodes
+        if (domAtPos.offset < childNodes.length) {
+          const refNode = childNodes[domAtPos.offset]
+          parentNode.insertBefore(widget, refNode)
+        } else {
+          parentNode.appendChild(widget)
+        }
+      }
+    } catch {
+      // Fallback: append to the editor container's ProseMirror div
+      const proseMirror = editorContainer.querySelector('.ProseMirror')
+      if (proseMirror) {
+        proseMirror.appendChild(widget)
+      }
+    }
+
+    // Scroll the widget into view
+    setTimeout(() => widget.scrollIntoView({ behavior: 'smooth', block: 'center' }), 50)
+
+    return () => {
+      widget.remove()
+    }
+  }, [editor, editorContainer, inlineDiffHtml, onAcceptInlineDiff, onDismissInlineDiff])
 
   // Track active comment via DOM click events - reads data attributes directly
   useEffect(() => {
@@ -3295,36 +3436,32 @@ export function TiptapEditor({
                     <FlaskConical className="h-4 w-4 mr-2" />
                     Chemical Formula
                   </DropdownMenuItem>
-                  <DropdownMenuItem
-                    onClick={() => {
-                      const { from, to } = editor.state.selection;
-                      if (from === to) {
-                        editor.chain().focus().insertContent("$ $").run();
-                        editor.chain().focus().setTextSelection(from + 1).run();
-                      } else {
-                        const text = editor.state.doc.textBetween(from, to, " ");
-                        editor.chain().focus().deleteRange({ from, to }).insertContent(`$${text}$`).run();
-                      }
-                    }}
-                  >
-                    <Sigma className="h-4 w-4 mr-2" />
-                    Inline Equation
-                  </DropdownMenuItem>
-                  <DropdownMenuItem
-                    onClick={() => {
-                      const { from, to } = editor.state.selection;
-                      if (from === to) {
-                        editor.chain().focus().insertContent("$$\n\n$$").run();
-                        editor.chain().focus().setTextSelection(from + 3).run();
-                      } else {
-                        const text = editor.state.doc.textBetween(from, to, " ");
-                        editor.chain().focus().deleteRange({ from, to }).insertContent(`$$\n${text}\n$$`).run();
-                      }
-                    }}
-                  >
-                    <Sigma className="h-4 w-4 mr-2" />
-                    Equation Block
-                  </DropdownMenuItem>
+                  {enableMath && (
+                    <>
+                      <DropdownMenuItem
+                        onClick={() => {
+                          const { from, to } = editor.state.selection;
+                          const selectedText = from !== to ? editor.state.doc.textBetween(from, to, " ") : "x^2";
+                          if (from !== to) editor.chain().focus().deleteRange({ from, to }).run();
+                          editor.chain().focus().insertInlineMath({ latex: selectedText }).run();
+                        }}
+                      >
+                        <Sigma className="h-4 w-4 mr-2" />
+                        Inline Equation ($...$)
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        onClick={() => {
+                          const { from, to } = editor.state.selection;
+                          const selectedText = from !== to ? editor.state.doc.textBetween(from, to, " ") : "\\sum_{i=1}^{n} x_i";
+                          if (from !== to) editor.chain().focus().deleteRange({ from, to }).run();
+                          editor.chain().focus().insertBlockMath({ latex: selectedText }).run();
+                        }}
+                      >
+                        <Sigma className="h-4 w-4 mr-2" />
+                        Equation Block ($$...$$)
+                      </DropdownMenuItem>
+                    </>
+                  )}
                 </DropdownMenuContent>
               </DropdownMenu>
 
@@ -3491,6 +3628,7 @@ export function TiptapEditor({
 
       <div
         className={cn("border border-border rounded-lg bg-background flex flex-col h-full w-full max-w-full overflow-hidden", className)}
+        {...(paperMode ? { "data-paper-mode": "" } : {})}
       >
         <div
           className="flex-1 overflow-hidden relative w-full h-full max-w-full"

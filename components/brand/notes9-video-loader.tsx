@@ -17,6 +17,7 @@ export type Notes9LoaderVariant =
   | "notes"
   | "protocols"
   | "research-map"
+  | "writing"
 
 interface Notes9VideoLoaderProps {
   className?: string
@@ -423,6 +424,8 @@ export function Notes9VideoLoader({
       return <NotesScene compact={sceneCompact} horizontal={horizontal} protocol inline={inline} />
     if (variant === "research-map")
       return <ResearchMapScene compact={sceneCompact} horizontal={horizontal} inline={inline} />
+    if (variant === "writing")
+      return <NotesScene compact={sceneCompact} horizontal={horizontal} inline={inline} />
     return <DefaultScene compact={sceneCompact} horizontal={horizontal} inline={inline} />
   }
 
