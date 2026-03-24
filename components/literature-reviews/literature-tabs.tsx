@@ -171,16 +171,15 @@ export function LiteratureTabs({
       })
       
       if (result.success) {
-        if (result.warning) {
-          toast.success('Paper saved to repository')
-          toast.warning(result.warning)
-        } else {
-          toast.success(
+        const pdfAttached =
+          Boolean(
             pendingSavePaper.isOpenAccess && pendingSavePaper.pdfUrl
-              ? 'Paper and PDF saved to repository'
-              : 'Paper saved to repository'
-          )
-        }
+          ) && !result.warning
+        toast.success(
+          pdfAttached
+            ? 'Paper and PDF saved to repository'
+            : 'Paper saved to repository'
+        )
         // Remove from staging after successful save
         setStagedPapers((current) => current.filter((p) => p.id !== pendingSavePaper.id))
         setSaveDialogOpen(false)
