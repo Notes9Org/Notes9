@@ -18,6 +18,13 @@ import {
 import { ArrowLeft, Star } from 'lucide-react'
 import Link from 'next/link'
 import { toast } from "sonner"
+import {
+  literatureLinkSelectContentClassName,
+  literatureLinkSelectItemClassName,
+  literatureLinkSelectTriggerClassName,
+  literatureLinkSelectViewportClassName,
+  literatureLinkSelectViewportStyle,
+} from "@/lib/literature-link-select-ui"
 
 export default function NewLiteratureReviewPage() {
   const router = useRouter()
@@ -385,8 +392,8 @@ export default function NewLiteratureReviewPage() {
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <div className="min-w-0 space-y-2">
                   <Label htmlFor="project_id">Project (Optional)</Label>
                   <Select
                     value={formData.project_id}
@@ -394,12 +401,23 @@ export default function NewLiteratureReviewPage() {
                       setFormData({ ...formData, project_id: value })
                     }
                   >
-                    <SelectTrigger id="project_id">
+                    <SelectTrigger
+                      id="project_id"
+                      className={literatureLinkSelectTriggerClassName}
+                    >
                       <SelectValue placeholder="Select project (optional)" />
                     </SelectTrigger>
-                    <SelectContent>
+                    <SelectContent
+                      className={literatureLinkSelectContentClassName}
+                      viewportClassName={literatureLinkSelectViewportClassName}
+                      viewportStyle={literatureLinkSelectViewportStyle}
+                    >
                       {projects.map((project) => (
-                        <SelectItem key={project.id} value={project.id}>
+                        <SelectItem
+                          key={project.id}
+                          value={project.id}
+                          className={literatureLinkSelectItemClassName}
+                        >
                           {project.name}
                         </SelectItem>
                       ))}
@@ -407,7 +425,7 @@ export default function NewLiteratureReviewPage() {
                   </Select>
                 </div>
 
-                <div className="space-y-2">
+                <div className="min-w-0 space-y-2">
                   <Label htmlFor="experiment_id">Experiment (Optional)</Label>
                   <Select
                     value={formData.experiment_id}
@@ -416,12 +434,23 @@ export default function NewLiteratureReviewPage() {
                     }
                     disabled={!formData.project_id}
                   >
-                    <SelectTrigger id="experiment_id">
+                    <SelectTrigger
+                      id="experiment_id"
+                      className={literatureLinkSelectTriggerClassName}
+                    >
                       <SelectValue placeholder={formData.project_id ? "Select experiment (optional)" : "Select project first"} />
                     </SelectTrigger>
-                    <SelectContent>
+                    <SelectContent
+                      className={literatureLinkSelectContentClassName}
+                      viewportClassName={literatureLinkSelectViewportClassName}
+                      viewportStyle={literatureLinkSelectViewportStyle}
+                    >
                       {filteredExperiments.map((experiment) => (
-                        <SelectItem key={experiment.id} value={experiment.id}>
+                        <SelectItem
+                          key={experiment.id}
+                          value={experiment.id}
+                          className={literatureLinkSelectItemClassName}
+                        >
                           {experiment.name}
                         </SelectItem>
                       ))}
