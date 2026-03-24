@@ -136,7 +136,7 @@ export function LiteraturePdfPanel({ literatureId, pdfUrl, pdfFileName }: Litera
             className="gap-2"
             disabled={exportingPdf}
             onClick={handleExportAnnotatedPdf}
-            title="Download a copy of the PDF with highlights and notes drawn on the pages"
+            title="Download PDF: colored highlights on the page (as in the reader) plus a right column listing highlights and notes"
           >
             {exportingPdf ? (
               <Loader2 className="h-4 w-4 shrink-0 animate-spin" />

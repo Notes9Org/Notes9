@@ -475,6 +475,21 @@ mark {
   text-shadow: none !important;
 }
 
+/* Injected Skip/Close — class names must NOT include "driver-popover" or driver.js blocks clicks */
+.driverjs-theme-researcher .notes9-tour-skip-btn,
+.driverjs-theme-researcher .notes9-tour-close-btn {
+  cursor: pointer !important;
+  background-color: transparent !important;
+  color: var(--muted-foreground) !important;
+  border: 1px solid var(--border) !important;
+}
+
+.driverjs-theme-researcher .notes9-tour-skip-btn:hover,
+.driverjs-theme-researcher .notes9-tour-close-btn:hover {
+  color: var(--foreground) !important;
+  background-color: var(--muted) !important;
+}
+
 .driverjs-theme-researcher .driver-popover-next-btn {
   background-color: var(--primary) !important;
   color: var(--primary-foreground) !important;

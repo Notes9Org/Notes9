@@ -1305,19 +1305,7 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
                           <div className="size-7 shrink-0 flex items-center justify-center rounded-full bg-background border shadow-sm mt-1 -translate-y-[5px]">
                             <Sparkles className="size-3.5 text-primary animate-pulse" />
                           </div>
-                          <div className="flex-1 min-w-0 max-w-[85%] space-y-2">
-                            <div className="flex justify-end">
-                              <Button
-                                type="button"
-                                variant="outline"
-                                size="sm"
-                                className="h-7 gap-1.5 text-xs"
-                                onClick={handleStopRequest}
-                              >
-                                <Square className="size-2.5 fill-current" />
-                                Stop
-                              </Button>
-                            </div>
+                          <div className="flex-1 min-w-0 max-w-[85%]">
                             <AgentStreamReply
                               thinkingSteps={agentStream.thinkingSteps}
                               sql={agentStream.sql}
@@ -1333,17 +1321,7 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
                       {isLoading &&
                         !(notes9Loading || agentStream.isStreaming || agentStream.error) &&
                         messages.at(-1)?.role === 'user' && (
-                        <div className="flex w-full flex-col gap-2 justify-start">
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            className="h-7 w-fit gap-1.5 text-xs"
-                            onClick={handleStopRequest}
-                          >
-                            <Square className="size-2.5 fill-current" />
-                            Stop
-                          </Button>
+                        <div className="flex w-full justify-start">
                           <Notes9VideoLoader
                             className="max-w-[280px]"
                             compact

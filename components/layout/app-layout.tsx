@@ -384,6 +384,7 @@ export function AppLayout({ children }: AppLayoutProps) {
           <Sheet open={rightSidebarOpen} onOpenChange={setRightSidebarOpen}>
             <SheetContent
               side="right"
+              showCloseButton={false}
               className="w-full max-w-full p-0 data-[state=open]:duration-300 data-[state=closed]:duration-200"
             >
               <SheetHeader className="sr-only">

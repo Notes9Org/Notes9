@@ -54,8 +54,13 @@ function SelectContent({
   className,
   children,
   position = 'popper',
+  viewportClassName,
+  viewportStyle,
   ...props
-}: React.ComponentProps<typeof SelectPrimitive.Content>) {
+}: React.ComponentProps<typeof SelectPrimitive.Content> & {
+  viewportClassName?: string
+  viewportStyle?: React.CSSProperties
+}) {
   return (
     <SelectPrimitive.Portal>
       <SelectPrimitive.Content
@@ -75,7 +80,9 @@ function SelectContent({
             'p-1',
             position === 'popper' &&
               'h-[var(--radix-select-trigger-height)] w-full min-w-[var(--radix-select-trigger-width)] scroll-my-1',
+            viewportClassName,
           )}
+          style={viewportStyle}
         >
           {children}
         </SelectPrimitive.Viewport>

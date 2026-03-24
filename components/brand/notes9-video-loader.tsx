@@ -1,7 +1,18 @@
 "use client"
 
 import { useEffect, useState, type ReactNode } from "react"
-import { BookOpen, ClipboardList, FlaskConical, Microscope, Network, NotebookPen, Search, Sparkles, TestTube2 } from "lucide-react"
+import {
+  BookOpen,
+  ClipboardList,
+  FlaskConical,
+  Microscope,
+  Network,
+  NotebookPen,
+  ScrollText,
+  Search,
+  Sparkles,
+  TestTube2,
+} from "lucide-react"
 import { Notes9LoaderGif } from "@/components/brand/notes9-loader-gif"
 import { cn } from "@/lib/utils"
 
@@ -351,6 +362,37 @@ function NotesScene({
   )
 }
 
+/** Writing section — same ScrollText icon as AppSidebar "Writing" / papers nav. */
+function WritingScene({
+  compact,
+  horizontal,
+  inline = false,
+}: {
+  compact: boolean
+  horizontal: boolean
+  inline?: boolean
+}) {
+  return (
+    <SceneShell compact={compact} horizontal={horizontal} inline={inline}>
+      <div className="absolute bottom-2 left-1/2 z-0 flex -translate-x-1/2 items-center gap-2 sm:bottom-3">
+        <div className="flex h-11 w-10 items-center justify-center rounded-xl border border-primary/16 bg-primary/6 sm:h-12">
+          <ScrollText className="size-5 text-primary/62" />
+        </div>
+        <div className="flex min-w-[3.25rem] flex-col gap-1">
+          <div className="loader-writing-grow-1 h-1.5 rounded-full bg-primary/32" />
+          <div className="loader-writing-grow-2 h-1.5 rounded-full bg-primary/24" />
+        </div>
+      </div>
+      <MascotColumn
+        compact={compact}
+        horizontal={horizontal}
+        inline={inline}
+        bottomOffset="md"
+      />
+    </SceneShell>
+  )
+}
+
 function ResearchMapScene({
   compact,
   horizontal,
@@ -425,7 +467,7 @@ export function Notes9VideoLoader({
     if (variant === "research-map")
       return <ResearchMapScene compact={sceneCompact} horizontal={horizontal} inline={inline} />
     if (variant === "writing")
-      return <NotesScene compact={sceneCompact} horizontal={horizontal} inline={inline} />
+      return <WritingScene compact={sceneCompact} horizontal={horizontal} inline={inline} />
     return <DefaultScene compact={sceneCompact} horizontal={horizontal} inline={inline} />
   }
 
