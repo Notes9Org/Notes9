@@ -78,6 +78,7 @@ export function RepoTab({
   const [isDeleting, setIsDeleting] = useState(false);
   const [selectedProjectId, setSelectedProjectId] = useState<string>("all");
   const [selectedExperimentId, setSelectedExperimentId] = useState<string>("all");
+  const [selectedStatus, setSelectedStatus] = useState<string>("all");
 
   const handleOpenModal = (id: string, tab: "overview" | "pdf" | "citation" | "linked" = "overview") => {
     setSelectedLiteratureId(id);
@@ -153,11 +154,14 @@ export function RepoTab({
           selectedProjectId === "all" || lit.project?.id === selectedProjectId;
         const matchesExperiment =
           selectedExperimentId === "all" || lit.experiment?.id === selectedExperimentId;
+        const matchesStatus =
+          selectedStatus === "all" || lit.status === selectedStatus;
 
         return (
           matchesSearch &&
           matchesProject &&
-          matchesExperiment
+          matchesExperiment &&
+          matchesStatus
         );
       }),
     [
@@ -165,12 +169,22 @@ export function RepoTab({
       searchQuery,
       selectedExperimentId,
       selectedProjectId,
+      selectedStatus,
     ]
   );
+
+  const statusOptions = useMemo(() => {
+    const s = new Set<string>();
+    for (const lit of literatureReviews || []) {
+      if (lit.status) s.add(lit.status);
+    }
+    return Array.from(s).sort();
+  }, [literatureReviews]);
 
   const clearFilters = () => {
     setSelectedProjectId("all");
     setSelectedExperimentId("all");
+    setSelectedStatus("all");
   };
 
   const visibleIds = filteredLiteratureReviews?.map((lit) => lit.id) || [];
@@ -275,6 +289,22 @@ export function RepoTab({
               ))}
             </SelectContent>
           </Select>
+
+          {statusOptions.length > 0 && (
+            <Select value={selectedStatus} onValueChange={setSelectedStatus}>
+              <SelectTrigger className="w-full lg:w-[160px]">
+                <SelectValue placeholder="Status" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All statuses</SelectItem>
+                {statusOptions.map((st) => (
+                  <SelectItem key={st} value={st}>
+                    {st.replace(/_/g, " ")}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
 
           <Button
             variant="ghost"

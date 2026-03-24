@@ -1,12 +1,17 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useMemo } from "react"
 import { useMediaQuery } from "@/hooks/use-media-query"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Plus, FileText, Grid3x3, List } from "lucide-react"
 import Link from "next/link"
 import { ProtocolList } from "./protocol-list"
+import {
+  FILTER_ALL,
+  ResourceFilterRow,
+  ResourceListFilter,
+} from "@/components/ui/resource-list-filters"
 
 interface Protocol {
   id: string
@@ -18,13 +23,60 @@ interface Protocol {
   experiment_protocols?: { count: number }[]
 }
 
+const USAGE_LINKED = "linked"
+const USAGE_UNLINKED = "unlinked"
+
+function protocolUsageCount(p: Protocol): number {
+  const arr = p.experiment_protocols
+  if (!arr?.length) return 0
+  const first = arr[0] as { count?: number }
+  return typeof first?.count === "number" ? first.count : 0
+}
+
 export function ProtocolsPageContent({ protocols }: { protocols: Protocol[] }) {
   const isMobile = useMediaQuery("(max-width: 768px)")
   const [viewMode, setViewMode] = useState<"grid" | "table">("grid")
+  const [categoryFilter, setCategoryFilter] = useState(FILTER_ALL)
+  const [versionFilter, setVersionFilter] = useState(FILTER_ALL)
+  const [usageFilter, setUsageFilter] = useState(FILTER_ALL)
 
   useEffect(() => {
     if (isMobile) setViewMode("grid")
   }, [isMobile])
+
+  const categoryOptions = useMemo(() => {
+    const s = new Set(
+      protocols.map((p) => p.category).filter((c): c is string => Boolean(c && c.trim()))
+    )
+    return Array.from(s)
+      .sort()
+      .map((value) => ({ value, label: value }))
+  }, [protocols])
+
+  const versionOptions = useMemo(() => {
+    const s = new Set(protocols.map((p) => p.version).filter(Boolean))
+    return Array.from(s)
+      .sort()
+      .map((value) => ({ value, label: value }))
+  }, [protocols])
+
+  const usageOptions = useMemo(
+    () => [
+      { value: USAGE_LINKED, label: "Used in experiments" },
+      { value: USAGE_UNLINKED, label: "Not linked" },
+    ],
+    []
+  )
+
+  const filteredProtocols = useMemo(() => {
+    return protocols.filter((p) => {
+      if (categoryFilter !== FILTER_ALL && (p.category || "") !== categoryFilter) return false
+      if (versionFilter !== FILTER_ALL && p.version !== versionFilter) return false
+      if (usageFilter === USAGE_LINKED && protocolUsageCount(p) === 0) return false
+      if (usageFilter === USAGE_UNLINKED && protocolUsageCount(p) > 0) return false
+      return true
+    })
+  }, [protocols, categoryFilter, versionFilter, usageFilter])
 
   return (
     <div className="space-y-6">
@@ -68,7 +120,40 @@ export function ProtocolsPageContent({ protocols }: { protocols: Protocol[] }) {
           </Button>
         </div>
       </div>
-      <ProtocolList protocols={protocols} viewMode={viewMode} setViewMode={setViewMode} hideToolbar />
+
+      <ResourceFilterRow>
+        <ResourceListFilter
+          label="Category"
+          value={categoryFilter}
+          onValueChange={setCategoryFilter}
+          options={categoryOptions}
+          allLabel="All categories"
+        />
+        {versionOptions.length > 0 && (
+          <ResourceListFilter
+            label="Version"
+            value={versionFilter}
+            onValueChange={setVersionFilter}
+            options={versionOptions}
+            allLabel="All versions"
+          />
+        )}
+        <ResourceListFilter
+          label="Usage"
+          value={usageFilter}
+          onValueChange={setUsageFilter}
+          options={usageOptions}
+          allLabel="Any usage"
+        />
+      </ResourceFilterRow>
+
+      {filteredProtocols.length > 0 ? (
+        <ProtocolList protocols={filteredProtocols} viewMode={viewMode} setViewMode={setViewMode} hideToolbar />
+      ) : (
+        <p className="py-10 text-center text-sm text-muted-foreground">
+          No protocols match the selected filters.
+        </p>
+      )}
     </div>
   )
 }

@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useMemo } from "react"
 import { useMediaQuery } from "@/hooks/use-media-query"
 import Link from "next/link"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -8,6 +8,11 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Users, Eye, Grid3x3, List, Plus, FlaskConical } from 'lucide-react'
+import {
+  FILTER_ALL,
+  ResourceFilterRow,
+  ResourceListFilter,
+} from "@/components/ui/resource-list-filters"
 
 // Format date consistently to avoid hydration mismatch between server/client locales
 const formatDate = (dateStr: string): string => {
@@ -37,10 +42,36 @@ interface Project {
 export function ProjectsPageContent({ projects }: { projects: Project[] }) {
   const isMobile = useMediaQuery("(max-width: 768px)")
   const [viewMode, setViewMode] = useState<"grid" | "table">("grid")
+  const [statusFilter, setStatusFilter] = useState(FILTER_ALL)
+  const [priorityFilter, setPriorityFilter] = useState(FILTER_ALL)
 
   useEffect(() => {
     if (isMobile) setViewMode("grid")
   }, [isMobile])
+
+  const statusOptions = useMemo(() => {
+    const s = new Set(projects.map((p) => p.status).filter(Boolean))
+    return Array.from(s)
+      .sort()
+      .map((value) => ({ value, label: value.replace(/_/g, " ") }))
+  }, [projects])
+
+  const priorityOptions = useMemo(() => {
+    const s = new Set(
+      projects.map((p) => p.priority).filter((x): x is string => Boolean(x))
+    )
+    return Array.from(s)
+      .sort()
+      .map((value) => ({ value, label: value.replace(/_/g, " ") }))
+  }, [projects])
+
+  const filteredProjects = useMemo(() => {
+    return projects.filter((p) => {
+      if (statusFilter !== FILTER_ALL && p.status !== statusFilter) return false
+      if (priorityFilter !== FILTER_ALL && (p.priority || "") !== priorityFilter) return false
+      return true
+    })
+  }, [projects, statusFilter, priorityFilter])
 
   return (
     <div className="space-y-6">
@@ -78,7 +109,25 @@ export function ProjectsPageContent({ projects }: { projects: Project[] }) {
           </Button>
         </div>
       </div>
-      <ProjectList projects={projects} viewMode={viewMode} setViewMode={setViewMode} hideToolbar />
+
+      <ResourceFilterRow>
+        <ResourceListFilter
+          label="Status"
+          value={statusFilter}
+          onValueChange={setStatusFilter}
+          options={statusOptions}
+          allLabel="All statuses"
+        />
+        <ResourceListFilter
+          label="Priority"
+          value={priorityFilter}
+          onValueChange={setPriorityFilter}
+          options={priorityOptions}
+          allLabel="All priorities"
+        />
+      </ResourceFilterRow>
+
+      <ProjectList projects={filteredProjects} viewMode={viewMode} setViewMode={setViewMode} hideToolbar />
     </div>
   )
 }

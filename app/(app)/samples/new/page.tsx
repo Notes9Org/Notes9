@@ -1,7 +1,7 @@
 "use client"
 
-import { useState, useEffect } from "react"
-import { useRouter } from "next/navigation"
+import { useState, useEffect, Suspense } from "react"
+import { useRouter, useSearchParams } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
 import { useSmartBack } from "@/hooks/use-smart-back"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -49,8 +49,9 @@ const STATUS_OPTIONS = [
   { value: "disposed", label: "Disposed" }
 ]
 
-export default function NewSamplePage() {
+function NewSamplePageInner() {
   const router = useRouter()
+  const searchParams = useSearchParams()
   const handleBack = useSmartBack("/samples")
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -73,6 +74,13 @@ export default function NewSamplePage() {
   useEffect(() => {
     fetchExperiments()
   }, [])
+
+  useEffect(() => {
+    const exp = searchParams.get("experiment")
+    if (exp) {
+      setFormData((prev) => (prev.experiment_id ? prev : { ...prev, experiment_id: exp }))
+    }
+  }, [searchParams])
 
   const fetchExperiments = async () => {
     try {
@@ -132,7 +140,11 @@ export default function NewSamplePage() {
 
       if (insertError) throw insertError
 
-      router.push("/samples")
+      if (formData.experiment_id) {
+        router.push(`/experiments/${formData.experiment_id}?tab=samples`)
+      } else {
+        router.push("/samples")
+      }
     } catch (err: any) {
       setError(err.message)
     } finally {
@@ -399,4 +411,12 @@ export default function NewSamplePage() {
         </Card>
       </div>
     )
+}
+
+export default function NewSamplePage() {
+  return (
+    <Suspense fallback={<div className="p-6 text-sm text-muted-foreground">Loading…</div>}>
+      <NewSamplePageInner />
+    </Suspense>
+  )
 }

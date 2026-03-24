@@ -26,7 +26,12 @@ interface Sample {
   storage_location: string | null
   storage_condition: string | null
   experiment_id: string | null
-  experiment?: { name: string; project?: { name: string } } | null
+  experiment?: {
+    id: string
+    name: string
+    project_id: string
+    project?: { id: string; name: string } | null
+  } | null
 }
 
 interface SampleListProps {

@@ -644,6 +644,7 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
     regenerate();
   }, [messages, regenerate, agentMode, supabase, saveMessage, loadSessions, agentStream]);
 
+  /** Stops Notes9 agent stream or useChat streaming. */
   const handleStopRequest = useCallback(() => {
     if (notes9Loading) {
       agentStream.abort();
@@ -767,8 +768,8 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
           maxLength={MAX_CHAT_CHARS}
         />
 
-        {/* Bottom Toolbar */}
-        <div className="flex items-center justify-between gap-2 px-2 pb-2 mt-1 min-h-[28px]">
+        {/* Bottom Toolbar — merge: keep `min-h-9` on this row and the trailing `h-9 … justify-end` wrapper so stop/send stay aligned (main used `min-h-[28px]` + `rounded-sm` stop; do not restore those here). */}
+        <div className="mt-1 flex min-h-9 items-center justify-between gap-2 px-2 pb-2">
           <div className="flex items-center gap-2 min-w-0 flex-1 overflow-hidden">
             {/* Mode Selector */}
             <DropdownMenu>
@@ -805,25 +806,45 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
             )}
           </div>
 
-          <div className="flex items-center gap-1 shrink-0">
+          <div className="flex h-9 shrink-0 items-center justify-end gap-1">
             <span className="mr-1 hidden text-[11px] text-muted-foreground sm:inline">
               {input.length}/{MAX_CHAT_CHARS}
             </span>
-            <Button size="icon" variant="ghost" className="size-7 text-muted-foreground hover:text-foreground" onClick={() => fileInputRef.current?.click()} disabled={isLoading}>
+            <Button
+              type="button"
+              size="icon"
+              variant="ghost"
+              className="size-7 text-muted-foreground hover:text-foreground"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={isLoading}
+            >
               <Paperclip className="size-4" />
             </Button>
 
             {isLoading ? (
               <Button
+                type="button"
                 size="icon"
                 variant="secondary"
-                className="size-7 rounded-sm animate-pulse"
+                className="size-7 animate-pulse"
+                aria-label="Stop generating"
+                title="Stop generating"
                 onClick={handleStopRequest}
               >
                 <Square className="size-3 fill-current" />
               </Button>
             ) : (
-              <Button size="icon" variant="ghost" className={cn("size-7 text-muted-foreground hover:text-primary transition-colors", (input.trim() || attachments.length > 0) && "text-primary")} onClick={(e) => handleSubmit(e as any)} disabled={(!input.trim() && attachments.length === 0) || isUploading}>
+              <Button
+                type="button"
+                size="icon"
+                variant="ghost"
+                className={cn(
+                  "size-7 text-muted-foreground transition-colors hover:text-primary",
+                  (input.trim() || attachments.length > 0) && "text-primary",
+                )}
+                onClick={(e) => handleSubmit(e as any)}
+                disabled={(!input.trim() && attachments.length === 0) || isUploading}
+              >
                 <ArrowUp className="size-4" />
               </Button>
             )}
@@ -958,8 +979,8 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
       <input ref={fileInputRef} type="file" multiple accept={ALLOWED_TYPES.join(',')} className="hidden" onChange={handleFileSelect} disabled={isLoading || isUploading} />
 
       {!mounted ? (
-        <div className="flex-1 flex items-center justify-center">
-          <Sparkles className="size-6 text-muted-foreground/50 animate-pulse" />
+        <div className="flex flex-1 items-center justify-center">
+          <Sparkles className="size-6 -translate-y-[5px] text-muted-foreground/50 animate-pulse" />
         </div>
       ) : (
         <>
@@ -1268,7 +1289,7 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
                         (notes9Loading || agentStream.isStreaming || agentStream.error) &&
                         messages.at(-1)?.role === 'user' && (
                         <div className="flex gap-4 w-full justify-start">
-                          <div className="size-7 shrink-0 flex items-center justify-center rounded-full bg-background border shadow-sm mt-1">
+                          <div className="size-7 shrink-0 flex items-center justify-center rounded-full bg-background border shadow-sm mt-1 -translate-y-[5px]">
                             <Sparkles className="size-3.5 text-primary animate-pulse" />
                           </div>
                           <div className="flex-1 min-w-0 max-w-[85%] space-y-2">
