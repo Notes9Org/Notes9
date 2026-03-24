@@ -272,20 +272,26 @@ export function PaperAIPanel({ open, onClose, paperContent, onInsert, paperTitle
       "flex flex-col h-full bg-background",
       embedded ? "w-full min-w-0" : "w-[400px] min-w-[400px] border-l border-border"
     )}>
-      {/* Header */}
-      <div className="flex items-center justify-between px-4 py-3 border-b border-border">
-        <div className="flex items-center gap-2">
-          <Sparkles className="h-4 w-4 text-primary" />
-          <span className="text-sm font-medium">Write with AI</span>
+      {/* Header — match app-layout SidebarInset bar (h-12 sm:h-14) */}
+      <div className="flex h-12 sm:h-14 shrink-0 items-center justify-between border-b border-border/45 bg-[var(--n9-header-bg)] px-3 sm:px-4 backdrop-blur-md">
+        <div className="flex min-w-0 items-center gap-2">
+          <Sparkles className="h-4 w-4 shrink-0 text-primary" />
+          <span className="truncate text-sm font-medium">Write with AI</span>
         </div>
-        <div className="flex items-center gap-1">
+        <div className="flex shrink-0 items-center gap-1 sm:gap-2">
           {messages.length > 0 && (
-            <Button variant="ghost" size="icon" className="h-7 w-7" onClick={handleClear} title="Clear chat">
-              <RotateCcw className="h-3.5 w-3.5" />
+            <Button
+              variant="ghost"
+              size="icon"
+              className="size-8 sm:size-9 text-muted-foreground hover:text-foreground"
+              onClick={handleClear}
+              title="Clear chat"
+            >
+              <RotateCcw className="size-4" />
             </Button>
           )}
-          <Button variant="ghost" size="icon" className="h-7 w-7" onClick={onClose}>
-            <X className="h-4 w-4" />
+          <Button variant="ghost" size="icon" className="size-8 sm:size-9 text-muted-foreground hover:text-foreground" onClick={onClose}>
+            <X className="size-4" />
           </Button>
         </div>
       </div>
