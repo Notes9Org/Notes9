@@ -570,12 +570,13 @@ mark {
   opacity: 0.18;
 }
 
+/* Rotate only — parent handles horizontal centering so the sparkle does not collide with the mascot */
 @keyframes loader-orbit {
   0% {
-    transform: translate(-50%, 0) rotate(0deg) translateY(0);
+    transform: rotate(0deg);
   }
   100% {
-    transform: translate(-50%, 0) rotate(360deg) translateY(0);
+    transform: rotate(360deg);
   }
 }
 

@@ -1,12 +1,17 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useMemo } from "react"
 import { useMediaQuery } from "@/hooks/use-media-query"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Plus, Package, Grid3x3, List } from "lucide-react"
 import Link from "next/link"
 import { SampleList } from "./sample-list"
+import {
+  FILTER_ALL,
+  ResourceFilterRow,
+  ResourceListFilter,
+} from "@/components/ui/resource-list-filters"
 
 interface Sample {
   id: string
@@ -18,7 +23,12 @@ interface Sample {
   storage_location: string | null
   storage_condition: string | null
   experiment_id: string | null
-  experiment?: { name: string; project?: { name: string } } | null
+  experiment?: {
+    id: string
+    name: string
+    project_id: string
+    project?: { id: string; name: string } | null
+  } | null
 }
 
 interface SamplesPageContentProps {
@@ -29,10 +39,89 @@ interface SamplesPageContentProps {
 export function SamplesPageContent({ samples, statusCount }: SamplesPageContentProps) {
   const isMobile = useMediaQuery("(max-width: 768px)")
   const [viewMode, setViewMode] = useState<"grid" | "table">("grid")
+  const [projectFilter, setProjectFilter] = useState(FILTER_ALL)
+  const [experimentFilter, setExperimentFilter] = useState(FILTER_ALL)
+  const [statusFilter, setStatusFilter] = useState(FILTER_ALL)
+  const [typeFilter, setTypeFilter] = useState(FILTER_ALL)
 
   useEffect(() => {
     if (isMobile) setViewMode("grid")
   }, [isMobile])
+
+  const projectOptions = useMemo(() => {
+    const m = new Map<string, string>()
+    for (const s of samples) {
+      const id = s.experiment?.project?.id
+      const name = s.experiment?.project?.name
+      if (id && name) m.set(id, name)
+    }
+    return Array.from(m.entries())
+      .map(([value, label]) => ({ value, label }))
+      .sort((a, b) => a.label.localeCompare(b.label))
+  }, [samples])
+
+  const experimentOptions = useMemo(() => {
+    const m = new Map<string, { label: string; project_id: string }>()
+    for (const s of samples) {
+      const ex = s.experiment
+      if (ex?.id && ex.name) {
+        m.set(ex.id, { label: ex.name, project_id: ex.project_id })
+      }
+    }
+    return Array.from(m.entries()).map(([value, v]) => ({
+      value,
+      label: v.label,
+      project_id: v.project_id,
+    }))
+  }, [samples])
+
+  useEffect(() => {
+    if (projectFilter === FILTER_ALL) return
+    setExperimentFilter((current) => {
+      if (current === FILTER_ALL) return current
+      const row = experimentOptions.find((e) => e.value === current)
+      if (!row || row.project_id !== projectFilter) return FILTER_ALL
+      return current
+    })
+  }, [projectFilter, experimentOptions])
+
+  const experimentFilterOptions = useMemo(() => {
+    if (projectFilter === FILTER_ALL) {
+      return experimentOptions.map(({ value, label }) => ({ value, label }))
+    }
+    return experimentOptions
+      .filter((e) => e.project_id === projectFilter)
+      .map(({ value, label }) => ({ value, label }))
+  }, [experimentOptions, projectFilter])
+
+  const statusOptions = useMemo(() => {
+    const u = new Set(samples.map((s) => s.status).filter(Boolean))
+    return Array.from(u)
+      .sort()
+      .map((value) => ({ value, label: value.replace(/_/g, " ") }))
+  }, [samples])
+
+  const typeOptions = useMemo(() => {
+    const u = new Set(samples.map((s) => s.sample_type).filter(Boolean))
+    return Array.from(u)
+      .sort()
+      .map((value) => ({ value, label: value.replace(/_/g, " ") }))
+  }, [samples])
+
+  const filteredSamples = useMemo(() => {
+    return samples.filter((s) => {
+      if (projectFilter !== FILTER_ALL) {
+        const pid = s.experiment?.project?.id
+        if (pid !== projectFilter) return false
+      }
+      if (experimentFilter !== FILTER_ALL && s.experiment_id !== experimentFilter) {
+        return false
+      }
+      if (statusFilter !== FILTER_ALL && s.status !== statusFilter) return false
+      if (typeFilter !== FILTER_ALL && s.sample_type !== typeFilter) return false
+      return true
+    })
+  }, [samples, projectFilter, experimentFilter, statusFilter, typeFilter])
 
   return (
     <div className="space-y-6">
@@ -77,6 +166,39 @@ export function SamplesPageContent({ samples, statusCount }: SamplesPageContentP
         </div>
       </div>
 
+      <ResourceFilterRow>
+        <ResourceListFilter
+          label="Project"
+          value={projectFilter}
+          onValueChange={setProjectFilter}
+          options={projectOptions}
+          allLabel="All projects"
+        />
+        <ResourceListFilter
+          label="Experiment"
+          value={experimentFilter}
+          onValueChange={setExperimentFilter}
+          options={experimentFilterOptions}
+          allLabel="All experiments"
+        />
+        <ResourceListFilter
+          label="Status"
+          value={statusFilter}
+          onValueChange={setStatusFilter}
+          options={statusOptions}
+          allLabel="All statuses"
+        />
+        {typeOptions.length > 0 && (
+          <ResourceListFilter
+            label="Type"
+            value={typeFilter}
+            onValueChange={setTypeFilter}
+            options={typeOptions}
+            allLabel="All types"
+          />
+        )}
+      </ResourceFilterRow>
+
       {/* Status Overview - same as experiments-style spacing */}
       <div className="grid gap-4 grid-cols-2 md:grid-cols-4">
         <Card>
@@ -113,7 +235,13 @@ export function SamplesPageContent({ samples, statusCount }: SamplesPageContentP
         </Card>
       </div>
 
-      <SampleList samples={samples} viewMode={viewMode} setViewMode={setViewMode} hideToolbar />
+      {filteredSamples.length > 0 ? (
+        <SampleList samples={filteredSamples} viewMode={viewMode} setViewMode={setViewMode} hideToolbar />
+      ) : (
+        <p className="py-10 text-center text-sm text-muted-foreground">
+          No samples match the selected filters.
+        </p>
+      )}
     </div>
   )
 }

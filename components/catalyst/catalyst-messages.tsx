@@ -159,7 +159,7 @@ export function CatalystMessages({
           {(isLoading || notes9Stream) && messages.at(-1)?.role === 'user' && (
             notes9Stream ? (
               <div className="flex w-full gap-3 justify-start">
-                <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-orange-400 to-pink-500 text-white shadow-sm">
+                <div className="flex size-8 shrink-0 -translate-y-[5px] items-center justify-center rounded-full bg-gradient-to-br from-orange-400 to-pink-500 text-white shadow-sm">
                   <Sparkles className="size-4 animate-pulse" />
                 </div>
                 <div className="flex-1 min-w-0 max-w-full space-y-2">
@@ -189,7 +189,7 @@ export function CatalystMessages({
               </div>
             ) : (
               <div className="flex w-full gap-3 justify-start">
-                <div className="mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-orange-400 to-pink-500 text-white shadow-sm">
+                <div className="mt-0.5 flex size-7 shrink-0 -translate-y-[5px] items-center justify-center rounded-full bg-gradient-to-br from-orange-400 to-pink-500 text-white shadow-sm">
                   <Sparkles className="size-3.5 animate-pulse" />
                 </div>
                 <div className="flex flex-wrap items-center gap-2 text-muted-foreground text-sm">

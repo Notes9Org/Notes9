@@ -1,15 +1,19 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useMemo } from "react"
 import { useMediaQuery } from "@/hooks/use-media-query"
 import Link from "next/link"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { Progress } from "@/components/ui/progress"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { FlaskConical, Calendar, User, Eye, Grid3x3, List, Plus } from 'lucide-react'
+import { FlaskConical, User, Eye, Grid3x3, List, Plus } from 'lucide-react'
 import { HtmlContentTruncated } from '@/components/html-content'
+import {
+  FILTER_ALL,
+  ResourceFilterRow,
+  ResourceListFilter,
+} from "@/components/ui/resource-list-filters"
 
 // Format date consistently to avoid hydration mismatch between server/client locales
 const formatDate = (dateStr: string): string => {
@@ -26,7 +30,9 @@ interface Experiment {
   start_date: string | null
   completion_date: string | null
   created_at: string
+  project_id: string
   project: {
+    id: string
     name: string
   } | null
   assigned_to: {
@@ -39,11 +45,43 @@ interface Experiment {
 export function ExperimentsPageContent({ experiments }: { experiments: Experiment[] }) {
   const isMobile = useMediaQuery("(max-width: 768px)")
   const [viewMode, setViewMode] = useState<"grid" | "table">("grid")
+  const [projectFilter, setProjectFilter] = useState(FILTER_ALL)
+  const [statusFilter, setStatusFilter] = useState(FILTER_ALL)
 
   // On mobile, lock to grid view (and switch to grid when resizing to mobile)
   useEffect(() => {
     if (isMobile) setViewMode("grid")
   }, [isMobile])
+
+  const projectOptions = useMemo(() => {
+    const m = new Map<string, string>()
+    for (const e of experiments) {
+      const id = e.project_id
+      const name = e.project?.name
+      if (id && name) m.set(id, name)
+    }
+    return Array.from(m.entries())
+      .map(([value, label]) => ({ value, label }))
+      .sort((a, b) => a.label.localeCompare(b.label))
+  }, [experiments])
+
+  const statusOptions = useMemo(() => {
+    const s = new Set<string>()
+    for (const e of experiments) {
+      if (e.status) s.add(e.status)
+    }
+    return Array.from(s)
+      .sort()
+      .map((value) => ({ value, label: value.replace(/_/g, " ") }))
+  }, [experiments])
+
+  const filteredExperiments = useMemo(() => {
+    return experiments.filter((e) => {
+      if (projectFilter !== FILTER_ALL && e.project_id !== projectFilter) return false
+      if (statusFilter !== FILTER_ALL && e.status !== statusFilter) return false
+      return true
+    })
+  }, [experiments, projectFilter, statusFilter])
 
   return (
     <div className="space-y-6">
@@ -81,7 +119,25 @@ export function ExperimentsPageContent({ experiments }: { experiments: Experimen
           </Button>
         </div>
       </div>
-      <ExperimentList experiments={experiments} viewMode={viewMode} setViewMode={setViewMode} hideToolbar />
+
+      <ResourceFilterRow>
+        <ResourceListFilter
+          label="Project"
+          value={projectFilter}
+          onValueChange={setProjectFilter}
+          options={projectOptions}
+          allLabel="All projects"
+        />
+        <ResourceListFilter
+          label="Status"
+          value={statusFilter}
+          onValueChange={setStatusFilter}
+          options={statusOptions}
+          allLabel="All statuses"
+        />
+      </ResourceFilterRow>
+
+      <ExperimentList experiments={filteredExperiments} viewMode={viewMode} setViewMode={setViewMode} hideToolbar />
     </div>
   )
 }
