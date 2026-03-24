@@ -1,7 +1,7 @@
 "use client"
 
 import { useCallback, useEffect, useRef, useState } from "react"
-import { ChevronDown, FileText, PanelRightOpen } from "lucide-react"
+import { ChevronDown, Download, FileText, Loader2, PanelRightOpen } from "lucide-react"
 
 import { LiteraturePdfAnnotationSidebar } from "@/components/literature-reviews/literature-pdf-annotation-sidebar"
 import {
@@ -17,13 +17,15 @@ import type { LiteraturePdfAnnotation } from "@/types/literature-pdf"
 interface LiteraturePdfPanelProps {
   literatureId: string
   pdfUrl: string
+  pdfFileName?: string | null
 }
 
-export function LiteraturePdfPanel({ literatureId, pdfUrl }: LiteraturePdfPanelProps) {
+export function LiteraturePdfPanel({ literatureId, pdfUrl, pdfFileName }: LiteraturePdfPanelProps) {
   const { toast } = useToast()
   const [annotations, setAnnotations] = useState<LiteraturePdfAnnotation[]>([])
   const [loadingAnnotations, setLoadingAnnotations] = useState(true)
   const [annotationsOpen, setAnnotationsOpen] = useState(false)
+  const [exportingPdf, setExportingPdf] = useState(false)
   const viewerRef = useRef<LiteraturePdfViewerHandle>(null)
 
   const handleNavigateToAnnotation = useCallback((annotation: LiteraturePdfAnnotation) => {
@@ -89,6 +91,36 @@ export function LiteraturePdfPanel({ literatureId, pdfUrl }: LiteraturePdfPanelP
     setAnnotations((current) => current.filter((annotation) => annotation.id !== annotationId))
   }
 
+  const handleExportAnnotatedPdf = useCallback(async () => {
+    setExportingPdf(true)
+    try {
+      const response = await fetch(pdfUrl)
+      if (!response.ok) throw new Error(`Could not download PDF (${response.status})`)
+      const buf = await response.arrayBuffer()
+      const { buildLiteraturePdfWithAnnotationsEmbedded } = await import("@/lib/export-literature-pdf-with-annotations")
+      const out = await buildLiteraturePdfWithAnnotationsEmbedded(buf, annotations)
+      const blob = new Blob([out], { type: "application/pdf" })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement("a")
+      a.href = url
+      const base = (pdfFileName || "document").replace(/\.pdf$/i, "").replace(/[/\\?%*:|"<>]/g, "-")
+      a.download = `${base}-annotated.pdf`
+      a.rel = "noopener"
+      a.click()
+      URL.revokeObjectURL(url)
+      toast({ title: "Annotated PDF downloaded" })
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Export failed"
+      toast({
+        title: "Could not export PDF",
+        description: message,
+        variant: "destructive",
+      })
+    } finally {
+      setExportingPdf(false)
+    }
+  }, [annotations, pdfFileName, pdfUrl, toast])
+
   return (
     <Collapsible open={annotationsOpen} onOpenChange={setAnnotationsOpen}>
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -96,27 +128,46 @@ export function LiteraturePdfPanel({ literatureId, pdfUrl }: LiteraturePdfPanelP
           <FileText className="h-4 w-4 shrink-0" />
           Reader
         </div>
-        <CollapsibleTrigger asChild>
+        <div className="flex flex-wrap items-center gap-2">
           <Button
             type="button"
             variant="outline"
             size="sm"
             className="gap-2"
-            aria-expanded={annotationsOpen}
+            disabled={exportingPdf}
+            onClick={handleExportAnnotatedPdf}
+            title="Download a copy of the PDF with highlights and notes drawn on the pages"
           >
-            <PanelRightOpen className="h-4 w-4 shrink-0" />
-            Highlights &amp; notes
-            <ChevronDown
-              className={cn("h-4 w-4 shrink-0 transition-transform duration-200", annotationsOpen && "rotate-180")}
-            />
+            {exportingPdf ? (
+              <Loader2 className="h-4 w-4 shrink-0 animate-spin" />
+            ) : (
+              <Download className="h-4 w-4 shrink-0" />
+            )}
+            Export with annotations
           </Button>
-        </CollapsibleTrigger>
+          <CollapsibleTrigger asChild>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="gap-2"
+              aria-expanded={annotationsOpen}
+            >
+              <PanelRightOpen className="h-4 w-4 shrink-0" />
+              Highlights &amp; notes
+              <ChevronDown
+                className={cn("h-4 w-4 shrink-0 transition-transform duration-200", annotationsOpen && "rotate-180")}
+              />
+            </Button>
+          </CollapsibleTrigger>
+        </div>
       </div>
 
       <div
         className={cn(
-          "mt-4 grid min-w-0 gap-6",
-          annotationsOpen && "xl:grid-cols-[minmax(0,1fr)_minmax(17.5rem,22rem)] xl:items-start"
+          "mt-4 grid min-w-0 gap-6 overflow-visible",
+          annotationsOpen &&
+            "lg:grid-cols-[minmax(0,1fr)_minmax(17.5rem,22rem)] lg:items-start"
         )}
       >
         <div className="min-h-0 min-w-0">
@@ -131,8 +182,10 @@ export function LiteraturePdfPanel({ literatureId, pdfUrl }: LiteraturePdfPanelP
         <CollapsibleContent
           id="literature-pdf-annotations"
           className={cn(
-            "min-w-0 overflow-hidden",
-            "xl:data-[state=open]:sticky xl:data-[state=open]:top-24 xl:data-[state=open]:z-10 xl:data-[state=open]:self-start"
+            "min-w-0",
+            // overflow-hidden on this node breaks position:sticky; list scroll is inside LiteraturePdfAnnotationSidebar.
+            "data-[state=closed]:overflow-hidden data-[state=open]:overflow-visible",
+            "lg:data-[state=open]:sticky lg:data-[state=open]:top-4 lg:data-[state=open]:z-10 lg:data-[state=open]:self-start"
           )}
         >
           <LiteraturePdfAnnotationSidebar

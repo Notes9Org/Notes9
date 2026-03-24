@@ -1,12 +1,17 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useMemo } from "react"
 import { useMediaQuery } from "@/hooks/use-media-query"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Plus, Microscope, Grid3x3, List } from "lucide-react"
 import Link from "next/link"
 import { EquipmentList } from "./equipment-list"
+import {
+  FILTER_ALL,
+  ResourceFilterRow,
+  ResourceListFilter,
+} from "@/components/ui/resource-list-filters"
 
 interface Equipment {
   id: string
@@ -28,10 +33,47 @@ interface EquipmentPageContentProps {
 export function EquipmentPageContent({ equipment, statusCount }: EquipmentPageContentProps) {
   const isMobile = useMediaQuery("(max-width: 768px)")
   const [viewMode, setViewMode] = useState<"grid" | "table">("grid")
+  const [statusFilter, setStatusFilter] = useState(FILTER_ALL)
+  const [categoryFilter, setCategoryFilter] = useState(FILTER_ALL)
+  const [locationFilter, setLocationFilter] = useState(FILTER_ALL)
 
   useEffect(() => {
     if (isMobile) setViewMode("grid")
   }, [isMobile])
+
+  const statusOptions = useMemo(() => {
+    const s = new Set(equipment.map((e) => e.status).filter(Boolean))
+    return Array.from(s)
+      .sort()
+      .map((value) => ({ value, label: value.replace(/_/g, " ") }))
+  }, [equipment])
+
+  const categoryOptions = useMemo(() => {
+    const s = new Set(
+      equipment.map((e) => e.category).filter((c): c is string => Boolean(c && c.trim()))
+    )
+    return Array.from(s)
+      .sort()
+      .map((value) => ({ value, label: value }))
+  }, [equipment])
+
+  const locationOptions = useMemo(() => {
+    const s = new Set(
+      equipment.map((e) => e.location).filter((loc): loc is string => Boolean(loc && loc.trim()))
+    )
+    return Array.from(s)
+      .sort()
+      .map((value) => ({ value, label: value }))
+  }, [equipment])
+
+  const filteredEquipment = useMemo(() => {
+    return equipment.filter((e) => {
+      if (statusFilter !== FILTER_ALL && e.status !== statusFilter) return false
+      if (categoryFilter !== FILTER_ALL && (e.category || "") !== categoryFilter) return false
+      if (locationFilter !== FILTER_ALL && (e.location || "").trim() !== locationFilter) return false
+      return true
+    })
+  }, [equipment, statusFilter, categoryFilter, locationFilter])
 
   return (
     <div className="space-y-6">
@@ -76,6 +118,32 @@ export function EquipmentPageContent({ equipment, statusCount }: EquipmentPageCo
         </div>
       </div>
 
+      <ResourceFilterRow>
+        <ResourceListFilter
+          label="Status"
+          value={statusFilter}
+          onValueChange={setStatusFilter}
+          options={statusOptions}
+          allLabel="All statuses"
+        />
+        <ResourceListFilter
+          label="Category"
+          value={categoryFilter}
+          onValueChange={setCategoryFilter}
+          options={categoryOptions}
+          allLabel="All categories"
+        />
+        {locationOptions.length > 0 && (
+          <ResourceListFilter
+            label="Location"
+            value={locationFilter}
+            onValueChange={setLocationFilter}
+            options={locationOptions}
+            allLabel="All locations"
+          />
+        )}
+      </ResourceFilterRow>
+
       <div className="grid gap-4 grid-cols-2 md:grid-cols-4">
         <Card>
           <CardHeader className="pb-2">
@@ -111,7 +179,13 @@ export function EquipmentPageContent({ equipment, statusCount }: EquipmentPageCo
         </Card>
       </div>
 
-      <EquipmentList equipment={equipment} viewMode={viewMode} setViewMode={setViewMode} hideToolbar />
+      {filteredEquipment.length > 0 ? (
+        <EquipmentList equipment={filteredEquipment} viewMode={viewMode} setViewMode={setViewMode} hideToolbar />
+      ) : (
+        <p className="py-10 text-center text-sm text-muted-foreground">
+          No equipment matches the selected filters.
+        </p>
+      )}
     </div>
   )
 }

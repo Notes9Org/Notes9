@@ -63,7 +63,7 @@ export function LiteraturePdfAnnotationSidebar({
       </div>
 
       <div className="rounded-md border">
-        <ScrollArea className="h-[min(20rem,52dvh)] xl:h-[min(32rem,calc(100dvh-11rem))]">
+        <ScrollArea className="h-[min(20rem,52dvh)] lg:h-[min(32rem,calc(100dvh-9rem))]">
           <div className="space-y-3 p-3">
             {loading && (
               <div className="flex items-center justify-center py-8">

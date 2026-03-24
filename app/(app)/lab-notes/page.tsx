@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
 import { useMediaQuery } from "@/hooks/use-media-query"
 import { useRouter } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
@@ -10,6 +10,11 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { Loader2, Plus, Grid3x3, List } from "lucide-react"
 import { SetPageBreadcrumb } from "@/components/layout/breadcrumb-context"
+import {
+  FILTER_ALL,
+  ResourceFilterRow,
+  ResourceListFilter,
+} from "@/components/ui/resource-list-filters"
 
 type LabNote = {
   id: string
@@ -17,6 +22,8 @@ type LabNote = {
   created_at: string
   note_type?: string | null
   experiment_id?: string | null
+  /** Resolved project for filtering (direct project_id or experiment’s project). */
+  resolved_project_id?: string | null
   project_name?: string | null
   experiment_name?: string | null
 }
@@ -30,6 +37,12 @@ export default function LabNotesPage() {
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [newNoteDialogOpen, setNewNoteDialogOpen] = useState(false)
+  const [projectFilter, setProjectFilter] = useState(FILTER_ALL)
+  const [experimentFilter, setExperimentFilter] = useState(FILTER_ALL)
+  const [projectOptions, setProjectOptions] = useState<{ value: string; label: string }[]>([])
+  const [experimentOptions, setExperimentOptions] = useState<
+    { value: string; label: string; project_id: string }[]
+  >([])
   const isMobile = useMediaQuery("(max-width: 768px)")
   const [viewMode, setViewMode] = useState<"grid" | "table">("grid")
 
@@ -40,32 +53,65 @@ export default function LabNotesPage() {
   const fetchNotes = useCallback(async () => {
     try {
       setIsLoading(true)
-      const { data, error } = await supabase
-        .from("lab_notes")
-        .select(`
-          id,
-          title,
-          created_at,
-          note_type,
-          experiment_id,
-          experiment:experiments (
-            name,
-            project:projects ( name )
-          )
-        `)
-        .order("created_at", { ascending: false })
+      const [notesRes, projectsRes, experimentsRes] = await Promise.all([
+        supabase
+          .from("lab_notes")
+          .select(`
+            id,
+            title,
+            created_at,
+            note_type,
+            experiment_id,
+            project_id,
+            experiment:experiments (
+              id,
+              name,
+              project_id,
+              project:projects ( id, name )
+            ),
+            project:projects ( id, name )
+          `)
+          .order("created_at", { ascending: false }),
+        supabase.from("projects").select("id, name").order("name"),
+        supabase.from("experiments").select("id, name, project_id").order("name"),
+      ])
 
-      if (error) throw error
+      if (notesRes.error) throw notesRes.error
+      if (projectsRes.data) {
+        setProjectOptions(
+          projectsRes.data.map((p) => ({ value: p.id, label: p.name }))
+        )
+      }
+      if (experimentsRes.data) {
+        setExperimentOptions(
+          experimentsRes.data.map((e) => ({
+            value: e.id,
+            label: e.name,
+            project_id: e.project_id,
+          }))
+        )
+      }
+
       const normalized =
-        data?.map((note: any) => ({
-          id: note.id,
-          title: note.title,
-          created_at: note.created_at,
-          note_type: note.note_type,
-          experiment_id: note.experiment_id,
-          project_name: note.experiment?.project?.name ?? null,
-          experiment_name: note.experiment?.name ?? null,
-        })) || []
+        notesRes.data?.map((note: any) => {
+          const resolved_project_id =
+            note.project_id ??
+            note.experiment?.project_id ??
+            note.experiment?.project?.id ??
+            null
+          const project_name =
+            note.project?.name ?? note.experiment?.project?.name ?? null
+          return {
+            id: note.id,
+            title: note.title,
+            created_at: note.created_at,
+            note_type: note.note_type,
+            experiment_id: note.experiment_id,
+            resolved_project_id,
+            project_name,
+            experiment_name: note.experiment?.name ?? null,
+          }
+        }) || []
 
       setNotes(normalized)
       setSelectedNote(normalized[0] || null)
@@ -79,6 +125,45 @@ export default function LabNotesPage() {
   useEffect(() => {
     fetchNotes()
   }, [fetchNotes])
+
+  useEffect(() => {
+    if (projectFilter === FILTER_ALL) return
+    setExperimentFilter((current) => {
+      if (current === FILTER_ALL) return current
+      const exp = experimentOptions.find((e) => e.value === current)
+      if (!exp || exp.project_id !== projectFilter) return FILTER_ALL
+      return current
+    })
+  }, [projectFilter, experimentOptions])
+
+  const experimentFilterOptions = useMemo(() => {
+    if (projectFilter === FILTER_ALL) {
+      return experimentOptions.map(({ value, label }) => ({ value, label }))
+    }
+    return experimentOptions
+      .filter((e) => e.project_id === projectFilter)
+      .map(({ value, label }) => ({ value, label }))
+  }, [experimentOptions, projectFilter])
+
+  const filteredNotes = useMemo(() => {
+    return notes.filter((n) => {
+      if (projectFilter !== FILTER_ALL && n.resolved_project_id !== projectFilter) {
+        return false
+      }
+      if (experimentFilter !== FILTER_ALL && n.experiment_id !== experimentFilter) {
+        return false
+      }
+      return true
+    })
+  }, [notes, projectFilter, experimentFilter])
+
+  useEffect(() => {
+    setSelectedNote((prev) => {
+      if (filteredNotes.length === 0) return null
+      if (prev && filteredNotes.some((n) => n.id === prev.id)) return prev
+      return filteredNotes[0]
+    })
+  }, [filteredNotes])
 
   const handleNewNote = () => {
     setNewNoteDialogOpen(true)
@@ -138,6 +223,23 @@ export default function LabNotesPage() {
         </div>
       </div>
 
+      <ResourceFilterRow>
+        <ResourceListFilter
+          label="Project"
+          value={projectFilter}
+          onValueChange={setProjectFilter}
+          options={projectOptions}
+          allLabel="All projects"
+        />
+        <ResourceListFilter
+          label="Experiment"
+          value={experimentFilter}
+          onValueChange={setExperimentFilter}
+          options={experimentFilterOptions}
+          allLabel="All experiments"
+        />
+      </ResourceFilterRow>
+
       {error && (
         <Alert variant="destructive">
           <AlertTitle>Error</AlertTitle>
@@ -152,7 +254,7 @@ export default function LabNotesPage() {
         </div>
       ) : (
         <LabNotesList
-          notes={notes}
+          notes={filteredNotes}
           selectedNote={selectedNote}
           isCreating={false}
           handleNewNote={handleNewNote}

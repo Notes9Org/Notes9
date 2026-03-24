@@ -1,10 +1,13 @@
 "use client"
 
+import "pdfjs-dist/web/pdf_viewer.css"
+
 import {
   forwardRef,
   useCallback,
   useEffect,
   useImperativeHandle,
+  useMemo,
   useRef,
   useState,
   type MutableRefObject,
@@ -21,6 +24,7 @@ import {
 } from "@/components/ui/dialog"
 import { TiptapEditor } from "@/components/text-editor/tiptap-editor"
 import { useToast } from "@/hooks/use-toast"
+import { LiteraturePdfLinkService } from "@/lib/literature-pdf-link-service"
 import type { LiteraturePdfAnnotation } from "@/types/literature-pdf"
 
 export type LiteraturePdfViewerHandle = {
@@ -72,6 +76,7 @@ function LiteraturePdfPageBlock({
   onHighlightSelection,
   onNoteSelection,
   focusedAnnotationId,
+  linkService,
 }: {
   pageNumber: number
   pdfDocument: any
@@ -85,9 +90,11 @@ function LiteraturePdfPageBlock({
   onHighlightSelection: () => void
   onNoteSelection: () => void
   focusedAnnotationId: string | null
+  linkService: LiteraturePdfLinkService
 }) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
   const textLayerRef = useRef<HTMLDivElement | null>(null)
+  const annotationLayerRef = useRef<HTMLDivElement | null>(null)
   const pageRef = useRef<HTMLDivElement | null>(null)
   const renderTaskRef = useRef<any>(null)
   const textLayerTaskRef = useRef<any>(null)
@@ -98,7 +105,7 @@ function LiteraturePdfPageBlock({
     let textLayer: any = null
 
     async function render() {
-      if (!pdfDocument || !canvasRef.current || !textLayerRef.current) return
+      if (!pdfDocument || !canvasRef.current || !textLayerRef.current || !annotationLayerRef.current) return
       const page = await pdfDocument.getPage(pageNumber)
       const scale = fitScale * zoom
       const viewport = page.getViewport({ scale })
@@ -142,6 +149,26 @@ function LiteraturePdfPageBlock({
       textLayerTaskRef.current = textLayer
       await textLayer.render()
       if (!isActive) return
+
+      const annDiv = annotationLayerRef.current
+      annDiv.replaceChildren()
+      annDiv.style.width = `${viewport.width}px`
+      annDiv.style.height = `${viewport.height}px`
+      annDiv.style.setProperty("--scale-factor", `${viewport.scale}`)
+      const rawAnnotations = await page.getAnnotations({ intent: "display" })
+      const linkAnnotationType = pdfjsLib.AnnotationType?.LINK ?? 2
+      const annotationList = rawAnnotations.filter(
+        (a: { annotationType?: number }) => a.annotationType === linkAnnotationType
+      )
+      const annLayer = new pdfjsLib.AnnotationLayer({
+        div: annDiv,
+        page,
+        viewport,
+      })
+      await annLayer.render({
+        annotations: annotationList,
+        linkService,
+      })
     }
 
     render().catch((renderError) => {
@@ -164,8 +191,9 @@ function LiteraturePdfPageBlock({
       textLayerTaskRef.current?.cancel?.()
       textLayerTaskRef.current = null
       textLayer?.cancel?.()
+      annotationLayerRef.current?.replaceChildren()
     }
-  }, [fitScale, pageNumber, pdfDocument, zoom])
+  }, [fitScale, linkService, pageNumber, pdfDocument, zoom])
 
   const handlePointerUp = useCallback(() => {
     window.setTimeout(() => {
@@ -246,6 +274,11 @@ function LiteraturePdfPageBlock({
       >
         <canvas ref={canvasRef} className="absolute inset-0 block bg-white" />
         <div ref={textLayerRef} className="n9-pdf-text-layer textLayer absolute inset-0 overflow-hidden" />
+        <div
+          ref={annotationLayerRef}
+          className="annotationLayer absolute inset-0 z-[2] overflow-hidden"
+          aria-hidden={false}
+        />
         {pageAnnotations.map((annotation) =>
           annotation.rects?.map((rect, index) => (
             <div
@@ -378,6 +411,47 @@ export const LiteraturePdfViewer = forwardRef<LiteraturePdfViewerHandle, Literat
       return next
     })
   })
+
+  const navigateToPdfPageRef = useRef<(pageNumber: number, yWithinPage?: number) => void>(() => {})
+
+  const scrollPdfToPage = useCallback((pageNumber: number, yWithinPage?: number) => {
+    setRenderedEndPage((p) => Math.max(p, pageNumber))
+
+    const runScroll = (attempts = 0) => {
+      const frame = viewportFrameRef.current
+      if (!frame) return
+      const el = frame.querySelector(`[data-pdf-page="${pageNumber}"]`) as HTMLElement | null
+      if (!el || el.offsetHeight < 2) {
+        if (attempts < 60) requestAnimationFrame(() => runScroll(attempts + 1))
+        return
+      }
+      if (yWithinPage != null && Number.isFinite(yWithinPage)) {
+        const pageTop = elementTopInScrollContent(el, frame)
+        const margin = Math.min(120, frame.clientHeight * 0.22)
+        const desiredTop = pageTop + yWithinPage - margin
+        const maxScroll = Math.max(0, frame.scrollHeight - frame.clientHeight)
+        frame.scrollTo({ top: Math.max(0, Math.min(desiredTop, maxScroll)), behavior: "smooth" })
+      } else {
+        el.scrollIntoView({ behavior: "smooth", block: "start", inline: "nearest" })
+      }
+    }
+
+    requestAnimationFrame(() => requestAnimationFrame(() => runScroll(0)))
+  }, [])
+
+  useEffect(() => {
+    navigateToPdfPageRef.current = scrollPdfToPage
+  }, [scrollPdfToPage])
+
+  const linkService = useMemo(() => new LiteraturePdfLinkService(navigateToPdfPageRef), [])
+
+  useEffect(() => {
+    linkService.setDocument(pdfDocument ?? null)
+  }, [linkService, pdfDocument])
+
+  useEffect(() => {
+    linkService.setDisplayScale(fitScale * zoom)
+  }, [linkService, fitScale, zoom])
 
   useImperativeHandle(ref, () => ({
     scrollToAnnotation(annotation: LiteraturePdfAnnotation) {
@@ -707,6 +781,7 @@ export const LiteraturePdfViewer = forwardRef<LiteraturePdfViewerHandle, Literat
               onHighlightSelection={() => createSelectionAnnotation("highlight")}
               onNoteSelection={() => createSelectionAnnotation("note")}
               focusedAnnotationId={focusedAnnotationId}
+              linkService={linkService}
             />
           ))}
           {pageCount > 0 && renderedEndPage < pageCount && (

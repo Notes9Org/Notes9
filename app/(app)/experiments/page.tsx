@@ -22,7 +22,7 @@ export default async function ExperimentsPage() {
     .from("experiments")
     .select(`
       *,
-      project:projects(name),
+      project:projects(id, name),
       assigned_to:profiles!experiments_assigned_to_fkey(first_name, last_name)
     `)
     .order("created_at", { ascending: false })

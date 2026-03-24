@@ -9,14 +9,7 @@ import {
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import {
-  BookOpen,
-  Calendar,
-  FileText,
-  Star,
-  ExternalLink,
-  Link as LinkIcon,
-} from "lucide-react";
+import { FileText, Star, ExternalLink } from "lucide-react";
 import Link from "next/link";
 import { LiteratureReviewActions } from "@/app/(app)/literature-reviews/[id]/literature-review-actions";
 import { UploadLiteraturePdfDialog } from "@/components/literature-reviews/upload-literature-pdf-dialog";
@@ -177,80 +170,6 @@ export function LiteratureDetailView({
             onRefresh={onRefresh}
           />
         )}
-      </div>
-
-      {/* Quick Info Cards */}
-      <div className="grid gap-3 md:grid-cols-4">
-        <Card className="py-2">
-          <CardHeader className="pb-1 pt-2 px-4">
-            <CardTitle className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-              Authors
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="px-4 pb-2">
-            <div className="flex items-center gap-2">
-              <BookOpen className="h-3.5 w-3.5 text-muted-foreground" />
-              <span className="text-sm font-medium text-foreground line-clamp-1">
-                {literature.authors
-                  ? literature.authors.split(",")[0] + " et al."
-                  : "—"}
-              </span>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="py-2">
-          <CardHeader className="pb-1 pt-2 px-4">
-            <CardTitle className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-              Journal & Year
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="px-4 pb-2">
-            <div className="flex items-center gap-2">
-              <Calendar className="h-3.5 w-3.5 text-muted-foreground" />
-              <span className="text-sm font-medium text-foreground">
-                {literature.journal || "—"} (
-                {literature.publication_year || "—"})
-              </span>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="py-2">
-          <CardHeader className="pb-1 pt-2 px-4">
-            <CardTitle className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-              DOI/PMID
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="px-4 pb-2">
-            <div className="flex items-center gap-2">
-              <LinkIcon className="h-3.5 w-3.5 text-muted-foreground" />
-              <span className="text-sm font-medium text-foreground">
-                {literature.doi
-                  ? `DOI: ${literature.doi.substring(0, 20)}...`
-                  : literature.pmid
-                  ? `PMID: ${literature.pmid}`
-                  : "—"}
-              </span>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="py-2">
-          <CardHeader className="pb-1 pt-2 px-4">
-            <CardTitle className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-              Added
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="px-4 pb-2">
-            <div className="flex items-center gap-2">
-              <Calendar className="h-3.5 w-3.5 text-muted-foreground" />
-              <span className="text-sm font-medium text-foreground">
-                {formatDate(literature.created_at)}
-              </span>
-            </div>
-          </CardContent>
-        </Card>
       </div>
 
       {/* Tabs */}
@@ -450,7 +369,11 @@ export function LiteratureDetailView({
                     )}
                   </div>
                   {literature.pdf_file_url && (
-                    <LiteraturePdfPanel literatureId={literature.id} pdfUrl={literature.pdf_file_url} />
+                    <LiteraturePdfPanel
+                      literatureId={literature.id}
+                      pdfUrl={literature.pdf_file_url}
+                      pdfFileName={literature.pdf_file_name}
+                    />
                   )}
                 </>
               ) : (

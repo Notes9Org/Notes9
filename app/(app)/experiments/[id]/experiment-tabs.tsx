@@ -159,12 +159,37 @@ export function ExperimentTabs({ experiment, initialTab }: ExperimentTabsProps) 
       </TabsContent>
 
       <TabsContent value="samples" id="tab-content-samples" className="space-y-4">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <p className="text-sm text-muted-foreground">
+            Samples linked to this experiment ({experiment.samples?.length ?? 0})
+          </p>
+          <Button asChild size="sm" variant="outline" className="w-full sm:w-auto shrink-0">
+            <Link href={`/samples/new?experiment=${experiment.id}`}>
+              <Plus className="mr-2 h-4 w-4" />
+              New sample for this experiment
+            </Link>
+          </Button>
+        </div>
         {experiment.samples && experiment.samples.length > 0 ? (
           <div className="space-y-2">
             {experiment.samples.map((sample: any) => (
               <Card key={sample.id}>
-                <CardHeader>
-                  <CardTitle className="text-sm">{sample.name}</CardTitle>
+                <CardHeader className="py-3">
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                    <div className="min-w-0 space-y-1">
+                      <CardTitle className="text-base font-semibold">
+                        {sample.sample_code ?? sample.name ?? "Sample"}
+                      </CardTitle>
+                      <CardDescription className="text-xs sm:text-sm">
+                        {sample.sample_type}
+                        {sample.status ? ` · ${sample.status.replace(/_/g, " ")}` : ""}
+                        {sample.storage_location ? ` · ${sample.storage_location}` : ""}
+                      </CardDescription>
+                    </div>
+                    <Button asChild variant="secondary" size="sm" className="shrink-0">
+                      <Link href={`/samples/${sample.id}`}>View</Link>
+                    </Button>
+                  </div>
                 </CardHeader>
               </Card>
             ))}
@@ -173,7 +198,7 @@ export function ExperimentTabs({ experiment, initialTab }: ExperimentTabsProps) 
           <Card>
             <CardContent className="py-8">
               <p className="text-center text-sm text-muted-foreground">
-                No samples yet
+                No samples linked yet. Create one with the button above, or choose this experiment when adding a sample from the Samples page.
               </p>
             </CardContent>
           </Card>

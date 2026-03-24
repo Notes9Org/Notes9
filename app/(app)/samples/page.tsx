@@ -16,7 +16,12 @@ export default async function SamplesPage() {
     .from("samples")
     .select(`
       *,
-      experiment:experiments(name, project:projects(name))
+      experiment:experiments(
+        id,
+        name,
+        project_id,
+        project:projects(id, name)
+      )
     `)
     .order("created_at", { ascending: false })
     .limit(100)
