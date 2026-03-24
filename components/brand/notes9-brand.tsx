@@ -20,7 +20,7 @@ function getWordmarkMetrics(textClassName?: string) {
       mascot: "h-[1.55rem] w-[1.55rem]",
       baseline: "items-end",
       extra: "tracking-[-0.01em]",
-      textNudgeY: "translate-y-[0.18em]",
+      textNudgeY: "translate-y-[0.28em]",
     }
   }
 
@@ -30,17 +30,17 @@ function getWordmarkMetrics(textClassName?: string) {
       mascot: "h-[2.05rem] w-[2.05rem]",
       baseline: "items-end",
       extra: "tracking-[-0.01em]",
-      textNudgeY: "translate-y-[0.18em]",
+      textNudgeY: "translate-y-[0.28em]",
     }
   }
 
   if (textClassName.includes("h-9")) {
     return {
       text: "text-[2.74rem]",
-      mascot: "h-[1.8rem] w-[1.8rem]",
+      mascot: "h-[1.62rem] w-[1.62rem]",
       baseline: "items-end",
       extra: "tracking-[-0.01em]",
-      textNudgeY: "translate-y-[0.18em]",
+      textNudgeY: "translate-y-[0.28em]",
     }
   }
 
@@ -70,7 +70,7 @@ function getWordmarkMetrics(textClassName?: string) {
     mascot: "h-[1.55rem] w-[1.55rem]",
     baseline: "items-end",
     extra: "tracking-[-0.01em]",
-    textNudgeY: "translate-y-[0.18em]",
+    textNudgeY: "translate-y-[0.28em]",
   }
 }
 
@@ -109,7 +109,10 @@ export function Notes9Brand({
           <span className="sr-only">o</span>
           <span
             aria-hidden="true"
-            className={cn("relative mx-[0.02em] inline-flex shrink-0 items-center justify-center self-end translate-y-[-0.03em]", metrics.mascot)}
+            className={cn(
+              "relative mx-[0.02em] inline-flex shrink-0 items-center justify-center self-end translate-y-[calc(-0.03em-2px)]",
+              metrics.mascot,
+            )}
           >
             <Image
               src="/notes9-logo-mark-transparent.png"
