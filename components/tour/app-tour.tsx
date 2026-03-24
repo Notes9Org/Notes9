@@ -386,7 +386,7 @@ export function AppTour() {
       }
     }
 
-    const finalizeTour = async (userId: string, status: TourStatus) => {
+    const finalizeTour = (userId: string, status: TourStatus) => {
       dismissalStatusRef.current = status
 
       if (status === "completed") {
@@ -396,8 +396,8 @@ export function AppTour() {
         localStorage.setItem(TOUR_SKIPPED_KEY, "true")
       }
 
-      await persistTourStatus(userId, status)
       driverRef.current?.destroy()
+      void persistTourStatus(userId, status)
     }
 
     const navigateAndAdvance = async (href: string, selector: string) => {
@@ -422,7 +422,8 @@ export function AppTour() {
       skipButton.type = "button"
       skipButton.dataset.tourSkipButton = "true"
       skipButton.textContent = "Skip tour"
-      skipButton.className = "driver-popover-btn"
+      /* Must not include substring "driver-popover" — driver.js blocks those clicks (see re() filter in driver.js). */
+      skipButton.className = "notes9-tour-skip-btn"
       skipButton.style.marginRight = "auto"
       skipButton.style.marginLeft = "12px"
       skipButton.style.opacity = "0.85"
@@ -431,7 +432,7 @@ export function AppTour() {
       skipButton.style.display = "inline-flex"
       skipButton.style.alignItems = "center"
       skipButton.onclick = () => {
-        void finalizeTour(userId, "skipped")
+        finalizeTour(userId, "skipped")
       }
       footerButtons.prepend(skipButton)
     }
@@ -444,7 +445,7 @@ export function AppTour() {
       closeButton.type = "button"
       closeButton.dataset.tourContextClose = "true"
       closeButton.textContent = "Close"
-      closeButton.className = "driver-popover-btn"
+      closeButton.className = "notes9-tour-close-btn"
       closeButton.style.marginRight = "auto"
       closeButton.style.marginLeft = "12px"
       closeButton.style.opacity = "0.85"
@@ -673,12 +674,20 @@ export function AppTour() {
         prevBtnText: "Back",
         doneBtnText: "Finish tour",
         onPopoverRender: (popover) => injectSkipButton(popover, user.id),
-        onDestroyStarted: () => {
-          if (suppressDestroyPersistenceRef.current) return
-          if (dismissalStatusRef.current) return
+        onDestroyStarted: (_element, _step, opts) => {
+          /* driver.js: if this hook is set, teardown waits until we call destroy() again. */
+          if (suppressDestroyPersistenceRef.current) {
+            opts.driver.destroy()
+            return
+          }
+          if (dismissalStatusRef.current) {
+            opts.driver.destroy()
+            return
+          }
           dismissalStatusRef.current = "skipped"
           localStorage.setItem(TOUR_SKIPPED_KEY, "true")
           void persistTourStatus(user.id, "skipped")
+          opts.driver.destroy()
         },
         steps: onboardingSteps(user.id),
       })
@@ -725,8 +734,13 @@ export function AppTour() {
         prevBtnText: "Back",
         doneBtnText: "Done",
         onPopoverRender: (popover) => injectContextCloseButton(popover),
-        onDestroyStarted: () => {
+        onDestroyStarted: (_element, _step, opts) => {
           /* Contextual help never writes skip/completed to profile or localStorage */
+          if (suppressDestroyPersistenceRef.current) {
+            opts.driver.destroy()
+            return
+          }
+          opts.driver.destroy()
         },
         steps,
       })
