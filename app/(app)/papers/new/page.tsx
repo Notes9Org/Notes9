@@ -53,7 +53,7 @@ export default function NewPaperPage() {
       if (IS_PAPERS_MOCKED) {
         const paper = createMockPaper(title.trim(), projectId || null)
         toast.success("Paper created")
-        router.push(`/papers/${paper.id}`)
+        router.push(`/papers?open=${paper.id}`)
         return
       }
 
@@ -76,10 +76,14 @@ export default function NewPaperPage() {
       if (error) throw error
 
       toast.success("Paper created")
-      router.push(`/papers/${data.id}`)
-    } catch (error) {
+      router.push(`/papers?open=${data.id}`)
+    } catch (error: unknown) {
       console.error("Error creating paper:", error)
-      toast.error("Failed to create paper")
+      const msg =
+        error && typeof error === "object" && "message" in error
+          ? String((error as { message: string }).message)
+          : "Failed to create paper"
+      toast.error(msg)
     } finally {
       setIsCreating(false)
     }
