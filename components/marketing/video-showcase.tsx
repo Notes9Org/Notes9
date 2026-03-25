@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react"
 import Image from "next/image"
 import { useTheme } from "next-themes"
-import { BookOpen, Database, FlaskConical, LineChart } from "lucide-react"
+import { BookOpen, Database, FlaskConical, LineChart, Network, Sparkles, TestTube2, FileText } from "lucide-react"
 import {
   Carousel,
   CarouselContent,
@@ -27,6 +27,16 @@ const slides = [
     alt: "Notes9 literature search",
   },
   {
+    id: "research-map",
+    label: "Research Map",
+    icon: Network,
+    title: "Visualize your entire knowledge graph",
+    description:
+      "Explore connections between projects, papers, experiments, and notes dynamically.",
+    screenshot: "/demo/research-map-literature.png",
+    alt: "Notes9 research map",
+  },
+  {
     id: "experiments",
     label: "Experiments",
     icon: FlaskConical,
@@ -47,6 +57,26 @@ const slides = [
     alt: "Notes9 lab memory",
   },
   {
+    id: "samples",
+    label: "Sample Inventory",
+    icon: TestTube2,
+    title: "Track physical materials securely",
+    description:
+      "Manage your lab inventory seamlessly, linking samples directly to their corresponding origin and experiment.",
+    screenshot: "/demo/samples.png",
+    alt: "Notes9 sample inventory",
+  },
+  {
+    id: "protocols",
+    label: "Protocols",
+    icon: FileText,
+    title: "Standardize your lab procedures",
+    description:
+      "Maintain, version, and share procedural details and SOPs to ensure your experiments are highly reproducible.",
+    screenshot: "/demo/protocol-details.png",
+    alt: "Notes9 protocol details",
+  },
+  {
     id: "reporting",
     label: "Reporting",
     icon: LineChart,
@@ -55,6 +85,16 @@ const slides = [
       "Use structured workflow context to accelerate reports, reviews, and downstream analysis.",
     screenshot: "/demo/project-report.png",
     alt: "Notes9 project reporting",
+  },
+  {
+    id: "writing",
+    label: "Writing & AI",
+    icon: Sparkles,
+    title: "Draft publications with AI assistance",
+    description:
+      "Write manuscripts equipped with full context and a dedicated AI assistant directly inside the editor.",
+    screenshot: "/demo/writing-editor.png",
+    alt: "Notes9 writing editor with AI",
   },
 ]
 

@@ -131,6 +131,17 @@ async function capture(
     // Continue anyway - page may have loaded
   }
 
+  // Hide Next.js dev indicator (the 'N' letter)
+  await page.addStyleTag({ content: 'nextjs-portal, #nextjs-build-indicator, [data-nextjs-toast] { display: none !important; }' })
+
+  // Specific delays for content to settle
+  if (route === "/research-map") {
+    console.log("Waiting 8s for research map to fully render...")
+    await new Promise((r) => setTimeout(r, 8000))
+  } else {
+    await new Promise((r) => setTimeout(r, 800))
+  }
+
   const filePath = path.join(OUTPUT_DIR, output)
   await page.screenshot({ path: filePath, type: "png" })
   console.log(`Captured ${output} from ${route}`)
@@ -245,6 +256,127 @@ async function getFirstDetailLink(
   return pathname
 }
 
+async function captureProtocolDetails(page: Page) {
+  await page.goto(`${BASE_URL}/protocols`, { waitUntil: "networkidle2", timeout: 30000 })
+  await page.addStyleTag({ content: 'nextjs-portal, #nextjs-build-indicator, [data-nextjs-toast] { display: none !important; }' })
+  await new Promise(r => setTimeout(r, 2000))
+
+  const clicked = await page.evaluate(() => {
+    const spans = Array.from(document.querySelectorAll("span"))
+    const target = spans.find(s => s.textContent?.trim() === "View Details")
+    if (target) {
+      ;(target as HTMLElement).click()
+      return true
+    }
+    return false
+  })
+  
+  if (clicked) {
+    await new Promise(r => setTimeout(r, 3000))
+    await page.addStyleTag({ content: 'nextjs-portal, #nextjs-build-indicator, [data-nextjs-toast] { display: none !important; }' })
+    const filePath = path.join(OUTPUT_DIR, "protocol-details.png")
+    await page.screenshot({ path: filePath, type: "png" })
+    console.log("Captured protocol-details.png from /protocols")
+  } else {
+    console.warn("Could not find 'View Details' button in /protocols")
+  }
+}
+
+async function captureResearchMapLiterature(page: Page) {
+  await page.goto(`${BASE_URL}/research-map`, { waitUntil: "networkidle2", timeout: 30000 })
+  await page.addStyleTag({ content: 'nextjs-portal, #nextjs-build-indicator, [data-nextjs-toast] { display: none !important; }' })
+  await new Promise(r => setTimeout(r, 8000)) // map render delay
+
+  const clicked = await page.evaluate(() => {
+    const labels = Array.from(document.querySelectorAll("label"))
+    const target = labels.find(l => l.textContent?.trim().includes("Literature"))
+    if (target) {
+      ;(target as HTMLElement).click()
+      return true
+    }
+    return false
+  })
+
+  if (clicked) {
+    console.log("Clicked Literature filter, waiting 4s for rerender...")
+    await new Promise(r => setTimeout(r, 4000))
+    const filePath = path.join(OUTPUT_DIR, "research-map-literature.png")
+    await page.screenshot({ path: filePath, type: "png" })
+    console.log("Captured research-map-literature.png from /research-map")
+  } else {
+    console.warn("Could not find 'Literature' filter in /research-map")
+  }
+}
+
+async function captureWritingEditor(page: Page) {
+  await page.goto(`${BASE_URL}/papers`, { waitUntil: "networkidle2", timeout: 30000 })
+  await page.addStyleTag({ content: 'nextjs-portal, #nextjs-build-indicator, [data-nextjs-toast] { display: none !important; }' })
+  await new Promise(r => setTimeout(r, 2000))
+
+  const clickedOpen = await page.evaluate(() => {
+    const cards = Array.from(document.querySelectorAll("[class*='card'], tr"))
+    let targetCard = cards.find(c => c.textContent?.toLowerCase().includes("research proposal"))
+    
+    if (!targetCard) {
+      targetCard = cards.find(c => c.textContent?.includes("Open in editor") || c.textContent?.includes("Open full page"))
+    }
+
+    if (targetCard) {
+      const btn = Array.from(targetCard.querySelectorAll("span, button, a, div")).find(b => {
+        const t = b.textContent?.trim() || ""
+        return t.includes("Open in editor") || t.includes("Open full page")
+      })
+      if (btn) {
+        ;(btn as HTMLElement).click()
+        return true
+      }
+      ;(targetCard as HTMLElement).click()
+      return true
+    }
+
+    // fallback
+    const els = Array.from(document.querySelectorAll("span, button, a, div"))
+    const target = els.find(b => {
+      const t = b.textContent?.trim() || ""
+      return t === "Open in editor" || t.includes("New Paper")
+    })
+    if (target) {
+      ;(target as HTMLElement).click()
+      return true
+    }
+    return false
+  })
+
+  if (clickedOpen) {
+    await new Promise(r => setTimeout(r, 6000)) // wait for editor
+
+    // Open AI Sidebar
+    await page.evaluate(() => {
+      const buttons = Array.from(document.querySelectorAll("button, span, div, a"))
+      const aiBtn = buttons.find(b => {
+        const text = b.textContent?.trim() || ""
+        return text.includes("Write with AI")
+      })
+      if (aiBtn) {
+        ;(aiBtn as HTMLElement).click()
+      } else {
+        const attrs = document.querySelectorAll("[aria-label*='AI'], [title*='AI']")
+        if (attrs.length > 0) {
+          ;(attrs[0] as HTMLElement).click()
+        }
+      }
+    })
+
+    await new Promise(r => setTimeout(r, 4000)) // wait for sidebar to open
+    await page.addStyleTag({ content: 'nextjs-portal, #nextjs-build-indicator, [data-nextjs-toast] { display: none !important; }' })
+    const filePath = path.join(OUTPUT_DIR, "writing-editor.png")
+    await page.screenshot({ path: filePath, type: "png" })
+    console.log("Captured writing-editor.png from /papers")
+  } else {
+    console.warn("Could not find paper to open in /papers")
+  }
+}
+
 async function main() {
   console.log("Starting screenshot capture...")
   console.log(`Base URL: ${BASE_URL}`)
@@ -317,6 +449,12 @@ async function main() {
     // Experiments list
     await capture(page, "/experiments", "experiments-list.png")
 
+    // Additional requested pages
+    await capture(page, "/research-map", "research-map.png")
+    await capture(page, "/papers", "writing.png")
+    await capture(page, "/samples", "samples.png")
+    await capture(page, "/protocols", "protocols.png")
+
     // Project report
     const projectId = process.env.CAPTURE_PROJECT_ID
     if (projectId) {
@@ -329,6 +467,11 @@ async function main() {
         console.warn("No projects found, skipping project-report.png")
       }
     }
+
+    // Interactive custom pages
+    await captureProtocolDetails(page)
+    await captureResearchMapLiterature(page)
+    await captureWritingEditor(page)
 
     console.log("Screenshot capture complete.")
   } finally {
