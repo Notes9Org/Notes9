@@ -20,9 +20,10 @@ export const LITERATURE_ALLOWED_PDF_MIME_TYPES = ["application/pdf"] as const
 export const LITERATURE_MAX_PDF_SIZE = 25 * 1024 * 1024
 export const LITERATURE_MAX_PDF_SIZE_MB = 25
 
-export const LITERATURE_FINAL_PREFIX = "literature-review"
-export const LITERATURE_TEMP_PREFIX = "temp-literature-review"
-export const LITERATURE_STORAGE_BUCKET = "experiment-files"
+/** Object key prefix segments under bucket `user`: `{userId}/{domain}/{recordId}/...` */
+export type LiteratureStorageDomain = "literature" | "experiment" | "protocol"
+
+export const LITERATURE_STORAGE_BUCKET = "user"
 
 export type SaveMode = "naming_convention" | "extract_pdf_metadata"
 export type AnnotationType = "highlight" | "note" | "comment"
@@ -35,6 +36,8 @@ export type PdfMatchSource =
   | "manual_existing_record_selection"
   | "manual_new_record_creation"
   | "replacement"
+  | "staging_pubmed_import"
+  | "repository_pubmed_import"
 
 export type AnalyzeStatus = "matched" | "duplicate" | "ambiguous" | "unmatched"
 
@@ -67,6 +70,8 @@ export interface LiteratureRecordSummary {
 export interface AnalyzePdfResponse {
   status: AnalyzeStatus
   tempUploadPath: string
+  /** Size in bytes (set when upload ran server-side). */
+  fileSize?: number
   extractedMetadata: LiteraturePdfExtractedMetadata
   checksum: string
   matchCandidates: LiteratureRecordSummary[]

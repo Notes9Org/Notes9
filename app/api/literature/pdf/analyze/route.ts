@@ -4,6 +4,7 @@ import { NextResponse } from "next/server"
 
 import { analyzeLiteraturePdfUpload } from "@/lib/literature-pdf-match"
 import {
+  createLiteraturePdfPath,
   createTempLiteraturePdfPath,
   getLiteratureStorageBucket,
   validatePdfFile,
@@ -36,11 +37,17 @@ export async function POST(request: Request) {
     }
 
     const buffer = await file.arrayBuffer()
-    const tempUploadPath = createTempLiteraturePdfPath(user.id, file.name)
+    const literatureIdForPath =
+      typeof currentLiteratureId === "string" && currentLiteratureId.length > 0
+        ? currentLiteratureId
+        : null
+    const uploadPath = literatureIdForPath
+      ? createLiteraturePdfPath(user.id, literatureIdForPath, file.name)
+      : createTempLiteraturePdfPath(user.id, file.name)
 
     const { error: uploadError } = await supabase.storage
       .from(getLiteratureStorageBucket())
-      .upload(tempUploadPath, file, {
+      .upload(uploadPath, file, {
         cacheControl: "3600",
         upsert: false,
         contentType: file.type,
@@ -60,7 +67,8 @@ export async function POST(request: Request) {
     return NextResponse.json({
       ...result,
       checksum,
-      tempUploadPath,
+      tempUploadPath: uploadPath,
+      fileSize: file.size,
     })
   } catch (error: any) {
     console.error("Failed to analyze literature PDF", error)

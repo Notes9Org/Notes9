@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button"
 import { Plus } from 'lucide-react'
 import Link from 'next/link'
 import { LiteratureTabs } from '@/components/literature-reviews/literature-tabs'
+import type { StagingLiteratureRow } from "@/components/literature-reviews/staging-tab"
 import { UploadLiteraturePdfDialog } from "@/components/literature-reviews/upload-literature-pdf-dialog"
 
 export default async function LiteratureReviewsPage() {
@@ -83,6 +84,11 @@ export default async function LiteratureReviewsPage() {
       {/* Tabs */}
       <LiteratureTabs
         literatureReviews={literatureReviews}
+        stagedLiterature={
+          (literatureReviews ?? []).filter(
+            (row: { catalog_placement?: string | null }) => row.catalog_placement === "staging"
+          ) as StagingLiteratureRow[]
+        }
         projects={safeProjects}
         experiments={safeExperiments}
       />

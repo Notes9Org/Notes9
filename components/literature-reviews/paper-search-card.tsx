@@ -9,17 +9,18 @@ import { useState } from 'react';
 
 interface PaperSearchCardProps {
   paper: SearchPaper;
-  onStage?: (paper: SearchPaper) => void;
+  onStage?: (paper: SearchPaper) => void | Promise<void>;
   onSave?: (paper: SearchPaper) => Promise<void>;
   onSaveToRepository?: (paper: SearchPaper) => Promise<void>;
   onRemove?: (paperId: string) => void;
   isStaged?: boolean;
   isSaving?: boolean;
+  isStaging?: boolean;
   hideActions?: boolean;
   compact?: boolean;
 }
 
-export function PaperSearchCard({ paper, onStage, onSave, onSaveToRepository, onRemove, isStaged = false, isSaving = false, hideActions = false, compact = false }: PaperSearchCardProps) {
+export function PaperSearchCard({ paper, onStage, onSave, onSaveToRepository, onRemove, isStaged = false, isSaving = false, isStaging = false, hideActions = false, compact = false }: PaperSearchCardProps) {
   const [isExpanded, setIsExpanded] = useState(false);
 
   const getSourceColor = (source: string) => {
@@ -176,12 +177,14 @@ export function PaperSearchCard({ paper, onStage, onSave, onSaveToRepository, on
                 <Button
                   variant={isStaged ? "secondary" : "default"}
                   size="icon"
-                  onClick={() => onStage(paper)}
-                  disabled={isStaged}
-                  title={isStaged ? "Already staged" : "Stage paper"}
-                  aria-label={isStaged ? "Already staged" : "Stage paper"}
+                  onClick={() => void onStage(paper)}
+                  disabled={isStaged || isStaging}
+                  title={isStaged ? "Already staged" : isStaging ? "Staging…" : "Stage paper"}
+                  aria-label={isStaged ? "Already staged" : isStaging ? "Staging" : "Stage paper"}
                 >
-                  {isStaged ? (
+                  {isStaging ? (
+                    <Loader2 size={14} className="animate-spin" />
+                  ) : isStaged ? (
                     <Check size={14} />
                   ) : (
                     <Plus size={14} />

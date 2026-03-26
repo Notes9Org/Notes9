@@ -18,9 +18,16 @@ interface LiteraturePdfPanelProps {
   literatureId: string
   pdfUrl: string
   pdfFileName?: string | null
+  /** Direct Supabase/public URL for “Open” when `pdfUrl` is the authenticated viewer proxy. */
+  openInNewTabFallbackUrl?: string | null
 }
 
-export function LiteraturePdfPanel({ literatureId, pdfUrl, pdfFileName }: LiteraturePdfPanelProps) {
+export function LiteraturePdfPanel({
+  literatureId,
+  pdfUrl,
+  pdfFileName,
+  openInNewTabFallbackUrl,
+}: LiteraturePdfPanelProps) {
   const { toast } = useToast()
   const [annotations, setAnnotations] = useState<LiteraturePdfAnnotation[]>([])
   const [loadingAnnotations, setLoadingAnnotations] = useState(true)
@@ -174,6 +181,7 @@ export function LiteraturePdfPanel({ literatureId, pdfUrl, pdfFileName }: Litera
           <LiteraturePdfViewer
             ref={viewerRef}
             pdfUrl={pdfUrl}
+            externalOpenUrl={openInNewTabFallbackUrl ?? undefined}
             annotations={annotations}
             onCreateAnnotation={createAnnotation}
           />

@@ -4,6 +4,7 @@ import {
   clampText,
   createLiteraturePdfPath,
   getLiteratureStorageBucket,
+  isFinalLiteraturePdfPath,
   normalizeDoi,
   validateTextLimits,
 } from "@/lib/literature-pdf-storage"
@@ -39,6 +40,8 @@ interface FinalizePayload {
     }
   tempUploadPath: string
   fileName: string
+  /** Byte size of the uploaded PDF (avoids re-download when file is already at final path). */
+  fileSize?: number
   checksum: string
   extractedMetadata?: Record<string, unknown>
   confirmedClearAnnotations?: boolean
@@ -120,6 +123,8 @@ export async function POST(request: Request) {
           status: "saved",
           created_by: user.id,
           organization_id: organizationId,
+          catalog_placement: "repository",
+          pdf_import_status: "pending",
         })
         .select("id")
         .single()
@@ -163,20 +168,43 @@ export async function POST(request: Request) {
     }
 
     const storage = supabase.storage.from(getLiteratureStorageBucket())
-    const { data: downloaded, error: downloadError } = await storage.download(payload.tempUploadPath)
-    if (downloadError || !downloaded) {
-      return NextResponse.json({ error: downloadError?.message ?? "Temp PDF was not found" }, { status: 404 })
-    }
+    const uploadedPath = payload.tempUploadPath
+    const alreadyFinal = isFinalLiteraturePdfPath(user.id, literatureId, uploadedPath)
 
-    const finalStoragePath = createLiteraturePdfPath(literatureId, payload.fileName)
-    const { error: finalUploadError } = await storage.upload(finalStoragePath, downloaded, {
-      cacheControl: "3600",
-      upsert: false,
-      contentType: "application/pdf",
-    })
+    let finalStoragePath: string
+    let pdfByteLength: number
 
-    if (finalUploadError) {
-      return NextResponse.json({ error: finalUploadError.message }, { status: 500 })
+    if (alreadyFinal) {
+      finalStoragePath = uploadedPath
+      pdfByteLength = payload.fileSize ?? 0
+      if (pdfByteLength <= 0) {
+        const { data: blob, error: headErr } = await storage.download(uploadedPath)
+        if (headErr || !blob) {
+          return NextResponse.json(
+            { error: headErr?.message ?? "Uploaded PDF was not found" },
+            { status: 404 }
+          )
+        }
+        pdfByteLength = blob.size
+      }
+    } else {
+      const { data: downloaded, error: downloadError } = await storage.download(uploadedPath)
+      if (downloadError || !downloaded) {
+        return NextResponse.json({ error: downloadError?.message ?? "Uploaded PDF was not found" }, { status: 404 })
+      }
+
+      finalStoragePath = createLiteraturePdfPath(user.id, literatureId, payload.fileName)
+      const { error: finalUploadError } = await storage.upload(finalStoragePath, downloaded, {
+        cacheControl: "3600",
+        upsert: false,
+        contentType: "application/pdf",
+      })
+
+      if (finalUploadError) {
+        return NextResponse.json({ error: finalUploadError.message }, { status: 500 })
+      }
+
+      pdfByteLength = downloaded.size
     }
 
     const { data: urlData } = storage.getPublicUrl(finalStoragePath)
@@ -188,13 +216,14 @@ export async function POST(request: Request) {
       .update({
         pdf_file_url: urlData.publicUrl,
         pdf_file_name: clampText(payload.fileName, "pdf_file_name"),
-        pdf_file_size: downloaded.size,
+        pdf_file_size: pdfByteLength,
         pdf_file_type: clampText("application/pdf", "pdf_file_type"),
         pdf_storage_path: clampText(finalStoragePath, "pdf_storage_path"),
         pdf_uploaded_at: new Date().toISOString(),
         pdf_checksum: clampText(payload.checksum, "pdf_checksum"),
         pdf_match_source: clampText(matchSource, "pdf_match_source"),
         pdf_metadata: metadata,
+        pdf_import_status: "success",
       })
       .eq("id", literatureId)
 
@@ -204,12 +233,17 @@ export async function POST(request: Request) {
 
     if (payload.action === "replace_existing_pdf") {
       await supabase.from("literature_pdf_annotations").delete().eq("literature_review_id", literatureId)
-      if (literature.pdf_storage_path) {
+      if (
+        literature.pdf_storage_path &&
+        literature.pdf_storage_path !== finalStoragePath
+      ) {
         await storage.remove([literature.pdf_storage_path])
       }
     }
 
-    await storage.remove([payload.tempUploadPath])
+    if (!alreadyFinal) {
+      await storage.remove([uploadedPath])
+    }
 
     return NextResponse.json({
       success: true,

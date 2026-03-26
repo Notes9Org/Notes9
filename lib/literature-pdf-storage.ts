@@ -1,10 +1,9 @@
 import {
   LITERATURE_ALLOWED_PDF_MIME_TYPES,
-  LITERATURE_FINAL_PREFIX,
   LITERATURE_MAX_PDF_SIZE,
   LITERATURE_STORAGE_BUCKET,
-  LITERATURE_TEMP_PREFIX,
   LITERATURE_TEXT_LIMITS,
+  type LiteratureStorageDomain,
 } from "@/types/literature-pdf"
 
 const TEXT_LIMIT_MAP: Record<string, number> = {
@@ -32,12 +31,37 @@ export function sanitizeStorageFileName(name: string) {
     .slice(0, LITERATURE_TEXT_LIMITS.pdfFileName)
 }
 
+/**
+ * Used only when no `literature_reviews.id` exists yet (e.g. upload wizard creating a new record).
+ * Staging → repository only updates `catalog_placement`; PDF stays at the same key.
+ */
 export function createTempLiteraturePdfPath(userId: string, fileName: string) {
-  return `${LITERATURE_TEMP_PREFIX}/${userId}/${Date.now()}-${sanitizeStorageFileName(fileName)}`
+  return `${userId}/temp/${Date.now()}-${sanitizeStorageFileName(fileName)}`
 }
 
-export function createLiteraturePdfPath(literatureId: string, fileName: string) {
-  return `${LITERATURE_FINAL_PREFIX}/${literatureId}/${Date.now()}-${sanitizeStorageFileName(fileName)}`
+/** True if `path` is the final user-scoped key for this literature record (not `/temp/`). */
+export function isFinalLiteraturePdfPath(userId: string, literatureId: string, path: string) {
+  const prefix = `${userId}/literature/${literatureId}/`
+  return path.startsWith(prefix) && !path.includes("/temp/")
+}
+
+/** Final PDF object key: `{userId}/{domain}/{recordId}/{timestamp}-{fileName}`. */
+export function createUserScopedStoragePath(
+  userId: string,
+  domain: LiteratureStorageDomain,
+  recordId: string,
+  fileName: string
+) {
+  return `${userId}/${domain}/${recordId}/${Date.now()}-${sanitizeStorageFileName(fileName)}`
+}
+
+/** @deprecated Use createUserScopedStoragePath — kept for call sites migrating to user-scoped keys. */
+export function createLiteraturePdfPath(
+  userId: string,
+  literatureId: string,
+  fileName: string
+) {
+  return createUserScopedStoragePath(userId, "literature", literatureId, fileName)
 }
 
 export function getLiteratureStorageBucket() {
@@ -57,6 +81,20 @@ export function validatePdfFile(file: File) {
     return "File must use the .pdf extension."
   }
 
+  return null
+}
+
+export function validatePdfBuffer(byteLength: number, headerSlice: Uint8Array) {
+  if (byteLength > LITERATURE_MAX_PDF_SIZE) {
+    return `PDF must be ${Math.round(LITERATURE_MAX_PDF_SIZE / (1024 * 1024))}MB or smaller.`
+  }
+  if (headerSlice.length < 4 || byteLength < 4) {
+    return "Response was not a PDF file."
+  }
+  const header = String.fromCharCode(...headerSlice.subarray(0, 4))
+  if (!header.startsWith("%PDF")) {
+    return "Response was not a PDF file."
+  }
   return null
 }
 

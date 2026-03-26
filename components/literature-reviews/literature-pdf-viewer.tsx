@@ -32,7 +32,10 @@ export type LiteraturePdfViewerHandle = {
 }
 
 interface LiteraturePdfViewerProps {
+  /** URL passed to pdf.js (often same-origin `/api/.../viewer-pdf`). */
   pdfUrl: string
+  /** Optional direct storage/public URL for “Open in new tab” when `pdfUrl` is an API proxy. */
+  externalOpenUrl?: string
   annotations: LiteraturePdfAnnotation[]
   onCreateAnnotation: (payload: {
     type: "highlight" | "note" | "comment"
@@ -377,7 +380,7 @@ function highlightCenterYWithinPage(
 }
 
 export const LiteraturePdfViewer = forwardRef<LiteraturePdfViewerHandle, LiteraturePdfViewerProps>(
-  function LiteraturePdfViewer({ pdfUrl, annotations, onCreateAnnotation }, ref) {
+  function LiteraturePdfViewer({ pdfUrl, externalOpenUrl, annotations, onCreateAnnotation }, ref) {
   const { toast } = useToast()
   const viewportFrameRef = useRef<HTMLDivElement | null>(null)
   const loadMoreSentinelRef = useRef<HTMLDivElement | null>(null)
@@ -481,7 +484,10 @@ export const LiteraturePdfViewer = forwardRef<LiteraturePdfViewerHandle, Literat
           )
         }
 
-        const task = pdfjsLib.getDocument(pdfUrl)
+        const task = pdfjsLib.getDocument({
+          url: pdfUrl,
+          withCredentials: true,
+        })
         const document = await task.promise
         if (!isActive) return
         setPdfDocument(document)
@@ -490,7 +496,11 @@ export const LiteraturePdfViewer = forwardRef<LiteraturePdfViewerHandle, Literat
         setRenderedEndPage(n > 0 ? Math.min(3, n) : 1)
       } catch (loadError) {
         console.error(loadError)
-        if (isActive) setError("Failed to render this PDF.")
+        if (isActive) {
+          const detail =
+            loadError instanceof Error ? loadError.message : typeof loadError === "string" ? loadError : "Unknown error"
+          setError(`Could not load PDF. ${detail}`)
+        }
       } finally {
         if (isActive) setIsLoading(false)
       }
@@ -744,7 +754,7 @@ export const LiteraturePdfViewer = forwardRef<LiteraturePdfViewerHandle, Literat
             <StickyNote className="h-4 w-4" />
           </Button>
           <Button variant="outline" size="sm" className="h-8 px-2.5 text-xs sm:h-9 sm:px-3 sm:text-sm" asChild>
-            <a href={pdfUrl} target="_blank" rel="noopener noreferrer">
+            <a href={externalOpenUrl ?? pdfUrl} target="_blank" rel="noopener noreferrer">
               <ExternalLink className="mr-2 h-4 w-4" />
               Open
             </a>
@@ -763,7 +773,13 @@ export const LiteraturePdfViewer = forwardRef<LiteraturePdfViewerHandle, Literat
           </div>
         )}
         {error && !isLoading && (
-          <div className="flex min-h-[24rem] items-center justify-center text-sm text-destructive">{error}</div>
+          <div className="flex min-h-[24rem] flex-col items-center justify-center gap-2 px-4 text-center text-sm text-destructive">
+            <p>{error}</p>
+            <p className="max-w-md text-xs font-normal text-muted-foreground">
+              The reader loads PDFs through your login session. If a direct storage link fails in the browser, use Open or
+              re-upload the file from the literature tab.
+            </p>
+          </div>
         )}
         <div className={`${isLoading || error ? "hidden" : "block"} relative mx-auto w-fit max-w-full`}>
           {pageNumbers.map((num) => (
