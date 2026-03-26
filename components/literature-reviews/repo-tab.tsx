@@ -2,7 +2,6 @@
 
 import { useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { createClient } from "@/lib/supabase/client"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -215,10 +214,13 @@ export function RepoTab({
     setIsDeleting(true);
 
     try {
-      const supabase = createClient();
-      const { error } = await supabase.from("literature_reviews").delete().in("id", ids);
-
-      if (error) throw error;
+      for (const id of ids) {
+        const response = await fetch(`/api/literature/${id}`, { method: "DELETE" });
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) {
+          throw new Error(typeof data.error === "string" ? data.error : "Delete failed");
+        }
+      }
 
       setSelectedIds((current) => current.filter((id) => !ids.includes(id)));
       setDeleteTarget(null);

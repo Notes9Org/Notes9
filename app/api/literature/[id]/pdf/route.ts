@@ -3,7 +3,7 @@ import { NextResponse } from "next/server"
 import { analyzeLiteraturePdfUpload } from "@/lib/literature-pdf-match"
 import { createClient } from "@/lib/supabase/server"
 import {
-  createTempLiteraturePdfPath,
+  createLiteraturePdfPath,
   getLiteratureStorageBucket,
   validatePdfFile,
 } from "@/lib/literature-pdf-storage"
@@ -32,10 +32,10 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
       return NextResponse.json({ error: validationError }, { status: 400 })
     }
 
-    const tempUploadPath = createTempLiteraturePdfPath(user.id, file.name)
+    const storagePath = createLiteraturePdfPath(user.id, id, file.name)
     const { error: uploadError } = await supabase.storage
       .from(getLiteratureStorageBucket())
-      .upload(tempUploadPath, file, {
+      .upload(storagePath, file, {
         cacheControl: "3600",
         upsert: false,
         contentType: file.type,
@@ -53,7 +53,8 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
 
     return NextResponse.json({
       ...analysis,
-      tempUploadPath,
+      tempUploadPath: storagePath,
+      fileSize: file.size,
     })
   } catch (error: any) {
     console.error("Failed to analyze literature PDF for record", error)
@@ -101,6 +102,7 @@ export async function DELETE(_: Request, context: { params: Promise<{ id: string
         pdf_checksum: null,
         pdf_match_source: null,
         pdf_metadata: null,
+        pdf_import_status: "none",
       })
       .eq("id", id)
 

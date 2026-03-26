@@ -116,8 +116,9 @@ export function UploadLiteraturePdfDialog({
     try {
       const formData = new FormData()
       formData.set("file", file)
-      if (currentLiterature?.id) {
-        formData.set("currentLiteratureId", currentLiterature.id)
+      const targetId = selectedExistingId ?? currentLiterature?.id
+      if (targetId) {
+        formData.set("currentLiteratureId", targetId)
       }
 
       const response = await fetch("/api/literature/pdf/analyze", {
@@ -172,6 +173,7 @@ export function UploadLiteraturePdfDialog({
             : undefined,
         tempUploadPath: analysis.tempUploadPath,
         fileName: file.name,
+        fileSize: analysis.fileSize ?? file.size,
         checksum: analysis.checksum,
         extractedMetadata: {
           ...analysis.extractedMetadata,

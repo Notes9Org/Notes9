@@ -319,6 +319,7 @@ async function persistImportedFile({
       title: baseName || "Imported Literature",
       url: fileUrl,
       status: "saved",
+      catalog_placement: "repository",
       project_id: projectId,
       experiment_id: experimentId,
       created_by: userId,

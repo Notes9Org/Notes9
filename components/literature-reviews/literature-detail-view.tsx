@@ -15,6 +15,10 @@ import { LiteratureReviewActions } from "@/app/(app)/literature-reviews/[id]/lit
 import { UploadLiteraturePdfDialog } from "@/components/literature-reviews/upload-literature-pdf-dialog";
 import { LiteraturePdfPanel } from "@/components/literature-reviews/literature-pdf-panel";
 
+const PUBLIC_SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "https://notes9.com";
+const NLM_PMC_OA_WEB_SERVICE = "https://pmc.ncbi.nlm.nih.gov/tools/oa-service/";
+const NLM_EUTILS_OVERVIEW = "https://www.ncbi.nlm.nih.gov/books/NBK25501/";
+
 interface LiteratureData {
   id: string;
   title: string;
@@ -41,6 +45,7 @@ interface LiteratureData {
   pdf_checksum: string | null;
   pdf_match_source: string | null;
   pdf_metadata: Record<string, unknown> | null;
+  pdf_import_status?: string | null;
   created_at: string;
   project: { id: string; name: string } | null;
   experiment: { id: string; name: string } | null;
@@ -354,6 +359,101 @@ export function LiteratureDetailView({
               />
             </CardHeader>
             <CardContent className="space-y-4">
+              {literature.pdf_import_status === "pending" && !literature.pdf_storage_path && (
+                <div className="rounded-lg border bg-muted/30 px-4 py-6 text-center text-sm text-muted-foreground">
+                  Importing PDF…
+                </div>
+              )}
+              {literature.pdf_import_status === "failed" && !literature.pdf_storage_path && (
+                <div className="rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-6 text-center text-sm space-y-2">
+                  <p className="text-destructive">
+                    Automatic import could not download an open-access PDF from PubMed Central. NLM
+                    may require a browser for some files, or the fetch mirrors returned no PDF bytes.
+                  </p>
+                  <p className="text-muted-foreground">
+                    Notes9 only auto-imports articles in the{" "}
+                    <a
+                      href={NLM_PMC_OA_WEB_SERVICE}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-primary underline underline-offset-4"
+                    >
+                      PMC open-access subset
+                    </a>
+                    . Closed-access articles are yours to attach. Upload a PDF below if you have it.
+                  </p>
+                  <div className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1 text-xs text-muted-foreground pt-1">
+                    {literature.pmid?.trim() ? (
+                      <a
+                        href={`https://pubmed.ncbi.nlm.nih.gov/${encodeURIComponent(literature.pmid.trim())}/`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1 text-primary underline underline-offset-4"
+                      >
+                        View on PubMed
+                        <ExternalLink className="h-3 w-3" />
+                      </a>
+                    ) : null}
+                    <a
+                      href={NLM_EUTILS_OVERVIEW}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1 text-primary underline underline-offset-4"
+                    >
+                      NLM E-utilities overview
+                      <ExternalLink className="h-3 w-3" />
+                    </a>
+                    <a
+                      href={PUBLIC_SITE_URL}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1 text-primary underline underline-offset-4"
+                    >
+                      {PUBLIC_SITE_URL.replace(/^https?:\/\//, "")}
+                      <ExternalLink className="h-3 w-3" />
+                    </a>
+                  </div>
+                </div>
+              )}
+              {literature.pdf_import_status === "none" && !literature.pdf_storage_path && (
+                <div className="rounded-lg border bg-muted/20 px-4 py-6 text-center text-sm text-muted-foreground space-y-2">
+                  {literature.pdf_metadata &&
+                  typeof literature.pdf_metadata === "object" &&
+                  "not_pmc_open_access_subset" in literature.pdf_metadata &&
+                  literature.pdf_metadata.not_pmc_open_access_subset ? (
+                    <p>
+                      This PMID links to PubMed Central, but the article is{" "}
+                      <strong className="text-foreground font-medium">not</strong> in the PMC
+                      open-access subset. Automatic import is open-access only — upload the PDF if your
+                      library or subscription provides it.
+                    </p>
+                  ) : literature.pdf_metadata &&
+                    typeof literature.pdf_metadata === "object" &&
+                    "pmc_oa_check_failed" in literature.pdf_metadata &&
+                    literature.pdf_metadata.pmc_oa_check_failed ? (
+                    <p>
+                      Could not reach NLM to confirm open-access status. Try staging or saving again
+                      later, or upload the PDF below.
+                    </p>
+                  ) : (
+                    <p>
+                      No PMC id was found for this PubMed record, so automatic import was skipped
+                      (PMC open-access subset only). You can upload a PDF below.
+                    </p>
+                  )}
+                  <p className="text-xs">
+                    <a
+                      href={PUBLIC_SITE_URL}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1 text-primary underline underline-offset-4"
+                    >
+                      {PUBLIC_SITE_URL.replace(/^https?:\/\//, "")}
+                      <ExternalLink className="h-3 w-3" />
+                    </a>
+                  </p>
+                </div>
+              )}
               {literature.pdf_storage_path ? (
                 <>
                   <div className="flex flex-wrap items-center gap-3 rounded-lg border bg-muted/30 p-3 text-sm text-muted-foreground">
@@ -368,22 +468,21 @@ export function LiteratureDetailView({
                       <Badge variant="outline">{literature.pdf_match_source}</Badge>
                     )}
                   </div>
-                  {literature.pdf_file_url && (
-                    <LiteraturePdfPanel
-                      literatureId={literature.id}
-                      pdfUrl={literature.pdf_file_url}
-                      pdfFileName={literature.pdf_file_name}
-                    />
-                  )}
+                  <LiteraturePdfPanel
+                    literatureId={literature.id}
+                    pdfUrl={`/api/literature/${literature.id}/viewer-pdf`}
+                    pdfFileName={literature.pdf_file_name}
+                    openInNewTabFallbackUrl={literature.pdf_file_url ?? undefined}
+                  />
                 </>
-              ) : (
+              ) : !["pending", "failed", "none"].includes(String(literature.pdf_import_status)) ? (
                 <div className="rounded-lg border border-dashed px-6 py-10 text-center">
                   <FileText className="mx-auto h-10 w-10 text-muted-foreground" />
                   <p className="mt-4 text-sm text-muted-foreground">
                     No PDF is attached yet. Upload the paper PDF to read and annotate it inside Notes9.
                   </p>
                 </div>
-              )}
+              ) : null}
             </CardContent>
           </Card>
         </TabsContent>

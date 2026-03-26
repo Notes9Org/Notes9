@@ -12,8 +12,9 @@ interface SearchTabProps {
   isSearching: boolean
   hasSearched: boolean
   onSearch: () => void
-  onStagePaper: (paper: SearchPaper) => void
+  onStagePaper: (paper: SearchPaper) => void | Promise<void>
   isPaperStaged: (paperId: string) => boolean
+  isPaperStaging?: (paperId: string) => boolean
 }
 
 export function SearchTab({
@@ -25,6 +26,7 @@ export function SearchTab({
   onSearch,
   onStagePaper,
   isPaperStaged,
+  isPaperStaging,
 }: SearchTabProps) {
   const handleSearch = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -109,6 +111,7 @@ export function SearchTab({
                 paper={paper}
                 onStage={onStagePaper}
                 isStaged={isPaperStaged(paper.id)}
+                isStaging={isPaperStaging?.(paper.id) ?? false}
               />
             ))}
           </div>

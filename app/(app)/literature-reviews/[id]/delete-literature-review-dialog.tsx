@@ -2,7 +2,6 @@
 
 import { useState } from "react"
 import { useRouter } from "next/navigation"
-import { createClient } from "@/lib/supabase/client"
 import { Button } from "@/components/ui/button"
 import {
   AlertDialog,
@@ -34,14 +33,13 @@ export function DeleteLiteratureReviewDialog({
     setIsLoading(true)
 
     try {
-      const supabase = createClient()
-
-      const { error } = await supabase
-        .from("literature_reviews")
-        .delete()
-        .eq("id", literatureId)
-
-      if (error) throw error
+      const response = await fetch(`/api/literature/${literatureId}`, {
+        method: "DELETE",
+      })
+      const data = await response.json().catch(() => ({}))
+      if (!response.ok) {
+        throw new Error(typeof data.error === "string" ? data.error : "Delete failed")
+      }
 
       toast({
         title: "Literature reference deleted",
