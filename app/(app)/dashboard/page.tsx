@@ -19,7 +19,9 @@ import {
   BookOpen,
   Eye,
 } from "lucide-react";
+import { DayPlannerCalendar } from "./day-planner-calendar";
 import { TodoPanel } from "./todo-panel";
+import "./fullcalendar-overrides.css";
 
 export default async function DashboardPage() {
   const supabase = await createClient();
@@ -205,6 +207,8 @@ export default async function DashboardPage() {
           </Link>
         </CardContent>
       </Card>
+
+      <DayPlannerCalendar />
 
       {/* Recent Experiments & Notes */}
       <div className="grid min-w-0 gap-4 md:grid-cols-2">

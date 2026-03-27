@@ -1,9 +1,6 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 @import "../styles/tiptap.css";
-@import "tailwindcss";
-@import "tw-animate-css";
-@import "../styles/tiptap.css";
 
 @custom-variant dark (&:is(.dark *));
 
