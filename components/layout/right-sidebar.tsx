@@ -63,6 +63,7 @@ import {
 import { Switch } from '@/components/ui/switch';
 import { usePaperAI } from '@/contexts/paper-ai-context';
 import { PaperAIPanel } from '@/components/text-editor/paper-ai-panel';
+import { FileDropzone } from '@/components/ui/file-dropzone';
 
 type AgentMode = 'general' | 'notes9';
 
@@ -283,7 +284,6 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
       return null;
     }
   }, []);
-
   const handleFileSelect = useCallback(async (event: ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(event.target.files || []);
     if (files.length === 0) return;
@@ -305,6 +305,26 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
     setAttachments((prev) => [...prev, ...successful]);
     setUploadQueue([]);
     if (fileInputRef.current) fileInputRef.current.value = '';
+  }, [uploadFile]);
+
+  const handleFilesDrop = useCallback(async (dropFiles: File[]) => {
+    const validFiles = dropFiles.filter((file) => {
+      if (file.size > MAX_FILE_SIZE) {
+        toast.error(`${file.name} is too large`);
+        return false;
+      }
+      if (!ALLOWED_TYPES.includes(file.type)) {
+        toast.error(`${file.name} type not supported`);
+        return false;
+      }
+      return true;
+    });
+    if (validFiles.length === 0) return;
+    setUploadQueue(validFiles.map((f) => f.name));
+    const results = await Promise.all(validFiles.map((f) => uploadFile(f)));
+    const successful = results.filter((r): r is Attachment => r !== null);
+    setAttachments((prev) => [...prev, ...successful]);
+    setUploadQueue([]);
   }, [uploadFile]);
 
   const handlePaste = useCallback(async (event: ClipboardEvent) => {
@@ -756,28 +776,35 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
         "rounded-xl border bg-card/50 shadow-sm focus-within:ring-1 focus-within:ring-ring/50 focus-within:border-ring transition-all overflow-hidden",
         isDraggingContext && "ring-2 ring-primary border-primary bg-primary/5"
       )} id="tour-ai-chat">
-        <textarea
-          ref={inputRef}
-          value={input}
-          onChange={(e) => {
-            setInput(e.target.value);
-            resizeInput();
-          }}
-          onKeyDown={handleKeyDown}
-          placeholder="Plan, @ for context, / for commands"
-          className="w-full min-h-[52px] resize-none bg-transparent px-4 py-2.5 text-sm placeholder:text-muted-foreground/60 focus:outline-none scrollbar-hide"
-          disabled={isLoading || contextLoading}
-          autoFocus
-          maxLength={MAX_CHAT_CHARS}
-        />
+        <FileDropzone
+          onFilesDrop={handleFilesDrop}
+          accept={ALLOWED_TYPES}
+          description="Drop files to attach"
+          activeClassName="ring-2 ring-primary border-primary bg-primary/5"
+        >
+          <textarea
+            ref={inputRef}
+            value={input}
+            onChange={(e) => {
+              setInput(e.target.value);
+              resizeInput();
+            }}
+            onKeyDown={handleKeyDown}
+            placeholder="Plan, @ for context, / for commands"
+            className="w-full min-h-[52px] resize-none bg-transparent px-4 py-2.5 text-sm placeholder:text-muted-foreground/60 focus:outline-none scrollbar-hide"
+            disabled={isLoading || contextLoading}
+            autoFocus
+            maxLength={MAX_CHAT_CHARS}
+          />
+        </FileDropzone>
 
         {/* Bottom Toolbar — merge: keep `min-h-9` on this row and the trailing `h-9 … justify-end` wrapper so stop/send stay aligned (main used `min-h-[28px]` + `rounded-sm` stop; do not restore those here). */}
         <div className="mt-1 flex min-h-9 items-center justify-between gap-2 px-2 pb-2">
-          <div className="flex items-center gap-2 min-w-0 flex-1 overflow-hidden">
+          <div className="flex items-center gap-2 min-w-0 flex-1">
             {/* Mode Selector */}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button id="tour-ai-mode" variant="ghost" size="sm" className="h-7 gap-1.5 rounded-md bg-muted/50 hover:bg-muted text-muted-foreground px-2 text-xs font-medium">
+                <Button id="tour-ai-mode" variant="ghost" size="sm" className="h-7 gap-1.5 rounded-md bg-muted/50 hover:bg-muted text-muted-foreground px-2 text-xs font-medium shrink-0">
                   {agentMode === 'notes9' ? (
                     <><NotebookPen className="size-3.5" /> Notes9</>
                   ) : (

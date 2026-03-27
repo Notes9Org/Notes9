@@ -1,4 +1,4 @@
-import { useMemo, useState, useEffect } from "react"
+import { useMemo, useState, useEffect, useRef } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
@@ -26,7 +26,7 @@ import {
 } from "@/components/ui/table"
 import { removeStagingLiterature } from "@/app/(app)/literature-reviews/actions"
 import { SearchPaper } from "@/types/paper-search"
-import { BookOpen, Database, ExternalLink, FileText, Layers, Loader2, Star, Trash2, X } from "lucide-react"
+import { BookOpen, Database, ExternalLink, FileText, Layers, Loader2, Star, Trash2, X, ChevronLeft, ChevronRight } from "lucide-react"
 import { toast } from "sonner"
 import { LiteraturePdfPanel } from "./literature-pdf-panel"
 import { UploadLiteraturePdfDialog } from "./upload-literature-pdf-dialog"
@@ -118,15 +118,48 @@ export function StagingTab({ stagedLiterature, onSavePaper }: StagingTabProps) {
   const [removeTarget, setRemoveTarget] = useState<StagingListItem | null>(null)
   const [bulkRemoveOpen, setBulkRemoveOpen] = useState(false)
   const [isRemoving, setIsRemoving] = useState(false)
+  const [isInitialized, setIsInitialized] = useState(false)
+
+  // Load from localStorage on mount
+  useEffect(() => {
+    const savedTabs = localStorage.getItem("n9-staging-open-tabs")
+    const savedActive = localStorage.getItem("n9-staging-active-tab")
+    if (savedTabs) {
+      try {
+        setOpenTabs(JSON.parse(savedTabs))
+      } catch (e) {
+        console.error("Failed to load staging tabs", e)
+      }
+    }
+    if (savedActive) setActiveTab(savedActive)
+    setIsInitialized(true)
+  }, [])
+
+  // Sync to localStorage
+  useEffect(() => {
+    if (!isInitialized) return
+    localStorage.setItem("n9-staging-open-tabs", JSON.stringify(openTabs))
+  }, [openTabs, isInitialized])
+
+  useEffect(() => {
+    if (!isInitialized) return
+    localStorage.setItem("n9-staging-active-tab", activeTab)
+  }, [activeTab, isInitialized])
 
   // Sync open tabs if papers are removed
   useEffect(() => {
+    if (!isInitialized) return
     const validIds = items.map((i) => i.id)
-    setOpenTabs((prev) => prev.filter((id) => validIds.includes(id)))
+    const filtered = openTabs.filter((id) => validIds.includes(id))
+    
+    if (filtered.length !== openTabs.length) {
+      setOpenTabs(filtered)
+    }
+
     if (activeTab !== "list" && !validIds.includes(activeTab)) {
       setActiveTab("list")
     }
-  }, [items])
+  }, [items, isInitialized])
 
   const handleOpenPaper = (id: string) => {
     if (!openTabs.includes(id)) {
@@ -135,7 +168,7 @@ export function StagingTab({ stagedLiterature, onSavePaper }: StagingTabProps) {
     setActiveTab(id)
   }
 
-  const handleCloseTab = (id: string, e: React.MouseEvent) => {
+  const handleCloseTab = (id: string, e: React.MouseEvent | React.KeyboardEvent) => {
     e.stopPropagation()
     const nextTabs = openTabs.filter((t) => t !== id)
     setOpenTabs(nextTabs)
@@ -143,6 +176,51 @@ export function StagingTab({ stagedLiterature, onSavePaper }: StagingTabProps) {
       setActiveTab("list")
     }
   }
+
+  const scrollTabsRef = useRef<HTMLDivElement>(null)
+  const [showLeftArrow, setShowLeftArrow] = useState(false)
+  const [showRightArrow, setShowRightArrow] = useState(false)
+
+  const checkScroll = () => {
+    if (scrollTabsRef.current) {
+      const { scrollLeft, scrollWidth, clientWidth } = scrollTabsRef.current
+      setShowLeftArrow(scrollLeft > 0)
+      setShowRightArrow(scrollLeft < scrollWidth - clientWidth - 2)
+    }
+  }
+
+  useEffect(() => {
+    checkScroll()
+    window.addEventListener('resize', checkScroll)
+    return () => window.removeEventListener('resize', checkScroll)
+  }, [openTabs])
+
+  const scrollTabs = (direction: 'left' | 'right') => {
+    if (scrollTabsRef.current) {
+      const scrollAmount = 250
+      scrollTabsRef.current.scrollBy({
+        left: direction === 'left' ? -scrollAmount : scrollAmount,
+        behavior: 'smooth'
+      })
+    }
+  }
+
+  // Scroll active tab into view
+  useEffect(() => {
+    if (activeTab !== 'list' && scrollTabsRef.current) {
+      const container = scrollTabsRef.current
+      const activeElement = container.querySelector(`[data-value="${activeTab}"]`) as HTMLElement
+      if (activeElement) {
+        const containerRect = container.getBoundingClientRect()
+        const activeRect = activeElement.getBoundingClientRect()
+        
+        if (activeRect.left < containerRect.left || activeRect.right > containerRect.right) {
+          activeElement.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' })
+        }
+      }
+    }
+    checkScroll()
+  }, [activeTab])
 
   const getStatusBadge = (status: string) => {
     const variants: Record<string, "default" | "secondary" | "outline"> = {
@@ -340,44 +418,88 @@ export function StagingTab({ stagedLiterature, onSavePaper }: StagingTabProps) {
   return (
     <div className="space-y-6">
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-        <div className="flex items-center justify-between gap-4 border-b pb-1 overflow-x-auto no-scrollbar">
-          <TabsList className="bg-transparent h-auto p-0 flex-nowrap border-none">
-            <TabsTrigger
-              value="list"
-              className="data-[state=active]:bg-transparent data-[state=active]:border-b-2 data-[state=active]:border-[var(--n9-accent)] data-[state=active]:text-foreground rounded-none border-b-2 border-transparent px-4 py-2 bg-transparent text-muted-foreground transition-none shadow-none"
-            >
-              <Layers className="h-4 w-4 mr-2" />
-              All Staged
-              {items.length > 0 && (
-                <Badge variant="secondary" className="ml-2 px-1 py-0 min-w-[1.25rem] h-5 justify-center">
-                  {items.length}
-                </Badge>
-              )}
-            </TabsTrigger>
-            {openTabs.map((id) => {
-              const lit = items.find((i) => i.id === id)
-              if (!lit) return null
-              return (
-                <TabsTrigger
-                  key={id}
-                  value={id}
-                  className="group relative data-[state=active]:bg-transparent data-[state=active]:border-b-2 data-[state=active]:border-[var(--n9-accent)] data-[state=active]:text-foreground rounded-none border-b-2 border-transparent px-4 py-2 bg-transparent text-muted-foreground transition-none shadow-none max-w-[200px]"
+        <div className="flex items-center justify-between gap-4 border-b">
+          <div className="relative group transition-all flex-1 overflow-hidden">
+            {showLeftArrow && (
+              <div className="absolute left-0 top-0 bottom-0 z-20 flex items-center bg-gradient-to-r from-background via-background/80 to-transparent pr-10 pointer-events-none">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                className="h-8 w-8 rounded-full shadow-lg bg-background border pointer-events-auto hover:bg-muted ml-0.5 transform translate-y-[1.5px]"
+                  onClick={() => scrollTabs('left')}
                 >
-                  <span className="truncate mr-4">{lit.title}</span>
-                  <button
-                    onClick={(e) => handleCloseTab(id, e)}
-                    className="absolute right-1 opacity-0 group-hover:opacity-100 hover:bg-muted p-0.5 rounded transition-opacity"
-                  >
-                    <X className="h-3 w-3" />
-                  </button>
+                  <ChevronLeft className="h-4 w-4" />
+                </Button>
+              </div>
+            )}
+
+            <div
+              ref={scrollTabsRef}
+              className="overflow-x-auto no-scrollbar scroll-smooth"
+              onScroll={checkScroll}
+            >
+              <TabsList className="bg-transparent h-auto p-0 flex items-center justify-start border-none flex-nowrap w-max min-w-full relative">
+              <div className="w-2 flex-shrink-0" />
+                <TabsTrigger
+                  value="list"
+                  data-value="list"
+                  className="data-[state=active]:bg-transparent data-[state=active]:border-b-2 data-[state=active]:border-[var(--n9-accent)] data-[state=active]:text-foreground rounded-none border-b-2 border-transparent px-4 py-2 bg-transparent text-muted-foreground transition-none shadow-none font-semibold"
+                >
+                  <Layers className="h-4 w-4 mr-2" />
+                  All Staged
+                  {items.length > 0 && (
+                    <Badge variant="secondary" className="ml-2 px-1 py-0 min-w-[1.25rem] h-5 justify-center">
+                      {items.length}
+                    </Badge>
+                  )}
                 </TabsTrigger>
-              )
-            })}
-          </TabsList>
+                {openTabs.map((id) => {
+                  const lit = items.find((i) => i.id === id)
+                  if (!lit) return null
+                  return (
+                    <TabsTrigger
+                      key={id}
+                      value={id}
+                      data-value={id}
+                      className="group relative data-[state=active]:bg-transparent data-[state=active]:border-b-2 data-[state=active]:border-[var(--n9-accent)] data-[state=active]:text-foreground rounded-none border-b-2 border-transparent px-4 py-2 bg-transparent text-muted-foreground transition-none shadow-none max-w-[220px] flex items-center gap-1"
+                    >
+                      <span className="truncate text-sm font-semibold">{lit.title}</span>
+                      <button
+                        type="button"
+                        onClick={(e) => handleCloseTab(id, e)}
+                        className="flex-shrink-0 p-1 rounded-md hover:bg-muted text-muted-foreground/60 hover:text-rose-500 transition-all opacity-0 group-hover:opacity-100 focus:opacity-100"
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
+                    </TabsTrigger>
+                  )
+                })}
+                <div className="w-10 flex-shrink-0" />
+              </TabsList>
+            </div>
+
+            {showRightArrow && (
+              <div className="absolute right-0 top-0 bottom-0 z-20 flex items-center bg-gradient-to-l from-background via-background/80 to-transparent pl-10 pointer-events-none">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                className="h-8 w-8 rounded-full shadow-lg bg-background border pointer-events-auto hover:bg-muted mr-0.5 transform translate-y-[1.5px]"
+                  onClick={() => scrollTabs('right')}
+                >
+                  <ChevronRight className="h-4 w-4" />
+                </Button>
+              </div>
+            )}
+          </div>
 
           {activeTab === "list" && selectedIds.length > 0 && (
             <div className="flex items-center gap-2 mb-1 px-4">
-              <Button variant="destructive" size="sm" onClick={() => setBulkRemoveOpen(true)}>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setBulkRemoveOpen(true)}
+                className="bg-rose-50 text-rose-600 border border-rose-100 font-semibold hover:bg-rose-100 dark:bg-rose-900/20 dark:text-rose-400 dark:border-rose-900/10 dark:hover:bg-rose-900/30"
+              >
                 <Trash2 className="mr-2 h-4 w-4" />
                 Remove ({selectedIds.length})
               </Button>
@@ -410,12 +532,13 @@ export function StagingTab({ stagedLiterature, onSavePaper }: StagingTabProps) {
                           <Checkbox
                             checked={allVisibleSelected ? true : someVisibleSelected ? "indeterminate" : false}
                             onCheckedChange={(c) => toggleSelectAllVisible(c === true)}
+                            className="data-[state=checked]:bg-rose-50 data-[state=checked]:text-rose-600 data-[state=checked]:border-rose-200 dark:data-[state=checked]:bg-rose-950/30 dark:data-[state=checked]:text-rose-400 dark:data-[state=checked]:border-rose-900/30"
                           />
                         </TableHead>
                         <TableHead>Title</TableHead>
                         <TableHead>Source</TableHead>
                         <TableHead>Status</TableHead>
-                        <TableHead className="text-right">Actions</TableHead>
+                        <TableHead className="text-left">Actions</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -425,6 +548,7 @@ export function StagingTab({ stagedLiterature, onSavePaper }: StagingTabProps) {
                             <Checkbox
                               checked={selectedIds.includes(lit.id)}
                               onCheckedChange={(c) => toggleSelected(lit.id, c === true)}
+                              className="data-[state=checked]:bg-rose-50 data-[state=checked]:text-rose-600 data-[state=checked]:border-rose-200 dark:data-[state=checked]:bg-rose-950/30 dark:data-[state=checked]:text-rose-400 dark:data-[state=checked]:border-rose-900/30"
                             />
                           </TableCell>
                           <TableCell>
@@ -449,8 +573,8 @@ export function StagingTab({ stagedLiterature, onSavePaper }: StagingTabProps) {
                               {lit.status}
                             </Badge>
                           </TableCell>
-                          <TableCell className="text-right">
-                            <div className="flex justify-end gap-1">
+                          <TableCell className="text-left">
+                            <div className="flex justify-start gap-1">
                               <Button variant="ghost" size="sm" onClick={() => handleOpenPaper(lit.id)}>
                                 Open
                               </Button>
@@ -524,7 +648,7 @@ export function StagingTab({ stagedLiterature, onSavePaper }: StagingTabProps) {
                 if (removeTarget) void removeFromStaging([removeTarget.id])
               }}
               disabled={isRemoving}
-              className="bg-rose-300 text-rose-950 hover:bg-rose-400 dark:bg-rose-300 dark:text-rose-950 dark:hover:bg-rose-200"
+              className="bg-rose-50 text-rose-600 border border-rose-100 font-semibold hover:bg-rose-100 dark:bg-rose-900/20 dark:text-rose-400 dark:border-rose-900/10 dark:hover:bg-rose-900/30"
             >
               {isRemoving ? "Removing…" : "Remove"}
             </AlertDialogAction>
@@ -548,7 +672,7 @@ export function StagingTab({ stagedLiterature, onSavePaper }: StagingTabProps) {
                 void removeFromStaging(selectedIds)
               }}
               disabled={isRemoving || selectedIds.length === 0}
-              className="bg-rose-300 text-rose-950 hover:bg-rose-400 dark:bg-rose-300 dark:text-rose-950 dark:hover:bg-rose-200"
+              className="bg-rose-50 text-rose-600 border border-rose-100 font-semibold hover:bg-rose-100 dark:bg-rose-900/20 dark:text-rose-400 dark:border-rose-900/10 dark:hover:bg-rose-900/30"
             >
               {isRemoving ? "Removing…" : `Remove (${selectedIds.length})`}
             </AlertDialogAction>

@@ -1,9 +1,10 @@
 "use client"
 
-import { useMemo, useState } from "react"
+import React, { useMemo, useState, useEffect } from "react"
 import { Loader2, Upload } from "lucide-react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
+import { cn } from "@/lib/utils"
 
 import { LiteratureRecordCreateForm, type NewLiteratureRecordDraft } from "@/components/literature-reviews/literature-record-create-form"
 import { LiteratureRecordPicker } from "@/components/literature-reviews/literature-record-picker"
@@ -23,6 +24,7 @@ import { Label } from "@/components/ui/label"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { Textarea } from "@/components/ui/textarea"
 import { useToast } from "@/hooks/use-toast"
+import { FileDropzone } from "@/components/ui/file-dropzone"
 import type { AnalyzePdfResponse, LiteraturePdfExtractedMetadata, LiteratureRecordSummary, SaveMode } from "@/types/literature-pdf"
 
 interface UploadLiteraturePdfDialogProps {
@@ -84,6 +86,13 @@ export function UploadLiteraturePdfDialog({
     () => analysis?.availableRecords ?? literatureReviews,
     [analysis, literatureReviews]
   )
+
+  // Auto-analyze when file is selected
+  useEffect(() => {
+    if (file && !analysis && !loading) {
+      analyzeFile()
+    }
+  }, [file, analysis, loading])
 
   const resetState = () => {
     setFile(null)
@@ -153,6 +162,19 @@ export function UploadLiteraturePdfDialog({
 
   const finalize = async (action: "attach_existing" | "replace_existing_pdf" | "create_record_and_attach") => {
     if (!analysis || !file) return
+
+    // Validation for new records
+    if (action === "create_record_and_attach") {
+      if (!createDraft.project_id || !createDraft.experiment_id) {
+        toast({
+          title: "Missing association",
+          description: "Please link this paper to a Project and an Experiment before saving.",
+          variant: "destructive",
+        })
+        return
+      }
+    }
+
     setLoading(true)
     try {
       const payload = {
@@ -167,8 +189,8 @@ export function UploadLiteraturePdfDialog({
                 publication_year: createDraft.publication_year
                   ? Number.parseInt(createDraft.publication_year, 10)
                   : null,
-                project_id: createDraft.project_id || null,
-                experiment_id: createDraft.experiment_id || null,
+                project_id: createDraft.project_id,
+                experiment_id: createDraft.experiment_id,
               }
             : undefined,
         tempUploadPath: analysis.tempUploadPath,
@@ -200,12 +222,6 @@ export function UploadLiteraturePdfDialog({
       setOpen(false)
       resetState()
       router.refresh()
-    } catch (error: any) {
-      toast({
-        title: "Failed to save PDF",
-        description: error.message,
-        variant: "destructive",
-      })
     } finally {
       setLoading(false)
     }
@@ -217,35 +233,62 @@ export function UploadLiteraturePdfDialog({
     const extracted = analysis.extractedMetadata
 
     return (
-      <div className="space-y-5">
-        <div className="rounded-lg border bg-muted/30 p-4">
-          <div className="flex items-center gap-2">
-            <Badge variant="outline" className="capitalize">
-              {analysis.status}
-            </Badge>
-            {analysis.matchSource && <Badge variant="secondary">{analysis.matchSource}</Badge>}
+      <div className="space-y-4">
+        <div className="rounded-2xl border bg-muted/20 p-4 space-y-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Badge variant="secondary" className="px-2 py-0.5 text-[10px] uppercase tracking-wider font-bold bg-primary/10 text-primary border-primary/20">
+                {analysis.status}
+              </Badge>
+              {analysis.matchSource && (
+                <Badge variant="outline" className="px-2 py-0.5 text-[10px] uppercase tracking-wider font-medium text-muted-foreground">
+                  {analysis.matchSource}
+                </Badge>
+              )}
+            </div>
           </div>
-          <div className="mt-3 space-y-2 text-sm">
-            <div><span className="font-medium">Detected title:</span> {extracted.title ?? "—"}</div>
-            <div><span className="font-medium">DOI:</span> {extracted.doi ?? "—"}</div>
-            <div><span className="font-medium">PMID:</span> {extracted.pmid ?? "—"}</div>
-            <div><span className="font-medium">Pages:</span> {extracted.pageCount ?? "—"}</div>
+          
+          <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-[10px]">
+            <div className="col-span-2 pb-0.5 border-b border-border/40">
+              <p className="font-bold text-muted-foreground uppercase text-[9px] mb-0.5">Detected Title</p>
+              <p className="font-semibold line-clamp-1 leading-tight text-xs">{extracted.title ?? "Unknown Title"}</p>
+            </div>
+            <div className="col-span-2 pb-0.5 border-b border-border/40">
+              <p className="font-bold text-muted-foreground uppercase text-[9px] mb-0.5">Authors & Source</p>
+              <p className="font-medium text-foreground truncate">{extracted.authors || "Unknown Authors"}</p>
+              <p className="text-muted-foreground italic truncate mt-0.5">{extracted.journal || "—"}</p>
+            </div>
+            <div>
+              <p className="font-bold text-muted-foreground uppercase text-[9px] mb-0.5">DOI/PMID</p>
+              <p className="font-mono text-primary/80 truncate">{extracted.doi ?? extracted.pmid ?? "—"}</p>
+            </div>
+            <div>
+              <p className="font-bold text-muted-foreground uppercase text-[9px] mb-0.5">Publication</p>
+              <p className="font-medium text-foreground">{extracted.publicationYear ?? "—"}{extracted.pageCount ? ` • ${extracted.pageCount}p` : ""}</p>
+            </div>
           </div>
         </div>
 
         {(analysis.status === "duplicate" || analysis.status === "matched") && (
-          <div className="rounded-lg border p-4">
-            <div className="font-medium">
-              {analysis.status === "duplicate" ? "Matching paper already has a PDF" : "Matched to an existing paper"}
+          <div className="rounded-xl border border-primary/20 bg-primary/5 px-3 py-2 animate-in zoom-in-95 duration-200">
+            <div className="flex items-center gap-3">
+              <div className="size-6 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
+                <span className="text-xs">{analysis.status === "duplicate" ? "⚠️" : "✨"}</span>
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-xs font-bold leading-tight truncate">
+                  {analysis.status === "duplicate" ? "Duplicate record" : "Matched existing"}
+                </p>
+                <p className="text-[10px] text-muted-foreground truncate font-medium">
+                  {(analysis.duplicateRecord ?? analysis.matchCandidates[0])?.title}
+                </p>
+              </div>
+              {analysis.status === "duplicate" && analysis.duplicateRecord && (
+                <Button variant="link" className="h-auto p-0 text-[10px] font-bold text-primary shrink-0" asChild>
+                  <Link href={`/literature-reviews/${analysis.duplicateRecord.id}`}>View</Link>
+                </Button>
+              )}
             </div>
-            <div className="mt-2 text-sm text-muted-foreground">
-              {(analysis.duplicateRecord ?? analysis.matchCandidates[0])?.title}
-            </div>
-            {analysis.status === "duplicate" && analysis.duplicateRecord && (
-              <Button variant="link" className="mt-2 h-auto px-0" asChild>
-                <Link href={`/literature-reviews/${analysis.duplicateRecord.id}`}>Open existing record</Link>
-              </Button>
-            )}
           </div>
         )}
 
@@ -334,43 +377,69 @@ export function UploadLiteraturePdfDialog({
           {triggerLabel}
         </Button>
       </DialogTrigger>
-      <DialogContent className="max-h-[90vh] max-w-4xl overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle>Upload literature PDF</DialogTitle>
-          <DialogDescription>
-            Upload, analyze, match, and attach a paper PDF to the right literature record.
+      <DialogContent className={cn(
+        "overflow-hidden flex flex-col p-0 border-none shadow-2xl bg-background/95 backdrop-blur-xl transition-all duration-300 max-h-[85vh]",
+        analysis ? "sm:max-w-xl" : "sm:max-w-md"
+      )}>
+        <DialogHeader className="p-4 pb-0">
+          <DialogTitle className="text-lg font-bold tracking-tight">Add Paper PDF</DialogTitle>
+          <DialogDescription className="text-muted-foreground/80 text-xs">
+            Directly from file analysis.
           </DialogDescription>
         </DialogHeader>
 
-        {!analysis ? (
-          <div className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="literature-pdf-file">PDF file</Label>
-              <Input
-                id="literature-pdf-file"
-                type="file"
-                accept="application/pdf"
-                onChange={(event) => setFile(event.target.files?.[0] ?? null)}
-              />
-            </div>
-            {currentLiterature && (
-              <div className="rounded-lg border bg-muted/30 p-3 text-sm text-muted-foreground">
-                This upload will target <span className="font-medium text-foreground">{currentLiterature.title}</span> unless a duplicate conflict is found.
-              </div>
-            )}
-          </div>
-        ) : (
-          renderAnalysisState()
-        )}
-
-        <DialogFooter>
+        <div className="flex-1 overflow-y-auto p-4 pt-4">
           {!analysis ? (
-            <Button onClick={analyzeFile} disabled={!file || loading}>
-              {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-              Analyze and match
-            </Button>
+            <FileDropzone 
+              onFilesDrop={(files) => setFile(files[0] || null)}
+              accept={["application/pdf"]}
+              description="Drop PDF to begin"
+              className="w-full"
+            >
+              <div className="relative group">
+                <div className="absolute inset-0 bg-gradient-to-br from-primary/5 to-secondary/5 rounded-2xl -z-10" />
+                {!file ? (
+                  <div className="flex flex-col items-center justify-center py-12 px-4 border-2 border-dashed border-muted-foreground/20 rounded-2xl hover:border-primary/40 transition-colors cursor-pointer" onClick={() => document.getElementById('literature-pdf-file')?.click()}>
+                    <div className="size-12 rounded-full bg-primary/10 flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
+                      <Upload className="size-6 text-primary" />
+                    </div>
+                    <p className="text-sm font-semibold">Click or drag PDF</p>
+                    <p className="text-xs text-muted-foreground mt-1">Files up to 32MB</p>
+                  </div>
+                ) : (
+                  <div className="flex flex-col items-center justify-center py-12 px-4 border-2 border-primary/20 bg-primary/5 rounded-2xl">
+                    <div className="size-12 rounded-full bg-primary/20 flex items-center justify-center mb-4">
+                      {loading ? <Loader2 className="size-6 text-primary animate-spin" /> : <Upload className="size-6 text-primary" />}
+                    </div>
+                    <p className="text-sm font-semibold truncate max-w-full px-4">{file.name}</p>
+                    <button onClick={() => setFile(null)} className="text-xs text-muted-foreground hover:text-destructive mt-2 transition-colors">Change file</button>
+                  </div>
+                )}
+                <input
+                  id="literature-pdf-file"
+                  type="file"
+                  accept="application/pdf"
+                  className="hidden"
+                  onChange={(event) => setFile(event.target.files?.[0] ?? null)}
+                />
+              </div>
+              {currentLiterature && !file && (
+                <div className="mt-4 p-3 rounded-xl bg-muted/30 text-xs text-muted-foreground border border-border/50">
+                  Target: <span className="font-semibold text-foreground">{currentLiterature.title}</span>
+                </div>
+              )}
+            </FileDropzone>
           ) : (
+            <div className="animate-in fade-in slide-in-from-bottom-2 duration-300">
+              {renderAnalysisState()}
+            </div>
+          )}
+        </div>
+
+        <DialogFooter className="p-4 pt-2">
+          {analysis && (
             <Button
+              className="w-full bg-primary hover:bg-primary/90 text-primary-foreground h-11 rounded-xl font-semibold shadow-lg shadow-primary/20"
               onClick={() => finalize(finalizeAction)}
               disabled={
                 loading ||
@@ -379,7 +448,7 @@ export function UploadLiteraturePdfDialog({
               }
             >
               {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-              {analysis.status === "duplicate" ? "Replace PDF" : "Save PDF"}
+              {analysis.status === "duplicate" ? "Replace PDF" : "Save and Attach"}
             </Button>
           )}
         </DialogFooter>
