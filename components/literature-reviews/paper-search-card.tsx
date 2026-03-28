@@ -7,6 +7,33 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Download, ExternalLink, FileText, Lock, Unlock, ChevronDown, ChevronUp, Plus, Check, Database, X, Loader2 } from 'lucide-react';
 import { useState } from 'react';
 
+function stripDoiToBare(doi: string): string {
+  return doi
+    .trim()
+    .replace(/^https?:\/\/(dx\.)?doi\.org\//i, "")
+    .trim()
+}
+
+/** Resolver URL for the paper: publisher page, DOI, or PubMed. */
+function resolvePaperExternalUrl(paper: SearchPaper): string | null {
+  const article = paper.articlePageUrl?.trim()
+  if (article && /^https?:\/\//i.test(article)) {
+    return article
+  }
+  const rawDoi = paper.doi?.trim()
+  if (rawDoi) {
+    const bare = stripDoiToBare(rawDoi)
+    if (bare.length > 0) {
+      return `https://doi.org/${bare}`
+    }
+  }
+  const pm = paper.pmid?.trim()
+  if (pm) {
+    return `https://pubmed.ncbi.nlm.nih.gov/${pm}/`
+  }
+  return null
+}
+
 interface PaperSearchCardProps {
   paper: SearchPaper;
   onStage?: (paper: SearchPaper) => void | Promise<void>;
@@ -25,27 +52,22 @@ export function PaperSearchCard({ paper, onStage, onSave, onSaveToRepository, on
 
   const getSourceColor = (source: string) => {
     switch (source) {
-      case 'PubMed':
-        return 'bg-blue-100 text-blue-800 border-blue-200';
-      case 'BioRxiv':
-        return 'bg-green-100 text-green-800 border-green-200';
-      case 'MedRxiv':
-        return 'bg-purple-100 text-purple-800 border-purple-200';
+      case "PubMed":
+        return "bg-blue-100 text-blue-800 border-blue-200"
+      case "Europe PMC":
+        return "bg-cyan-100 text-cyan-900 border-cyan-200 dark:bg-cyan-950/50 dark:text-cyan-100 dark:border-cyan-800"
+      case "OpenAlex":
+        return "bg-amber-100 text-amber-900 border-amber-200 dark:bg-amber-950/50 dark:text-amber-100 dark:border-amber-800"
+      case "BioRxiv":
+        return "bg-green-100 text-green-800 border-green-200"
+      case "MedRxiv":
+        return "bg-purple-100 text-purple-800 border-purple-200"
       default:
-        return 'bg-gray-100 text-gray-800 border-gray-200';
+        return "bg-gray-100 text-gray-800 border-gray-200"
     }
-  };
+  }
 
-  const getExternalLink = () => {
-    if (paper.doi) {
-      return `https://doi.org/${paper.doi}`;
-    } else if (paper.pmid) {
-      return `https://pubmed.ncbi.nlm.nih.gov/${paper.pmid}/`;
-    }
-    return null;
-  };
-
-  const externalLink = getExternalLink();
+  const externalLink = resolvePaperExternalUrl(paper)
 
   return (
     <Card className="hover:shadow-md transition-shadow">
@@ -82,16 +104,50 @@ export function PaperSearchCard({ paper, onStage, onSave, onSaveToRepository, on
         </div>
 
         <h3 className={`${compact ? 'text-base' : 'text-lg'} font-semibold text-foreground mb-2 leading-tight`}>
-          {paper.title}
+          {externalLink ? (
+            <a
+              href={externalLink}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-foreground hover:underline underline-offset-2 decoration-foreground/50"
+            >
+              {paper.title}
+            </a>
+          ) : (
+            paper.title
+          )}
         </h3>
 
         <p className="text-sm text-muted-foreground mb-3">
           {paper.authors.join(', ')}
         </p>
 
+        {paper.citedByCount != null && paper.citedByCount > 0 && (
+          <p className="text-xs text-muted-foreground mb-2">
+            Citations: {paper.citedByCount.toLocaleString()}
+          </p>
+        )}
+
         {paper.doi && (
           <p className="text-xs text-muted-foreground mb-3">
-            DOI: {paper.doi}
+            DOI:{" "}
+            {externalLink ? (
+              <a
+                href={externalLink}
+                target="_blank"
+                rel="noopener noreferrer"
+                title={
+                  paper.articlePageUrl
+                    ? "Open publisher article page"
+                    : "Resolve DOI (publisher site)"
+                }
+                className="font-medium text-primary underline-offset-2 underline hover:text-primary"
+              >
+                {stripDoiToBare(paper.doi) || paper.doi}
+              </a>
+            ) : (
+              stripDoiToBare(paper.doi) || paper.doi
+            )}
           </p>
         )}
 
