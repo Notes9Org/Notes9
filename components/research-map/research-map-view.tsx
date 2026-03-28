@@ -139,55 +139,95 @@ const RESEARCH_MAP_REALTIME_TABLES = [
   "papers",
 ] as const
 
-function buildComponentHighlight(
+function buildIncomingIndex(edges: Edge[]) {
+  const incomingByTarget = new Map<string, Edge[]>()
+  for (const e of edges) {
+    if (!incomingByTarget.has(e.target)) incomingByTarget.set(e.target, [])
+    incomingByTarget.get(e.target)!.push(e)
+  }
+  return incomingByTarget
+}
+
+/**
+ * API edges use source = parent/container → target = child. Walk from `startNode` upward:
+ * repeatedly follow edges where the current node is the target, collecting every ancestor
+ * (e.g. literature → experiment → project).
+ */
+function buildUpwardAncestorHighlight(
+  startNode: string,
+  edges: Edge[],
+): { nodeIds: Set<string>; edgeIds: Set<string> } {
+  const incomingByTarget = buildIncomingIndex(edges)
+  const nodeIds = new Set<string>([startNode])
+  const edgeIds = new Set<string>()
+  const expanded = new Set<string>()
+  const queue = [startNode]
+
+  while (queue.length) {
+    const v = queue.shift()!
+    if (expanded.has(v)) continue
+    expanded.add(v)
+
+    const incoming = incomingByTarget.get(v) ?? []
+    for (const e of incoming) {
+      const p = e.source
+      edgeIds.add(e.id)
+      nodeIds.add(p)
+      if (!expanded.has(p)) {
+        queue.push(p)
+      }
+    }
+  }
+
+  return { nodeIds, edgeIds }
+}
+
+/**
+ * On edge click: clicked edge, child (target), parent (source), and full ancestor chain
+ * from the parent toward root.
+ */
+function buildEdgeAncestorHighlight(
   edgeId: string,
   edges: Edge[],
 ): { nodeIds: Set<string>; edgeIds: Set<string> } {
-  const edge = edges.find((e) => e.id === edgeId)
-  if (!edge) return { nodeIds: new Set(), edgeIds: new Set() }
+  const clicked = edges.find((e) => e.id === edgeId)
+  if (!clicked) return { nodeIds: new Set(), edgeIds: new Set() }
 
-  const adj = new Map<string, Set<string>>()
-  const link = (a: string, b: string) => {
-    if (!adj.has(a)) adj.set(a, new Set())
-    if (!adj.has(b)) adj.set(b, new Set())
-    adj.get(a)!.add(b)
-    adj.get(b)!.add(a)
-  }
-  for (const e of edges) {
-    link(e.source, e.target)
-  }
+  const { source: parent, target: child } = clicked
+  const upward = buildUpwardAncestorHighlight(parent, edges)
 
-  const seen = new Set<string>()
-  const stack = [edge.source, edge.target]
-  while (stack.length) {
-    const u = stack.pop()!
-    if (seen.has(u)) continue
-    seen.add(u)
-    for (const v of adj.get(u) ?? []) stack.push(v)
-  }
+  const nodeIds = new Set(upward.nodeIds)
+  nodeIds.add(child)
+  const edgeIds = new Set(upward.edgeIds)
+  edgeIds.add(edgeId)
 
-  const edgeIds = new Set<string>()
-  for (const e of edges) {
-    if (seen.has(e.source) && seen.has(e.target)) edgeIds.add(e.id)
-  }
-  return { nodeIds: seen, edgeIds }
+  return { nodeIds, edgeIds }
 }
 
-/** Highlight only the directly-connected immediate neighbours of a clicked node (one hop). */
+/**
+ * On node click: immediate neighbours (one hop) plus full upward chain from the clicked
+ * node (so literature shows experiment and project even when only experiment↔literature
+ * is directly visible in the neighbour set after layout filtering).
+ */
 function buildNodeHighlight(
   nodeId: string,
   edges: Edge[],
 ): { nodeIds: Set<string>; edgeIds: Set<string> } {
-  const neighbourNodes = new Set<string>([nodeId])
-  const neighbourEdges = new Set<string>()
+  const nodeIds = new Set<string>([nodeId])
+  const edgeIds = new Set<string>()
   for (const e of edges) {
     if (e.source === nodeId || e.target === nodeId) {
-      neighbourNodes.add(e.source)
-      neighbourNodes.add(e.target)
-      neighbourEdges.add(e.id)
+      nodeIds.add(e.source)
+      nodeIds.add(e.target)
+      edgeIds.add(e.id)
     }
   }
-  return { nodeIds: neighbourNodes, edgeIds: neighbourEdges }
+
+  const upward = buildUpwardAncestorHighlight(nodeId, edges)
+  for (const id of upward.nodeIds) nodeIds.add(id)
+  for (const id of upward.edgeIds) edgeIds.add(id)
+
+  return { nodeIds, edgeIds }
 }
 
 function mapApiToFlow(
@@ -457,7 +497,7 @@ function ResearchMapCanvas() {
     (_: React.MouseEvent, edge: Edge) => {
       setSelectedNodeId(null)
       setSelectedEdgeId(edge.id)
-      const { nodeIds, edgeIds } = buildComponentHighlight(edge.id, getEdges())
+      const { nodeIds, edgeIds } = buildEdgeAncestorHighlight(edge.id, getEdges())
       setHighlightNodes(nodeIds)
       setHighlightEdges(edgeIds)
     },

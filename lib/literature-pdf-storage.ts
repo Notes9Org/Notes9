@@ -68,17 +68,56 @@ export function getLiteratureStorageBucket() {
   return LITERATURE_STORAGE_BUCKET
 }
 
+export function validateLiteraturePdfDisplayName(fileName: string): string | null {
+  const name = fileName.trim()
+  if (!name) {
+    return "PDF file name is required."
+  }
+  if (name.length > LITERATURE_TEXT_LIMITS.pdfFileName) {
+    return `PDF file name must be ${LITERATURE_TEXT_LIMITS.pdfFileName} characters or fewer.`
+  }
+  if (!name.toLowerCase().endsWith(".pdf")) {
+    return "File must use the .pdf extension."
+  }
+  return null
+}
+
+/**
+ * Ensures `storagePath` is under the signed-in user and matches either a temp upload or
+ * a final key for `currentLiteratureId` (direct browser upload flow).
+ */
+export function isValidOwnedLiteratureUploadPath(
+  userId: string,
+  storagePath: string,
+  currentLiteratureId: string | null
+): boolean {
+  if (!storagePath || storagePath.includes("..") || storagePath.startsWith("/")) {
+    return false
+  }
+  if (!storagePath.startsWith(`${userId}/`)) {
+    return false
+  }
+  if (currentLiteratureId) {
+    const prefix = `${userId}/literature/${currentLiteratureId}/`
+    if (!storagePath.startsWith(prefix)) return false
+    if (storagePath.includes("/temp/")) return false
+    return true
+  }
+  return storagePath.startsWith(`${userId}/temp/`)
+}
+
 export function validatePdfFile(file: File) {
+  const nameErr = validateLiteraturePdfDisplayName(file.name)
+  if (nameErr) {
+    return nameErr
+  }
+
   if (file.size > LITERATURE_MAX_PDF_SIZE) {
     return `PDF must be ${Math.round(LITERATURE_MAX_PDF_SIZE / (1024 * 1024))}MB or smaller.`
   }
 
   if (!LITERATURE_ALLOWED_PDF_MIME_TYPES.includes(file.type as "application/pdf")) {
     return "Only PDF uploads are supported."
-  }
-
-  if (!file.name.toLowerCase().endsWith(".pdf")) {
-    return "File must use the .pdf extension."
   }
 
   return null
