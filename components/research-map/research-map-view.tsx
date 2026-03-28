@@ -4,13 +4,16 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import {
   Background,
   BackgroundVariant,
+  EdgeLabelRenderer,
   Panel,
   ReactFlow,
   ReactFlowProvider,
+  getSmoothStepPath,
   useEdgesState,
   useNodesState,
   useReactFlow,
   type Edge,
+  type EdgeProps,
   type Node,
   MarkerType,
 } from "@xyflow/react"
@@ -44,12 +47,84 @@ import { toast } from "sonner"
 
 const nodeTypes = { researchEntity: ResearchEntityNode }
 
+/** Custom edge that renders the label as an HTML chip via EdgeLabelRenderer for perfect centering. */
+function LabelledEdge({
+  id,
+  sourceX,
+  sourceY,
+  targetX,
+  targetY,
+  sourcePosition,
+  targetPosition,
+  data,
+  style,
+  markerEnd,
+  label,
+}: EdgeProps) {
+  const [edgePath, labelX, labelY] = getSmoothStepPath({
+    sourceX,
+    sourceY,
+    sourcePosition,
+    targetX,
+    targetY,
+    targetPosition,
+    borderRadius: 10,
+  })
+  const text = (label as string) || (data?.humanLabel as string)
+  return (
+    <>
+      <path
+        id={id}
+        className="react-flow__edge-path"
+        d={edgePath}
+        style={style}
+        markerEnd={markerEnd as string}
+      />
+      {text && (
+        <EdgeLabelRenderer>
+          <div
+            style={{
+              position: "absolute",
+              transform: `translate(-50%, -50%) translate(${labelX}px,${labelY}px)`,
+              pointerEvents: "all",
+            }}
+            className="nodrag nopan"
+          >
+            <span
+              style={{
+                display: "inline-block",
+                background: "#fff",
+                border: "1px solid #e5e7eb",
+                borderRadius: 6,
+                padding: "2px 7px",
+                fontSize: 9,
+                fontWeight: 600,
+                color: "#6b7280",
+                letterSpacing: "0.05em",
+                textTransform: "uppercase",
+                lineHeight: "1.4",
+                whiteSpace: "nowrap",
+                boxShadow: "0 1px 2px rgba(0,0,0,0.06)",
+              }}
+            >
+              {text}
+            </span>
+          </div>
+        </EdgeLabelRenderer>
+      )}
+    </>
+  )
+}
+
+const edgeTypes = { labelled: LabelledEdge }
+
 const KINDS: ResearchMapNodeKind[] = [
   "project",
   "experiment",
   "protocol",
   "literature",
   "lab_note",
+  "paper",
 ]
 
 /** Tables whose changes affect the research map graph (requires Realtime enabled in Supabase). */
@@ -61,6 +136,7 @@ const RESEARCH_MAP_REALTIME_TABLES = [
   "lab_notes",
   "experiment_protocols",
   "lab_note_protocols",
+  "papers",
 ] as const
 
 function buildComponentHighlight(
@@ -97,6 +173,23 @@ function buildComponentHighlight(
   return { nodeIds: seen, edgeIds }
 }
 
+/** Highlight only the directly-connected immediate neighbours of a clicked node (one hop). */
+function buildNodeHighlight(
+  nodeId: string,
+  edges: Edge[],
+): { nodeIds: Set<string>; edgeIds: Set<string> } {
+  const neighbourNodes = new Set<string>([nodeId])
+  const neighbourEdges = new Set<string>()
+  for (const e of edges) {
+    if (e.source === nodeId || e.target === nodeId) {
+      neighbourNodes.add(e.source)
+      neighbourNodes.add(e.target)
+      neighbourEdges.add(e.id)
+    }
+  }
+  return { nodeIds: neighbourNodes, edgeIds: neighbourEdges }
+}
+
 function mapApiToFlow(
   payload: ResearchMapResponse,
   labelQuery: string,
@@ -131,7 +224,7 @@ function mapApiToFlow(
     source: e.source,
     target: e.target,
     label: e.label,
-    type: "smoothstep",
+    type: "labelled",
     markerEnd: { type: MarkerType.ArrowClosed, width: 18, height: 18 },
     data: { kind: e.kind, humanLabel: e.label },
   }))
@@ -152,6 +245,7 @@ function ResearchMapCanvas() {
     protocol: true,
     literature: true,
     lab_note: true,
+    paper: true,
   })
   const [labelQuery, setLabelQuery] = useState("")
   const [debouncedQuery, setDebouncedQuery] = useState("")
@@ -163,6 +257,7 @@ function ResearchMapCanvas() {
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([])
 
   const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null)
+  const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null)
   const [highlightNodes, setHighlightNodes] = useState<Set<string> | null>(
     null,
   )
@@ -306,14 +401,14 @@ function ResearchMapCanvas() {
   }, [rawPayload, debouncedQuery, setNodes, setEdges, fitView])
 
   const applyHighlightToGraph = useCallback(
-    (hn: Set<string> | null, he: Set<string> | null, edgeSelected: string | null) => {
+    (hn: Set<string> | null, he: Set<string> | null, edgeSelected: string | null, nodeSelected: string | null) => {
       setNodes((curr) =>
         curr.map((n) => ({
           ...n,
           data: {
             ...(n.data as ResearchEntityNodeData),
             dimmed: hn ? !hn.has(n.id) : false,
-            ring: Boolean(edgeSelected && hn?.has(n.id)),
+            ring: Boolean((edgeSelected && hn?.has(n.id)) || (nodeSelected && hn?.has(n.id) && n.id !== nodeSelected)),
           },
         })),
       )
@@ -321,13 +416,16 @@ function ResearchMapCanvas() {
         curr.map((e) => {
           const inComp = he?.has(e.id) ?? false
           const isSel = e.id === edgeSelected
+          // Node-click: bold dotted lines for connected edges
+          const isNodeConnected = Boolean(nodeSelected && he?.has(e.id))
           return {
             ...e,
             style: {
               opacity: he && !he.has(e.id) ? 0.12 : 1,
-              strokeWidth: isSel ? 3.2 : inComp ? 2.4 : 1.5,
+              strokeWidth: isSel ? 3.2 : isNodeConnected ? 2.8 : inComp ? 2.4 : 1.5,
+              strokeDasharray: isNodeConnected && !isSel ? "6 4" : undefined,
             },
-            animated: Boolean(isSel || (he && he.has(e.id))),
+            animated: Boolean(isSel || (edgeSelected && he?.has(e.id))),
           }
         }),
       )
@@ -336,17 +434,28 @@ function ResearchMapCanvas() {
   )
 
   useEffect(() => {
-    applyHighlightToGraph(highlightNodes, highlightEdges, selectedEdgeId)
-  }, [highlightNodes, highlightEdges, selectedEdgeId, applyHighlightToGraph])
+    applyHighlightToGraph(highlightNodes, highlightEdges, selectedEdgeId, selectedNodeId)
+  }, [highlightNodes, highlightEdges, selectedEdgeId, selectedNodeId, applyHighlightToGraph])
 
-  const onNodeClick = useCallback((_: React.MouseEvent, _node: Node) => {
+  const onNodeClick = useCallback((_: React.MouseEvent, node: Node) => {
+    // Toggle: clicking the same node again deselects
+    if (selectedNodeId === node.id) {
+      setSelectedNodeId(null)
+      setSelectedEdgeId(null)
+      setHighlightNodes(null)
+      setHighlightEdges(null)
+      return
+    }
+    setSelectedNodeId(node.id)
     setSelectedEdgeId(null)
-    setHighlightNodes(null)
-    setHighlightEdges(null)
-  }, [])
+    const { nodeIds, edgeIds } = buildNodeHighlight(node.id, getEdges())
+    setHighlightNodes(nodeIds)
+    setHighlightEdges(edgeIds)
+  }, [selectedNodeId, getEdges])
 
   const onEdgeClick = useCallback(
     (_: React.MouseEvent, edge: Edge) => {
+      setSelectedNodeId(null)
       setSelectedEdgeId(edge.id)
       const { nodeIds, edgeIds } = buildComponentHighlight(edge.id, getEdges())
       setHighlightNodes(nodeIds)
@@ -357,6 +466,7 @@ function ResearchMapCanvas() {
 
   const onPaneClick = useCallback(() => {
     setSelectedEdgeId(null)
+    setSelectedNodeId(null)
     setHighlightNodes(null)
     setHighlightEdges(null)
   }, [])
@@ -390,6 +500,7 @@ function ResearchMapCanvas() {
           onNodesChange={onNodesChange}
           onEdgesChange={onEdgesChange}
           nodeTypes={nodeTypes}
+          edgeTypes={edgeTypes}
           onNodeClick={onNodeClick}
           onNodeDoubleClick={onNodeDoubleClick}
           onEdgeClick={onEdgeClick}

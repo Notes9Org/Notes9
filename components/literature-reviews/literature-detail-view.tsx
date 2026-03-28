@@ -1,5 +1,6 @@
 "use client";
 
+import { useState, useEffect } from "react";
 import {
   Card,
   CardContent,
@@ -8,14 +9,22 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { FileText, Star, ExternalLink } from "lucide-react";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { FileText, Star, ExternalLink, Copy, Check } from "lucide-react";
+import { toast } from "sonner";
 import Link from "next/link";
 import { LiteratureReviewActions } from "@/app/(app)/literature-reviews/[id]/literature-review-actions";
 import { UploadLiteraturePdfDialog } from "@/components/literature-reviews/upload-literature-pdf-dialog";
 import { LiteraturePdfPanel } from "@/components/literature-reviews/literature-pdf-panel";
 
-const PUBLIC_SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "https://notes9.com";
 const NLM_PMC_OA_WEB_SERVICE = "https://pmc.ncbi.nlm.nih.gov/tools/oa-service/";
 const NLM_EUTILS_OVERVIEW = "https://www.ncbi.nlm.nih.gov/books/NBK25501/";
 
@@ -71,6 +80,12 @@ export function LiteratureDetailView({
   onRefresh,
   initialTab = "overview",
 }: LiteratureDetailViewProps) {
+  const [activeTab, setActiveTab] = useState<string>(initialTab);
+
+  // Sync tab when prop changes (e.g. clicking PDF icon in list for already open paper)
+  useEffect(() => {
+    setActiveTab(initialTab);
+  }, [initialTab]);
   const formatDate = (date: string | null) => {
     if (!date) return "—";
     return new Date(date).toLocaleDateString();
@@ -105,8 +120,18 @@ export function LiteratureDetailView({
     );
   };
 
-  const formatCitation = (format: "apa" | "mla" | "bibtex") => {
-    const authors = literature.authors || "Unknown";
+  const [selectedCitationFormat, setSelectedCitationFormat] = useState("apa");
+  const [copiedId, setCopiedId] = useState<string | null>(null);
+
+  const copyToClipboard = (text: string, id: string) => {
+    navigator.clipboard.writeText(text);
+    setCopiedId(id);
+    setTimeout(() => setCopiedId(null), 2000);
+    toast.success("Citation copied to clipboard");
+  };
+
+  const formatCitation = (format: string) => {
+    const authors = literature.authors || "Unknown Authors";
     const year = literature.publication_year || "n.d.";
     const title = literature.title;
     const journal = literature.journal || "";
@@ -115,26 +140,34 @@ export function LiteratureDetailView({
     const pages = literature.pages || "";
     const doi = literature.doi || "";
 
-    if (format === "apa") {
-      let citation = `${authors} (${year}). ${title}.`;
-      if (journal) citation += ` ${journal}`;
-      if (volume) citation += `, ${volume}`;
-      if (issue) citation += `(${issue})`;
-      if (pages) citation += `, ${pages}`;
-      if (doi) citation += `. https://doi.org/${doi}`;
-      return citation;
-    } else if (format === "mla") {
-      let citation = `${authors}. "${title}."`;
-      if (journal) citation += ` ${journal}`;
-      if (volume) citation += `, vol. ${volume}`;
-      if (issue) citation += `, no. ${issue}`;
-      if (year) citation += `, ${year}`;
-      if (pages) citation += `, pp. ${pages}`;
-      return citation + ".";
-    } else if (format === "bibtex") {
-      const bibKey = authors.split(",")[0].toLowerCase() + year;
-      return `@article{${bibKey},
-  author = {${authors}},
+    const cleanAuthors = authors.trim();
+    const firstAuthor = cleanAuthors.split(',')[0].trim().split(' ').pop() || "author";
+
+    switch (format) {
+      case "apa":
+        return `${cleanAuthors} (${year}). ${title}. ${journal}${volume ? `, ${volume}` : ""}${issue ? `(${issue})` : ""}${pages ? `, ${pages}` : ""}.${doi ? ` https://doi.org/${doi}` : ""}`;
+      case "mla":
+        return `${cleanAuthors}. "${title}." ${journal}${volume ? `, vol. ${volume}` : ""}${issue ? `, no. ${issue}` : ""}${year ? `, ${year}` : ""}${pages ? `, pp. ${pages}` : ""}.${doi ? ` doi:${doi}` : ""}`;
+      case "chicago_ad":
+        return `${cleanAuthors}. ${year}. "${title}." ${journal} ${volume}${issue ? ` (${issue})` : ""}: ${pages || ""}.${doi ? ` https://doi.org/${doi}` : ""}`;
+      case "chicago_nb":
+        return `${cleanAuthors}. "${title}." ${journal} ${volume}${issue ? `, no. ${issue}` : ""} (${year}): ${pages || ""}.${doi ? ` https://doi.org/${doi}` : ""}`;
+      case "harvard":
+        return `${cleanAuthors} (${year}) '${title}', ${journal}, ${volume}${issue ? `(${issue})` : ""}${pages ? `, pp. ${pages}` : ""}.`;
+      case "vancouver":
+        return `${cleanAuthors.replace(/,/g, '')}. ${title}. ${journal}. ${year};${volume}${issue ? `(${issue})` : ""}:${pages || ""}.`;
+      case "ieee":
+        return `[1] ${cleanAuthors}, "${title}," ${journal}, vol. ${volume}, no. ${issue}, pp. ${pages}, ${year}.`;
+      case "ama":
+        return `${cleanAuthors}. ${title}. ${journal}. ${year};${volume}${issue ? `(${issue})` : ""}:${pages || ""}.`;
+      case "nature":
+        return `${cleanAuthors}. ${title}. ${journal} ${volume}, ${pages} (${year}).`;
+      case "science":
+        return `${cleanAuthors}, ${title}. ${journal} ${volume}, ${pages} (${year}).`;
+      case "bibtex":
+        const bibKey = firstAuthor.toLowerCase() + year;
+        return `@article{${bibKey},
+  author = {${cleanAuthors}},
   title = {${title}},
   journal = {${journal}},
   year = {${year}},
@@ -143,8 +176,33 @@ export function LiteratureDetailView({
   pages = {${pages}},
   doi = {${doi}}
 }`;
+      case "ris":
+        const startPage = pages.split("-")[0] || "";
+        const endPage = pages.split("-")[1] || "";
+        return `TY  - JOUR
+AU  - ${cleanAuthors.replace(/,/g, "\nAU  - ")}
+TI  - ${title}
+JO  - ${journal}
+PY  - ${year}
+VL  - ${volume}
+IS  - ${issue}
+SP  - ${startPage}
+EP  - ${endPage}
+DO  - ${doi}
+ER  - `;
+      case "apa6":
+        return `${cleanAuthors} (${year}). ${title}. ${journal}, ${volume}${issue ? `(${issue})` : ""}, ${pages}.${doi ? ` doi:${doi}` : ""}`;
+      case "cse":
+        return `${cleanAuthors}. ${title}. ${journal}. ${year};${volume}${issue ? `(${issue})` : ""}:${pages || ""}.`;
+      case "asa":
+        return `${cleanAuthors}. ${year}. "${title}." ${journal} ${volume}${issue ? `(${issue})` : ""}:${pages || ""}.`;
+      case "aps":
+        return `${cleanAuthors}, ${journal} ${volume}, ${pages} (${year}).`;
+      case "aip":
+        return `${cleanAuthors}, ${journal} ${volume}, ${pages} (${year}).`;
+      default:
+        return "";
     }
-    return "";
   };
 
   return (
@@ -178,7 +236,7 @@ export function LiteratureDetailView({
       </div>
 
       {/* Tabs */}
-      <Tabs defaultValue={initialTab} className="space-y-4">
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
         <TabsList>
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="pdf">PDF</TabsTrigger>
@@ -365,93 +423,81 @@ export function LiteratureDetailView({
                 </div>
               )}
               {literature.pdf_import_status === "failed" && !literature.pdf_storage_path && (
-                <div className="rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-6 text-center text-sm space-y-2">
-                  <p className="text-destructive">
-                    Automatic import could not download an open-access PDF from PubMed Central. NLM
-                    may require a browser for some files, or the fetch mirrors returned no PDF bytes.
+                <div className="rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-8 text-center text-sm space-y-4">
+                  <p className="text-destructive font-medium">
+                    Automatic ingestion could not locate an open-access version of this paper.
                   </p>
-                  <p className="text-muted-foreground">
-                    Notes9 only auto-imports articles in the{" "}
-                    <a
-                      href={NLM_PMC_OA_WEB_SERVICE}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-primary underline underline-offset-4"
-                    >
-                      PMC open-access subset
-                    </a>
-                    . Closed-access articles are yours to attach. Upload a PDF below if you have it.
-                  </p>
-                  <div className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1 text-xs text-muted-foreground pt-1">
-                    {literature.pmid?.trim() ? (
-                      <a
-                        href={`https://pubmed.ncbi.nlm.nih.gov/${encodeURIComponent(literature.pmid.trim())}/`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="inline-flex items-center gap-1 text-primary underline underline-offset-4"
-                      >
-                        View on PubMed
-                        <ExternalLink className="h-3 w-3" />
-                      </a>
-                    ) : null}
-                    <a
-                      href={NLM_EUTILS_OVERVIEW}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1 text-primary underline underline-offset-4"
-                    >
-                      NLM E-utilities overview
-                      <ExternalLink className="h-3 w-3" />
-                    </a>
-                    <a
-                      href={PUBLIC_SITE_URL}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1 text-primary underline underline-offset-4"
-                    >
-                      {PUBLIC_SITE_URL.replace(/^https?:\/\//, "")}
-                      <ExternalLink className="h-3 w-3" />
-                    </a>
-                  </div>
+                  
+                  {literature.doi ? (
+                    <div className="flex flex-col items-center gap-4">
+                      <p className="text-muted-foreground max-w-md mx-auto">
+                        Please use the following steps to manually add the paper to your library:
+                      </p>
+                      
+                      <div className="flex flex-col gap-3 items-center">
+                        <div className="flex items-center gap-3">
+                          <span className="flex h-6 w-6 items-center justify-center rounded-full bg-destructive/10 text-[10px] font-bold text-destructive border border-destructive/20">1</span>
+                          <a
+                            href={`https://doi.org/${literature.doi}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1.5 text-primary hover:underline font-semibold text-base"
+                          >
+                            Access via DOI to download PDF
+                            <ExternalLink className="h-4 w-4" />
+                          </a>
+                        </div>
+                        
+                        <div className="flex items-center gap-3">
+                          <span className="flex h-6 w-6 items-center justify-center rounded-full bg-destructive/10 text-[10px] font-bold text-destructive border border-destructive/20">2</span>
+                          <p className="text-muted-foreground font-medium">
+                            Use the <span className="text-foreground">"Upload PDF"</span> button above to save the file.
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <p className="text-muted-foreground">
+                      No PDF is currently attached. You can upload a PDF below if you have the file.
+                    </p>
+                  )}
                 </div>
               )}
               {literature.pdf_import_status === "none" && !literature.pdf_storage_path && (
-                <div className="rounded-lg border bg-muted/20 px-4 py-6 text-center text-sm text-muted-foreground space-y-2">
-                  {literature.pdf_metadata &&
-                  typeof literature.pdf_metadata === "object" &&
-                  "not_pmc_open_access_subset" in literature.pdf_metadata &&
-                  literature.pdf_metadata.not_pmc_open_access_subset ? (
-                    <p>
-                      This PMID links to PubMed Central, but the article is{" "}
-                      <strong className="text-foreground font-medium">not</strong> in the PMC
-                      open-access subset. Automatic import is open-access only — upload the PDF if your
-                      library or subscription provides it.
-                    </p>
-                  ) : literature.pdf_metadata &&
-                    typeof literature.pdf_metadata === "object" &&
-                    "pmc_oa_check_failed" in literature.pdf_metadata &&
-                    literature.pdf_metadata.pmc_oa_check_failed ? (
-                    <p>
-                      Could not reach NLM to confirm open-access status. Try staging or saving again
-                      later, or upload the PDF below.
-                    </p>
+                <div className="rounded-lg border bg-muted/20 px-4 py-8 text-center text-sm space-y-4">
+                  {literature.doi ? (
+                    <div className="flex flex-col items-center gap-4">
+                      <p className="text-muted-foreground max-w-md mx-auto">
+                        This paper is currently not available for direct download. Please use the following steps to add it to your library:
+                      </p>
+                      
+                      <div className="flex flex-col gap-3 items-center">
+                        <div className="flex items-center gap-3">
+                          <span className="flex h-6 w-6 items-center justify-center rounded-full bg-primary/10 text-[10px] font-bold text-primary border border-primary/20">1</span>
+                          <a
+                            href={`https://doi.org/${literature.doi}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1.5 text-primary hover:underline font-semibold text-base"
+                          >
+                            Access via DOI to download PDF
+                            <ExternalLink className="h-4 w-4" />
+                          </a>
+                        </div>
+                        
+                        <div className="flex items-center gap-3">
+                          <span className="flex h-6 w-6 items-center justify-center rounded-full bg-primary/10 text-[10px] font-bold text-primary border border-primary/20">2</span>
+                          <p className="text-muted-foreground font-medium">
+                            Use the <span className="text-foreground">"Upload PDF"</span> button above to save the file.
+                          </p>
+                        </div>
+                      </div>
+                    </div>
                   ) : (
-                    <p>
-                      No PMC id was found for this PubMed record, so automatic import was skipped
-                      (PMC open-access subset only). You can upload a PDF below.
+                    <p className="text-muted-foreground">
+                      No PDF is currently attached. You can upload a PDF below if you have the file.
                     </p>
                   )}
-                  <p className="text-xs">
-                    <a
-                      href={PUBLIC_SITE_URL}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1 text-primary underline underline-offset-4"
-                    >
-                      {PUBLIC_SITE_URL.replace(/^https?:\/\//, "")}
-                      <ExternalLink className="h-3 w-3" />
-                    </a>
-                  </p>
                 </div>
               )}
               {literature.pdf_storage_path ? (
@@ -489,35 +535,71 @@ export function LiteratureDetailView({
 
         <TabsContent value="citation" className="space-y-4">
           <Card>
-            <CardHeader>
-              <CardTitle>APA Format</CardTitle>
+            <CardHeader className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-6 border-b bg-muted/10">
+              <div className="space-y-1">
+                <CardTitle className="text-lg">Paper Citation</CardTitle>
+                <CardDescription>Select a style and copy the formatted reference.</CardDescription>
+              </div>
+              <div className="flex items-center gap-2">
+                <Select value={selectedCitationFormat} onValueChange={setSelectedCitationFormat}>
+                  <SelectTrigger className="w-[280px] bg-background">
+                    <SelectValue placeholder="Citation Style" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {[
+                      { id: "apa", label: "APA (7th Ed.)" },
+                      { id: "mla", label: "MLA (9th Ed.)" },
+                      { id: "chicago_ad", label: "Chicago (Author-Date)" },
+                      { id: "chicago_nb", label: "Chicago (Notes & Bib)" },
+                      { id: "harvard", label: "Harvard" },
+                      { id: "vancouver", label: "Vancouver" },
+                      { id: "ieee", label: "IEEE" },
+                      { id: "ama", label: "AMA" },
+                      { id: "nature", label: "Nature" },
+                      { id: "science", label: "Science" },
+                      { id: "bibtex", label: "BibTeX" },
+                      { id: "ris", label: "RIS (Reference Manager)" },
+                      { id: "apa6", label: "APA (6th Ed.)" },
+                      { id: "cse", label: "CSE (Scientific Style)" },
+                      { id: "asa", label: "ASA (Sociological Assoc.)" },
+                      { id: "aps", label: "APS (Physics)" },
+                      { id: "aip", label: "AIP (Physics)" },
+                    ].map((fmt) => (
+                      <SelectItem key={fmt.id} value={fmt.id}>
+                        {fmt.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Button
+                  variant="default"
+                  className="gap-2 shadow-sm"
+                  onClick={() => copyToClipboard(formatCitation(selectedCitationFormat), selectedCitationFormat)}
+                >
+                  {copiedId === selectedCitationFormat ? (
+                    <>
+                      <Check className="h-4 w-4" />
+                      Copied!
+                    </>
+                  ) : (
+                    <>
+                      <Copy className="h-4 w-4" />
+                      Copy Format
+                    </>
+                  )}
+                </Button>
+              </div>
             </CardHeader>
-            <CardContent>
-              <code className="text-sm text-foreground block bg-muted p-4 rounded">
-                {formatCitation("apa")}
-              </code>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle>MLA Format</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <code className="text-sm text-foreground block bg-muted p-4 rounded">
-                {formatCitation("mla")}
-              </code>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle>BibTeX</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <pre className="text-sm text-foreground block bg-muted p-4 rounded overflow-x-auto">
-                {formatCitation("bibtex")}
-              </pre>
+            <CardContent className="pt-8">
+              <div
+                className={`p-8 bg-muted/30 rounded-xl border border-dashed border-muted-foreground/20 text-md leading-relaxed break-words min-h-[160px] flex items-center justify-center text-center
+                  ${["bibtex", "ris"].includes(selectedCitationFormat) ? "font-mono whitespace-pre text-left justify-start overflow-x-auto text-sm" : ""}
+                `}
+              >
+                <div className="max-w-2xl mx-auto">
+                  {formatCitation(selectedCitationFormat)}
+                </div>
+              </div>
             </CardContent>
           </Card>
         </TabsContent>

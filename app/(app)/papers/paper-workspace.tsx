@@ -25,6 +25,7 @@ import {
   DropdownMenuLabel,
   DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu"
+import { FileDropzone } from "@/components/ui/file-dropzone"
 
 export type PaperWorkspaceProps = {
   paperId: string
@@ -334,15 +335,59 @@ export function PaperWorkspace({ paperId, backLink, onPaperMutated }: PaperWorks
       </div>
 
       <div style={{ height: "calc(100vh - 180px)" }}>
-        <PaperEditor
-          content={content}
-          onChange={handleContentChange}
-          minHeight="calc(100vh - 180px)"
-          title={title}
-          autoSave
-          onAutoSave={handleAutoSave}
-          onEditorReady={handleEditorReady}
-        />
+        <FileDropzone
+          onFilesDrop={(files) => {
+            const bibFile = files.find(f => f.name.endsWith('.bib'))
+            if (bibFile) {
+              const reader = new FileReader()
+              reader.onload = (ev) => {
+                const text = ev.target?.result as string
+                if (!text) return
+                const entries = parseBibtex(text)
+                if (entries.length === 0) {
+                  toast.error("No entries found in .bib file")
+                  return
+                }
+                let refsHtml = "<h2>References</h2>"
+                entries.forEach((entry, idx) => {
+                  const authors = parseAuthors(entry.author)
+                  const authorStr = authors.length > 0 ? authors.join(", ") : "Unknown"
+                  const year = entry.year || "n.d."
+                  const t = entry.title || "Untitled"
+                  const journal = entry.journal || ""
+                  const doi = entry.doi || ""
+                  refsHtml += `<p>[${idx + 1}] ${authorStr} (${year}). ${t}.`
+                  if (journal) refsHtml += ` <em>${journal}</em>.`
+                  if (doi) refsHtml += ` DOI: ${doi}`
+                  refsHtml += `</p>`
+                })
+                setContent((prev) => {
+                  const updated = prev + refsHtml
+                  debouncedSave(updated)
+                  return updated
+                })
+                toast.success(`Imported ${entries.length} references from .bib file`)
+              }
+              reader.readAsText(bibFile)
+            } else {
+              toast.error("Please drop a .bib file")
+            }
+          }}
+          accept={[".bib"]}
+          description="Drop .bib file to import references"
+          activeClassName="ring-4 ring-primary ring-inset bg-primary/5 rounded-xl"
+          className="h-full"
+        >
+          <PaperEditor
+            content={content}
+            onChange={handleContentChange}
+            minHeight="calc(100vh - 180px)"
+            title={title}
+            autoSave
+            onAutoSave={handleAutoSave}
+            onEditorReady={handleEditorReady}
+          />
+        </FileDropzone>
       </div>
 
       <input

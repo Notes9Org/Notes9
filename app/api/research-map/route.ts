@@ -16,6 +16,7 @@ const ALL_KINDS: ResearchMapNodeKind[] = [
   "protocol",
   "literature",
   "lab_note",
+  "paper",
 ]
 
 function parseIncludeTypes(raw: string | null): Set<ResearchMapNodeKind> {
@@ -251,7 +252,8 @@ export async function GET(req: NextRequest) {
         if (
           includeTypes.has("project") &&
           includeTypes.has("literature") &&
-          l.project_id
+          l.project_id &&
+          !l.experiment_id
         ) {
           queueEdge({
             id: `project_literature:${l.project_id}:${l.id}`,
@@ -343,7 +345,48 @@ export async function GET(req: NextRequest) {
           }
         }
       }
+
+      // Papers (writing section) linked to this project
+      if (includeTypes.has("paper")) {
+        const { data: paperRows } = await supabase
+          .from("papers")
+          .select("id, title, status, project_id")
+          .eq("project_id", projectId)
+          .order("updated_at", { ascending: false })
+          .limit(200)
+        for (const paper of paperRows ?? []) {
+          addNode({
+            id: nodeId("paper", paper.id),
+            kind: "paper",
+            label: paper.title || "Untitled paper",
+            href: `/papers/${paper.id}`,
+            meta: { status: paper.status ?? null },
+          })
+          if (includeTypes.has("project")) {
+            queueEdge({
+              id: `project_paper:${projectRow.id}:${paper.id}`,
+              source: nodeId("project", projectRow.id),
+              target: nodeId("paper", paper.id),
+              kind: "project_contains_paper",
+              label: "Paper",
+            })
+          }
+        }
+      }
     } else {
+      // Fetch all org projects first so empty projects always appear in the map
+      const { data: allOrgProjects } = await supabase
+        .from("projects")
+        .select("id, name, status, description")
+        .eq("organization_id", orgId)
+        .order("updated_at", { ascending: false })
+        .limit(300)
+
+      const projectIdSet = new Set<string>()
+      for (const p of allOrgProjects ?? []) {
+        projectIdSet.add(p.id)
+      }
+
       const { data: experiments } = await supabase
         .from("experiments")
         .select("id, name, status, project_id")
@@ -390,7 +433,6 @@ export async function GET(req: NextRequest) {
       }
 
       const allExperiments = [...expList, ...extraExps]
-      const projectIdSet = new Set<string>()
       for (const e of allExperiments) {
         if (e.project_id) projectIdSet.add(e.project_id)
       }
@@ -401,16 +443,28 @@ export async function GET(req: NextRequest) {
         if (n.project_id) projectIdSet.add(n.project_id)
       }
 
+      // Build a lookup of org projects already fetched to avoid re-querying those
+      const orgProjectMap = new Map(
+        (allOrgProjects ?? []).map((p) => [p.id, p]),
+      )
+
       const projectIds = [...projectIdSet]
       for (const chunk of chunkArray(projectIds, CHUNK)) {
         if (chunk.length === 0) continue
-        const { data: projects } = await supabase
-          .from("projects")
-          .select("id, name, status, description")
-          .in("id", chunk)
-          .eq("organization_id", orgId)
+        // Use already-fetched org projects where possible; only query unknowns
+        const unknownIds = chunk.filter((id) => !orgProjectMap.has(id))
+        if (unknownIds.length > 0) {
+          const { data: extra } = await supabase
+            .from("projects")
+            .select("id, name, status, description")
+            .in("id", unknownIds)
+            .eq("organization_id", orgId)
+          for (const p of extra ?? []) orgProjectMap.set(p.id, p)
+        }
 
-        for (const p of projects ?? []) {
+        for (const id of chunk) {
+          const p = orgProjectMap.get(id)
+          if (!p) continue
           if (includeTypes.has("project")) {
             addNode({
               id: nodeId("project", p.id),
@@ -492,7 +546,8 @@ export async function GET(req: NextRequest) {
         if (
           includeTypes.has("project") &&
           includeTypes.has("literature") &&
-          l.project_id
+          l.project_id &&
+          !l.experiment_id
         ) {
           queueEdge({
             id: `project_literature:${l.project_id}:${l.id}`,
@@ -601,6 +656,33 @@ export async function GET(req: NextRequest) {
                 version: p.version ?? null,
                 category: p.category ?? null,
               },
+            })
+          }
+        }
+      }
+
+      // Papers (writing section) — RLS ensures only user's own papers are returned
+      if (includeTypes.has("paper")) {
+        const { data: paperRows } = await supabase
+          .from("papers")
+          .select("id, title, status, project_id")
+          .order("updated_at", { ascending: false })
+          .limit(300)
+        for (const paper of paperRows ?? []) {
+          addNode({
+            id: nodeId("paper", paper.id),
+            kind: "paper",
+            label: paper.title || "Untitled paper",
+            href: `/papers/${paper.id}`,
+            meta: { status: paper.status ?? null },
+          })
+          if (includeTypes.has("project") && paper.project_id) {
+            queueEdge({
+              id: `project_paper:${paper.project_id}:${paper.id}`,
+              source: nodeId("project", paper.project_id),
+              target: nodeId("paper", paper.id),
+              kind: "project_contains_paper",
+              label: "Paper",
             })
           }
         }

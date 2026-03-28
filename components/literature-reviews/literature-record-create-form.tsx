@@ -112,18 +112,17 @@ export function LiteratureRecordCreateForm({
             Optionally connect this paper to a project and one of its experiments.
           </p>
         </div>
-        <div className="grid gap-4 md:grid-cols-2">
-          <div className="space-y-2">
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div className="space-y-2 min-w-0">
             <Label htmlFor="new-project-id">Project</Label>
             <Select
-              value={value.project_id || "none"}
-              onValueChange={(next) => update("project_id", next === "none" ? "" : next)}
+              value={value.project_id}
+              onValueChange={(next) => update("project_id", next)}
             >
-              <SelectTrigger id="new-project-id">
-                <SelectValue placeholder="Select project (optional)" />
+              <SelectTrigger id="new-project-id" className="w-full">
+                <SelectValue placeholder="Select project" className="truncate" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="none">No project</SelectItem>
                 {projects.map((project) => (
                   <SelectItem key={project.id} value={project.id}>
                     {project.name}
@@ -132,24 +131,24 @@ export function LiteratureRecordCreateForm({
               </SelectContent>
             </Select>
           </div>
-          <div className="space-y-2">
+          <div className="space-y-2 min-w-0">
             <Label htmlFor="new-experiment-id">Experiment</Label>
             <Select
-              value={value.experiment_id || "none"}
-              onValueChange={(next) => update("experiment_id", next === "none" ? "" : next)}
+              value={value.experiment_id}
+              onValueChange={(next) => update("experiment_id", next)}
               disabled={!value.project_id}
             >
-              <SelectTrigger id="new-experiment-id">
+              <SelectTrigger id="new-experiment-id" className="w-full">
                 <SelectValue
                   placeholder={
                     value.project_id
-                      ? "Select experiment (optional)"
+                      ? "Select experiment"
                       : "Select project first"
                   }
+                  className="truncate"
                 />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="none">No experiment</SelectItem>
                 {filteredExperiments.map((experiment) => (
                   <SelectItem key={experiment.id} value={experiment.id}>
                     {experiment.name}
