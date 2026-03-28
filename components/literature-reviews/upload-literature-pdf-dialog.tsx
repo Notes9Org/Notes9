@@ -25,6 +25,9 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { Textarea } from "@/components/ui/textarea"
 import { useToast } from "@/hooks/use-toast"
 import { FileDropzone } from "@/components/ui/file-dropzone"
+import { validatePdfFile } from "@/lib/literature-pdf-storage"
+import { createClient as createSupabaseBrowserClient } from "@/lib/supabase/client"
+import { LITERATURE_STORAGE_BUCKET } from "@/types/literature-pdf"
 import type { AnalyzePdfResponse, LiteraturePdfExtractedMetadata, LiteratureRecordSummary, SaveMode } from "@/types/literature-pdf"
 
 interface UploadLiteraturePdfDialogProps {
@@ -122,17 +125,58 @@ export function UploadLiteraturePdfDialog({
   const analyzeFile = async () => {
     if (!file) return
     setLoading(true)
+    const supabase = createSupabaseBrowserClient()
+    let uploadedPath: string | null = null
+    let uploadBucket = LITERATURE_STORAGE_BUCKET
     try {
-      const formData = new FormData()
-      formData.set("file", file)
-      const targetId = selectedExistingId ?? currentLiterature?.id
-      if (targetId) {
-        formData.set("currentLiteratureId", targetId)
+      const localValidation = validatePdfFile(file)
+      if (localValidation) {
+        throw new Error(localValidation)
       }
+
+      const targetId = selectedExistingId ?? currentLiterature?.id
+
+      const reserveRes = await fetch("/api/literature/pdf/reserve-upload", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          fileName: file.name,
+          ...(targetId ? { currentLiteratureId: targetId } : {}),
+        }),
+      })
+      const reserveJson = (await reserveRes.json()) as {
+        path?: string
+        bucket?: string
+        error?: string
+      }
+      if (!reserveRes.ok) {
+        throw new Error(reserveJson.error ?? "Failed to reserve upload path")
+      }
+      const path = reserveJson.path
+      const bucket = reserveJson.bucket ?? LITERATURE_STORAGE_BUCKET
+      if (!path) {
+        throw new Error("Invalid reserve response")
+      }
+      uploadBucket = bucket
+
+      const { error: uploadError } = await supabase.storage.from(bucket).upload(path, file, {
+        cacheControl: "3600",
+        upsert: false,
+        contentType: file.type || "application/pdf",
+      })
+      if (uploadError) {
+        throw new Error(uploadError.message)
+      }
+      uploadedPath = path
 
       const response = await fetch("/api/literature/pdf/analyze", {
         method: "POST",
-        body: formData,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          storagePath: path,
+          fileName: file.name,
+          ...(targetId ? { currentLiteratureId: targetId } : {}),
+        }),
       })
       const data = (await response.json()) as AnalyzePdfResponse & { error?: string }
       if (!response.ok) throw new Error(data.error ?? "Failed to analyze PDF")
@@ -150,6 +194,9 @@ export function UploadLiteraturePdfDialog({
         setDestinationMode("new")
       }
     } catch (error: any) {
+      if (uploadedPath) {
+        await supabase.storage.from(uploadBucket).remove([uploadedPath])
+      }
       toast({
         title: "PDF analysis failed",
         description: error.message,

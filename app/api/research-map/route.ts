@@ -260,7 +260,7 @@ export async function GET(req: NextRequest) {
             source: nodeId("project", l.project_id),
             target: nodeId("literature", l.id),
             kind: "project_linked_literature",
-            label: "Linked literature",
+            label: "Literature",
           })
         }
         if (
@@ -273,7 +273,7 @@ export async function GET(req: NextRequest) {
             source: nodeId("experiment", l.experiment_id),
             target: nodeId("literature", l.id),
             kind: "experiment_linked_literature",
-            label: "Linked literature",
+            label: "Literature",
           })
         }
       }
@@ -554,7 +554,7 @@ export async function GET(req: NextRequest) {
             source: nodeId("project", l.project_id),
             target: nodeId("literature", l.id),
             kind: "project_linked_literature",
-            label: "Linked literature",
+            label: "Literature",
           })
         }
         if (
@@ -567,7 +567,7 @@ export async function GET(req: NextRequest) {
             source: nodeId("experiment", l.experiment_id),
             target: nodeId("literature", l.id),
             kind: "experiment_linked_literature",
-            label: "Linked literature",
+            label: "Literature",
           })
         }
       }
