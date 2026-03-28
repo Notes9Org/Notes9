@@ -6,7 +6,7 @@ import { Search as SearchIcon, Database, Layers } from "lucide-react"
 import { SearchTab } from "@/components/literature-reviews/search-tab"
 import { StagingTab, type StagingLiteratureRow } from "@/components/literature-reviews/staging-tab"
 import { RepoTab } from "@/components/literature-reviews/repo-tab"
-import { SearchPaper } from "@/types/paper-search"
+import { PaperSearchSortMode, SearchPaper } from "@/types/paper-search"
 import { normalizeDoi } from "@/lib/literature-pdf-storage"
 import { savePaperToRepository, stagePaper } from "@/app/(app)/literature-reviews/actions"
 import { toast } from "sonner"
@@ -60,6 +60,10 @@ export function LiteratureTabs({
   const router = useRouter()
 
   const [query, setQuery] = useState("")
+  const [searchSort, setSearchSort] = useState<PaperSearchSortMode>("relevance")
+  /** Publication lookback for &quot;Newest only&quot; sort (matches server default). */
+  const RECENT_SORT_YEARS = 5
+  const [openAccessOnlySearch, setOpenAccessOnlySearch] = useState(false)
   const [searchResults, setSearchResults] = useState<SearchPaper[]>([])
   const [isSearching, setIsSearching] = useState(false)
   const [hasSearched, setHasSearched] = useState(false)
@@ -99,15 +103,23 @@ export function LiteratureTabs({
     }
   }, [filteredExperiments, selectedExperimentId, selectedProjectId])
 
-  const handleSearch = async () => {
-    if (!query.trim()) return
-
+  const executePaperSearch = async (
+    q: string,
+    sort: PaperSearchSortMode,
+    openAccessOnly: boolean,
+  ) => {
     setIsSearching(true)
-    setHasSearched(true)
-    setSearchResults([])
-
     try {
-      const response = await fetch(`/api/search-papers?query=${encodeURIComponent(query)}`)
+      const params = new URLSearchParams()
+      params.set("query", q)
+      params.set("sort", sort)
+      if (sort === "recent") {
+        params.set("recentYears", String(RECENT_SORT_YEARS))
+      }
+      if (openAccessOnly) {
+        params.set("openAccessOnly", "true")
+      }
+      const response = await fetch(`/api/search-papers?${params.toString()}`)
       const data = await response.json()
 
       if (response.ok) {
@@ -119,6 +131,29 @@ export function LiteratureTabs({
       console.error("Search failed:", error)
     } finally {
       setIsSearching(false)
+    }
+  }
+
+  const handleSearch = async () => {
+    const q = query.trim()
+    if (!q) return
+    setHasSearched(true)
+    await executePaperSearch(q, searchSort, openAccessOnlySearch)
+  }
+
+  const handleSearchSortChange = (sort: PaperSearchSortMode) => {
+    setSearchSort(sort)
+    const q = query.trim()
+    if (hasSearched && q) {
+      void executePaperSearch(q, sort, openAccessOnlySearch)
+    }
+  }
+
+  const handleOpenAccessSearchChange = (openAccess: boolean) => {
+    setOpenAccessOnlySearch(openAccess)
+    const q = query.trim()
+    if (hasSearched && q) {
+      void executePaperSearch(q, searchSort, openAccess)
     }
   }
 
@@ -232,6 +267,10 @@ export function LiteratureTabs({
           onStagePaper={handleStagePaper}
           isPaperStaged={isPaperStaged}
           isPaperStaging={(paperId) => stagingPaperId === paperId}
+          sortMode={searchSort}
+          onSortModeChange={handleSearchSortChange}
+          openAccessOnly={openAccessOnlySearch}
+          onOpenAccessOnlyChange={handleOpenAccessSearchChange}
         />
       </TabsContent>
 
