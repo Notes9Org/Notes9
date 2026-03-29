@@ -23,6 +23,7 @@ import { Progress } from "@/components/ui/progress"
 import { useToast } from "@/hooks/use-toast"
 import { Upload, File, X, CheckCircle2, AlertCircle, Files } from "lucide-react"
 import { Card } from "@/components/ui/card"
+import { FileDropzone } from "@/components/ui/file-dropzone"
 
 // File size limit: 10 MB for MVP
 const MAX_FILE_SIZE = 10 * 1024 * 1024 // 10 MB in bytes
@@ -165,18 +166,6 @@ export function UploadFileDialog({ experimentId, onUploadComplete }: UploadFileD
     setSelectedFiles(prev => [...prev, ...newFiles])
   }
 
-  const handleDragOver = (e: React.DragEvent) => {
-    e.preventDefault()
-    e.stopPropagation()
-  }
-
-  const handleDrop = (e: React.DragEvent) => {
-    e.preventDefault()
-    e.stopPropagation()
-
-    const files = Array.from(e.dataTransfer.files)
-    addFiles(files)
-  }
 
   const handleUploadAll = async () => {
     if (selectedFiles.length === 0) return
@@ -372,29 +361,32 @@ export function UploadFileDialog({ experimentId, onUploadComplete }: UploadFileD
 
           {/* Drag & Drop / File Select Area */}
           {selectedFiles.length === 0 && (
-            <div
-              onDragOver={handleDragOver}
-              onDrop={handleDrop}
+            <FileDropzone
+              onFilesDrop={addFiles}
+              accept={[...ALLOWED_MIME_TYPES, ...ALLOWED_EXTENSIONS]}
+              description="Drop files to upload"
               className="border-2 border-dashed rounded-lg p-8 text-center cursor-pointer hover:border-primary transition-colors"
-              onClick={() => fileInputRef.current?.click()}
+              activeClassName="ring-2 ring-primary border-primary bg-primary/5"
             >
-              <Files className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
-              <p className="text-sm font-medium mb-1">
-                Drag and drop files or click to select
-              </p>
-              <p className="text-xs text-muted-foreground">
-                Multiple files supported • PDF, images, CSV, MD, FASTA, JSON, XML, text (max {MAX_FILE_SIZE_MB} MB each)
-              </p>
-              <input
-                ref={fileInputRef}
-                type="file"
-                multiple
-                className="hidden"
-                onChange={handleFileSelect}
-                disabled={isUploading}
-                accept={`${ALLOWED_MIME_TYPES.join(',')},${ALLOWED_EXTENSIONS.join(',')}`}
-              />
-            </div>
+              <div onClick={() => fileInputRef.current?.click()}>
+                <Files className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
+                <p className="text-sm font-medium mb-1">
+                  Drag and drop files or click to select
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  Multiple files supported • PDF, images, CSV, MD, FASTA, JSON, XML, text (max {MAX_FILE_SIZE_MB} MB each)
+                </p>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  multiple
+                  className="hidden"
+                  onChange={handleFileSelect}
+                  disabled={isUploading}
+                  accept={`${ALLOWED_MIME_TYPES.join(',')},${ALLOWED_EXTENSIONS.join(',')}`}
+                />
+              </div>
+            </FileDropzone>
           )}
 
           {/* Selected Files List */}

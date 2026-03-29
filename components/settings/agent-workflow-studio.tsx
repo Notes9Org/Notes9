@@ -32,6 +32,7 @@ import { Progress } from "@/components/ui/progress"
 import { Switch } from "@/components/ui/switch"
 import { Textarea } from "@/components/ui/textarea"
 import { cn } from "@/lib/utils"
+import { FileDropzone } from "@/components/ui/file-dropzone"
 
 type AgentId =
   | "orchestrator"
@@ -698,6 +699,18 @@ export function AgentWorkflowStudio() {
     reader.readAsDataURL(file)
   }
 
+  const handleFilesDrop = (files: File[]) => {
+    const imageFile = files.find(f => f.type.startsWith('image/'))
+    if (imageFile) {
+      const reader = new FileReader()
+      reader.onload = () => {
+        const result = typeof reader.result === "string" ? reader.result : ""
+        if (result) addImageNode(result)
+      }
+      reader.readAsDataURL(imageFile)
+    }
+  }
+
   const completeRunLogText = runLogs
     .slice()
     .reverse()
@@ -743,26 +756,32 @@ export function AgentWorkflowStudio() {
             </div>
           </CardHeader>
           <CardContent>
-            <div
-              ref={canvasRef}
-              className={cn(
-                "relative rounded-lg border overflow-hidden",
-                (draggingNodeId || isPanning) && "cursor-grabbing",
-              )}
-              style={{
-                height: canvasHeightPx,
-                backgroundColor: canvasVisual.backgroundColor,
-                touchAction: "none",
-              }}
-              onMouseMove={handleCanvasMouseMove}
-              onMouseUp={handleCanvasMouseUp}
-              onMouseLeave={handleCanvasMouseUp}
-              onMouseDown={(event) => {
-                if (event.target !== event.currentTarget) return
-                setIsPanning(true)
-                setLastPointer({ x: event.clientX, y: event.clientY })
-              }}
+            <FileDropzone
+              onFilesDrop={handleFilesDrop}
+              accept={["image/*"]}
+              description="Drop image onto canvas"
+              activeClassName="ring-4 ring-primary ring-inset bg-primary/5 rounded-lg"
+              className="relative rounded-lg border overflow-hidden h-full"
             >
+              <div
+                ref={canvasRef}
+                className={cn(
+                  "h-full w-full",
+                  (draggingNodeId || isPanning) && "cursor-grabbing",
+                )}
+                style={{
+                  backgroundColor: canvasVisual.backgroundColor,
+                  touchAction: "none",
+                }}
+                onMouseMove={handleCanvasMouseMove}
+                onMouseUp={handleCanvasMouseUp}
+                onMouseLeave={handleCanvasMouseUp}
+                onMouseDown={(event) => {
+                  if (event.target !== event.currentTarget) return
+                  setIsPanning(true)
+                  setLastPointer({ x: event.clientX, y: event.clientY })
+                }}
+              >
               <div className="absolute right-3 top-3 z-30 flex items-center gap-1 rounded-md border bg-background/85 p-1 backdrop-blur">
                 <Button
                   type="button"
@@ -998,9 +1017,10 @@ export function AgentWorkflowStudio() {
                 )
               })}
             </div>
-            <p className="mt-2 text-xs text-muted-foreground">
-              Simple canvas: drag nodes to reposition, pinch to zoom, and two-finger scroll to pan.
-            </p>
+          </FileDropzone>
+          <p className="mt-2 text-xs text-muted-foreground">
+            Simple canvas: drag nodes to reposition, pinch to zoom, and two-finger scroll to pan.
+          </p>
             <div className="mt-3 space-y-1">
               <div className="flex items-center justify-between text-xs text-muted-foreground">
                 <span>Canvas height</span>

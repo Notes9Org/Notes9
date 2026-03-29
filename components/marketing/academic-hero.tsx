@@ -61,14 +61,16 @@ const narrativeSlides = [
     steps: [
       { image: "/demo/projects.png", label: "One layer" },
       { image: "/demo/literature-search.png", label: "Search" },
+      { image: "/demo/research-map-literature.png", label: "Map context" },
       { image: "/demo/experiment-details.png", label: "Capture" },
-      { image: "/demo/lab-memory.png", label: "Connect" },
+      { image: "/demo/lab-memory.png", label: "Preserve" },
     ],
     fallbackSteps: [
       { image: "/projects-page.png", label: "One layer" },
       { image: "/literature-search-page.png", label: "Search" },
+      { image: "/demo/research-map-literature.png", label: "Map context" },
       { image: "/experiment-details.png", label: "Capture" },
-      { image: "/lab_notes-details.png", label: "Connect" },
+      { image: "/lab_notes-details.png", label: "Preserve" },
     ],
   },
   {
@@ -84,10 +86,12 @@ const narrativeSlides = [
     icon: CheckCircle2,
     bgClass: "from-background via-muted/40 to-background dark:from-background dark:via-muted/30 dark:to-background",
     steps: [
+      { image: "/demo/writing-editor.png", label: "Draft with AI" },
       { image: "/demo/project-report.png", label: "Report with evidence" },
       { image: "/demo/lab-memory.png", label: "Context stays linked" },
     ],
     fallbackSteps: [
+      { image: "/demo/writing-editor.png", label: "Draft with AI" },
       { image: "/project-details.png", label: "Report with evidence" },
       { image: "/lab_notes-details.png", label: "Context stays linked" },
     ],

@@ -65,6 +65,8 @@ export function kindAccentClass(kind: ResearchMapNodeKind): string {
       return "border-emerald-500/70 bg-emerald-500/10 text-emerald-950 dark:text-emerald-100"
     case "lab_note":
       return "border-rose-500/70 bg-rose-500/10 text-rose-950 dark:text-rose-100"
+    case "paper":
+      return "border-orange-500/70 bg-orange-500/10 text-orange-950 dark:text-orange-100"
     default:
       return "border-border bg-muted/40"
   }
@@ -82,6 +84,8 @@ export function kindDotClass(kind: ResearchMapNodeKind): string {
       return "bg-emerald-500"
     case "lab_note":
       return "bg-rose-500"
+    case "paper":
+      return "bg-orange-500"
     default:
       return "bg-muted-foreground"
   }
@@ -99,6 +103,8 @@ export function kindLabel(kind: ResearchMapNodeKind): string {
       return "Literature"
     case "lab_note":
       return "Lab note"
+    case "paper":
+      return "Paper"
     default:
       return kind
   }

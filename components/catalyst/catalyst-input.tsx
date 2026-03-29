@@ -16,6 +16,7 @@ import { Switch } from '@/components/ui/switch';
 import { cn } from '@/lib/utils';
 import { PreviewAttachment, type Attachment } from './preview-attachment';
 import { toast } from 'sonner';
+import { FileDropzone } from '../ui/file-dropzone';
 
 export type AgentMode = 'general' | 'notes9';
 
@@ -154,6 +155,39 @@ export function CatalystInput({
     },
     [uploadFile]
   );
+  const handleFilesDrop = useCallback(
+    async (dropFiles: File[]) => {
+      // Validate files
+      const validFiles = dropFiles.filter((file) => {
+        if (file.size > MAX_FILE_SIZE) {
+          toast.error(`${file.name} is too large (max 10MB)`);
+          return false;
+        }
+        if (!ALLOWED_TYPES.includes(file.type)) {
+          toast.error(`${file.name} has unsupported type`);
+          return false;
+        }
+        return true;
+      });
+
+      if (validFiles.length === 0) return;
+
+      // Add to upload queue
+      setUploadQueue(validFiles.map((f) => f.name));
+
+      // Upload all files
+      const uploadPromises = validFiles.map((file) => uploadFile(file));
+      const results = await Promise.all(uploadPromises);
+
+      // Add successful uploads to attachments
+      const successfulUploads = results.filter((r): r is Attachment => r !== null);
+      setAttachments((prev) => [...prev, ...successfulUploads]);
+
+      // Clear queue
+      setUploadQueue([]);
+    },
+    [uploadFile]
+  );
 
   const handlePaste = useCallback(
     async (event: ClipboardEvent) => {
@@ -283,28 +317,36 @@ export function CatalystInput({
             </div>
           )}
 
-          {/* Textarea */}
-          <Textarea
-            ref={textareaRef}
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={handleKeyDown}
-            placeholder="How can I help you today?"
-            className="min-h-[52px] max-h-[200px] resize-none border-0 bg-transparent px-4 pt-4 pb-14 text-base focus-visible:ring-0 focus-visible:ring-offset-0"
-            disabled={isLoading}
-            maxLength={MAX_CHAT_CHARS}
-          />
+          <FileDropzone
+            onFilesDrop={handleFilesDrop}
+            accept={ALLOWED_TYPES}
+            description="Drop files to attach"
+            className="flex flex-col h-full w-full"
+            activeClassName="ring-2 ring-primary ring-inset rounded-2xl"
+          >
+            {/* Textarea */}
+            <Textarea
+              ref={textareaRef}
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              onKeyDown={handleKeyDown}
+              placeholder="How can I help you today?"
+              className="min-h-[52px] max-h-[200px] resize-none border-0 bg-transparent px-4 pt-4 pb-14 text-base focus-visible:ring-0 focus-visible:ring-offset-0"
+              disabled={isLoading}
+              maxLength={MAX_CHAT_CHARS}
+            />
 
-          {/* Hidden file input */}
-          <input
-            ref={fileInputRef}
-            type="file"
-            multiple
-            accept={ALLOWED_TYPES.join(',')}
-            className="hidden"
-            onChange={handleFileSelect}
-            disabled={isLoading || isUploading}
-          />
+            {/* Hidden file input */}
+            <input
+              ref={fileInputRef}
+              type="file"
+              multiple
+              accept={ALLOWED_TYPES.join(',')}
+              className="hidden"
+              onChange={handleFileSelect}
+              disabled={isLoading || isUploading}
+            />
+          </FileDropzone>
 
           {/* Toolbar */}
           <div className="absolute bottom-0 left-0 right-0 flex items-center justify-between px-3 py-2">

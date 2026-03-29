@@ -277,8 +277,8 @@ export function AppLayout({ children }: AppLayoutProps) {
 
   // Right sidebar resizing
   const rightSidebar = useResizable({
-    initialWidth: isTablet ? 280 : 320,
-    minWidth: 240,
+    initialWidth: isTablet ? 340 : 380,
+    minWidth: 300,
     maxWidth: 480,
     direction: 'right',
   })

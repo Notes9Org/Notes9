@@ -1,12 +1,11 @@
-"use client"
-
-import { useMemo, useState } from "react"
+import { useMemo, useState, useEffect, useRef } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Checkbox } from "@/components/ui/checkbox"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import {
   AlertDialog,
   AlertDialogAction,
@@ -25,11 +24,12 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
-import { LiteratureDetailModal } from "@/components/literature-reviews/literature-detail-modal"
 import { removeStagingLiterature } from "@/app/(app)/literature-reviews/actions"
 import { SearchPaper } from "@/types/paper-search"
-import { BookOpen, Database, ExternalLink, FileText, Layers, Loader2, Star, Trash2 } from "lucide-react"
+import { BookOpen, Database, ExternalLink, FileText, Layers, Loader2, Star, Trash2, X, ChevronLeft, ChevronRight } from "lucide-react"
 import { toast } from "sonner"
+import { LiteraturePdfPanel } from "./literature-pdf-panel"
+import { UploadLiteraturePdfDialog } from "./upload-literature-pdf-dialog"
 
 export type StagingLiteratureRow = Record<string, unknown>
 
@@ -38,7 +38,7 @@ interface StagingTabProps {
   onSavePaper: (paper: SearchPaper, literatureId: string) => void
 }
 
-function rowToSearchPaper(row: StagingLiteratureRow): SearchPaper {
+function rowToSearchPaper(row: StagingListItem | StagingLiteratureRow): SearchPaper {
   const authorsStr = (row.authors as string | null) ?? ""
   const authors = authorsStr
     ? authorsStr.split(",").map((a) => a.trim()).filter(Boolean)
@@ -58,7 +58,7 @@ function rowToSearchPaper(row: StagingLiteratureRow): SearchPaper {
     year,
     journal: String(row.journal ?? ""),
     abstract: String(row.abstract ?? ""),
-    isOpenAccess: Boolean(row.pdf_file_url ?? row.pdf_storage_path),
+    isOpenAccess: Boolean((row as any).pdf_file_url ?? row.pdf_storage_path),
     doi,
     pmid,
     pdfUrl: undefined,
@@ -73,10 +73,14 @@ type StagingListItem = {
   journal: string | null
   publication_year: number | null
   doi: string | null
+  pmid: string | null
   status: string
   relevance_rating: number | null
-  pdf_storage_path: string | null | undefined
-  pdf_import_status: string | null | undefined
+  abstract: string | null
+  pdf_storage_path: string | null
+  pdf_import_status: string | null
+  pdf_file_name: string | null
+  pdf_file_url: string | null
   project: { id: string; name: string } | null
   experiment: { id: string; name: string } | null
   created_by_profile: { first_name: string; last_name: string } | null
@@ -90,10 +94,14 @@ function mapRowToListItem(row: StagingLiteratureRow): StagingListItem {
     journal: (row.journal as string | null) ?? null,
     publication_year: (row.publication_year as number | null) ?? null,
     doi: (row.doi as string | null) ?? null,
+    pmid: (row.pmid as string | null) ?? null,
     status: String(row.status ?? "saved"),
     relevance_rating: (row.relevance_rating as number | null) ?? null,
+    abstract: (row.abstract as string | null) ?? null,
     pdf_storage_path: (row.pdf_storage_path as string | null) ?? null,
     pdf_import_status: (row.pdf_import_status as string | null) ?? null,
+    pdf_file_name: (row.pdf_file_name as string | null) ?? null,
+    pdf_file_url: (row.pdf_file_url as string | null) ?? null,
     project: (row.project as StagingListItem["project"]) ?? null,
     experiment: (row.experiment as StagingListItem["experiment"]) ?? null,
     created_by_profile: (row.created_by_profile as StagingListItem["created_by_profile"]) ?? null,
@@ -104,19 +112,115 @@ export function StagingTab({ stagedLiterature, onSavePaper }: StagingTabProps) {
   const router = useRouter()
   const items = useMemo(() => stagedLiterature.map(mapRowToListItem), [stagedLiterature])
 
-  const [selectedLiteratureId, setSelectedLiteratureId] = useState<string | null>(null)
-  const [selectedTab, setSelectedTab] = useState<"overview" | "pdf" | "citation" | "linked">("overview")
-  const [modalOpen, setModalOpen] = useState(false)
+  const [activeTab, setActiveTab] = useState<string>("list")
+  const [openTabs, setOpenTabs] = useState<string[]>([])
   const [selectedIds, setSelectedIds] = useState<string[]>([])
   const [removeTarget, setRemoveTarget] = useState<StagingListItem | null>(null)
   const [bulkRemoveOpen, setBulkRemoveOpen] = useState(false)
   const [isRemoving, setIsRemoving] = useState(false)
+  const [isInitialized, setIsInitialized] = useState(false)
 
-  const handleOpenModal = (id: string, tab: "overview" | "pdf" | "citation" | "linked" = "overview") => {
-    setSelectedLiteratureId(id)
-    setSelectedTab(tab)
-    setModalOpen(true)
+  // Load from localStorage on mount
+  useEffect(() => {
+    const savedTabs = localStorage.getItem("n9-staging-open-tabs")
+    const savedActive = localStorage.getItem("n9-staging-active-tab")
+    if (savedTabs) {
+      try {
+        setOpenTabs(JSON.parse(savedTabs))
+      } catch (e) {
+        console.error("Failed to load staging tabs", e)
+      }
+    }
+    if (savedActive) setActiveTab(savedActive)
+    setIsInitialized(true)
+  }, [])
+
+  // Sync to localStorage
+  useEffect(() => {
+    if (!isInitialized) return
+    localStorage.setItem("n9-staging-open-tabs", JSON.stringify(openTabs))
+  }, [openTabs, isInitialized])
+
+  useEffect(() => {
+    if (!isInitialized) return
+    localStorage.setItem("n9-staging-active-tab", activeTab)
+  }, [activeTab, isInitialized])
+
+  // Sync open tabs if papers are removed
+  useEffect(() => {
+    if (!isInitialized) return
+    const validIds = items.map((i) => i.id)
+    const filtered = openTabs.filter((id) => validIds.includes(id))
+    
+    if (filtered.length !== openTabs.length) {
+      setOpenTabs(filtered)
+    }
+
+    if (activeTab !== "list" && !validIds.includes(activeTab)) {
+      setActiveTab("list")
+    }
+  }, [items, isInitialized])
+
+  const handleOpenPaper = (id: string) => {
+    if (!openTabs.includes(id)) {
+      setOpenTabs((prev) => [...prev, id])
+    }
+    setActiveTab(id)
   }
+
+  const handleCloseTab = (id: string, e: React.MouseEvent | React.KeyboardEvent) => {
+    e.stopPropagation()
+    const nextTabs = openTabs.filter((t) => t !== id)
+    setOpenTabs(nextTabs)
+    if (activeTab === id) {
+      setActiveTab("list")
+    }
+  }
+
+  const scrollTabsRef = useRef<HTMLDivElement>(null)
+  const [showLeftArrow, setShowLeftArrow] = useState(false)
+  const [showRightArrow, setShowRightArrow] = useState(false)
+
+  const checkScroll = () => {
+    if (scrollTabsRef.current) {
+      const { scrollLeft, scrollWidth, clientWidth } = scrollTabsRef.current
+      setShowLeftArrow(scrollLeft > 0)
+      setShowRightArrow(scrollLeft < scrollWidth - clientWidth - 2)
+    }
+  }
+
+  useEffect(() => {
+    checkScroll()
+    window.addEventListener('resize', checkScroll)
+    return () => window.removeEventListener('resize', checkScroll)
+  }, [openTabs])
+
+  const scrollTabs = (direction: 'left' | 'right') => {
+    if (scrollTabsRef.current) {
+      const scrollAmount = 250
+      scrollTabsRef.current.scrollBy({
+        left: direction === 'left' ? -scrollAmount : scrollAmount,
+        behavior: 'smooth'
+      })
+    }
+  }
+
+  // Scroll active tab into view
+  useEffect(() => {
+    if (activeTab !== 'list' && scrollTabsRef.current) {
+      const container = scrollTabsRef.current
+      const activeElement = container.querySelector(`[data-value="${activeTab}"]`) as HTMLElement
+      if (activeElement) {
+        const containerRect = container.getBoundingClientRect()
+        const activeRect = activeElement.getBoundingClientRect()
+        
+        if (activeRect.left < containerRect.left || activeRect.right > containerRect.right) {
+          activeElement.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' })
+        }
+      }
+    }
+    checkScroll()
+  }, [activeTab])
 
   const getStatusBadge = (status: string) => {
     const variants: Record<string, "default" | "secondary" | "outline"> = {
@@ -185,217 +289,338 @@ export function StagingTab({ stagedLiterature, onSavePaper }: StagingTabProps) {
     }
   }
 
-  const pdfSubRow = (lit: StagingListItem) => {
-    if (lit.pdf_storage_path) {
-      return (
-        <button
-          type="button"
-          onClick={() => handleOpenModal(lit.id, "pdf")}
-          className="mt-1 flex items-center gap-1 text-xs text-[var(--n9-accent)] hover:underline"
-        >
-          <FileText className="h-3 w-3" />
-          PDF attached
-        </button>
-      )
-    }
-    if (lit.pdf_import_status === "pending") {
-      return (
-        <p className="mt-1 flex items-center gap-1 text-xs text-muted-foreground">
-          <Loader2 className="h-3 w-3 animate-spin" />
-          Importing PDF…
-        </p>
-      )
-    }
-    if (lit.pdf_import_status === "failed") {
-      return <p className="mt-1 text-xs text-destructive">PDF import failed</p>
-    }
-    if (lit.pdf_import_status === "none") {
-      return <p className="mt-1 text-xs text-muted-foreground">No open-access PDF</p>
-    }
-    return null
+  const renderPaperView = (lit: StagingListItem) => {
+    const isClosedSource = !lit.pdf_storage_path && (lit.pdf_import_status === "none" || lit.pdf_import_status === "failed")
+
+    return (
+      <div className="space-y-6">
+        <div className="flex items-start justify-between">
+          <div className="space-y-1">
+            <h3 className="text-xl font-bold text-foreground">{lit.title}</h3>
+            <p className="text-sm text-muted-foreground">
+              {lit.authors || "Unknown Author"} • {lit.journal || "No journal"} ({lit.publication_year || "n.d."})
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => onSavePaper(rowToSearchPaper(lit), lit.id)}
+              className="gap-2"
+            >
+              <Database className="h-4 w-4" />
+              Save to Repository
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="text-muted-foreground hover:bg-rose-50 hover:text-rose-400 dark:hover:bg-rose-950/40 dark:hover:text-rose-300"
+              onClick={() => setRemoveTarget(lit)}
+            >
+              <Trash2 className="h-4 w-4 mr-2" />
+              Remove
+            </Button>
+          </div>
+        </div>
+
+        <Card>
+          <CardHeader className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between border-b pb-6">
+            <div>
+              <CardTitle className="text-lg">Paper Source & PDF</CardTitle>
+              <CardDescription>
+                {lit.pdf_storage_path 
+                  ? "View and annotate the paper PDF inline." 
+                  : "Automatic import skipped or failed for this reference."}
+              </CardDescription>
+            </div>
+            <UploadLiteraturePdfDialog
+              literatureReviews={[
+                {
+                  id: lit.id,
+                  title: lit.title,
+                  authors: lit.authors,
+                  journal: lit.journal,
+                  publication_year: lit.publication_year,
+                  doi: lit.doi,
+                  pmid: lit.pmid,
+                  pdf_storage_path: lit.pdf_storage_path,
+                  pdf_file_name: lit.pdf_file_name,
+                },
+              ]}
+              currentLiterature={{
+                id: lit.id,
+                title: lit.title,
+                authors: lit.authors,
+                journal: lit.journal,
+                publication_year: lit.publication_year,
+                doi: lit.doi,
+                pmid: lit.pmid,
+                pdf_storage_path: lit.pdf_storage_path,
+                pdf_file_name: lit.pdf_file_name,
+              }}
+              triggerLabel={lit.pdf_storage_path ? "Replace PDF" : "Upload PDF"}
+            />
+          </CardHeader>
+          <CardContent className="pt-6">
+            {lit.pdf_storage_path ? (
+              <LiteraturePdfPanel
+                literatureId={lit.id}
+                pdfUrl={`/api/literature/${lit.id}/viewer-pdf`}
+                pdfFileName={lit.pdf_file_name || "paper.pdf"}
+                openInNewTabFallbackUrl={lit.pdf_file_url ?? undefined}
+              />
+            ) : isClosedSource ? (
+              <div className="rounded-xl border border-dashed bg-muted/20 px-8 py-12 text-center">
+                <div className="mb-4 inline-flex h-12 w-12 items-center justify-center rounded-full bg-muted">
+                  <FileText className="h-6 w-6 text-muted-foreground" />
+                </div>
+                <h4 className="text-lg font-semibold text-foreground">Closed Source Paper</h4>
+                <p className="mx-auto mt-2 max-w-lg text-sm text-muted-foreground">
+                  This article is not in the PMC open-access subset. Please download the paper from the 
+                  original publisher using your institution&apos;s access, then upload it here to read and annotate.
+                </p>
+                <div className="mt-6 flex flex-wrap items-center justify-center gap-4">
+                  {lit.doi && (
+                    <Button variant="outline" size="sm" asChild>
+                      <a href={`https://doi.org/${lit.doi}`} target="_blank" rel="noopener noreferrer">
+                        <ExternalLink className="mr-2 h-4 w-4" />
+                        View via DOI
+                      </a>
+                    </Button>
+                  )}
+                  {lit.pmid && (
+                    <Button variant="outline" size="sm" asChild>
+                      <a href={`https://pubmed.ncbi.nlm.nih.gov/${lit.pmid}/`} target="_blank" rel="noopener noreferrer">
+                        <ExternalLink className="mr-2 h-4 w-4" />
+                        View on PubMed
+                      </a>
+                    </Button>
+                  )}
+                </div>
+              </div>
+            ) : lit.pdf_import_status === "pending" ? (
+              <div className="flex flex-col items-center justify-center py-20 text-center">
+                <Loader2 className="h-10 w-10 animate-spin text-[var(--n9-accent)] mb-4" />
+                <p className="text-muted-foreground">Importing Open Access PDF...</p>
+              </div>
+            ) : (
+              <div className="rounded-xl border border-dashed px-8 py-12 text-center text-muted-foreground">
+                <BookOpen className="mx-auto h-12 w-12 opacity-20 mb-4" />
+                <p>No PDF attached yet.</p>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+    )
   }
 
   return (
     <div className="space-y-6">
-      <Card>
-        <CardHeader>
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <CardTitle className="text-foreground flex items-center gap-2">
-                <Layers className="h-5 w-5" />
-                Staging
-              </CardTitle>
-              <CardDescription>
-                Same layout as My repository. Promote to the repository when ready; remove to delete the
-                draft and its PDF.
-              </CardDescription>
-            </div>
-            <div className="flex flex-wrap items-center gap-2">
-              <Badge variant="secondary" className="font-normal">
-                {items.length} pending
-              </Badge>
-              {selectedIds.length > 0 && (
-                <Button variant="destructive" size="sm" onClick={() => setBulkRemoveOpen(true)}>
-                  <Trash2 className="mr-2 h-4 w-4" />
-                  Remove selected ({selectedIds.length})
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+        <div className="flex items-center justify-between gap-4 border-b">
+          <div className="relative group transition-all flex-1 overflow-hidden">
+            {showLeftArrow && (
+              <div className="absolute left-0 top-0 bottom-0 z-20 flex items-center bg-gradient-to-r from-background via-background/80 to-transparent pr-10 pointer-events-none">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                className="h-8 w-8 rounded-full shadow-lg bg-background border pointer-events-auto hover:bg-muted ml-0.5 transform translate-y-[1.5px]"
+                  onClick={() => scrollTabs('left')}
+                >
+                  <ChevronLeft className="h-4 w-4" />
                 </Button>
-              )}
-            </div>
-          </div>
-        </CardHeader>
-        <CardContent>
-          {items.length > 0 ? (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="w-[48px]">
-                    <Checkbox
-                      checked={allVisibleSelected ? true : someVisibleSelected ? "indeterminate" : false}
-                      onCheckedChange={(c) => toggleSelectAllVisible(c === true)}
-                      aria-label="Select all staged references"
-                    />
-                  </TableHead>
-                  <TableHead className="w-[350px]">Title</TableHead>
-                  <TableHead className="w-[200px]">Authors</TableHead>
-                  <TableHead className="w-[150px]">Journal & Year</TableHead>
-                  <TableHead className="w-[100px]">Status</TableHead>
-                  <TableHead className="w-[100px]">Rating</TableHead>
-                  <TableHead className="w-[150px]">Linked To</TableHead>
-                  <TableHead className="w-[140px] text-right">Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {items.map((lit) => (
-                  <TableRow key={lit.id}>
-                    <TableCell>
-                      <Checkbox
-                        checked={selectedIds.includes(lit.id)}
-                        onCheckedChange={(c) => toggleSelected(lit.id, c === true)}
-                        aria-label={`Select ${lit.title}`}
-                      />
-                    </TableCell>
-                    <TableCell>
+              </div>
+            )}
+
+            <div
+              ref={scrollTabsRef}
+              className="overflow-x-auto no-scrollbar scroll-smooth"
+              onScroll={checkScroll}
+            >
+              <TabsList className="bg-transparent h-auto p-0 flex items-center justify-start border-none flex-nowrap w-max min-w-full relative">
+              <div className="w-2 flex-shrink-0" />
+                <TabsTrigger
+                  value="list"
+                  data-value="list"
+                  className="data-[state=active]:bg-transparent data-[state=active]:border-b-2 data-[state=active]:border-[var(--n9-accent)] data-[state=active]:text-foreground rounded-none border-b-2 border-transparent px-4 py-2 bg-transparent text-muted-foreground transition-none shadow-none font-semibold"
+                >
+                  <Layers className="h-4 w-4 mr-2" />
+                  All Staged
+                  {items.length > 0 && (
+                    <Badge variant="secondary" className="ml-2 px-1 py-0 min-w-[1.25rem] h-5 justify-center">
+                      {items.length}
+                    </Badge>
+                  )}
+                </TabsTrigger>
+                {openTabs.map((id) => {
+                  const lit = items.find((i) => i.id === id)
+                  if (!lit) return null
+                  return (
+                    <TabsTrigger
+                      key={id}
+                      value={id}
+                      data-value={id}
+                      className="group relative data-[state=active]:bg-transparent data-[state=active]:border-b-2 data-[state=active]:border-[var(--n9-accent)] data-[state=active]:text-foreground rounded-none border-b-2 border-transparent px-4 py-2 bg-transparent text-muted-foreground transition-none shadow-none max-w-[220px] flex items-center gap-1"
+                    >
+                      <span className="truncate text-sm font-semibold">{lit.title}</span>
                       <button
                         type="button"
-                        onClick={() => handleOpenModal(lit.id)}
-                        className="font-medium text-foreground hover:underline text-left truncate block max-w-[350px]"
-                        title={lit.title}
+                        onClick={(e) => handleCloseTab(id, e)}
+                        className="flex-shrink-0 p-1 rounded-md hover:bg-muted text-muted-foreground/60 hover:text-rose-500 transition-all opacity-0 group-hover:opacity-100 focus:opacity-100"
                       >
-                        {lit.title}
+                        <X className="h-3 w-3" />
                       </button>
-                      {lit.doi && (
-                        <div className="flex items-center gap-1.5 mt-0.5">
-                          <span className="text-xs text-muted-foreground">DOI: {lit.doi}</span>
-                          <a
-                            href={`https://doi.org/${lit.doi}`}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="text-muted-foreground hover:text-foreground transition-colors"
-                            title="Open DOI in new tab"
-                            onClick={(e) => e.stopPropagation()}
-                          >
-                            <ExternalLink className="h-3 w-3" />
-                          </a>
-                        </div>
-                      )}
-                      {pdfSubRow(lit)}
-                    </TableCell>
-                    <TableCell className="text-sm text-foreground">
-                      {lit.authors ? (
-                        <>
-                          {lit.authors.split(",")[0]}
-                          {lit.authors.split(",").length > 1 ? " et al." : ""}
-                        </>
-                      ) : (
-                        <span className="text-muted-foreground">—</span>
-                      )}
-                    </TableCell>
-                    <TableCell className="text-sm text-foreground">
-                      {lit.journal && lit.publication_year ? (
-                        <>
-                          <div className="font-medium">{lit.journal}</div>
-                          <div className="text-xs text-muted-foreground">{lit.publication_year}</div>
-                        </>
-                      ) : (
-                        <span className="text-muted-foreground">—</span>
-                      )}
-                    </TableCell>
-                    <TableCell>
-                      <Badge
-                        variant={getStatusBadge(lit.status)}
-                        className="text-xs capitalize"
-                      >
-                        {lit.status}
-                      </Badge>
-                    </TableCell>
-                    <TableCell>{renderStars(lit.relevance_rating)}</TableCell>
-                    <TableCell>
-                      {lit.project ? (
-                        <Link
-                          href={`/projects/${lit.project.id}`}
-                          className="text-xs text-blue-600 hover:underline"
-                        >
-                          {lit.project.name}
-                        </Link>
-                      ) : lit.experiment ? (
-                        <Link
-                          href={`/experiments/${lit.experiment.id}`}
-                          className="text-xs text-blue-600 hover:underline"
-                        >
-                          {lit.experiment.name}
-                        </Link>
-                      ) : (
-                        <span className="text-xs text-muted-foreground">—</span>
-                      )}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <div className="flex flex-wrap items-center justify-end gap-1">
-                        <Button variant="ghost" size="sm" onClick={() => handleOpenModal(lit.id)}>
-                          View
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => {
-                            const raw = stagedLiterature.find((r) => String(r.id) === lit.id)
-                            if (raw) onSavePaper(rowToSearchPaper(raw), lit.id)
-                          }}
-                          className="gap-1"
-                        >
-                          <Database className="h-4 w-4" />
-                          Save
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="text-muted-foreground hover:bg-rose-50 hover:text-rose-400 dark:hover:bg-rose-950/40 dark:hover:text-rose-300"
-                          onClick={() => setRemoveTarget(lit)}
-                          aria-label={`Remove ${lit.title} from staging`}
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          ) : (
-            <div className="flex flex-col items-center justify-center py-12 text-center border border-dashed rounded-lg">
-              <BookOpen className="h-12 w-12 text-muted-foreground mb-4 opacity-50" />
-              <p className="text-muted-foreground mb-4">Staging is empty</p>
-              <p className="text-sm text-muted-foreground">Use the Search tab to stage papers</p>
+                    </TabsTrigger>
+                  )
+                })}
+                <div className="w-10 flex-shrink-0" />
+              </TabsList>
+            </div>
+
+            {showRightArrow && (
+              <div className="absolute right-0 top-0 bottom-0 z-20 flex items-center bg-gradient-to-l from-background via-background/80 to-transparent pl-10 pointer-events-none">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                className="h-8 w-8 rounded-full shadow-lg bg-background border pointer-events-auto hover:bg-muted mr-0.5 transform translate-y-[1.5px]"
+                  onClick={() => scrollTabs('right')}
+                >
+                  <ChevronRight className="h-4 w-4" />
+                </Button>
+              </div>
+            )}
+          </div>
+
+          {activeTab === "list" && selectedIds.length > 0 && (
+            <div className="flex items-center gap-2 mb-1 px-4">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setBulkRemoveOpen(true)}
+                className="bg-rose-50 text-rose-600 border border-rose-100 font-semibold hover:bg-rose-100 dark:bg-rose-900/20 dark:text-rose-400 dark:border-rose-900/10 dark:hover:bg-rose-900/30"
+              >
+                <Trash2 className="mr-2 h-4 w-4" />
+                Remove ({selectedIds.length})
+              </Button>
             </div>
           )}
-        </CardContent>
-      </Card>
+        </div>
 
-      <LiteratureDetailModal
-        literatureId={selectedLiteratureId}
-        open={modalOpen}
-        onOpenChange={setModalOpen}
-        initialTab={selectedTab}
-      />
+        <div className="mt-6">
+          <TabsContent value="list" className="m-0 border-none p-0">
+            <Card>
+              <CardHeader>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <CardTitle>Staging Inventory</CardTitle>
+                    <CardDescription>
+                      Review gathered references before saving to your repository.
+                    </CardDescription>
+                  </div>
+                  <Badge variant="secondary" className="font-normal">
+                    {items.length} total
+                  </Badge>
+                </div>
+              </CardHeader>
+              <CardContent>
+                {items.length > 0 ? (
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead className="w-[48px]">
+                          <Checkbox
+                            checked={allVisibleSelected ? true : someVisibleSelected ? "indeterminate" : false}
+                            onCheckedChange={(c) => toggleSelectAllVisible(c === true)}
+                            className="data-[state=checked]:bg-rose-50 data-[state=checked]:text-rose-600 data-[state=checked]:border-rose-200 dark:data-[state=checked]:bg-rose-950/30 dark:data-[state=checked]:text-rose-400 dark:data-[state=checked]:border-rose-900/30"
+                          />
+                        </TableHead>
+                        <TableHead>Title</TableHead>
+                        <TableHead>Source</TableHead>
+                        <TableHead>Status</TableHead>
+                        <TableHead className="text-left">Actions</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {items.map((lit) => (
+                        <TableRow key={lit.id}>
+                          <TableCell>
+                            <Checkbox
+                              checked={selectedIds.includes(lit.id)}
+                              onCheckedChange={(c) => toggleSelected(lit.id, c === true)}
+                              className="data-[state=checked]:bg-rose-50 data-[state=checked]:text-rose-600 data-[state=checked]:border-rose-200 dark:data-[state=checked]:bg-rose-950/30 dark:data-[state=checked]:text-rose-400 dark:data-[state=checked]:border-rose-900/30"
+                            />
+                          </TableCell>
+                          <TableCell>
+                            <button
+                              onClick={() => handleOpenPaper(lit.id)}
+                              className="font-medium text-foreground hover:underline text-left block max-w-md truncate"
+                            >
+                              {lit.title}
+                            </button>
+                            <p className="text-xs text-muted-foreground truncate max-w-md">
+                              {lit.authors || "—"}
+                            </p>
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex flex-col gap-1">
+                              <span className="text-xs font-medium">{lit.journal || "—"}</span>
+                              <span className="text-[10px] text-muted-foreground">{lit.publication_year || "—"}</span>
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <Badge variant={getStatusBadge(lit.status)} className="capitalize text-[10px]">
+                              {lit.status}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="text-left">
+                            <div className="flex justify-start gap-1">
+                              <Button variant="ghost" size="sm" onClick={() => handleOpenPaper(lit.id)}>
+                                Open
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => onSavePaper(rowToSearchPaper(lit), lit.id)}
+                              >
+                                Save
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8 text-muted-foreground hover:text-rose-400"
+                                onClick={() => setRemoveTarget(lit)}
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                ) : (
+                  <div className="flex flex-col items-center justify-center py-12 text-center border border-dashed rounded-lg">
+                    <BookOpen className="h-12 w-12 text-muted-foreground mb-4 opacity-50" />
+                    <p className="text-muted-foreground">Staging is empty</p>
+                    <p className="text-sm text-muted-foreground font-sans">Use the Search tab to gather papers.</p>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          {openTabs.map((id) => {
+            const lit = items.find((i) => i.id === id)
+            if (!lit) return null
+            return (
+              <TabsContent key={id} value={id} className="m-0 border-none p-0">
+                {renderPaperView(lit)}
+              </TabsContent>
+            )
+          })}
+        </div>
+      </Tabs>
 
       <AlertDialog
         open={Boolean(removeTarget)}
@@ -423,7 +648,7 @@ export function StagingTab({ stagedLiterature, onSavePaper }: StagingTabProps) {
                 if (removeTarget) void removeFromStaging([removeTarget.id])
               }}
               disabled={isRemoving}
-              className="bg-rose-300 text-rose-950 hover:bg-rose-400 dark:bg-rose-300 dark:text-rose-950 dark:hover:bg-rose-200"
+              className="bg-rose-50 text-rose-600 border border-rose-100 font-semibold hover:bg-rose-100 dark:bg-rose-900/20 dark:text-rose-400 dark:border-rose-900/10 dark:hover:bg-rose-900/30"
             >
               {isRemoving ? "Removing…" : "Remove"}
             </AlertDialogAction>
@@ -447,7 +672,7 @@ export function StagingTab({ stagedLiterature, onSavePaper }: StagingTabProps) {
                 void removeFromStaging(selectedIds)
               }}
               disabled={isRemoving || selectedIds.length === 0}
-              className="bg-rose-300 text-rose-950 hover:bg-rose-400 dark:bg-rose-300 dark:text-rose-950 dark:hover:bg-rose-200"
+              className="bg-rose-50 text-rose-600 border border-rose-100 font-semibold hover:bg-rose-100 dark:bg-rose-900/20 dark:text-rose-400 dark:border-rose-900/10 dark:hover:bg-rose-900/30"
             >
               {isRemoving ? "Removing…" : `Remove (${selectedIds.length})`}
             </AlertDialogAction>

@@ -47,6 +47,7 @@ import {
   type ExportTable,
 } from "@/lib/data-transfer"
 import { cn } from "@/lib/utils"
+import { FileDropzone } from "@/components/ui/file-dropzone"
 
 type TableOption = {
   table: ExportTable
@@ -471,14 +472,39 @@ export function DataTransferPanel() {
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="rounded-lg border border-dashed p-4">
+            <FileDropzone
+              onFilesDrop={(files) => {
+                if (files.length === 0) return
+                const parsed = parseResearchFolder(files)
+                if (!parsed) {
+                  toast({
+                    title: "Unable to parse folder",
+                    description: "Select a folder containing project and experiment subfolders.",
+                    variant: "destructive",
+                  })
+                  return
+                }
+                setProjects(parsed.projects)
+                setExperiments(parsed.experiments)
+                setFiles(parsed.files)
+                setSelectedFolderName(parsed.root)
+                setImportReport(null)
+                toast({
+                  title: "Folder loaded",
+                  description: `Detected ${parsed.projects.length} projects, ${parsed.experiments.length} experiments, ${parsed.files.length} files.`,
+                })
+              }}
+              description="Drop research folder here"
+              className="rounded-lg border border-dashed p-4"
+              activeClassName="ring-2 ring-primary border-primary bg-primary/5"
+            >
               <div className="flex items-start justify-between gap-3">
                 <div>
                   <p className="text-sm font-medium">
                     {selectedFolderName || "No folder selected"}
                   </p>
                   <p className="text-xs text-muted-foreground mt-1">
-                    Select a root folder. You can edit mapping and categories before import.
+                    Select or drop a root folder. You can edit mapping and categories before import.
                   </p>
                 </div>
                 <FileArchive className="h-5 w-5 text-primary shrink-0" />
@@ -500,7 +526,7 @@ export function DataTransferPanel() {
                 onChange={handleFolderSelection}
                 {...({ webkitdirectory: "", directory: "" } as Record<string, string>)}
               />
-            </div>
+            </FileDropzone>
 
             {files.length > 0 && (
               <div className="rounded-lg border bg-muted/30 p-3 text-sm">
