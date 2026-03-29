@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Download, ExternalLink, FileText, Lock, Unlock, ChevronDown, ChevronUp, Plus, Check, Database, X, Loader2 } from 'lucide-react';
 import { useState } from 'react';
+import { formatLiteratureAbstractPlain } from '@/lib/literature-abstract-display';
 
 function stripDoiToBare(doi: string): string {
   return doi
@@ -49,6 +50,7 @@ interface PaperSearchCardProps {
 
 export function PaperSearchCard({ paper, onStage, onSave, onSaveToRepository, onRemove, isStaged = false, isSaving = false, isStaging = false, hideActions = false, compact = false }: PaperSearchCardProps) {
   const [isExpanded, setIsExpanded] = useState(false);
+  const abstractPlain = formatLiteratureAbstractPlain(paper.abstract);
 
   const getSourceColor = (source: string) => {
     switch (source) {
@@ -153,10 +155,10 @@ export function PaperSearchCard({ paper, onStage, onSave, onSaveToRepository, on
 
         {/* Abstract preview/full */}
         <div className="bg-muted/50 rounded-md p-3 mb-4">
-          <p className={`text-sm text-foreground leading-relaxed ${!isExpanded && 'line-clamp-3'}`}>
-            {paper.abstract}
+          <p className={`text-sm text-foreground leading-relaxed whitespace-pre-wrap ${!isExpanded && 'line-clamp-3'}`}>
+            {abstractPlain}
           </p>
-          {paper.abstract.length > 200 && (
+          {abstractPlain.length > 200 && (
             <Button
               variant="ghost"
               size="sm"

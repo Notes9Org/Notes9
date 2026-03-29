@@ -24,6 +24,7 @@ import Link from "next/link";
 import { LiteratureReviewActions } from "@/app/(app)/literature-reviews/[id]/literature-review-actions";
 import { UploadLiteraturePdfDialog } from "@/components/literature-reviews/upload-literature-pdf-dialog";
 import { LiteraturePdfPanel } from "@/components/literature-reviews/literature-pdf-panel";
+import { formatLiteratureAbstractPlain } from "@/lib/literature-abstract-display";
 
 const NLM_PMC_OA_WEB_SERVICE = "https://pmc.ncbi.nlm.nih.gov/tools/oa-service/";
 const NLM_EUTILS_OVERVIEW = "https://www.ncbi.nlm.nih.gov/books/NBK25501/";
@@ -340,7 +341,7 @@ ER  - `;
               </CardHeader>
               <CardContent>
                 <p className="text-sm text-foreground whitespace-pre-wrap">
-                  {literature.abstract}
+                  {formatLiteratureAbstractPlain(literature.abstract)}
                 </p>
               </CardContent>
             </Card>
