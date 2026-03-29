@@ -37,6 +37,7 @@ import Link from "next/link";
 import { toast } from "sonner";
 import { LiteratureDetailView } from "./literature-detail-view";
 import { createClient } from "@/lib/supabase/client";
+import { LITERATURE_DRAG_MIME } from "@/lib/catalyst-agent-types";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 
 interface LiteratureReview {
@@ -643,7 +644,18 @@ export function RepoTab({
               </TableHeader>
               <TableBody>
                 {filteredLiteratureReviews.map((lit) => (
-                  <TableRow key={lit.id} className="group transition-colors">
+                  <TableRow
+                    key={lit.id}
+                    draggable
+                    className="group cursor-grab transition-colors active:cursor-grabbing"
+                    onDragStart={(e) => {
+                      e.dataTransfer.setData(
+                        LITERATURE_DRAG_MIME,
+                        JSON.stringify({ id: lit.id, title: lit.title })
+                      )
+                      e.dataTransfer.effectAllowed = "copy"
+                    }}
+                  >
                     <TableCell>
                       <Checkbox
                         checked={selectedIds.includes(lit.id)}
