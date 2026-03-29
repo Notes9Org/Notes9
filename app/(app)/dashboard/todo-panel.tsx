@@ -44,6 +44,7 @@ import {
   FlaskConical,
   FolderOpen,
   X,
+  Check
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
@@ -741,24 +742,27 @@ export function TodoPanel({ initialTasks }: { initialTasks: DashboardTask[] }) {
     if (!dueAt) return null;
     const d = new Date(dueAt);
     return d.toLocaleString(undefined, {
-      dateStyle: "short",
-      timeStyle:
-        d.getHours() === 0 && d.getMinutes() === 0 ? undefined : "short",
+      year: "numeric",
+      month: "short",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
     });
   };
 
   return (
     <Card className="min-w-0 overflow-hidden">
-      <CardHeader className="pb-3">
+      <CardHeader className="">
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <CardTitle className="flex items-center gap-2">
               <ListTodo className="h-5 w-5" />
               To-Do
             </CardTitle>
-            <CardDescription>
+            {/* <CardDescription>
               Daily task management for your laboratory work
-            </CardDescription>
+            </CardDescription> */}
           </div>
           <Select
             value={sortBy}
@@ -779,190 +783,189 @@ export function TodoPanel({ initialTasks }: { initialTasks: DashboardTask[] }) {
       </CardHeader>
       <CardContent className="space-y-4">
         {/* Add new todo */}
-        <Card>
-          <CardContent className="pt-3 pb-3 space-y-2">
-            <div className="relative flex flex-wrap items-center gap-2">
-              <Popover open={mentionOpen} onOpenChange={setMentionOpen}>
-                <PopoverAnchor asChild>
-                  <div className="flex-1 min-w-[120px] rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2">
-                    <div
-                      ref={editableRef}
-                      contentEditable
-                      suppressContentEditableWarning
-                      data-placeholder="Add a task... Use @ to link experiment or project"
-                      className="outline-none empty:before:content-[attr(data-placeholder)] empty:before:text-muted-foreground min-h-[1.5rem]"
-                      onInput={() => {
-                        if (!editableRef.current) return;
-                        setSegments(getSegmentsFromEl(editableRef.current));
-                        syncMentionFromEditable();
-                      }}
-                      onKeyDown={(e) => {
-                        const el = editableRef.current;
-                        if (
-                          el &&
-                          (e.key === "ArrowRight" || e.key === "ArrowLeft")
-                        ) {
-                          const sel = window.getSelection();
-                          const anchor = sel?.anchorNode;
-                          const mention =
-                            anchor &&
-                            (anchor.nodeType === Node.ELEMENT_NODE
-                              ? (anchor as HTMLElement)
-                              : (anchor as HTMLElement).parentElement
-                            )?.closest?.("[data-mention-id]");
-                          if (mention && el.contains(mention)) {
-                            e.preventDefault();
-                            const range = document.createRange();
-                            if (e.key === "ArrowRight") {
-                              const after =
-                                mention.nextSibling?.nextSibling ??
-                                mention.nextSibling ??
-                                mention;
-                              if (after.nodeType === Node.TEXT_NODE) {
-                                range.setStart(
-                                  after,
-                                  after.textContent?.length ?? 0,
-                                );
-                              } else {
-                                range.setStartAfter(after);
-                              }
-                            } else {
-                              const before = mention.previousSibling;
-                              if (before?.nodeType === Node.TEXT_NODE) {
-                                range.setStart(
-                                  before,
-                                  before.textContent?.length ?? 0,
-                                );
-                              } else if (before) {
-                                range.setStartAfter(before);
-                              } else {
-                                range.setStart(el, 0);
-                              }
-                            }
-                            range.collapse(true);
-                            sel?.removeAllRanges();
-                            sel?.addRange(range);
-                            return;
-                          }
-                        }
-                        if (mentionOpen && filteredMentionItems.length > 0) {
-                          if (e.key === "ArrowDown") {
-                            e.preventDefault();
-                            setSelectedMentionIndex((i) =>
-                              i < 0
-                                ? 0
-                                : Math.min(
-                                    i + 1,
-                                    filteredMentionItems.length - 1,
-                                  ),
+        <div className="relative flex flex-wrap items-center gap-2">
+          <Checkbox
+            className="mt-0.5 invisible"
+          />
+          <Popover open={mentionOpen} onOpenChange={setMentionOpen}>
+            <PopoverAnchor asChild>
+              <div className="flex-1 min-w-[120px] rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2">
+                <div
+                  ref={editableRef}
+                  contentEditable
+                  suppressContentEditableWarning
+                  data-placeholder="Add a task... Use @ to link experiment or project"
+                  className="outline-none empty:before:content-[attr(data-placeholder)] empty:before:text-muted-foreground min-h-[1.5rem]"
+                  onInput={() => {
+                    if (!editableRef.current) return;
+                    setSegments(getSegmentsFromEl(editableRef.current));
+                    syncMentionFromEditable();
+                  }}
+                  onKeyDown={(e) => {
+                    const el = editableRef.current;
+                    if (
+                      el &&
+                      (e.key === "ArrowRight" || e.key === "ArrowLeft")
+                    ) {
+                      const sel = window.getSelection();
+                      const anchor = sel?.anchorNode;
+                      const mention =
+                        anchor &&
+                        (anchor.nodeType === Node.ELEMENT_NODE
+                          ? (anchor as HTMLElement)
+                          : (anchor as HTMLElement).parentElement
+                        )?.closest?.("[data-mention-id]");
+                      if (mention && el.contains(mention)) {
+                        e.preventDefault();
+                        const range = document.createRange();
+                        if (e.key === "ArrowRight") {
+                          const after =
+                            mention.nextSibling?.nextSibling ??
+                            mention.nextSibling ??
+                            mention;
+                          if (after.nodeType === Node.TEXT_NODE) {
+                            range.setStart(
+                              after,
+                              after.textContent?.length ?? 0,
                             );
-                            return;
+                          } else {
+                            range.setStartAfter(after);
                           }
-                          if (e.key === "ArrowUp") {
-                            e.preventDefault();
-                            setSelectedMentionIndex((i) =>
-                              i <= 0 ? -1 : i - 1,
+                        } else {
+                          const before = mention.previousSibling;
+                          if (before?.nodeType === Node.TEXT_NODE) {
+                            range.setStart(
+                              before,
+                              before.textContent?.length ?? 0,
                             );
-                            return;
-                          }
-                          if (e.key === "Enter" && selectedMentionIndex >= 0) {
-                            const item =
-                              filteredMentionItems[selectedMentionIndex];
-                            if (item) {
-                              e.preventDefault();
-                              applyMention(item);
-                              return;
-                            }
+                          } else if (before) {
+                            range.setStartAfter(before);
+                          } else {
+                            range.setStart(el, 0);
                           }
                         }
-                        if (e.key === "Enter") {
-                          e.preventDefault();
-                          addTask();
-                        }
-                        if (e.key === "Escape") setMentionOpen(false);
-                      }}
-                    />
-                  </div>
-                </PopoverAnchor>
-                <PopoverContent
-                  className="w-[var(--radix-popover-trigger-width)] p-0"
-                  align="start"
-                  sideOffset={4}
-                  onOpenAutoFocus={(e) => e.preventDefault()}
-                >
-                  <div
-                    ref={mentionListRef}
-                    className="max-h-[200px] overflow-y-auto rounded-md"
-                    role="listbox"
-                    aria-label="Link experiment or project"
-                  >
-                    {filteredMentionItems.slice(0, 10).map((item, index) => (
-                      <button
-                        type="button"
-                        key={`${item.type}-${item.id}`}
-                        role="option"
-                        aria-selected={
-                          selectedMentionIndex >= 0 &&
-                          index === selectedMentionIndex
-                        }
-                        className={cn(
-                          "w-full text-left px-3 py-2 text-sm flex items-center gap-2 rounded-sm",
-                          index === selectedMentionIndex
-                            ? "bg-accent text-accent-foreground"
-                            : "hover:bg-accent/50",
-                        )}
-                        onMouseDown={(e) => {
+                        range.collapse(true);
+                        sel?.removeAllRanges();
+                        sel?.addRange(range);
+                        return;
+                      }
+                    }
+                    if (mentionOpen && filteredMentionItems.length > 0) {
+                      if (e.key === "ArrowDown") {
+                        e.preventDefault();
+                        setSelectedMentionIndex((i) =>
+                          i < 0
+                            ? 0
+                            : Math.min(
+                                i + 1,
+                                filteredMentionItems.length - 1,
+                              ),
+                        );
+                        return;
+                      }
+                      if (e.key === "ArrowUp") {
+                        e.preventDefault();
+                        setSelectedMentionIndex((i) =>
+                          i <= 0 ? -1 : i - 1,
+                        );
+                        return;
+                      }
+                      if (e.key === "Enter" && selectedMentionIndex >= 0) {
+                        const item =
+                          filteredMentionItems[selectedMentionIndex];
+                        if (item) {
                           e.preventDefault();
                           applyMention(item);
-                        }}
-                      >
-                        {item.type === "experiment" ? (
-                          <FlaskConical className="h-4 w-4 shrink-0" />
-                        ) : (
-                          <FolderOpen className="h-4 w-4 shrink-0" />
-                        )}
-                        <span className="truncate">{item.name}</span>
-                        <span className="ml-auto text-xs text-muted-foreground shrink-0">
-                          {item.type}
-                        </span>
-                      </button>
-                    ))}
-                  </div>
-                </PopoverContent>
-              </Popover>
-              <Button onClick={addTask} size="sm">
-                Add
-              </Button>
-            </div>
-            <div className="flex flex-wrap items-center gap-2">
-              <Input
-                type="date"
-                value={dueDateStr}
-                onChange={(e) => setDueDateStr(e.target.value)}
-                className="w-[160px]"
-              />
-              <Input
-                type="time"
-                value={dueTime}
-                onChange={(e) => setDueTime(e.target.value)}
-                className="w-[120px]"
-              />
-              <Select
-                value={priority}
-                onValueChange={(v) => setPriority(v as typeof priority)}
+                          return;
+                        }
+                      }
+                    }
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      addTask();
+                    }
+                    if (e.key === "Escape") setMentionOpen(false);
+                  }}
+                />
+              </div>
+            </PopoverAnchor>
+            <PopoverContent
+              className="w-[var(--radix-popover-trigger-width)] p-0"
+              align="start"
+              sideOffset={4}
+              onOpenAutoFocus={(e) => e.preventDefault()}
+            >
+              <div
+                ref={mentionListRef}
+                className="max-h-[200px] overflow-y-auto rounded-md"
+                role="listbox"
+                aria-label="Link experiment or project"
               >
-                <SelectTrigger className="w-[120px]" size="sm">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="low">Low</SelectItem>
-                  <SelectItem value="medium">Medium</SelectItem>
-                  <SelectItem value="high">High</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          </CardContent>
-        </Card>
+                {filteredMentionItems.slice(0, 10).map((item, index) => (
+                  <button
+                    type="button"
+                    key={`${item.type}-${item.id}`}
+                    role="option"
+                    aria-selected={
+                      selectedMentionIndex >= 0 &&
+                      index === selectedMentionIndex
+                    }
+                    className={cn(
+                      "w-full text-left px-3 py-2 text-sm flex items-center gap-2 rounded-sm",
+                      index === selectedMentionIndex
+                        ? "bg-accent text-accent-foreground"
+                        : "hover:bg-accent/50",
+                    )}
+                    onMouseDown={(e) => {
+                      e.preventDefault();
+                      applyMention(item);
+                    }}
+                  >
+                    {item.type === "experiment" ? (
+                      <FlaskConical className="h-4 w-4 shrink-0" />
+                    ) : (
+                      <FolderOpen className="h-4 w-4 shrink-0" />
+                    )}
+                    <span className="truncate">{item.name}</span>
+                    <span className="ml-auto text-xs text-muted-foreground shrink-0">
+                      {item.type}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </PopoverContent>
+          </Popover>
+        
+          <Input
+            type="date"
+            value={dueDateStr}
+            onChange={(e) => setDueDateStr(e.target.value)}
+            className="w-[140px] md:text-xs"
+          />
+          <Input
+            type="time"
+            value={dueTime}
+            onChange={(e) => setDueTime(e.target.value)}
+            className="w-[100px] md:text-xs"
+          />
+          <Select
+            value={priority}
+            onValueChange={(v) => setPriority(v as typeof priority)}
+          >
+            <SelectTrigger className="w-[100px] md:text-xs" size="sm">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="low">Low</SelectItem>
+              <SelectItem value="medium">Medium</SelectItem>
+              <SelectItem value="high">High</SelectItem>
+            </SelectContent>
+          </Select>
+
+          <Button onClick={addTask} size="sm" className="h8 w-16.5">
+            Add
+          </Button>
+        </div>
 
         {/* Task list */}
         <motion.div layout className="space-y-3">
@@ -1211,100 +1214,108 @@ function TaskRow({
       layoutId={layoutId}
       transition={{ type: "spring", stiffness: 350, damping: 30 }}
     >
-      <Card className={cn("group", completed && "opacity-75")}>
-        <CardContent className="flex items-start gap-2 pt-3 pb-3">
-          <Checkbox
-            checked={completed}
-            onCheckedChange={onToggleComplete}
-            className="mt-0.5"
-          />
-          <div className="flex-1 min-w-0 flex flex-col gap-2">
-            {isEditing ? (
-              <>
-                <div className="relative flex flex-wrap items-center gap-2">
-                  {titleHasPlaceholders(task.title) ? (
-                    <div className="flex-1 min-w-[120px] rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2">
-                      <div
-                        ref={editEditableRef}
-                        contentEditable
-                        suppressContentEditableWarning
-                        className="outline-none min-h-[1.5rem]"
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter") {
-                            e.preventDefault();
-                            handleSaveEdit();
-                          }
-                          if (e.key === "Escape") onCancelEdit();
-                        }}
-                      />
-                    </div>
-                  ) : (
-                    <Input
-                      value={editTitle}
-                      onChange={(e) => setEditTitle(e.target.value)}
+      <div className="group flex flex-row items-center">
+        <div className="flex-1 min-w-0 flex flex-row gap-2 items-center">
+          {isEditing ? (
+            <>
+              <Checkbox
+                checked={completed}
+                onCheckedChange={onToggleComplete}
+                className="mt-0.5 invisible"
+              />
+              <div className="relative flex flex-wrap items-center gap-2 grow">
+                {titleHasPlaceholders(task.title) ? (
+                  <div className="flex-1 min-w-[120px] rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2">
+                    <div
+                      ref={editEditableRef}
+                      contentEditable
+                      suppressContentEditableWarning
+                      className="outline-none min-h-[1.5rem]"
                       onKeyDown={(e) => {
-                        if (e.key === "Enter") handleSaveEdit();
+                        if (e.key === "Enter") {
+                          e.preventDefault();
+                          handleSaveEdit();
+                        }
                         if (e.key === "Escape") onCancelEdit();
                       }}
-                      className="h-8 text-sm flex-1 min-w-[120px]"
-                      autoFocus
                     />
-                  )}
-                  <Button size="sm" onClick={handleSaveEdit}>
-                    Save
-                  </Button>
-                  <Button size="sm" variant="ghost" onClick={onCancelEdit}>
-                    Cancel
-                  </Button>
-                </div>
-                <div className="flex flex-wrap items-center gap-2">
+                  </div>
+                ) : (
                   <Input
-                    type="date"
-                    value={editDueDateStr}
-                    onChange={(e) => setEditDueDateStr(e.target.value)}
-                    className="w-[160px]"
+                    value={editTitle}
+                    onChange={(e) => setEditTitle(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") handleSaveEdit();
+                      if (e.key === "Escape") onCancelEdit();
+                    }}
+                    className="h-8 text-sm flex-1 min-w-[120px]"
+                    autoFocus
                   />
-                  <Input
-                    type="time"
-                    value={editTimeStr}
-                    onChange={(e) => setEditTimeStr(e.target.value)}
-                    className="w-[120px]"
-                  />
-                  <Select
-                    value={editPriority}
-                    onValueChange={(v) =>
-                      setEditPriority(v as "low" | "medium" | "high")
-                    }
-                  >
-                    <SelectTrigger className="w-[120px]" size="sm">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="low">Low</SelectItem>
-                      <SelectItem value="medium">Medium</SelectItem>
-                      <SelectItem value="high">High</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </>
-            ) : (
-              <>
-                <div
-                  role="button"
-                  tabIndex={0}
-                  onClick={onStartEdit}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" || e.key === " ") {
-                      e.preventDefault();
-                      onStartEdit();
-                    }
-                  }}
-                  className={cn(
-                    "min-h-[2.5rem] flex items-center gap-2 flex-wrap rounded-md -m-1 p-1 cursor-text text-left text-sm min-w-0",
-                    completed && "line-through text-muted-foreground",
-                  )}
-                  aria-label="Edit task"
+                )}
+              </div>
+              <div className="flex flex-row gap-2 items-center">
+                <Input
+                  type="date"
+                  value={editDueDateStr}
+                  onChange={(e) => setEditDueDateStr(e.target.value)}
+                  className="w-[140px] md:text-xs"
+                />
+                <Input
+                  type="time"
+                  value={editTimeStr}
+                  onChange={(e) => setEditTimeStr(e.target.value)}
+                  className="w-[100px] md:text-xs"
+                />
+                <Select
+                  value={editPriority}
+                  onValueChange={(v) =>
+                    setEditPriority(v as "low" | "medium" | "high")
+                  }
                 >
+                  <SelectTrigger className="w-[100px] md:text-xs" size="sm">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="low">Low</SelectItem>
+                    <SelectItem value="medium">Medium</SelectItem>
+                    <SelectItem value="high">High</SelectItem>
+                  </SelectContent>
+                </Select>
+
+                <div className="flex flex-row gap-0.5 items-center">
+                  <Button size="icon" className="h-8 w-8" onClick={handleSaveEdit}>
+                    <Check className="h-4 w-4" />
+                  </Button>
+                  <Button size="icon" variant="ghost" className="h-8 w-8" onClick={onCancelEdit}>
+                    <X className="h-4 w-4" />
+                  </Button>
+                </div>
+              </div>
+            </>
+          ) : (
+            <>
+              <Checkbox
+                checked={completed}
+                onCheckedChange={onToggleComplete}
+                className="mt-0.5"
+              />
+              {/* <div
+                role="button"
+                tabIndex={0}
+                onClick={onStartEdit}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    onStartEdit();
+                  }
+                }}
+                className={cn(
+                  "min-h-[2.5rem] flex items-center gap-2 flex-wrap rounded-md -m-1 p-1 cursor-text text-left text-sm min-w-0 grow",
+                  completed && "line-through text-muted-foreground",
+                )}
+                aria-label="Edit task"
+              > */}
+                <div className="grow">
                   <span className="inline-flex flex-wrap items-center gap-x-1 gap-y-0.5 break-words min-w-0">
                     {titleHasPlaceholders(task.title)
                       ? parseTitleWithPlaceholders(task.title).map((part, i) =>
@@ -1348,7 +1359,7 @@ function TaskRow({
                       : task.title}
                   </span>
                 </div>
-                <div className="flex items-center gap-2 flex-wrap">
+                <div className="flex flex-row items-center gap-2">
                   {(() => {
                     const formattedDue = formatDue(task.due_at);
                     return (
@@ -1359,44 +1370,46 @@ function TaskRow({
                       )
                     );
                   })()}
-                  <Badge
-                    variant={task.priority === "high" ? "default" : "secondary"}
-                    className={cn(
-                      "text-xs",
-                      task.priority === "low" &&
-                        "bg-muted text-muted-foreground",
-                    )}
-                  >
-                    {task.priority}
-                  </Badge>
+                  <div className="w-[80px]">
+                    <Badge
+                      variant={task.priority === "high" ? "default" : "secondary"}
+                      className={cn(
+                        "text-xs",
+                        task.priority === "low" &&
+                          "bg-muted text-muted-foreground",
+                      )}
+                    >
+                      {task.priority}
+                    </Badge>
+                  </div>
                 </div>
-              </>
-            )}
-          </div>
-          {!isEditing && (
-            <div className="flex items-center gap-0.5 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
-              <Button
-                size="icon"
-                variant="ghost"
-                className="h-8 w-8"
-                onClick={onStartEdit}
-                aria-label="Edit task"
-              >
-                <Pencil className="h-4 w-4" />
-              </Button>
-              <Button
-                size="icon"
-                variant="destructive-ghost"
-                className="h-8 w-8"
-                onClick={onDelete}
-                aria-label="Delete task"
-              >
-                <Trash2 className="h-4 w-4" />
-              </Button>
-            </div>
+              {/* </div> */}
+            </>
           )}
-        </CardContent>
-      </Card>
+        </div>
+        {!isEditing && (
+          <div className="flex items-center gap-0.5 shrink-0 opacity-100 group-hover:opacity-100 transition-opacity">
+            <Button
+              size="icon"
+              variant="ghost"
+              className="h-8 w-8"
+              onClick={onStartEdit}
+              aria-label="Edit task"
+            >
+              <Pencil className="h-4 w-4" />
+            </Button>
+            <Button
+              size="icon"
+              variant="destructive-ghost"
+              className="h-8 w-8"
+              onClick={onDelete}
+              aria-label="Delete task"
+            >
+              <Trash2 className="h-4 w-4" />
+            </Button>
+          </div>
+        )}
+      </div>
     </motion.div>
   );
 }
