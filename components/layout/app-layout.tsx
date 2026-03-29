@@ -5,8 +5,10 @@ import { usePathname } from "next/navigation"
 import Link from "next/link"
 import { AppSidebar } from "./app-sidebar"
 import { RightSidebar } from "./right-sidebar"
+import { DayPlannerCountdownWidget } from "./day-planner-countdown-widget"
 import { AppTour, requestPageHelp } from "@/components/tour/app-tour"
 import { BreadcrumbProvider, useBreadcrumb } from "./breadcrumb-context"
+import { DayPlannerProvider } from "@/contexts/day-planner-context"
 import { PaperAIProvider, usePaperAI } from "@/contexts/paper-ai-context"
 import { Button } from "@/components/ui/button"
 import { ResizeHandle } from "@/components/ui/resize-handle"
@@ -283,6 +285,7 @@ export function AppLayout({ children }: AppLayoutProps) {
 
   return (
     <BreadcrumbProvider>
+      <DayPlannerProvider>
       <PaperAIProvider>
       <SidebarProvider defaultOpen={!isMobile} open={sidebarOpen} onOpenChange={setSidebarOpen}>
         <AppTour />
@@ -336,6 +339,9 @@ export function AppLayout({ children }: AppLayoutProps) {
               </div>
 
             <div className="flex items-center gap-1 sm:gap-2">
+              <div className="hidden md:block">
+                <DayPlannerCountdownWidget />
+              </div>
               <Button
                 type="button"
                 variant="ghost"
@@ -413,6 +419,7 @@ export function AppLayout({ children }: AppLayoutProps) {
         </div>
       </SidebarProvider>
       </PaperAIProvider>
+      </DayPlannerProvider>
     </BreadcrumbProvider>
   )
 }
