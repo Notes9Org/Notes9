@@ -178,7 +178,7 @@ export function LiteratureTabs({
         if (result.alreadyStaged) {
           toast.message("Already in staging")
         } else {
-          toast.success("Paper staged — importing PDF when available")
+          toast.success("Paper staged — downloading PDF from the search link")
         }
         if ("warning" in result && result.warning) {
           toast.message(result.warning)
