@@ -297,6 +297,10 @@
   border-color: var(--border);
 }
 
+*[role="checkbox"] {
+  border-color: #BC9F81;
+}
+
 body {
   background-color: var(--background);
   color: var(--foreground);

@@ -111,7 +111,7 @@ export default async function DashboardPage() {
   const pendingReportsCount = reports?.length || 0;
 
   return (
-    <div className="min-w-0 space-y-4 md:space-y-6">
+    <div className="min-w-0 space-y-4 md:space-y-6 pb-6">
       {/* Welcome Section */}
       <div>
         <h1 className="text-2xl font-bold tracking-tight md:text-3xl">
