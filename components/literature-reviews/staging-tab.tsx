@@ -374,10 +374,11 @@ export function StagingTab({ stagedLiterature, onSavePaper }: StagingTabProps) {
                 <div className="mb-4 inline-flex h-12 w-12 items-center justify-center rounded-full bg-muted">
                   <FileText className="h-6 w-6 text-muted-foreground" />
                 </div>
-                <h4 className="text-lg font-semibold text-foreground">Closed Source Paper</h4>
+                <h4 className="text-lg font-semibold text-foreground">No PDF from search link</h4>
                 <p className="mx-auto mt-2 max-w-lg text-sm text-muted-foreground">
-                  This article is not in the PMC open-access subset. Please download the paper from the 
-                  original publisher using your institution&apos;s access, then upload it here to read and annotate.
+                  Staging only pulls the PDF URL from your search result. That link may be missing, blocked for
+                  server download, or require a browser session. Download the PDF yourself if needed, then upload
+                  it here to read and annotate.
                 </p>
                 <div className="mt-6 flex flex-wrap items-center justify-center gap-4">
                   {lit.doi && (

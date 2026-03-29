@@ -1,4 +1,10 @@
 /**
+ * **Staging / repository import from search** tries **`SearchPaper.pdfUrl`** first (same href as the PDF
+ * icon), with PMC `…/pdf` → `…/pdf/main.pdf` when the path is the bare folder.
+ * If NLM returns HTML (common: Proof-of-Work interstitial on `pmc.ncbi.nlm.nih.gov/.../pdf`), falls back
+ * to **PMC Open Access Subset** sources for the **same** article (Europe PMC mirrors + `oa.fcgi` package URL).
+ * ScienceDirect `pdfft` URLs are skipped on the server (session-bound).
+ *
  * PMC open-access PDF pipeline (server-only; NCBI does not support CORS for these endpoints).
  *
  * 1. **Discovery** — [PMC OA Web Service](https://pmc.ncbi.nlm.nih.gov/tools/oa-service/)
@@ -184,6 +190,9 @@ export type LiteraturePmcPdfResolution =
 async function resolvePmcOaPdfUrls(paper: SearchPaper): Promise<{
   urls: string[]
   oaPackageTgzUrl: string | null
+  /** Direct PDF link from `oa.fcgi` when present (often FTP→HTTPS). */
+  oaDirectPdfUrl: string | null
+  pmcNumeric: string | null
   resolution: LiteraturePmcPdfResolution
 }> {
   let pmcNum = extractPmcNumericId(paper)
@@ -192,15 +201,33 @@ async function resolvePmcOaPdfUrls(paper: SearchPaper): Promise<{
   }
 
   if (!pmcNum) {
-    return { urls: [], oaPackageTgzUrl: null, resolution: "no_pmc" }
+    return {
+      urls: [],
+      oaPackageTgzUrl: null,
+      oaDirectPdfUrl: null,
+      pmcNumeric: null,
+      resolution: "no_pmc",
+    }
   }
 
   const oa = await queryPmcOpenAccessSubset(pmcNum)
   if (!oa.ok) {
-    return { urls: [], oaPackageTgzUrl: null, resolution: "oa_subset_check_failed" }
+    return {
+      urls: [],
+      oaPackageTgzUrl: null,
+      oaDirectPdfUrl: null,
+      pmcNumeric: pmcNum,
+      resolution: "oa_subset_check_failed",
+    }
   }
   if (!oa.inSubset) {
-    return { urls: [], oaPackageTgzUrl: null, resolution: "not_pmc_open_access" }
+    return {
+      urls: [],
+      oaPackageTgzUrl: null,
+      oaDirectPdfUrl: null,
+      pmcNumeric: pmcNum,
+      resolution: "not_pmc_open_access",
+    }
   }
 
   const urls: string[] = []
@@ -210,6 +237,8 @@ async function resolvePmcOaPdfUrls(paper: SearchPaper): Promise<{
   return {
     urls: [...new Set(urls)],
     oaPackageTgzUrl: oa.oaTgzHttpsUrl,
+    oaDirectPdfUrl: oa.oaPdfHttpsUrl,
+    pmcNumeric: pmcNum,
     resolution: "open_access_urls_ready",
   }
 }
@@ -394,6 +423,91 @@ export async function importLiteraturePdfFromRemote(params: {
   }
 }
 
+/**
+ * Links we can attempt from the server (same href as the search card PDF button).
+ * EuropePMC / EBI often return `http://`; we upgrade known hosts to `https` before fetch.
+ */
+function shouldTrySearchCardPdfUrl(url: string): boolean {
+  const u = url.trim()
+  if (!/^https?:\/\//i.test(u)) return false
+  const lower = u.toLowerCase()
+  if (lower.includes("sciencedirect.com") && lower.includes("pdfft")) return false
+  return true
+}
+
+function upgradeInsecurePdfUrlIfKnownHost(url: string): string {
+  try {
+    const parsed = new URL(url.trim())
+    if (parsed.protocol !== "http:") return url.trim()
+    const host = parsed.hostname.toLowerCase()
+    const upgrade =
+      host.includes("europepmc.org") ||
+      host.includes("ebi.ac.uk") ||
+      host.endsWith("nih.gov")
+    if (!upgrade) return url.trim()
+    parsed.protocol = "https:"
+    return parsed.toString()
+  } catch {
+    return url.trim()
+  }
+}
+
+/**
+ * Only URLs tied to what search showed — primary card href, then same-article fallbacks (PMC folder → main.pdf).
+ */
+function expandSearchCardPdfUrls(cardUrl: string): string[] {
+  const primary = upgradeInsecurePdfUrlIfKnownHost(cardUrl.trim())
+  const out: string[] = []
+  const add = (raw: string) => {
+    const t = upgradeInsecurePdfUrlIfKnownHost(raw.trim())
+    if (shouldTrySearchCardPdfUrl(t) && !out.includes(t)) out.push(t)
+  }
+  add(primary)
+  try {
+    const parsed = new URL(primary)
+    const host = parsed.hostname.toLowerCase()
+    const isNlmPmc =
+      host === "pmc.ncbi.nlm.nih.gov" ||
+      host === "www.ncbi.nlm.nih.gov"
+    if (isNlmPmc) {
+      const path = parsed.pathname.replace(/\/+$/, "")
+      if (path.endsWith("/pdf") && !path.toLowerCase().endsWith(".pdf")) {
+        add(`${parsed.origin}${path}/main.pdf`)
+      }
+    }
+  } catch {
+    /* ignore */
+  }
+  return out
+}
+
+/**
+ * URLs that tend to return raw PDF bytes from the server (NLM `…/pdf` and `…/pdf/*.pdf` often serve a
+ * JS Proof-of-Work interstitial instead). Same PMC article as the search card.
+ */
+function buildOaSubsetServerFetchablePdfUrls(
+  oaDirectPdfUrl: string | null,
+  pmcNumeric: string,
+): string[] {
+  const id = `PMC${pmcNumeric.replace(/^PMC/i, "")}`
+  const raw: string[] = []
+  if (oaDirectPdfUrl) raw.push(oaDirectPdfUrl)
+  raw.push(
+    `https://europepmc.org/backend/ptpmcrender.fcgi?accid=${encodeURIComponent(id)}&blobtype=pdf`,
+    `https://europepmc.org/articles/${id}?pdf=render`,
+  )
+  const out: string[] = []
+  for (const u of raw) {
+    const t = upgradeInsecurePdfUrlIfKnownHost(u.trim())
+    if (shouldTrySearchCardPdfUrl(t) && !out.includes(t)) out.push(t)
+  }
+  return out
+}
+
+/**
+ * Import from `paper.pdfUrl` first; if the response is not a PDF (e.g. NLM POW page), use OA-subset
+ * mirrors / package for the **same** PMC article.
+ */
 export async function tryImportPdfForPaper(params: {
   supabase: SupabaseClient
   userId: string
@@ -401,36 +515,28 @@ export async function tryImportPdfForPaper(params: {
   paper: SearchPaper
   matchSource: PdfMatchSource
 }) {
-  const { urls: pdfUrls, oaPackageTgzUrl, resolution } = await resolvePmcOaPdfUrls(params.paper)
-
-  if (resolution === "no_pmc") {
+  const cardPdf = params.paper.pdfUrl?.trim()
+  if (!cardPdf) {
     await params.supabase
       .from("literature_reviews")
-      .update({ pdf_import_status: "none", pdf_metadata: null })
+      .update({
+        pdf_import_status: "none",
+        pdf_metadata: { note: "no_pdf_url_on_search_hit" },
+      })
       .eq("id", params.literatureId)
     return { ok: false as const, reason: "no_open_access_pdf" as const }
   }
 
-  if (resolution === "not_pmc_open_access") {
+  const pdfUrls = expandSearchCardPdfUrls(cardPdf)
+  if (pdfUrls.length === 0) {
     await params.supabase
       .from("literature_reviews")
       .update({
         pdf_import_status: "none",
-        pdf_metadata: { not_pmc_open_access_subset: true },
+        pdf_metadata: { search_pdf_url: cardPdf, note: "url_not_allowed_for_server_fetch" },
       })
       .eq("id", params.literatureId)
-    return { ok: false as const, reason: "not_pmc_open_access" as const }
-  }
-
-  if (resolution === "oa_subset_check_failed") {
-    await params.supabase
-      .from("literature_reviews")
-      .update({
-        pdf_import_status: "none",
-        pdf_metadata: { pmc_oa_check_failed: true },
-      })
-      .eq("id", params.literatureId)
-    return { ok: false as const, reason: "oa_subset_check_failed" as const }
+    return { ok: false as const, reason: "no_open_access_pdf" as const }
   }
 
   try {
@@ -439,19 +545,49 @@ export async function tryImportPdfForPaper(params: {
       userId: params.userId,
       literatureId: params.literatureId,
       pdfUrls,
-      oaPackageTgzUrl,
+      oaPackageTgzUrl: null,
       matchSource: params.matchSource,
     })
     return { ok: true as const }
   } catch (e: unknown) {
     const message = e instanceof Error ? e.message : "PDF import failed"
+    const resolved = await resolvePmcOaPdfUrls(params.paper)
+    let oaFallbackMeta: Record<string, unknown> = {}
+
+    if (resolved.resolution === "open_access_urls_ready" && resolved.pmcNumeric) {
+      const fallbackUrls = buildOaSubsetServerFetchablePdfUrls(
+        resolved.oaDirectPdfUrl,
+        resolved.pmcNumeric,
+      )
+      try {
+        await importLiteraturePdfFromRemote({
+          supabase: params.supabase,
+          userId: params.userId,
+          literatureId: params.literatureId,
+          pdfUrls: fallbackUrls,
+          oaPackageTgzUrl: resolved.oaPackageTgzUrl,
+          matchSource: params.matchSource,
+          catalogNote:
+            "after_search_card_url_non_pdf: OA subset mirrors / OA package (NLM /pdf may return POW interstitial)",
+        })
+        return { ok: true as const }
+      } catch (e2: unknown) {
+        oaFallbackMeta = {
+          oa_subset_fallback_tried_urls: [...fallbackUrls, ...(resolved.oaPackageTgzUrl ? [resolved.oaPackageTgzUrl] : [])],
+          oa_subset_fallback_error: e2 instanceof Error ? e2.message : "PDF import failed",
+        }
+      }
+    }
+
     await params.supabase
       .from("literature_reviews")
       .update({
         pdf_import_status: "failed",
         pdf_metadata: {
           import_error: message,
-          tried_urls: [...pdfUrls, ...(oaPackageTgzUrl ? [oaPackageTgzUrl] : [])],
+          tried_urls: pdfUrls,
+          search_pdf_url: cardPdf,
+          ...oaFallbackMeta,
         },
       })
       .eq("id", params.literatureId)
