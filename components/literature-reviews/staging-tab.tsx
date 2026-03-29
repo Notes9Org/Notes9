@@ -25,6 +25,7 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { removeStagingLiterature } from "@/app/(app)/literature-reviews/actions"
+import { LITERATURE_DRAG_MIME } from "@/lib/catalyst-agent-types"
 import { SearchPaper } from "@/types/paper-search"
 import { BookOpen, Database, ExternalLink, FileText, Layers, Loader2, Star, Trash2, X, ChevronLeft, ChevronRight } from "lucide-react"
 import { toast } from "sonner"
@@ -544,7 +545,18 @@ export function StagingTab({ stagedLiterature, onSavePaper }: StagingTabProps) {
                     </TableHeader>
                     <TableBody>
                       {items.map((lit) => (
-                        <TableRow key={lit.id}>
+                        <TableRow
+                          key={lit.id}
+                          draggable
+                          className="cursor-grab active:cursor-grabbing"
+                          onDragStart={(e) => {
+                            e.dataTransfer.setData(
+                              LITERATURE_DRAG_MIME,
+                              JSON.stringify({ id: lit.id, title: lit.title })
+                            )
+                            e.dataTransfer.effectAllowed = "copy"
+                          }}
+                        >
                           <TableCell>
                             <Checkbox
                               checked={selectedIds.includes(lit.id)}

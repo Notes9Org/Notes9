@@ -28,6 +28,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import { useLiteratureMentionRegister } from "@/contexts/literature-mention-context"
 
 interface LiteratureReview {
   id: string
@@ -83,6 +84,35 @@ export function LiteratureTabs({
       ),
     [literatureReviews]
   )
+
+  const registerLiteratureMentions = useLiteratureMentionRegister()
+  const literatureMentionCandidates = useMemo(() => {
+    const staged = stagedLiterature.map((row) => {
+      const r = row as StagingLiteratureRow & {
+        id?: string
+        title?: string
+        authors?: string | null
+      }
+      return {
+        id: String(r.id ?? ""),
+        title: String(r.title ?? ""),
+        authors: r.authors ?? null,
+        catalog_placement: "staging" as const,
+      }
+    })
+    const repo = repositoryReviews.map((r) => ({
+      id: r.id,
+      title: r.title,
+      authors: r.authors,
+      catalog_placement: r.catalog_placement ?? "repository",
+    }))
+    return [...staged, ...repo].filter((c) => c.id)
+  }, [stagedLiterature, repositoryReviews])
+
+  useEffect(() => {
+    registerLiteratureMentions(literatureMentionCandidates)
+    return () => registerLiteratureMentions([])
+  }, [literatureMentionCandidates, registerLiteratureMentions])
 
   const filteredExperiments = useMemo(
     () =>

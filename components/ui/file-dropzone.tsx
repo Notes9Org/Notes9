@@ -8,6 +8,8 @@ import { useToast } from "@/hooks/use-toast"
 interface FileDropzoneProps {
   children: React.ReactNode
   onFilesDrop: (files: File[]) => void
+  /** If this returns true, file handling is skipped (e.g. custom MIME literature drag). */
+  onNonFileDrop?: (e: React.DragEvent) => boolean
   className?: string
   activeClassName?: string
   disabled?: boolean
@@ -18,6 +20,7 @@ interface FileDropzoneProps {
 export function FileDropzone({
   children,
   onFilesDrop,
+  onNonFileDrop,
   className,
   activeClassName,
   disabled = false,
@@ -63,6 +66,10 @@ export function FileDropzone({
     setIsDragActive(false)
     dragCounter.current = 0
 
+    if (onNonFileDrop?.(e)) {
+      return
+    }
+
     const files = Array.from(e.dataTransfer.files)
     if (files.length > 0) {
       // Filter by accept if provided
@@ -93,7 +100,7 @@ export function FileDropzone({
         })
       }
     }
-  }, [disabled, onFilesDrop, accept, toast])
+  }, [disabled, onFilesDrop, onNonFileDrop, accept, toast])
 
   return (
     <div
