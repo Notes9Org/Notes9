@@ -1,5 +1,6 @@
 'use client';
 
+import * as React from 'react';
 import { cn } from '@/lib/utils';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -9,6 +10,16 @@ import rehypeKatex from 'rehype-katex';
 import Link from 'next/link';
 import 'highlight.js/styles/github-dark.css';
 import 'katex/dist/katex.min.css';
+
+function mdFlattenText(node: React.ReactNode): string {
+  if (node == null || typeof node === 'boolean') return '';
+  if (typeof node === 'string' || typeof node === 'number') return String(node);
+  if (Array.isArray(node)) return node.map(mdFlattenText).join('');
+  if (React.isValidElement(node)) {
+    return mdFlattenText((node.props as { children?: React.ReactNode }).children);
+  }
+  return '';
+}
 
 interface MarkdownRendererProps {
   content: string;
@@ -64,12 +75,29 @@ export function MarkdownRenderer({ content, className }: MarkdownRendererProps) 
         a({ href, children, ...props }) {
           const url = href ?? '#';
           const isInternal = url.startsWith('/');
-          
+          const isLiteratureRecord =
+            isInternal && url.startsWith('/literature-reviews/');
+          const linkText = mdFlattenText(children).trim();
+          const isLiteratureIdChip =
+            isLiteratureRecord &&
+            linkText.length > 0 &&
+            linkText.length <= 48 &&
+            !/\s/.test(linkText);
+
           if (isInternal) {
             return (
               <Link
                 href={url}
-                className="text-primary underline underline-offset-2 hover:text-primary/80 transition-colors"
+                className={cn(
+                  'transition-colors',
+                  isLiteratureIdChip &&
+                    'no-underline inline-flex items-center rounded-md bg-muted px-1.5 py-0.5 text-xs font-mono text-foreground hover:bg-muted/80 ring-1 ring-border/60',
+                  isLiteratureRecord &&
+                    !isLiteratureIdChip &&
+                    'no-underline font-medium text-foreground hover:text-primary',
+                  !isLiteratureRecord &&
+                    'text-primary underline underline-offset-2 hover:text-primary/80'
+                )}
                 {...props}
               >
                 {children}
