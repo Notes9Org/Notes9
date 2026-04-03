@@ -79,7 +79,6 @@ import {
   PenLine,
   Plus,
   Pipette,
-  Search,
 } from "lucide-react"
 import { Extension, Mark, mergeAttributes } from "@tiptap/core"
 import { Plugin, PluginKey } from "@tiptap/pm/state"
@@ -87,7 +86,7 @@ import { TextSelection } from "@tiptap/pm/state"
 import { Decoration, DecorationSet } from "@tiptap/pm/view"
 import { cn } from "@/lib/utils"
 import { useAwsTranscribe } from "@/hooks/use-aws-transcribe"
-import { Fragment, useCallback, useEffect, useRef, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import { createPortal } from "react-dom"
 import "@/styles/inline-diff.css"
 // @ts-ignore
@@ -111,9 +110,16 @@ import {
 import {
   DEFAULT_TEXT_STYLE_FONT_LABEL,
   DEFAULT_TEXT_STYLE_FONT_STACK,
-  filterFontMenuByQuery,
+  ALL_FONT_MENU_VARIANTS,
   fontLabelForAttr,
 } from "./font-menu-data"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 import {
   Dialog,
   DialogContent,
@@ -1384,7 +1390,6 @@ export function TiptapEditor({
   const [toolbarClusterMenu, setToolbarClusterMenu] = useState<ToolbarClusterId | null>(null)
   const [textMenuFontSizeInput, setTextMenuFontSizeInput] = useState("16")
   const [textMenuBaseColor, setTextMenuBaseColor] = useState("#1e88e5")
-  const [textMenuFontFilter, setTextMenuFontFilter] = useState("")
   const [tableRows, setTableRows] = useState(3)
   const [tableCols, setTableCols] = useState(3)
   const [citationModalOpen, setCitationModalOpen] = useState(false)
@@ -2693,12 +2698,6 @@ export function TiptapEditor({
     }
   }, [toolbarClusterMenu, editor])
 
-  useEffect(() => {
-    if (toolbarClusterMenu === "text") {
-      setTextMenuFontFilter("")
-    }
-  }, [toolbarClusterMenu])
-
   const applyTextMenuFontSizePx = useCallback(
     (px: number) => {
       if (!editor) return
@@ -2963,6 +2962,13 @@ export function TiptapEditor({
       : editor.isActive("heading", { level: 3 })
         ? "Heading 3"
         : "Paragraph"
+  const currentParagraphValue = editor.isActive("heading", { level: 1 })
+    ? "h1"
+    : editor.isActive("heading", { level: 2 })
+      ? "h2"
+      : editor.isActive("heading", { level: 3 })
+        ? "h3"
+        : "p"
 
   const currentFontFamily =
     editor.getAttributes("textStyle").fontFamily || DEFAULT_TEXT_STYLE_FONT_STACK
@@ -2979,7 +2985,6 @@ export function TiptapEditor({
       side: "bottom" as const,
       align: "end" as const,
     }
-    const filteredFonts = filterFontMenuByQuery(textMenuFontFilter)
     return (
     <TooltipProvider delayDuration={300}>
       <div className="flex min-w-0 flex-nowrap items-center gap-x-1 [&>*]:shrink-0">
@@ -3044,15 +3049,30 @@ export function TiptapEditor({
           onWheel={(e) => e.stopPropagation()}
         >
           <div className="shrink-0 p-1">
-            <DropdownMenuGroup>
-              <DropdownMenuLabel className="px-2 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-foreground">
-                Paragraph
-              </DropdownMenuLabel>
-              <DropdownMenuItem onClick={() => editor.chain().focus().setParagraph().run()}>Normal text</DropdownMenuItem>
-              <DropdownMenuItem onClick={() => editor.chain().focus().toggleHeading({ level: 1 }).run()}>Heading 1</DropdownMenuItem>
-              <DropdownMenuItem onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()}>Heading 2</DropdownMenuItem>
-              <DropdownMenuItem onClick={() => editor.chain().focus().toggleHeading({ level: 3 }).run()}>Heading 3</DropdownMenuItem>
-            </DropdownMenuGroup>
+            <DropdownMenuLabel className="px-2 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-foreground">
+              Paragraph
+            </DropdownMenuLabel>
+            <div className="px-2 pb-1" onPointerDown={(e) => e.stopPropagation()}>
+              <Select
+                value={currentParagraphValue}
+                onValueChange={(value) => {
+                  if (value === "h1") editor.chain().focus().toggleHeading({ level: 1 }).run()
+                  else if (value === "h2") editor.chain().focus().toggleHeading({ level: 2 }).run()
+                  else if (value === "h3") editor.chain().focus().toggleHeading({ level: 3 }).run()
+                  else editor.chain().focus().setParagraph().run()
+                }}
+              >
+                <SelectTrigger size="sm" className="h-8 w-full text-xs">
+                  <SelectValue placeholder="Select paragraph style" />
+                </SelectTrigger>
+                <SelectContent className="z-[240]">
+                  <SelectItem value="p">Paragraph</SelectItem>
+                  <SelectItem value="h1">Heading 1</SelectItem>
+                  <SelectItem value="h2">Heading 2</SelectItem>
+                  <SelectItem value="h3">Heading 3</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
           </div>
           <DropdownMenuSeparator className="my-0 shrink-0" />
           <div className="shrink-0 p-1">
@@ -3157,6 +3177,17 @@ export function TiptapEditor({
           <p className="px-2 pb-1 text-[10px] leading-snug text-muted-foreground">
             Presets, native picker, screen pipette, then a grid from the current base hue.
           </p>
+          <div className="px-2 pb-1">
+            <div className="flex items-center gap-2 rounded-md border border-border/80 bg-background/70 px-2 py-1">
+              <span className="text-[10px] font-semibold uppercase tracking-wide text-foreground">Current</span>
+              <span
+                className="h-4 w-4 rounded-sm border border-foreground/40 shadow-sm"
+                style={{ backgroundColor: textMenuBaseColor }}
+                aria-hidden
+              />
+              <span className="text-xs font-medium tabular-nums text-foreground">{textMenuBaseColor.toUpperCase()}</span>
+            </div>
+          </div>
           <div className="grid grid-cols-4 gap-1 p-2">
             {["#e53935", "#fb8c00", "#fdd835", "#43a047", "#1e88e5", "#8e24aa", "#ffffff", "#000000"].map((color) => (
               <button
@@ -3166,7 +3197,7 @@ export function TiptapEditor({
                   setTextMenuBaseColor(normalizeHex(color))
                   editor.chain().focus().setColor(color).run()
                 }}
-                className="h-6 w-6 rounded border border-border"
+                className="h-7 w-7 rounded border-2 border-foreground/35 shadow-sm transition-transform hover:scale-105"
                 style={{ backgroundColor: color }}
                 aria-label={`Set color ${color}`}
               />
@@ -3255,83 +3286,25 @@ export function TiptapEditor({
             <DropdownMenuLabel className="shrink-0 px-2 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-foreground">
               Font
             </DropdownMenuLabel>
-            <p className="shrink-0 px-2 pb-1 text-[10px] leading-snug text-muted-foreground">
-              Search or pick a typeface; scroll this section for the full list.
-            </p>
-            <div className="relative mb-1.5 shrink-0 px-2" onPointerDown={(e) => e.stopPropagation()}>
-              <Search className="pointer-events-none absolute left-4 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
-              <Input
-                type="search"
-                value={textMenuFontFilter}
-                onChange={(e) => setTextMenuFontFilter(e.target.value)}
-                placeholder="Search fonts…"
-                className="h-8 pl-8 text-xs"
-                aria-label="Filter fonts by name"
-              />
-            </div>
-            <div
-              className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-y-contain px-1 [scrollbar-width:thin]"
-              onWheel={(e) => e.stopPropagation()}
-            >
-              {filteredFonts.quick.length === 0 && filteredFonts.groups.length === 0 ? (
-                <p className="px-2 py-3 text-xs text-muted-foreground">No fonts match your search.</p>
-              ) : (
-                <>
-                  {filteredFonts.quick.map(({ label, value }) => (
-                    <DropdownMenuItem
-                      key={value || "default"}
-                      className="text-xs"
-                      onClick={() =>
-                        value ? editor.chain().focus().setFontFamily(value).run() : editor.chain().focus().unsetFontFamily().run()
-                      }
-                    >
+            <div className="px-2 pb-1" onPointerDown={(e) => e.stopPropagation()}>
+              <Select
+                value={currentFontFamily || "__default__"}
+                onValueChange={(value) => {
+                  if (value === "__default__") editor.chain().focus().unsetFontFamily().run()
+                  else editor.chain().focus().setFontFamily(value).run()
+                }}
+              >
+                <SelectTrigger size="sm" className="h-8 w-full text-xs">
+                  <SelectValue placeholder="Select font family" />
+                </SelectTrigger>
+                <SelectContent className="z-[240]" viewportClassName="max-h-72">
+                  {ALL_FONT_MENU_VARIANTS.map(({ label, value }) => (
+                    <SelectItem key={value || "__default__"} value={value || "__default__"}>
                       <span style={value ? { fontFamily: value } : undefined}>{label}</span>
-                    </DropdownMenuItem>
+                    </SelectItem>
                   ))}
-                  {filteredFonts.groups.length > 0 && (
-                    <>
-                      {filteredFonts.quick.length > 0 ? <DropdownMenuSeparator className="my-0" /> : null}
-                      <DropdownMenuLabel className="px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-                        {textMenuFontFilter.trim() ? "Matching typefaces" : "More typefaces"}
-                      </DropdownMenuLabel>
-                      {filteredFonts.groups.map((group) => (
-                        <Fragment key={group.id}>
-                          <DropdownMenuSeparator className="my-0" />
-                          <DropdownMenuLabel className="px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-                            {group.label}
-                          </DropdownMenuLabel>
-                          {group.families.map((family) =>
-                            family.variants.length === 1 ? (
-                              <DropdownMenuItem
-                                key={`${group.id}-${family.id}`}
-                                className="text-xs"
-                                onClick={() => editor.chain().focus().setFontFamily(family.variants[0].value).run()}
-                              >
-                                <span style={{ fontFamily: family.variants[0].value }}>{family.variants[0].label}</span>
-                              </DropdownMenuItem>
-                            ) : (
-                              <Fragment key={`${group.id}-${family.id}`}>
-                                <DropdownMenuLabel className="px-2 py-0.5 pl-3 text-[10px] font-medium normal-case text-muted-foreground">
-                                  {family.label}
-                                </DropdownMenuLabel>
-                                {family.variants.map(({ label, value }) => (
-                                  <DropdownMenuItem
-                                    key={`${group.id}-${family.id}-${value}`}
-                                    className="text-xs pl-4"
-                                    onClick={() => editor.chain().focus().setFontFamily(value).run()}
-                                  >
-                                    <span style={{ fontFamily: value }}>{label}</span>
-                                  </DropdownMenuItem>
-                                ))}
-                              </Fragment>
-                            ),
-                          )}
-                        </Fragment>
-                      ))}
-                    </>
-                  )}
-                </>
-              )}
+                </SelectContent>
+              </Select>
             </div>
           </div>
           </div>
