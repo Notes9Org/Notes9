@@ -16,9 +16,10 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Switch } from "@/components/ui/switch"
-import { ArrowLeft, FileText } from "lucide-react"
+import { ArrowLeft, Download, FileText } from "lucide-react"
 import Link from "next/link"
 import { TiptapEditor } from "@/components/text-editor/tiptap-editor"
+import { NoteExportMenu } from "@/components/note-export-menu"
 
 const PROTOCOL_CATEGORIES = [
   "Sample Preparation",
@@ -191,9 +192,20 @@ export default function NewProtocolPage() {
 
               {/* Content */}
               <div className="space-y-2">
-                <Label htmlFor="content">
-                  Protocol Content <span className="text-destructive">*</span>
-                </Label>
+                <div className="flex items-center justify-between gap-2">
+                  <Label htmlFor="content">
+                    Protocol Content <span className="text-destructive">*</span>
+                  </Label>
+                  <NoteExportMenu
+                    title={formData.name || "protocol"}
+                    htmlContent={formData.content || ""}
+                    trigger={
+                      <Button type="button" variant="ghost" size="icon" className="h-8 w-8 shrink-0" aria-label="Export">
+                        <Download className="h-4 w-4" />
+                      </Button>
+                    }
+                  />
+                </div>
                 <TiptapEditor
                   content={formData.content}
                   onChange={(content) =>

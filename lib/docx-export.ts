@@ -20,6 +20,25 @@ export async function exportHtmlToDocx(html: string, title: string) {
     comments: {
       children: comments
     },
+    styles: {
+      default: {
+        document: {
+          run: {
+            font: 'Work Sans',
+            size: 22,
+          },
+        },
+        heading1: {
+          run: { font: 'Space Grotesk', size: 32, bold: true },
+        },
+        heading2: {
+          run: { font: 'Space Grotesk', size: 28, bold: true },
+        },
+        heading3: {
+          run: { font: 'Space Grotesk', size: 26, bold: true },
+        },
+      },
+    },
     sections: [{
       properties: {
         page: {
@@ -110,6 +129,12 @@ function parseNode(node: Node, comments: ICommentOptions[]): any | null {
           spacing: { before: 240, after: 240 },
         })
       case 'div':
+        if (el.getAttribute('data-type') === 'simple-shape') {
+          return new Paragraph({
+            children: [new TextRun({ text: '[Shape]', size: 22, italics: true, color: '888888' })],
+            spacing: { before: 120, after: 120 },
+          })
+        }
         // Parse children recursively
         const divChildren: any[] = []
         for (const child of el.childNodes) {
@@ -200,24 +225,37 @@ function getHeadingSize(level: any): number {
   }
 }
 
-function parseList(el: Element, comments: ICommentOptions[]): any[] {
+function parseList(el: Element, comments: ICommentOptions[], depth = 0): any[] {
   const items: any[] = []
   const isOrdered = el.tagName.toLowerCase() === 'ol'
   let index = 1
 
   for (const li of el.querySelectorAll(':scope > li')) {
-    const runs = parseInlineContent(li, comments)
-    const prefix = isOrdered ? `${index}. ` : '• '
+    const nestedLists = Array.from(li.children).filter((c) => {
+      const t = c.tagName.toLowerCase()
+      return t === 'ul' || t === 'ol'
+    }) as Element[]
 
+    const liClone = li.cloneNode(true) as HTMLElement
+    Array.from(liClone.children).forEach((child) => {
+      const t = child.tagName.toLowerCase()
+      if (t === 'ul' || t === 'ol') liClone.removeChild(child)
+    })
+
+    const runs = parseInlineContent(liClone, comments)
+    const prefix = isOrdered ? `${index}. ` : '• '
     runs.unshift(new TextRun({ text: prefix, size: 22 }))
 
     items.push(new Paragraph({
-      children: runs,
+      children: runs.length > 0 ? runs : [new TextRun({ text: prefix.trimEnd(), size: 22 })],
       spacing: { before: 60, after: 60 },
-      indent: { left: convertInchesToTwip(0.25) },
+      indent: { left: convertInchesToTwip(0.25 * (depth + 1)) },
     }))
 
     index++
+    for (const n of nestedLists) {
+      items.push(...parseList(n, comments, depth + 1))
+    }
   }
 
   return items
@@ -316,6 +354,28 @@ function parseTable(el: Element, comments: ICommentOptions[]): Table {
   })
 }
 
+function parseCssFontSizeToHalfPoints(fontSize: string): number | undefined {
+  if (!fontSize || !fontSize.trim()) return undefined
+  const s = fontSize.trim().toLowerCase()
+  const pxMatch = s.match(/^([\d.]+)px$/)
+  if (pxMatch) {
+    const px = parseFloat(pxMatch[1])
+    if (!Number.isNaN(px)) return Math.max(8, Math.round((px * 72) / 96 * 2))
+  }
+  const ptMatch = s.match(/^([\d.]+)pt$/)
+  if (ptMatch) {
+    const pt = parseFloat(ptMatch[1])
+    if (!Number.isNaN(pt)) return Math.max(8, Math.round(pt * 2))
+  }
+  return undefined
+}
+
+function parseCssFontFamily(fontFamily: string): string | undefined {
+  if (!fontFamily || !fontFamily.trim()) return undefined
+  const first = fontFamily.split(',')[0].replace(/['"]/g, '').trim()
+  return first || undefined
+}
+
 function parseInlineContent(el: Element, comments: ICommentOptions[]): any[] {
   const runs: any[] = []
 
@@ -337,10 +397,15 @@ function parseInlineContent(el: Element, comments: ICommentOptions[]): any[] {
 
       const runOpts: any = {
         text,
-        size: 22,
+        size: parseCssFontSizeToHalfPoints(style.fontSize) ?? 22,
         bold: tagName === 'strong' || tagName === 'b',
         italics: tagName === 'em' || tagName === 'i',
         strike: tagName === 's' || tagName === 'strike' || tagName === 'del',
+      }
+
+      const inlineFont = parseCssFontFamily(style.fontFamily)
+      if (inlineFont && tagName !== 'code') {
+        runOpts.font = inlineFont
       }
 
       // Underline
