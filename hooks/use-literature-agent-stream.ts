@@ -21,12 +21,18 @@ export interface LiteratureAgentStreamState {
   isStreaming: boolean;
 }
 
+/** Biomni (`/biomni/literature`) options; compare mode only uses `debug` upstream. */
 export type LiteratureAgentRequestBody = {
   query: string;
   session_id: string;
   history?: Notes9AgentHistoryItem[];
   literature_review_ids: string[];
-  options?: { debug?: boolean };
+  options?: {
+    debug?: boolean;
+    skip_clarify?: boolean;
+    max_clarify_rounds?: number;
+    include_reasoning_trace?: boolean;
+  };
 };
 
 export function useLiteratureAgentStream() {

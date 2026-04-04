@@ -17,13 +17,18 @@ import { ArrowLeft, FileText, Calendar, Package, CheckCircle } from 'lucide-reac
 import Link from 'next/link'
 import { ProtocolActions } from './protocol-actions'
 import { ProtocolEditor } from './protocol-editor'
+import { resolveInitialProjectIdParam } from "@/lib/url-project-param"
+import { SetPageBreadcrumb } from "@/components/layout/breadcrumb-context"
 
 export default async function ProtocolDetailPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>
+  searchParams?: Promise<{ project?: string }>
 }) {
   const { id } = await params
+  const resolvedSearch = searchParams ? await searchParams : {}
   const supabase = await createClient()
 
   const {
@@ -32,6 +37,23 @@ export default async function ProtocolDetailPage({
   if (!user) {
     redirect("/auth/login")
   }
+
+  const { data: profileForProject } = await supabase
+    .from("profiles")
+    .select("organization_id")
+    .eq("id", user.id)
+    .single()
+  const { data: orgProjectsForParam = [] } = profileForProject?.organization_id
+    ? await supabase.from("projects").select("id").eq("organization_id", profileForProject.organization_id)
+    : { data: [] as { id: string }[] }
+  const allowedProjectIdsForParam = (orgProjectsForParam ?? []).map((p) => p.id)
+  const projectFromUrl = resolveInitialProjectIdParam(
+    resolvedSearch.project,
+    allowedProjectIdsForParam
+  )
+  const protocolsBackHref = projectFromUrl
+    ? `/protocols?project=${projectFromUrl}`
+    : "/protocols"
 
   // Fetch protocol details with usage count
   const { data: protocol, error } = await supabase
@@ -59,22 +81,59 @@ export default async function ProtocolDetailPage({
     notFound()
   }
 
+  let projectContextBanner: { id: string; name: string } | null = null
+  if (projectFromUrl) {
+    const { data: bannerProj } = await supabase
+      .from("projects")
+      .select("id, name")
+      .eq("id", projectFromUrl)
+      .single()
+    if (bannerProj) projectContextBanner = bannerProj
+  }
+
   const formatDate = (date: string | null) => {
     if (!date) return "—"
     return new Date(date).toLocaleDateString()
   }
 
+  const protocolBreadcrumbSegments =
+    projectContextBanner && projectFromUrl
+      ? [
+          {
+            label: projectContextBanner.name,
+            href: `/projects/${projectContextBanner.id}`,
+          },
+          { label: "Protocols", href: protocolsBackHref },
+          { label: protocol.name },
+        ]
+      : [
+          { label: "Protocols", href: "/protocols" },
+          { label: protocol.name },
+        ]
+
   return (
       <div className="space-y-4 md:space-y-6">
+        <SetPageBreadcrumb segments={protocolBreadcrumbSegments} />
         {/* Header: stacked on mobile, row on desktop */}
         <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
           <div className="flex items-start gap-3 min-w-0">
             <Button variant="ghost" size="icon" asChild className="shrink-0">
-              <Link href="/protocols">
+              <Link href={protocolsBackHref} aria-label="Back to protocols">
                 <ArrowLeft className="h-4 w-4" />
               </Link>
             </Button>
             <div className="min-w-0 space-y-1">
+              {projectContextBanner ? (
+                <p className="text-xs text-muted-foreground">
+                  <span className="text-foreground/80">Project:</span>{" "}
+                  <Link
+                    href={`/projects/${projectContextBanner.id}`}
+                    className="font-medium text-primary hover:underline"
+                  >
+                    {projectContextBanner.name}
+                  </Link>
+                </p>
+              ) : null}
               <div className="flex flex-wrap items-center gap-2">
                 <h1 className="text-2xl font-bold tracking-tight text-foreground md:text-3xl">
                   {protocol.name}
@@ -209,7 +268,13 @@ export default async function ProtocolDetailPage({
                           </TableCell>
                           <TableCell className="text-right">
                             <Button variant="ghost" size="sm" asChild>
-                              <Link href={`/experiments/${ep.experiment.id}`}>
+                              <Link
+                                href={
+                                  ep.experiment.project?.id
+                                    ? `/experiments/${ep.experiment.id}?project=${ep.experiment.project.id}`
+                                    : `/experiments/${ep.experiment.id}`
+                                }
+                              >
                                 View
                               </Link>
                             </Button>

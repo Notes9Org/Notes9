@@ -27,9 +27,11 @@ interface ExperimentTabsProps {
     samples: any[]
   }
   initialTab: string
+  /** Breadcrumb link for the experiment segment (e.g. includes `?project=` when scoped). */
+  experimentPageHref?: string
 }
 
-export function ExperimentTabs({ experiment, initialTab }: ExperimentTabsProps) {
+export function ExperimentTabs({ experiment, initialTab, experimentPageHref }: ExperimentTabsProps) {
   const [mounted, setMounted] = useState(false)
   const baseId = useId()
 
@@ -221,7 +223,13 @@ export function ExperimentTabs({ experiment, initialTab }: ExperimentTabsProps) 
       </TabsContent>
 
       <TabsContent value="notes" id="tab-content-notes" className="flex flex-col gap-3 min-h-0 flex-1">
-        <LabNotesTab experimentId={experiment.id} experimentName={experiment.name} projectName={experiment.project} projectId={experiment.projectId} />
+        <LabNotesTab
+          experimentId={experiment.id}
+          experimentName={experiment.name}
+          projectName={experiment.project}
+          projectId={experiment.projectId}
+          experimentPageHref={experimentPageHref}
+        />
       </TabsContent>
     </Tabs>
   )

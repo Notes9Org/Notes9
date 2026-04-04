@@ -21,25 +21,109 @@ function mdFlattenText(node: React.ReactNode): string {
   return '';
 }
 
+type MdastLike = {
+  type: string;
+  spread?: boolean;
+  children?: MdastLike[];
+};
+
+/**
+ * After remark-gfm, force `spread: false` on every list / listItem so items are not
+ * wrapped in `<p>` (avoids loose-list gaps regardless of blank lines in source).
+ */
+function remarkTightLists() {
+  return (tree: MdastLike) => {
+    const visit = (node: MdastLike) => {
+      if (node.type === 'list' || node.type === 'listItem') {
+        node.spread = false;
+      }
+      node.children?.forEach(visit);
+    };
+    visit(tree);
+  };
+}
+
+/**
+ * Collapse excessive blank lines from LLM output (3+ newlines → 2) and trim
+ * trailing whitespace on each line. Skips fenced ``` blocks so code is unchanged.
+ */
+export function tightenChatMarkdown(source: string): string {
+  const trimmed = source.trim();
+  if (!trimmed) return '';
+
+  const segments = trimmed.split(/(```[\s\S]*?```)/g);
+  return segments
+    .map((segment, i) => {
+      if (i % 2 === 1) return segment;
+      return segment
+        .replace(/[ \t]+$/gm, '')
+        .replace(/\n[ \t]+\n/g, '\n\n')
+        .replace(/\n{3,}/g, '\n\n');
+    })
+    .join('');
+}
+
+/** Distinct reference so `li` can unwrap `p` from GFM loose lists. */
+function MarkdownParagraph({ ...props }: React.ComponentPropsWithoutRef<'p'>) {
+  return (
+    <p
+      className={cn(
+        'leading-[1.55] text-foreground m-0',
+        '[&:has(>strong:only-child)]:mb-0',
+        '[&:has(>strong:only-child)]:mt-0',
+        'first:[&:has(>strong:only-child)]:mt-0'
+      )}
+      {...props}
+    />
+  );
+}
+
 interface MarkdownRendererProps {
   content: string;
   className?: string;
 }
 
 export function MarkdownRenderer({ content, className }: MarkdownRendererProps) {
+  const md = tightenChatMarkdown(content);
+
   return (
     <div
       className={cn(
-        'notes9-md prose prose-sm dark:prose-invert max-w-none text-foreground prose-headings:text-foreground prose-p:text-foreground prose-li:text-foreground [&_.katex]:text-inherit [&_.katex-display]:my-2',
-        // Disable typography defaults that stack with our component margins
-        'prose-p:my-0 prose-ul:my-0 prose-ol:my-0 prose-li:my-0 prose-hr:my-0 leading-[1.45]',
-        '[&_li>p]:!my-0 [&_li>p]:leading-[1.45]',
+        'notes9-md whitespace-normal prose prose-sm dark:prose-invert max-w-none',
+        'text-foreground prose-headings:text-foreground prose-p:text-foreground prose-li:text-foreground',
+        '[&_.katex]:text-inherit [&_.katex-display]:my-1',
+        'prose-p:my-0 leading-[1.55]',
+        'prose-ul:my-0 prose-ol:my-0 prose-li:my-0 prose-hr:my-0',
+        '[&_li>p]:!my-0 [&_li>p]:leading-[1.55]',
+        '[&_ol>li]:!my-0 [&_ol>li]:!py-0 [&_ul>li]:!my-0 [&_ul>li]:!py-0',
+        '[&_ol>li+li]:!mt-0 [&_ul>li+li]:!mt-0',
+        '[&_ol>li>p]:!my-0 [&_ul>li>p]:!my-0',
+        '[&>p+p]:mt-2 [&_p+p]:mt-2',
+        '[&>h1]:mt-4 [&>h1]:mb-1 [&_h1]:mt-4 [&_h1]:mb-1',
+        '[&>h2]:mt-3 [&>h2]:mb-0.5 [&_h2]:mt-3 [&_h2]:mb-0.5',
+        '[&>h3]:mt-2 [&>h3]:mb-0 [&_h3]:mt-2 [&_h3]:mb-0',
+        '[&>h1+p]:mt-1 [&>h2+p]:mt-1 [&>h3+p]:mt-0.5',
+        '[&_h1+p]:mt-1 [&_h2+p]:mt-1 [&_h3+p]:mt-0.5',
+        '[&>p+h1]:mt-4 [&>p+h2]:mt-3 [&>p+h3]:mt-2',
+        '[&_p+h1]:mt-4 [&_p+h2]:mt-3 [&_p+h3]:mt-2',
+        '[&>ul+h2]:mt-3 [&>ol+h2]:mt-3 [&_ul+h2]:mt-3 [&_ol+h2]:mt-3',
+        '[&>hr]:my-2 [&_hr]:my-2',
+        '[&>hr+h1]:mt-2 [&>hr+h2]:mt-2 [&_hr+h1]:mt-2 [&_hr+h2]:mt-2',
+        '[&>p+ul]:mt-1 [&>p+ol]:mt-1 [&_p+ul]:mt-1 [&_p+ol]:mt-1',
+        '[&>ul+p]:mt-2 [&>ol+p]:mt-2 [&_ul+p]:mt-2 [&_ol+p]:mt-2',
+        '[&>blockquote]:my-2 [&_blockquote]:my-2',
+        '[&_p:empty]:hidden [&_p:empty]:m-0',
         '[&_p:has(>strong:only-child)+ul]:!mt-0 [&_p:has(>strong:only-child)+ol]:!mt-0',
+        '[&>h1+ul]:mt-1 [&>h2+ul]:mt-1 [&>h1+ol]:mt-1 [&>h2+ol]:mt-1',
+        '[&_h1+ul]:mt-1 [&_h2+ul]:mt-1 [&_h1+ol]:mt-1 [&_h2+ol]:mt-1',
+        '[&>blockquote+p]:mt-2 [&>p+blockquote]:mt-2',
+        '[&_blockquote+p]:mt-2 [&_p+blockquote]:mt-2',
+        '[&>p+hr]:mt-2 [&>h2+hr]:mt-2 [&_p+hr]:mt-2 [&_h2+hr]:mt-2',
         className
       )}
     >
     <ReactMarkdown
-      remarkPlugins={[remarkGfm, remarkMath]}
+      remarkPlugins={[remarkGfm, remarkMath, remarkTightLists]}
       rehypePlugins={[rehypeHighlight, rehypeKatex]}
       components={{
         // Custom code block rendering
@@ -64,7 +148,7 @@ export function MarkdownRenderer({ content, className }: MarkdownRendererProps) 
         pre({ children, ...props }) {
           return (
             <pre
-              className="bg-muted/50 border rounded-lg p-4 overflow-x-auto text-sm"
+              className="bg-muted/50 border rounded-lg p-3 overflow-x-auto text-sm my-1"
               {...props}
             >
               {children}
@@ -117,11 +201,15 @@ export function MarkdownRenderer({ content, className }: MarkdownRendererProps) 
             </a>
           );
         },
-        // Custom list styling — no space-y (GFM <li><p> already got margin until we zero it above)
+        // Explicit list resets (avoid not-prose — it breaks wrapper [&>p+ul] sibling rules).
         ul({ children, ...props }) {
           return (
             <ul
-              className="list-disc list-outside space-y-0 !my-0 mb-0 mt-0 pl-4 marker:text-muted-foreground [&:not(:first-child)]:mt-1"
+              className={cn(
+                'list-disc list-inside space-y-0 my-0 max-w-none pl-0 text-foreground marker:text-muted-foreground',
+                '[&>li]:!my-0 [&>li]:!py-0 [&>li+li]:!mt-0',
+                '[&>li>p]:!m-0 [&>li>p]:inline [&>li>p]:leading-[1.55]'
+              )}
               {...props}
             >
               {children}
@@ -131,7 +219,11 @@ export function MarkdownRenderer({ content, className }: MarkdownRendererProps) 
         ol({ children, ...props }) {
           return (
             <ol
-              className="list-decimal list-outside space-y-0 !my-0 mb-0 mt-0 pl-4 marker:text-muted-foreground [&:not(:first-child)]:mt-1"
+              className={cn(
+                'list-decimal list-outside space-y-0 my-0 max-w-none pl-5 text-foreground marker:text-muted-foreground',
+                '[&>li]:!my-0 [&>li]:!py-0 [&>li+li]:!mt-0',
+                '[&>li>p]:!m-0 [&>li>p]:inline [&>li>p]:leading-[1.55]'
+              )}
               {...props}
             >
               {children}
@@ -139,50 +231,68 @@ export function MarkdownRenderer({ content, className }: MarkdownRendererProps) 
           );
         },
         li({ children, ...props }) {
+          const kids = React.Children.toArray(children);
+          const liShell = cn(
+            '!my-0 !py-0 leading-[1.55] text-left',
+            '[&>ul]:mt-1 [&>ul]:mb-0 [&>ul]:ml-3',
+            '[&>ol]:mt-1 [&>ol]:mb-0 [&>ol]:ml-3'
+          );
+
+          if (kids.length === 1 && React.isValidElement(kids[0]) && kids[0].type === MarkdownParagraph) {
+            const inner = (kids[0] as React.ReactElement<{ children?: React.ReactNode }>).props
+              .children;
+            return (
+              <li className={liShell} {...props}>
+                {inner}
+              </li>
+            );
+          }
+          if (
+            kids.length > 1 &&
+            React.isValidElement(kids[0]) &&
+            kids[0].type === MarkdownParagraph
+          ) {
+            const inner = (kids[0] as React.ReactElement<{ children?: React.ReactNode }>).props
+              .children;
+            const tail = kids.slice(1);
+            return (
+              <li className={liShell} {...props}>
+                {inner}
+                <div className="mt-1 space-y-1 [&_p]:!my-0 [&_ul]:mt-1 [&_ol]:mt-1">{tail}</div>
+              </li>
+            );
+          }
+
           return (
-            <li className="!my-0 py-0 leading-[1.45] [&>p]:!my-0" {...props}>
+            <li className={cn(liShell, '[&>p]:!my-0')} {...props}>
               {children}
             </li>
           );
         },
-        // Paragraphs: tight stack; **Section** lines (single <strong>) hug the list below
-        p({ children, ...props }) {
-          return (
-            <p
-              className={cn(
-                'leading-[1.45] text-foreground',
-                'mt-0 mb-1 last:mb-0',
-                '[&:has(>strong:only-child)]:mb-0',
-                '[&:has(>strong:only-child)]:mt-1',
-                'first:[&:has(>strong:only-child)]:mt-0'
-              )}
-              {...props}
-            >
-              {children}
-            </p>
-          );
-        },
+        p: MarkdownParagraph,
         hr({ ...props }) {
-          return <hr className="my-2 border-border" {...props} />;
+          return <hr className="my-2 shrink-0 border-0 border-t border-border/50" {...props} />;
         },
-        // Custom headings (tighter spacing)
         h1({ children, ...props }) {
           return (
-            <h1 className="text-xl font-bold mt-2.5 mb-1" {...props}>
+            <h1
+              className="text-xl font-bold mt-4 mb-1 border-b border-border/40 pb-1 first:mt-0"
+              {...props}
+            >
               {children}
             </h1>
           );
         },
         h2({ children, ...props }) {
           return (
-            <h2 className="text-lg font-semibold mt-2 mb-0.5" {...props}>
+            <h2 className="text-base font-semibold mt-3 mb-0.5 first:mt-0" {...props}>
               {children}
             </h2>
           );
         },
         h3({ children, ...props }) {
           return (
-            <h3 className="text-base font-semibold mt-1.5 mb-0.5 first:mt-0" {...props}>
+            <h3 className="text-sm font-semibold mt-2 mb-0 first:mt-0" {...props}>
               {children}
             </h3>
           );
@@ -191,7 +301,7 @@ export function MarkdownRenderer({ content, className }: MarkdownRendererProps) 
         blockquote({ children, ...props }) {
           return (
             <blockquote
-              className="border-l-4 border-primary/30 pl-4 italic text-muted-foreground my-1"
+              className="border-l-4 border-primary/30 pl-3 py-1 italic text-muted-foreground my-2"
               {...props}
             >
               {children}
@@ -201,7 +311,7 @@ export function MarkdownRenderer({ content, className }: MarkdownRendererProps) 
         // Custom table
         table({ children, ...props }) {
           return (
-            <div className="overflow-x-auto my-1">
+            <div className="overflow-x-auto my-0">
               <table className="min-w-full border-collapse border border-border" {...props}>
                 {children}
               </table>
@@ -210,21 +320,21 @@ export function MarkdownRenderer({ content, className }: MarkdownRendererProps) 
         },
         th({ children, ...props }) {
           return (
-            <th className="border border-border bg-muted px-3 py-2 text-left font-semibold" {...props}>
+            <th className="border border-border bg-muted px-2 py-1.5 text-left font-semibold text-sm" {...props}>
               {children}
             </th>
           );
         },
         td({ children, ...props }) {
           return (
-            <td className="border border-border px-3 py-2" {...props}>
+            <td className="border border-border px-2 py-1.5 text-sm" {...props}>
               {children}
             </td>
           );
         },
       }}
     >
-      {content}
+      {md}
     </ReactMarkdown>
     </div>
   );

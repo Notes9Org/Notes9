@@ -49,7 +49,10 @@ export async function removeStagingLiterature(literatureId: string) {
   }
 }
 
-export async function stagePaper(paper: SearchPaper) {
+export async function stagePaper(
+  paper: SearchPaper,
+  options?: { projectId?: string | null }
+) {
   try {
     const supabase = await createClient()
     const {
@@ -93,6 +96,12 @@ export async function stagePaper(paper: SearchPaper) {
     }
 
     if (existing?.catalog_placement === "staging") {
+      if (options?.projectId) {
+        await supabase
+          .from("literature_reviews")
+          .update({ project_id: options.projectId })
+          .eq("id", existing.id)
+      }
       const { data: row } = await supabase
         .from("literature_reviews")
         .select("*")
@@ -112,6 +121,7 @@ export async function stagePaper(paper: SearchPaper) {
         doi: normalizedDoi || null,
         pmid: paper.pmid || null,
         abstract: paper.abstract,
+        project_id: options?.projectId ?? null,
         status: "saved",
         created_by: user.id,
         organization_id: organizationId,

@@ -5,6 +5,8 @@
  *
  * **Zep vs `history`:** With Zep on, body **`history`** is ignored; default here
  * is **`[]`** unless **`NEXT_PUBLIC_NOTES9_AGENT_INCLUDE_HISTORY=true`** (Zep off).
+ * The Notes9 API splits per-role content into multiple Zep thread messages when a
+ * single message would exceed **4096** characters (Zep thread API limit).
  *
  * Use **`POST /chat`** ( **`content`**, not **`query`** ) for general assistant +
  * optional web search; use **`POST /notes9`** for SQL/RAG over lab data.

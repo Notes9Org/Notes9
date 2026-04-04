@@ -33,8 +33,14 @@ export type LiteratureAgentDonePayload = {
   answer: string;
   session_id?: string;
   structured?: { references?: PaperAnalyzerReference[] };
+  /** Legacy paper-analyzer shape; biomni success uses `structured.references` only. */
   sources?: PaperAnalyzerSource[];
   debug?: unknown;
+  /** Biomni non-stream JSON when the clarification gate fires. */
+  needs_clarification?: boolean;
+  clarify_question?: string;
+  clarify_options?: string[];
+  reasoning_trace?: string[];
 };
 
 function normalizeReferences(raw: unknown): PaperAnalyzerReference[] {
@@ -134,6 +140,21 @@ export function normalizeLiteratureAgentResponse(
   const session_id = typeof raw.session_id === 'string' ? raw.session_id : undefined;
   const debug = raw.debug;
 
+  const needs_clarification = raw.needs_clarification === true;
+  const clarify_question =
+    typeof raw.clarify_question === 'string' ? raw.clarify_question : undefined;
+  let clarify_options: string[] | undefined;
+  if (Array.isArray(raw.clarify_options)) {
+    const opts = raw.clarify_options.filter((o): o is string => typeof o === 'string');
+    if (opts.length) clarify_options = opts;
+  }
+
+  let reasoning_trace: string[] | undefined;
+  if (Array.isArray(raw.reasoning_trace)) {
+    const rt = raw.reasoning_trace.filter((s): s is string => typeof s === 'string');
+    if (rt.length) reasoning_trace = rt;
+  }
+
   const structuredIn = raw.structured;
   let structured: LiteratureAgentDonePayload['structured'];
   if (structuredIn && typeof structuredIn === 'object' && !Array.isArray(structuredIn)) {
@@ -153,5 +174,9 @@ export function normalizeLiteratureAgentResponse(
     ...(structured ? { structured } : {}),
     ...(sources.length ? { sources } : {}),
     ...(debug !== undefined ? { debug } : {}),
+    ...(needs_clarification ? { needs_clarification: true } : {}),
+    ...(clarify_question !== undefined ? { clarify_question } : {}),
+    ...(clarify_options ? { clarify_options } : {}),
+    ...(reasoning_trace ? { reasoning_trace } : {}),
   };
 }

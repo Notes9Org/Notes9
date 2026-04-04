@@ -1,5 +1,7 @@
 /** Inline literature paper chips in the chat composer (same DOM pattern as todo-panel mentions). */
 
+import { escapeMarkdownLinkLabel } from '@/lib/chat-response-sources';
+
 export const LITERATURE_CHIP = {
   id: 'data-literature-id',
   title: 'data-literature-title',
@@ -218,6 +220,34 @@ export function insertLiteratureMention(
     sel.addRange(r);
   }
   el.normalize();
+}
+
+function unescapeMarkdownLinkLabel(label: string): string {
+  return label.replace(/\\([\[\]\\])/g, '$1');
+}
+
+/** Markdown `[title](/literature-reviews/id)` segments for persisting user turns (chat history + DB). */
+export function segmentsToLiteratureMessageMarkdown(segments: LiteratureEditableSegment[]): string {
+  let s = '';
+  for (const seg of segments) {
+    if (seg.type === 'text') {
+      s += seg.value.replace(/\u200B/g, '');
+    } else {
+      const label = escapeMarkdownLinkLabel(seg.title);
+      const link = `[${label}](/literature-reviews/${encodeURIComponent(seg.id)})`;
+      if (s.length > 0 && !/\s$/.test(s)) s += ' ';
+      s += link;
+    }
+  }
+  return s.trim();
+}
+
+/**
+ * Turn stored user markdown into plain text for `query` / model `history` (titles only, no link syntax).
+ */
+export function literatureMessageMarkdownToPlainForModel(md: string): string {
+  const litLink = /\[((?:\\.|[^\]])+)\]\(\/literature-reviews\/[0-9a-f-]+\)/gi;
+  return md.replace(litLink, (_, label: string) => unescapeMarkdownLinkLabel(label));
 }
 
 export function getLiteratureSegmentsFromEl(el: HTMLElement): LiteratureEditableSegment[] {

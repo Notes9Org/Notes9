@@ -10,9 +10,10 @@ import Link from 'next/link'
 import { ExperimentActions } from './experiment-actions'
 import { ExperimentTabs } from './experiment-tabs'
 import { Badge } from '@/components/ui/badge'
+import { resolveInitialProjectIdParam } from "@/lib/url-project-param"
 
 
-type SearchParams = { tab?: string; noteId?: string }
+type SearchParams = { tab?: string; noteId?: string; project?: string }
 
 export default async function ExperimentDetailPage({
   params,
@@ -77,6 +78,14 @@ export default async function ExperimentDetailPage({
     .select("id, name")
     .order("name")
 
+  const allowedProjectIds = (projects ?? []).map((p) => p.id)
+  const projectFromUrl = resolveInitialProjectIdParam(
+    resolvedSearch.project,
+    allowedProjectIds
+  )
+  const useProjectScopedHeader =
+    Boolean(projectFromUrl) && projectFromUrl === experimentData.project_id
+
   // Fetch all users for assignment dropdown
   const { data: users } = await supabase
     .from("profiles")
@@ -105,10 +114,24 @@ export default async function ExperimentDetailPage({
   return (
     <div className="flex flex-col gap-4 md:gap-6 min-h-0 flex-1">
       <SetPageBreadcrumb
-        segments={[
-          { label: experiment.project, href: `/projects/${experiment.projectId}` },
-          { label: experiment.name },
-        ]}
+        segments={
+          useProjectScopedHeader
+            ? [
+                {
+                  label: experiment.project,
+                  href: `/projects/${experiment.projectId}`,
+                },
+                { label: experiment.name },
+              ]
+            : [
+                { label: "Projects", href: "/projects" },
+                {
+                  label: experiment.project,
+                  href: `/projects/${experiment.projectId}`,
+                },
+                { label: experiment.name },
+              ]
+        }
       />
       {/* Header: stacked on mobile, row on desktop (matches project detail) */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
@@ -149,6 +172,11 @@ export default async function ExperimentDetailPage({
       <ExperimentTabs
         experiment={experiment}
         initialTab={initialTab}
+        experimentPageHref={
+          useProjectScopedHeader && projectFromUrl
+            ? `/experiments/${experiment.id}?project=${projectFromUrl}`
+            : `/experiments/${experiment.id}`
+        }
       />
     </div>
   )
