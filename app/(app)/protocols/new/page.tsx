@@ -1,8 +1,9 @@
 "use client"
 
-import { useState } from "react"
-import { useRouter } from "next/navigation"
+import { useState, useEffect, Suspense } from "react"
+import { useRouter, useSearchParams } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
+import { resolveInitialProjectIdParam } from "@/lib/url-project-param"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -30,8 +31,10 @@ const PROTOCOL_CATEGORIES = [
   "General SOP"
 ]
 
-export default function NewProtocolPage() {
+function NewProtocolForm() {
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const [returnProjectId, setReturnProjectId] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   
@@ -43,6 +46,40 @@ export default function NewProtocolPage() {
     category: "",
     is_active: true,
   })
+
+  useEffect(() => {
+    let cancelled = false
+    const run = async () => {
+      const supabase = createClient()
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user || cancelled) return
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("organization_id")
+        .eq("id", user.id)
+        .single()
+      if (!profile?.organization_id || cancelled) return
+      const { data: projectRows } = await supabase
+        .from("projects")
+        .select("id")
+        .eq("organization_id", profile.organization_id)
+      if (cancelled) return
+      const allowed = projectRows?.map((p) => p.id) ?? []
+      const id = resolveInitialProjectIdParam(
+        searchParams.get("project") ?? undefined,
+        allowed
+      )
+      setReturnProjectId(id)
+    }
+    void run()
+    return () => {
+      cancelled = true
+    }
+  }, [searchParams])
+
+  const protocolsListHref = returnProjectId
+    ? `/protocols?project=${returnProjectId}`
+    : "/protocols"
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -84,7 +121,7 @@ export default function NewProtocolPage() {
 
       if (insertError) throw insertError
 
-      router.push("/protocols")
+      router.push(protocolsListHref)
     } catch (err: any) {
       setError(err.message)
     } finally {
@@ -97,7 +134,7 @@ export default function NewProtocolPage() {
         {/* Header */}
         <div className="flex items-center gap-3">
           <Button variant="ghost" size="icon" asChild className="shrink-0">
-            <Link href="/protocols">
+            <Link href={protocolsListHref}>
               <ArrowLeft className="h-4 w-4" />
             </Link>
           </Button>
@@ -237,7 +274,7 @@ export default function NewProtocolPage() {
                 <Button
                   type="button"
                   variant="outline"
-                  onClick={() => router.push("/protocols")}
+                  onClick={() => router.push(protocolsListHref)}
                   data-navigate
                   disabled={isLoading}
                 >
@@ -252,4 +289,19 @@ export default function NewProtocolPage() {
         </Card>
       </div>
     )
+}
+
+export default function NewProtocolPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="space-y-6 py-8">
+          <div className="h-10 w-64 bg-muted animate-pulse rounded" />
+          <div className="h-96 w-full bg-muted animate-pulse rounded" />
+        </div>
+      }
+    >
+      <NewProtocolForm />
+    </Suspense>
+  )
 }

@@ -6,8 +6,15 @@ import Link from 'next/link'
 import { LiteratureTabs } from '@/components/literature-reviews/literature-tabs'
 import type { StagingLiteratureRow } from "@/components/literature-reviews/staging-tab"
 import { UploadLiteraturePdfDialog } from "@/components/literature-reviews/upload-literature-pdf-dialog"
+import { resolveInitialProjectIdParam } from "@/lib/url-project-param"
+import { SetPageBreadcrumb } from "@/components/layout/breadcrumb-context"
 
-export default async function LiteratureReviewsPage() {
+export default async function LiteratureReviewsPage({
+  searchParams,
+}: {
+  searchParams?: Promise<{ project?: string }>
+}) {
+  const sp = searchParams ? await searchParams : {}
   const supabase = await createClient()
 
   const {
@@ -56,8 +63,26 @@ export default async function LiteratureReviewsPage() {
       : { data: [] as { id: string; name: string; project_id: string }[] }
   const safeExperiments = experiments ?? []
 
+  const initialProjectId = resolveInitialProjectIdParam(
+    sp.project,
+    safeProjects.map((p) => p.id)
+  )
+  const scopedProject = initialProjectId
+    ? safeProjects.find((p) => p.id === initialProjectId)
+    : null
+
   return (
     <div className="space-y-4 md:space-y-6">
+      {scopedProject ? (
+        <SetPageBreadcrumb
+          segments={[
+            { label: scopedProject.name, href: `/projects/${scopedProject.id}` },
+            { label: "Literature" },
+          ]}
+        />
+      ) : (
+        <SetPageBreadcrumb segments={[]} />
+      )}
       {/* Header: stacked on mobile */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
@@ -73,7 +98,13 @@ export default async function LiteratureReviewsPage() {
             experiments={safeExperiments}
           />
           <Button asChild className="w-full sm:w-auto">
-            <Link href="/literature-reviews/new">
+            <Link
+              href={
+                initialProjectId
+                  ? `/literature-reviews/new?project=${initialProjectId}`
+                  : "/literature-reviews/new"
+              }
+            >
               <Plus className="h-4 w-4 mr-2" />
               Add Reference
             </Link>
@@ -91,6 +122,7 @@ export default async function LiteratureReviewsPage() {
         }
         projects={safeProjects}
         experiments={safeExperiments}
+        initialProjectId={initialProjectId}
       />
     </div>
   )

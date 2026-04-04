@@ -94,10 +94,13 @@ import {
   deleteLiteratureTextRange,
   getCursorOffset,
   getMentionsFromLiteratureEditable,
+  getLiteratureSegmentsFromEl,
   getPlainTextFromLiteratureEditable,
   getQueryAfterAt,
   getTextBeforeCursor,
   insertLiteratureMention,
+  literatureMessageMarkdownToPlainForModel,
+  segmentsToLiteratureMessageMarkdown,
 } from '@/lib/literature-chat-editable';
 
 /** Unwrap stringified JSON parts to plain text (handles double/triple wrapping). Used so request body always sends plain text. */
@@ -135,6 +138,17 @@ function getPlainTextFromMessage(msg: { content?: unknown; parts?: Array<{ type?
     if (fromParts) return fromParts;
   }
   return '';
+}
+
+/** Model-facing history for literature agent: user turns strip `[title](url)` to titles only. */
+function literatureHistoryTurnContent(msg: {
+  role: string;
+  content?: unknown;
+  parts?: Array<{ type?: string; text?: string }>;
+}): string {
+  const raw = getPlainTextFromMessage(msg);
+  if (msg.role === 'user') return literatureMessageMarkdownToPlainForModel(raw);
+  return raw;
 }
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024;
@@ -793,8 +807,11 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
         return;
       }
 
+      const userStoredContent = litEl
+        ? segmentsToLiteratureMessageMarkdown(getLiteratureSegmentsFromEl(litEl))
+        : text;
       const queryText =
-        text.trim() ||
+        literatureMessageMarkdownToPlainForModel(userStoredContent).trim() ||
         (litIdsSnapshot.length > 0
           ? 'Compare and analyze the tagged papers.'
           : '');
@@ -803,14 +820,14 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
       const userMessage = {
         id: userMessageId,
         role: 'user' as const,
-        content: queryText,
-        parts: [{ type: 'text' as const, text: queryText }],
+        content: userStoredContent,
+        parts: [{ type: 'text' as const, text: userStoredContent }],
         createdAt: new Date(),
       };
       setMessages((prev) => [...prev, userMessage]);
 
       const sessionId = currentSessionRef.current!;
-      const savedUser = await saveMessage(sessionId, 'user', queryText);
+      const savedUser = await saveMessage(sessionId, 'user', userStoredContent);
       if (savedUser) {
         setSavedMessageIds((prev) => new Set(prev).add(savedUser.id));
         setMessages((prev) => {
@@ -825,7 +842,7 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
 
       const history = messages.map((m) => ({
         role: m.role,
-        content: getPlainTextFromMessage(m),
+        content: literatureHistoryTurnContent(m),
       }));
 
       const endpoint = literatureSubMode === 'research_design' ? 'biomni' : 'compare';
@@ -979,7 +996,10 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
 
       const history = messages.slice(0, messageIndex).map((m) => ({
         role: m.role,
-        content: getPlainTextFromMessage(m),
+        content:
+          agentMode === 'literature'
+            ? literatureHistoryTurnContent(m)
+            : getPlainTextFromMessage(m),
       }));
 
       setMessages((currentMessages) => {
@@ -1024,10 +1044,13 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
 
         const litIds = sortedTaggedLiterature.map((t) => t.id);
         const endpoint = literatureSubMode === 'research_design' ? 'biomni' : 'compare';
+        const queryFromEdit =
+          literatureMessageMarkdownToPlainForModel(newContent).trim() ||
+          (litIds.length > 0 ? 'Compare and analyze the tagged papers.' : '');
         const { donePayload, error } = await literatureAgentStream.runRequest(
           endpoint,
           {
-            query: newContent,
+            query: queryFromEdit,
             session_id: sid,
             history,
             literature_review_ids: litIds,
@@ -1174,10 +1197,14 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
 
       setMessages((curr) => curr.slice(0, lastAssistantIndex));
 
-      const query = getPlainTextFromMessage(lastUserMessage);
+      const query =
+        literatureMessageMarkdownToPlainForModel(getPlainTextFromMessage(lastUserMessage)).trim() ||
+        (sortedTaggedLiterature.length > 0
+          ? 'Compare and analyze the tagged papers.'
+          : '');
       const history = messages.slice(0, lastAssistantIndex - 1).map((m) => ({
         role: m.role,
-        content: getPlainTextFromMessage(m),
+        content: literatureHistoryTurnContent(m),
       }));
 
       const { data: { session } } = await supabase.auth.getSession();
@@ -2186,6 +2213,10 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
                     <div className="flex flex-col gap-6 p-4 pt-5 pb-20 max-w-3xl mx-auto w-full min-w-0">
                       {messages.map((message, index) => {
                         const content = getMessageContent(message);
+                        const userLiteratureMarkdown =
+                          message.role === 'user' &&
+                          ((agentMode === 'literature' && isLiteratureRoute) ||
+                            /\]\(\/literature-reviews\//.test(content));
                         const isLastAssistant = message.role === 'assistant' && index === messages.length - 1;
                         const isLastUserAwaitingReply =
                           isLoading &&
@@ -2220,8 +2251,23 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
                                 />
                               ) : (
                                 <>
-                                  <div className={cn("text-sm leading-[1.45] whitespace-pre-wrap break-words overflow-visible", message.role === 'user' ? "bg-primary/5 text-foreground px-4 py-2.5 rounded-2xl rounded-tr-sm" : "min-w-0 text-foreground")}>
-                                    {message.role === 'user' ? content : <MarkdownRenderer content={content} className="text-sm text-foreground" />}
+                                  <div
+                                    className={cn(
+                                      'text-sm leading-[1.45] break-words overflow-visible',
+                                      message.role === 'user'
+                                        ? 'whitespace-pre-wrap bg-primary/5 text-foreground px-4 py-2.5 rounded-2xl rounded-tr-sm'
+                                        : 'min-w-0 text-foreground whitespace-normal'
+                                    )}
+                                  >
+                                    {message.role === 'user' ? (
+                                      userLiteratureMarkdown ? (
+                                        <MarkdownRenderer content={content} className="text-sm text-foreground" />
+                                      ) : (
+                                        content
+                                      )
+                                    ) : (
+                                      <MarkdownRenderer content={content} className="text-sm text-foreground" />
+                                    )}
                                   </div>
                                   <div className="mt-1 opacity-0 group-hover/message:opacity-100 transition-opacity px-1">
                                     <MessageActions

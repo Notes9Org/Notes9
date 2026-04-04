@@ -1,11 +1,6 @@
 import { escapeMarkdownLinkLabel } from '@/lib/chat-response-sources';
-import type {
-  LiteratureAgentDonePayload,
-  PaperAnalyzerReference,
-  PaperAnalyzerSource,
-} from '@/lib/literature-agent-types';
+import type { LiteratureAgentDonePayload, PaperAnalyzerReference } from '@/lib/literature-agent-types';
 
-const ABSTRACT_MAX = 360;
 const SENTENCE_MAX = 2000;
 
 function literatureReviewPath(id: string): string {
@@ -42,71 +37,6 @@ function doiUrl(doi: string): string {
 
 function pmidUrl(pmid: string): string {
   return `https://pubmed.ncbi.nlm.nih.gov/${encodeURIComponent(pmid.trim())}/`;
-}
-
-function formatSourceBlock(s: PaperAnalyzerSource, listIndex: number): string {
-  const id = s.literature_review_id?.trim();
-  const path = id ? literatureReviewPath(id) : '';
-  const titleSafe = s.title?.trim()
-    ? escapeMarkdownLinkLabel(s.title.trim())
-    : '';
-
-  let block: string;
-  if (path && titleSafe) {
-    block = `${listIndex}. **[${titleSafe}](${path})**`;
-  } else if (path) {
-    block = `${listIndex}. [View in library](${path})`;
-  } else if (titleSafe) {
-    block = `${listIndex}. **${titleSafe}**`;
-  } else {
-    block = `${listIndex}. _Source_`;
-  }
-  block += `  \n`;
-
-  const meta: string[] = [];
-  if (s.authors?.trim()) {
-    meta.push(`*${escapeMarkdownLinkLabel(s.authors.trim())}*`);
-  }
-  const jour = [s.journal?.trim(), s.publication_year != null ? String(s.publication_year) : '']
-    .filter(Boolean)
-    .join(', ');
-  if (jour) meta.push(`_${escapeMarkdownLinkLabel(jour)}_`);
-
-  if (s.catalog_placement?.trim()) {
-    meta.push(`\`${s.catalog_placement.trim()}\``);
-  }
-
-  if (meta.length) {
-    block += `   ${meta.join(' · ')}\n`;
-  }
-
-  if (s.doi?.trim()) {
-    const d = s.doi.trim();
-    block += `   · DOI: [${escapeMarkdownLinkLabel(d)}](${doiUrl(d)})\n`;
-  }
-  if (s.pmid?.trim()) {
-    const p = s.pmid.trim();
-    block += `   · PMID: [${escapeMarkdownLinkLabel(p)}](${pmidUrl(p)})\n`;
-  }
-
-  if (s.abstract?.trim()) {
-    let abs = s.abstract.trim();
-    if (abs.length > ABSTRACT_MAX) abs = `${abs.slice(0, ABSTRACT_MAX - 1)}…`;
-    block += `\n   *Abstract:* ${abs}\n`;
-  }
-
-  const hints: string[] = [];
-  if (s.has_extracted_text && typeof s.extracted_text_char_count === 'number') {
-    hints.push(`full text ≈ ${s.extracted_text_char_count.toLocaleString()} chars indexed`);
-  }
-  if (s.context_sent_to_model_was_truncated) {
-    hints.push('context to model was truncated');
-  }
-  if (hints.length) {
-    block += `\n   _${hints.join(' · ')}_\n`;
-  }
-
-  return block;
 }
 
 function formatReferenceDetail(ref: PaperAnalyzerReference): string {
@@ -156,15 +86,28 @@ function formatReferenceDetail(ref: PaperAnalyzerReference): string {
 }
 
 /**
- * Compare mode (non–research-design): markdown answer with linked [n] citations,
- * then **Sources** (clickable IDs + metadata), then **Citation detail** from `structured.references`.
+ * Literature agent reply: markdown `content` with linked `[n]` when `structured.references` maps indices,
+ * then **Citation detail** (identifiers, note, supporting sentences). Top-level `sources` from the API is ignored here to avoid duplicating citation blocks.
+ * Biomni clarification: `needs_clarification` / `clarify_question` / `clarify_options`.
  */
 export function formatLiteratureAssistantMarkdown(
   payload: LiteratureAgentDonePayload,
-  endpoint: 'compare' | 'biomni'
+  _endpoint: 'compare' | 'biomni'
 ): string {
-  if (endpoint === 'biomni') {
-    return (payload.content || payload.answer || '').trim();
+  if (payload.needs_clarification) {
+    const q = payload.clarify_question?.trim();
+    const opts = payload.clarify_options ?? [];
+    if (q) {
+      let md = `### Clarification needed\n\n${q}`;
+      if (opts.length) {
+        md += '\n\n';
+        md += opts
+          .map((o) => (typeof o === 'string' && o.trim() ? `- ${escapeMarkdownLinkLabel(o.trim())}` : ''))
+          .filter(Boolean)
+          .join('\n');
+      }
+      return md.trim();
+    }
   }
 
   const refs = payload.structured?.references ?? [];
@@ -176,14 +119,6 @@ export function formatLiteratureAssistantMarkdown(
   }
 
   const parts: string[] = [body];
-
-  const sources = payload.sources ?? [];
-  if (sources.length > 0) {
-    parts.push('\n\n---\n\n### Sources\n\n');
-    parts.push(
-      sources.map((s, i) => formatSourceBlock(s, i + 1)).join('\n')
-    );
-  }
 
   if (refs.length > 0) {
     parts.push('\n\n---\n\n### Citation detail\n\n');

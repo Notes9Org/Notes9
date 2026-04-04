@@ -36,7 +36,9 @@ export type StagingLiteratureRow = Record<string, unknown>
 
 interface StagingTabProps {
   stagedLiterature: StagingLiteratureRow[]
-  onSavePaper: (paper: SearchPaper, literatureId: string) => void
+  onSavePaper: (paper: SearchPaper, literatureId: string) => void | Promise<void>
+  /** When set, Save to repository is in progress for this staged row id. */
+  savingLiteratureId?: string | null
 }
 
 function rowToSearchPaper(row: StagingListItem | StagingLiteratureRow): SearchPaper {
@@ -109,7 +111,11 @@ function mapRowToListItem(row: StagingLiteratureRow): StagingListItem {
   }
 }
 
-export function StagingTab({ stagedLiterature, onSavePaper }: StagingTabProps) {
+export function StagingTab({
+  stagedLiterature,
+  onSavePaper,
+  savingLiteratureId = null,
+}: StagingTabProps) {
   const router = useRouter()
   const items = useMemo(() => stagedLiterature.map(mapRowToListItem), [stagedLiterature])
 
@@ -306,10 +312,15 @@ export function StagingTab({ stagedLiterature, onSavePaper }: StagingTabProps) {
             <Button
               variant="outline"
               size="sm"
-              onClick={() => onSavePaper(rowToSearchPaper(lit), lit.id)}
+              onClick={() => void onSavePaper(rowToSearchPaper(lit), lit.id)}
+              disabled={Boolean(savingLiteratureId)}
               className="gap-2"
             >
-              <Database className="h-4 w-4" />
+              {savingLiteratureId === lit.id ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Database className="h-4 w-4" />
+              )}
               Save to Repository
             </Button>
             <Button
@@ -594,9 +605,14 @@ export function StagingTab({ stagedLiterature, onSavePaper }: StagingTabProps) {
                               <Button
                                 variant="ghost"
                                 size="sm"
-                                onClick={() => onSavePaper(rowToSearchPaper(lit), lit.id)}
+                                disabled={Boolean(savingLiteratureId)}
+                                onClick={() => void onSavePaper(rowToSearchPaper(lit), lit.id)}
                               >
-                                Save
+                                {savingLiteratureId === lit.id ? (
+                                  <Loader2 className="h-4 w-4 animate-spin" />
+                                ) : (
+                                  "Save"
+                                )}
                               </Button>
                               <Button
                                 variant="ghost"

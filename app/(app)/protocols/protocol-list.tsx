@@ -31,9 +31,22 @@ interface ProtocolListProps {
   viewMode?: "grid" | "table"
   setViewMode?: (mode: "grid" | "table") => void
   hideToolbar?: boolean
+  /** Preserve project hierarchy on protocol detail links (`?project=`). */
+  linkProjectId?: string | null
 }
 
-export function ProtocolList({ protocols, viewMode: controlledView, setViewMode: setControlledView, hideToolbar }: ProtocolListProps) {
+function protocolDetailHref(protocolId: string, linkProjectId?: string | null) {
+  if (linkProjectId) return `/protocols/${protocolId}?project=${linkProjectId}`
+  return `/protocols/${protocolId}`
+}
+
+export function ProtocolList({
+  protocols,
+  viewMode: controlledView,
+  setViewMode: setControlledView,
+  hideToolbar,
+  linkProjectId = null,
+}: ProtocolListProps) {
   const isMobile = useMediaQuery("(max-width: 768px)")
   const [internalView, setInternalView] = useState<"grid" | "table">("grid")
   const viewMode = controlledView ?? internalView
@@ -127,7 +140,7 @@ export function ProtocolList({ protocols, viewMode: controlledView, setViewMode:
                   </div>
                 </div>
                 <Button variant="outline" size="sm" className="w-full mt-auto shrink-0" asChild>
-                  <Link href={`/protocols/${item.id}`}>
+                  <Link href={protocolDetailHref(item.id, linkProjectId)}>
                     <Eye className="h-4 w-4 mr-2" />
                     <span className="truncate">View Details</span>
                   </Link>
@@ -194,7 +207,7 @@ export function ProtocolList({ protocols, viewMode: controlledView, setViewMode:
                       </TableCell>
                       <TableCell className="text-right">
                         <Button variant="ghost" size="sm" asChild>
-                          <Link href={`/protocols/${item.id}`}>
+                          <Link href={protocolDetailHref(item.id, linkProjectId)}>
                             <Eye className="h-4 w-4" />
                           </Link>
                         </Button>

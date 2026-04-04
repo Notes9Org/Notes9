@@ -78,11 +78,13 @@ export function LabNotesTab({
   experimentName,
   projectName,
   projectId,
+  experimentPageHref,
 }: {
   experimentId: string
   experimentName?: string
   projectName?: string
   projectId?: string
+  experimentPageHref?: string
 }) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -232,14 +234,25 @@ export function LabNotesTab({
     if (!projectName || !experimentName) return;
     const baseSegments = [
       { label: projectName, href: projectId ? `/projects/${projectId}` : undefined },
-      { label: experimentName },
+      {
+        label: experimentName,
+        href: experimentPageHref,
+      },
     ];
     const noteTitle = formData.title || selectedNote?.title || "Lab notes";
     setSegments([...baseSegments, { label: noteTitle }]);
     return () => {
       setSegments([]);
     };
-  }, [projectName, experimentName, projectId, setSegments, formData.title, selectedNote?.title]);
+  }, [
+    projectName,
+    experimentName,
+    projectId,
+    experimentPageHref,
+    setSegments,
+    formData.title,
+    selectedNote?.title,
+  ]);
 
   // Focus and select title input when entering inline edit mode
   useEffect(() => {
