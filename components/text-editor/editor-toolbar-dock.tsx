@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react"
 import { cn } from "@/lib/utils"
 import { useMediaQuery } from "@/hooks/use-media-query"
 
-const LEAVE_DELAY_MS = 280
+const LEAVE_DELAY_MS = 220
 const TOOLBAR_DOCK_POS_KEY = "notes9-tiptap-toolbar-dock-top"
 const DEFAULT_TOP_PX = 12
 const EDGE_GAP_PX = 12
@@ -29,8 +29,9 @@ export type EditorToolbarDockProps = {
 }
 
 /**
- * Right-aligned compact dock: launcher stays on the right; tools expand to the **left**
- * in a single horizontal row (flex-row-reverse). Hover pen/tools control to reveal.
+ * Right-aligned compact dock: launcher stays on the right; tools expand to the left
+ * in a single horizontal row. Hover and focus keep the rail open without changing
+ * the control geometry between collapsed and expanded states.
  */
 export function EditorToolbarDock({
   positionContainerRef,
@@ -270,12 +271,14 @@ export function EditorToolbarDock({
         >
           <div
             className={cn(
-              "box-content flex min-h-8 max-w-[min(calc(100vw-2rem),calc(100%-1.5rem))] origin-top-right scale-95 flex-row-reverse flex-nowrap items-center gap-x-0.5 gap-y-0 overflow-x-auto overflow-y-hidden rounded-md border border-border bg-muted/30 px-1.5 py-0.5 shadow-sm [scrollbar-width:thin] transition-[box-shadow,opacity,transform] duration-200 ease-out dark:border-border/80",
-              expanded && "bg-background/95 shadow-md backdrop-blur-sm dark:bg-card/95",
+              "box-content flex h-10 max-w-[min(calc(100vw-2rem),calc(100%-1.5rem))] origin-top-right flex-row-reverse flex-nowrap items-center gap-x-1 gap-y-0 overflow-x-auto overflow-y-hidden rounded-xl border border-border/70 bg-background/80 px-1.5 py-1 shadow-sm [scrollbar-width:thin] transition-[background-color,border-color,box-shadow,transform,opacity] duration-200 ease-out dark:border-border/80",
+              expanded
+                ? "translate-x-0 bg-background/96 shadow-md backdrop-blur-sm dark:bg-card/95"
+                : "translate-x-0.5 bg-muted/55 shadow-sm",
             )}
           >
             <div
-              className="group/launcher flex shrink-0 items-center gap-0.5"
+              className="group/launcher flex h-8 shrink-0 items-center gap-1"
               onPointerDown={onLauncherPointerDown}
               onPointerMove={onLauncherPointerMove}
               onPointerUp={(e) => finishDrag(e.pointerId)}
@@ -286,7 +289,7 @@ export function EditorToolbarDock({
             {expanded && (
               <div
                 data-slot="toolbar-tools"
-                className="flex min-w-0 flex-nowrap items-center gap-x-1 border-r border-border/60 pr-1.5 [&>*]:shrink-0"
+                className="flex h-8 min-w-0 flex-nowrap items-center gap-x-1 border-r border-border/60 pr-2 [&>*]:shrink-0"
               >
                 {children}
               </div>

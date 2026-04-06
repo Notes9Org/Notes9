@@ -19,7 +19,6 @@ import { TableRow } from "@tiptap/extension-table-row"
 import { TableCell } from "@tiptap/extension-table-cell"
 import { TableHeader } from "@tiptap/extension-table-header"
 import { TableOfContents } from "./table-of-contents"
-import { EditorToolbarDock } from "./editor-toolbar-dock"
 import { Mathematics } from "@tiptap/extension-mathematics"
 import { Underline } from "@tiptap/extension-underline"
 import { Subscript } from "@tiptap/extension-subscript"
@@ -34,8 +33,6 @@ import { Input } from "@/components/ui/input"
 import {
   Bold,
   Italic,
-  Strikethrough,
-  Code,
   List,
   ListOrdered,
   ListChecks,
@@ -43,8 +40,9 @@ import {
   Redo,
   Link2,
   Mic,
-  Highlighter,
-  Palette,
+  Camera,
+  BookOpen,
+  Quote,
   Table as TableIcon,
   FileText,
   FileInput,
@@ -54,19 +52,15 @@ import {
   FlaskConical,
   Sigma,
   Underline as UnderlineIcon,
-  Subscript as SubscriptIcon,
-  Superscript as SuperscriptIcon,
   AlignLeft,
   AlignCenter,
   AlignRight,
   AlignJustify,
   Type,
-  Paintbrush,
   MessageSquarePlus,
   IndentDecrease,
   IndentIncrease,
   ChevronDown,
-  ChevronUp,
   Trash2,
   X,
   Columns,
@@ -74,11 +68,13 @@ import {
   Maximize2,
   Minimize2,
   MessageSquare,
-  Pin,
-  PinOff,
-  PenLine,
   Plus,
   Pipette,
+  Paintbrush,
+  ImagePlus,
+  Square,
+  Circle,
+  ArrowRight,
 } from "lucide-react"
 import { Extension, Mark, mergeAttributes } from "@tiptap/core"
 import { Plugin, PluginKey } from "@tiptap/pm/state"
@@ -101,11 +97,11 @@ import {
 import {
   DropdownMenu,
   DropdownMenuContent,
-  DropdownMenuGroup,
   DropdownMenuItem,
   DropdownMenuTrigger,
   DropdownMenuSeparator,
   DropdownMenuLabel,
+  DropdownMenuShortcut,
 } from "@/components/ui/dropdown-menu"
 import {
   DEFAULT_TEXT_STYLE_FONT_LABEL,
@@ -130,6 +126,7 @@ import {
 } from "@/components/ui/dialog"
 import { ChemicalFormula, formatChemicalFormula } from "./extensions/chemical-formula"
 import { ChemistryHighlight } from "./extensions/chemistry-highlight"
+import { SimpleShape, type SimpleShapeVariant } from "./extensions/simple-shape"
 // @ts-ignore - CSS import for KaTeX math rendering
 import "katex/dist/katex.min.css"
 
@@ -1202,14 +1199,52 @@ export const Comment = Mark.create<CommentOptions>({
   },
 });
 
-const TOOLBAR_TOOLS_STRIP_KEY = "notes9-tiptap-toolbar-tools-expanded"
-
 /** At most one of these toolbar dropdowns open at a time (mutually exclusive). */
-type ToolbarClusterId = "text" | "format" | "insert" | "lists" | "align" | "table" | "sigma" | "ai"
+type ToolbarClusterId = "text" | "insert" | "lists" | "align" | "table" | "sigma" | "ai"
 
-function readToolbarToolsStripExpanded(): boolean {
-  if (typeof window === "undefined") return false
-  return localStorage.getItem(TOOLBAR_TOOLS_STRIP_KEY) === "true"
+type ToolbarShortcutTarget =
+  | "text-trigger"
+  | "font-family"
+  | "font-size"
+  | "text-color"
+  | "insert"
+  | "lists"
+  | "align"
+  | "table"
+  | "sigma"
+
+const SCIENTIFIC_SYMBOL_GROUPS = [
+  ["alpha", "beta", "gamma", "delta", "mu", "pi"].map((id, index) => ({
+    id,
+    label: ["alpha", "beta", "gamma", "delta", "mu", "pi"][index],
+    value: ["alpha", "beta", "gamma", "delta", "mu", "pi"][index] === "alpha" ? "α" :
+      ["alpha", "beta", "gamma", "delta", "mu", "pi"][index] === "beta" ? "β" :
+      ["alpha", "beta", "gamma", "delta", "mu", "pi"][index] === "gamma" ? "γ" :
+      ["alpha", "beta", "gamma", "delta", "mu", "pi"][index] === "delta" ? "Δ" :
+      ["alpha", "beta", "gamma", "delta", "mu", "pi"][index] === "mu" ? "μ" : "π",
+  })),
+  [
+    { id: "plus-minus", label: "plus/minus", value: "±" },
+    { id: "approx", label: "approx", value: "≈" },
+    { id: "not-equal", label: "not equal", value: "≠" },
+    { id: "less-equal", label: "less/equal", value: "≤" },
+    { id: "greater-equal", label: "greater/equal", value: "≥" },
+    { id: "infinity", label: "infinity", value: "∞" },
+  ],
+  [
+    { id: "right-arrow", label: "reaction arrow", value: "→" },
+    { id: "equilibrium", label: "equilibrium", value: "⇌" },
+    { id: "degree", label: "degree", value: "°" },
+    { id: "angstrom", label: "angstrom", value: "Å" },
+    { id: "times", label: "times", value: "×" },
+    { id: "middle-dot", label: "dot", value: "·" },
+  ],
+]
+
+function isEditableShortcutTarget(target: EventTarget | null) {
+  if (!(target instanceof HTMLElement)) return false
+  if (target.matches("input, textarea, select")) return true
+  return !!target.closest("input, textarea, select")
 }
 
 function clampChannel(n: number, min: number, max: number) {
@@ -1227,96 +1262,22 @@ function normalizeHex(hex: string): string {
   return "#" + h.slice(0, 6).toLowerCase()
 }
 
-function hexToRgb(hex: string): { r: number; g: number; b: number } {
-  const h = normalizeHex(hex).slice(1)
-  const n = parseInt(h, 16)
-  return { r: (n >> 16) & 255, g: (n >> 8) & 255, b: n & 255 }
+function normalizeUrl(url: string) {
+  const trimmed = url.trim()
+  if (!trimmed) return ""
+  if (/^(https?:\/\/|mailto:|tel:|data:|blob:)/i.test(trimmed)) return trimmed
+  return `https://${trimmed}`
 }
 
-function rgbToHex(r: number, g: number, b: number): string {
-  return (
-    "#" +
-    [r, g, b]
-      .map((x) => clampChannel(Math.round(x), 0, 255).toString(16).padStart(2, "0"))
-      .join("")
-  )
+function isMacLikePlatform() {
+  if (typeof navigator === "undefined") return false
+  const platform = navigator.platform || ""
+  const userAgent = navigator.userAgent || ""
+  return /Mac|iPhone|iPad|iPod/i.test(platform) || /Mac OS|iPhone|iPad|iPod/i.test(userAgent)
 }
 
-function rgbToHsl(r: number, g: number, b: number): { h: number; s: number; l: number } {
-  r /= 255
-  g /= 255
-  b /= 255
-  const max = Math.max(r, g, b),
-    min = Math.min(r, g, b)
-  let h = 0
-  const l = (max + min) / 2
-  const d = max - min
-  let s = 0
-  if (d !== 0) {
-    s = l > 0.5 ? d / (2 - max - min) : d / (max + min)
-    switch (max) {
-      case r:
-        h = ((g - b) / d + (g < b ? 6 : 0)) / 6
-        break
-      case g:
-        h = ((b - r) / d + 2) / 6
-        break
-      default:
-        h = ((r - g) / d + 4) / 6
-    }
-  }
-  return { h: h * 360, s: s * 100, l: l * 100 }
-}
-
-function hslToRgb(h: number, s: number, l: number): { r: number; g: number; b: number } {
-  s /= 100
-  l /= 100
-  const c = (1 - Math.abs(2 * l - 1)) * s
-  const hp = h / 60
-  const x = c * (1 - Math.abs((hp % 2) - 1))
-  const m = l - c / 2
-  let rp = 0,
-    gp = 0,
-    bp = 0
-  if (hp >= 0 && hp < 1) [rp, gp, bp] = [c, x, 0]
-  else if (hp < 2) [rp, gp, bp] = [x, c, 0]
-  else if (hp < 3) [rp, gp, bp] = [0, c, x]
-  else if (hp < 4) [rp, gp, bp] = [0, x, c]
-  else if (hp < 5) [rp, gp, bp] = [x, 0, c]
-  else [rp, gp, bp] = [c, 0, x]
-  return { r: (rp + m) * 255, g: (gp + m) * 255, b: (bp + m) * 255 }
-}
-
-/** Saturation × lightness grid locked to one hue (from base color). */
-function buildSatLightGrid(hue: number, rows: number, cols: number): string[] {
-  const out: string[] = []
-  const h = ((hue % 360) + 360) % 360
-  for (let ri = 0; ri < rows; ri++) {
-    const L = 10 + (ri / Math.max(1, rows - 1)) * 82
-    for (let ci = 0; ci < cols; ci++) {
-      const S = 8 + (ci / Math.max(1, cols - 1)) * 92
-      const { r, g, b } = hslToRgb(h, S, L)
-      out.push(rgbToHex(r, g, b))
-    }
-  }
-  return out
-}
-
-/** Neighbor hues at similar saturation/lightness as the base. */
-function buildHueStrip(baseHex: string, steps: number): string[] {
-  const { r, g, b } = hexToRgb(baseHex)
-  let { h, s, l } = rgbToHsl(r, g, b)
-  if (s < 6) s = 65
-  if (l < 12) l = 42
-  if (l > 90) l = 42
-  const out: string[] = []
-  const step = 360 / steps
-  for (let i = 0; i < steps; i++) {
-    const hue = (h + i * step) % 360
-    const rgb = hslToRgb(hue < 0 ? hue + 360 : hue, s, l)
-    out.push(rgbToHex(rgb.r, rgb.g, rgb.b))
-  }
-  return out
+function formatToolbarShortcutLabel(isMac: boolean, key: string) {
+  return `\\ ${key.toUpperCase()}`
 }
 
 export function TiptapEditor({
@@ -1390,6 +1351,12 @@ export function TiptapEditor({
   const [toolbarClusterMenu, setToolbarClusterMenu] = useState<ToolbarClusterId | null>(null)
   const [textMenuFontSizeInput, setTextMenuFontSizeInput] = useState("16")
   const [textMenuBaseColor, setTextMenuBaseColor] = useState("#1e88e5")
+  const [linkDialogOpen, setLinkDialogOpen] = useState(false)
+  const [linkUrlInput, setLinkUrlInput] = useState("")
+  const [linkTextInput, setLinkTextInput] = useState("")
+  const [imageInsertDialogOpen, setImageInsertDialogOpen] = useState(false)
+  const [imageUrlInput, setImageUrlInput] = useState("")
+  const [imageAltInput, setImageAltInput] = useState("")
   const [tableRows, setTableRows] = useState(3)
   const [tableCols, setTableCols] = useState(3)
   const [citationModalOpen, setCitationModalOpen] = useState(false)
@@ -1549,11 +1516,12 @@ export function TiptapEditor({
           },
         },
       })] : []),
-      // Underline,
+      Underline,
       Subscript,
       Superscript,
       ChemicalFormula,
       ChemistryHighlight,
+      SimpleShape,
       Alignment,
       ProtocolMention.configure({
         HTMLAttributes: {
@@ -2348,6 +2316,29 @@ export function TiptapEditor({
     toast.success('Bibliography inserted successfully')
   }, [editor, citationMetadata, selectedCitationStyle, formatCitation])
 
+  const insertScientificSymbol = useCallback((symbol: string) => {
+    if (!editor) return
+    editor.chain().focus().insertContent(symbol).run()
+    setToolbarClusterMenu(null)
+  }, [editor])
+
+  const insertSimpleShape = useCallback((variant: SimpleShapeVariant) => {
+    if (!editor) return
+    const attrs =
+      variant === "line"
+        ? { variant, width: 220, height: 72 }
+        : { variant, width: 220, height: 120 }
+
+    editor.chain().focus().insertContent({ type: "simpleShape", attrs }).run()
+    setToolbarClusterMenu(null)
+  }, [editor])
+
+  const insertArrowSymbol = useCallback((symbol: string) => {
+    if (!editor) return
+    editor.chain().focus().insertContent(` ${symbol} `).run()
+    setToolbarClusterMenu(null)
+  }, [editor])
+
   // Download functions
   const downloadAsMarkdown = useCallback(() => {
     if (!editor) return
@@ -2648,41 +2639,27 @@ export function TiptapEditor({
 
   const toolbarPositionContainerRef = useRef<HTMLDivElement>(null)
   const toolbarRailRef = useRef<HTMLDivElement>(null)
+  const textMenuLayoutRef = useRef<HTMLDivElement>(null)
+  const imageUploadInputRef = useRef<HTMLInputElement>(null)
+  const cameraCaptureInputRef = useRef<HTMLInputElement>(null)
+  const toolbarShortcutModeUntilRef = useRef(0)
   /** Mounted editor shell; state (not ref-only) so popper gets a stable collision boundary after first paint. */
   const [editorPopoverBoundaryEl, setEditorPopoverBoundaryEl] = useState<HTMLDivElement | null>(null)
-  const [toolbarToolsStripExpanded, setToolbarToolsStripExpanded] = useState(true)
-
-  useEffect(() => {
-    setToolbarToolsStripExpanded(readToolbarToolsStripExpanded())
-  }, [])
-
-  const toggleToolbarToolsStrip = useCallback(() => {
-    setToolbarToolsStripExpanded((prev) => {
-      const next = !prev
-      if (typeof window !== "undefined") {
-        localStorage.setItem(TOOLBAR_TOOLS_STRIP_KEY, String(next))
-      }
-      if (!next) {
-        setToolbarClusterMenu(null)
-      }
-      return next
-    })
-  }, [])
-
-  const expandToolbarToolsStrip = useCallback(() => {
-    setToolbarToolsStripExpanded(true)
-    if (typeof window !== "undefined") {
-      localStorage.setItem(TOOLBAR_TOOLS_STRIP_KEY, "true")
-    }
-  }, [])
-
-  const toolbarRightInsetPx = 16
+  const [pendingToolbarShortcutFocus, setPendingToolbarShortcutFocus] = useState<ToolbarShortcutTarget | null>(null)
 
   const handleToolbarClusterChange = useCallback((id: ToolbarClusterId) => {
     return (open: boolean) => {
       setToolbarClusterMenu((prev) => (open ? id : prev === id ? null : prev))
     }
   }, [])
+
+  const openToolbarCluster = useCallback(
+    (id: ToolbarClusterId, target?: ToolbarShortcutTarget) => {
+      setToolbarClusterMenu(id)
+      setPendingToolbarShortcutFocus(target ?? null)
+    },
+    [],
+  )
 
   useEffect(() => {
     if (toolbarClusterMenu !== "text" || !editor) return
@@ -2697,6 +2674,70 @@ export function TiptapEditor({
       }
     }
   }, [toolbarClusterMenu, editor])
+
+  useEffect(() => {
+    if (!pendingToolbarShortcutFocus) return
+
+    const focusShortcutTarget = () => {
+      const toolbarRoot = editorPopoverBoundaryEl
+      if (pendingToolbarShortcutFocus === "text-trigger") {
+        ;(toolbarRoot?.querySelector('[data-toolbar-trigger="text"]') as HTMLElement | null)?.focus()
+        setPendingToolbarShortcutFocus(null)
+        return
+      }
+
+      if (pendingToolbarShortcutFocus === "insert") {
+        ;(toolbarRoot?.querySelector('[data-toolbar-trigger="insert"]') as HTMLElement | null)?.focus()
+        setPendingToolbarShortcutFocus(null)
+        return
+      }
+
+      if (pendingToolbarShortcutFocus === "lists") {
+        ;(toolbarRoot?.querySelector('[data-toolbar-trigger="lists"]') as HTMLElement | null)?.focus()
+        setPendingToolbarShortcutFocus(null)
+        return
+      }
+
+      if (pendingToolbarShortcutFocus === "align") {
+        ;(toolbarRoot?.querySelector('[data-toolbar-trigger="align"]') as HTMLElement | null)?.focus()
+        setPendingToolbarShortcutFocus(null)
+        return
+      }
+
+      if (pendingToolbarShortcutFocus === "table") {
+        ;(toolbarRoot?.querySelector('[data-toolbar-trigger="table"]') as HTMLElement | null)?.focus()
+        setPendingToolbarShortcutFocus(null)
+        return
+      }
+
+      if (pendingToolbarShortcutFocus === "sigma") {
+        ;(toolbarRoot?.querySelector('[data-toolbar-trigger="sigma"]') as HTMLElement | null)?.focus()
+        setPendingToolbarShortcutFocus(null)
+        return
+      }
+
+      const root = textMenuLayoutRef.current
+      if (!root) return
+
+      let selector = ""
+      if (pendingToolbarShortcutFocus === "font-family") {
+        selector = '[data-toolbar-focus="font-family"] [data-slot="select-trigger"]'
+      } else if (pendingToolbarShortcutFocus === "font-size") {
+        selector = '[data-toolbar-focus="font-size"] input'
+      } else if (pendingToolbarShortcutFocus === "text-color") {
+        selector = '[data-toolbar-focus="text-color"] button, [data-toolbar-focus="text-color"] input[type="color"]'
+      }
+
+      const target = selector ? (root.querySelector(selector) as HTMLElement | null) : null
+      if (target) {
+        target.focus()
+        setPendingToolbarShortcutFocus(null)
+      }
+    }
+
+    const timer = window.setTimeout(focusShortcutTarget, 30)
+    return () => window.clearTimeout(timer)
+  }, [editorPopoverBoundaryEl, pendingToolbarShortcutFocus, toolbarClusterMenu])
 
   const applyTextMenuFontSizePx = useCallback(
     (px: number) => {
@@ -2729,11 +2770,145 @@ export function TiptapEditor({
     }
   }, [editor])
 
-  if (!editor) {
-    return null
-  }
+  const handleEditorToolbarShortcuts = useCallback(
+    (e: KeyboardEvent | React.KeyboardEvent<HTMLDivElement>) => {
+      if (!editor) return
+
+      const target = e.target as HTMLElement | null
+      const focusInsideEditor =
+        !!target &&
+        !!(editorPopoverBoundaryEl?.contains(target) || toolbarPositionContainerRef.current?.contains(target))
+
+      if (!focusInsideEditor) return
+
+      const key = e.key.toLowerCase()
+      const shortcutModeActive = toolbarShortcutModeUntilRef.current > Date.now()
+
+      const isShortcutLeader = e.key === "\\"
+
+      if (!shortcutModeActive && !isShortcutLeader && e.key !== "Escape") return
+
+      if (e.key === "Escape") {
+        if (toolbarClusterMenu !== null) {
+          e.preventDefault()
+          setToolbarClusterMenu(null)
+          setPendingToolbarShortcutFocus(null)
+          editor.commands.focus()
+          return
+        }
+        toolbarShortcutModeUntilRef.current = 0
+        return
+      }
+
+      if (isShortcutLeader) {
+        e.preventDefault()
+        e.stopPropagation()
+        toolbarShortcutModeUntilRef.current = Date.now() + 3000
+        return
+      }
+
+      if (isEditableShortcutTarget(target) && !["b", "i", "u", "t", "f", "s", "c", "n", "l", "a", "m", "e"].includes(key)) return
+
+      if (key === "b") {
+        e.preventDefault()
+        toolbarShortcutModeUntilRef.current = 0
+        editor.chain().focus().toggleBold().run()
+        return
+      }
+      if (key === "i") {
+        e.preventDefault()
+        toolbarShortcutModeUntilRef.current = 0
+        editor.chain().focus().toggleItalic().run()
+        return
+      }
+      if (key === "u") {
+        e.preventDefault()
+        toolbarShortcutModeUntilRef.current = 0
+        editor.chain().focus().toggleUnderline().run()
+        return
+      }
+      if (key === "t") {
+        e.preventDefault()
+        toolbarShortcutModeUntilRef.current = 0
+        openToolbarCluster("text", "text-trigger")
+        return
+      }
+      if (key === "f") {
+        e.preventDefault()
+        toolbarShortcutModeUntilRef.current = 0
+        openToolbarCluster("text", "font-family")
+        return
+      }
+      if (key === "s") {
+        e.preventDefault()
+        toolbarShortcutModeUntilRef.current = 0
+        openToolbarCluster("text", "font-size")
+        return
+      }
+      if (key === "c") {
+        e.preventDefault()
+        toolbarShortcutModeUntilRef.current = 0
+        openToolbarCluster("text", "text-color")
+        return
+      }
+      if (key === "n") {
+        e.preventDefault()
+        toolbarShortcutModeUntilRef.current = 0
+        openToolbarCluster("insert", "insert")
+        return
+      }
+      if (key === "l") {
+        e.preventDefault()
+        toolbarShortcutModeUntilRef.current = 0
+        openToolbarCluster("lists", "lists")
+        return
+      }
+      if (key === "a") {
+        e.preventDefault()
+        toolbarShortcutModeUntilRef.current = 0
+        openToolbarCluster("align", "align")
+        return
+      }
+      if (key === "m") {
+        e.preventDefault()
+        toolbarShortcutModeUntilRef.current = 0
+        openToolbarCluster("table", "table")
+        return
+      }
+      if (key === "e") {
+        e.preventDefault()
+        toolbarShortcutModeUntilRef.current = 0
+        openToolbarCluster("sigma", "sigma")
+      }
+    },
+    [
+      editor,
+      editorPopoverBoundaryEl,
+      openToolbarCluster,
+      toolbarClusterMenu,
+    ],
+  )
+
+  useEffect(() => {
+    const boundary = editorPopoverBoundaryEl
+    const toolbar = toolbarPositionContainerRef.current
+    if (!boundary && !toolbar) return
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      handleEditorToolbarShortcuts(event)
+    }
+
+    boundary?.addEventListener("keydown", onKeyDown, true)
+    toolbar?.addEventListener("keydown", onKeyDown, true)
+
+    return () => {
+      boundary?.removeEventListener("keydown", onKeyDown, true)
+      toolbar?.removeEventListener("keydown", onKeyDown, true)
+    }
+  }, [editorPopoverBoundaryEl, handleEditorToolbarShortcuts])
 
   const getSelectedTable = () => {
+    if (!editor) return null
     const { $from } = editor.state.selection
     for (let depth = $from.depth; depth > 0; depth--) {
       const node = $from.node(depth)
@@ -2746,6 +2921,7 @@ export function TiptapEditor({
   }
 
   const growTable = (rows: number, cols: number) => {
+    if (!editor) return
     const selTable = getSelectedTable()
     if (!selTable) {
       // Insert new table at cursor
@@ -2794,6 +2970,7 @@ export function TiptapEditor({
   }
 
   const handleTable = () => {
+    if (!editor) return
     const selTable = getSelectedTable()
     const currentRows = selTable ? selTable.node.childCount : 3
     const currentCols = selTable ? selTable.node.child(0)?.childCount || 3 : 3
@@ -2805,25 +2982,87 @@ export function TiptapEditor({
     setToolbarClusterMenu((p) => (p === "table" ? null : p))
   }
 
-  const handleSetLink = () => {
+  const openLinkDialog = useCallback(() => {
     if (!editor) return
+    const { from, to, empty } = editor.state.selection
+    const selectionText = empty ? "" : editor.state.doc.textBetween(from, to, " ").trim()
     const previousUrl = editor.getAttributes("link").href || ""
-    const url = window.prompt("Enter URL", previousUrl)
-    if (url === null) return
-    if (url === "") {
-      editor.chain().focus().unsetLink().run()
+
+    setLinkUrlInput(previousUrl)
+    setLinkTextInput(selectionText || "")
+    setLinkDialogOpen(true)
+    setToolbarClusterMenu(null)
+  }, [editor])
+
+  const applyLinkFromDialog = useCallback(() => {
+    if (!editor) return
+
+    const href = normalizeUrl(linkUrlInput)
+    if (!href) {
+      toast.error("Enter a link URL before inserting it.")
       return
     }
-    editor.chain().focus().extendMarkRange("link").setLink({ href: url }).run()
-  }
 
-  const handleInsertImage = () => {
+    const { from, to, empty } = editor.state.selection
+    const selectedText = empty ? "" : editor.state.doc.textBetween(from, to, " ")
+    const label = linkTextInput.trim() || selectedText.trim() || href
+    const attrs = {
+      href,
+      target: "_blank",
+      rel: "noopener noreferrer",
+    }
+
+    if (empty) {
+      editor
+        .chain()
+        .focus()
+        .insertContent({
+          type: "text",
+          text: label,
+          marks: [{ type: "link", attrs }],
+        })
+        .run()
+    } else if (label !== selectedText.trim() && label.length > 0) {
+      editor
+        .chain()
+        .focus()
+        .deleteRange({ from, to })
+        .insertContent({
+          type: "text",
+          text: label,
+          marks: [{ type: "link", attrs }],
+        })
+        .run()
+    } else {
+      editor.chain().focus().extendMarkRange("link").setLink(attrs).run()
+    }
+
+    setLinkDialogOpen(false)
+  }, [editor, linkTextInput, linkUrlInput])
+
+  const removeLinkFromDialog = useCallback(() => {
     if (!editor) return
-    const url = window.prompt("Image URL")
-    if (!url) return
-    const alt = window.prompt("Alt text (optional)") || ""
-    editor.chain().focus().setImage({ src: url, alt }).run()
-  }
+    editor.chain().focus().extendMarkRange("link").unsetLink().run()
+    setLinkDialogOpen(false)
+  }, [editor])
+
+  const openImageDialog = useCallback(() => {
+    setImageInsertDialogOpen(true)
+    setToolbarClusterMenu(null)
+  }, [])
+
+  const insertImageFromUrl = useCallback(() => {
+    if (!editor) return
+    const src = normalizeUrl(imageUrlInput)
+    if (!src) {
+      toast.error("Enter an image URL before inserting it.")
+      return
+    }
+    editor.chain().focus().setImage({ src, alt: imageAltInput.trim() }).run()
+    setImageInsertDialogOpen(false)
+    setImageUrlInput("")
+    setImageAltInput("")
+  }, [editor, imageAltInput, imageUrlInput])
 
   const insertImagesFromFileList = (files: FileList | File[]) => {
     const images = Array.from(files).filter((f) => f.type.startsWith("image/"))
@@ -2836,6 +3075,24 @@ export function TiptapEditor({
       }
       reader.readAsDataURL(file)
     })
+    setImageInsertDialogOpen(false)
+    setImageUrlInput("")
+    setImageAltInput("")
+  }
+
+  const openImageUploadPicker = useCallback(() => {
+    imageUploadInputRef.current?.click()
+  }, [])
+
+  const openCameraCapturePicker = useCallback(() => {
+    cameraCaptureInputRef.current?.click()
+  }, [])
+
+  const handleImageUploadChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files?.length) {
+      insertImagesFromFileList(e.target.files)
+    }
+    e.target.value = ""
   }
 
   const insertDocxFromFile = async (file: File) => {
@@ -2873,6 +3130,10 @@ export function TiptapEditor({
       }
     }
     input.click()
+  }
+
+  if (!editor) {
+    return null
   }
 
   const removeTable = () => {
@@ -2977,9 +3238,25 @@ export function TiptapEditor({
     if (!font) return DEFAULT_TEXT_STYLE_FONT_LABEL
     return fontLabelForAttr(font) ?? font.split(",")[0].replace(/['"]/g, "").trim()
   })()
+  const isMacShortcuts = isMacLikePlatform()
+  const shortcutText = {
+    text: formatToolbarShortcutLabel(isMacShortcuts, "t"),
+    font: formatToolbarShortcutLabel(isMacShortcuts, "f"),
+    size: formatToolbarShortcutLabel(isMacShortcuts, "s"),
+    color: formatToolbarShortcutLabel(isMacShortcuts, "c"),
+    bold: formatToolbarShortcutLabel(isMacShortcuts, "b"),
+    italic: formatToolbarShortcutLabel(isMacShortcuts, "i"),
+    underline: formatToolbarShortcutLabel(isMacShortcuts, "u"),
+    insert: formatToolbarShortcutLabel(isMacShortcuts, "n"),
+    lists: formatToolbarShortcutLabel(isMacShortcuts, "l"),
+    align: formatToolbarShortcutLabel(isMacShortcuts, "a"),
+    table: formatToolbarShortcutLabel(isMacShortcuts, "m"),
+    sigma: formatToolbarShortcutLabel(isMacShortcuts, "e"),
+  }
 
   const renderToolbarDockChildren = () => {
     const dockPopperOpts = {
+      container: editorPopoverBoundaryEl ?? undefined,
       collisionBoundary: editorPopoverBoundaryEl ?? undefined,
       collisionPadding: 12,
       side: "bottom" as const,
@@ -2987,7 +3264,7 @@ export function TiptapEditor({
     }
     return (
     <TooltipProvider delayDuration={300}>
-      <div className="flex min-w-0 flex-nowrap items-center gap-x-1 [&>*]:shrink-0">
+      <div className="flex min-w-0 flex-nowrap items-center gap-x-0.5 [&>*]:shrink-0">
       {/* Undo/Redo */}
       <Tooltip>
         <TooltipTrigger asChild>
@@ -2996,7 +3273,7 @@ export function TiptapEditor({
             size="sm"
             onClick={() => editor.chain().focus().undo().run()}
             disabled={!editor.can().undo()}
-            className="h-8 w-8 p-0 shrink-0"
+            className="h-8 w-8 rounded-lg p-0 shrink-0"
           >
             <Undo className="h-4 w-4" />
           </Button>
@@ -3011,7 +3288,7 @@ export function TiptapEditor({
             size="sm"
             onClick={() => editor.chain().focus().redo().run()}
             disabled={!editor.can().redo()}
-            className="h-8 w-8 p-0 shrink-0"
+            className="h-8 w-8 rounded-lg p-0 shrink-0"
           >
             <Redo className="h-4 w-4" />
           </Button>
@@ -3025,9 +3302,10 @@ export function TiptapEditor({
           <TooltipTrigger asChild>
             <DropdownMenuTrigger asChild>
               <Button
+                data-toolbar-trigger="text"
                 variant="ghost"
                 size="sm"
-                className="h-8 gap-1.5 px-2 shrink-0 max-w-[9rem] sm:max-w-[11rem] inline-flex"
+                className="inline-flex h-8 max-w-[9rem] shrink-0 gap-1.5 rounded-lg px-2.5 sm:max-w-[11rem]"
               >
                 <Type className="h-4 w-4 shrink-0" />
                 <span className="text-xs truncate hidden sm:inline" style={{ fontFamily: currentFontFamily }}>
@@ -3038,280 +3316,201 @@ export function TiptapEditor({
               </Button>
             </DropdownMenuTrigger>
           </TooltipTrigger>
-          <TooltipContent>Text &amp; font</TooltipContent>
+          <TooltipContent>{`Text & font ${shortcutText.text}`}</TooltipContent>
         </Tooltip>
         <DropdownMenuContent
           {...dockPopperOpts}
-          className="z-[200] flex min-h-0 w-[min(20rem,calc(100vw-2rem))] max-h-[min(78vh,40rem)] flex-col overflow-hidden p-0 overscroll-y-contain [scrollbar-width:thin]"
+          className="z-[200] w-[min(16rem,calc(100vw-2rem))] max-h-[min(76vh,34rem)] overflow-hidden rounded-xl border-border/80 p-0 shadow-lg overscroll-y-contain [scrollbar-width:thin]"
           style={{
-            maxHeight: "min(78vh, 40rem, var(--radix-popper-available-height, 100dvh))",
+            maxHeight: "min(76vh, 34rem, var(--radix-popper-available-height, 100dvh))",
           }}
           onWheel={(e) => e.stopPropagation()}
         >
-          <div className="shrink-0 p-1">
-            <DropdownMenuLabel className="px-2 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-foreground">
-              Paragraph
-            </DropdownMenuLabel>
-            <div className="px-2 pb-1" onPointerDown={(e) => e.stopPropagation()}>
-              <Select
-                value={currentParagraphValue}
-                onValueChange={(value) => {
-                  if (value === "h1") editor.chain().focus().toggleHeading({ level: 1 }).run()
-                  else if (value === "h2") editor.chain().focus().toggleHeading({ level: 2 }).run()
-                  else if (value === "h3") editor.chain().focus().toggleHeading({ level: 3 }).run()
-                  else editor.chain().focus().setParagraph().run()
-                }}
-              >
-                <SelectTrigger size="sm" className="h-8 w-full text-xs">
-                  <SelectValue placeholder="Select paragraph style" />
-                </SelectTrigger>
-                <SelectContent className="z-[240]">
-                  <SelectItem value="p">Paragraph</SelectItem>
-                  <SelectItem value="h1">Heading 1</SelectItem>
-                  <SelectItem value="h2">Heading 2</SelectItem>
-                  <SelectItem value="h3">Heading 3</SelectItem>
-                </SelectContent>
-              </Select>
+          <div ref={textMenuLayoutRef} className="flex max-h-[inherit] min-h-0 flex-col overflow-y-auto px-2 py-2 [scrollbar-width:thin]">
+            <div className="space-y-1.5 rounded-lg px-1 py-1">
+              <DropdownMenuLabel className="px-1 py-0 text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+                Paragraph
+              </DropdownMenuLabel>
+              <div className="px-1" onPointerDown={(e) => e.stopPropagation()}>
+                <Select
+                  value={currentParagraphValue}
+                  onValueChange={(value) => {
+                    if (value === "h1") editor.chain().focus().toggleHeading({ level: 1 }).run()
+                    else if (value === "h2") editor.chain().focus().toggleHeading({ level: 2 }).run()
+                    else if (value === "h3") editor.chain().focus().toggleHeading({ level: 3 }).run()
+                    else editor.chain().focus().setParagraph().run()
+                  }}
+                >
+                  <SelectTrigger size="sm" className="h-8 w-full rounded-lg text-xs">
+                    <SelectValue placeholder="Select paragraph style" />
+                  </SelectTrigger>
+                  <SelectContent className="z-[240]">
+                    <SelectItem value="p">Paragraph</SelectItem>
+                    <SelectItem value="h1">Heading 1</SelectItem>
+                    <SelectItem value="h2">Heading 2</SelectItem>
+                    <SelectItem value="h3">Heading 3</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
-          </div>
-          <DropdownMenuSeparator className="my-0 shrink-0" />
-          <div className="shrink-0 p-1">
-          <DropdownMenuLabel className="px-2 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-foreground">
-            Size (px)
-          </DropdownMenuLabel>
-          <p className="px-2 pb-1 text-[10px] leading-snug text-muted-foreground">
-            Type any whole number from <span className="tabular-nums">8</span>–<span className="tabular-nums">96</span>, press
-            Enter to apply, or use − / +.
-          </p>
-          <div className="px-2 pb-1">
-            <div
-              className="flex items-center gap-0 rounded-md border border-border bg-background overflow-hidden h-8"
-              onPointerDown={(e) => e.stopPropagation()}
-            >
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                className="h-8 w-8 p-0 rounded-none border-r border-border shrink-0"
-                onClick={() => {
-                  const cur = parseInt(textMenuFontSizeInput, 10)
-                  const base = Number.isNaN(cur)
-                    ? clampChannel(
-                        parseInt(
-                          String(editor.getAttributes("textStyle").fontSize || "16").replace(/px/gi, ""),
-                          10,
-                        ) || 16,
-                        8,
-                        96,
-                      )
-                    : cur
-                  applyTextMenuFontSizePx(base - 1)
-                }}
-              >
-                <span className="text-sm font-medium">−</span>
-              </Button>
-              <Input
-                type="text"
-                inputMode="numeric"
-                pattern="[0-9]*"
-                value={textMenuFontSizeInput}
-                onChange={(e) => setTextMenuFontSizeInput(e.target.value.replace(/[^\d]/g, ""))}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") {
-                    e.preventDefault()
-                    const v = parseInt(textMenuFontSizeInput, 10)
-                    if (!Number.isNaN(v)) applyTextMenuFontSizePx(v)
-                    else {
-                      const raw = editor.getAttributes("textStyle").fontSize as string | undefined
-                      const n = clampChannel(parseInt(String(raw || "16").replace(/px/gi, ""), 10) || 16, 8, 96)
-                      setTextMenuFontSizeInput(String(n))
-                    }
-                  }
-                }}
-                onBlur={() => {
-                  const v = parseInt(textMenuFontSizeInput, 10)
-                  if (!Number.isNaN(v)) applyTextMenuFontSizePx(v)
-                  else {
-                    const raw = editor.getAttributes("textStyle").fontSize as string | undefined
-                    const n = clampChannel(parseInt(String(raw || "16").replace(/px/gi, ""), 10) || 16, 8, 96)
-                    setTextMenuFontSizeInput(String(n))
-                  }
-                }}
-                className="h-8 min-w-0 flex-1 rounded-none border-0 bg-transparent px-1 py-0 text-center text-xs tabular-nums shadow-none focus-visible:z-[1] focus-visible:ring-0 focus-visible:ring-offset-0"
-                aria-label="Font size in pixels (8–96)"
-              />
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                className="h-8 w-8 p-0 rounded-none border-l border-border shrink-0"
-                onClick={() => {
-                  const cur = parseInt(textMenuFontSizeInput, 10)
-                  const base = Number.isNaN(cur)
-                    ? clampChannel(
-                        parseInt(
-                          String(editor.getAttributes("textStyle").fontSize || "16").replace(/px/gi, ""),
-                          10,
-                        ) || 16,
-                        8,
-                        96,
-                      )
-                    : cur
-                  applyTextMenuFontSizePx(base + 1)
-                }}
-              >
-                <span className="text-sm font-medium">+</span>
-              </Button>
+            <DropdownMenuSeparator className="my-1" />
+            <div data-toolbar-focus="font-family" className="space-y-1.5 rounded-lg px-1 py-1">
+              <DropdownMenuLabel className="px-1 py-0 text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+                Font
+              </DropdownMenuLabel>
+              <div className="px-1" onPointerDown={(e) => e.stopPropagation()}>
+                <Select
+                  value={currentFontFamily || "__default__"}
+                  onValueChange={(value) => {
+                    if (value === "__default__") editor.chain().focus().unsetFontFamily().run()
+                    else editor.chain().focus().setFontFamily(value).run()
+                  }}
+                >
+                  <SelectTrigger size="sm" className="h-8 w-full rounded-lg text-xs">
+                    <SelectValue placeholder="Select font family" />
+                  </SelectTrigger>
+                  <SelectContent className="z-[240]" viewportClassName="max-h-72">
+                    {ALL_FONT_MENU_VARIANTS.map(({ label, value }) => (
+                      <SelectItem key={value || "__default__"} value={value || "__default__"}>
+                        <span style={value ? { fontFamily: value } : undefined}>{label}</span>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
-          </div>
-          </div>
-          <DropdownMenuSeparator className="my-0 shrink-0" />
-          <div className="grid min-h-0 min-w-0 flex-1 grid-rows-[minmax(0,12rem)_minmax(9rem,1fr)] overflow-hidden">
-          <div
-            className="min-h-0 overflow-y-auto overflow-x-hidden overscroll-y-contain border-b border-border/60 p-1 [scrollbar-width:thin]"
-            onWheel={(e) => e.stopPropagation()}
-          >
-          <DropdownMenuLabel className="px-2 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-foreground">
-            Color
-          </DropdownMenuLabel>
-          <p className="px-2 pb-1 text-[10px] leading-snug text-muted-foreground">
-            Presets, native picker, screen pipette, then a grid from the current base hue.
-          </p>
-          <div className="px-2 pb-1">
-            <div className="flex items-center gap-2 rounded-md border border-border/80 bg-background/70 px-2 py-1">
-              <span className="text-[10px] font-semibold uppercase tracking-wide text-foreground">Current</span>
-              <span
-                className="h-4 w-4 rounded-sm border border-foreground/40 shadow-sm"
-                style={{ backgroundColor: textMenuBaseColor }}
-                aria-hidden
-              />
-              <span className="text-xs font-medium tabular-nums text-foreground">{textMenuBaseColor.toUpperCase()}</span>
-            </div>
-          </div>
-          <div className="grid grid-cols-4 gap-1 p-2">
-            {["#e53935", "#fb8c00", "#fdd835", "#43a047", "#1e88e5", "#8e24aa", "#ffffff", "#000000"].map((color) => (
-              <button
-                type="button"
-                key={color}
-                onClick={() => {
-                  setTextMenuBaseColor(normalizeHex(color))
-                  editor.chain().focus().setColor(color).run()
-                }}
-                className="h-7 w-7 rounded border-2 border-foreground/35 shadow-sm transition-transform hover:scale-105"
-                style={{ backgroundColor: color }}
-                aria-label={`Set color ${color}`}
-              />
-            ))}
-          </div>
-          <div
-            className="flex flex-wrap items-center gap-2 px-2 pb-2"
-            onPointerDown={(e) => e.stopPropagation()}
-          >
-            <span className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">Custom</span>
-            <label className="relative h-8 w-10 shrink-0 cursor-pointer overflow-hidden rounded-md border border-border">
-              <input
-                type="color"
-                value={textMenuBaseColor}
-                onChange={(e) => {
-                  const v = normalizeHex(e.target.value)
-                  setTextMenuBaseColor(v)
-                  editor.chain().focus().setColor(v).run()
-                }}
-                className="absolute -left-1/2 -top-1/2 h-[200%] w-[200%] cursor-pointer border-0 p-0"
-                aria-label="Open full color spectrum"
-              />
-            </label>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="h-8 gap-1 px-2"
-              onClick={() => void pickTextColorFromScreen()}
-              title="Pick a color from anywhere on screen"
-            >
-              <Pipette className="h-3.5 w-3.5" />
-              <span className="text-xs">Pipette</span>
-            </Button>
-          </div>
-          {(() => {
-            const { r, g, b } = hexToRgb(textMenuBaseColor)
-            const { h, s } = rgbToHsl(r, g, b)
-            const hue = s < 2 ? 210 : h
-            const satLight = buildSatLightGrid(hue, 5, 7)
-            const hueStrip = buildHueStrip(textMenuBaseColor, 10)
-            return (
-              <>
-                <DropdownMenuLabel className="px-2 pt-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-                  From base hue (saturation × lightness)
-                </DropdownMenuLabel>
-                <div className="grid grid-cols-7 gap-0.5 px-2 pb-2">
-                  {satLight.map((hex, idx) => (
-                    <button
-                      type="button"
-                      key={`sl-${idx}-${hex}`}
-                      onClick={() => {
-                        setTextMenuBaseColor(hex)
-                        editor.chain().focus().setColor(hex).run()
-                      }}
-                      className="h-5 w-full min-w-0 rounded-sm border border-border/60"
-                      style={{ backgroundColor: hex }}
-                      aria-label={`Use ${hex}`}
-                    />
-                  ))}
+            <DropdownMenuSeparator className="my-1" />
+            <div data-toolbar-focus="font-size" className="space-y-1.5 rounded-lg px-1 py-1">
+              <DropdownMenuLabel className="px-1 py-0 text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+                Size
+              </DropdownMenuLabel>
+              <div className="px-1">
+                <div className="flex items-center overflow-hidden rounded-lg border border-border bg-background" onPointerDown={(e) => e.stopPropagation()}>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="h-8 w-8 rounded-none border-r border-border p-0"
+                    onClick={() => {
+                      const cur = parseInt(textMenuFontSizeInput, 10)
+                      const base = Number.isNaN(cur)
+                        ? clampChannel(parseInt(String(editor.getAttributes("textStyle").fontSize || "16").replace(/px/gi, ""), 10) || 16, 8, 96)
+                        : cur
+                      applyTextMenuFontSizePx(base - 1)
+                    }}
+                  >
+                    <span className="text-sm font-medium">-</span>
+                  </Button>
+                  <Input
+                    type="text"
+                    inputMode="numeric"
+                    pattern="[0-9]*"
+                    value={textMenuFontSizeInput}
+                    onChange={(e) => setTextMenuFontSizeInput(e.target.value.replace(/[^\d]/g, ""))}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault()
+                        const v = parseInt(textMenuFontSizeInput, 10)
+                        if (!Number.isNaN(v)) applyTextMenuFontSizePx(v)
+                        else {
+                          const raw = editor.getAttributes("textStyle").fontSize as string | undefined
+                          const n = clampChannel(parseInt(String(raw || "16").replace(/px/gi, ""), 10) || 16, 8, 96)
+                          setTextMenuFontSizeInput(String(n))
+                        }
+                      }
+                    }}
+                    onBlur={() => {
+                      const v = parseInt(textMenuFontSizeInput, 10)
+                      if (!Number.isNaN(v)) applyTextMenuFontSizePx(v)
+                      else {
+                        const raw = editor.getAttributes("textStyle").fontSize as string | undefined
+                        const n = clampChannel(parseInt(String(raw || "16").replace(/px/gi, ""), 10) || 16, 8, 96)
+                        setTextMenuFontSizeInput(String(n))
+                      }
+                    }}
+                    className="h-8 min-w-0 flex-1 rounded-none border-0 bg-transparent px-1 py-0 text-center text-xs tabular-nums shadow-none focus-visible:z-[1] focus-visible:ring-0 focus-visible:ring-offset-0"
+                    aria-label="Font size in pixels (8-96)"
+                  />
+                  <div className="flex h-8 items-center border-l border-border px-2 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                    px
+                  </div>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="h-8 w-8 rounded-none border-l border-border p-0"
+                    onClick={() => {
+                      const cur = parseInt(textMenuFontSizeInput, 10)
+                      const base = Number.isNaN(cur)
+                        ? clampChannel(parseInt(String(editor.getAttributes("textStyle").fontSize || "16").replace(/px/gi, ""), 10) || 16, 8, 96)
+                        : cur
+                      applyTextMenuFontSizePx(base + 1)
+                    }}
+                  >
+                    <span className="text-sm font-medium">+</span>
+                  </Button>
                 </div>
-                <DropdownMenuLabel className="px-2 pt-0 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-                  Neighbor hues
-                </DropdownMenuLabel>
-                <div className="flex gap-0.5 px-2 pb-2">
-                  {hueStrip.map((hex, idx) => (
-                    <button
-                      type="button"
-                      key={`hue-${idx}-${hex}`}
-                      onClick={() => {
-                        setTextMenuBaseColor(hex)
-                        editor.chain().focus().setColor(hex).run()
-                      }}
-                      className="h-5 min-w-0 flex-1 rounded-sm border border-border/60"
-                      style={{ backgroundColor: hex }}
-                      aria-label={`Use ${hex}`}
-                    />
-                  ))}
-                </div>
-              </>
-            )
-          })()}
-          <DropdownMenuItem onClick={() => editor.chain().focus().unsetColor().run()}>Clear color</DropdownMenuItem>
-          </div>
-          <div className="flex min-h-0 min-w-0 flex-col overflow-hidden p-1 pb-2 pt-2">
-            <DropdownMenuLabel className="shrink-0 px-2 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-foreground">
-              Font
-            </DropdownMenuLabel>
-            <div className="px-2 pb-1" onPointerDown={(e) => e.stopPropagation()}>
-              <Select
-                value={currentFontFamily || "__default__"}
-                onValueChange={(value) => {
-                  if (value === "__default__") editor.chain().focus().unsetFontFamily().run()
-                  else editor.chain().focus().setFontFamily(value).run()
-                }}
-              >
-                <SelectTrigger size="sm" className="h-8 w-full text-xs">
-                  <SelectValue placeholder="Select font family" />
-                </SelectTrigger>
-                <SelectContent className="z-[240]" viewportClassName="max-h-72">
-                  {ALL_FONT_MENU_VARIANTS.map(({ label, value }) => (
-                    <SelectItem key={value || "__default__"} value={value || "__default__"}>
-                      <span style={value ? { fontFamily: value } : undefined}>{label}</span>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              </div>
             </div>
-          </div>
+            <DropdownMenuSeparator className="my-1" />
+            <div data-toolbar-focus="text-color" className="space-y-2 rounded-lg px-1 py-1">
+              <DropdownMenuLabel className="px-1 py-0 text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+                Color
+              </DropdownMenuLabel>
+              <div className="flex items-center gap-2 px-1">
+                <span className="h-4 w-4 rounded-sm border border-foreground/30" style={{ backgroundColor: textMenuBaseColor }} aria-hidden />
+                <span className="text-xs font-medium tabular-nums text-foreground">{textMenuBaseColor.toUpperCase()}</span>
+              </div>
+              <div className="grid grid-cols-4 gap-1 px-1">
+                {["#111827", "#e53935", "#fb8c00", "#fdd835", "#43a047", "#1e88e5", "#8e24aa", "#ffffff"].map((color) => (
+                  <button
+                    type="button"
+                    key={color}
+                    onClick={() => {
+                      setTextMenuBaseColor(normalizeHex(color))
+                      editor.chain().focus().setColor(color).run()
+                    }}
+                    className="h-7 w-full rounded-md border border-border/70 transition-transform duration-150 hover:scale-[1.03] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    style={{ backgroundColor: color }}
+                    aria-label={`Set color ${color}`}
+                  />
+                ))}
+              </div>
+              <div className="flex items-center gap-2 px-1" onPointerDown={(e) => e.stopPropagation()}>
+                <label className="relative h-8 w-10 shrink-0 cursor-pointer overflow-hidden rounded-lg border border-border">
+                  <input
+                    type="color"
+                    value={textMenuBaseColor}
+                    onChange={(e) => {
+                      const v = normalizeHex(e.target.value)
+                      setTextMenuBaseColor(v)
+                      editor.chain().focus().setColor(v).run()
+                    }}
+                    className="absolute -left-1/2 -top-1/2 h-[200%] w-[200%] cursor-pointer border-0 p-0"
+                    aria-label="Open full color spectrum"
+                  />
+                </label>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="h-8 flex-1 justify-center gap-1 rounded-lg px-2 text-xs"
+                  onClick={() => void pickTextColorFromScreen()}
+                  title="Pick a color from anywhere on screen"
+                >
+                  <Pipette className="h-3.5 w-3.5" />
+                  Pipette
+                </Button>
+              </div>
+              <DropdownMenuItem onClick={() => editor.chain().focus().unsetColor().run()} className="mx-1 rounded-lg">
+                Clear color
+              </DropdownMenuItem>
+            </div>
           </div>
         </DropdownMenuContent>
       </DropdownMenu>
 
-      <Separator orientation="vertical" className="h-5 shrink-0 mx-0.5" />
+      <Separator orientation="vertical" className="mx-px h-5 shrink-0" />
 
       <Tooltip>
         <TooltipTrigger asChild>
@@ -3319,12 +3518,12 @@ export function TiptapEditor({
             variant="ghost"
             size="sm"
             onClick={() => editor.chain().focus().toggleBold().run()}
-            className={cn("h-8 w-8 p-0 shrink-0", editor.isActive("bold") && "bg-accent")}
+            className={cn("h-8 w-8 rounded-lg p-0 shrink-0", editor.isActive("bold") && "bg-accent")}
           >
             <Bold className="h-4 w-4" />
           </Button>
         </TooltipTrigger>
-        <TooltipContent>Bold</TooltipContent>
+        <TooltipContent>{`Bold ${shortcutText.bold}`}</TooltipContent>
       </Tooltip>
 
       <Tooltip>
@@ -3333,88 +3532,74 @@ export function TiptapEditor({
             variant="ghost"
             size="sm"
             onClick={() => editor.chain().focus().toggleItalic().run()}
-            className={cn("h-8 w-8 p-0 shrink-0", editor.isActive("italic") && "bg-accent")}
+            className={cn("h-8 w-8 rounded-lg p-0 shrink-0", editor.isActive("italic") && "bg-accent")}
           >
             <Italic className="h-4 w-4" />
           </Button>
         </TooltipTrigger>
-        <TooltipContent>Italic</TooltipContent>
+        <TooltipContent>{`Italic ${shortcutText.italic}`}</TooltipContent>
       </Tooltip>
 
-      <DropdownMenu modal={false} open={toolbarClusterMenu === "format"} onOpenChange={handleToolbarClusterChange("format")}>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="sm" className="h-8 w-8 p-0 shrink-0">
-                <Paintbrush className="h-4 w-4" />
-              </Button>
-            </DropdownMenuTrigger>
-          </TooltipTrigger>
-          <TooltipContent>More formatting</TooltipContent>
-        </Tooltip>
-        <DropdownMenuContent {...dockPopperOpts} className="z-[200] w-48">
-          <DropdownMenuLabel className="text-xs text-muted-foreground">Inline</DropdownMenuLabel>
-          <DropdownMenuItem
-            onClick={() => editor.chain().focus().toggleStrike().run()}
-            className={cn(editor.isActive("strike") && "bg-accent")}
-          >
-            <Strikethrough className="mr-2 h-4 w-4" />
-            Strikethrough
-          </DropdownMenuItem>
-          <DropdownMenuItem
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Button
+            variant="ghost"
+            size="sm"
             onClick={() => editor.chain().focus().toggleUnderline().run()}
-            className={cn(editor.isActive("underline") && "bg-accent")}
+            className={cn("h-8 w-8 rounded-lg p-0 shrink-0", editor.isActive("underline") && "bg-accent")}
           >
-            <UnderlineIcon className="mr-2 h-4 w-4" />
-            Underline
-          </DropdownMenuItem>
-          <DropdownMenuItem
-            onClick={() => (editor.chain().focus() as any).toggleSubscript().run()}
-            className={cn(editor.isActive("subscript") && "bg-accent")}
-          >
-            <SubscriptIcon className="mr-2 h-4 w-4" />
-            Subscript
-          </DropdownMenuItem>
-          <DropdownMenuItem
-            onClick={() => (editor.chain().focus() as any).toggleSuperscript().run()}
-            className={cn(editor.isActive("superscript") && "bg-accent")}
-          >
-            <SuperscriptIcon className="mr-2 h-4 w-4" />
-            Superscript
-          </DropdownMenuItem>
-          <DropdownMenuItem
-            onClick={() => editor.chain().focus().toggleCode().run()}
-            className={cn(editor.isActive("code") && "bg-accent")}
-          >
-            <Code className="mr-2 h-4 w-4" />
-            Inline code
-          </DropdownMenuItem>
-          <DropdownMenuItem
-            onClick={() => editor.chain().focus().toggleHighlight({ color: "var(--highlight)" }).run()}
-            className={cn(editor.isActive("highlight") && "bg-accent")}
-          >
-            <Highlighter className="mr-2 h-4 w-4" />
-            Highlight
-          </DropdownMenuItem>
-        </DropdownMenuContent>
-      </DropdownMenu>
+            <UnderlineIcon className="h-4 w-4" />
+          </Button>
+        </TooltipTrigger>
+        <TooltipContent>{`Underline ${shortcutText.underline}`}</TooltipContent>
+      </Tooltip>
 
       <DropdownMenu modal={false} open={toolbarClusterMenu === "insert"} onOpenChange={handleToolbarClusterChange("insert")}>
         <Tooltip>
           <TooltipTrigger asChild>
             <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="sm" className="h-8 w-8 p-0 shrink-0">
+              <Button data-toolbar-trigger="insert" variant="ghost" size="sm" className="h-8 w-8 rounded-lg p-0 shrink-0">
                 <Plus className="h-4 w-4" />
               </Button>
             </DropdownMenuTrigger>
           </TooltipTrigger>
-          <TooltipContent>Insert</TooltipContent>
+          <TooltipContent>{`Insert ${shortcutText.insert}`}</TooltipContent>
         </Tooltip>
         <DropdownMenuContent {...dockPopperOpts} className="z-[200] w-48">
-          <DropdownMenuItem onClick={handleSetLink}>
+          <DropdownMenuItem onClick={openLinkDialog}>
             <Link2 className="mr-2 h-4 w-4" />
             Link…
+            <DropdownMenuShortcut>{shortcutText.insert}</DropdownMenuShortcut>
           </DropdownMenuItem>
+          <DropdownMenuSeparator />
+          <DropdownMenuLabel className="text-xs text-muted-foreground">Shapes</DropdownMenuLabel>
+          <DropdownMenuItem onClick={() => insertSimpleShape("rectangle")}>
+            <Square className="mr-2 h-4 w-4" />
+            Rectangle
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={() => insertSimpleShape("ellipse")}>
+            <Circle className="mr-2 h-4 w-4" />
+            Ellipse
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={() => insertSimpleShape("line")}>
+            <ArrowRight className="mr-2 h-4 w-4" />
+            Line
+          </DropdownMenuItem>
+          <DropdownMenuSeparator />
+          <DropdownMenuLabel className="text-xs text-muted-foreground">Arrows</DropdownMenuLabel>
+          <DropdownMenuItem onClick={() => insertArrowSymbol("→")}>
+            <ArrowRight className="mr-2 h-4 w-4" />
+            Right arrow
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={() => insertArrowSymbol("⇌")}>
+            <ArrowRight className="mr-2 h-4 w-4" />
+            Equilibrium arrow
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={() => insertArrowSymbol("⇒")}>
+            <ArrowRight className="mr-2 h-4 w-4" />
+            Double arrow
+          </DropdownMenuItem>
+          <DropdownMenuSeparator />
           <DropdownMenuItem
             onMouseDown={(e) => e.preventDefault()}
             onClick={() => {
@@ -3441,10 +3626,11 @@ export function TiptapEditor({
           <TooltipTrigger asChild>
             <DropdownMenuTrigger asChild>
               <Button
+                data-toolbar-trigger="lists"
                 variant="ghost"
                 size="sm"
                 className={cn(
-                  "h-8 w-8 p-0 shrink-0",
+                  "h-8 w-8 rounded-lg p-0 shrink-0",
                   (editor.isActive("taskList") || editor.isActive("bulletList") || editor.isActive("orderedList")) &&
                     "bg-accent",
                 )}
@@ -3453,7 +3639,7 @@ export function TiptapEditor({
               </Button>
             </DropdownMenuTrigger>
           </TooltipTrigger>
-          <TooltipContent>Lists &amp; indent</TooltipContent>
+          <TooltipContent>{`Lists & indent ${shortcutText.lists}`}</TooltipContent>
         </Tooltip>
         <DropdownMenuContent {...dockPopperOpts} className="z-[200] w-48">
           <DropdownMenuLabel className="text-xs text-muted-foreground">Task</DropdownMenuLabel>
@@ -3493,11 +3679,39 @@ export function TiptapEditor({
         </DropdownMenuContent>
       </DropdownMenu>
 
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={openImageDialog}
+            className="h-8 w-8 rounded-lg p-0 shrink-0"
+          >
+            <ImagePlus className="h-4 w-4" />
+          </Button>
+        </TooltipTrigger>
+        <TooltipContent>Insert image</TooltipContent>
+      </Tooltip>
+
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={isListening ? stopSpeechToText : startSpeechToText}
+            className={cn("h-8 w-8 rounded-lg p-0 shrink-0", isListening && "bg-accent")}
+          >
+            {isListening ? <Loader2 className="h-4 w-4 animate-spin" /> : <Mic className="h-4 w-4" />}
+          </Button>
+        </TooltipTrigger>
+        <TooltipContent>{isListening ? "Stop dictation" : "Start dictation"}</TooltipContent>
+      </Tooltip>
+
       <DropdownMenu modal={false} open={toolbarClusterMenu === "align"} onOpenChange={handleToolbarClusterChange("align")}>
         <Tooltip>
           <TooltipTrigger asChild>
             <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="sm" className="h-8 w-8 p-0 shrink-0">
+              <Button data-toolbar-trigger="align" variant="ghost" size="sm" className="h-8 w-8 rounded-lg p-0 shrink-0">
                 {currentTextAlign === "center" ? (
                   <AlignCenter className="h-4 w-4" />
                 ) : currentTextAlign === "right" ? (
@@ -3510,7 +3724,7 @@ export function TiptapEditor({
               </Button>
             </DropdownMenuTrigger>
           </TooltipTrigger>
-          <TooltipContent>Alignment</TooltipContent>
+          <TooltipContent>{`Alignment ${shortcutText.align}`}</TooltipContent>
         </Tooltip>
         <DropdownMenuContent {...dockPopperOpts} className="z-[200] w-48">
           <DropdownMenuLabel>Text alignment</DropdownMenuLabel>
@@ -3568,7 +3782,7 @@ export function TiptapEditor({
         </DropdownMenuContent>
       </DropdownMenu>
 
-      <Separator orientation="vertical" className="h-5 shrink-0 mx-0.5" />
+      <Separator orientation="vertical" className="mx-px h-5 shrink-0" />
 
       <DropdownMenu
         modal={false}
@@ -3587,12 +3801,12 @@ export function TiptapEditor({
         <Tooltip>
           <TooltipTrigger asChild>
             <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="sm" className="h-8 w-8 p-0 shrink-0">
+              <Button data-toolbar-trigger="table" variant="ghost" size="sm" className="h-8 w-8 rounded-lg p-0 shrink-0">
                 <TableIcon className="h-4 w-4" />
               </Button>
             </DropdownMenuTrigger>
           </TooltipTrigger>
-          <TooltipContent>Insert / resize table</TooltipContent>
+          <TooltipContent>{`Insert / resize table ${shortcutText.table}`}</TooltipContent>
         </Tooltip>
         <DropdownMenuContent {...dockPopperOpts} className="z-[200] w-48">
           <DropdownMenuLabel className="text-xs">Rows &amp; columns</DropdownMenuLabel>
@@ -3628,18 +3842,18 @@ export function TiptapEditor({
         </DropdownMenuContent>
       </DropdownMenu>
 
-      <Separator orientation="vertical" className="h-5 shrink-0 mx-0.5" />
+      <Separator orientation="vertical" className="mx-px h-5 shrink-0" />
 
       <DropdownMenu modal={false} open={toolbarClusterMenu === "sigma"} onOpenChange={handleToolbarClusterChange("sigma")}>
         <Tooltip>
           <TooltipTrigger asChild>
             <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="sm" className="h-8 w-8 p-0 shrink-0">
+              <Button data-toolbar-trigger="sigma" variant="ghost" size="sm" className="h-8 w-8 rounded-lg p-0 shrink-0">
                 <Sigma className="h-4 w-4" />
               </Button>
             </DropdownMenuTrigger>
           </TooltipTrigger>
-          <TooltipContent>Chemistry &amp; equations</TooltipContent>
+          <TooltipContent>{`Chemistry & equations ${shortcutText.sigma}`}</TooltipContent>
         </Tooltip>
         <DropdownMenuContent {...dockPopperOpts} className="z-[200] w-56">
           <DropdownMenuItem
@@ -3654,6 +3868,10 @@ export function TiptapEditor({
           >
             <FlaskConical className="mr-2 h-4 w-4" />
             Chemical formula
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={aiStructure} disabled={isAIProcessing}>
+            <FlaskConical className="mr-2 h-4 w-4" />
+            Structure properly
           </DropdownMenuItem>
           {enableMath && (
             <>
@@ -3682,17 +3900,55 @@ export function TiptapEditor({
               </DropdownMenuItem>
             </>
           )}
+          <DropdownMenuSeparator />
+          <DropdownMenuLabel className="text-xs text-muted-foreground">Scientific symbols</DropdownMenuLabel>
+          <div className="space-y-1 px-2 py-2">
+            {SCIENTIFIC_SYMBOL_GROUPS.map((group, groupIndex) => (
+              <div key={`symbol-group-${groupIndex}`} className="grid grid-cols-6 gap-1">
+                {group.map((symbol) => (
+                  <button
+                    key={symbol.id}
+                    type="button"
+                    onClick={() => insertScientificSymbol(symbol.value)}
+                    className="flex h-8 items-center justify-center rounded-md border border-border/70 bg-background text-sm font-medium transition-colors hover:bg-accent hover:text-accent-foreground"
+                    title={symbol.label}
+                  >
+                    {symbol.value}
+                  </button>
+                ))}
+              </div>
+            ))}
+          </div>
         </DropdownMenuContent>
       </DropdownMenu>
 
       {showAITools && (
         <>
-          <Separator orientation="vertical" className="h-5 shrink-0 mx-0.5" />
+          <Separator orientation="vertical" className="mx-px h-5 shrink-0" />
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button variant="ghost" size="sm" className="h-8 gap-1 rounded-lg px-2 shrink-0" onClick={aiCite} disabled={isCiteProcessing}>
+                {isCiteProcessing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Quote className="h-4 w-4" />}
+                <span className="text-xs hidden sm:inline">Cite</span>
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>Cite with AI</TooltipContent>
+          </Tooltip>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button variant="ghost" size="sm" className="h-8 gap-1 rounded-lg px-2 shrink-0" onClick={handleGenerateBibliography} disabled={isCiteProcessing}>
+                <BookOpen className="h-4 w-4" />
+                <span className="text-xs hidden sm:inline">Bibliography</span>
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>Generate bibliography</TooltipContent>
+          </Tooltip>
+          <Separator orientation="vertical" className="mx-px h-5 shrink-0" />
           <DropdownMenu modal={false} open={toolbarClusterMenu === "ai"} onOpenChange={handleToolbarClusterChange("ai")}>
             <Tooltip>
               <TooltipTrigger asChild>
                 <DropdownMenuTrigger asChild>
-                  <Button variant="ghost" size="sm" className="h-8 gap-1 px-2 shrink-0" disabled={isAIProcessing}>
+                  <Button variant="ghost" size="sm" className="h-8 gap-1 rounded-lg px-2 shrink-0" disabled={isAIProcessing}>
                     {isAIProcessing ? (
                       <Loader2 className="h-4 w-4 animate-spin" />
                     ) : (
@@ -3705,42 +3961,10 @@ export function TiptapEditor({
               <TooltipContent>AI &amp; dictation</TooltipContent>
             </Tooltip>
             <DropdownMenuContent {...dockPopperOpts} className="z-[200] w-56">
-              <DropdownMenuLabel className="text-xs text-muted-foreground">Dictation</DropdownMenuLabel>
-              <DropdownMenuItem
-                onClick={isListening ? stopSpeechToText : startSpeechToText}
-                className={cn(isListening && "bg-accent")}
-              >
-                <Mic className="mr-2 h-4 w-4" />
-                {isListening ? "Stop dictation" : "Start dictation"}
-              </DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuLabel className="text-xs text-muted-foreground">Research</DropdownMenuLabel>
-              <DropdownMenuItem onClick={aiCite} disabled={isCiteProcessing}>
-                {isCiteProcessing ? (
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                ) : (
-                  <FileText className="mr-2 h-4 w-4" />
-                )}
-                Cite with AI
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={handleGenerateBibliography} disabled={isCiteProcessing}>
-                <FileText className="mr-2 h-4 w-4" />
-                Bibliography
-              </DropdownMenuItem>
-              <DropdownMenuSeparator />
               <DropdownMenuLabel className="flex items-center gap-2 text-xs">
                 <WandSparkles className="h-4 w-4" />
                 Writing
               </DropdownMenuLabel>
-              <DropdownMenuItem onClick={aiImprove} disabled={isAIProcessing}>
-                <Sparkles className="mr-2 h-4 w-4" />
-                Improve writing
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={aiContinue} disabled={isAIProcessing}>
-                <WandSparkles className="mr-2 h-4 w-4" />
-                Continue writing
-              </DropdownMenuItem>
-              <DropdownMenuSeparator />
               <DropdownMenuItem onClick={aiShorter} disabled={isAIProcessing}>
                 Make shorter
               </DropdownMenuItem>
@@ -3752,15 +3976,6 @@ export function TiptapEditor({
               </DropdownMenuItem>
               <DropdownMenuItem onClick={aiGrammar} disabled={isAIProcessing}>
                 Fix grammar
-              </DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuLabel className="flex items-center gap-2 text-xs">
-                <FlaskConical className="h-4 w-4" />
-                Chemistry
-              </DropdownMenuLabel>
-              <DropdownMenuItem onClick={aiStructure} disabled={isAIProcessing}>
-                <FlaskConical className="mr-2 h-4 w-4" />
-                Structure properly
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
@@ -3777,6 +3992,19 @@ export function TiptapEditor({
         className={cn("border border-border rounded-lg bg-background flex flex-col h-full w-full max-w-full overflow-hidden", className)}
         {...(paperMode ? { "data-paper-mode": "" } : {})}
       >
+        {!hideToolbar && editor && (
+          <div
+            ref={toolbarPositionContainerRef}
+            className="border-b border-border/70 bg-background/95 px-3 py-2 backdrop-blur-sm"
+          >
+            <div
+              ref={toolbarRailRef}
+              className="flex min-w-0 items-center overflow-x-auto [scrollbar-width:thin]"
+            >
+              {renderToolbarDockChildren()}
+            </div>
+          </div>
+        )}
         <div
           ref={setEditorPopoverBoundaryEl}
           className="flex-1 overflow-hidden relative w-full h-full max-w-full"
@@ -3799,106 +4027,6 @@ export function TiptapEditor({
             )}
           </div>
           {/* TOC and Comment Sidebar positioned absolutely relative to the card */}
-          {!hideToolbar && editor && (
-            <EditorToolbarDock
-              positionContainerRef={toolbarPositionContainerRef}
-              railRef={toolbarRailRef}
-              toolsStripPinned={toolbarToolsStripExpanded}
-              lockOpen={toolbarClusterMenu !== null}
-              rightInsetPx={toolbarRightInsetPx}
-              launcher={({ expanded: toolbarExpanded }) => (
-                <TooltipProvider delayDuration={300}>
-                  <>
-                    <div
-                      data-toolbar-drag-handle=""
-                      className={cn(
-                        "flex h-7 w-3.5 shrink-0 items-center justify-center text-[9px] leading-none text-muted-foreground select-none opacity-0 transition-opacity duration-150 pointer-events-none group-hover/launcher:opacity-100 group-hover/launcher:pointer-events-auto group-focus-within/launcher:opacity-100 group-focus-within/launcher:pointer-events-auto",
-                        toolbarToolsStripExpanded ? "cursor-not-allowed opacity-60" : "cursor-grab active:cursor-grabbing",
-                      )}
-                      title={toolbarToolsStripExpanded ? "Pinned: unpin to drag" : "Drag toolbar vertically"}
-                      aria-hidden
-                    >
-                      :::
-                    </div>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="sm"
-                          data-toolbar-expand-trigger=""
-                          onClick={(e) => {
-                            e.preventDefault()
-                            expandToolbarToolsStrip()
-                          }}
-                          className={cn(
-                            "h-7 gap-0.5 px-1.5 shrink-0 text-muted-foreground",
-                            toolbarExpanded && "bg-accent/60 text-foreground",
-                          )}
-                          aria-expanded={toolbarExpanded}
-                          aria-label={
-                            toolbarExpanded ? "Formatting tools visible" : "Show formatting tools on hover"
-                          }
-                        >
-                          <PenLine className="h-3 w-3" />
-                        </Button>
-                      </TooltipTrigger>
-                      <TooltipContent side="bottom">
-                        {toolbarToolsStripExpanded
-                          ? toolbarExpanded
-                            ? "Pinned: toolbar stays open and position is locked"
-                            : "Pinned: toolbar stays open and position is locked"
-                          : "Click to expand the toolbar strip (or use the pin on the right)"}
-                      </TooltipContent>
-                    </Tooltip>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="sm"
-                          data-toolbar-strip-toggle=""
-                          onClick={(e) => {
-                            e.preventDefault()
-                            toggleToolbarToolsStrip()
-                          }}
-                          className={cn(
-                            "h-7 w-7 shrink-0 p-0 opacity-0 transition-opacity duration-150 pointer-events-none group-hover/launcher:opacity-100 group-hover/launcher:pointer-events-auto group-focus-within/launcher:opacity-100 group-focus-within/launcher:pointer-events-auto",
-                            toolbarToolsStripExpanded && "bg-accent text-accent-foreground",
-                          )}
-                          aria-pressed={toolbarToolsStripExpanded}
-                          aria-label={
-                            toolbarToolsStripExpanded
-                              ? "Unpin formatting toolbar"
-                              : "Pin formatting toolbar open"
-                          }
-                        >
-                          {toolbarToolsStripExpanded ? (
-                            <PinOff className="h-4 w-4" />
-                          ) : (
-                            <Pin className="h-4 w-4" />
-                          )}
-                        </Button>
-                      </TooltipTrigger>
-                      <TooltipContent side="bottom" className="max-w-xs">
-                        {toolbarToolsStripExpanded ? (
-                          <p>
-                            Toolbar is pinned: it stays open and cannot be dragged. Click <strong>unpin</strong> to move it again.
-                          </p>
-                        ) : (
-                          <p>
-                            Click <strong>pin</strong> to keep formatting tools expanded and lock its position.
-                          </p>
-                        )}
-                      </TooltipContent>
-                    </Tooltip>
-                  </>
-                </TooltipProvider>
-              )}
-            >
-              {renderToolbarDockChildren()}
-            </EditorToolbarDock>
-          )}
           {editor && <TableOfContents editor={editor} className={cn(commentsSidebarOpen ? "right-[304px]" : "right-4")} />}
           {editor && <CommentSidebar editor={editor} open={commentsSidebarOpen} onClose={() => setCommentsSidebarOpen(false)} />}
 
@@ -4151,6 +4279,130 @@ export function TiptapEditor({
             </div>
           )
         }
+
+        <input
+          ref={imageUploadInputRef}
+          type="file"
+          accept="image/*"
+          multiple
+          className="hidden"
+          onChange={handleImageUploadChange}
+        />
+        <input
+          ref={cameraCaptureInputRef}
+          type="file"
+          accept="image/*"
+          capture="environment"
+          className="hidden"
+          onChange={handleImageUploadChange}
+        />
+
+        <Dialog open={linkDialogOpen} onOpenChange={setLinkDialogOpen}>
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle>{editor?.isActive("link") ? "Edit link" : "Insert link"}</DialogTitle>
+              <DialogDescription>
+                Add a clean link without leaving the editor. You can apply it to selected text or insert a new linked label.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4 py-2">
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-foreground">Link URL</label>
+                <Input
+                  value={linkUrlInput}
+                  onChange={(e) => setLinkUrlInput(e.target.value)}
+                  placeholder="https://example.com"
+                  autoFocus
+                />
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-foreground">Link text</label>
+                <Input
+                  value={linkTextInput}
+                  onChange={(e) => setLinkTextInput(e.target.value)}
+                  placeholder="Optional label"
+                />
+              </div>
+            </div>
+            <DialogFooter className="gap-2 sm:justify-between">
+              <div className="flex gap-2">
+                <Button type="button" variant="outline" onClick={() => setLinkDialogOpen(false)}>
+                  Cancel
+                </Button>
+                <Button type="button" onClick={applyLinkFromDialog}>
+                  Apply link
+                </Button>
+              </div>
+              {editor?.isActive("link") && (
+                <Button type="button" variant="ghost" onClick={removeLinkFromDialog}>
+                  Remove link
+                </Button>
+              )}
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        <Dialog open={imageInsertDialogOpen} onOpenChange={setImageInsertDialogOpen}>
+          <DialogContent className="max-w-lg">
+            <DialogHeader>
+              <DialogTitle>Insert image</DialogTitle>
+              <DialogDescription>
+                Upload images, take a photo, or add one by URL. Inserted images are placed directly into the notes area.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-5 py-2">
+              <div className="grid gap-3 sm:grid-cols-2">
+                <button
+                  type="button"
+                  onClick={openImageUploadPicker}
+                  className="flex min-h-28 flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-border bg-muted/30 px-4 py-4 text-sm font-medium text-foreground transition-colors hover:bg-accent/40"
+                >
+                  <ImagePlus className="h-5 w-5" />
+                  Upload image
+                  <span className="text-xs font-normal text-muted-foreground">PNG, JPG, HEIC, GIF and more</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={openCameraCapturePicker}
+                  className="flex min-h-28 flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-border bg-muted/30 px-4 py-4 text-sm font-medium text-foreground transition-colors hover:bg-accent/40"
+                >
+                  <Camera className="h-5 w-5" />
+                  Take photo
+                  <span className="text-xs font-normal text-muted-foreground">Works best on mobile and camera-enabled devices</span>
+                </button>
+              </div>
+
+              <div className="space-y-3 rounded-xl border border-border/70 bg-muted/20 p-4">
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-foreground">Image URL</label>
+                  <Input
+                    value={imageUrlInput}
+                    onChange={(e) => setImageUrlInput(e.target.value)}
+                    placeholder="https://example.com/image.png"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-foreground">Alt text</label>
+                  <Input
+                    value={imageAltInput}
+                    onChange={(e) => setImageAltInput(e.target.value)}
+                    placeholder="Optional description"
+                  />
+                </div>
+                <div className="flex justify-end">
+                  <Button type="button" onClick={insertImageFromUrl}>
+                    Insert from URL
+                  </Button>
+                </div>
+              </div>
+            </div>
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => setImageInsertDialogOpen(false)}>
+                Close
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
 
         {/* Citation Selection Modal */}
         <Dialog open={citationModalOpen} onOpenChange={setCitationModalOpen}>
