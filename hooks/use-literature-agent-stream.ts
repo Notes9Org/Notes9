@@ -2,11 +2,17 @@
 
 import { useState, useCallback, useRef } from 'react';
 import type { Notes9AgentHistoryItem } from '@/lib/notes9-agent-request';
+import {
+  type LiteratureAgentDonePayload,
+  type PaperAnalyzerReference,
+  type PaperAnalyzerSource,
+  normalizeLiteratureAgentResponse,
+} from '@/lib/literature-agent-types';
 
-export type LiteratureAgentDonePayload = {
-  role: string;
-  content: string;
-  answer: string;
+export type {
+  PaperAnalyzerReference,
+  PaperAnalyzerSource,
+  LiteratureAgentDonePayload,
 };
 
 export interface LiteratureAgentStreamState {
@@ -15,25 +21,18 @@ export interface LiteratureAgentStreamState {
   isStreaming: boolean;
 }
 
-function normalizeResponse(raw: Record<string, unknown>): LiteratureAgentDonePayload {
-  const content =
-    typeof raw.content === 'string'
-      ? raw.content
-      : typeof raw.answer === 'string'
-        ? raw.answer
-        : typeof raw.message === 'string'
-          ? raw.message
-          : '';
-  const role = typeof raw.role === 'string' ? raw.role : 'assistant';
-  return { role, content, answer: content };
-}
-
+/** Biomni (`/biomni/literature`) options; compare mode only uses `debug` upstream. */
 export type LiteratureAgentRequestBody = {
   query: string;
   session_id: string;
   history?: Notes9AgentHistoryItem[];
   literature_review_ids: string[];
-  options?: { debug?: boolean };
+  options?: {
+    debug?: boolean;
+    skip_clarify?: boolean;
+    max_clarify_rounds?: number;
+    include_reasoning_trace?: boolean;
+  };
 };
 
 export function useLiteratureAgentStream() {
@@ -91,7 +90,7 @@ export function useLiteratureAgentStream() {
           return { donePayload: null, error: errMsg };
         }
 
-        const donePayload = normalizeResponse(raw);
+        const donePayload = normalizeLiteratureAgentResponse(raw);
         setState((s) => ({
           ...s,
           donePayload,

@@ -60,6 +60,9 @@ interface RepoTabProps {
   literatureReviews: LiteratureReview[] | null;
   projects: { id: string; name: string }[];
   experiments: { id: string; name: string; project_id: string }[];
+  initialProjectFilterId?: string | null;
+  /** When true (with initialProjectFilterId), project filter is fixed and cannot switch to &quot;all&quot;. */
+  lockProjectFilter?: boolean;
 }
 
 function PaperTabContent({ id, onRefresh, initialTab }: { id: string; onRefresh: () => void; initialTab?: "overview" | "pdf" | "citation" | "linked" }) {
@@ -130,6 +133,8 @@ export function RepoTab({
   literatureReviews,
   projects,
   experiments,
+  initialProjectFilterId = null,
+  lockProjectFilter = false,
 }: RepoTabProps) {
   const router = useRouter();
   const [activeTab, setActiveTab] = useState<string>("list");
@@ -169,6 +174,25 @@ export function RepoTab({
     window.addEventListener('mouseup', onMouseUp);
     document.body.style.cursor = 'col-resize';
   };
+
+  useEffect(() => {
+    if (!initialProjectFilterId) return;
+    if (projects.some((p) => p.id === initialProjectFilterId)) {
+      setSelectedProjectId(initialProjectFilterId);
+    }
+  }, [initialProjectFilterId, projects]);
+
+  useEffect(() => {
+    if (!lockProjectFilter || !initialProjectFilterId) return;
+    setSelectedProjectId((current) =>
+      current === initialProjectFilterId ? current : initialProjectFilterId
+    );
+  }, [lockProjectFilter, initialProjectFilterId]);
+
+  const newManualReferenceHref =
+    lockProjectFilter && initialProjectFilterId
+      ? `/literature-reviews/new?project=${initialProjectFilterId}`
+      : "/literature-reviews/new";
 
   // Load from localStorage
   useEffect(() => {
@@ -371,9 +395,12 @@ export function RepoTab({
   }, [literatureReviews]);
 
   const clearFilters = () => {
-    setSelectedProjectId("all");
+    if (!lockProjectFilter) {
+      setSelectedProjectId("all");
+    }
     setSelectedExperimentId("all");
     setSelectedStatus("all");
+    setSearchQuery("");
   };
 
   const visibleIds = filteredLiteratureReviews?.map((lit) => lit.id) || [];
@@ -515,25 +542,33 @@ export function RepoTab({
         </div>
 
         <div className="flex flex-col gap-3 lg:flex-row lg:flex-wrap lg:items-center">
-          <Select
-            value={selectedProjectId}
-            onValueChange={(value) => {
-              setSelectedProjectId(value);
-              setSelectedExperimentId("all");
-            }}
-          >
-            <SelectTrigger className="w-full lg:w-[180px]">
-              <SelectValue placeholder="Project" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All projects</SelectItem>
-              {projects.map((project) => (
-                <SelectItem key={project.id} value={project.id}>
-                  {project.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          {lockProjectFilter && initialProjectFilterId ? (
+            <div className="flex h-9 w-full min-w-0 items-center rounded-md border border-input bg-muted/40 px-3 text-sm text-foreground lg:w-[180px]">
+              <span className="truncate">
+                {projects.find((p) => p.id === initialProjectFilterId)?.name ?? "Project"}
+              </span>
+            </div>
+          ) : (
+            <Select
+              value={selectedProjectId}
+              onValueChange={(value) => {
+                setSelectedProjectId(value);
+                setSelectedExperimentId("all");
+              }}
+            >
+              <SelectTrigger className="w-full lg:w-[180px]">
+                <SelectValue placeholder="Project" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All projects</SelectItem>
+                {projects.map((project) => (
+                  <SelectItem key={project.id} value={project.id}>
+                    {project.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
 
           <Select
             value={selectedExperimentId}
@@ -754,7 +789,7 @@ export function RepoTab({
                 No literature references yet
               </p>
               <Button asChild>
-                <Link href="/literature-reviews/new">
+                <Link href={newManualReferenceHref}>
                   <Plus className="h-4 w-4 mr-2" />
                   Add First Reference
                 </Link>

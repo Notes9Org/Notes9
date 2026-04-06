@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react"
 import Link from "next/link"
-import { usePathname, useRouter } from 'next/navigation'
+import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import Image from "next/image"
 import {
   Home,
@@ -132,6 +132,7 @@ type SearchResultItem = {
 
 export function AppSidebar() {
   const pathname = usePathname()
+  const searchParams = useSearchParams()
   const router = useRouter()
   const { setOpenMobile, isMobile, state, openMobile, open, setOpen } = useSidebar()
   const [searchQuery, setSearchQuery] = useState("")
@@ -681,11 +682,18 @@ export function AppSidebar() {
           <SidebarGroupContent className={cn(isIconMode && "w-full flex flex-col items-center")}>
             <SidebarMenu className={cn(isIconMode && "flex flex-col items-center gap-1")} id="tour-main-nav">
               {navigation.map((item) => {
-                const Icon = item.icon;
+                const Icon = item.icon
+                const pathMatches =
+                  pathname === item.href || pathname.startsWith(item.href + "/")
+                const hasProjectScope =
+                  (searchParams.get("project")?.trim() ?? "") !== ""
+                const suppressActiveForProjectDeepLink =
+                  hasProjectScope &&
+                  (item.href === "/literature-reviews" ||
+                    item.href === "/protocols" ||
+                    item.href === "/experiments")
                 const isActive =
-                  mounted &&
-                  (pathname === item.href ||
-                    pathname.startsWith(item.href + "/"));
+                  mounted && pathMatches && !suppressActiveForProjectDeepLink
 
                 return (
                   <SidebarMenuItem key={item.name}>

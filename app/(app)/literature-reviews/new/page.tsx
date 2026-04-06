@@ -1,8 +1,9 @@
 "use client"
 
-import { useState, useEffect } from "react"
-import { useRouter } from 'next/navigation'
+import { useState, useEffect, useRef, Suspense } from "react"
+import { useRouter, useSearchParams } from 'next/navigation'
 import { createClient } from "@/lib/supabase/client"
+import { resolveInitialProjectIdParam } from "@/lib/url-project-param"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -26,8 +27,10 @@ import {
   literatureLinkSelectViewportStyle,
 } from "@/lib/literature-link-select-ui"
 
-export default function NewLiteratureReviewPage() {
+function NewLiteratureReviewForm() {
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const appliedProjectFromUrlRef = useRef(false)
   const [isLoading, setIsLoading] = useState(false)
   const [projects, setProjects] = useState<any[]>([])
   const [experiments, setExperiments] = useState<any[]>([])
@@ -57,6 +60,18 @@ export default function NewLiteratureReviewPage() {
     fetchProjects()
     fetchExperiments()
   }, [])
+
+  useEffect(() => {
+    if (!projects.length || appliedProjectFromUrlRef.current) return
+    const id = resolveInitialProjectIdParam(
+      searchParams.get("project") ?? undefined,
+      projects.map((p: { id: string }) => p.id)
+    )
+    if (id) {
+      appliedProjectFromUrlRef.current = true
+      setFormData((prev) => ({ ...prev, project_id: id }))
+    }
+  }, [projects, searchParams])
 
   useEffect(() => {
     if (formData.project_id) {
@@ -141,7 +156,8 @@ export default function NewLiteratureReviewPage() {
       if (insertError) throw insertError
 
       toast.success("Literature reference added successfully")
-      router.push(`/literature-reviews/${data.id}`)
+      const detailQs = formData.project_id ? `?project=${formData.project_id}` : ""
+      router.push(`/literature-reviews/${data.id}${detailQs}`)
     } catch (err: any) {
       toast.error(err.message || "Failed to add reference")
     } finally {
@@ -153,7 +169,13 @@ export default function NewLiteratureReviewPage() {
       <div className="max-w-3xl mx-auto space-y-4 md:space-y-6">
         <div className="flex items-center gap-3">
           <Button variant="ghost" size="icon" asChild className="shrink-0">
-            <Link href="/literature-reviews">
+            <Link
+              href={
+                formData.project_id
+                  ? `/literature-reviews?project=${formData.project_id}`
+                  : "/literature-reviews"
+              }
+            >
               <ArrowLeft className="h-4 w-4" />
             </Link>
           </Button>
@@ -484,7 +506,15 @@ export default function NewLiteratureReviewPage() {
           {/* Actions */}
           <div className="flex justify-end gap-4">
             <Button type="button" variant="outline" asChild>
-              <Link href="/literature-reviews">Cancel</Link>
+              <Link
+                href={
+                  formData.project_id
+                    ? `/literature-reviews?project=${formData.project_id}`
+                    : "/literature-reviews"
+                }
+              >
+                Cancel
+              </Link>
             </Button>
             <Button type="submit" disabled={isLoading} className="w-full sm:w-auto">
               {isLoading ? "Adding..." : "Add Reference"}
@@ -493,5 +523,20 @@ export default function NewLiteratureReviewPage() {
         </form>
       </div>
     )
+}
+
+export default function NewLiteratureReviewPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="max-w-3xl mx-auto space-y-6 py-8">
+          <div className="h-10 w-64 bg-muted animate-pulse rounded" />
+          <div className="h-96 w-full bg-muted animate-pulse rounded" />
+        </div>
+      }
+    >
+      <NewLiteratureReviewForm />
+    </Suspense>
+  )
 }
 

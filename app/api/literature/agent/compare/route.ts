@@ -2,7 +2,10 @@ import { NextResponse } from 'next/server';
 
 export const maxDuration = 60;
 
-const UPSTREAM = process.env.LITERATURE_COMPARE_AGENT_URL?.replace(/\/$/, '') ?? '';
+const NOTES9_BASE = process.env.NEXT_PUBLIC_NOTES9_API_URL?.replace(/\/$/, '') ?? '';
+const DEFAULT_PAPER_ANALYZER = NOTES9_BASE ? `${NOTES9_BASE}/paper-analyzer` : '';
+const UPSTREAM =
+  process.env.LITERATURE_COMPARE_AGENT_URL?.replace(/\/$/, '') || DEFAULT_PAPER_ANALYZER;
 
 type Body = {
   query?: string;
@@ -50,9 +53,9 @@ export async function POST(req: Request) {
     return NextResponse.json({
       role: 'assistant',
       content:
-        'Literature compare agent is not connected yet. Set **LITERATURE_COMPARE_AGENT_URL** to your HTTP endpoint. Request shape: `query`, `session_id`, `history[]`, `literature_review_ids[]`.',
+        'Literature compare agent is not connected yet. Set **NEXT_PUBLIC_NOTES9_API_URL** (paper analyzer is called at `/paper-analyzer`) or **LITERATURE_COMPARE_AGENT_URL** to the full `POST` URL. Request shape: `query`, `session_id`, `history[]`, `literature_review_ids[]`.',
       answer:
-        'Literature compare agent is not connected yet. Set LITERATURE_COMPARE_AGENT_URL to your HTTP endpoint.',
+        'Literature compare agent is not connected yet. Set NEXT_PUBLIC_NOTES9_API_URL or LITERATURE_COMPARE_AGENT_URL.',
     });
   }
 
@@ -66,12 +69,21 @@ export async function POST(req: Request) {
       body: JSON.stringify(forwardBody),
     });
 
-    const data = await response.json().catch(() => ({}));
+    const data = (await response.json().catch(() => ({}))) as Record<string, unknown>;
     if (!response.ok) {
+      const detail = data.detail;
+      const detailStr =
+        typeof detail === 'string'
+          ? detail
+          : Array.isArray(detail)
+            ? detail.map((d) => (typeof d === 'object' && d && 'msg' in d ? String((d as { msg: unknown }).msg) : JSON.stringify(d))).join('; ')
+            : undefined;
+      const message =
+        (typeof data.error === 'string' && data.error) ||
+        detailStr ||
+        `Upstream error: ${response.status}`;
       return NextResponse.json(
-        typeof data === 'object' && data && 'error' in data
-          ? data
-          : { error: `Upstream error: ${response.status}` },
+        typeof data.error === 'string' ? data : { ...data, error: message },
         { status: response.status }
       );
     }
