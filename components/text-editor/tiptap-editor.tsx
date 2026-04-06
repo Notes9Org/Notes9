@@ -43,6 +43,7 @@ import {
   Camera,
   BookOpen,
   Quote,
+  Sheet,
   Table as TableIcon,
   FileText,
   FileInput,
@@ -127,8 +128,10 @@ import {
 import { ChemicalFormula, formatChemicalFormula } from "./extensions/chemical-formula"
 import { ChemistryHighlight } from "./extensions/chemistry-highlight"
 import { SimpleShape, type SimpleShapeVariant } from "./extensions/simple-shape"
+import { SpreadsheetEmbed } from "./extensions/spreadsheet-embed"
 // @ts-ignore - CSS import for KaTeX math rendering
 import "katex/dist/katex.min.css"
+import * as XLSX from "xlsx"
 
 interface Paper {
   id: number
@@ -321,6 +324,140 @@ const markdownToHtml = async (markdown: string) => {
   } catch {
     return basicMarkdownToHtml(markdown)
   }
+}
+
+const encodeSpreadsheetWorkbook = (workbook: Record<string, unknown>) =>
+  encodeURIComponent(JSON.stringify(workbook))
+
+const buildSpreadsheetWorkbookSnapshot = (fileName: string, workbook: XLSX.WorkBook) => {
+  const workbookId = `spreadsheet-${Math.random().toString(36).slice(2, 10)}`
+  const sheetOrder: string[] = []
+  const sheets: Record<string, Record<string, unknown>> = {}
+
+  workbook.SheetNames.forEach((sheetName, index) => {
+    const worksheet = workbook.Sheets[sheetName]
+    if (!worksheet) return
+
+    const sheetId = `sheet-${index + 1}-${Math.random().toString(36).slice(2, 8)}`
+    sheetOrder.push(sheetId)
+
+    const range = worksheet["!ref"] ? XLSX.utils.decode_range(worksheet["!ref"]) : { s: { r: 0, c: 0 }, e: { r: 24, c: 9 } }
+    const rowCount = Math.max(range.e.r + 1, 25)
+    const columnCount = Math.max(range.e.c + 1, 10)
+    const cellData: Record<number, Record<number, Record<string, unknown>>> = {}
+
+    Object.keys(worksheet).forEach((key) => {
+      if (key.startsWith("!")) return
+      const cell = worksheet[key]
+      if (!cell) return
+      const decoded = XLSX.utils.decode_cell(key)
+      if (!cellData[decoded.r]) {
+        cellData[decoded.r] = {}
+      }
+
+      const cellEntry: Record<string, unknown> = {}
+      if (cell.f) {
+        cellEntry.f = `=${cell.f}`
+      }
+
+      if (cell.t === "n") {
+        cellEntry.v = typeof cell.v === "number" ? cell.v : Number(cell.v ?? 0)
+        cellEntry.t = 2
+      } else if (cell.t === "b") {
+        cellEntry.v = Boolean(cell.v)
+        cellEntry.t = 3
+      } else {
+        cellEntry.v = cell.w ?? cell.v ?? ""
+        cellEntry.t = 1
+      }
+
+      cellData[decoded.r][decoded.c] = cellEntry
+    })
+
+    const mergeData = Array.isArray(worksheet["!merges"])
+      ? worksheet["!merges"].map((merge) => ({
+          startRow: merge.s.r,
+          startColumn: merge.s.c,
+          endRow: merge.e.r,
+          endColumn: merge.e.c,
+        }))
+      : []
+
+    const columnData = Array.isArray(worksheet["!cols"])
+      ? worksheet["!cols"].reduce<Record<number, Record<string, unknown>>>((acc, col, colIndex) => {
+          if (!col) return acc
+          if (typeof col.wpx === "number") {
+            acc[colIndex] = { ...(acc[colIndex] ?? {}), w: col.wpx }
+          } else if (typeof col.width === "number") {
+            acc[colIndex] = { ...(acc[colIndex] ?? {}), w: Math.round(col.width * 8) }
+          }
+          if (col.hidden) {
+            acc[colIndex] = { ...(acc[colIndex] ?? {}), hd: 1 }
+          }
+          return acc
+        }, {})
+      : {}
+
+    const rowData = Array.isArray(worksheet["!rows"])
+      ? worksheet["!rows"].reduce<Record<number, Record<string, unknown>>>((acc, row, rowIndex) => {
+          if (!row) return acc
+          if (typeof row.hpx === "number") {
+            acc[rowIndex] = { ...(acc[rowIndex] ?? {}), h: row.hpx }
+          } else if (typeof row.hpt === "number") {
+            acc[rowIndex] = { ...(acc[rowIndex] ?? {}), h: Math.round(row.hpt * 1.3333) }
+          }
+          if (row.hidden) {
+            acc[rowIndex] = { ...(acc[rowIndex] ?? {}), hd: 1 }
+          }
+          return acc
+        }, {})
+      : {}
+
+    sheets[sheetId] = {
+      id: sheetId,
+      name: sheetName,
+      tabColor: "",
+      hidden: 0,
+      freeze: { xSplit: 0, ySplit: 0, startRow: 0, startColumn: 0 },
+      rowCount,
+      columnCount,
+      zoomRatio: 1,
+      scrollTop: 0,
+      scrollLeft: 0,
+      defaultColumnWidth: 96,
+      defaultRowHeight: 24,
+      mergeData,
+      cellData,
+      rowData,
+      columnData,
+      rowHeader: { width: 46 },
+      columnHeader: { height: 28 },
+      showGridlines: 1,
+      rightToLeft: 0,
+    }
+  })
+
+  return {
+    id: workbookId,
+    name: fileName.replace(/\.[^.]+$/, "") || "Spreadsheet",
+    appVersion: "0.20.0",
+    locale: "enUS",
+    styles: {},
+    sheetOrder,
+    sheets,
+  }
+}
+
+const isSpreadsheetFile = (file: File) => {
+  const lower = file.name.toLowerCase()
+  return (
+    lower.endsWith(".xlsx") ||
+    lower.endsWith(".xls") ||
+    lower.endsWith(".csv") ||
+    file.type.includes("spreadsheet") ||
+    file.type.includes("excel") ||
+    file.type.includes("csv")
+  )
 }
 
 interface TiptapEditorProps {
@@ -1694,6 +1831,7 @@ export function TiptapEditor({
       ChemicalFormula,
       ChemistryHighlight,
       SimpleShape,
+      SpreadsheetEmbed,
       Alignment,
       ProtocolMention.configure({
         HTMLAttributes: {
@@ -1780,6 +1918,12 @@ export function TiptapEditor({
           insertHtmlFromFile(html)
           return true
         }
+        const spreadsheet = files.find((f) => isSpreadsheetFile(f))
+        if (spreadsheet) {
+          event.preventDefault()
+          insertSpreadsheetFromFile(spreadsheet)
+          return true
+        }
         const md = files.find((f) => f.name.toLowerCase().endsWith(".md") || f.name.toLowerCase().endsWith(".markdown"))
         if (md) {
           event.preventDefault()
@@ -1812,6 +1956,12 @@ export function TiptapEditor({
           if (html) {
             event.preventDefault()
             insertHtmlFromFile(html)
+            return true
+          }
+          const spreadsheet = arr.find((f) => isSpreadsheetFile(f))
+          if (spreadsheet) {
+            event.preventDefault()
+            insertSpreadsheetFromFile(spreadsheet)
             return true
           }
           const md = arr.find((f) => f.name.toLowerCase().endsWith(".md") || f.name.toLowerCase().endsWith(".markdown"))
@@ -3294,6 +3444,27 @@ export function TiptapEditor({
     editor.chain().focus().insertContent(html).run()
   }
 
+  const insertSpreadsheetFromFile = async (file: File) => {
+    if (!editor) return
+    if (!isSpreadsheetFile(file)) return
+
+    const arrayBuffer = await file.arrayBuffer()
+    const workbook = XLSX.read(arrayBuffer, { type: "array", cellFormula: true, cellDates: true })
+    const workbookSnapshot = buildSpreadsheetWorkbookSnapshot(file.name, workbook)
+
+    editor
+      .chain()
+      .focus()
+      .insertContent({
+        type: "spreadsheetEmbed",
+        attrs: {
+          fileName: file.name,
+          workbookData: encodeSpreadsheetWorkbook(workbookSnapshot),
+        },
+      })
+      .run()
+  }
+
   const insertPlainTextFromFile = async (file: File) => {
     const text = await file.text()
     editor?.chain().focus().insertContent(text).run()
@@ -3318,13 +3489,15 @@ export function TiptapEditor({
   const handleFilePicker = () => {
     const input = document.createElement("input")
     input.type = "file"
-    input.accept = ".docx,.txt,.md,.markdown,.html,.htm"
+    input.accept = ".docx,.txt,.md,.markdown,.html,.htm,.xls,.xlsx,.csv"
     input.onchange = async () => {
       const file = input.files?.[0]
       if (file) {
         const lower = file.name.toLowerCase()
         if (lower.endsWith(".docx")) {
           await insertDocxFromFile(file)
+        } else if (lower.endsWith(".xlsx") || lower.endsWith(".xls") || lower.endsWith(".csv")) {
+          await insertSpreadsheetFromFile(file)
         } else if (lower.endsWith(".html") || lower.endsWith(".htm")) {
           await insertHtmlFromFile(file)
         } else if (lower.endsWith(".md") || lower.endsWith(".markdown")) {
@@ -3336,6 +3509,19 @@ export function TiptapEditor({
     }
     input.click()
   }
+
+  const handleSpreadsheetPicker = useCallback(() => {
+    const input = document.createElement("input")
+    input.type = "file"
+    input.accept = ".xls,.xlsx,.csv,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv"
+    input.onchange = async () => {
+      const file = input.files?.[0]
+      if (file) {
+        await insertSpreadsheetFromFile(file)
+      }
+    }
+    input.click()
+  }, [editor])
 
   if (!editor) {
     return null
@@ -3819,6 +4005,10 @@ export function TiptapEditor({
             <MessageSquare className="mr-2 h-4 w-4" />
             Comments
           </DropdownMenuItem>
+          <DropdownMenuItem onClick={() => void handleSpreadsheetPicker()}>
+            <Sheet className="mr-2 h-4 w-4" />
+            Spreadsheet
+          </DropdownMenuItem>
           <DropdownMenuItem onClick={handleFilePicker}>
             <FileInput className="mr-2 h-4 w-4" />
             Import file…
@@ -3896,6 +4086,20 @@ export function TiptapEditor({
           </Button>
         </TooltipTrigger>
         <TooltipContent>Insert image</TooltipContent>
+      </Tooltip>
+
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => void handleSpreadsheetPicker()}
+            className="h-8 w-8 rounded-lg p-0 shrink-0"
+          >
+            <Sheet className="h-4 w-4" />
+          </Button>
+        </TooltipTrigger>
+        <TooltipContent>Insert spreadsheet</TooltipContent>
       </Tooltip>
 
       <Tooltip>
