@@ -349,3 +349,9 @@
     line-height: 1.5rem;
   }
 }
+
+/* Simple shape blocks (SVG) */
+.ProseMirror .simple-shape-node svg {
+  color: var(--foreground);
+  opacity: 0.85;
+}

@@ -18,6 +18,8 @@ import {
 } from "@/components/ui/select"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { useToast } from "@/hooks/use-toast"
+import { NoteExportMenu } from "@/components/note-export-menu"
+import { Download } from "lucide-react"
 
 const PROTOCOL_CATEGORIES = [
   "Sample Preparation",
@@ -158,6 +160,15 @@ export function ProtocolEditor({ protocol }: { protocol: any }) {
           <div className="mb-2 flex items-center justify-between gap-3">
             <Label htmlFor="protocol-content">Protocol Body</Label>
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <NoteExportMenu
+                title={formData.name || "protocol"}
+                htmlContent={formData.content || ""}
+                trigger={
+                  <Button type="button" variant="ghost" size="icon" className="h-8 w-8" aria-label="Export protocol">
+                    <Download className="h-4 w-4" />
+                  </Button>
+                }
+              />
               <span>{hasChanges ? "Unsaved changes" : "Saved"}</span>
             </div>
           </div>

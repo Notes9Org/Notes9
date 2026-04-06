@@ -26,6 +26,8 @@ import { Switch } from "@/components/ui/switch"
 import { Pencil } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { TiptapEditor } from "@/components/text-editor/tiptap-editor"
+import { NoteExportMenu } from "@/components/note-export-menu"
+import { Download } from "lucide-react"
 
 const PROTOCOL_CATEGORIES = [
   "Sample Preparation",
@@ -174,7 +176,18 @@ export function EditProtocolDialog({ protocol }: { protocol: any }) {
 
           {/* Content */}
           <div className="space-y-2">
-            <Label htmlFor="content">Protocol Content</Label>
+            <div className="flex items-center justify-between gap-2">
+              <Label htmlFor="content">Protocol Content</Label>
+              <NoteExportMenu
+                title={formData.name || "protocol"}
+                htmlContent={formData.content || ""}
+                trigger={
+                  <Button type="button" variant="ghost" size="icon" className="h-8 w-8 shrink-0" aria-label="Export">
+                    <Download className="h-4 w-4" />
+                  </Button>
+                }
+              />
+            </div>
             <TiptapEditor
               content={formData.content}
               onChange={(content) =>
