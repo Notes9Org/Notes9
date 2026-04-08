@@ -2011,29 +2011,32 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
                                 <div className="py-6 text-center text-muted-foreground text-xs">No history yet.</div>
                               ) : (
                                 sessions.map(session => (
-                                  <div key={session.id} className="group/hist relative flex w-full min-w-max items-center overflow-hidden rounded-md pr-1">
+                                  <div
+                                    key={session.id}
+                                    className="group/row relative"
+                                  >
                                     <button
                                       type="button"
                                       onClick={() => loadSession(session.id)}
                                       className={cn(
-                                        "flex min-w-max max-w-full items-center justify-between gap-3 overflow-hidden rounded-md px-2 py-1.5 pr-12 text-left text-sm transition-colors",
+                                        "flex min-w-max max-w-full items-center justify-between gap-2 overflow-hidden rounded-md px-2 py-1.5 pr-12 text-left text-sm transition-all duration-150 hover:bg-[color:color-mix(in_oklab,var(--background)_78%,var(--primary)_22%)] hover:text-sidebar-foreground active:scale-[0.985] active:bg-[color:color-mix(in_oklab,var(--background)_70%,var(--primary)_30%)] dark:hover:bg-sidebar-accent dark:hover:text-sidebar-accent-foreground dark:active:scale-[0.985] dark:active:bg-sidebar-accent/90",
                                         currentSessionId === session.id
                                           ? "bg-sidebar-accent text-sidebar-accent-foreground"
-                                          : "text-muted-foreground hover:text-foreground"
+                                          : "text-sidebar-foreground/70"
                                       )}
                                     >
                                       <span
                                         className={cn(
-                                          "block whitespace-nowrap rounded-full px-2.5 py-1 transition-colors",
+                                          "block truncate whitespace-nowrap font-medium",
                                           currentSessionId === session.id
-                                            ? "bg-sidebar-accent-foreground/12 text-sidebar-accent-foreground"
-                                            : "group-hover/hist:bg-gradient-to-r group-hover/hist:from-[var(--primary)]/28 group-hover/hist:via-[var(--accent)]/85 group-hover/hist:to-[var(--accent)]/32"
+                                            ? "text-sidebar-accent-foreground"
+                                            : "text-inherit"
                                         )}
                                         title={session.title || 'New conversation'}
                                       >
                                         {session.title || 'New conversation'}
                                       </span>
-                                      <span className="text-[10px] shrink-0 opacity-70">
+                                      <span className="shrink-0 text-[10px] text-sidebar-foreground/70 opacity-70">
                                         {new Date(session.updated_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
                                       </span>
                                     </button>
@@ -2042,8 +2045,8 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
                                       variant="ghost"
                                       size="icon"
                                       className={cn(
-                                        "absolute right-1 top-1/2 z-10 h-7 w-7 -translate-y-1/2 rounded-full border border-border/35 bg-background/82 text-destructive shadow-sm backdrop-blur-md transition-opacity hover:bg-background hover:text-destructive",
-                                        currentSessionId === session.id ? "opacity-100" : "opacity-0 group-hover/hist:opacity-100"
+                                        "absolute right-1 top-1/2 z-10 h-7 w-7 -translate-y-1/2 rounded-full border border-border/35 bg-background/82 text-sidebar-foreground/70 shadow-sm backdrop-blur-md transition-[opacity,transform,background-color,color] duration-200 ease-out hover:bg-background hover:text-destructive",
+                                        currentSessionId === session.id ? "opacity-100" : "pointer-events-none translate-x-1 opacity-0 group-hover/row:pointer-events-auto group-hover/row:translate-x-0 group-hover/row:opacity-100"
                                       )}
                                       onClick={(e) => handleDeleteSession(e, session.id)}
                                       aria-label="Delete chat"
@@ -2126,14 +2129,17 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
                     ) : (
                       <ul className="flex min-w-0 flex-col gap-0.5 pr-1">
                         {sessions.map((session) => (
-                          <li key={session.id} className="group/row relative">
+                          <li
+                            key={session.id}
+                            className="group/row relative"
+                          >
                             <div
                               role="button"
                               tabIndex={0}
                               onClick={() => loadSession(session.id)}
                               onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); loadSession(session.id); } }}
                               className={cn(
-                                "grid min-h-9 min-w-0 grid-cols-[auto_1fr_auto] items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm outline-none transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
+                                "grid min-h-9 min-w-0 grid-cols-[auto_1fr_auto] items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm outline-none transition-all duration-150 hover:bg-[color:color-mix(in_oklab,var(--background)_78%,var(--primary)_22%)] hover:text-sidebar-foreground active:scale-[0.985] active:bg-[color:color-mix(in_oklab,var(--background)_70%,var(--primary)_30%)] dark:hover:bg-sidebar-accent dark:hover:text-sidebar-accent-foreground dark:active:scale-[0.985] dark:active:bg-sidebar-accent/90",
                                 currentSessionId === session.id && "bg-sidebar-accent font-medium text-sidebar-accent-foreground"
                               )}
                             >
@@ -2142,10 +2148,10 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
                               </span>
                               <span
                                 className={cn(
-                                  "block truncate rounded-full px-2.5 py-1 font-medium transition-colors",
+                                  "block truncate font-medium",
                                   currentSessionId === session.id
-                                    ? "bg-sidebar-accent-foreground/12 text-sidebar-accent-foreground"
-                                    : "group-hover/row:bg-gradient-to-r group-hover/row:from-[var(--primary)]/28 group-hover/row:via-[var(--accent)]/85 group-hover/row:to-[var(--accent)]/32"
+                                    ? "text-sidebar-accent-foreground"
+                                    : "text-inherit"
                                 )}
                                 title={session.title || 'New conversation'}
                               >
@@ -2155,8 +2161,8 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
                                 variant="ghost"
                                 size="icon"
                                 className={cn(
-                                  "size-8 shrink-0 text-sidebar-foreground/70 transition-opacity hover:text-destructive",
-                                  currentSessionId === session.id ? "opacity-100" : "opacity-0 group-hover/row:opacity-100"
+                                  "size-8 shrink-0 text-sidebar-foreground/70 transition-[opacity,transform,color] duration-200 ease-out hover:text-destructive",
+                                  currentSessionId === session.id ? "opacity-100" : "pointer-events-none translate-x-1 opacity-0 group-hover/row:pointer-events-auto group-hover/row:translate-x-0 group-hover/row:opacity-100"
                                 )}
                                 onClick={(e) => handleDeleteSession(e, session.id)}
                                 aria-label="Delete chat"
