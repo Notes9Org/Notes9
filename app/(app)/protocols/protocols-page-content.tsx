@@ -13,6 +13,12 @@ import {
   ResourceListFilter,
 } from "@/components/ui/resource-list-filters"
 
+export type ProtocolsProjectContext = {
+  id: string
+  name: string
+  protocolIds: string[]
+}
+
 interface Protocol {
   id: string
   name: string
@@ -33,12 +39,25 @@ function protocolUsageCount(p: Protocol): number {
   return typeof first?.count === "number" ? first.count : 0
 }
 
-export function ProtocolsPageContent({ protocols }: { protocols: Protocol[] }) {
+export function ProtocolsPageContent({
+  protocols,
+  projectContext = null,
+}: {
+  protocols: Protocol[]
+  projectContext?: ProtocolsProjectContext | null
+}) {
   const isMobile = useMediaQuery("(max-width: 768px)")
   const [viewMode, setViewMode] = useState<"grid" | "table">("grid")
   const [categoryFilter, setCategoryFilter] = useState(FILTER_ALL)
   const [versionFilter, setVersionFilter] = useState(FILTER_ALL)
   const [usageFilter, setUsageFilter] = useState(FILTER_ALL)
+
+  const scopedProtocols = useMemo(() => {
+    if (!projectContext) return protocols
+    if (projectContext.protocolIds.length === 0) return [] as Protocol[]
+    const allow = new Set(projectContext.protocolIds)
+    return protocols.filter((p) => allow.has(p.id))
+  }, [protocols, projectContext])
 
   useEffect(() => {
     if (isMobile) setViewMode("grid")
@@ -46,19 +65,19 @@ export function ProtocolsPageContent({ protocols }: { protocols: Protocol[] }) {
 
   const categoryOptions = useMemo(() => {
     const s = new Set(
-      protocols.map((p) => p.category).filter((c): c is string => Boolean(c && c.trim()))
+      scopedProtocols.map((p) => p.category).filter((c): c is string => Boolean(c && c.trim()))
     )
     return Array.from(s)
       .sort()
       .map((value) => ({ value, label: value }))
-  }, [protocols])
+  }, [scopedProtocols])
 
   const versionOptions = useMemo(() => {
-    const s = new Set(protocols.map((p) => p.version).filter(Boolean))
+    const s = new Set(scopedProtocols.map((p) => p.version).filter(Boolean))
     return Array.from(s)
       .sort()
       .map((value) => ({ value, label: value }))
-  }, [protocols])
+  }, [scopedProtocols])
 
   const usageOptions = useMemo(
     () => [
@@ -68,15 +87,19 @@ export function ProtocolsPageContent({ protocols }: { protocols: Protocol[] }) {
     []
   )
 
+  const newProtocolHref = projectContext
+    ? `/protocols/new?project=${projectContext.id}`
+    : "/protocols/new"
+
   const filteredProtocols = useMemo(() => {
-    return protocols.filter((p) => {
+    return scopedProtocols.filter((p) => {
       if (categoryFilter !== FILTER_ALL && (p.category || "") !== categoryFilter) return false
       if (versionFilter !== FILTER_ALL && p.version !== versionFilter) return false
       if (usageFilter === USAGE_LINKED && protocolUsageCount(p) === 0) return false
       if (usageFilter === USAGE_UNLINKED && protocolUsageCount(p) > 0) return false
       return true
     })
-  }, [protocols, categoryFilter, versionFilter, usageFilter])
+  }, [scopedProtocols, categoryFilter, versionFilter, usageFilter])
 
   return (
     <div className="space-y-6">
@@ -114,7 +137,7 @@ export function ProtocolsPageContent({ protocols }: { protocols: Protocol[] }) {
             className="size-8 rounded-md text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
             aria-label="New protocol"
           >
-            <Link href="/protocols/new">
+            <Link href={newProtocolHref}>
               <Plus className="size-4" />
             </Link>
           </Button>
@@ -148,7 +171,34 @@ export function ProtocolsPageContent({ protocols }: { protocols: Protocol[] }) {
       </ResourceFilterRow>
 
       {filteredProtocols.length > 0 ? (
-        <ProtocolList protocols={filteredProtocols} viewMode={viewMode} setViewMode={setViewMode} hideToolbar />
+        <ProtocolList
+          protocols={filteredProtocols}
+          viewMode={viewMode}
+          setViewMode={setViewMode}
+          hideToolbar
+          linkProjectId={projectContext?.id ?? null}
+        />
+      ) : projectContext && scopedProtocols.length === 0 ? (
+        <Card>
+          <CardContent className="py-10 text-center text-sm text-muted-foreground space-y-3">
+            <p>
+              No protocols are linked to experiments in{" "}
+              <span className="font-medium text-foreground">{projectContext.name}</span> yet.
+            </p>
+            <p>
+              <Link
+                href={`/projects/${projectContext.id}`}
+                className="font-medium text-primary underline-offset-4 hover:underline"
+              >
+                Back to project
+              </Link>
+              {" · "}
+              <Link href="/protocols" className="underline-offset-4 hover:underline">
+                Browse full protocol library
+              </Link>
+            </p>
+          </CardContent>
+        </Card>
       ) : (
         <p className="py-10 text-center text-sm text-muted-foreground">
           No protocols match the selected filters.

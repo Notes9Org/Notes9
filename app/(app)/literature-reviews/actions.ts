@@ -49,7 +49,10 @@ export async function removeStagingLiterature(literatureId: string) {
   }
 }
 
-export async function stagePaper(paper: SearchPaper) {
+export async function stagePaper(
+  paper: SearchPaper,
+  options?: { projectId?: string | null }
+) {
   try {
     const supabase = await createClient()
     const {
@@ -93,6 +96,12 @@ export async function stagePaper(paper: SearchPaper) {
     }
 
     if (existing?.catalog_placement === "staging") {
+      if (options?.projectId) {
+        await supabase
+          .from("literature_reviews")
+          .update({ project_id: options.projectId })
+          .eq("id", existing.id)
+      }
       const { data: row } = await supabase
         .from("literature_reviews")
         .select("*")
@@ -112,6 +121,7 @@ export async function stagePaper(paper: SearchPaper) {
         doi: normalizedDoi || null,
         pmid: paper.pmid || null,
         abstract: paper.abstract,
+        project_id: options?.projectId ?? null,
         status: "saved",
         created_by: user.id,
         organization_id: organizationId,
@@ -137,14 +147,10 @@ export async function stagePaper(paper: SearchPaper) {
 
     let warning: string | null = null
     if (!importResult.ok && importResult.reason === "fetch_failed" && "message" in importResult) {
-      warning = importResult.message ?? "PDF could not be imported"
+      warning = importResult.message ?? "Could not download the PDF from the search link."
     } else if (!importResult.ok && importResult.reason === "no_open_access_pdf") {
-      warning = "No PMC id for this PMID — automatic import only covers PubMed Central"
-    } else if (!importResult.ok && importResult.reason === "not_pmc_open_access") {
       warning =
-        "Not in the PubMed Central open-access subset — add the PDF yourself if you have access"
-    } else if (!importResult.ok && importResult.reason === "oa_subset_check_failed") {
-      warning = "Could not reach NLM to verify open-access status — try again or upload the PDF"
+        "No downloadable PDF link on this search result (or it cannot be fetched here). Open the publisher PDF or upload the file."
     }
 
     const { data: refreshed } = await supabase
@@ -238,15 +244,10 @@ export async function savePaperToRepository(
           matchSource: "repository_pubmed_import",
         })
         if (!importResult.ok && importResult.reason === "fetch_failed" && "message" in importResult) {
-          warning = importResult.message ?? "PDF import failed"
+          warning = importResult.message ?? "Could not download the PDF from the search link."
         } else if (!importResult.ok && importResult.reason === "no_open_access_pdf") {
-          warning = "No PMC id for this PMID — automatic import only covers PubMed Central"
-        } else if (!importResult.ok && importResult.reason === "not_pmc_open_access") {
           warning =
-            "Not in the PubMed Central open-access subset — add the PDF yourself if you have access"
-        } else if (!importResult.ok && importResult.reason === "oa_subset_check_failed") {
-          warning =
-            "Could not reach NLM to verify open-access status — try again or upload the PDF"
+            "No PDF link from search (or it cannot be fetched here). Upload the PDF if you have it."
         }
       }
 
@@ -312,15 +313,10 @@ export async function savePaperToRepository(
       matchSource: "repository_pubmed_import",
     })
     if (!importResult.ok && importResult.reason === "fetch_failed" && "message" in importResult) {
-      warning = importResult.message ?? "Paper saved but PDF import failed"
+      warning = importResult.message ?? "Paper saved but the search PDF link could not be downloaded."
     } else if (!importResult.ok && importResult.reason === "no_open_access_pdf") {
-      warning = "Paper saved; no PMC id for this PMID (automatic import is PubMed Central only)"
-    } else if (!importResult.ok && importResult.reason === "not_pmc_open_access") {
       warning =
-        "Paper saved; not in PMC open-access subset — add the PDF yourself if you have access"
-    } else if (!importResult.ok && importResult.reason === "oa_subset_check_failed") {
-      warning =
-        "Paper saved; could not verify open-access with NLM — try import again or upload the PDF"
+        "Paper saved; no fetchable PDF URL was on the search hit — upload the PDF if needed."
     }
 
     revalidatePath("/literature-reviews")

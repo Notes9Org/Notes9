@@ -706,8 +706,11 @@ export function CatalystChat({ sessionId }: CatalystChatProps) {
               }
               notes9Stream={
                 agentMode === 'notes9' &&
-                (notes9Loading || agentStream.isStreaming || agentStream.error) &&
-                messages.at(-1)?.role === 'user'
+                messages.at(-1)?.role === 'user' &&
+                (notes9Loading ||
+                  agentStream.isStreaming ||
+                  agentStream.error != null ||
+                  agentStream.donePayload != null)
                   ? {
                       thinkingSteps: agentStream.thinkingSteps,
                       sql: agentStream.sql,
@@ -715,6 +718,7 @@ export function CatalystChat({ sessionId }: CatalystChatProps) {
                       streamedAnswer: agentStream.streamedAnswer,
                       donePayload: agentStream.donePayload,
                       error: agentStream.error,
+                      isStreaming: agentStream.isStreaming,
                     }
                   : null
               }

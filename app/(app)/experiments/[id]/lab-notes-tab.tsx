@@ -24,6 +24,8 @@ import {
 } from "@/components/ui/dialog"
 import { AffineBlock } from "@/components/text-editor/affine-block"
 import { TiptapEditor } from "@/components/text-editor/tiptap-editor"
+import type { Editor } from "@tiptap/react"
+import { NoteExportMenu, NotePrintButton } from "@/components/note-export-menu"
 import { useToast } from "@/hooks/use-toast"
 import { useAutoSave } from "@/hooks/use-auto-save"
 import { SaveStatusIndicator } from "@/components/ui/save-status"
@@ -78,11 +80,13 @@ export function LabNotesTab({
   experimentName,
   projectName,
   projectId,
+  experimentPageHref,
 }: {
   experimentId: string
   experimentName?: string
   projectName?: string
   projectId?: string
+  experimentPageHref?: string
 }) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -120,9 +124,7 @@ export function LabNotesTab({
   // Inline title editing in card header (no dialog)
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const titleInputRef = useRef<HTMLInputElement>(null);
-  const toolbarPortalRef = useRef<HTMLDivElement>(null);
-  const toolbarPortalReadyRef = useRef(false);
-  const [, setToolbarPortalReady] = useState(false);
+  const noteEditorRef = useRef<Editor | null>(null);
 
   // Auto-save functionality
   const handleAutoSave = async (content: string, title?: string, noteType?: string) => {
@@ -232,14 +234,25 @@ export function LabNotesTab({
     if (!projectName || !experimentName) return;
     const baseSegments = [
       { label: projectName, href: projectId ? `/projects/${projectId}` : undefined },
-      { label: experimentName },
+      {
+        label: experimentName,
+        href: experimentPageHref,
+      },
     ];
     const noteTitle = formData.title || selectedNote?.title || "Lab notes";
     setSegments([...baseSegments, { label: noteTitle }]);
     return () => {
       setSegments([]);
     };
-  }, [projectName, experimentName, projectId, setSegments, formData.title, selectedNote?.title]);
+  }, [
+    projectName,
+    experimentName,
+    projectId,
+    experimentPageHref,
+    setSegments,
+    formData.title,
+    selectedNote?.title,
+  ]);
 
   // Focus and select title input when entering inline edit mode
   useEffect(() => {
@@ -435,346 +448,6 @@ export function LabNotesTab({
       }
     } catch (error: any) {
       console.error("Error fetching notes:", error);
-    }
-  };
-
-
-
-  const downloadAsHTML = () => {
-    const fullHTML = `<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>${formData.title}</title>
-  <style>
-    body {
-      font-family: system-ui, -apple-system, sans-serif;
-      max-width: 800px;
-      margin: 40px auto;
-      padding: 20px;
-      line-height: 1.6;
-    }
-    h1, h2, h3 { margin-top: 1.5em; }
-    code { background: #f4f4f4; padding: 2px 6px; border-radius: 3px; }
-    pre { background: #f4f4f4; padding: 15px; border-radius: 5px; overflow-x: auto; }
-    blockquote { border-left: 4px solid #ddd; margin: 0; padding-left: 20px; color: #666; }
-    table { border-collapse: collapse; width: 100%; margin: 20px 0; }
-    th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
-    th { background: #f4f4f4; }
-  </style>
-</head>
-<body>
-  <h1>${formData.title}</h1>
-  ${formData.content}
-</body>
-</html>`;
-    const blob = new Blob([fullHTML], { type: "text/html" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `${formData.title || "lab-note"}.html`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-  };
-
-  const downloadAsMarkdown = async () => {
-    try {
-      // @ts-ignore
-      const TurndownService = (await import('turndown')).default;
-      // @ts-ignore
-      const { gfm } = await import('turndown-plugin-gfm');
-
-      const turndownService = new TurndownService({
-        headingStyle: 'atx',
-        codeBlockStyle: 'fenced',
-        bulletListMarker: '-',
-      });
-
-      turndownService.use(gfm);
-
-      const markdown = turndownService.turndown(formData.content);
-      const blob = new Blob([markdown], { type: "text/markdown" });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `${formData.title || "lab-note"}.md`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-
-      toast({
-        title: "Markdown exported",
-        description: "Your note has been exported as Markdown.",
-      });
-    } catch (error: any) {
-      console.error("Markdown export error:", error);
-      toast({
-        title: "Export failed",
-        description: "Failed to export as Markdown.",
-        variant: "destructive",
-      });
-    }
-  };
-
-  const downloadAsPDF = async () => {
-    // Use iframe-based print approach for complete style isolation
-    // This prevents CSS leaks that can break the main page
-    let iframe: HTMLIFrameElement | null = null;
-
-    try {
-      toast({
-        title: "Generating PDF",
-        description: "Opening print dialog...",
-      });
-
-      // Create an isolated iframe for printing
-      iframe = document.createElement("iframe");
-      iframe.style.cssText = `
-        position: fixed;
-        right: 0;
-        bottom: 0;
-        width: 0;
-        height: 0;
-        border: 0;
-        visibility: hidden;
-      `;
-      document.body.appendChild(iframe);
-
-      // Wait for iframe to be ready
-      await new Promise(resolve => setTimeout(resolve, 100));
-
-      const iframeDoc = iframe.contentDocument || iframe.contentWindow?.document;
-      if (!iframeDoc) {
-        throw new Error("Could not access iframe document");
-      }
-
-      // Sanitize HTML helper
-      const sanitizeHtml = (html: string) => {
-        return html
-          .replace(/lab\([^)]+\)/gi, '#000000')
-          .replace(/lch\([^)]+\)/gi, '#000000')
-          .replace(/oklab\([^)]+\)/gi, '#000000')
-          .replace(/oklch\([^)]+\)/gi, '#000000')
-          .replace(/var\([^)]+\)/gi, '#000000');
-      };
-
-      // Process comments for export
-      const processCommentsForExport = (html: string) => {
-        const parser = new DOMParser();
-        const doc = parser.parseFromString(html, 'text/html');
-        const comments: any[] = [];
-        const commentMarks = doc.querySelectorAll('span[data-comment]');
-
-        commentMarks.forEach((mark, index) => {
-          const id = mark.getAttribute('data-id');
-          const author = mark.getAttribute('data-author');
-          const content = mark.getAttribute('data-content');
-          const createdAt = mark.getAttribute('data-created-at');
-
-          if (content) {
-            const commentNum = comments.length + 1;
-            comments.push({ id, author, content, createdAt, num: commentNum });
-
-            // Add visual indicator to the text
-            const sup = doc.createElement('sup');
-            sup.textContent = `[${commentNum}]`;
-            sup.style.color = '#7c3aed';
-            sup.style.fontWeight = 'bold';
-            sup.style.marginLeft = '2px';
-            mark.appendChild(sup);
-
-            // Highlight the commented text
-            (mark as HTMLElement).style.backgroundColor = '#f3e8ff';
-            (mark as HTMLElement).style.borderRadius = '2px';
-          }
-        });
-
-        return {
-          content: doc.body.innerHTML,
-          comments
-        };
-      };
-
-      const { content: processedContent, comments } = processCommentsForExport(formData.content || "");
-      const cleanContent = sanitizeHtml(processedContent);
-
-      // Write isolated HTML with comprehensive print-friendly styles
-      iframeDoc.open();
-      iframeDoc.write(`
-        <!DOCTYPE html>
-        <html>
-        <head>
-          <meta charset="UTF-8">
-          <title>${formData.title || "Lab Note"}</title>
-          <style>
-            /* Reset */
-            * { margin: 0; padding: 0; box-sizing: border-box; }
-            
-            /* Base */
-            body {
-              font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-              font-size: 11pt;
-              line-height: 1.5;
-              padding: 40px;
-              background: #fff;
-              color: #000;
-            }
-            
-            /* Typography */
-            h1 { font-size: 20pt; font-weight: 700; margin: 0 0 15pt; border-bottom: 1.5pt solid #333; padding-bottom: 8pt; }
-            h2 { font-size: 16pt; font-weight: 600; margin: 18pt 0 8pt; border-bottom: 1pt solid #ccc; padding-bottom: 4pt; }
-            h3 { font-size: 13pt; font-weight: 600; margin: 14pt 0 6pt; }
-            p { margin: 6pt 0; }
-            
-            /* Text formatting */
-            strong, b { font-weight: 700; }
-            em, i { font-style: italic; }
-            u { text-decoration: underline; }
-            sub { vertical-align: sub; font-size: 0.8em; }
-            sup { vertical-align: super; font-size: 0.8em; }
-            
-            /* Tables */
-            table {
-              border-collapse: collapse;
-              width: 100%;
-              margin: 12pt 0;
-            }
-            th, td {
-              border: 0.5pt solid #000;
-              padding: 6pt 8pt;
-              text-align: left;
-              vertical-align: top;
-            }
-            th {
-              background: #f0f0f0 !important;
-              font-weight: 700;
-              -webkit-print-color-adjust: exact;
-            }
-            
-            /* Comments Section */
-            .comments-section {
-              margin-top: 40pt;
-              border-top: 1pt solid #eee;
-              padding-top: 20pt;
-            }
-            .comments-title {
-              font-size: 14pt;
-              font-weight: 700;
-              margin-bottom: 15pt;
-              color: #333;
-            }
-            .comment-item {
-              margin-bottom: 12pt;
-              font-size: 10pt;
-              line-height: 1.4;
-            }
-            .comment-header {
-              font-weight: 700;
-              margin-bottom: 2pt;
-              display: flex;
-              gap: 8pt;
-            }
-            .comment-author { color: #7c3aed; }
-            .comment-date { color: #666; font-weight: 400; font-size: 9pt; }
-            .comment-content { color: #444; }
-            
-            @media print {
-              body { padding: 0; }
-              .no-print { display: none; }
-            }
-          </style>
-        </head>
-        <body>
-          <h1>${formData.title || "Lab Note"}</h1>
-          ${cleanContent}
-          
-          ${comments.length > 0 ? `
-            <div class="comments-section">
-              <h2 class="comments-title">Comments</h2>
-              ${comments.map(c => `
-                <div class="comment-item">
-                  <div class="comment-header">
-                    <span class="comment-number">[${c.num}]</span>
-                    <span class="comment-author">${c.author}</span>
-                    <span class="comment-date">${c.createdAt ? new Date(Number(c.createdAt)).toLocaleString() : ""}</span>
-                  </div>
-                  <div class="comment-content">${c.content}</div>
-                </div>
-              `).join('')}
-            </div>
-          ` : ""}
-        </body>
-        </html>
-      `);
-      iframeDoc.close();
-
-      // Wait for content to render
-      await new Promise(resolve => setTimeout(resolve, 200));
-
-      // Use browser's print functionality
-      const printWindow = iframe.contentWindow;
-      if (printWindow) {
-        printWindow.focus();
-        printWindow.print();
-      }
-
-      toast({
-        title: "Print dialog opened",
-        description: "Save as PDF from your browser's print dialog.",
-      });
-
-      // Clean up after a delay to allow print dialog to work
-      setTimeout(() => {
-        if (iframe && document.body.contains(iframe)) {
-          document.body.removeChild(iframe);
-        }
-      }, 2000);
-    } catch (error: any) {
-      console.error("PDF export error:", error);
-      // Clean up on error
-      if (iframe && document.body.contains(iframe)) {
-        document.body.removeChild(iframe);
-      }
-      toast({
-        title: "Export failed",
-        description: error.message || "Failed to export as PDF.",
-        variant: "destructive",
-      });
-    }
-  };
-
-
-  const downloadAsDOCX = async () => {
-    try {
-      toast({
-        title: "Generating DOCX",
-        description: "Please wait...",
-      });
-
-      // Get clean content
-      const cleanContent = formData.content || "<p>No content</p>";
-
-      // Dynamically import the DOCX export function (proper .docx format!)
-      const { exportHtmlToDocx } = await import('@/lib/docx-export')
-
-      // Export to DOCX (works on Mac, Windows, Linux!)
-      await exportHtmlToDocx(cleanContent, formData.title || "Lab Note");
-
-      toast({
-        title: "DOCX exported",
-        description: "Your note has been exported as DOCX.",
-      });
-    } catch (error: any) {
-      console.error("DOCX export error:", error);
-      toast({
-        title: "Export failed",
-        description: error.message || "Failed to export as DOCX. Please try HTML or PDF format instead.",
-        variant: "destructive",
-      });
     }
   };
 
@@ -1071,6 +744,10 @@ export function LabNotesTab({
     setIsEditingTitle(false);
   };
 
+  /** PDF/print + downloads: prefer in-form title, then saved note title (avoids empty title in exports). */
+  const resolvedExportTitle =
+    (formData.title || "").trim() || (selectedNote?.title || "").trim() || "Lab note";
+
   return (
     <div className="flex w-full min-h-0 flex-1">
       {/* Rename note dialog */}
@@ -1110,8 +787,8 @@ export function LabNotesTab({
 
       {/* Single Card: notes list (when open) + editor */}
       <div className="flex-1 min-w-0 min-h-0 flex flex-col">
-        <Card className="h-full flex flex-col min-h-0 py-0 gap-0 overflow-hidden">
-          <div className="flex flex-row flex-1 min-h-0 min-w-0">
+        <Card className="flex h-full min-h-0 flex-col gap-0 py-0">
+          <div className="flex min-h-0 min-w-0 flex-1 flex-row">
             {/* Notes list - inside card, left side (hidden on mobile; use Sheet instead) */}
             <aside
               className={cn(
@@ -1415,40 +1092,30 @@ export function LabNotesTab({
                       )}
                     </Button>
                     {!isCreating && selectedNote && (
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-8 w-8 text-muted-foreground hover:text-foreground"
-                            aria-label="Export"
-                          >
-                            <Download className="h-4 w-4" />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                          <DropdownMenuLabel>Download as...</DropdownMenuLabel>
-                          <DropdownMenuSeparator />
-                          <DropdownMenuItem onClick={downloadAsMarkdown}>
-                            <FileCode className="h-4 w-4 mr-2" />
-                            Markdown (.md)
-                          </DropdownMenuItem>
-                          <DropdownMenuItem onClick={downloadAsHTML}>
-                            <NotebookPen className="h-4 w-4 mr-2" />
-                            HTML (.html)
-                          </DropdownMenuItem>
-
-                          <DropdownMenuSeparator />
-                          <DropdownMenuItem onClick={downloadAsPDF}>
-                            <NotebookPen className="h-4 w-4 mr-2" />
-                            PDF (.pdf)
-                          </DropdownMenuItem>
-                          <DropdownMenuItem onClick={downloadAsDOCX}>
-                            <NotebookPen className="h-4 w-4 mr-2" />
-                            Word (.docx)
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
+                      <>
+                        <NotePrintButton
+                          getHtmlContent={() => formData.content || ""}
+                          title={resolvedExportTitle}
+                          includeCommentsInPdf
+                        />
+                        <NoteExportMenu
+                          title={resolvedExportTitle}
+                          htmlContent={formData.content || ""}
+                          getHtmlContent={() => formData.content || ""}
+                          getTiptapJson={() => noteEditorRef.current?.getJSON() ?? null}
+                          includeCommentsInPdf
+                          trigger={
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                              aria-label="Export"
+                            >
+                              <Download className="h-4 w-4" />
+                            </Button>
+                          }
+                        />
+                      </>
                     )}
                     {/* Share Button - Google Docs style */}
 
@@ -1511,18 +1178,8 @@ export function LabNotesTab({
                 )} */}
                   </div>
                 </div>
-                <div
-                  ref={(el) => {
-                    (toolbarPortalRef as React.MutableRefObject<HTMLDivElement | null>).current = el;
-                    if (el && !toolbarPortalReadyRef.current) {
-                      toolbarPortalReadyRef.current = true;
-                      setToolbarPortalReady(true);
-                    }
-                  }}
-                  className="min-h-0"
-                />
               </CardHeader>
-              <CardContent className="space-y-3 px-4 sm:px-6 h-full">
+              <CardContent className="flex min-h-0 min-w-0 flex-1 flex-col space-y-3 px-4 sm:px-6">
                 {!isCreating && !selectedNote ? (
                   <div className="flex flex-col items-center justify-center h-full min-h-[400px] text-muted-foreground">
                     <p className="text-lg font-medium mb-2">No note selected</p>
@@ -1536,7 +1193,7 @@ export function LabNotesTab({
                   </div>
                 ) : (
                   /* Rich Text Editor */
-                  <div className="h-full">
+                  <div className="min-h-0 min-w-0 flex-1">
                     <TiptapEditor
                       content={formData.content}
                       onChange={(content) => {
@@ -1545,7 +1202,7 @@ export function LabNotesTab({
                         debouncedSave(content);
                       }}
                       placeholder="Write your lab notes here... Use @ to tag protocols"
-                      title={formData.title || "lab-note"}
+                      title={resolvedExportTitle}
                       minHeight="400px"
                       showAITools={true}
                       protocols={availableProtocols.map(p => ({
@@ -1553,7 +1210,11 @@ export function LabNotesTab({
                         name: p.name,
                         version: p.version,
                       }))}
-                      toolbarPortalRef={toolbarPortalRef}
+                      hideExportControls
+                      exportIncludeCommentsInPdf
+                      onEditorReady={(ed) => {
+                        noteEditorRef.current = ed;
+                      }}
                     />
                   </div>
                 )}

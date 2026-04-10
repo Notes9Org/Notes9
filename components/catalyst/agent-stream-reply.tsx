@@ -14,6 +14,11 @@ interface AgentStreamReplyProps {
   donePayload: DonePayload | null;
   error: string | null;
   compact?: boolean;
+  /**
+   * When true, only the latest thinking line is shown (replaces previous as steps arrive).
+   * When false, all collected steps are listed (after the stream finishes).
+   */
+  isThinkingStreaming?: boolean;
 }
 
 function getCitationRoute(citation: { source_type: string; source_id?: string | null }): string {
@@ -48,6 +53,7 @@ export function AgentStreamReply({
   donePayload,
   error,
   compact = false,
+  isThinkingStreaming = false,
 }: AgentStreamReplyProps) {
   const displayAnswer =
     donePayload?.content ?? donePayload?.answer ?? streamedAnswer;
@@ -65,26 +71,41 @@ export function AgentStreamReply({
     );
   }
 
-  const lastStepIndex = thinkingSteps.length - 1;
+  const liveSingleStep =
+    isThinkingStreaming && thinkingSteps.length > 0
+      ? thinkingSteps[thinkingSteps.length - 1]
+      : null;
+  const stepsForList =
+    isThinkingStreaming && liveSingleStep ? [liveSingleStep] : thinkingSteps;
+  const lastStepIndex = stepsForList.length - 1;
 
   return (
     <div className={cn('flex flex-col gap-3', compact && 'gap-2')}>
-      {/* Thinking steps - ChatGPT/Cursor style */}
-      {thinkingSteps.length > 0 && (
+      {/* Live: one line; after stream: full step list */}
+      {stepsForList.length > 0 && (
         <div className="rounded-xl border border-border/60 bg-muted/20 overflow-hidden">
           <div className="flex items-center gap-2 px-3 py-2 border-b border-border/50 bg-muted/30">
-            <span className="inline-flex size-2 rounded-full bg-primary animate-pulse" />
+            <span
+              className={cn(
+                'inline-flex size-2 rounded-full bg-primary',
+                isThinkingStreaming && 'animate-pulse'
+              )}
+            />
             <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
-              Thinking
+              {isThinkingStreaming ? 'Thinking' : 'Steps'}
             </span>
           </div>
           <ul className="divide-y divide-border/40">
-            {thinkingSteps.map((step, i) => (
+            {stepsForList.map((step, i) => (
               <li
-                key={i}
+                key={
+                  isThinkingStreaming
+                    ? `${step.node}-${step.status}-${step.message}`
+                    : i
+                }
                 className={cn(
                   'px-3 py-2.5 text-sm flex items-start gap-3 transition-colors',
-                  i === lastStepIndex && !donePayload
+                  isThinkingStreaming || (i === lastStepIndex && !donePayload)
                     ? 'bg-primary/5 text-foreground'
                     : 'text-muted-foreground'
                 )}

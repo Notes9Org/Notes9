@@ -1,7 +1,15 @@
 'use client';
 
 import Image from 'next/image';
-import { useState, useRef, useEffect, useCallback, useMemo, type ChangeEvent } from 'react';
+import {
+  useState,
+  useRef,
+  useEffect,
+  useCallback,
+  useMemo,
+  type ChangeEvent,
+  type DragEvent,
+} from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import { useChat } from '@ai-sdk/react';
 import { DefaultChatTransport } from 'ai';
@@ -34,12 +42,20 @@ import {
   ChevronLeft,
   X,
   Mic,
+  BookOpen,
+  DraftingCompass,
+  Loader2,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import {
   formatNotes9AssistantMarkdown,
   isPersistedChatMessageId,
 } from '@/lib/notes9-chat-format';
+import { formatLiteratureAssistantMarkdown } from '@/lib/literature-agent-chat-format';
+import {
+  parseLiteratureAssistantStoredContent,
+  serializeLiteratureAssistantStoredContent,
+} from '@/lib/literature-assistant-stored';
 import { useAgentStream } from '@/hooks/use-agent-stream';
 import { deleteTrailingMessages } from '@/app/(app)/catalyst/actions';
 import { MessageEditor } from '@/components/catalyst/message-editor';
@@ -61,11 +77,40 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Switch } from '@/components/ui/switch';
+import {
+  Popover,
+  PopoverAnchor,
+  PopoverContent,
+} from '@/components/ui/popover';
 import { usePaperAI } from '@/contexts/paper-ai-context';
 import { PaperAIPanel } from '@/components/text-editor/paper-ai-panel';
 import { FileDropzone } from '@/components/ui/file-dropzone';
-
-type AgentMode = 'general' | 'notes9';
+import type { CatalystAgentMode, LiteratureSubMode, LiteratureDragPayload } from '@/lib/catalyst-agent-types';
+import {
+  LITERATURE_DRAG_MIME,
+  isLiteratureRoutePath,
+} from '@/lib/catalyst-agent-types';
+import { useLiteratureMentionCandidates } from '@/contexts/literature-mention-context';
+import { useLiteratureAgentStream } from '@/hooks/use-literature-agent-stream';
+import type { LiteratureAgentDonePayload } from '@/lib/literature-agent-types';
+import { ClarifyCard } from '@/components/clarify-card';
+import { LiteratureSourcesDropdown } from '@/components/literature-sources-dropdown';
+import { LiteratureAgentThinkingPanel } from '@/components/literature-agent-thinking-panel';
+import type { LiteratureMentionCandidate } from '@/contexts/literature-mention-context';
+import {
+  appendLiteratureMentionAtEnd,
+  clearLiteratureEditablePlainText,
+  deleteLiteratureTextRange,
+  getCursorOffset,
+  getMentionsFromLiteratureEditable,
+  getLiteratureSegmentsFromEl,
+  getPlainTextFromLiteratureEditable,
+  getQueryAfterAt,
+  getTextBeforeCursor,
+  insertLiteratureMention,
+  literatureMessageMarkdownToPlainForModel,
+  segmentsToLiteratureMessageMarkdown,
+} from '@/lib/literature-chat-editable';
 
 /** Unwrap stringified JSON parts to plain text (handles double/triple wrapping). Used so request body always sends plain text. */
 function normalizeMessageContentToPlainText(raw: string): string {
@@ -104,6 +149,17 @@ function getPlainTextFromMessage(msg: { content?: unknown; parts?: Array<{ type?
   return '';
 }
 
+/** Model-facing history for literature agent: user turns strip `[title](url)` to titles only. */
+function literatureHistoryTurnContent(msg: {
+  role: string;
+  content?: unknown;
+  parts?: Array<{ type?: string; text?: string }>;
+}): string {
+  const raw = getPlainTextFromMessage(msg);
+  if (msg.role === 'user') return literatureMessageMarkdownToPlainForModel(raw);
+  return parseLiteratureAssistantStoredContent(raw).bodyMarkdown;
+}
+
 const MAX_FILE_SIZE = 10 * 1024 * 1024;
 const ALLOWED_TYPES = [
   'image/jpeg',
@@ -114,6 +170,18 @@ const ALLOWED_TYPES = [
   'text/plain',
 ];
 const MAX_CHAT_CHARS = 4096;
+const MAX_LITERATURE_TAGS = 4;
+
+function sortLiteratureCandidates(
+  list: LiteratureMentionCandidate[]
+): LiteratureMentionCandidate[] {
+  return [...list].sort((a, b) => {
+    const tier = (p: string | null) => (p === 'staging' ? 0 : 1);
+    const d = tier(a.catalog_placement) - tier(b.catalog_placement);
+    if (d !== 0) return d;
+    return a.title.localeCompare(b.title, undefined, { sensitivity: 'base' });
+  });
+}
 
 interface RightSidebarProps {
   onClose?: () => void;
@@ -124,15 +192,28 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
   const pathname = usePathname();
   const paperAI = usePaperAI();
   const [input, setInput] = useState('');
-  const [agentMode, setAgentMode] = useState<AgentMode>('general');
+  const [agentMode, setAgentMode] = useState<CatalystAgentMode>('general');
+  const [literatureSubMode, setLiteratureSubMode] = useState<LiteratureSubMode>('normal');
+  const [taggedLiterature, setTaggedLiterature] = useState<Array<{ id: string; title: string }>>([]);
+  const [mentionOpen, setMentionOpen] = useState(false);
+  const [mentionFilter, setMentionFilter] = useState('');
+  /** Todo-style @ menu: row highlight (-1 = none). */
+  const [literatureMentionSelectIndex, setLiteratureMentionSelectIndex] = useState(-1);
+  const [literatureMentionStartIndex, setLiteratureMentionStartIndex] = useState(-1);
+  const [literaturePlainLen, setLiteraturePlainLen] = useState(0);
+  const [fallbackMentionCandidates, setFallbackMentionCandidates] = useState<LiteratureMentionCandidate[]>([]);
   const [webSearchEnabled, setWebSearchEnabled] = useState(true);
   const [savedMessageIds, setSavedMessageIds] = useState<Set<string>>(() => new Set());
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
   const [userId, setUserId] = useState<string>('');
   const [notes9Loading, setNotes9Loading] = useState(false);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const literatureEditableRef = useRef<HTMLDivElement>(null);
+  const literatureMentionListRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const chatScrollRef = useRef<HTMLDivElement>(null);
+  const [chatShowJumpBottom, setChatShowJumpBottom] = useState(false);
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [uploadQueue, setUploadQueue] = useState<string[]>([]);
   const [mounted, setMounted] = useState(false);
@@ -142,6 +223,10 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
   const [expandedHistoryOpen, setExpandedHistoryOpen] = useState(true);
   const [showAllPastChats, setShowAllPastChats] = useState(false);
   const previousPathnameRef = useRef(pathname);
+  const savedModeOutsideLiteratureRef = useRef<CatalystAgentMode>('general');
+  const wasOnLiteratureRouteRef = useRef(false);
+  /** When true, stay on General/Notes9 even while URL is under /literature-reviews (no redirect). */
+  const suppressLiteratureAutoModeRef = useRef(false);
   const historySidebar = useResizable({
     initialWidth: 224,
     minWidth: 208,
@@ -234,22 +319,429 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
     deleteSession,
   } = useChatSessions();
 
+  const currentSessionRef = useRef<string | null>(null);
+
   const agentStream = useAgentStream();
+  const literatureAgentStream = useLiteratureAgentStream();
+  const contextMentionCandidates = useLiteratureMentionCandidates();
+  const isLiteratureRoute = isLiteratureRoutePath(pathname ?? null);
+  const effectiveMentionCandidates =
+    contextMentionCandidates.length > 0 ? contextMentionCandidates : fallbackMentionCandidates;
+
+  const stagingRepoMentionCandidates = useMemo(
+    () =>
+      effectiveMentionCandidates.filter(
+        (m) =>
+          m.catalog_placement === 'staging' || m.catalog_placement === 'repository'
+      ),
+    [effectiveMentionCandidates]
+  );
+
+  const sortedBaseMentions = useMemo(
+    () => sortLiteratureCandidates(stagingRepoMentionCandidates),
+    [stagingRepoMentionCandidates]
+  );
+
+  const filteredMentionCandidates = useMemo(() => {
+    const q = mentionFilter.toLowerCase().trim();
+    const list = q
+      ? sortedBaseMentions.filter(
+          (m) =>
+            m.title.toLowerCase().includes(q) ||
+            (m.authors ?? '').toLowerCase().includes(q)
+        )
+      : sortedBaseMentions;
+    return sortLiteratureCandidates(list);
+  }, [sortedBaseMentions, mentionFilter]);
+
+  const sortedTaggedLiterature = useMemo(
+    () =>
+      [...taggedLiterature].sort((a, b) =>
+        a.title.localeCompare(b.title, undefined, { sensitivity: 'base' })
+      ),
+    [taggedLiterature]
+  );
+
+  const finalizeLiteratureAssistant = useCallback(
+    async (
+      donePayload: LiteratureAgentDonePayload,
+      sessionId: string,
+      endpoint: 'compare' | 'biomni'
+    ) => {
+      const bodyMd = formatLiteratureAssistantMarkdown(donePayload, endpoint);
+      const refs = donePayload.structured?.references ?? [];
+      const formattedAnswer = serializeLiteratureAssistantStoredContent(bodyMd, refs);
+      const assistantMessageId = `assistant-${Date.now()}`;
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: assistantMessageId,
+          role: 'assistant' as const,
+          content: formattedAnswer,
+          parts: [{ type: 'text' as const, text: formattedAnswer }],
+          createdAt: new Date(),
+        },
+      ]);
+      const savedAsst = await saveMessage(sessionId, 'assistant', formattedAnswer);
+      if (savedAsst) {
+        setSavedMessageIds((prev) => new Set(prev).add(savedAsst.id));
+        setMessages((prev) => {
+          const next = [...prev];
+          const last = next[next.length - 1];
+          if (last?.role === 'assistant' && last.id === assistantMessageId) {
+            next[next.length - 1] = { ...last, id: savedAsst.id };
+          }
+          return next;
+        });
+      }
+      loadSessions();
+      literatureAgentStream.reset();
+    },
+    [saveMessage, loadSessions, literatureAgentStream, setMessages]
+  );
+
+  const handleLiteratureClarifyAnswer = useCallback(
+    async (answer: string) => {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+      const token = session?.access_token;
+      if (!token) {
+        toast.error('Please sign in to continue');
+        return;
+      }
+      const sid = currentSessionRef.current;
+      if (!sid) return;
+      const { donePayload, error } = await literatureAgentStream.answerClarify(answer, token);
+      if (donePayload) await finalizeLiteratureAssistant(donePayload, sid, 'biomni');
+      else if (error) toast.error(error);
+    },
+    [supabase, literatureAgentStream, finalizeLiteratureAssistant]
+  );
+
+  const handleLiteratureClarifySkip = useCallback(async () => {
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
+    const token = session?.access_token;
+    if (!token) {
+      toast.error('Please sign in to continue');
+      return;
+    }
+    const sid = currentSessionRef.current;
+    if (!sid) return;
+    const { donePayload, error } = await literatureAgentStream.skipClarify(token);
+    if (donePayload) await finalizeLiteratureAssistant(donePayload, sid, 'biomni');
+    else if (error) toast.error(error);
+  }, [supabase, literatureAgentStream, finalizeLiteratureAssistant]);
+
+  /** Todo panel caps the @ list at 10 rows. */
+  const menuMentionCandidates = useMemo(
+    () => filteredMentionCandidates.slice(0, 10),
+    [filteredMentionCandidates]
+  );
+
+  const syncTaggedFromLiteratureEditable = useCallback(() => {
+    const el = literatureEditableRef.current;
+    if (!el) return;
+    setTaggedLiterature(getMentionsFromLiteratureEditable(el));
+    setLiteraturePlainLen(getPlainTextFromLiteratureEditable(el).length);
+  }, []);
+
+  const literatureResizeInput = useCallback((reset = false) => {
+    const el = literatureEditableRef.current;
+    if (!el) return;
+    const emptyText = !getPlainTextFromLiteratureEditable(el).trim();
+    const noMentions = getMentionsFromLiteratureEditable(el).length === 0;
+    if (reset || (emptyText && noMentions)) {
+      el.style.minHeight = '52px';
+      el.style.height = 'auto';
+      return;
+    }
+    el.style.height = 'auto';
+    el.style.minHeight = `${Math.min(el.scrollHeight, 300)}px`;
+  }, []);
+
+  useEffect(() => {
+    if (literatureMentionSelectIndex >= menuMentionCandidates.length) {
+      setLiteratureMentionSelectIndex(
+        menuMentionCandidates.length ? menuMentionCandidates.length - 1 : -1
+      );
+    }
+  }, [menuMentionCandidates.length, literatureMentionSelectIndex]);
+
+  useEffect(() => {
+    if (mentionOpen) setLiteratureMentionSelectIndex(-1);
+  }, [mentionOpen, mentionFilter]);
+
+  useEffect(() => {
+    const el = literatureEditableRef.current;
+    if (!el || agentMode !== 'literature' || !isLiteratureRoute) return;
+    const onRemoved = () => syncTaggedFromLiteratureEditable();
+    el.addEventListener('literature-mention-removed', onRemoved);
+    return () => el.removeEventListener('literature-mention-removed', onRemoved);
+  }, [agentMode, isLiteratureRoute, syncTaggedFromLiteratureEditable]);
+
+  const showLiteratureMention =
+    agentMode === 'literature' &&
+    isLiteratureRoute &&
+    literatureMentionStartIndex !== -1 &&
+    (mentionFilter.length === 0 ||
+      menuMentionCandidates.some(
+        (m) =>
+          m.title.toLowerCase().includes(mentionFilter.toLowerCase()) ||
+          (m.authors ?? '').toLowerCase().includes(mentionFilter.toLowerCase())
+      ));
+
+  useEffect(() => {
+    if (agentMode !== 'literature' || !isLiteratureRoute) {
+      setMentionOpen(false);
+      return;
+    }
+    setMentionOpen(showLiteratureMention && menuMentionCandidates.length > 0);
+  }, [
+    agentMode,
+    isLiteratureRoute,
+    showLiteratureMention,
+    menuMentionCandidates.length,
+  ]);
+
+  useEffect(() => {
+    if (!mentionOpen || !literatureMentionListRef.current || literatureMentionSelectIndex < 0)
+      return;
+    const row = literatureMentionListRef.current.querySelector(
+      `[role="option"]:nth-child(${literatureMentionSelectIndex + 1})`
+    );
+    row?.scrollIntoView({ block: 'nearest' });
+  }, [mentionOpen, literatureMentionSelectIndex]);
+
+  useEffect(() => {
+    if (!isLiteratureRoute) {
+      setFallbackMentionCandidates([]);
+      return;
+    }
+    if (contextMentionCandidates.length > 0) return;
+    let cancelled = false;
+    (async () => {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user || cancelled) return;
+      const { data, error } = await supabase
+        .from('literature_reviews')
+        .select('id,title,authors,catalog_placement')
+        .in('catalog_placement', ['staging', 'repository'])
+        .order('updated_at', { ascending: false })
+        .limit(300);
+      if (cancelled || error || !data) return;
+      setFallbackMentionCandidates(
+        data.map((row) => ({
+          id: row.id,
+          title: row.title ?? '',
+          authors: row.authors,
+          catalog_placement: row.catalog_placement ?? null,
+        }))
+      );
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [isLiteratureRoute, contextMentionCandidates.length, supabase]);
+
+  useEffect(() => {
+    const onLit = isLiteratureRoutePath(pathname ?? null);
+    if (onLit) {
+      if (!suppressLiteratureAutoModeRef.current) {
+        setAgentMode('literature');
+        if (!wasOnLiteratureRouteRef.current) {
+          setLiteratureSubMode('normal');
+        }
+      }
+      wasOnLiteratureRouteRef.current = true;
+      return;
+    }
+    wasOnLiteratureRouteRef.current = false;
+    suppressLiteratureAutoModeRef.current = false;
+    setTaggedLiterature([]);
+    setMentionOpen(false);
+    literatureEditableRef.current?.replaceChildren();
+    setLiteraturePlainLen(0);
+    setAgentMode((m) =>
+      m === 'literature' ? savedModeOutsideLiteratureRef.current : m
+    );
+  }, [pathname]);
+
+  const applyLiteratureMentionFromMenu = useCallback(
+    (pick: { id: string; title: string }) => {
+      const el = literatureEditableRef.current;
+      if (!el || literatureMentionStartIndex < 0) return;
+      const existing = getMentionsFromLiteratureEditable(el);
+      const end = getCursorOffset(el);
+      if (
+        !existing.some((m) => m.id === pick.id) &&
+        existing.length >= MAX_LITERATURE_TAGS
+      ) {
+        toast.error(`You can tag at most ${MAX_LITERATURE_TAGS} papers`);
+        return;
+      }
+      if (existing.some((m) => m.id === pick.id)) {
+        deleteLiteratureTextRange(el, literatureMentionStartIndex, end);
+      } else {
+        insertLiteratureMention(el, pick, literatureMentionStartIndex, end);
+      }
+      setMentionOpen(false);
+      setMentionFilter('');
+      setLiteratureMentionStartIndex(-1);
+      setLiteratureMentionSelectIndex(-1);
+      syncTaggedFromLiteratureEditable();
+      requestAnimationFrame(() => literatureResizeInput());
+    },
+    [literatureMentionStartIndex, syncTaggedFromLiteratureEditable, literatureResizeInput]
+  );
+
+  const addTaggedLiterature = useCallback(
+    (id: string, title: string) => {
+      const el = literatureEditableRef.current;
+      if (!el) return;
+      const ok = appendLiteratureMentionAtEnd(
+        el,
+        { id, title },
+        MAX_LITERATURE_TAGS
+      );
+      if (!ok) {
+        toast.error(`You can tag at most ${MAX_LITERATURE_TAGS} papers`);
+        return;
+      }
+      syncTaggedFromLiteratureEditable();
+      requestAnimationFrame(() => literatureResizeInput());
+    },
+    [syncTaggedFromLiteratureEditable, literatureResizeInput]
+  );
+
+  const handleNonFileDrop = useCallback(
+    (e: DragEvent) => {
+      if (agentMode !== 'literature' || !isLiteratureRoute) return false;
+      const raw = e.dataTransfer.getData(LITERATURE_DRAG_MIME);
+      if (!raw) return false;
+      try {
+        const p = JSON.parse(raw) as LiteratureDragPayload;
+        if (p?.id && p?.title) {
+          addTaggedLiterature(p.id, p.title);
+          return true;
+        }
+      } catch {
+        /* ignore */
+      }
+      return false;
+    },
+    [agentMode, isLiteratureRoute, addTaggedLiterature]
+  );
+
+  const handleEscapeToNonLiteratureMode = useCallback(
+    async (mode: 'general' | 'notes9') => {
+      if (
+        status === 'streaming' ||
+        status === 'submitted' ||
+        notes9Loading ||
+        literatureAgentStream.isStreaming ||
+        literatureAgentStream.clarify
+      ) {
+        toast.error('Wait for the current response to finish before switching.');
+        return;
+      }
+      savedModeOutsideLiteratureRef.current = mode;
+      const sessionId = await createSession();
+      if (sessionId) {
+        currentSessionRef.current = sessionId;
+        setMessages([]);
+        setAttachments([]);
+        setSavedMessageIds(new Set());
+        setTaggedLiterature([]);
+        setMentionOpen(false);
+        literatureEditableRef.current?.replaceChildren();
+        setLiteraturePlainLen(0);
+      } else {
+        toast.error('Failed to start new chat session');
+        return;
+      }
+      suppressLiteratureAutoModeRef.current = true;
+      setAgentMode(mode);
+      setLiteratureSubMode('normal');
+      agentStream.reset();
+      literatureAgentStream.reset();
+    },
+    [
+      status,
+      notes9Loading,
+      literatureAgentStream,
+      createSession,
+      setMessages,
+      agentStream,
+    ]
+  );
+
+  const goToLiteratureAgent = useCallback(() => {
+    suppressLiteratureAutoModeRef.current = false;
+    setAgentMode('literature');
+    setLiteratureSubMode('normal');
+    if (!isLiteratureRoutePath(pathname ?? null)) {
+      router.push('/literature-reviews');
+    }
+  }, [pathname, router]);
 
   const MAX_PAST_CHATS = 5;
   const pastChatsToShow = showAllPastChats ? sessions : sessions.slice(0, MAX_PAST_CHATS);
   const hasMorePastChats = sessions.length > MAX_PAST_CHATS;
 
-  const currentSessionRef = useRef<string | null>(null);
   useEffect(() => {
     currentSessionRef.current = currentSessionId;
   }, [currentSessionId]);
-  const isLoading = status === 'streaming' || status === 'submitted' || notes9Loading;
+  const literatureAwaitingClarify =
+    agentMode === 'literature' &&
+    literatureSubMode === 'research_design' &&
+    Boolean(literatureAgentStream.clarify);
+
+  const isLoading =
+    status === 'streaming' ||
+    status === 'submitted' ||
+    notes9Loading ||
+    literatureAgentStream.isStreaming ||
+    literatureAwaitingClarify;
   const isUploading = uploadQueue.length > 0;
+
+  const updateChatJumpBottom = useCallback(() => {
+    const el = chatScrollRef.current;
+    if (!el) return;
+    const { scrollTop, scrollHeight, clientHeight } = el;
+    const distFromBottom = scrollHeight - scrollTop - clientHeight;
+    setChatShowJumpBottom(distFromBottom > 120);
+  }, []);
+
+  const onChatScroll = useCallback(() => {
+    updateChatJumpBottom();
+  }, [updateChatJumpBottom]);
+
+  const scrollChatToBottom = useCallback(() => {
+    const el = chatScrollRef.current;
+    if (!el) return;
+    el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
+  }, []);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages, agentStream.thinkingSteps, agentStream.streamedAnswer, agentStream.donePayload, agentStream.thinkingSteps, agentStream.streamedAnswer, agentStream.donePayload, agentStream.thinkingSteps, agentStream.streamedAnswer, agentStream.donePayload]);
+    const id = requestAnimationFrame(() => updateChatJumpBottom());
+    return () => cancelAnimationFrame(id);
+  }, [
+    messages,
+    agentStream.thinkingSteps,
+    agentStream.streamedAnswer,
+    agentStream.donePayload,
+    literatureAgentStream.steps,
+    literatureAgentStream.clarify,
+    literatureAgentStream.isStreaming,
+    notes9Loading,
+    updateChatJumpBottom,
+  ]);
 
   useEffect(() => {
     resizeInput();
@@ -352,31 +844,169 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
     setAttachments((prev) => prev.filter((_, i) => i !== index));
   };
 
+  const handleTextareaChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    const v = e.target.value;
+    setInput(v);
+    resizeInput();
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if ((!input.trim() && attachments.length === 0) || isLoading || isUploading) return;
+    const litEl = literatureEditableRef.current;
+    const literaturePlain =
+      agentMode === 'literature' && isLiteratureRoute && litEl
+        ? getPlainTextFromLiteratureEditable(litEl).trim()
+        : '';
+    const litIdsLive =
+      agentMode === 'literature' && isLiteratureRoute && litEl
+        ? getMentionsFromLiteratureEditable(litEl).map((t) => t.id)
+        : [];
+    const hasLiteratureTags =
+      agentMode === 'literature' && isLiteratureRoute && litIdsLive.length > 0;
+    const canSendLiterature =
+      agentMode === 'literature' &&
+      isLiteratureRoute &&
+      (literaturePlain.length > 0 || hasLiteratureTags);
+    if (agentMode === 'literature' && isLiteratureRoute) {
+      if (!canSendLiterature || isLoading || isUploading) return;
+    } else if (
+      (!input.trim() && attachments.length === 0) ||
+      isLoading ||
+      isUploading
+    ) {
+      return;
+    }
 
-    const text = input;
+    const text =
+      agentMode === 'literature' && isLiteratureRoute ? literaturePlain : input;
+    const mentionsBefore =
+      agentMode === 'literature' && isLiteratureRoute && litEl
+        ? getMentionsFromLiteratureEditable(litEl)
+        : [];
+    const litIdsSnapshot = mentionsBefore
+      .slice()
+      .sort((a, b) =>
+        a.title.localeCompare(b.title, undefined, { sensitivity: 'base' })
+      )
+      .map((m) => m.id);
+
+    /** DOM + React state so tagged papers always reach the API even if one source is stale. */
+    const literatureReviewIdsForRequest = (() => {
+      const seen = new Set<string>();
+      const out: string[] = [];
+      for (const id of litIdsSnapshot) {
+        if (id && !seen.has(id)) {
+          seen.add(id);
+          out.push(id);
+        }
+      }
+      for (const t of sortedTaggedLiterature) {
+        if (t.id && !seen.has(t.id)) {
+          seen.add(t.id);
+          out.push(t.id);
+        }
+      }
+      return out;
+    })();
+
+    /** Must be read before clearLiteratureEditablePlainText — that call strips typed text from the composer. */
+    const userLiteratureMarkdownBeforeClear =
+      agentMode === 'literature' && isLiteratureRoute && litEl
+        ? segmentsToLiteratureMessageMarkdown(getLiteratureSegmentsFromEl(litEl))
+        : null;
+
     const currentAttachments = [...attachments];
     setInput('');
     setAttachments([]);
     requestAnimationFrame(() => resizeInput(true));
+    if (agentMode === 'literature' && isLiteratureRoute && litEl) {
+      clearLiteratureEditablePlainText(litEl);
+      syncTaggedFromLiteratureEditable();
+      requestAnimationFrame(() => literatureResizeInput(true));
+    }
 
     const isFirstMessageInSession = messages.length === 0;
+    const firstMentionTitle = mentionsBefore[0]?.title;
+    const titleFromFirst =
+      text.trim().slice(0, 50) ||
+      firstMentionTitle?.slice(0, 50) ||
+      'New conversation';
     if (!currentSessionRef.current) {
       const sessionId = await createSession();
       if (sessionId) {
         currentSessionRef.current = sessionId;
-        const title = text.trim().slice(0, 50) || 'New conversation';
-        updateSessionTitle(sessionId, title);
+        updateSessionTitle(sessionId, titleFromFirst);
       } else {
         toast.error("Failed to start new chat session");
         return;
       }
     } else if (isFirstMessageInSession) {
-      // Existing session but no messages yet (e.g. New Chat then type) – set title from first message
-      const title = text.trim().slice(0, 50) || 'New conversation';
-      updateSessionTitle(currentSessionRef.current, title);
+      updateSessionTitle(currentSessionRef.current, titleFromFirst);
+    }
+
+    if (agentMode === 'literature') {
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+      if (!token) {
+        toast.error('Please sign in to use the literature agent');
+        router.push('/auth/login');
+        return;
+      }
+
+      const userStoredContent = userLiteratureMarkdownBeforeClear ?? text;
+      const queryText =
+        literatureMessageMarkdownToPlainForModel(userStoredContent).trim() ||
+        (literatureReviewIdsForRequest.length > 0
+          ? 'Compare and analyze the tagged papers.'
+          : '');
+
+      const userMessageId = `user-${Date.now()}`;
+      const userMessage = {
+        id: userMessageId,
+        role: 'user' as const,
+        content: userStoredContent,
+        parts: [{ type: 'text' as const, text: userStoredContent }],
+        createdAt: new Date(),
+      };
+      setMessages((prev) => [...prev, userMessage]);
+
+      const sessionId = currentSessionRef.current!;
+      const savedUser = await saveMessage(sessionId, 'user', userStoredContent);
+      if (savedUser) {
+        setSavedMessageIds((prev) => new Set(prev).add(savedUser.id));
+        setMessages((prev) => {
+          const next = [...prev];
+          const last = next[next.length - 1];
+          if (last?.role === 'user' && last.id === userMessageId) {
+            next[next.length - 1] = { ...last, id: savedUser.id };
+          }
+          return next;
+        });
+      }
+
+      const history = messages.map((m) => ({
+        role: m.role,
+        content: literatureHistoryTurnContent(m),
+      }));
+
+      const endpoint = literatureSubMode === 'research_design' ? 'biomni' : 'compare';
+      const { donePayload, error } = await literatureAgentStream.runRequest(
+        endpoint,
+        {
+          query: queryText,
+          session_id: sessionId,
+          history,
+          literature_review_ids: literatureReviewIdsForRequest,
+        },
+        token
+      );
+
+      if (donePayload) {
+        await finalizeLiteratureAssistant(donePayload, sessionId, endpoint);
+      } else if (error) {
+        toast.error(error);
+      }
+      return;
     }
 
     if (agentMode === 'notes9') {
@@ -486,7 +1116,10 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
 
       const history = messages.slice(0, messageIndex).map((m) => ({
         role: m.role,
-        content: getPlainTextFromMessage(m),
+        content:
+          agentMode === 'literature'
+            ? literatureHistoryTurnContent(m)
+            : getPlainTextFromMessage(m),
       }));
 
       setMessages((currentMessages) => {
@@ -503,6 +1136,55 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
 
       const sid = currentSessionRef.current;
       if (!sid) return;
+
+      if (agentMode === 'literature') {
+        const { data: { session } } = await supabase.auth.getSession();
+        const token = session?.access_token;
+        if (!token) {
+          toast.error('Please sign in to use the literature agent');
+          return;
+        }
+
+        const savedUser = await saveMessage(sid, 'user', newContent);
+        if (savedUser) {
+          setSavedMessageIds((prev) => new Set(prev).add(savedUser.id));
+          setMessages((curr) => {
+            const idx = curr.findIndex((m) => m.id === messageId);
+            if (idx === -1) return curr;
+            return [
+              ...curr.slice(0, idx),
+              {
+                ...curr[idx],
+                id: savedUser.id,
+                parts: [{ type: 'text' as const, text: newContent }],
+              },
+            ];
+          });
+        }
+
+        const litIds = sortedTaggedLiterature.map((t) => t.id);
+        const endpoint = literatureSubMode === 'research_design' ? 'biomni' : 'compare';
+        const queryFromEdit =
+          literatureMessageMarkdownToPlainForModel(newContent).trim() ||
+          (litIds.length > 0 ? 'Compare and analyze the tagged papers.' : '');
+        const { donePayload, error } = await literatureAgentStream.runRequest(
+          endpoint,
+          {
+            query: queryFromEdit,
+            session_id: sid,
+            history,
+            literature_review_ids: litIds,
+          },
+          token
+        );
+
+        if (donePayload) {
+          await finalizeLiteratureAssistant(donePayload, sid, endpoint);
+        } else if (error) {
+          toast.error(error);
+        }
+        return;
+      }
 
       if (agentMode === 'notes9') {
         const { data: { session } } = await supabase.auth.getSession();
@@ -571,7 +1253,20 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
 
       regenerate();
     },
-    [messages, setMessages, regenerate, agentMode, supabase, saveMessage, loadSessions, agentStream]
+    [
+      messages,
+      setMessages,
+      regenerate,
+      agentMode,
+      literatureSubMode,
+      taggedLiterature,
+      supabase,
+      saveMessage,
+      loadSessions,
+      agentStream,
+      literatureAgentStream,
+      finalizeLiteratureAssistant,
+    ]
   );
 
   const handleRegenerate = useCallback(async () => {
@@ -579,6 +1274,57 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
 
     const sid = currentSessionRef.current;
     if (!sid) return;
+
+    if (agentMode === 'literature') {
+      const lastAssistantIndex = messages.findLastIndex((m) => m.role === 'assistant');
+      if (lastAssistantIndex === -1) return;
+      const lastUserMessage = messages[lastAssistantIndex - 1];
+      if (lastUserMessage?.role !== 'user') return;
+
+      const lastAssistantMessage = messages[lastAssistantIndex];
+      if (isPersistedChatMessageId(lastAssistantMessage.id)) {
+        await deleteTrailingMessages({ id: lastAssistantMessage.id });
+        setSavedMessageIds((prev) => {
+          const next = new Set(prev);
+          next.delete(lastAssistantMessage.id);
+          return next;
+        });
+      }
+
+      setMessages((curr) => curr.slice(0, lastAssistantIndex));
+
+      const query =
+        literatureMessageMarkdownToPlainForModel(getPlainTextFromMessage(lastUserMessage)).trim() ||
+        (sortedTaggedLiterature.length > 0
+          ? 'Compare and analyze the tagged papers.'
+          : '');
+      const history = messages.slice(0, lastAssistantIndex - 1).map((m) => ({
+        role: m.role,
+        content: literatureHistoryTurnContent(m),
+      }));
+
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+      if (!token) {
+        toast.error('Please sign in to use the literature agent');
+        return;
+      }
+
+      const litIds = sortedTaggedLiterature.map((t) => t.id);
+      const endpoint = literatureSubMode === 'research_design' ? 'biomni' : 'compare';
+      const { donePayload, error } = await literatureAgentStream.runRequest(
+        endpoint,
+        { query, session_id: sid, history, literature_review_ids: litIds },
+        token
+      );
+
+      if (donePayload) {
+        await finalizeLiteratureAssistant(donePayload, sid, endpoint);
+      } else if (error) {
+        toast.error(error);
+      }
+      return;
+    }
 
     if (agentMode === 'notes9') {
       const lastAssistantIndex = messages.findLastIndex((m) => m.role === 'assistant');
@@ -665,22 +1411,126 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
     }
 
     regenerate();
-  }, [messages, regenerate, agentMode, supabase, saveMessage, loadSessions, agentStream]);
+  }, [
+    messages,
+    regenerate,
+    agentMode,
+    literatureSubMode,
+    taggedLiterature,
+    supabase,
+    saveMessage,
+    loadSessions,
+    agentStream,
+    literatureAgentStream,
+    finalizeLiteratureAssistant,
+  ]);
 
-  /** Stops Notes9 agent stream or useChat streaming. */
+  /** Stops Notes9 / literature agent or useChat streaming. */
   const handleStopRequest = useCallback(() => {
     if (notes9Loading) {
       agentStream.abort();
       agentStream.reset();
+    } else if (literatureAgentStream.isStreaming) {
+      literatureAgentStream.abort();
+      literatureAgentStream.reset();
+    } else if (literatureAgentStream.clarify) {
+      literatureAgentStream.reset();
     } else {
       stop();
     }
-  }, [notes9Loading, agentStream, stop]);
+  }, [notes9Loading, agentStream, literatureAgentStream, stop]);
+
+  const handleLiteratureEditableKeyDown = (
+    e: React.KeyboardEvent<HTMLDivElement>
+  ) => {
+    const el = literatureEditableRef.current;
+    if (!el) return;
+
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      const { startIndex } = getQueryAfterAt(getTextBeforeCursor(el));
+      if (startIndex >= 0) {
+        deleteLiteratureTextRange(el, startIndex, getCursorOffset(el));
+        syncTaggedFromLiteratureEditable();
+      }
+      setMentionOpen(false);
+      setMentionFilter('');
+      setLiteratureMentionStartIndex(-1);
+      return;
+    }
+
+    if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') {
+      const sel = window.getSelection();
+      const anchor = sel?.anchorNode;
+      const mention =
+        anchor &&
+        (anchor.nodeType === Node.ELEMENT_NODE
+          ? (anchor as HTMLElement)
+          : (anchor as HTMLElement).parentElement
+        )?.closest?.('[data-literature-id]');
+      if (mention && el.contains(mention)) {
+        e.preventDefault();
+        const range = document.createRange();
+        if (e.key === 'ArrowRight') {
+          const after =
+            mention.nextSibling?.nextSibling ??
+            mention.nextSibling ??
+            mention;
+          if (after.nodeType === Node.TEXT_NODE) {
+            range.setStart(after, after.textContent?.length ?? 0);
+          } else {
+            range.setStartAfter(after);
+          }
+        } else {
+          const before = mention.previousSibling;
+          if (before?.nodeType === Node.TEXT_NODE) {
+            range.setStart(before, before.textContent?.length ?? 0);
+          } else if (before) {
+            range.setStartAfter(before);
+          } else {
+            range.setStart(el, 0);
+          }
+        }
+        range.collapse(true);
+        sel?.removeAllRanges();
+        sel?.addRange(range);
+        return;
+      }
+    }
+
+    if (mentionOpen && menuMentionCandidates.length > 0) {
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        setLiteratureMentionSelectIndex((i) =>
+          i < 0 ? 0 : Math.min(i + 1, menuMentionCandidates.length - 1)
+        );
+        return;
+      }
+      if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        setLiteratureMentionSelectIndex((i) => (i <= 0 ? -1 : i - 1));
+        return;
+      }
+      if (e.key === 'Enter' && !e.shiftKey && literatureMentionSelectIndex >= 0) {
+        const item = menuMentionCandidates[literatureMentionSelectIndex];
+        if (item) {
+          e.preventDefault();
+          applyLiteratureMentionFromMenu({ id: item.id, title: item.title });
+          return;
+        }
+      }
+    }
+
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      void handleSubmit(e as unknown as React.FormEvent);
+    }
+  };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
-      handleSubmit(e);
+      void handleSubmit(e);
     }
   };
 
@@ -695,6 +1545,12 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
       setMessages([]);
       setAttachments([]);
       setSavedMessageIds(new Set());
+      setTaggedLiterature([]);
+      setMentionOpen(false);
+      literatureEditableRef.current?.replaceChildren();
+      setLiteraturePlainLen(0);
+      literatureAgentStream.reset();
+      agentStream.reset();
     }
   };
 
@@ -758,7 +1614,116 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
 
   // --- Render Components ---
 
-  const renderCursorInput = () => (
+  const renderCursorInput = () => {
+    const canSendLiterature =
+      agentMode === 'literature' &&
+      isLiteratureRoute &&
+      (literaturePlainLen > 0 || taggedLiterature.length > 0);
+    const canSend =
+      agentMode === 'literature' && isLiteratureRoute
+        ? canSendLiterature
+        : agentMode === 'literature' && !isLiteratureRoute
+          ? input.trim().length > 0
+          : input.trim().length > 0 || attachments.length > 0;
+
+    const literatureComposer =
+      agentMode === 'literature' && isLiteratureRoute ? (
+        <Popover open={mentionOpen} onOpenChange={setMentionOpen}>
+          <PopoverAnchor asChild>
+            <div className="w-full min-h-[52px] rounded-md border border-transparent bg-transparent px-1 ring-offset-background focus-within:ring-1 focus-within:ring-ring/50">
+              <div
+                ref={literatureEditableRef}
+                contentEditable
+                suppressContentEditableWarning
+                data-placeholder={`Ask about papers… Use @ to link papers (max ${MAX_LITERATURE_TAGS}), or drop rows here`}
+                className="outline-none empty:before:pointer-events-none empty:before:content-[attr(data-placeholder)] empty:before:text-muted-foreground min-h-[52px] w-full px-3 py-2.5 text-sm max-h-[300px] overflow-y-auto scrollbar-hide"
+                onBeforeInput={(e) => {
+                  const ie = e.nativeEvent as InputEvent;
+                  if (!ie.inputType?.startsWith('insert')) return;
+                  const ed = literatureEditableRef.current;
+                  if (!ed) return;
+                  if (
+                    getPlainTextFromLiteratureEditable(ed).length >= MAX_CHAT_CHARS
+                  ) {
+                    e.preventDefault();
+                  }
+                }}
+                onInput={() => {
+                  const ed = literatureEditableRef.current;
+                  if (!ed) return;
+                  syncTaggedFromLiteratureEditable();
+                  const textBefore = getTextBeforeCursor(ed);
+                  const { query, startIndex } = getQueryAfterAt(textBefore);
+                  setMentionFilter(query);
+                  setLiteratureMentionStartIndex(startIndex);
+                  literatureResizeInput();
+                }}
+                onKeyDown={handleLiteratureEditableKeyDown}
+                role="textbox"
+                aria-multiline
+                aria-label="Literature chat message"
+              />
+            </div>
+          </PopoverAnchor>
+          <PopoverContent
+            className="w-[var(--radix-popover-trigger-width)] p-0"
+            align="start"
+            sideOffset={4}
+            onOpenAutoFocus={(e) => e.preventDefault()}
+          >
+            <div
+              ref={literatureMentionListRef}
+              className="max-h-[200px] overflow-y-auto rounded-md"
+              role="listbox"
+              aria-label="Link literature papers"
+            >
+              {menuMentionCandidates.length === 0 ? (
+                <p className="px-3 py-6 text-center text-sm text-muted-foreground">
+                  No papers match. Try another search.
+                </p>
+              ) : (
+                menuMentionCandidates.map((item, index) => {
+                  const placement =
+                    item.catalog_placement === 'staging' ? 'staging' : 'repository';
+                  return (
+                    <button
+                      type="button"
+                      key={item.id}
+                      role="option"
+                      aria-selected={
+                        literatureMentionSelectIndex >= 0 &&
+                        index === literatureMentionSelectIndex
+                      }
+                      className={cn(
+                        'w-full text-left px-3 py-2 text-sm flex items-center gap-2 rounded-sm',
+                        index === literatureMentionSelectIndex
+                          ? 'bg-accent text-accent-foreground'
+                          : 'hover:bg-accent/50'
+                      )}
+                      onMouseDown={(ev) => {
+                        ev.preventDefault();
+                        applyLiteratureMentionFromMenu({
+                          id: item.id,
+                          title: item.title,
+                        });
+                      }}
+                    >
+                      <BookOpen className="h-4 w-4 shrink-0" />
+                      <span className="truncate min-w-0">{item.title}</span>
+                      <span className="ml-auto text-xs text-muted-foreground shrink-0">
+                        {placement}
+                      </span>
+                    </button>
+                  );
+                })
+              )}
+            </div>
+          </PopoverContent>
+        </Popover>
+      ) : null;
+
+    return (
+    <>
     <div className="group/input relative flex flex-col w-full">
       {/* Attachments Preview */}
       {(attachments.length > 0 || uploadQueue.length > 0) && (
@@ -778,58 +1743,110 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
       )} id="tour-ai-chat">
         <FileDropzone
           onFilesDrop={handleFilesDrop}
+          onNonFileDrop={handleNonFileDrop}
           accept={ALLOWED_TYPES}
-          description="Drop files to attach"
+          description="Drop files or literature papers to attach"
           activeClassName="ring-2 ring-primary border-primary bg-primary/5"
         >
-          <textarea
-            ref={inputRef}
-            value={input}
-            onChange={(e) => {
-              setInput(e.target.value);
-              resizeInput();
-            }}
-            onKeyDown={handleKeyDown}
-            placeholder="Plan, @ for context, / for commands"
-            className="w-full min-h-[52px] resize-none bg-transparent px-4 py-2.5 text-sm placeholder:text-muted-foreground/60 focus:outline-none scrollbar-hide"
-            disabled={isLoading || contextLoading}
-            autoFocus
-            maxLength={MAX_CHAT_CHARS}
-          />
+          {literatureComposer ?? (
+            <textarea
+              ref={inputRef}
+              value={input}
+              onChange={handleTextareaChange}
+              onKeyDown={handleKeyDown}
+              placeholder="Plan, @ for context, / for commands"
+              className="w-full min-h-[52px] resize-none bg-transparent px-4 py-2.5 text-sm placeholder:text-muted-foreground/60 focus:outline-none scrollbar-hide"
+              disabled={isLoading || contextLoading}
+              autoFocus
+              maxLength={MAX_CHAT_CHARS}
+            />
+          )}
         </FileDropzone>
 
-        {/* Bottom Toolbar — merge: keep `min-h-9` on this row and the trailing `h-9 … justify-end` wrapper so stop/send stay aligned (main used `min-h-[28px]` + `rounded-sm` stop; do not restore those here). */}
         <div className="mt-1 flex min-h-9 items-center justify-between gap-2 px-2 pb-2">
-          <div className="flex items-center gap-2 min-w-0 flex-1">
-            {/* Mode Selector */}
+          <div className="flex min-w-0 flex-1 flex-nowrap items-center gap-1.5 overflow-x-auto">
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button id="tour-ai-mode" variant="ghost" size="sm" className="h-7 gap-1.5 rounded-md bg-muted/50 hover:bg-muted text-muted-foreground px-2 text-xs font-medium shrink-0">
-                  {agentMode === 'notes9' ? (
-                    <><NotebookPen className="size-3.5" /> Notes9</>
+                  {agentMode === 'literature' ? (
+                    <>
+                      <BookOpen className="size-3.5" />
+                      Literature
+                    </>
+                  ) : agentMode === 'notes9' ? (
+                    <>
+                      <NotebookPen className="size-3.5" /> Notes9
+                    </>
                   ) : (
-                    <><MessageSquare className="size-3.5" /> General</>
+                    <>
+                      <MessageSquare className="size-3.5" /> General
+                    </>
                   )}
                   <ChevronDown className="size-3 opacity-50" />
                 </Button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="start" className="w-[150px]">
-                <DropdownMenuItem onClick={() => setAgentMode('general')} className="gap-2 text-xs">
+              <DropdownMenuContent align="start" className="w-[200px]">
+                <DropdownMenuItem
+                  onClick={() => {
+                    goToLiteratureAgent();
+                  }}
+                  className="gap-2 text-xs"
+                >
+                  <BookOpen className="size-3.5" /> Literature
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onClick={() =>
+                    isLiteratureRoute
+                      ? void handleEscapeToNonLiteratureMode('general')
+                      : (savedModeOutsideLiteratureRef.current = 'general', setAgentMode('general'))
+                  }
+                  className={cn(
+                    'gap-2 text-xs',
+                    isLiteratureRoute && 'opacity-60 text-muted-foreground'
+                  )}
+                >
                   <MessageSquare className="size-3.5" /> General
                 </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => setAgentMode('notes9')} className="gap-2 text-xs">
+                <DropdownMenuItem
+                  onClick={() =>
+                    isLiteratureRoute
+                      ? void handleEscapeToNonLiteratureMode('notes9')
+                      : (savedModeOutsideLiteratureRef.current = 'notes9', setAgentMode('notes9'))
+                  }
+                  className={cn(
+                    'gap-2 text-xs',
+                    isLiteratureRoute && 'opacity-60 text-muted-foreground'
+                  )}
+                >
                   <NotebookPen className="size-3.5" /> Notes9
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
+
+            {agentMode === 'literature' && isLiteratureRoute && (
+              <div className="ml-1 flex shrink-0 items-center gap-1.5 whitespace-nowrap border-l border-border/50 pl-2">
+                <DraftingCompass className="size-3.5 shrink-0 text-muted-foreground" aria-hidden />
+                <span className="shrink-0 text-xs font-medium text-muted-foreground">Design</span>
+                <Switch
+                  checked={literatureSubMode === 'research_design'}
+                  onCheckedChange={(on) =>
+                    setLiteratureSubMode(on ? 'research_design' : 'normal')
+                  }
+                  disabled={isLoading}
+                  className="shrink-0 scale-90"
+                  aria-label="Design mode for experiment and protocol generation"
+                />
+              </div>
+            )}
+
             {agentMode === 'general' && (
-              <div className="flex items-center gap-1.5 shrink-0 pl-2 ml-1 border-l border-border/50">
-                <Globe className="size-3.5 text-muted-foreground" aria-hidden />
+              <div className="ml-1 flex shrink-0 items-center gap-1.5 whitespace-nowrap border-l border-border/50 pl-2">
+                <Globe className="size-3.5 shrink-0 text-muted-foreground" aria-hidden />
                 <Switch
                   checked={webSearchEnabled}
                   onCheckedChange={setWebSearchEnabled}
                   disabled={isLoading}
-                  className="scale-90"
+                  className="shrink-0 scale-90"
                   aria-label="Web search"
                 />
               </div>
@@ -838,7 +1855,10 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
 
           <div className="flex h-9 shrink-0 items-center justify-end gap-1">
             <span className="mr-1 hidden text-[11px] text-muted-foreground sm:inline">
-              {input.length}/{MAX_CHAT_CHARS}
+              {agentMode === 'literature' && isLiteratureRoute
+                ? literaturePlainLen
+                : input.length}
+              /{MAX_CHAT_CHARS}
             </span>
             <Button
               type="button"
@@ -846,7 +1866,7 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
               variant="ghost"
               className="size-7 text-muted-foreground hover:text-foreground"
               onClick={() => fileInputRef.current?.click()}
-              disabled={isLoading}
+              disabled={isLoading || agentMode === 'literature'}
             >
               <Paperclip className="size-4" />
             </Button>
@@ -870,10 +1890,10 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
                 variant="ghost"
                 className={cn(
                   "size-7 text-muted-foreground transition-colors hover:text-primary",
-                  (input.trim() || attachments.length > 0) && "text-primary",
+                  canSend && "text-primary",
                 )}
-                onClick={(e) => handleSubmit(e as any)}
-                disabled={(!input.trim() && attachments.length === 0) || isUploading}
+                onClick={(e) => void handleSubmit(e as React.FormEvent)}
+                disabled={!canSend || isUploading}
               >
                 <ArrowUp className="size-4" />
               </Button>
@@ -882,7 +1902,9 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
         </div>
       </div>
     </div>
-  );
+    </>
+    );
+  };
 
   /** Format session time: always 2 chars — "0m".."9m", "1h".."9h", "1d".."9d" (cap at 9 for h/d). */
   const formatSessionTime = (updatedAt: string): string => {
@@ -1063,29 +2085,32 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
                                 <div className="py-6 text-center text-muted-foreground text-xs">No history yet.</div>
                               ) : (
                                 sessions.map(session => (
-                                  <div key={session.id} className="group/hist relative flex w-full min-w-max items-center overflow-hidden rounded-md pr-1">
+                                  <div
+                                    key={session.id}
+                                    className="group/row relative"
+                                  >
                                     <button
                                       type="button"
                                       onClick={() => loadSession(session.id)}
                                       className={cn(
-                                        "flex min-w-max max-w-full items-center justify-between gap-3 overflow-hidden rounded-md px-2 py-1.5 pr-12 text-left text-sm transition-colors",
+                                        "flex min-w-max max-w-full items-center justify-between gap-2 overflow-hidden rounded-md px-2 py-1.5 pr-12 text-left text-sm transition-all duration-150 hover:bg-[color:color-mix(in_oklab,var(--background)_78%,var(--primary)_22%)] hover:text-sidebar-foreground active:scale-[0.985] active:bg-[color:color-mix(in_oklab,var(--background)_70%,var(--primary)_30%)] dark:hover:bg-sidebar-accent dark:hover:text-sidebar-accent-foreground dark:active:scale-[0.985] dark:active:bg-sidebar-accent/90",
                                         currentSessionId === session.id
                                           ? "bg-sidebar-accent text-sidebar-accent-foreground"
-                                          : "text-muted-foreground hover:text-foreground"
+                                          : "text-sidebar-foreground/70"
                                       )}
                                     >
                                       <span
                                         className={cn(
-                                          "block whitespace-nowrap rounded-full px-2.5 py-1 transition-colors",
+                                          "block truncate whitespace-nowrap font-medium",
                                           currentSessionId === session.id
-                                            ? "bg-sidebar-accent-foreground/12 text-sidebar-accent-foreground"
-                                            : "group-hover/hist:bg-gradient-to-r group-hover/hist:from-[var(--primary)]/28 group-hover/hist:via-[var(--accent)]/85 group-hover/hist:to-[var(--accent)]/32"
+                                            ? "text-sidebar-accent-foreground"
+                                            : "text-inherit"
                                         )}
                                         title={session.title || 'New conversation'}
                                       >
                                         {session.title || 'New conversation'}
                                       </span>
-                                      <span className="text-[10px] shrink-0 opacity-70">
+                                      <span className="shrink-0 text-[10px] text-sidebar-foreground/70 opacity-70">
                                         {new Date(session.updated_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
                                       </span>
                                     </button>
@@ -1094,8 +2119,8 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
                                       variant="ghost"
                                       size="icon"
                                       className={cn(
-                                        "absolute right-1 top-1/2 z-10 h-7 w-7 -translate-y-1/2 rounded-full border border-border/35 bg-background/82 text-destructive shadow-sm backdrop-blur-md transition-opacity hover:bg-background hover:text-destructive",
-                                        currentSessionId === session.id ? "opacity-100" : "opacity-0 group-hover/hist:opacity-100"
+                                        "absolute right-1 top-1/2 z-10 h-7 w-7 -translate-y-1/2 rounded-full border border-border/35 bg-background/82 text-sidebar-foreground/70 shadow-sm backdrop-blur-md transition-[opacity,transform,background-color,color] duration-200 ease-out hover:bg-background hover:text-destructive",
+                                        currentSessionId === session.id ? "opacity-100" : "pointer-events-none translate-x-1 opacity-0 group-hover/row:pointer-events-auto group-hover/row:translate-x-0 group-hover/row:opacity-100"
                                       )}
                                       onClick={(e) => handleDeleteSession(e, session.id)}
                                       aria-label="Delete chat"
@@ -1178,14 +2203,17 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
                     ) : (
                       <ul className="flex min-w-0 flex-col gap-0.5 pr-1">
                         {sessions.map((session) => (
-                          <li key={session.id} className="group/row relative">
+                          <li
+                            key={session.id}
+                            className="group/row relative"
+                          >
                             <div
                               role="button"
                               tabIndex={0}
                               onClick={() => loadSession(session.id)}
                               onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); loadSession(session.id); } }}
                               className={cn(
-                                "grid min-h-9 min-w-0 grid-cols-[auto_1fr_auto] items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm outline-none transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
+                                "grid min-h-9 min-w-0 grid-cols-[auto_1fr_auto] items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm outline-none transition-all duration-150 hover:bg-[color:color-mix(in_oklab,var(--background)_78%,var(--primary)_22%)] hover:text-sidebar-foreground active:scale-[0.985] active:bg-[color:color-mix(in_oklab,var(--background)_70%,var(--primary)_30%)] dark:hover:bg-sidebar-accent dark:hover:text-sidebar-accent-foreground dark:active:scale-[0.985] dark:active:bg-sidebar-accent/90",
                                 currentSessionId === session.id && "bg-sidebar-accent font-medium text-sidebar-accent-foreground"
                               )}
                             >
@@ -1194,10 +2222,10 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
                               </span>
                               <span
                                 className={cn(
-                                  "block truncate rounded-full px-2.5 py-1 font-medium transition-colors",
+                                  "block truncate font-medium",
                                   currentSessionId === session.id
-                                    ? "bg-sidebar-accent-foreground/12 text-sidebar-accent-foreground"
-                                    : "group-hover/row:bg-gradient-to-r group-hover/row:from-[var(--primary)]/28 group-hover/row:via-[var(--accent)]/85 group-hover/row:to-[var(--accent)]/32"
+                                    ? "text-sidebar-accent-foreground"
+                                    : "text-inherit"
                                 )}
                                 title={session.title || 'New conversation'}
                               >
@@ -1207,8 +2235,8 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
                                 variant="ghost"
                                 size="icon"
                                 className={cn(
-                                  "size-8 shrink-0 text-sidebar-foreground/70 transition-opacity hover:text-destructive",
-                                  currentSessionId === session.id ? "opacity-100" : "opacity-0 group-hover/row:opacity-100"
+                                  "size-8 shrink-0 text-sidebar-foreground/70 transition-[opacity,transform,color] duration-200 ease-out hover:text-destructive",
+                                  currentSessionId === session.id ? "opacity-100" : "pointer-events-none translate-x-1 opacity-0 group-hover/row:pointer-events-auto group-hover/row:translate-x-0 group-hover/row:opacity-100"
                                 )}
                                 onClick={(e) => handleDeleteSession(e, session.id)}
                                 aria-label="Delete chat"
@@ -1260,11 +2288,32 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
               ) : (
                 // --- Active Chat View ---
                 <div className="flex-1 flex flex-col min-h-0 overflow-hidden relative">
-                  {/* Messages Area - single scroll container */}
-                  <ScrollArea className="flex-1 min-h-0 basis-0 overflow-hidden">
-                    <div className="flex flex-col gap-6 p-4 pt-5 pb-20 max-w-3xl mx-auto w-full min-w-0">
+                  {/* Messages Area — native scroll so we can detect position (ScrollArea viewport is not exposed) */}
+                  <div
+                    ref={chatScrollRef}
+                    className="flex-1 min-h-0 basis-0 overflow-y-auto overflow-x-hidden overscroll-contain [scrollbar-gutter:stable]"
+                    onScroll={onChatScroll}
+                    role="log"
+                    aria-label="Chat messages"
+                  >
+                    <div className="flex flex-col gap-6 p-4 pt-5 pb-4 max-w-3xl mx-auto w-full min-w-0">
                       {messages.map((message, index) => {
-                        const content = getMessageContent(message);
+                        const rawContent = getMessageContent(message);
+                        const literatureParsed =
+                          message.role === 'assistant'
+                            ? parseLiteratureAssistantStoredContent(rawContent)
+                            : null;
+                        const content = literatureParsed
+                          ? literatureParsed.bodyMarkdown
+                          : rawContent;
+                        const literatureSources =
+                          literatureParsed && literatureParsed.refs.length > 0
+                            ? literatureParsed.refs
+                            : null;
+                        const userLiteratureMarkdown =
+                          message.role === 'user' &&
+                          ((agentMode === 'literature' && isLiteratureRoute) ||
+                            /\]\(\/literature-reviews\//.test(content));
                         const isLastAssistant = message.role === 'assistant' && index === messages.length - 1;
                         const isLastUserAwaitingReply =
                           isLoading &&
@@ -1299,9 +2348,30 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
                                 />
                               ) : (
                                 <>
-                                  <div className={cn("text-sm leading-[1.45] whitespace-pre-wrap break-words overflow-visible", message.role === 'user' ? "bg-primary/5 text-foreground px-4 py-2.5 rounded-2xl rounded-tr-sm" : "min-w-0 text-foreground")}>
-                                    {message.role === 'user' ? content : <MarkdownRenderer content={content} className="text-sm text-foreground" />}
+                                  <div
+                                    className={cn(
+                                      'text-sm leading-[1.45] break-words overflow-visible',
+                                      message.role === 'user'
+                                        ? 'whitespace-pre-wrap bg-primary/5 text-foreground px-4 py-2.5 rounded-2xl rounded-tr-sm'
+                                        : 'min-w-0 text-foreground whitespace-normal'
+                                    )}
+                                  >
+                                    {message.role === 'user' ? (
+                                      userLiteratureMarkdown ? (
+                                        <MarkdownRenderer content={content} className="text-sm text-foreground" />
+                                      ) : (
+                                        content
+                                      )
+                                    ) : (
+                                      <MarkdownRenderer content={content} className="text-sm text-foreground" />
+                                    )}
                                   </div>
+                                  {literatureSources && (
+                                    <LiteratureSourcesDropdown
+                                      refs={literatureSources}
+                                      className="mt-2 self-start"
+                                    />
+                                  )}
                                   <div className="mt-1 opacity-0 group-hover/message:opacity-100 transition-opacity px-1">
                                     <MessageActions
                                       sessionId={currentSessionId}
@@ -1325,9 +2395,60 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
                           </div>
                         );
                       })}
-                      {agentMode === 'notes9' &&
-                        (notes9Loading || agentStream.isStreaming || agentStream.error) &&
+                      {agentMode === 'literature' &&
+                        literatureAgentStream.isStreaming &&
                         messages.at(-1)?.role === 'user' && (
+                        <div className="flex w-full gap-4 justify-start">
+                          <div className="mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-full border border-border/60 bg-[rgba(124,82,52,0.05)] shadow-sm dark:bg-background dark:border-border">
+                            <div className="relative size-[18px] shrink-0" aria-hidden>
+                              <Image
+                                src="/notes9-logo-mark-transparent.png"
+                                alt=""
+                                fill
+                                sizes="18px"
+                                className="object-contain dark:invert dark:brightness-125"
+                              />
+                            </div>
+                          </div>
+                          <div className="flex min-w-0 flex-1 flex-col gap-2 max-w-[85%]">
+                            <div className="space-y-0.5">
+                              <p className="text-sm font-semibold leading-tight text-foreground">
+                                Literature agent
+                              </p>
+                              <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                                <Loader2
+                                  className="size-3 shrink-0 animate-spin text-primary/70"
+                                  aria-hidden
+                                />
+                                Working on your papers…
+                              </p>
+                            </div>
+                            {literatureSubMode === 'research_design' && (
+                              <LiteratureAgentThinkingPanel
+                                steps={literatureAgentStream.steps}
+                              />
+                            )}
+                          </div>
+                        </div>
+                      )}
+                      {literatureAwaitingClarify &&
+                        messages.at(-1)?.role === 'user' &&
+                        literatureAgentStream.clarify && (
+                        <div className="flex w-full justify-start pl-10 sm:pl-14">
+                          <ClarifyCard
+                            question={literatureAgentStream.clarify.question}
+                            options={literatureAgentStream.clarify.options}
+                            onAnswer={handleLiteratureClarifyAnswer}
+                            onSkip={handleLiteratureClarifySkip}
+                          />
+                        </div>
+                      )}
+                      {agentMode === 'notes9' &&
+                        messages.at(-1)?.role === 'user' &&
+                        (notes9Loading ||
+                          agentStream.isStreaming ||
+                          agentStream.error != null ||
+                          agentStream.donePayload != null) && (
                         <div className="flex gap-4 w-full justify-start">
                           <div className="size-7 shrink-0 flex items-center justify-center rounded-full bg-background border shadow-sm mt-1 -translate-y-[5px]">
                             <Sparkles className="size-3.5 text-primary animate-pulse" />
@@ -1341,12 +2462,15 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
                               donePayload={agentStream.donePayload}
                               error={agentStream.error}
                               compact
+                              isThinkingStreaming={agentStream.isStreaming}
                             />
                           </div>
                         </div>
                       )}
                       {isLoading &&
                         !(notes9Loading || agentStream.isStreaming || agentStream.error) &&
+                        !(agentMode === 'literature' && literatureAgentStream.isStreaming) &&
+                        !literatureAwaitingClarify &&
                         messages.at(-1)?.role === 'user' && (
                         <div className="flex w-full justify-start">
                           <Notes9VideoLoader
@@ -1364,9 +2488,21 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
                           />
                         </div>
                       )}
-                      <div ref={messagesEndRef} className="h-4" />
+                      <div ref={messagesEndRef} className="h-2 shrink-0" aria-hidden />
                     </div>
-                  </ScrollArea>
+                  </div>
+                  {chatShowJumpBottom && (
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      size="icon"
+                      className="absolute bottom-[7.25rem] right-4 z-30 h-9 w-9 rounded-full border border-border/60 bg-background/95 shadow-md backdrop-blur-sm hover:bg-muted"
+                      onClick={scrollChatToBottom}
+                      aria-label="Scroll to latest message"
+                    >
+                      <ChevronDown className="size-4" />
+                    </Button>
+                  )}
 
                   {/* Fixed Input at Bottom */}
                   <div className="flex-shrink-0 p-4 bg-background/95 backdrop-blur z-20 border-t">

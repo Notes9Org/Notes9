@@ -28,6 +28,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import { useLiteratureMentionRegister } from "@/contexts/literature-mention-context"
 
 interface LiteratureReview {
   id: string
@@ -49,6 +50,8 @@ interface LiteratureTabsProps {
   stagedLiterature: StagingLiteratureRow[]
   projects: { id: string; name: string }[]
   experiments: { id: string; name: string; project_id: string }[]
+  /** Deep link from `/literature-reviews?project=…` — opens My Repository filtered to this project. */
+  initialProjectId?: string | null
 }
 
 export function LiteratureTabs({
@@ -56,6 +59,7 @@ export function LiteratureTabs({
   stagedLiterature,
   projects,
   experiments,
+  initialProjectId = null,
 }: LiteratureTabsProps) {
   const router = useRouter()
 
@@ -75,6 +79,7 @@ export function LiteratureTabs({
   const [selectedProjectId, setSelectedProjectId] = useState<string>("")
   const [selectedExperimentId, setSelectedExperimentId] = useState<string>("")
   const [isSavingPaper, setIsSavingPaper] = useState(false)
+  const [savingStagingLiteratureId, setSavingStagingLiteratureId] = useState<string | null>(null)
 
   const repositoryReviews = useMemo(
     () =>
@@ -84,16 +89,72 @@ export function LiteratureTabs({
     [literatureReviews]
   )
 
+  const lockedProjectId =
+    initialProjectId && projects.some((p) => p.id === initialProjectId) ? initialProjectId : null
+  const lockedProjectName = lockedProjectId
+    ? projects.find((p) => p.id === lockedProjectId)?.name ?? null
+    : null
+
+  const stagedLiteratureScoped = useMemo(() => {
+    if (!lockedProjectId) return stagedLiterature
+    return stagedLiterature.filter((row) => {
+      const r = row as { project_id?: string | null; project?: { id?: string } | null }
+      const pid = r.project_id ?? r.project?.id ?? null
+      return pid === lockedProjectId
+    })
+  }, [stagedLiterature, lockedProjectId])
+
+  const registerLiteratureMentions = useLiteratureMentionRegister()
+  const literatureMentionCandidates = useMemo(() => {
+    const rowProjectId = (row: StagingLiteratureRow) => {
+      const r = row as { project_id?: string | null; project?: { id?: string } | null }
+      return r.project_id ?? r.project?.id ?? null
+    }
+    const stagedSource = lockedProjectId
+      ? stagedLiterature.filter((row) => rowProjectId(row) === lockedProjectId)
+      : stagedLiterature
+    const staged = stagedSource.map((row) => {
+      const r = row as StagingLiteratureRow & {
+        id?: string
+        title?: string
+        authors?: string | null
+      }
+      return {
+        id: String(r.id ?? ""),
+        title: String(r.title ?? ""),
+        authors: r.authors ?? null,
+        catalog_placement: "staging" as const,
+      }
+    })
+    const repoSource = lockedProjectId
+      ? repositoryReviews.filter((r) => r.project?.id === lockedProjectId)
+      : repositoryReviews
+    const repo = repoSource.map((r) => ({
+      id: r.id,
+      title: r.title,
+      authors: r.authors,
+      catalog_placement: r.catalog_placement ?? "repository",
+    }))
+    return [...staged, ...repo].filter((c) => c.id)
+  }, [stagedLiterature, repositoryReviews, lockedProjectId])
+
+  useEffect(() => {
+    registerLiteratureMentions(literatureMentionCandidates)
+    return () => registerLiteratureMentions([])
+  }, [literatureMentionCandidates, registerLiteratureMentions])
+
+  const projectIdForExperimentPicker = selectedProjectId || lockedProjectId || ""
+
   const filteredExperiments = useMemo(
     () =>
-      selectedProjectId
-        ? experiments.filter((experiment) => experiment.project_id === selectedProjectId)
+      projectIdForExperimentPicker
+        ? experiments.filter((experiment) => experiment.project_id === projectIdForExperimentPicker)
         : [],
-    [experiments, selectedProjectId]
+    [experiments, projectIdForExperimentPicker]
   )
 
   useEffect(() => {
-    if (!selectedProjectId) {
+    if (!projectIdForExperimentPicker) {
       setSelectedExperimentId("")
       return
     }
@@ -101,7 +162,7 @@ export function LiteratureTabs({
     if (!filteredExperiments.some((experiment) => experiment.id === selectedExperimentId)) {
       setSelectedExperimentId("")
     }
-  }, [filteredExperiments, selectedExperimentId, selectedProjectId])
+  }, [filteredExperiments, selectedExperimentId, projectIdForExperimentPicker])
 
   const executePaperSearch = async (
     q: string,
@@ -161,7 +222,14 @@ export function LiteratureTabs({
     const paper = searchResults.find((p) => p.id === paperId)
     if (!paper) return false
     const nd = paper.doi ? normalizeDoi(paper.doi) : null
-    return stagedLiterature.some((row) => {
+    const pool =
+      lockedProjectId != null
+        ? stagedLiterature.filter((row) => {
+            const r = row as { project_id?: string | null; project?: { id?: string } | null }
+            return (r.project_id ?? r.project?.id ?? null) === lockedProjectId
+          })
+        : stagedLiterature
+    return pool.some((row) => {
       if (paper.pmid && row.pmid === paper.pmid) return true
       if (nd && row.doi === nd) return true
       if (!paper.pmid && !nd && row.title === paper.title && row.publication_year === paper.year)
@@ -173,12 +241,12 @@ export function LiteratureTabs({
   const handleStagePaper = async (paper: SearchPaper) => {
     setStagingPaperId(paper.id)
     try {
-      const result = await stagePaper(paper)
+      const result = await stagePaper(paper, { projectId: lockedProjectId })
       if (result.success) {
         if (result.alreadyStaged) {
           toast.message("Already in staging")
         } else {
-          toast.success("Paper staged — importing PDF when available")
+          toast.success("Paper staged — downloading PDF from the search link")
         }
         if ("warning" in result && result.warning) {
           toast.message(result.warning)
@@ -195,9 +263,42 @@ export function LiteratureTabs({
   const openSaveDialog = (paper: SearchPaper, literatureId?: string) => {
     setPendingSavePaper(paper)
     setPendingLiteratureId(literatureId ?? null)
-    setSelectedProjectId("")
+    setSelectedProjectId(lockedProjectId ?? "")
     setSelectedExperimentId("")
     setSaveDialogOpen(true)
+  }
+
+  /** From staging: when opened with `?project=`, save straight to repository under that project (no dialog). */
+  const handleSaveFromStaging = async (paper: SearchPaper, literatureId: string) => {
+    if (lockedProjectId) {
+      setSavingStagingLiteratureId(literatureId)
+      try {
+        const result = await savePaperToRepository(paper, {
+          projectId: lockedProjectId,
+          experimentId: null,
+          literatureId,
+        })
+        if (result.success) {
+          const pdfAttached = Boolean(result.data?.pdf_storage_path) && !result.warning
+          toast.success(
+            pdfAttached ? "Paper and PDF saved to repository" : "Paper saved to repository"
+          )
+          if (result.warning) {
+            toast.message(result.warning)
+          }
+          router.refresh()
+        } else {
+          toast.error("error" in result && typeof result.error === "string" ? result.error : "Failed to save paper")
+        }
+      } catch (error) {
+        toast.error("Failed to save paper")
+        console.error("Save error:", error)
+      } finally {
+        setSavingStagingLiteratureId(null)
+      }
+      return
+    }
+    openSaveDialog(paper, literatureId)
   }
 
   const handleSavePaper = async () => {
@@ -206,7 +307,7 @@ export function LiteratureTabs({
     setIsSavingPaper(true)
     try {
       const result = await savePaperToRepository(pendingSavePaper, {
-        projectId: selectedProjectId || null,
+        projectId: (selectedProjectId || lockedProjectId) || null,
         experimentId: selectedExperimentId || null,
         literatureId: pendingLiteratureId || null,
       })
@@ -234,8 +335,10 @@ export function LiteratureTabs({
     }
   }
 
+  const literatureDefaultTab = "search"
+
   return (
-    <Tabs defaultValue="search" className="w-full">
+    <Tabs defaultValue={literatureDefaultTab} className="w-full">
       <TabsList>
         <TabsTrigger value="search" className="flex items-center gap-2">
           <SearchIcon className="h-4 w-4" />
@@ -244,9 +347,9 @@ export function LiteratureTabs({
         <TabsTrigger value="staging" className="flex items-center gap-2">
           <Layers className="h-4 w-4" />
           Staging
-          {stagedLiterature.length > 0 && (
+          {stagedLiteratureScoped.length > 0 && (
             <span className="ml-1 bg-primary text-primary-foreground text-xs px-1.5 py-0.5 rounded-full">
-              {stagedLiterature.length}
+              {stagedLiteratureScoped.length}
             </span>
           )}
         </TabsTrigger>
@@ -276,8 +379,9 @@ export function LiteratureTabs({
 
       <TabsContent value="staging" className="mt-6">
         <StagingTab
-          stagedLiterature={stagedLiterature}
-          onSavePaper={(paper, literatureId) => openSaveDialog(paper, literatureId)}
+          stagedLiterature={stagedLiteratureScoped}
+          onSavePaper={handleSaveFromStaging}
+          savingLiteratureId={savingStagingLiteratureId}
         />
       </TabsContent>
 
@@ -286,6 +390,8 @@ export function LiteratureTabs({
           literatureReviews={repositoryReviews}
           projects={projects}
           experiments={experiments}
+          initialProjectFilterId={initialProjectId ?? undefined}
+          lockProjectFilter={Boolean(lockedProjectId)}
         />
       </TabsContent>
 
@@ -319,34 +425,45 @@ export function LiteratureTabs({
             <div className="grid gap-4 md:grid-cols-2">
               <div className="space-y-2">
                 <Label htmlFor="link-project">Project</Label>
-                <Select
-                  value={selectedProjectId || "none"}
-                  onValueChange={(value) => setSelectedProjectId(value === "none" ? "" : value)}
-                >
-                  <SelectTrigger id="link-project">
-                    <SelectValue placeholder="Select project (optional)" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">No project</SelectItem>
-                    {projects.map((project) => (
-                      <SelectItem key={project.id} value={project.id}>
-                        {project.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                {lockedProjectId && lockedProjectName ? (
+                  <div
+                    id="link-project"
+                    className="flex h-10 items-center rounded-md border border-input bg-muted/40 px-3 text-sm"
+                  >
+                    <span className="font-medium text-foreground">{lockedProjectName}</span>
+                  </div>
+                ) : (
+                  <Select
+                    value={selectedProjectId || "none"}
+                    onValueChange={(value) => setSelectedProjectId(value === "none" ? "" : value)}
+                  >
+                    <SelectTrigger id="link-project">
+                      <SelectValue placeholder="Select project (optional)" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">No project</SelectItem>
+                      {projects.map((project) => (
+                        <SelectItem key={project.id} value={project.id}>
+                          {project.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
               </div>
               <div className="space-y-2">
                 <Label htmlFor="link-experiment">Experiment</Label>
                 <Select
                   value={selectedExperimentId || "none"}
                   onValueChange={(value) => setSelectedExperimentId(value === "none" ? "" : value)}
-                  disabled={!selectedProjectId}
+                  disabled={!(selectedProjectId || lockedProjectId)}
                 >
                   <SelectTrigger id="link-experiment">
                     <SelectValue
                       placeholder={
-                        selectedProjectId ? "Select experiment (optional)" : "Select project first"
+                        selectedProjectId || lockedProjectId
+                          ? "Select experiment (optional)"
+                          : "Select project first"
                       }
                     />
                   </SelectTrigger>

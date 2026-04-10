@@ -57,11 +57,21 @@ Use this for general Q&A without the full agent (no SQL/RAG pipeline).
 - Append assistant message with `response.content` and `response.role`.
 - The backend system prompt asks for: no filler openings, single-line list items with "—", no UUIDs in text. Render `content` as markdown (or plain text); no special handling needed beyond that.
 
+### Streaming chat (SSE)
+
+**Endpoint:** `POST /chat/stream`
+
+Same request fields as `POST /chat` (`content`, `session_id`, `history`, `web_search`). Optional: `options: { skip_clarify: true }` when continuing after a clarification.
+
+**SSE events (typical):** `thinking`, `token` (payload often includes `text`), `source` (web search hit), `ping`, `clarify` (question + options — rendered as markdown in the app stream), `done`, `error`.
+
+The Notes9 Next.js route [`/api/chat`](../app/api/chat/route.ts) calls **`/chat/stream`** by default. Set **`NOTES9_CHAT_USE_JSON=true`** (or **`NEXT_PUBLIC_NOTES9_CHAT_USE_JSON=true`**) to force the blocking **`POST /chat`** JSON path instead.
+
 ---
 
 ## 3. Agent run API (one-shot answer)
 
-**Endpoint:** `POST /notes9/run`
+**Endpoint:** `POST /notes9`
 
 Full pipeline: normalize → router → SQL/RAG → summarizer → judge → final answer. One request, one JSON response.
 
@@ -142,8 +152,10 @@ Full pipeline: normalize → router → SQL/RAG → summarizer → judge → fin
 ## 4. Agent stream API (SSE)
 
 **Endpoint:** `POST /notes9/stream`  
-**Request body:** Same as `/notes9/run` (e.g. `query`, `session_id`, `history`, `options`).  
+**Request body:** Same as `POST /notes9` (e.g. `query`, `session_id`, `history`, `options`).  
 **Response:** `Content-Type: text/event-stream`. Use `EventSource` or `fetch` + stream reader; parse SSE lines (`event:` and `data:`).
+
+**This repo:** Notes9 agent UI (`useAgentStream` in the sidebar and Catalyst) calls **`POST /api/agent/stream`**, which forwards to **`{NOTES9_API_BASE}/notes9/stream`**. Non-streaming **`POST /api/agent/run`** → `/notes9` remains available for one-shot tools but is not used by the default chat flow.
 
 ### SSE event format
 
@@ -297,9 +309,13 @@ Use the same pattern for Chat and Agent: check `response.ok`, then parse JSON an
 
 | Use case              | Endpoint               | Input                               | Output / display                    |
 |-----------------------|------------------------|-------------------------------------|-------------------------------------|
-| Simple chat           | `POST /chat`           | `content`, `session_id`, `history`  | `content`, `role` → append message  |
-| One-shot agent answer | `POST /notes9/run`     | `query`, `session_id`, `history`, `options` | `answer`, `citations`, `confidence`, `tool_used` |
-| Streaming agent       | `POST /notes9/stream`  | Same as run                         | SSE: `thinking`, `token`, `sql`, `rag_chunks`, `done`, `error`, `ping` |
+| Simple chat (JSON)    | `POST /chat`           | `content`, `session_id`, `history`  | `content`, `role` → append message  |
+| Simple chat (SSE, app default) | `POST /chat/stream` | Same + optional `options.skip_clarify` | SSE: `token`, `source`, `thinking`, `clarify`, `done`, `error`, `ping` |
+| One-shot agent answer | `POST /notes9`         | `query`, `session_id`, `history`, `options` | `content` / `answer`, `resources`, `confidence`, `tool_used` |
+| Streaming agent       | `POST /notes9/stream`  | Same as `/notes9`                   | SSE: `thinking`, `token`, …, `done`, `error`, `ping` |
+| Literature Biomni (SSE) | Next: `POST /api/literature/agent/biomni-stream` → Biomni `POST /biomni/literature/stream` | `query`, `literature_review_ids`, `session_id`, `history`, `options` | SSE: `step`, `thinking`, `clarify`, `result`, `done`; clarify → retry with history or `skip_clarify` |
+
+**Literature JSON shapes the UI accepts:** `content` or `answer` for the markdown body; citations as either `structured.references[]` **or** top-level `references[]` (each item: `index`, optional `literature_review_id`, `title`, optional `supporting_sentences[]`). If the model returns prose instead of valid JSON, the **upstream** service may respond with an error such as *Assistant did not return valid JSON* — fix the agent prompt / JSON schema / repair step on the Lambda, not only the Next.js app.
 
 - **Auth:** `Authorization: Bearer <access_token>` (Supabase JWT).  
 - **Confidence:** 0.0–1.0; `tool_used`: `sql` \| `rag` \| `hybrid` \| `none`.  

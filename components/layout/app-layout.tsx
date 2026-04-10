@@ -10,6 +10,7 @@ import { AppTour, requestPageHelp } from "@/components/tour/app-tour"
 import { BreadcrumbProvider, useBreadcrumb } from "./breadcrumb-context"
 import { DayPlannerProvider } from "@/contexts/day-planner-context"
 import { PaperAIProvider, usePaperAI } from "@/contexts/paper-ai-context"
+import { LiteratureMentionProvider } from "@/contexts/literature-mention-context"
 import { Button } from "@/components/ui/button"
 import { ResizeHandle } from "@/components/ui/resize-handle"
 import { SidebarProvider, SidebarInset, useSidebar } from "@/components/ui/sidebar"
@@ -287,6 +288,7 @@ export function AppLayout({ children }: AppLayoutProps) {
     <BreadcrumbProvider>
       <DayPlannerProvider>
       <PaperAIProvider>
+      <LiteratureMentionProvider>
       <SidebarProvider defaultOpen={!isMobile} open={sidebarOpen} onOpenChange={setSidebarOpen}>
         <AppTour />
         <div
@@ -418,6 +420,7 @@ export function AppLayout({ children }: AppLayoutProps) {
         )}
         </div>
       </SidebarProvider>
+      </LiteratureMentionProvider>
       </PaperAIProvider>
       </DayPlannerProvider>
     </BreadcrumbProvider>

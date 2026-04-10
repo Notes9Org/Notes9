@@ -25,6 +25,7 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { removeStagingLiterature } from "@/app/(app)/literature-reviews/actions"
+import { LITERATURE_DRAG_MIME } from "@/lib/catalyst-agent-types"
 import { SearchPaper } from "@/types/paper-search"
 import { BookOpen, Database, ExternalLink, FileText, Layers, Loader2, Star, Trash2, X, ChevronLeft, ChevronRight } from "lucide-react"
 import { toast } from "sonner"
@@ -35,7 +36,9 @@ export type StagingLiteratureRow = Record<string, unknown>
 
 interface StagingTabProps {
   stagedLiterature: StagingLiteratureRow[]
-  onSavePaper: (paper: SearchPaper, literatureId: string) => void
+  onSavePaper: (paper: SearchPaper, literatureId: string) => void | Promise<void>
+  /** When set, Save to repository is in progress for this staged row id. */
+  savingLiteratureId?: string | null
 }
 
 function rowToSearchPaper(row: StagingListItem | StagingLiteratureRow): SearchPaper {
@@ -108,7 +111,11 @@ function mapRowToListItem(row: StagingLiteratureRow): StagingListItem {
   }
 }
 
-export function StagingTab({ stagedLiterature, onSavePaper }: StagingTabProps) {
+export function StagingTab({
+  stagedLiterature,
+  onSavePaper,
+  savingLiteratureId = null,
+}: StagingTabProps) {
   const router = useRouter()
   const items = useMemo(() => stagedLiterature.map(mapRowToListItem), [stagedLiterature])
 
@@ -305,10 +312,15 @@ export function StagingTab({ stagedLiterature, onSavePaper }: StagingTabProps) {
             <Button
               variant="outline"
               size="sm"
-              onClick={() => onSavePaper(rowToSearchPaper(lit), lit.id)}
+              onClick={() => void onSavePaper(rowToSearchPaper(lit), lit.id)}
+              disabled={Boolean(savingLiteratureId)}
               className="gap-2"
             >
-              <Database className="h-4 w-4" />
+              {savingLiteratureId === lit.id ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Database className="h-4 w-4" />
+              )}
               Save to Repository
             </Button>
             <Button
@@ -374,10 +386,11 @@ export function StagingTab({ stagedLiterature, onSavePaper }: StagingTabProps) {
                 <div className="mb-4 inline-flex h-12 w-12 items-center justify-center rounded-full bg-muted">
                   <FileText className="h-6 w-6 text-muted-foreground" />
                 </div>
-                <h4 className="text-lg font-semibold text-foreground">Closed Source Paper</h4>
+                <h4 className="text-lg font-semibold text-foreground">No PDF from search link</h4>
                 <p className="mx-auto mt-2 max-w-lg text-sm text-muted-foreground">
-                  This article is not in the PMC open-access subset. Please download the paper from the 
-                  original publisher using your institution&apos;s access, then upload it here to read and annotate.
+                  Staging only pulls the PDF URL from your search result. That link may be missing, blocked for
+                  server download, or require a browser session. Download the PDF yourself if needed, then upload
+                  it here to read and annotate.
                 </p>
                 <div className="mt-6 flex flex-wrap items-center justify-center gap-4">
                   {lit.doi && (
@@ -543,7 +556,18 @@ export function StagingTab({ stagedLiterature, onSavePaper }: StagingTabProps) {
                     </TableHeader>
                     <TableBody>
                       {items.map((lit) => (
-                        <TableRow key={lit.id}>
+                        <TableRow
+                          key={lit.id}
+                          draggable
+                          className="cursor-grab active:cursor-grabbing"
+                          onDragStart={(e) => {
+                            e.dataTransfer.setData(
+                              LITERATURE_DRAG_MIME,
+                              JSON.stringify({ id: lit.id, title: lit.title })
+                            )
+                            e.dataTransfer.effectAllowed = "copy"
+                          }}
+                        >
                           <TableCell>
                             <Checkbox
                               checked={selectedIds.includes(lit.id)}
@@ -581,9 +605,14 @@ export function StagingTab({ stagedLiterature, onSavePaper }: StagingTabProps) {
                               <Button
                                 variant="ghost"
                                 size="sm"
-                                onClick={() => onSavePaper(rowToSearchPaper(lit), lit.id)}
+                                disabled={Boolean(savingLiteratureId)}
+                                onClick={() => void onSavePaper(rowToSearchPaper(lit), lit.id)}
                               >
-                                Save
+                                {savingLiteratureId === lit.id ? (
+                                  <Loader2 className="h-4 w-4 animate-spin" />
+                                ) : (
+                                  "Save"
+                                )}
                               </Button>
                               <Button
                                 variant="ghost"

@@ -1,8 +1,9 @@
 "use client"
 
-import { useState, useEffect, Suspense } from "react"
+import { useState, useEffect, Suspense, useRef } from "react"
 import { useRouter, useSearchParams } from 'next/navigation'
 import { createClient } from "@/lib/supabase/client"
+import { resolveInitialProjectIdParam } from "@/lib/url-project-param"
 import { useSmartBack } from "@/hooks/use-smart-back"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -26,7 +27,7 @@ function NewExperimentForm() {
   const router = useRouter()
   const handleBack = useSmartBack("/experiments")
   const searchParams = useSearchParams()
-  const projectId = searchParams.get('project')
+  const appliedProjectFromUrlRef = useRef(false)
   
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -36,7 +37,7 @@ function NewExperimentForm() {
   const [formData, setFormData] = useState({
     name: "",
     description: "",
-    project_id: projectId || "",
+    project_id: "",
     protocol_id: "",
     status: "planned",
     start_date: "",
@@ -70,6 +71,18 @@ function NewExperimentForm() {
     
     fetchData()
   }, [])
+
+  useEffect(() => {
+    if (!projects.length || appliedProjectFromUrlRef.current) return
+    const id = resolveInitialProjectIdParam(
+      searchParams.get("project") ?? undefined,
+      projects.map((p: { id: string }) => p.id)
+    )
+    if (id) {
+      appliedProjectFromUrlRef.current = true
+      setFormData((prev) => ({ ...prev, project_id: id }))
+    }
+  }, [projects, searchParams])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -120,7 +133,11 @@ function NewExperimentForm() {
         if (protocolError) console.error("Error linking protocol:", protocolError)
       }
 
-      router.push(`/experiments/${data.id}`)
+      const after =
+        formData.project_id
+          ? `/experiments/${data.id}?project=${formData.project_id}`
+          : `/experiments/${data.id}`
+      router.push(after)
     } catch (err: any) {
       setError(getUniqueNameErrorMessage(err, "experiment"))
     } finally {

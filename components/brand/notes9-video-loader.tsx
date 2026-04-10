@@ -42,6 +42,8 @@ interface Notes9VideoLoaderProps {
   /** Smaller mascot + orbit (e.g. AI chat thread while generating) */
   inline?: boolean
   variant?: Notes9LoaderVariant
+  /** When false, only the animated scene is shown (no title / caption). */
+  showLabels?: boolean
 }
 
 function SceneShell({
@@ -433,6 +435,7 @@ export function Notes9VideoLoader({
   horizontal = false,
   inline = false,
   variant = "default",
+  showLabels = true,
 }: Notes9VideoLoaderProps) {
   const resolvedCaptions = captions?.length ? captions : [caption]
   const [captionIndex, setCaptionIndex] = useState(0)
@@ -442,6 +445,7 @@ export function Notes9VideoLoader({
   }, [title, caption, captions, variant])
 
   useEffect(() => {
+    if (!showLabels) return
     if (resolvedCaptions.length <= 1) return
 
     const intervalId = window.setInterval(() => {
@@ -449,7 +453,7 @@ export function Notes9VideoLoader({
     }, 2200)
 
     return () => window.clearInterval(intervalId)
-  }, [resolvedCaptions])
+  }, [resolvedCaptions, showLabels])
 
   const sceneCompact = compact || size === "sm"
 
@@ -475,27 +479,30 @@ export function Notes9VideoLoader({
     <div
       className={cn(
         "flex flex-col items-center gap-3 bg-transparent",
-        horizontal && "flex-row items-center gap-4",
-        horizontal && compact && "gap-3",
+        horizontal && showLabels && "flex-row items-center gap-4",
+        horizontal && showLabels && compact && "gap-3",
+        horizontal && !showLabels && "flex-row items-start justify-start",
         className,
       )}
     >
       {renderScene()}
-      <div
-        className={cn(
-          "space-y-1 text-center",
-          compact && "space-y-0.5",
-          horizontal && "flex min-w-0 flex-col justify-center text-left",
-          horizontal && compact && "max-w-[220px]",
-        )}
-      >
-        <p className={cn("text-base font-semibold leading-tight text-foreground/95", compact && "text-sm")}>
-          {title}
-        </p>
-        <p className={cn("text-sm leading-snug text-foreground/88 transition-opacity duration-500", compact && "text-xs")}>
-          {resolvedCaptions[captionIndex]}
-        </p>
-      </div>
+      {showLabels ? (
+        <div
+          className={cn(
+            "space-y-1 text-center",
+            compact && "space-y-0.5",
+            horizontal && "flex min-w-0 flex-col justify-center text-left",
+            horizontal && compact && "max-w-[220px]",
+          )}
+        >
+          <p className={cn("text-base font-semibold leading-tight text-foreground/95", compact && "text-sm")}>
+            {title}
+          </p>
+          <p className={cn("text-sm leading-snug text-foreground/88 transition-opacity duration-500", compact && "text-xs")}>
+            {resolvedCaptions[captionIndex]}
+          </p>
+        </div>
+      ) : null}
     </div>
   )
 }

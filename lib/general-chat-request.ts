@@ -4,6 +4,8 @@
  * **Zep vs `history`:** With Zep on, the server loads the thread from memory for
  * `(session_id, JWT user)` and ignores body **`history`**. Send **`history: []`**
  * (default here unless **`NEXT_PUBLIC_GENERAL_CHAT_INCLUDE_HISTORY=true`**).
+ * Long turns are split server-side so each Zep thread message stays within **4096**
+ * characters.
  *
  * Fields match **`ChatRequest`**: **`content`**, **`session_id`**, optional
  * **`history`**, **`web_search`** (`'on' | 'off'`), optional **`response_format`**
@@ -52,6 +54,27 @@ export function buildGeneralChatLegacyUpstreamBody(params: {
   };
   if (params.webSearchOn) {
     body.web_search = true;
+  }
+  return body;
+}
+
+/** Notes9 `POST /chat/stream` body: `content`, `session_id`, optional `history`, `web_search`. */
+export function buildGeneralChatStreamNotes9UpstreamBody(params: {
+  content: string;
+  session_id: string;
+  history: GeneralChatHistoryItem[];
+  web_search: 'on' | 'off';
+  skip_clarify?: boolean;
+}): Record<string, unknown> {
+  const includeHistory = generalChatIncludesBodyHistory();
+  const body: Record<string, unknown> = {
+    content: params.content,
+    session_id: params.session_id,
+    history: includeHistory && params.history.length ? params.history : [],
+    web_search: params.web_search,
+  };
+  if (params.skip_clarify === true) {
+    body.options = { skip_clarify: true };
   }
   return body;
 }

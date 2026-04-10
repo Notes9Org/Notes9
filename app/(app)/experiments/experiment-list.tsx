@@ -15,6 +15,8 @@ import {
   ResourceListFilter,
 } from "@/components/ui/resource-list-filters"
 
+export type ExperimentsProjectContext = { id: string; name: string }
+
 // Format date consistently to avoid hydration mismatch between server/client locales
 const formatDate = (dateStr: string): string => {
   const date = new Date(dateStr)
@@ -41,12 +43,30 @@ interface Experiment {
   } | null
 }
 
+function experimentDetailHref(experimentId: string, linkProjectId?: string | null) {
+  if (linkProjectId) return `/experiments/${experimentId}?project=${linkProjectId}`
+  return `/experiments/${experimentId}`
+}
+
 /** Client wrapper: single-line header (description + Grid/Table toggle + New button) + list */
-export function ExperimentsPageContent({ experiments }: { experiments: Experiment[] }) {
+export function ExperimentsPageContent({
+  experiments,
+  projectContext = null,
+  linkProjectId = null,
+}: {
+  experiments: Experiment[]
+  projectContext?: ExperimentsProjectContext | null
+  linkProjectId?: string | null
+}) {
   const isMobile = useMediaQuery("(max-width: 768px)")
   const [viewMode, setViewMode] = useState<"grid" | "table">("grid")
   const [projectFilter, setProjectFilter] = useState(FILTER_ALL)
   const [statusFilter, setStatusFilter] = useState(FILTER_ALL)
+
+  const baseExperiments = useMemo(() => {
+    if (!projectContext) return experiments
+    return experiments.filter((e) => e.project_id === projectContext.id)
+  }, [experiments, projectContext])
 
   // On mobile, lock to grid view (and switch to grid when resizing to mobile)
   useEffect(() => {
@@ -55,7 +75,7 @@ export function ExperimentsPageContent({ experiments }: { experiments: Experimen
 
   const projectOptions = useMemo(() => {
     const m = new Map<string, string>()
-    for (const e of experiments) {
+    for (const e of baseExperiments) {
       const id = e.project_id
       const name = e.project?.name
       if (id && name) m.set(id, name)
@@ -63,25 +83,31 @@ export function ExperimentsPageContent({ experiments }: { experiments: Experimen
     return Array.from(m.entries())
       .map(([value, label]) => ({ value, label }))
       .sort((a, b) => a.label.localeCompare(b.label))
-  }, [experiments])
+  }, [baseExperiments])
 
   const statusOptions = useMemo(() => {
     const s = new Set<string>()
-    for (const e of experiments) {
+    for (const e of baseExperiments) {
       if (e.status) s.add(e.status)
     }
     return Array.from(s)
       .sort()
       .map((value) => ({ value, label: value.replace(/_/g, " ") }))
-  }, [experiments])
+  }, [baseExperiments])
 
   const filteredExperiments = useMemo(() => {
-    return experiments.filter((e) => {
-      if (projectFilter !== FILTER_ALL && e.project_id !== projectFilter) return false
+    return baseExperiments.filter((e) => {
+      if (!projectContext && projectFilter !== FILTER_ALL && e.project_id !== projectFilter) {
+        return false
+      }
       if (statusFilter !== FILTER_ALL && e.status !== statusFilter) return false
       return true
     })
-  }, [experiments, projectFilter, statusFilter])
+  }, [baseExperiments, projectContext, projectFilter, statusFilter])
+
+  const newExperimentHref = linkProjectId
+    ? `/experiments/new?project=${linkProjectId}`
+    : "/experiments/new"
 
   return (
     <div className="space-y-6">
@@ -113,7 +139,7 @@ export function ExperimentsPageContent({ experiments }: { experiments: Experimen
             </Button>
           </div>
           <Button id="tour-create-experiment" asChild size="icon" variant="ghost" className="size-8 rounded-md text-muted-foreground hover:bg-muted hover:text-foreground transition-colors" aria-label="New experiment">
-            <Link href="/experiments/new">
+            <Link href={newExperimentHref}>
               <Plus className="size-4" />
             </Link>
           </Button>
@@ -121,6 +147,7 @@ export function ExperimentsPageContent({ experiments }: { experiments: Experimen
       </div>
 
       <ResourceFilterRow>
+        {!projectContext ? (
         <ResourceListFilter
           label="Project"
           value={projectFilter}
@@ -128,6 +155,7 @@ export function ExperimentsPageContent({ experiments }: { experiments: Experimen
           options={projectOptions}
           allLabel="All projects"
         />
+        ) : null}
         <ResourceListFilter
           label="Status"
           value={statusFilter}
@@ -137,7 +165,39 @@ export function ExperimentsPageContent({ experiments }: { experiments: Experimen
         />
       </ResourceFilterRow>
 
-      <ExperimentList experiments={filteredExperiments} viewMode={viewMode} setViewMode={setViewMode} hideToolbar />
+      {filteredExperiments.length > 0 ? (
+        <ExperimentList
+          experiments={filteredExperiments}
+          viewMode={viewMode}
+          setViewMode={setViewMode}
+          hideToolbar
+          linkProjectId={linkProjectId}
+        />
+      ) : (
+        <Card>
+          <CardContent className="py-12 text-center text-sm text-muted-foreground space-y-2">
+            <p>
+              {projectContext
+                ? `No experiments in ${projectContext.name} yet.`
+                : "No experiments match the selected filters."}
+            </p>
+            {projectContext ? (
+              <p>
+                <Link
+                  href={newExperimentHref}
+                  className="font-medium text-primary underline-offset-4 hover:underline"
+                >
+                  Create an experiment
+                </Link>
+                {" · "}
+                <Link href="/experiments" className="underline-offset-4 hover:underline">
+                  All experiments
+                </Link>
+              </p>
+            ) : null}
+          </CardContent>
+        </Card>
+      )}
     </div>
   )
 }
@@ -147,9 +207,16 @@ interface ExperimentListProps {
   viewMode?: "grid" | "table"
   setViewMode?: (mode: "grid" | "table") => void
   hideToolbar?: boolean
+  linkProjectId?: string | null
 }
 
-export function ExperimentList({ experiments, viewMode: controlledView, setViewMode: setControlledView, hideToolbar }: ExperimentListProps) {
+export function ExperimentList({
+  experiments,
+  viewMode: controlledView,
+  setViewMode: setControlledView,
+  hideToolbar,
+  linkProjectId = null,
+}: ExperimentListProps) {
   const isMobile = useMediaQuery("(max-width: 768px)")
   const [internalView, setInternalView] = useState<"grid" | "table">("grid")
   const viewMode = controlledView ?? internalView
@@ -278,7 +345,7 @@ export function ExperimentList({ experiments, viewMode: controlledView, setViewM
                   />
                 </div>
                 <Button variant="outline" size="sm" className="w-full mt-auto shrink-0" asChild>
-                  <Link href={`/experiments/${experiment.id}`}>
+                  <Link href={experimentDetailHref(experiment.id, linkProjectId)}>
                     <Eye className="h-4 w-4 mr-2" />
                     <span className="truncate">View Details</span>
                   </Link>
@@ -365,7 +432,7 @@ export function ExperimentList({ experiments, viewMode: controlledView, setViewM
                       </TableCell>
                       <TableCell className="text-right">
                         <Button variant="ghost" size="sm" asChild>
-                          <Link href={`/experiments/${experiment.id}`}>
+                          <Link href={experimentDetailHref(experiment.id, linkProjectId)}>
                             <Eye className="h-4 w-4" />
                           </Link>
                         </Button>

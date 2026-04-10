@@ -26,6 +26,7 @@ import {
   DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu"
 import { FileDropzone } from "@/components/ui/file-dropzone"
+import { NoteExportMenu } from "@/components/note-export-menu"
 
 export type PaperWorkspaceProps = {
   paperId: string
@@ -327,6 +328,7 @@ export function PaperWorkspace({ paperId, backLink, onPaperMutated }: PaperWorks
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
+          <NoteExportMenu title={title} htmlContent={content} />
           <PaperActions
             paper={{ id, title, status }}
             onAfterMutation={onPaperMutated}

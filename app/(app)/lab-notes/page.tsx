@@ -1,15 +1,16 @@
 "use client"
 
-import { useCallback, useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useMediaQuery } from "@/hooks/use-media-query"
-import { useRouter } from "next/navigation"
+import { useRouter, useSearchParams } from "next/navigation"
+import { resolveInitialProjectIdParam } from "@/lib/url-project-param"
 import { createClient } from "@/lib/supabase/client"
 import LabNotesList from "@/app/(app)/lab-notes-list/[id]/lab-notes-list"
 import { NewLabNoteDialog } from "@/app/(app)/lab-notes/new-lab-note-dialog"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { Loader2, Plus, Grid3x3, List } from "lucide-react"
-import { SetPageBreadcrumb } from "@/components/layout/breadcrumb-context"
+import { useBreadcrumb } from "@/components/layout/breadcrumb-context"
 import {
   FILTER_ALL,
   ResourceFilterRow,
@@ -30,7 +31,10 @@ type LabNote = {
 
 export default function LabNotesPage() {
   const router = useRouter()
+  const searchParams = useSearchParams()
   const supabase = createClient()
+  const appliedProjectFromUrl = useRef(false)
+  const { setSegments } = useBreadcrumb()
 
   const [notes, setNotes] = useState<LabNote[]>([])
   const [selectedNote, setSelectedNote] = useState<LabNote | null>(null)
@@ -127,6 +131,19 @@ export default function LabNotesPage() {
   }, [fetchNotes])
 
   useEffect(() => {
+    if (appliedProjectFromUrl.current) return
+    const raw = searchParams.get("project")
+    const resolved = resolveInitialProjectIdParam(
+      raw ?? undefined,
+      projectOptions.map((o) => o.value)
+    )
+    if (resolved) {
+      appliedProjectFromUrl.current = true
+      setProjectFilter(resolved)
+    }
+  }, [searchParams, projectOptions])
+
+  useEffect(() => {
     if (projectFilter === FILTER_ALL) return
     setExperimentFilter((current) => {
       if (current === FILTER_ALL) return current
@@ -165,6 +182,23 @@ export default function LabNotesPage() {
     })
   }, [filteredNotes])
 
+  const scopedProjectLabel = useMemo(() => {
+    if (projectFilter === FILTER_ALL) return null
+    return projectOptions.find((o) => o.value === projectFilter)?.label ?? null
+  }, [projectFilter, projectOptions])
+
+  useEffect(() => {
+    if (!scopedProjectLabel || projectFilter === FILTER_ALL) {
+      setSegments([])
+      return
+    }
+    setSegments([
+      { label: scopedProjectLabel, href: `/projects/${projectFilter}` },
+      { label: "Lab notes" },
+    ])
+    return () => setSegments([])
+  }, [scopedProjectLabel, projectFilter, setSegments])
+
   const handleNewNote = () => {
     setNewNoteDialogOpen(true)
   }
@@ -176,14 +210,26 @@ export default function LabNotesPage() {
   const handleSelectNote = (note: LabNote) => {
     setSelectedNote(note)
     if (note.experiment_id) {
-      window.dispatchEvent(new CustomEvent("notes9:navigation-start", { detail: { label: note.experiment_name || "Experiment", href: `/experiments/${note.experiment_id}`, kind: "experiments" } }))
-      router.push(`/experiments/${note.experiment_id}?noteId=${note.id}`)
+      const projectQs =
+        note.resolved_project_id != null && note.resolved_project_id !== ""
+          ? `&project=${note.resolved_project_id}`
+          : ""
+      const expHref = `/experiments/${note.experiment_id}?noteId=${note.id}${projectQs}`
+      window.dispatchEvent(
+        new CustomEvent("notes9:navigation-start", {
+          detail: {
+            label: note.experiment_name || "Experiment",
+            href: expHref,
+            kind: "experiments",
+          },
+        })
+      )
+      router.push(expHref)
     }
   }
 
   return (
     <div className="space-y-6">
-      <SetPageBreadcrumb segments={[]} />
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <p className="text-muted-foreground">
           Access and manage lab notes across your experiments.

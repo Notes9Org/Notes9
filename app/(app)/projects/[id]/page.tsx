@@ -7,10 +7,10 @@ import { Progress } from "@/components/ui/progress"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { SetPageBreadcrumb } from "@/components/layout/breadcrumb-context"
-import { Plus, Users, Calendar, FlaskConical, FileText } from 'lucide-react'
-import Link from 'next/link'
+import { Plus, FileText } from 'lucide-react'
 import { ProjectActions } from './project-actions'
-import { HtmlContent, HtmlContentTruncated } from '@/components/html-content'
+import { ProjectWorkspace } from './project-workspace'
+import { HtmlContent } from '@/components/html-content'
 
 export default async function ProjectDetailPage({
   params,
@@ -48,6 +48,44 @@ export default async function ProjectDetailPage({
   if (error || !project) {
     notFound()
   }
+
+  const experimentsList = (project.experiments ?? []) as {
+    id: string
+    name: string
+  }[]
+  const experimentIds = experimentsList.map((e) => e.id)
+
+  const literatureQuery = supabase
+    .from("literature_reviews")
+    .select("id, title, status", { count: "exact" })
+    .eq("project_id", id)
+    .order("created_at", { ascending: false })
+    .limit(8)
+
+  const protocolsQuery =
+    experimentIds.length > 0
+      ? supabase
+          .from("experiment_protocols")
+          .select("protocol:protocols(id, name, version)")
+          .in("experiment_id", experimentIds)
+      : Promise.resolve({ data: [] as { protocol: { id: string; name: string; version: string | null } | null }[] })
+
+  const [literatureRes, protocolsRes] = await Promise.all([
+    literatureQuery,
+    protocolsQuery,
+  ])
+
+  const literatureRows = literatureRes.data ?? []
+  const literatureCount = literatureRes.count ?? literatureRows.length
+
+  const protocolMap = new Map<string, { id: string; name: string; version: string | null }>()
+  for (const row of protocolsRes.data ?? []) {
+    const p = row.protocol as { id: string; name: string; version: string | null } | null
+    if (p?.id) protocolMap.set(p.id, p)
+  }
+  const protocolList = [...protocolMap.values()]
+  const protocolCount = protocolList.length
+  const protocolsPreview = protocolList.slice(0, 8)
 
   return (
       <div className="space-y-4 md:space-y-6">
@@ -102,79 +140,12 @@ export default async function ProjectDetailPage({
         </div>
 
         {/* Tabs */}
-        <Tabs defaultValue="experiments" className="space-y-4">
+        <Tabs defaultValue="overview" className="space-y-4">
           <TabsList>
             <TabsTrigger value="overview">Overview</TabsTrigger>
-            <TabsTrigger value="experiments">Experiments</TabsTrigger>
             <TabsTrigger value="team">Team</TabsTrigger>
             <TabsTrigger value="reports">Reports</TabsTrigger>
           </TabsList>
-
-          <TabsContent value="experiments" className="space-y-4">
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <h2 className="text-lg font-semibold md:text-xl">Experiments</h2>
-              <Button asChild className="w-full sm:w-auto">
-                <Link href={`/experiments/new?project=${id}`}>
-                  <Plus className="h-4 w-4 mr-2" />
-                  New Experiment
-                </Link>
-              </Button>
-            </div>
-
-            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-              {project.experiments && project.experiments.length > 0 ? (
-                project.experiments.map((experiment: any) => (
-                  <Link
-                    key={experiment.id}
-                    href={`/experiments/${experiment.id}`}
-                    className="block min-w-0"
-                  >
-                    <Card className="hover:border-primary transition-colors cursor-pointer h-full flex flex-col min-h-0 overflow-hidden">
-                      <CardHeader className="min-w-0 flex flex-col gap-2">
-                        <CardTitle className="text-base line-clamp-2 min-w-0 pr-0">
-                          {experiment.name}
-                        </CardTitle>
-                        <div className="flex items-center gap-2 flex-wrap min-w-0">
-                          <Badge variant="outline" className="shrink-0">
-                            {experiment.status}
-                          </Badge>
-                        </div>
-                        <CardDescription className="line-clamp-2 min-w-0">
-                          <HtmlContentTruncated content={experiment.description} />
-                        </CardDescription>
-                      </CardHeader>
-                      <CardContent className="space-y-2 min-w-0 pt-0">
-                        {experiment.assigned_to && (
-                          <p className="text-xs text-muted-foreground truncate">
-                            Assigned to: {experiment.assigned_to.first_name}{" "}
-                            {experiment.assigned_to.last_name}
-                          </p>
-                        )}
-                        {experiment.start_date && (
-                          <p className="text-xs text-muted-foreground">
-                            Started: {new Date(experiment.start_date).toLocaleDateString()}
-                          </p>
-                        )}
-                      </CardContent>
-                    </Card>
-                  </Link>
-                ))
-              ) : (
-                <Card className="col-span-full">
-                  <CardContent className="flex flex-col items-center justify-center py-12">
-                    <FlaskConical className="h-12 w-12 text-muted-foreground mb-4" />
-                    <p className="text-muted-foreground mb-4">No experiments yet</p>
-                    <Button asChild>
-                      <Link href={`/experiments/new?project=${id}`}>
-                        <Plus className="h-4 w-4 mr-2" />
-                        Create First Experiment
-                      </Link>
-                    </Button>
-                  </CardContent>
-                </Card>
-              )}
-            </div>
-          </TabsContent>
 
           <TabsContent value="team" className="space-y-4">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -247,6 +218,17 @@ export default async function ProjectDetailPage({
                 <HtmlContent content={project.description} />
               </CardContent>
             </Card>
+
+            <ProjectWorkspace
+              projectId={id}
+              literature={literatureRows}
+              literatureCount={literatureCount}
+              protocols={protocolsPreview}
+              protocolCount={protocolCount}
+              experiments={experimentsList}
+              experimentsCount={experimentsList.length}
+            />
+
             <div className="grid gap-4 grid-cols-1 md:grid-cols-2">
               <Card>
                 <CardHeader>
