@@ -19,13 +19,17 @@ export type ProtocolsProjectContext = {
   protocolIds: string[]
 }
 
-interface Protocol {
+export interface Protocol {
   id: string
   name: string
   description: string | null
   version: string
   category: string | null
   updated_at: string
+  project_id: string | null
+  experiment_id: string | null
+  project?: { id: string; name: string } | null
+  experiment?: { id: string; name: string } | null
   experiment_protocols?: { count: number }[]
 }
 
@@ -51,6 +55,7 @@ export function ProtocolsPageContent({
   const [categoryFilter, setCategoryFilter] = useState(FILTER_ALL)
   const [versionFilter, setVersionFilter] = useState(FILTER_ALL)
   const [usageFilter, setUsageFilter] = useState(FILTER_ALL)
+  const [projectFilter, setProjectFilter] = useState(FILTER_ALL)
 
   const scopedProtocols = useMemo(() => {
     if (!projectContext) return protocols
@@ -79,6 +84,18 @@ export function ProtocolsPageContent({
       .map((value) => ({ value, label: value }))
   }, [scopedProtocols])
 
+  const projectOptions = useMemo(() => {
+    const seen = new Map<string, string>()
+    for (const p of scopedProtocols) {
+      if (p.project?.id && p.project.name) {
+        seen.set(p.project.id, p.project.name)
+      }
+    }
+    return Array.from(seen.entries())
+      .sort((a, b) => a[1].localeCompare(b[1]))
+      .map(([value, label]) => ({ value, label }))
+  }, [scopedProtocols])
+
   const usageOptions = useMemo(
     () => [
       { value: USAGE_LINKED, label: "Used in experiments" },
@@ -97,9 +114,10 @@ export function ProtocolsPageContent({
       if (versionFilter !== FILTER_ALL && p.version !== versionFilter) return false
       if (usageFilter === USAGE_LINKED && protocolUsageCount(p) === 0) return false
       if (usageFilter === USAGE_UNLINKED && protocolUsageCount(p) > 0) return false
+      if (projectFilter !== FILTER_ALL && p.project?.id !== projectFilter) return false
       return true
     })
-  }, [scopedProtocols, categoryFilter, versionFilter, usageFilter])
+  }, [scopedProtocols, categoryFilter, versionFilter, usageFilter, projectFilter])
 
   return (
     <div className="space-y-6">
@@ -168,6 +186,15 @@ export function ProtocolsPageContent({
           options={usageOptions}
           allLabel="Any usage"
         />
+        {projectOptions.length > 1 && (
+          <ResourceListFilter
+            label="Project"
+            value={projectFilter}
+            onValueChange={setProjectFilter}
+            options={projectOptions}
+            allLabel="All projects"
+          />
+        )}
       </ResourceFilterRow>
 
       {filteredProtocols.length > 0 ? (

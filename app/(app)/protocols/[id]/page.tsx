@@ -13,7 +13,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
-import { ArrowLeft, FileText, Calendar, Package, CheckCircle } from 'lucide-react'
+import { ArrowLeft, CheckCircle } from 'lucide-react'
 import Link from 'next/link'
 import { ProtocolActions } from './protocol-actions'
 import { ProtocolEditor } from './protocol-editor'
@@ -25,10 +25,11 @@ export default async function ProtocolDetailPage({
   searchParams,
 }: {
   params: Promise<{ id: string }>
-  searchParams?: Promise<{ project?: string }>
+  searchParams?: Promise<{ project?: string; design?: string }>
 }) {
   const { id } = await params
   const resolvedSearch = searchParams ? await searchParams : {}
+  const defaultDesignMode = resolvedSearch.design === "1"
   const supabase = await createClient()
 
   const {
@@ -77,6 +78,24 @@ export default async function ProtocolDetailPage({
     .eq("id", id)
     .single()
 
+  // Enrich with project/experiment context (requires migration 030).
+  if (protocol) {
+    try {
+      const { data: ctx } = await supabase
+        .from("protocols")
+        .select("id, project:projects(id, name), experiment:experiments(id, name)")
+        .eq("id", id)
+        .single()
+      if (ctx) {
+        (protocol as any).project = (ctx as any).project ?? null
+        ;(protocol as any).experiment = (ctx as any).experiment ?? null
+      }
+    } catch {
+      (protocol as any).project = null
+      ;(protocol as any).experiment = null
+    }
+  }
+
   if (error || !protocol) {
     notFound()
   }
@@ -89,11 +108,6 @@ export default async function ProtocolDetailPage({
       .eq("id", projectFromUrl)
       .single()
     if (bannerProj) projectContextBanner = bannerProj
-  }
-
-  const formatDate = (date: string | null) => {
-    if (!date) return "—"
-    return new Date(date).toLocaleDateString()
   }
 
   const protocolBreadcrumbSegments =
@@ -111,6 +125,43 @@ export default async function ProtocolDetailPage({
           { label: protocol.name },
         ]
 
+  // ─── Design mode: full-height layout without tabs/cards ──────────────────
+  if (defaultDesignMode) {
+    return (
+      <div className="flex flex-col min-h-0 h-full -m-3 sm:-m-4 md:-m-6 overflow-hidden">
+        <SetPageBreadcrumb segments={protocolBreadcrumbSegments} />
+        {/* Minimal header */}
+        <div className="flex items-center gap-2 px-3 sm:px-4 py-2 border-b shrink-0 bg-background/90 backdrop-blur-sm">
+          <Button variant="ghost" size="icon" className="shrink-0 h-8 w-8" asChild>
+            <Link href={protocolsBackHref} aria-label="Back to protocols">
+              <ArrowLeft className="h-4 w-4" />
+            </Link>
+          </Button>
+          <div className="flex flex-wrap items-center gap-2 min-w-0 flex-1">
+            <h1 className="font-semibold text-foreground truncate">{protocol.name}</h1>
+            <Badge variant="outline" className="shrink-0">v{protocol.version}</Badge>
+            {protocol.is_active ? (
+              <Badge variant="default" className="gap-1 shrink-0">
+                <CheckCircle className="h-3 w-3" />
+                Active
+              </Badge>
+            ) : (
+              <Badge variant="outline" className="shrink-0">Inactive</Badge>
+            )}
+          </div>
+          <div className="shrink-0">
+            <ProtocolActions protocol={protocol} />
+          </div>
+        </div>
+        {/* Full-height editor area */}
+        <div className="flex-1 min-h-0 overflow-hidden">
+          <ProtocolEditor protocol={protocol} defaultDesignMode={true} />
+        </div>
+      </div>
+    )
+  }
+
+  // ─── Standard layout ──────────────────────────────────────────────────────
   return (
       <div className="space-y-4 md:space-y-6">
         <SetPageBreadcrumb segments={protocolBreadcrumbSegments} />
@@ -156,73 +207,6 @@ export default async function ProtocolDetailPage({
           <ProtocolActions protocol={protocol} />
         </div>
 
-        {/* Quick Info Cards */}
-        <div className="grid gap-3 grid-cols-1 sm:grid-cols-2 md:grid-cols-4">
-          <Card className="py-2">
-            <CardHeader className="pb-1 pt-2 px-4">
-              <CardTitle className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                Version
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="px-4 pb-2">
-              <div className="flex items-center gap-2">
-                <FileText className="h-3.5 w-3.5 text-muted-foreground" />
-                <span className="text-sm font-medium text-foreground">
-                  {protocol.version}
-                </span>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card className="py-2">
-            <CardHeader className="pb-1 pt-2 px-4">
-              <CardTitle className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                Category
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="px-4 pb-2">
-              <div className="flex items-center gap-2">
-                <Package className="h-3.5 w-3.5 text-muted-foreground" />
-                <span className="text-sm font-medium text-foreground">
-                  {protocol.category || "Not specified"}
-                </span>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card className="py-2">
-            <CardHeader className="pb-1 pt-2 px-4">
-              <CardTitle className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                Last Updated
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="px-4 pb-2">
-              <div className="flex items-center gap-2">
-                <Calendar className="h-3.5 w-3.5 text-muted-foreground" />
-                <span className="text-sm font-medium text-foreground">
-                  {formatDate(protocol.updated_at)}
-                </span>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card className="py-2">
-            <CardHeader className="pb-1 pt-2 px-4">
-              <CardTitle className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                Used In
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="px-4 pb-2">
-              <div className="flex items-center gap-2">
-                <FileText className="h-3.5 w-3.5 text-muted-foreground" />
-                <span className="text-sm font-medium text-foreground">
-                  {protocol.experiment_protocols?.length || 0} experiments
-                </span>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-
         {/* Main Content Tabs */}
         <Tabs defaultValue="content" className="space-y-4">
           <TabsList>
@@ -232,7 +216,7 @@ export default async function ProtocolDetailPage({
           </TabsList>
 
           <TabsContent value="content" className="space-y-4">
-            <ProtocolEditor protocol={protocol} />
+            <ProtocolEditor protocol={protocol} defaultDesignMode={false} />
           </TabsContent>
 
           <TabsContent value="usage" className="space-y-4">

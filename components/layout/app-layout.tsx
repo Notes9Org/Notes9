@@ -9,6 +9,7 @@ import { AppTour, requestPageHelp } from "@/components/tour/app-tour"
 import { BreadcrumbProvider, useBreadcrumb } from "./breadcrumb-context"
 import { PaperAIProvider, usePaperAI } from "@/contexts/paper-ai-context"
 import { LiteratureMentionProvider } from "@/contexts/literature-mention-context"
+import { HeaderAiProvider, useHeaderAi } from "./header-ai-context"
 import { Button } from "@/components/ui/button"
 import { ResizeHandle } from "@/components/ui/resize-handle"
 import { SidebarProvider, SidebarInset, useSidebar } from "@/components/ui/sidebar"
@@ -221,7 +222,22 @@ function AIToggleButton({ onClick }: { onClick: () => void }) {
 }
 
 export function AppLayout({ children }: AppLayoutProps) {
+  return (
+    <BreadcrumbProvider>
+      <PaperAIProvider>
+        <LiteratureMentionProvider>
+          <HeaderAiProvider>
+            <AppLayoutBody>{children}</AppLayoutBody>
+          </HeaderAiProvider>
+        </LiteratureMentionProvider>
+      </PaperAIProvider>
+    </BreadcrumbProvider>
+  )
+}
+
+function AppLayoutBody({ children }: AppLayoutProps) {
   const pathname = usePathname()
+  const { registration: headerAi } = useHeaderAi()
   const { setTheme, resolvedTheme } = useTheme()
   const [rightSidebarOpen, setRightSidebarOpen] = useState(false)
   const [themeMounted, setThemeMounted] = useState(false)
@@ -242,6 +258,12 @@ export function AppLayout({ children }: AppLayoutProps) {
       setRightSidebarOpen(false)
     }
   }, [isMobile])
+
+  useEffect(() => {
+    if (headerAi?.active) {
+      setRightSidebarOpen(false)
+    }
+  }, [headerAi?.active])
 
   useEffect(() => {
     const openSidebar = () => setRightSidebarOpen(true)
@@ -283,9 +305,7 @@ export function AppLayout({ children }: AppLayoutProps) {
   })
 
   return (
-    <BreadcrumbProvider>
-      <PaperAIProvider>
-      <LiteratureMentionProvider>
+    <>
       <SidebarProvider defaultOpen={!isMobile} open={sidebarOpen} onOpenChange={setSidebarOpen}>
         <AppTour />
         <div
@@ -367,9 +387,22 @@ export function AppLayout({ children }: AppLayoutProps) {
                 )}
               </Button>
               {/* AI / Right sidebar toggle */}
-                {!rightSidebarOpen && (
+                {headerAi?.active ? (
+                  <Button
+                    id="tour-ai-toggle"
+                    type="button"
+                    variant={headerAi.isOpen ? "secondary" : "ghost"}
+                    size="icon"
+                    className="size-8 sm:size-9"
+                    onClick={headerAi.onToggle}
+                    aria-label={headerAi.ariaLabel ?? "Toggle protocol AI"}
+                    title={headerAi.title ?? "Toggle protocol AI"}
+                  >
+                    <Sparkles className="size-4" />
+                  </Button>
+                ) : !rightSidebarOpen ? (
                   <AIToggleButton onClick={() => setRightSidebarOpen(true)} />
-                )}
+                ) : null}
             </div>
           </header>
 
@@ -382,7 +415,39 @@ export function AppLayout({ children }: AppLayoutProps) {
         </SidebarInset>
 
         {/* Right Sidebar - Sheet on mobile, panel on desktop */}
-        {isMobile ? (
+        {headerAi?.active ? (
+          /* Protocol AI panel occupies the right sidebar slot */
+          isMobile ? (
+            <Sheet open={headerAi.isOpen} onOpenChange={(open) => { if (!open && headerAi.isOpen) headerAi.onToggle() }}>
+              <SheetContent
+                side="right"
+                showCloseButton={false}
+                className="w-full max-w-full p-0 data-[state=open]:duration-300 data-[state=closed]:duration-200"
+              >
+                <SheetHeader className="sr-only">
+                  <SheetTitle>Protocol AI</SheetTitle>
+                </SheetHeader>
+                {headerAi.panel}
+              </SheetContent>
+            </Sheet>
+          ) : (
+            headerAi.isOpen && (
+              <div className="flex shrink-0 h-full min-h-0">
+                <ResizeHandle
+                  onMouseDown={rightSidebar.handleMouseDown}
+                  isResizing={rightSidebar.isResizing}
+                  position="left"
+                />
+                <div
+                  className="border-l border-border overflow-hidden h-full min-h-0 flex flex-col"
+                  style={{ width: rightSidebar.width, minWidth: 0 }}
+                >
+                  {headerAi.panel}
+                </div>
+              </div>
+            )
+          )
+        ) : isMobile ? (
           <Sheet open={rightSidebarOpen} onOpenChange={setRightSidebarOpen}>
             <SheetContent
               side="right"
@@ -414,8 +479,6 @@ export function AppLayout({ children }: AppLayoutProps) {
         )}
         </div>
       </SidebarProvider>
-      </LiteratureMentionProvider>
-      </PaperAIProvider>
-    </BreadcrumbProvider>
+    </>
   )
 }

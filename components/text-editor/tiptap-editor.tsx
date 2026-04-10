@@ -26,6 +26,7 @@ import { Superscript } from "@tiptap/extension-superscript"
 import Mention from "@tiptap/extension-mention"
 import { createProtocolSuggestion, ProtocolItem, ProtocolMention } from "./extensions/protocol-mention"
 import { createLabNoteSuggestion, LabNoteItem, LabNoteMention } from "./extensions/labnote-mention"
+import { createLiteratureSuggestion, LiteratureItem, LiteratureMention } from "./extensions/literature-mention"
 
 import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
@@ -473,6 +474,7 @@ interface TiptapEditorProps {
   onAutoSave?: (content: string) => Promise<void>
   protocols?: ProtocolItem[]
   labNotes?: LabNoteItem[]
+  literatureItems?: LiteratureItem[]
   /** Enable KaTeX math equation support (inline & block) */
   enableMath?: boolean
   /** Enable academic paper mode (auto-numbered sections, figures, tables) */
@@ -1601,6 +1603,7 @@ export function TiptapEditor({
   hideToolbar = false,
   protocols = [],
   labNotes = [],
+  literatureItems = [],
   enableMath = false,
   paperMode = false,
   onEditorReady,
@@ -1729,6 +1732,7 @@ export function TiptapEditor({
   // Use ref for protocols so the mention extension always has access to current protocols
   const protocolsRef = useRef<ProtocolItem[]>(protocols)
   const labNotesRef = useRef<LabNoteItem[]>(labNotes)
+  const literatureRef = useRef<LiteratureItem[]>(literatureItems)
 
   // Keep the refs in sync with props
   useEffect(() => {
@@ -1738,6 +1742,10 @@ export function TiptapEditor({
   useEffect(() => {
     labNotesRef.current = labNotes
   }, [labNotes])
+
+  useEffect(() => {
+    literatureRef.current = literatureItems
+  }, [literatureItems])
 
 
 
@@ -1851,6 +1859,10 @@ export function TiptapEditor({
           return `#${node.attrs.label ?? node.attrs.id}`
         },
       }),
+      // LiteratureMention is available but omitted here to avoid conflicting with
+      // ProtocolMention on the '@' trigger. Literature citations are inserted
+      // as raw HTML via the ProtocolLiteraturePanel (drag-and-drop / checkbox insert),
+      // and rendered with the .mention-literature CSS class.
       Indent,
       Comment,
     ],

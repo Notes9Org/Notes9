@@ -355,3 +355,60 @@
   color: var(--foreground);
   opacity: 0.85;
 }
+
+/* Protocol mentions (@ProtocolName) */
+.mention-protocol {
+  display: inline;
+  padding: 0.1em 0.45em;
+  border-radius: 0.3em;
+  background-color: hsl(var(--primary) / 0.1);
+  color: hsl(var(--primary));
+  font-weight: 500;
+  font-size: 0.875em;
+  text-decoration: none;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.mention-protocol:hover {
+  background-color: hsl(var(--primary) / 0.18);
+  text-decoration: underline;
+}
+
+/* Lab note mentions (#NoteName) */
+.mention-labnote {
+  display: inline;
+  padding: 0.1em 0.45em;
+  border-radius: 0.3em;
+  background-color: hsl(217 91% 60% / 0.1);
+  color: hsl(217 91% 45%);
+  font-weight: 500;
+  font-size: 0.875em;
+  text-decoration: none;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.mention-labnote:hover {
+  background-color: hsl(217 91% 60% / 0.18);
+  text-decoration: underline;
+}
+
+/* Literature citations (@Author et al.) */
+.mention-literature {
+  display: inline;
+  padding: 0.1em 0.45em;
+  border-radius: 0.3em;
+  background-color: hsl(142 76% 36% / 0.1);
+  color: hsl(142 76% 30%);
+  font-weight: 500;
+  font-size: 0.875em;
+  text-decoration: none;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.mention-literature:hover {
+  background-color: hsl(142 76% 36% / 0.18);
+  text-decoration: underline;
+}
+:is(.dark) .mention-literature {
+  color: hsl(142 76% 55%);
+}

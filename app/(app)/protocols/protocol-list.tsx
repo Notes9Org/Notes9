@@ -13,18 +13,9 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
-import { FileText, Calendar, Eye, Grid3x3, List } from "lucide-react"
+import { FileText, Calendar, Eye, Grid3x3, List, Pencil, FolderOpen, FlaskConical } from "lucide-react"
 import Link from "next/link"
-
-interface Protocol {
-  id: string
-  name: string
-  description: string | null
-  version: string
-  category: string | null
-  updated_at: string
-  experiment_protocols?: { count: number }[]
-}
+import type { Protocol } from "./protocols-page-content"
 
 interface ProtocolListProps {
   protocols: Protocol[]
@@ -38,6 +29,11 @@ interface ProtocolListProps {
 function protocolDetailHref(protocolId: string, linkProjectId?: string | null) {
   if (linkProjectId) return `/protocols/${protocolId}?project=${linkProjectId}`
   return `/protocols/${protocolId}`
+}
+
+function protocolDesignHref(protocolId: string, linkProjectId?: string | null) {
+  if (linkProjectId) return `/protocols/${protocolId}?project=${linkProjectId}&design=1`
+  return `/protocols/${protocolId}?design=1`
 }
 
 export function ProtocolList({
@@ -125,6 +121,23 @@ export function ProtocolList({
                     v{item.version}
                   </Badge>
                 </div>
+                {/* Project + Experiment context */}
+                {(item.project || item.experiment) && (
+                  <div className="flex flex-wrap gap-1.5 pt-1">
+                    {item.project && (
+                      <span className="inline-flex items-center gap-1 text-xs text-muted-foreground bg-muted/60 rounded px-1.5 py-0.5 truncate max-w-[140px]">
+                        <FolderOpen className="h-3 w-3 shrink-0" />
+                        <span className="truncate">{item.project.name}</span>
+                      </span>
+                    )}
+                    {item.experiment && (
+                      <span className="inline-flex items-center gap-1 text-xs text-muted-foreground bg-muted/60 rounded px-1.5 py-0.5 truncate max-w-[140px]">
+                        <FlaskConical className="h-3 w-3 shrink-0" />
+                        <span className="truncate">{item.experiment.name}</span>
+                      </span>
+                    )}
+                  </div>
+                )}
               </CardHeader>
               <CardContent className="space-y-3 flex-1 flex flex-col pt-0 min-w-0">
                 <div className="space-y-2 flex-1 min-w-0">
@@ -139,12 +152,20 @@ export function ProtocolList({
                     <span className="truncate">Updated {new Date(item.updated_at).toLocaleDateString()}</span>
                   </div>
                 </div>
-                <Button variant="outline" size="sm" className="w-full mt-auto shrink-0" asChild>
-                  <Link href={protocolDetailHref(item.id, linkProjectId)}>
-                    <Eye className="h-4 w-4 mr-2" />
-                    <span className="truncate">View Details</span>
-                  </Link>
-                </Button>
+                <div className="flex gap-2 mt-auto shrink-0">
+                  <Button variant="outline" size="sm" className="flex-1" asChild>
+                    <Link href={protocolDetailHref(item.id, linkProjectId)}>
+                      <Eye className="h-4 w-4 mr-2" />
+                      <span className="truncate">View</span>
+                    </Link>
+                  </Button>
+                  <Button variant="default" size="sm" className="flex-1 gap-1.5" asChild>
+                    <Link href={protocolDesignHref(item.id, linkProjectId)}>
+                      <Pencil className="h-3.5 w-3.5" />
+                      Design
+                    </Link>
+                  </Button>
+                </div>
               </CardContent>
             </Card>
           ))}
@@ -164,11 +185,12 @@ export function ProtocolList({
                 <TableHeader>
                   <TableRow>
                     <TableHead className="min-w-[200px]">Protocol</TableHead>
+                    <TableHead className="min-w-[120px]">Project / Experiment</TableHead>
                     <TableHead className="min-w-[120px]">Category</TableHead>
                     <TableHead className="min-w-[80px]">Version</TableHead>
                     <TableHead className="min-w-[100px]">Used In</TableHead>
                     <TableHead className="min-w-[120px]">Last Updated</TableHead>
-                    <TableHead className="text-right min-w-[80px]">Actions</TableHead>
+                    <TableHead className="text-right min-w-[100px]">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -185,6 +207,25 @@ export function ProtocolList({
                               </p>
                             )}
                           </div>
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex flex-col gap-0.5">
+                          {item.project && (
+                            <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                              <FolderOpen className="h-3 w-3 shrink-0" />
+                              <span className="truncate max-w-[140px]">{item.project.name}</span>
+                            </span>
+                          )}
+                          {item.experiment && (
+                            <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                              <FlaskConical className="h-3 w-3 shrink-0" />
+                              <span className="truncate max-w-[140px]">{item.experiment.name}</span>
+                            </span>
+                          )}
+                          {!item.project && !item.experiment && (
+                            <span className="text-xs text-muted-foreground">—</span>
+                          )}
                         </div>
                       </TableCell>
                       <TableCell>
@@ -206,11 +247,18 @@ export function ProtocolList({
                         {new Date(item.updated_at).toLocaleDateString()}
                       </TableCell>
                       <TableCell className="text-right">
-                        <Button variant="ghost" size="sm" asChild>
-                          <Link href={protocolDetailHref(item.id, linkProjectId)}>
-                            <Eye className="h-4 w-4" />
-                          </Link>
-                        </Button>
+                        <div className="flex items-center justify-end gap-1">
+                          <Button variant="ghost" size="sm" asChild>
+                            <Link href={protocolDetailHref(item.id, linkProjectId)}>
+                              <Eye className="h-4 w-4" />
+                            </Link>
+                          </Button>
+                          <Button variant="ghost" size="sm" asChild>
+                            <Link href={protocolDesignHref(item.id, linkProjectId)}>
+                              <Pencil className="h-4 w-4" />
+                            </Link>
+                          </Button>
+                        </div>
                       </TableCell>
                     </TableRow>
                   ))}

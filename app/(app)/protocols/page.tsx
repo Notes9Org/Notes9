@@ -76,6 +76,29 @@ export default async function ProtocolsPage({
     .eq("is_active", true)
     .order("name")
 
+  // Attempt to enrich with project/experiment context (requires migration 030).
+  // If the columns don't exist yet the enrichment silently fails and protocols
+  // are displayed without context chips.
+  let enrichedProtocols: any[] = protocols ?? []
+  if (protocols && protocols.length > 0) {
+    try {
+      const { data: ctx } = await supabase
+        .from("protocols")
+        .select("id, project:projects(id, name), experiment:experiments(id, name)")
+        .in("id", protocols.map((p: any) => p.id))
+      if (ctx) {
+        const ctxMap = new Map((ctx as any[]).map((r) => [r.id, r]))
+        enrichedProtocols = protocols.map((p: any) => ({
+          ...p,
+          project: ctxMap.get(p.id)?.project ?? null,
+          experiment: ctxMap.get(p.id)?.experiment ?? null,
+        }))
+      }
+    } catch {
+      // migration not yet applied — show protocols without context
+    }
+  }
+
   return (
     <div className="space-y-6">
       {projectContext ? (
@@ -88,8 +111,8 @@ export default async function ProtocolsPage({
       ) : (
         <SetPageBreadcrumb segments={[]} />
       )}
-      {protocols && protocols.length > 0 ? (
-        <ProtocolsPageContent protocols={protocols} projectContext={projectContext} />
+      {enrichedProtocols.length > 0 ? (
+        <ProtocolsPageContent protocols={enrichedProtocols} projectContext={projectContext} />
       ) : (
         <ProtocolsEmptyState />
       )}
