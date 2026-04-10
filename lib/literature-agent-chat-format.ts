@@ -1,8 +1,6 @@
 import { escapeMarkdownLinkLabel } from '@/lib/chat-response-sources';
 import type { LiteratureAgentDonePayload, PaperAnalyzerReference } from '@/lib/literature-agent-types';
 
-const SENTENCE_MAX = 2000;
-
 function literatureReviewPath(id: string): string {
   return `/literature-reviews/${encodeURIComponent(id)}`;
 }
@@ -30,64 +28,9 @@ function buildReferenceIndexMap(refs: PaperAnalyzerReference[]): Map<number, str
   return m;
 }
 
-function doiUrl(doi: string): string {
-  const d = doi.trim().replace(/^https?:\/\/doi\.org\//i, '');
-  return `https://doi.org/${encodeURIComponent(d)}`;
-}
-
-function pmidUrl(pmid: string): string {
-  return `https://pubmed.ncbi.nlm.nih.gov/${encodeURIComponent(pmid.trim())}/`;
-}
-
-function formatReferenceDetail(ref: PaperAnalyzerReference): string {
-  const id = ref.literature_review_id?.trim();
-  const path = id ? literatureReviewPath(id) : '';
-  const title =
-    ref.title?.trim() ||
-    `Untitled reference`;
-  const safeTitle = escapeMarkdownLinkLabel(title);
-
-  let block = path
-    ? `**[${ref.index}].** [${safeTitle}](${path})\n\n`
-    : `**[${ref.index}].** ${safeTitle}\n\n`;
-
-  const ids: string[] = [];
-  if (ref.doi?.trim()) {
-    const d = ref.doi.trim();
-    ids.push(`DOI [${escapeMarkdownLinkLabel(d)}](${doiUrl(d)})`);
-  }
-  if (ref.pmid?.trim()) {
-    const p = ref.pmid.trim();
-    ids.push(`PMID [${escapeMarkdownLinkLabel(p)}](${pmidUrl(p)})`);
-  }
-  if (ids.length) {
-    block += `**Identifiers:** ${ids.join(' · ')}\n\n`;
-  }
-
-  if (ref.note?.trim()) {
-    block += `**Note:** *${escapeMarkdownLinkLabel(ref.note.trim())}*\n\n`;
-  }
-
-  const sentences = ref.supporting_sentences?.filter(Boolean) ?? [];
-  if (sentences.length) {
-    block += '**Supporting sentences**\n\n';
-    for (const s of sentences) {
-      let line = s.trim();
-      if (line.length > SENTENCE_MAX) line = `${line.slice(0, SENTENCE_MAX - 1)}…`;
-      const quoted = line
-        .split(/\n+/)
-        .map((ln) => `> ${ln}`)
-        .join('\n');
-      block += `${quoted}\n\n`;
-    }
-  }
-
-  return block.trimEnd() + '\n';
-}
-
 /**
- * Literature agent reply: markdown `content` with linked `[n]` when `structured.references` maps indices,
- * then **Citation detail** (identifiers, note, supporting sentences). Top-level `sources` from the API is ignored here to avoid duplicating citation blocks.
+ * Literature agent reply body: markdown with linked `[n]` when `structured.references` maps indices.
+ * Citation detail is stored separately (see `serializeLiteratureAssistantStoredContent`) and shown in the Sources dropdown.
  * Biomni clarification: `needs_clarification` / `clarify_question` / `clarify_options`.
  */
 export function formatLiteratureAssistantMarkdown(
@@ -118,13 +61,5 @@ export function formatLiteratureAssistantMarkdown(
     body = linkifyNumericCitations(body, indexMap);
   }
 
-  const parts: string[] = [body];
-
-  if (refs.length > 0) {
-    parts.push('\n\n---\n\n### Citation detail\n\n');
-    const sorted = [...refs].sort((a, b) => a.index - b.index);
-    parts.push(sorted.map(formatReferenceDetail).join('\n'));
-  }
-
-  return parts.join('').trim();
+  return body.trim();
 }
