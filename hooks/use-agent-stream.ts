@@ -5,10 +5,12 @@ import type {
   ThinkingPayload,
   RagChunksPayload,
   DonePayload,
+  RagChunk,
 } from '@/lib/agent-stream-types';
 import { buildNotes9AgentRequestBody } from '@/lib/notes9-agent-request';
+import { splitSseBuffer, parseSseDataJson } from '@/lib/sse-event-blocks';
 
-/** Request shape for POST /notes9 (proxied via /api/agent/run). */
+/** Request shape for POST /notes9/stream (proxied via /api/agent/stream). */
 export interface AgentStreamParams {
   query: string;
   session_id: string;
@@ -54,6 +56,51 @@ function normalizeNotes9AgentResponse(raw: Record<string, unknown>): DonePayload
   };
 }
 
+function thinkingFromPayload(data: Record<string, unknown> | null): ThinkingPayload | null {
+  if (!data || typeof data.message !== 'string') return null;
+  return {
+    node: typeof data.node === 'string' ? data.node : 'step',
+    status: typeof data.status === 'string' ? data.status : '',
+    message: data.message,
+    intent: typeof data.intent === 'string' ? data.intent : undefined,
+    conclusion: typeof data.conclusion === 'string' ? data.conclusion : undefined,
+    decision: typeof data.decision === 'string' ? data.decision : undefined,
+    rationale: typeof data.rationale === 'string' ? data.rationale : undefined,
+    confidence: typeof data.confidence === 'number' ? data.confidence : undefined,
+    sql: typeof data.sql === 'string' ? data.sql : undefined,
+    verdict: typeof data.verdict === 'string' ? data.verdict : undefined,
+    issues: Array.isArray(data.issues)
+      ? data.issues.filter((x): x is string => typeof x === 'string')
+      : undefined,
+  };
+}
+
+function ragFromPayload(data: Record<string, unknown> | null): RagChunksPayload | null {
+  if (!data || typeof data.message !== 'string') return null;
+  const chunksRaw = data.chunks;
+  if (!Array.isArray(chunksRaw)) return null;
+  const chunks: RagChunk[] = [];
+  for (const item of chunksRaw) {
+    if (!item || typeof item !== 'object') continue;
+    const c = item as Record<string, unknown>;
+    if (typeof c.source_type !== 'string' || typeof c.source_id !== 'string') continue;
+    if (typeof c.excerpt !== 'string' || typeof c.relevance !== 'number') continue;
+    chunks.push({
+      source_type: c.source_type,
+      source_id: c.source_id,
+      source_name: typeof c.source_name === 'string' ? c.source_name : undefined,
+      chunk_id: typeof c.chunk_id === 'string' || c.chunk_id === null ? (c.chunk_id as string | null) : undefined,
+      excerpt: c.excerpt,
+      relevance: c.relevance,
+    });
+  }
+  return {
+    message: data.message,
+    count: typeof data.count === 'number' ? data.count : chunks.length,
+    chunks,
+  };
+}
+
 export function useAgentStream() {
   const [state, setState] = useState<AgentStreamState>({
     thinkingSteps: [],
@@ -85,24 +132,31 @@ export function useAgentStream() {
         isStreaming: true,
       });
 
+      let donePayload: DonePayload | null = null;
+      let streamError: string | null = null;
+      let tokenBuffer = '';
+
       try {
-        const response = await fetch('/api/agent/run', {
+        const response = await fetch('/api/agent/stream', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
+            Accept: 'text/event-stream',
             Authorization: `Bearer ${token}`,
           },
           body: JSON.stringify(buildNotes9AgentRequestBody(params)),
           signal,
         });
 
-        const raw = (await response.json().catch(() => ({}))) as Record<string, unknown>;
-
         if (!response.ok) {
-          const errMsg =
-            typeof raw.error === 'string'
-              ? raw.error
-              : `Request failed: ${response.status}`;
+          const errText = await response.text();
+          let errMsg = errText || `Request failed: ${response.status}`;
+          try {
+            const j = JSON.parse(errText) as { error?: string };
+            if (typeof j.error === 'string') errMsg = j.error;
+          } catch {
+            /* keep errMsg */
+          }
           setState((s) => ({
             ...s,
             error: errMsg,
@@ -111,20 +165,129 @@ export function useAgentStream() {
           return { donePayload: null, error: errMsg };
         }
 
-        const donePayload = normalizeNotes9AgentResponse(raw);
-        setState((s) => ({
-          ...s,
-          donePayload,
-          streamedAnswer: donePayload.content,
-          isStreaming: false,
-        }));
+        if (!response.body) {
+          const errMsg = 'Agent stream returned an empty body';
+          setState((s) => ({ ...s, error: errMsg, isStreaming: false }));
+          return { donePayload: null, error: errMsg };
+        }
+
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let sseBuffer = '';
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          sseBuffer += decoder.decode(value, { stream: true });
+          const { blocks, rest } = splitSseBuffer(sseBuffer);
+          sseBuffer = rest;
+
+          for (const block of blocks) {
+            const payload = parseSseDataJson(block.data);
+            const ev = block.event;
+
+            switch (ev) {
+              case 'ping':
+                break;
+              case 'thinking': {
+                const step = thinkingFromPayload(payload);
+                if (step) {
+                  setState((s) => ({
+                    ...s,
+                    thinkingSteps: [...s.thinkingSteps, step],
+                  }));
+                }
+                break;
+              }
+              case 'sql': {
+                const q =
+                  payload && typeof (payload as { query?: string }).query === 'string'
+                    ? (payload as { query: string }).query
+                    : null;
+                if (q) setState((s) => ({ ...s, sql: q }));
+                break;
+              }
+              case 'rag_chunks': {
+                const rag = ragFromPayload(payload);
+                if (rag) setState((s) => ({ ...s, ragChunks: rag }));
+                break;
+              }
+              case 'token': {
+                const t =
+                  payload && typeof payload.text === 'string'
+                    ? payload.text
+                    : payload && typeof payload.token === 'string'
+                      ? payload.token
+                      : '';
+                if (t) {
+                  tokenBuffer += t;
+                  setState((s) => ({ ...s, streamedAnswer: s.streamedAnswer + t }));
+                }
+                break;
+              }
+              case 'done': {
+                if (payload) {
+                  const finished = normalizeNotes9AgentResponse(payload);
+                  donePayload = finished;
+                  const answerOverride =
+                    typeof payload.answer === 'string' ? payload.answer : '';
+                  setState((s) => ({
+                    ...s,
+                    donePayload: finished,
+                    streamedAnswer:
+                      finished.content || answerOverride || s.streamedAnswer,
+                  }));
+                }
+                break;
+              }
+              case 'error': {
+                const msg =
+                  payload && typeof (payload as { error?: string }).error === 'string'
+                    ? (payload as { error: string }).error
+                    : 'Agent stream error';
+                streamError = msg;
+                setState((s) => ({ ...s, error: msg }));
+                break;
+              }
+              default:
+                break;
+            }
+          }
+        }
+
+        if (streamError) {
+          setState((s) => ({ ...s, isStreaming: false }));
+          return { donePayload: null, error: streamError };
+        }
+
+        if (!donePayload) {
+          if (tokenBuffer.trim()) {
+            const synthetic = normalizeNotes9AgentResponse({
+              answer: tokenBuffer,
+              role: 'assistant',
+            });
+            donePayload = synthetic;
+            setState((s) => ({
+              ...s,
+              donePayload: synthetic,
+              streamedAnswer: synthetic.content,
+              isStreaming: false,
+            }));
+            return { donePayload: synthetic, error: null };
+          }
+          const errMsg = 'No response from agent stream';
+          setState((s) => ({ ...s, error: errMsg, isStreaming: false }));
+          return { donePayload: null, error: errMsg };
+        }
+
+        setState((s) => ({ ...s, isStreaming: false }));
         return { donePayload, error: null };
       } catch (err) {
         if ((err as Error).name === 'AbortError') {
           setState((s) => ({ ...s, isStreaming: false }));
           return { donePayload: null, error: null };
         }
-        const errMsg = err instanceof Error ? err.message : 'Agent request failed';
+        const errMsg = err instanceof Error ? err.message : 'Agent stream failed';
         setState((s) => ({
           ...s,
           error: errMsg,

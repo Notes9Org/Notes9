@@ -57,3 +57,24 @@ export function buildGeneralChatLegacyUpstreamBody(params: {
   }
   return body;
 }
+
+/** Notes9 `POST /chat/stream` body: `content`, `session_id`, optional `history`, `web_search`. */
+export function buildGeneralChatStreamNotes9UpstreamBody(params: {
+  content: string;
+  session_id: string;
+  history: GeneralChatHistoryItem[];
+  web_search: 'on' | 'off';
+  skip_clarify?: boolean;
+}): Record<string, unknown> {
+  const includeHistory = generalChatIncludesBodyHistory();
+  const body: Record<string, unknown> = {
+    content: params.content,
+    session_id: params.session_id,
+    history: includeHistory && params.history.length ? params.history : [],
+    web_search: params.web_search,
+  };
+  if (params.skip_clarify === true) {
+    body.options = { skip_clarify: true };
+  }
+  return body;
+}

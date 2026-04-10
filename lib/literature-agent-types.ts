@@ -164,6 +164,12 @@ export function normalizeLiteratureAgentResponse(
     if (refs.length) structured = { references: refs };
   }
 
+  /** Paper-analyzer / some LLM paths return `references` at top level (not only `structured.references`). */
+  if (!structured?.references?.length && Array.isArray(raw.references)) {
+    const refs = normalizeReferences(raw.references);
+    if (refs.length) structured = { references: refs };
+  }
+
   const sources = normalizeSources(raw.sources);
 
   return {

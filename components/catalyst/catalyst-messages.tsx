@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState, useCallback } from 'react';
+import { ChevronDown } from 'lucide-react';
 import type { UIMessage } from 'ai';
 import { Sparkles, Square } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -30,6 +31,7 @@ interface CatalystMessagesProps {
     streamedAnswer: string;
     donePayload: DonePayload | null;
     error: string | null;
+    isStreaming: boolean;
   } | null;
 }
 
@@ -47,11 +49,27 @@ export function CatalystMessages({
   const scrollRef = useRef<HTMLDivElement>(null);
   const endRef = useRef<HTMLDivElement>(null);
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
+  const [showJumpBottom, setShowJumpBottom] = useState(false);
+
+  const updateJumpBottom = useCallback(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const dist = el.scrollHeight - el.scrollTop - el.clientHeight;
+    setShowJumpBottom(dist > 120);
+  }, []);
+
+  const scrollToBottom = useCallback(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
+  }, []);
 
   // Auto-scroll to bottom when messages or stream updates
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages, notes9Stream]);
+    const id = requestAnimationFrame(() => updateJumpBottom());
+    return () => cancelAnimationFrame(id);
+  }, [messages, notes9Stream, updateJumpBottom]);
 
   const getVoteForMessage = useCallback(
     (messageId: string): Vote | undefined => {
@@ -68,9 +86,16 @@ export function CatalystMessages({
   };
 
   return (
-    <div ref={scrollRef} className="h-full overflow-y-auto">
-      <div className="mx-auto max-w-3xl px-4 py-6">
-        <div className="flex flex-col gap-4">
+    <div className="relative h-full min-h-0">
+      <div
+        ref={scrollRef}
+        className="h-full overflow-y-auto overflow-x-hidden overscroll-contain [scrollbar-gutter:stable]"
+        onScroll={updateJumpBottom}
+        role="log"
+        aria-label="Chat messages"
+      >
+        <div className="mx-auto max-w-3xl px-4 pt-6 pb-4">
+          <div className="flex flex-col gap-4">
           {messages.map((message, index) => {
             const isEditing = editingMessageId === message.id;
             const content = getMessageContent(message);
@@ -184,6 +209,7 @@ export function CatalystMessages({
                     streamedAnswer={notes9Stream.streamedAnswer}
                     donePayload={notes9Stream.donePayload}
                     error={notes9Stream.error}
+                    isThinkingStreaming={notes9Stream.isStreaming}
                   />
                 </div>
               </div>
@@ -218,9 +244,22 @@ export function CatalystMessages({
             )
           )}
 
-          <div ref={endRef} />
+          <div ref={endRef} className="h-2 shrink-0" aria-hidden />
+          </div>
         </div>
       </div>
+      {showJumpBottom && (
+        <Button
+          type="button"
+          variant="secondary"
+          size="icon"
+          className="absolute bottom-3 right-3 z-10 h-9 w-9 rounded-full border border-border/60 bg-background/95 shadow-md backdrop-blur-sm hover:bg-muted"
+          onClick={scrollToBottom}
+          aria-label="Scroll to latest message"
+        >
+          <ChevronDown className="size-4" />
+        </Button>
+      )}
     </div>
   );
 }
