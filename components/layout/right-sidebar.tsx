@@ -52,6 +52,7 @@ import {
   isPersistedChatMessageId,
 } from '@/lib/notes9-chat-format';
 import { formatLiteratureAssistantMarkdown } from '@/lib/literature-agent-chat-format';
+import { previewFromLiteratureSseTokenBuffer } from '@/lib/literature-stream-preview';
 import {
   parseLiteratureAssistantStoredContent,
   serializeLiteratureAssistantStoredContent,
@@ -412,8 +413,8 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
       }
       const sid = currentSessionRef.current;
       if (!sid) return;
-      const { donePayload, error } = await literatureAgentStream.answerClarify(answer, token);
-      if (donePayload) await finalizeLiteratureAssistant(donePayload, sid, 'biomni');
+      const { donePayload, error, finalizeTag } = await literatureAgentStream.answerClarify(answer, token);
+      if (donePayload && finalizeTag) await finalizeLiteratureAssistant(donePayload, sid, finalizeTag);
       else if (error) toast.error(error);
     },
     [supabase, literatureAgentStream, finalizeLiteratureAssistant]
@@ -430,8 +431,8 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
     }
     const sid = currentSessionRef.current;
     if (!sid) return;
-    const { donePayload, error } = await literatureAgentStream.skipClarify(token);
-    if (donePayload) await finalizeLiteratureAssistant(donePayload, sid, 'biomni');
+    const { donePayload, error, finalizeTag } = await literatureAgentStream.skipClarify(token);
+    if (donePayload && finalizeTag) await finalizeLiteratureAssistant(donePayload, sid, finalizeTag);
     else if (error) toast.error(error);
   }, [supabase, literatureAgentStream, finalizeLiteratureAssistant]);
 
@@ -737,6 +738,7 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
     agentStream.streamedAnswer,
     agentStream.donePayload,
     literatureAgentStream.steps,
+    literatureAgentStream.streamedAnswer,
     literatureAgentStream.clarify,
     literatureAgentStream.isStreaming,
     notes9Loading,
@@ -2423,11 +2425,33 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
                                 Working on your papers…
                               </p>
                             </div>
-                            {literatureSubMode === 'research_design' && (
-                              <LiteratureAgentThinkingPanel
-                                steps={literatureAgentStream.steps}
-                              />
-                            )}
+                            <LiteratureAgentThinkingPanel steps={literatureAgentStream.steps} />
+                            {(() => {
+                              const livePreview = previewFromLiteratureSseTokenBuffer(
+                                literatureAgentStream.streamedAnswer,
+                                literatureSubMode === 'research_design' ? 'biomni' : 'compare'
+                              );
+                              if (livePreview.kind === 'empty') return null;
+                              if (livePreview.kind === 'waiting_structured') {
+                                return (
+                                  <p className="rounded-md border border-border/40 bg-muted/20 px-3 py-2 text-xs text-muted-foreground dark:bg-muted/10">
+                                    Receiving structured answer…
+                                  </p>
+                                );
+                              }
+                              return (
+                                <div className="rounded-md border border-border/40 bg-muted/20 px-3 py-2 dark:bg-muted/10">
+                                  {/*
+                                    Live tokens: plain text only. Full MarkdownRenderer (remark/rehype/highlight)
+                                    on every chunk blocks the main thread so nothing paints until the stream ends.
+                                    Final formatted markdown appears in the saved assistant message.
+                                  */}
+                                  <div className="whitespace-pre-wrap break-words text-sm leading-relaxed text-foreground">
+                                    {livePreview.markdown}
+                                  </div>
+                                </div>
+                              );
+                            })()}
                           </div>
                         </div>
                       )}

@@ -9,6 +9,10 @@ import type {
 } from '@/lib/agent-stream-types';
 import { buildNotes9AgentRequestBody } from '@/lib/notes9-agent-request';
 import { splitSseBuffer, parseSseDataJson } from '@/lib/sse-event-blocks';
+import {
+  extractSseTokenPiece,
+  mergeTokenBufferIntoAssistantRaw,
+} from '@/lib/sse-stream-assistant-merge';
 
 /** Request shape for POST /notes9/stream (proxied via /api/agent/stream). */
 export interface AgentStreamParams {
@@ -213,12 +217,7 @@ export function useAgentStream() {
                 break;
               }
               case 'token': {
-                const t =
-                  payload && typeof payload.text === 'string'
-                    ? payload.text
-                    : payload && typeof payload.token === 'string'
-                      ? payload.token
-                      : '';
+                const t = extractSseTokenPiece(payload);
                 if (t) {
                   tokenBuffer += t;
                   setState((s) => ({ ...s, streamedAnswer: s.streamedAnswer + t }));
@@ -261,11 +260,9 @@ export function useAgentStream() {
         }
 
         if (!donePayload) {
-          if (tokenBuffer.trim()) {
-            const synthetic = normalizeNotes9AgentResponse({
-              answer: tokenBuffer,
-              role: 'assistant',
-            });
+          const mergedFromTokens = mergeTokenBufferIntoAssistantRaw(null, tokenBuffer);
+          if (mergedFromTokens) {
+            const synthetic = normalizeNotes9AgentResponse(mergedFromTokens);
             donePayload = synthetic;
             setState((s) => ({
               ...s,

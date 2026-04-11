@@ -4,6 +4,10 @@ import { useState, useCallback, useRef } from 'react';
 import type { Notes9AgentHistoryItem } from '@/lib/notes9-agent-request';
 import { splitSseBuffer, parseSseDataJson } from '@/lib/sse-event-blocks';
 import {
+  extractSseTokenPiece,
+  mergeTokenBufferIntoAssistantRaw,
+} from '@/lib/sse-stream-assistant-merge';
+import {
   type LiteratureAgentDonePayload,
   type PaperAnalyzerReference,
   type PaperAnalyzerSource,
@@ -37,6 +41,8 @@ export type LiteratureClarifyPending = {
   pendingHistory: Notes9AgentHistoryItem[];
   pendingLiteratureIds: string[];
   pendingOptions: LiteratureAgentRequestBody['options'];
+  /** Which upstream emitted `clarify` (for retry + finalize tag). */
+  clarifySource: 'compare' | 'biomni';
 };
 
 export interface LiteratureAgentStreamState {
@@ -45,7 +51,16 @@ export interface LiteratureAgentStreamState {
   isStreaming: boolean;
   steps: string[];
   clarify: LiteratureClarifyPending | null;
+  /** Live token text from paper-analyzer or Biomni SSE (`token` events). */
+  streamedAnswer: string;
 }
+
+export type LiteratureClarifyContinuationResult = {
+  donePayload: LiteratureAgentDonePayload | null;
+  error: string | null;
+  /** When set, pass to `finalizeLiteratureAssistant(..., tag)` after clarify. */
+  finalizeTag?: 'compare' | 'biomni';
+};
 
 function stepTextFromPayload(payload: Record<string, unknown> | null): string {
   if (!payload) return '';
@@ -80,6 +95,176 @@ function resultEventToRaw(payload: Record<string, unknown>): Record<string, unkn
   return raw;
 }
 
+/**
+ * Some Lambdas emit the final JSON on `done` only, or split `result` + `done`.
+ * Empty `done` payloads must not wipe a prior `result`.
+ */
+function mergeBiomniFinalPayloads(
+  prior: Record<string, unknown> | null,
+  incoming: Record<string, unknown>
+): Record<string, unknown> {
+  const layer = resultEventToRaw(incoming);
+  const layerHasText = typeof layer.content === 'string' && layer.content.trim() !== '';
+  const layerHasStructured =
+    layer.structured != null && typeof layer.structured === 'object';
+  const layerHasRefs =
+    Array.isArray(layer.references) && (layer.references as unknown[]).length > 0;
+  const layerHasSources =
+    Array.isArray(layer.sources) && (layer.sources as unknown[]).length > 0;
+  const layerMeaningful =
+    layerHasText || layerHasStructured || layerHasRefs || layerHasSources;
+
+  if (!layerMeaningful) {
+    return prior ?? {};
+  }
+  if (!prior) return layer;
+
+  const priorText =
+    (typeof prior.content === 'string' && prior.content.trim()) ||
+    (typeof prior.answer === 'string' && prior.answer.trim());
+  const pickText = layerHasText ? String(layer.content) : priorText || '';
+
+  return {
+    ...prior,
+    ...layer,
+    content: pickText,
+    answer: pickText,
+    structured: layerHasStructured ? layer.structured : prior.structured,
+    references: layerHasRefs ? layer.references : prior.references,
+    sources: layerHasSources ? layer.sources : prior.sources,
+  };
+}
+
+async function drainLiteratureAgentSse(
+  reader: ReadableStreamDefaultReader<Uint8Array>,
+  body: LiteratureAgentRequestBody,
+  clarifySource: 'compare' | 'biomni',
+  onStep: (line: string) => void,
+  onToken: (piece: string) => void
+): Promise<{
+  donePayload: LiteratureAgentDonePayload | null;
+  error: string | null;
+  clarify: LiteratureClarifyPending | null;
+}> {
+  const decoder = new TextDecoder();
+  let buffer = '';
+  let errored = false;
+  let errorMessage: string | null = null;
+  let resultRaw: Record<string, unknown> | null = null;
+  let clarifyPending: LiteratureClarifyPending | null = null;
+  let tokenBuffer = '';
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    const { blocks, rest } = splitSseBuffer(buffer);
+    buffer = rest;
+
+    for (const block of blocks) {
+      const payload = parseSseDataJson(block.data);
+
+      switch (block.event) {
+        case 'ping':
+        case 'started':
+          break;
+        case 'step':
+        case 'thinking': {
+          const text = stepTextFromPayload(payload);
+          if (text) onStep(text);
+          break;
+        }
+        case 'clarify': {
+          if (!payload) break;
+          const question =
+            typeof payload.question === 'string'
+              ? payload.question
+              : typeof (payload as { clarify_question?: string }).clarify_question === 'string'
+                ? (payload as { clarify_question: string }).clarify_question
+                : '';
+          const options = Array.isArray(payload.options)
+            ? payload.options.filter((o): o is string => typeof o === 'string')
+            : [];
+          clarifyPending = {
+            question: question || 'Please provide more detail.',
+            options,
+            pendingQuery: body.query,
+            pendingSessionId: body.session_id,
+            pendingHistory: body.history ?? [],
+            pendingLiteratureIds: body.literature_review_ids,
+            pendingOptions: body.options,
+            clarifySource,
+          };
+          break;
+        }
+        case 'result':
+          if (payload) {
+            resultRaw = mergeBiomniFinalPayloads(resultRaw, payload);
+          }
+          break;
+        case 'done':
+          if (payload) {
+            resultRaw = mergeBiomniFinalPayloads(resultRaw, payload);
+          }
+          break;
+        case 'token': {
+          const piece = extractSseTokenPiece(payload);
+          if (piece) {
+            tokenBuffer += piece;
+            onToken(piece);
+            // Yield so React can commit/paint between tokens (avoids one giant batch at EOF).
+            await new Promise<void>((resolve) => {
+              queueMicrotask(resolve);
+            });
+          }
+          break;
+        }
+        case 'error': {
+          errored = true;
+          const msg =
+            typeof payload?.message === 'string'
+              ? payload.message
+              : typeof payload?.error === 'string'
+                ? payload.error
+                : 'Stream error';
+          errorMessage = msg;
+          break;
+        }
+        default:
+          break;
+      }
+    }
+  }
+
+  if (clarifyPending && !errored) {
+    return { donePayload: null, error: null, clarify: clarifyPending };
+  }
+
+  if (errored) {
+    return { donePayload: null, error: errorMessage || 'Stream error', clarify: null };
+  }
+
+  resultRaw = mergeTokenBufferIntoAssistantRaw(resultRaw, tokenBuffer);
+
+  if (resultRaw) {
+    const donePayload = normalizeLiteratureAgentResponse(resultRaw);
+    const hasPersistableBody =
+      Boolean(donePayload.content?.trim()) ||
+      Boolean(donePayload.structured?.references?.length) ||
+      Boolean(donePayload.sources?.length) ||
+      donePayload.needs_clarification === true;
+    if (hasPersistableBody) {
+      return { donePayload, error: null, clarify: null };
+    }
+  }
+
+  return {
+    donePayload: null,
+    error: null,
+    clarify: null,
+  };
+}
+
 export function useLiteratureAgentStream() {
   const [state, setState] = useState<LiteratureAgentStreamState>({
     donePayload: null,
@@ -87,36 +272,65 @@ export function useLiteratureAgentStream() {
     isStreaming: false,
     steps: [],
     clarify: null,
+    streamedAnswer: '',
   });
 
   const abortControllerRef = useRef<AbortController | null>(null);
   const clarifyRef = useRef<LiteratureClarifyPending | null>(null);
 
-  const runCompareJson = useCallback(
+  const consumePaperAnalyzerSse = useCallback(
     async (
       body: LiteratureAgentRequestBody,
       token: string,
-      signal: AbortSignal
-    ): Promise<{ donePayload: LiteratureAgentDonePayload | null; error: string | null }> => {
-      const response = await fetch('/api/literature/agent/compare', {
+      skipClarify: boolean,
+      signal: AbortSignal,
+      onStep: (line: string) => void,
+      onToken: (piece: string) => void
+    ): Promise<{
+      donePayload: LiteratureAgentDonePayload | null;
+      error: string | null;
+      clarify: LiteratureClarifyPending | null;
+    }> => {
+      const mergedOptions = {
+        ...body.options,
+        skip_clarify: skipClarify || body.options?.skip_clarify === true,
+      };
+
+      const response = await fetch('/api/literature/agent/compare-stream', {
         method: 'POST',
         headers: {
+          Accept: 'text/event-stream',
           'Content-Type': 'application/json',
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify(body),
+        body: JSON.stringify({
+          query: body.query,
+          session_id: body.session_id,
+          history: body.history ?? [],
+          literature_review_ids: body.literature_review_ids,
+          options: mergedOptions,
+        }),
         signal,
       });
 
-      const raw = (await response.json().catch(() => ({}))) as Record<string, unknown>;
-
       if (!response.ok) {
-        const errMsg =
-          typeof raw.error === 'string' ? raw.error : `Request failed: ${response.status}`;
-        return { donePayload: null, error: errMsg };
+        const errText = await response.text();
+        let errMsg = errText || `Request failed: ${response.status}`;
+        try {
+          const j = JSON.parse(errText) as { error?: string };
+          if (typeof j.error === 'string') errMsg = j.error;
+        } catch {
+          /* plain */
+        }
+        return { donePayload: null, error: errMsg, clarify: null };
       }
 
-      return { donePayload: normalizeLiteratureAgentResponse(raw), error: null };
+      const reader = response.body?.getReader();
+      if (!reader) {
+        return { donePayload: null, error: 'No response body', clarify: null };
+      }
+
+      return drainLiteratureAgentSse(reader, body, 'compare', onStep, onToken);
     },
     []
   );
@@ -127,7 +341,8 @@ export function useLiteratureAgentStream() {
       token: string,
       skipClarify: boolean,
       signal: AbortSignal,
-      onStep: (line: string) => void
+      onStep: (line: string) => void,
+      onToken: (piece: string) => void
     ): Promise<{
       donePayload: LiteratureAgentDonePayload | null;
       error: string | null;
@@ -173,98 +388,7 @@ export function useLiteratureAgentStream() {
         return { donePayload: null, error: 'No response body', clarify: null };
       }
 
-      const decoder = new TextDecoder();
-      let buffer = '';
-      let errored = false;
-      let errorMessage: string | null = null;
-      let resultRaw: Record<string, unknown> | null = null;
-      let clarifyPending: LiteratureClarifyPending | null = null;
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        buffer += decoder.decode(value, { stream: true });
-        const { blocks, rest } = splitSseBuffer(buffer);
-        buffer = rest;
-
-        for (const block of blocks) {
-          const payload = parseSseDataJson(block.data);
-
-          switch (block.event) {
-            case 'ping':
-            case 'started':
-              break;
-            case 'step':
-            case 'thinking': {
-              const text = stepTextFromPayload(payload);
-              if (text) onStep(text);
-              break;
-            }
-            case 'clarify': {
-              if (!payload) break;
-              const question =
-                typeof payload.question === 'string'
-                  ? payload.question
-                  : typeof (payload as { clarify_question?: string }).clarify_question === 'string'
-                    ? (payload as { clarify_question: string }).clarify_question
-                    : '';
-              const options = Array.isArray(payload.options)
-                ? payload.options.filter((o): o is string => typeof o === 'string')
-                : [];
-              clarifyPending = {
-                question: question || 'Please provide more detail.',
-                options,
-                pendingQuery: body.query,
-                pendingSessionId: body.session_id,
-                pendingHistory: body.history ?? [],
-                pendingLiteratureIds: body.literature_review_ids,
-                pendingOptions: body.options,
-              };
-              break;
-            }
-            case 'result':
-              if (payload) resultRaw = resultEventToRaw(payload);
-              break;
-            case 'error': {
-              errored = true;
-              const msg =
-                typeof payload?.message === 'string'
-                  ? payload.message
-                  : typeof payload?.error === 'string'
-                    ? payload.error
-                    : 'Stream error';
-              errorMessage = msg;
-              break;
-            }
-            case 'done':
-              break;
-            default:
-              break;
-          }
-        }
-      }
-
-      if (clarifyPending && !errored) {
-        return { donePayload: null, error: null, clarify: clarifyPending };
-      }
-
-      if (errored) {
-        return { donePayload: null, error: errorMessage || 'Stream error', clarify: null };
-      }
-
-      if (resultRaw) {
-        return {
-          donePayload: normalizeLiteratureAgentResponse(resultRaw),
-          error: null,
-          clarify: null,
-        };
-      }
-
-      return {
-        donePayload: null,
-        error: null,
-        clarify: null,
-      };
+      return drainLiteratureAgentSse(reader, body, 'biomni', onStep, onToken);
     },
     []
   );
@@ -286,35 +410,22 @@ export function useLiteratureAgentStream() {
         isStreaming: true,
         steps: [],
         clarify: null,
+        streamedAnswer: '',
       });
 
       try {
-        if (endpoint === 'compare') {
-          const { donePayload, error } = await runCompareJson(body, token, signal);
-          setState((s) => ({
-            ...s,
-            donePayload,
-            error,
-            isStreaming: false,
-            steps: [],
-            clarify: null,
-          }));
-          abortControllerRef.current = null;
-          return { donePayload, error };
-        }
-
         const skipClarify = options?.skipClarify === true;
         const onStep = (line: string) => {
           setState((s) => ({ ...s, steps: [...s.steps, line] }));
         };
+        const onToken = (piece: string) => {
+          setState((s) => ({ ...s, streamedAnswer: s.streamedAnswer + piece }));
+        };
 
-        const { donePayload, error, clarify } = await consumeBiomniSse(
-          body,
-          token,
-          skipClarify,
-          signal,
-          onStep
-        );
+        const { donePayload, error, clarify } =
+          endpoint === 'compare'
+            ? await consumePaperAnalyzerSse(body, token, skipClarify, signal, onStep, onToken)
+            : await consumeBiomniSse(body, token, skipClarify, signal, onStep, onToken);
 
         if (clarify) {
           clarifyRef.current = clarify;
@@ -325,6 +436,7 @@ export function useLiteratureAgentStream() {
             error: null,
             isStreaming: false,
             clarify,
+            streamedAnswer: '',
           }));
           return { donePayload: null, error: null };
         }
@@ -335,12 +447,13 @@ export function useLiteratureAgentStream() {
           error,
           isStreaming: false,
           clarify: null,
+          streamedAnswer: '',
         }));
         abortControllerRef.current = null;
         return { donePayload, error };
       } catch (err) {
         if ((err as Error).name === 'AbortError') {
-          setState((s) => ({ ...s, isStreaming: false, clarify: null }));
+          setState((s) => ({ ...s, isStreaming: false, clarify: null, streamedAnswer: '' }));
           abortControllerRef.current = null;
           clarifyRef.current = null;
           return { donePayload: null, error: null };
@@ -351,19 +464,24 @@ export function useLiteratureAgentStream() {
           error: errMsg,
           isStreaming: false,
           clarify: null,
+          streamedAnswer: '',
         }));
         abortControllerRef.current = null;
         clarifyRef.current = null;
         return { donePayload: null, error: errMsg };
       }
     },
-    [runCompareJson, consumeBiomniSse]
+    [consumePaperAnalyzerSse, consumeBiomniSse]
   );
 
   const answerClarify = useCallback(
-    async (answer: string, token: string) => {
+    async (answer: string, token: string): Promise<LiteratureClarifyContinuationResult> => {
       const c = clarifyRef.current;
-      if (!c) return { donePayload: null as LiteratureAgentDonePayload | null, error: 'No pending clarification' };
+      if (!c) {
+        return { donePayload: null, error: 'No pending clarification' };
+      }
+
+      const finalizeTag = c.clarifySource;
 
       const newHistory: Notes9AgentHistoryItem[] = [
         ...c.pendingHistory,
@@ -390,14 +508,23 @@ export function useLiteratureAgentStream() {
         error: null,
         donePayload: null,
         steps: [],
+        streamedAnswer: '',
       }));
 
       try {
         const onStep = (line: string) => {
           setState((s) => ({ ...s, steps: [...s.steps, line] }));
         };
+        const onToken = (piece: string) => {
+          setState((s) => ({ ...s, streamedAnswer: s.streamedAnswer + piece }));
+        };
 
-        const { donePayload, error, clarify } = await consumeBiomniSse(body, token, false, signal, onStep);
+        const runSse =
+          finalizeTag === 'compare'
+            ? consumePaperAnalyzerSse(body, token, false, signal, onStep, onToken)
+            : consumeBiomniSse(body, token, false, signal, onStep, onToken);
+
+        const { donePayload, error, clarify } = await runSse;
 
         if (clarify) {
           clarifyRef.current = clarify;
@@ -408,6 +535,7 @@ export function useLiteratureAgentStream() {
             error: null,
             isStreaming: false,
             clarify,
+            streamedAnswer: '',
           }));
           return { donePayload: null, error: null };
         }
@@ -418,24 +546,32 @@ export function useLiteratureAgentStream() {
           error,
           isStreaming: false,
           clarify: null,
+          streamedAnswer: '',
         }));
         abortControllerRef.current = null;
+        if (donePayload && !error) {
+          return { donePayload, error: null, finalizeTag };
+        }
         return { donePayload, error };
       } catch (err) {
         const errMsg = err instanceof Error ? err.message : 'Request failed';
-        setState((s) => ({ ...s, error: errMsg, isStreaming: false, clarify: null }));
+        setState((s) => ({ ...s, error: errMsg, isStreaming: false, clarify: null, streamedAnswer: '' }));
         abortControllerRef.current = null;
         clarifyRef.current = null;
         return { donePayload: null, error: errMsg };
       }
     },
-    [consumeBiomniSse]
+    [consumeBiomniSse, consumePaperAnalyzerSse]
   );
 
   const skipClarify = useCallback(
-    async (token: string) => {
+    async (token: string): Promise<LiteratureClarifyContinuationResult> => {
       const c = clarifyRef.current;
-      if (!c) return { donePayload: null as LiteratureAgentDonePayload | null, error: 'No pending clarification' };
+      if (!c) {
+        return { donePayload: null, error: 'No pending clarification' };
+      }
+
+      const finalizeTag = c.clarifySource;
 
       const body: LiteratureAgentRequestBody = {
         query: c.pendingQuery,
@@ -456,14 +592,23 @@ export function useLiteratureAgentStream() {
         error: null,
         donePayload: null,
         steps: [],
+        streamedAnswer: '',
       }));
 
       try {
         const onStep = (line: string) => {
           setState((s) => ({ ...s, steps: [...s.steps, line] }));
         };
+        const onToken = (piece: string) => {
+          setState((s) => ({ ...s, streamedAnswer: s.streamedAnswer + piece }));
+        };
 
-        const { donePayload, error, clarify } = await consumeBiomniSse(body, token, true, signal, onStep);
+        const runSse =
+          finalizeTag === 'compare'
+            ? consumePaperAnalyzerSse(body, token, true, signal, onStep, onToken)
+            : consumeBiomniSse(body, token, true, signal, onStep, onToken);
+
+        const { donePayload, error, clarify } = await runSse;
 
         if (clarify) {
           clarifyRef.current = clarify;
@@ -474,6 +619,7 @@ export function useLiteratureAgentStream() {
             error: null,
             isStreaming: false,
             clarify,
+            streamedAnswer: '',
           }));
           return { donePayload: null, error: null };
         }
@@ -484,18 +630,22 @@ export function useLiteratureAgentStream() {
           error,
           isStreaming: false,
           clarify: null,
+          streamedAnswer: '',
         }));
         abortControllerRef.current = null;
+        if (donePayload && !error) {
+          return { donePayload, error: null, finalizeTag };
+        }
         return { donePayload, error };
       } catch (err) {
         const errMsg = err instanceof Error ? err.message : 'Request failed';
-        setState((s) => ({ ...s, error: errMsg, isStreaming: false, clarify: null }));
+        setState((s) => ({ ...s, error: errMsg, isStreaming: false, clarify: null, streamedAnswer: '' }));
         abortControllerRef.current = null;
         clarifyRef.current = null;
         return { donePayload: null, error: errMsg };
       }
     },
-    [consumeBiomniSse]
+    [consumeBiomniSse, consumePaperAnalyzerSse]
   );
 
   const abort = useCallback(() => {
@@ -512,6 +662,7 @@ export function useLiteratureAgentStream() {
       isStreaming: false,
       steps: [],
       clarify: null,
+      streamedAnswer: '',
     });
   }, []);
 
