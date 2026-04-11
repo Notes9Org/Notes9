@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { ChevronDown, Sparkles } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
@@ -16,6 +16,59 @@ function compactStep(text: string): string {
   const t = text.replace(/\s+/g, ' ').trim();
   if (t.length <= STEP_MAX_CHARS) return t;
   return `${t.slice(0, STEP_MAX_CHARS - 1)}…`;
+}
+
+function formatElapsed(totalSec: number) {
+  const m = Math.floor(totalSec / 60);
+  const s = totalSec % 60;
+  return `${m}:${s.toString().padStart(2, '0')}`;
+}
+
+/** Live clock and reassurance when the SSE connection is open but quiet (long model runs). */
+export function LiteratureStreamProgressHint({
+  isStreaming,
+  upstreamActivityAt,
+}: {
+  isStreaming: boolean;
+  upstreamActivityAt: number | null;
+}) {
+  const [startedAt, setStartedAt] = useState<number | null>(null);
+  const [pulse, setPulse] = useState(0);
+
+  useEffect(() => {
+    if (!isStreaming) {
+      setStartedAt(null);
+      return;
+    }
+    setStartedAt(Date.now());
+    const id = window.setInterval(() => setPulse((p) => p + 1), 1000);
+    return () => window.clearInterval(id);
+  }, [isStreaming]);
+
+  if (!isStreaming || startedAt === null) return null;
+
+  const elapsedSec = Math.floor((Date.now() - startedAt) / 1000);
+  const quietSec =
+    upstreamActivityAt != null ? Math.floor((Date.now() - upstreamActivityAt) / 1000) : null;
+
+  return (
+    <div className="mt-1 space-y-1 text-[11px] leading-snug text-muted-foreground" data-pulse={pulse}>
+      <p className="flex flex-wrap items-center gap-x-1 tabular-nums">
+        <span>Running</span>
+        <span className="font-medium text-foreground/85">{formatElapsed(elapsedSec)}</span>
+        <span className="opacity-75">· stream open</span>
+      </p>
+      {upstreamActivityAt == null && elapsedSec >= 6 && (
+        <p>Waiting for the first chunk from the server…</p>
+      )}
+      {quietSec != null && quietSec >= 20 && (
+        <p>
+          No new data for {quietSec}s; the job may still be running in the background. If the reply
+          never arrives, check hosting timeouts (this route allows up to 5 minutes).
+        </p>
+      )}
+    </div>
+  );
 }
 
 /** Collapsed-by-default trace from the literature stream; hidden after the reply finishes. */
