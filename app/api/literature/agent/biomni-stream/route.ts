@@ -1,4 +1,5 @@
-export const maxDuration = 120;
+/** Long Biomni design-mode runs can exceed 120s; 300s matches typical Vercel Pro serverless max (raise on Fluid/self-host if needed). */
+export const maxDuration = 300;
 
 /** Full POST URL to SSE biomni literature endpoint (`…/biomni/literature/stream`). */
 function literatureBiomniStreamUrl(): string {

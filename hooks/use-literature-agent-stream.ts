@@ -53,6 +53,8 @@ export interface LiteratureAgentStreamState {
   clarify: LiteratureClarifyPending | null;
   /** Live token text from paper-analyzer or Biomni SSE (`token` events). */
   streamedAnswer: string;
+  /** Last time we saw throttled upstream SSE/HTTP activity (bytes or ping); null before first signal. */
+  upstreamActivityAt: number | null;
 }
 
 export type LiteratureClarifyContinuationResult = {
@@ -140,7 +142,8 @@ async function drainLiteratureAgentSse(
   body: LiteratureAgentRequestBody,
   clarifySource: 'compare' | 'biomni',
   onStep: (line: string) => void,
-  onToken: (piece: string) => void
+  onToken: (piece: string) => void,
+  onUpstreamActivity?: () => void
 ): Promise<{
   donePayload: LiteratureAgentDonePayload | null;
   error: string | null;
@@ -153,11 +156,20 @@ async function drainLiteratureAgentSse(
   let resultRaw: Record<string, unknown> | null = null;
   let clarifyPending: LiteratureClarifyPending | null = null;
   let tokenBuffer = '';
+  let lastUpstreamSignal = 0;
+  const signalUpstream = () => {
+    if (!onUpstreamActivity) return;
+    const n = Date.now();
+    if (n - lastUpstreamSignal < 1500) return;
+    lastUpstreamSignal = n;
+    onUpstreamActivity();
+  };
 
   while (true) {
     const { done, value } = await reader.read();
     if (done) break;
     buffer += decoder.decode(value, { stream: true });
+    if (value.byteLength) signalUpstream();
     const { blocks, rest } = splitSseBuffer(buffer);
     buffer = rest;
 
@@ -167,11 +179,15 @@ async function drainLiteratureAgentSse(
       switch (block.event) {
         case 'ping':
         case 'started':
+          signalUpstream();
           break;
         case 'step':
         case 'thinking': {
           const text = stepTextFromPayload(payload);
-          if (text) onStep(text);
+          if (text) {
+            onStep(text);
+            signalUpstream();
+          }
           break;
         }
         case 'clarify': {
@@ -273,6 +289,7 @@ export function useLiteratureAgentStream() {
     steps: [],
     clarify: null,
     streamedAnswer: '',
+    upstreamActivityAt: null,
   });
 
   const abortControllerRef = useRef<AbortController | null>(null);
@@ -285,7 +302,8 @@ export function useLiteratureAgentStream() {
       skipClarify: boolean,
       signal: AbortSignal,
       onStep: (line: string) => void,
-      onToken: (piece: string) => void
+      onToken: (piece: string) => void,
+      onUpstreamActivity?: () => void
     ): Promise<{
       donePayload: LiteratureAgentDonePayload | null;
       error: string | null;
@@ -330,7 +348,7 @@ export function useLiteratureAgentStream() {
         return { donePayload: null, error: 'No response body', clarify: null };
       }
 
-      return drainLiteratureAgentSse(reader, body, 'compare', onStep, onToken);
+      return drainLiteratureAgentSse(reader, body, 'compare', onStep, onToken, onUpstreamActivity);
     },
     []
   );
@@ -342,7 +360,8 @@ export function useLiteratureAgentStream() {
       skipClarify: boolean,
       signal: AbortSignal,
       onStep: (line: string) => void,
-      onToken: (piece: string) => void
+      onToken: (piece: string) => void,
+      onUpstreamActivity?: () => void
     ): Promise<{
       donePayload: LiteratureAgentDonePayload | null;
       error: string | null;
@@ -388,7 +407,7 @@ export function useLiteratureAgentStream() {
         return { donePayload: null, error: 'No response body', clarify: null };
       }
 
-      return drainLiteratureAgentSse(reader, body, 'biomni', onStep, onToken);
+      return drainLiteratureAgentSse(reader, body, 'biomni', onStep, onToken, onUpstreamActivity);
     },
     []
   );
@@ -411,6 +430,7 @@ export function useLiteratureAgentStream() {
         steps: [],
         clarify: null,
         streamedAnswer: '',
+        upstreamActivityAt: null,
       });
 
       try {
@@ -421,11 +441,30 @@ export function useLiteratureAgentStream() {
         const onToken = (piece: string) => {
           setState((s) => ({ ...s, streamedAnswer: s.streamedAnswer + piece }));
         };
+        const onUpstreamActivity = () => {
+          setState((s) => ({ ...s, upstreamActivityAt: Date.now() }));
+        };
 
         const { donePayload, error, clarify } =
           endpoint === 'compare'
-            ? await consumePaperAnalyzerSse(body, token, skipClarify, signal, onStep, onToken)
-            : await consumeBiomniSse(body, token, skipClarify, signal, onStep, onToken);
+            ? await consumePaperAnalyzerSse(
+                body,
+                token,
+                skipClarify,
+                signal,
+                onStep,
+                onToken,
+                onUpstreamActivity
+              )
+            : await consumeBiomniSse(
+                body,
+                token,
+                skipClarify,
+                signal,
+                onStep,
+                onToken,
+                onUpstreamActivity
+              );
 
         if (clarify) {
           clarifyRef.current = clarify;
@@ -437,6 +476,7 @@ export function useLiteratureAgentStream() {
             isStreaming: false,
             clarify,
             streamedAnswer: '',
+            upstreamActivityAt: null,
           }));
           return { donePayload: null, error: null };
         }
@@ -448,12 +488,19 @@ export function useLiteratureAgentStream() {
           isStreaming: false,
           clarify: null,
           streamedAnswer: '',
+          upstreamActivityAt: null,
         }));
         abortControllerRef.current = null;
         return { donePayload, error };
       } catch (err) {
         if ((err as Error).name === 'AbortError') {
-          setState((s) => ({ ...s, isStreaming: false, clarify: null, streamedAnswer: '' }));
+          setState((s) => ({
+            ...s,
+            isStreaming: false,
+            clarify: null,
+            streamedAnswer: '',
+            upstreamActivityAt: null,
+          }));
           abortControllerRef.current = null;
           clarifyRef.current = null;
           return { donePayload: null, error: null };
@@ -465,6 +512,7 @@ export function useLiteratureAgentStream() {
           isStreaming: false,
           clarify: null,
           streamedAnswer: '',
+          upstreamActivityAt: null,
         }));
         abortControllerRef.current = null;
         clarifyRef.current = null;
@@ -509,6 +557,7 @@ export function useLiteratureAgentStream() {
         donePayload: null,
         steps: [],
         streamedAnswer: '',
+        upstreamActivityAt: null,
       }));
 
       try {
@@ -518,11 +567,14 @@ export function useLiteratureAgentStream() {
         const onToken = (piece: string) => {
           setState((s) => ({ ...s, streamedAnswer: s.streamedAnswer + piece }));
         };
+        const onUpstreamActivity = () => {
+          setState((s) => ({ ...s, upstreamActivityAt: Date.now() }));
+        };
 
         const runSse =
           finalizeTag === 'compare'
-            ? consumePaperAnalyzerSse(body, token, false, signal, onStep, onToken)
-            : consumeBiomniSse(body, token, false, signal, onStep, onToken);
+            ? consumePaperAnalyzerSse(body, token, false, signal, onStep, onToken, onUpstreamActivity)
+            : consumeBiomniSse(body, token, false, signal, onStep, onToken, onUpstreamActivity);
 
         const { donePayload, error, clarify } = await runSse;
 
@@ -536,6 +588,7 @@ export function useLiteratureAgentStream() {
             isStreaming: false,
             clarify,
             streamedAnswer: '',
+            upstreamActivityAt: null,
           }));
           return { donePayload: null, error: null };
         }
@@ -547,6 +600,7 @@ export function useLiteratureAgentStream() {
           isStreaming: false,
           clarify: null,
           streamedAnswer: '',
+          upstreamActivityAt: null,
         }));
         abortControllerRef.current = null;
         if (donePayload && !error) {
@@ -555,7 +609,14 @@ export function useLiteratureAgentStream() {
         return { donePayload, error };
       } catch (err) {
         const errMsg = err instanceof Error ? err.message : 'Request failed';
-        setState((s) => ({ ...s, error: errMsg, isStreaming: false, clarify: null, streamedAnswer: '' }));
+        setState((s) => ({
+          ...s,
+          error: errMsg,
+          isStreaming: false,
+          clarify: null,
+          streamedAnswer: '',
+          upstreamActivityAt: null,
+        }));
         abortControllerRef.current = null;
         clarifyRef.current = null;
         return { donePayload: null, error: errMsg };
@@ -593,6 +654,7 @@ export function useLiteratureAgentStream() {
         donePayload: null,
         steps: [],
         streamedAnswer: '',
+        upstreamActivityAt: null,
       }));
 
       try {
@@ -602,11 +664,14 @@ export function useLiteratureAgentStream() {
         const onToken = (piece: string) => {
           setState((s) => ({ ...s, streamedAnswer: s.streamedAnswer + piece }));
         };
+        const onUpstreamActivity = () => {
+          setState((s) => ({ ...s, upstreamActivityAt: Date.now() }));
+        };
 
         const runSse =
           finalizeTag === 'compare'
-            ? consumePaperAnalyzerSse(body, token, true, signal, onStep, onToken)
-            : consumeBiomniSse(body, token, true, signal, onStep, onToken);
+            ? consumePaperAnalyzerSse(body, token, true, signal, onStep, onToken, onUpstreamActivity)
+            : consumeBiomniSse(body, token, true, signal, onStep, onToken, onUpstreamActivity);
 
         const { donePayload, error, clarify } = await runSse;
 
@@ -620,6 +685,7 @@ export function useLiteratureAgentStream() {
             isStreaming: false,
             clarify,
             streamedAnswer: '',
+            upstreamActivityAt: null,
           }));
           return { donePayload: null, error: null };
         }
@@ -631,6 +697,7 @@ export function useLiteratureAgentStream() {
           isStreaming: false,
           clarify: null,
           streamedAnswer: '',
+          upstreamActivityAt: null,
         }));
         abortControllerRef.current = null;
         if (donePayload && !error) {
@@ -639,7 +706,14 @@ export function useLiteratureAgentStream() {
         return { donePayload, error };
       } catch (err) {
         const errMsg = err instanceof Error ? err.message : 'Request failed';
-        setState((s) => ({ ...s, error: errMsg, isStreaming: false, clarify: null, streamedAnswer: '' }));
+        setState((s) => ({
+          ...s,
+          error: errMsg,
+          isStreaming: false,
+          clarify: null,
+          streamedAnswer: '',
+          upstreamActivityAt: null,
+        }));
         abortControllerRef.current = null;
         clarifyRef.current = null;
         return { donePayload: null, error: errMsg };
@@ -663,6 +737,7 @@ export function useLiteratureAgentStream() {
       steps: [],
       clarify: null,
       streamedAnswer: '',
+      upstreamActivityAt: null,
     });
   }, []);
 

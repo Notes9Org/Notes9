@@ -96,7 +96,10 @@ import { useLiteratureAgentStream } from '@/hooks/use-literature-agent-stream';
 import type { LiteratureAgentDonePayload } from '@/lib/literature-agent-types';
 import { ClarifyCard } from '@/components/clarify-card';
 import { LiteratureSourcesDropdown } from '@/components/literature-sources-dropdown';
-import { LiteratureAgentThinkingPanel } from '@/components/literature-agent-thinking-panel';
+import {
+  LiteratureAgentThinkingPanel,
+  LiteratureStreamProgressHint,
+} from '@/components/literature-agent-thinking-panel';
 import type { LiteratureMentionCandidate } from '@/contexts/literature-mention-context';
 import {
   appendLiteratureMentionAtEnd,
@@ -739,6 +742,7 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
     agentStream.donePayload,
     literatureAgentStream.steps,
     literatureAgentStream.streamedAnswer,
+    literatureAgentStream.upstreamActivityAt,
     literatureAgentStream.clarify,
     literatureAgentStream.isStreaming,
     notes9Loading,
@@ -2424,6 +2428,10 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
                                 />
                                 Working on your papers…
                               </p>
+                              <LiteratureStreamProgressHint
+                                isStreaming={literatureAgentStream.isStreaming}
+                                upstreamActivityAt={literatureAgentStream.upstreamActivityAt}
+                              />
                             </div>
                             <LiteratureAgentThinkingPanel steps={literatureAgentStream.steps} />
                             {(() => {
