@@ -9,8 +9,10 @@ CREATE TABLE IF NOT EXISTS public.content_diffs (
   user_id          UUID NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
   -- Short human-readable summary (e.g. first 120 chars of added text)
   change_summary   TEXT,
-  previous_content TEXT NOT NULL DEFAULT '',
-  new_content      TEXT NOT NULL DEFAULT '',
+  -- Compact word-level change log: +/- fragments and "_" entries for unchanged run lengths (see app `buildStoredSegments`).
+  diff_segments    JSONB NOT NULL DEFAULT '[]'::jsonb,
+  -- JSON `{ "document_title": string|null, "sections": string[] }` — compact; legacy `{ "section_trails": [] }` supported on read
+  structure_hints    JSONB NOT NULL DEFAULT '{}'::jsonb,
   words_added      INTEGER NOT NULL DEFAULT 0,
   words_removed    INTEGER NOT NULL DEFAULT 0,
   created_at       TIMESTAMPTZ NOT NULL DEFAULT NOW()
@@ -26,6 +28,10 @@ CREATE INDEX IF NOT EXISTS idx_content_diffs_user
 
 -- Enable RLS
 ALTER TABLE public.content_diffs ENABLE ROW LEVEL SECURITY;
+
+-- Policies (drop first so this script is safe to re-run)
+DROP POLICY IF EXISTS "content_diffs_insert_own" ON public.content_diffs;
+DROP POLICY IF EXISTS "content_diffs_select_org" ON public.content_diffs;
 
 -- Users can insert their own diff entries
 CREATE POLICY "content_diffs_insert_own"

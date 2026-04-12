@@ -76,6 +76,13 @@ export function ContentChangeApprovalBar(props: ContentChangeApprovalBarProps) {
   const recordId =
     props.variant === "protocol" ? props.protocolId : props.noteId ?? undefined
 
+  const historyExportContext =
+    props.variant === "protocol"
+      ? { recordType: "protocol" as const, recordId: props.protocolId }
+      : props.noteId
+        ? { recordType: "lab_note" as const, recordId: props.noteId }
+        : undefined
+
   const { diffs, loading: diffsLoading, error: diffsError, loadDiffs, recordDiff } =
     useContentDiffs(recordType, recordId)
 
@@ -185,6 +192,7 @@ export function ContentChangeApprovalBar(props: ContentChangeApprovalBarProps) {
           diffs={diffs}
           loading={diffsLoading}
           error={diffsError}
+          exportContext={historyExportContext}
         />
       </>
     )
@@ -329,6 +337,7 @@ export function ContentChangeApprovalBar(props: ContentChangeApprovalBarProps) {
         diffs={diffs}
         loading={diffsLoading}
         error={diffsError}
+        exportContext={historyExportContext}
       />
     </>
   )

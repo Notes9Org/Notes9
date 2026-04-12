@@ -24,14 +24,37 @@ export interface ChatMessage {
   created_at: string;
 }
 
+/** Stored in `content_diffs.diff_segments` — word-level fragments plus `_` skips for unchanged runs (no full-body snapshots). */
+export type ContentDiffSegment =
+  | { k: '+'; v: string }
+  | { k: '-'; v: string }
+  | { k: '_'; n: number };
+
+/**
+ * Stored in `content_diffs.structure_hints` JSON (compact: title once, sections without repeated title).
+ * Legacy rows may still use `{ section_trails: string[] }` only — normalize when reading.
+ */
+export interface ContentDiffStructureHints {
+  document_title: string | null;
+  sections: string[];
+}
+
 export interface ContentDiff {
   id: string;
   record_type: 'protocol' | 'lab_note';
   record_id: string;
   user_id: string;
   change_summary: string | null;
-  previous_content: string;
-  new_content: string;
+  /** Compact change log (preferred). */
+  diff_segments: ContentDiffSegment[] | null;
+  /** Heading trails (document title + sections) for audit context. */
+  structure_hints?: ContentDiffStructureHints | null;
+  /**
+   * Legacy columns — removed in migration `042_content_diffs_diff_segments.sql`; may still be
+   * present when reading old API responses.
+   */
+  previous_content?: string | null;
+  new_content?: string | null;
   words_added: number;
   words_removed: number;
   created_at: string;
