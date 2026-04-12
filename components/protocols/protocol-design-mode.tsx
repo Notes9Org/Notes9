@@ -52,6 +52,7 @@ import {
 } from "@/components/ui/alert-dialog"
 import { useHeaderAi } from "@/components/layout/header-ai-context"
 import { ScientificCalculatorSheet } from "@/components/lab-notes/scientific-calculator"
+import { useMediaQuery } from "@/hooks/use-media-query"
 import { cn } from "@/lib/utils"
 
 interface ProtocolDesignModeProps {
@@ -92,7 +93,9 @@ export function ProtocolDesignMode({
   const [literaturePanelPapers, setLiteraturePanelPapers] = useState<
     LiteraturePaperItem[]
   >([])
-  const [showLiteraturePanel, setShowLiteraturePanel] = useState(true)
+  /** Closed until client knows viewport — avoids a flash of the desktop sidebar on phones. */
+  const [showLiteraturePanel, setShowLiteraturePanel] = useState(false)
+  const isNarrow = useMediaQuery("(max-width: 767px)")
   const [showAiPanel, setShowAiPanel] = useState(false)
   const [scientificCalculatorOpen, setScientificCalculatorOpen] = useState(false)
   const protocolEditorRef = useRef<Editor | null>(null)
@@ -133,6 +136,11 @@ export function ProtocolDesignMode({
     return () => {
       cancelled = true
     }
+  }, [])
+
+  useEffect(() => {
+    if (typeof window === "undefined") return
+    setShowLiteraturePanel(window.innerWidth >= 768)
   }, [])
 
   useEffect(() => {
@@ -322,49 +330,79 @@ export function ProtocolDesignMode({
     <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
       {/* ── Card shell (matches lab notes Card) ──────────────────────────── */}
       <Card className="flex min-h-0 min-w-0 flex-1 w-full flex-col gap-0 rounded-none border-0 border-t border-border/40 py-0 shadow-none">
-        <div className="flex min-h-0 min-w-0 flex-1 flex-row items-stretch overflow-hidden">
-
-          {/* ── Literature aside (mirrors lab notes "notes list" aside) ── */}
-          <aside
-            className={cn(
-              "flex min-h-0 shrink-0 flex-col self-stretch overflow-hidden bg-muted/30 transition-all duration-200",
-              showLiteraturePanel
-                ? "w-64 min-w-[16rem]"
-                : "w-0 min-w-0"
-            )}
-            aria-hidden={!showLiteraturePanel}
-            id="protocol-literature"
-          >
-            {showLiteraturePanel && (
-              <ProtocolLiteraturePanel
-                projectId={protocol.project_id}
-                experimentId={protocol.experiment_id}
-                variant="aiContext"
-                onAddToAiContext={(papers) => {
-                  mergeAiPapers(papers)
-                  setShowAiPanel(true)
-                }}
-                onPapersChange={setLiteraturePanelPapers}
-                showFilters={!protocol.project_id && !protocol.experiment_id}
-                onContextChange={onContextChange}
+        <div className="relative flex min-h-0 min-w-0 flex-1 flex-row items-stretch overflow-hidden">
+          {/* Mobile: literature as full-height sheet over the editor */}
+          {isNarrow && showLiteraturePanel && (
+            <>
+              <button
+                type="button"
+                className="fixed inset-0 z-40 bg-black/40"
+                aria-label="Close literature panel"
+                onClick={() => setShowLiteraturePanel(false)}
               />
-            )}
-          </aside>
+              <aside
+                className="fixed inset-y-0 left-0 z-50 flex w-[min(22rem,calc(100vw-0.75rem))] min-w-0 flex-col overflow-hidden border-r border-border bg-background shadow-xl"
+                id="protocol-literature-mobile"
+              >
+                <ProtocolLiteraturePanel
+                  projectId={protocol.project_id}
+                  experimentId={protocol.experiment_id}
+                  variant="aiContext"
+                  onAddToAiContext={(papers) => {
+                    mergeAiPapers(papers)
+                    setShowAiPanel(true)
+                  }}
+                  onPapersChange={setLiteraturePanelPapers}
+                  showFilters={!protocol.project_id && !protocol.experiment_id}
+                  onContextChange={onContextChange}
+                />
+              </aside>
+            </>
+          )}
 
-          {showLiteraturePanel && (
-            <Separator
-              orientation="vertical"
-              decorative
-              className="min-h-0 shrink-0 self-stretch bg-border/70"
-            />
+          {/* Desktop: inline literature column */}
+          {!isNarrow && (
+            <>
+              <aside
+                className={cn(
+                  "flex min-h-0 shrink-0 flex-col self-stretch overflow-hidden border-r border-border bg-background transition-all duration-200",
+                  showLiteraturePanel ? "w-64 min-w-[16rem]" : "w-0 min-w-0 border-r-0"
+                )}
+                aria-hidden={!showLiteraturePanel}
+                id="protocol-literature-desktop"
+              >
+                {showLiteraturePanel && (
+                  <ProtocolLiteraturePanel
+                    projectId={protocol.project_id}
+                    experimentId={protocol.experiment_id}
+                    variant="aiContext"
+                    onAddToAiContext={(papers) => {
+                      mergeAiPapers(papers)
+                      setShowAiPanel(true)
+                    }}
+                    onPapersChange={setLiteraturePanelPapers}
+                    showFilters={!protocol.project_id && !protocol.experiment_id}
+                    onContextChange={onContextChange}
+                  />
+                )}
+              </aside>
+
+              {showLiteraturePanel && (
+                <Separator
+                  orientation="vertical"
+                  decorative
+                  className="min-h-0 shrink-0 self-stretch bg-border/70"
+                />
+              )}
+            </>
           )}
 
           {/* ── Main editor area ──────────────────────────────────────── */}
-          <div className="relative z-0 flex min-h-0 min-w-0 flex-1 flex-col gap-4 py-4">
+          <div className="relative z-0 flex min-h-0 min-w-0 flex-1 flex-col gap-3 py-3 sm:gap-4 sm:py-4">
 
             {/* ── Document chrome (mirrors lab notes CardHeader) ── */}
-            <CardHeader className="shrink-0 px-4 pb-0 sm:px-6">
-              <div className="flex items-center justify-between gap-3">
+            <CardHeader className="shrink-0 px-3 pb-0 sm:px-6">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
                 <div className="flex min-w-0 flex-1 items-center gap-2">
                   {/* Literature toggle — mirrors the notes-list toggle in lab notes */}
                   <Button
@@ -375,7 +413,9 @@ export function ProtocolDesignMode({
                     onClick={() => setShowLiteraturePanel((v) => !v)}
                     aria-pressed={showLiteraturePanel}
                     aria-expanded={showLiteraturePanel}
-                    aria-controls="protocol-literature"
+                    aria-controls={
+                      isNarrow ? "protocol-literature-mobile" : "protocol-literature-desktop"
+                    }
                     title={showLiteraturePanel ? "Hide literature" : "Show literature"}
                   >
                     {showLiteraturePanel ? (
@@ -451,7 +491,7 @@ export function ProtocolDesignMode({
                 </div>
 
                 {/* Right action buttons */}
-                <div className="flex shrink-0 items-center gap-1">
+                <div className="flex shrink-0 flex-wrap items-center justify-end gap-1 sm:justify-start">
                   <Badge variant="outline" className="shrink-0 text-[10px] font-normal">
                     v{currentVersion}
                   </Badge>
@@ -486,39 +526,41 @@ export function ProtocolDesignMode({
                 </div>
               </div>
 
-              <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-border/50 pt-3">
+              <div className="mt-3 flex flex-col gap-2 border-t border-border/50 pt-3 sm:flex-row sm:flex-wrap sm:items-center sm:gap-2">
                 <span className="text-xs font-medium text-muted-foreground shrink-0">
                   Document template
                 </span>
-                {draftDocumentTemplateId ? (
-                  <Badge
-                    variant="secondary"
-                    className="text-xs font-normal gap-1 max-w-[min(100%,240px)] truncate"
-                    title={draftTemplateLabel ?? undefined}
+                <div className="flex min-w-0 flex-wrap items-center gap-2">
+                  {draftDocumentTemplateId ? (
+                    <Badge
+                      variant="secondary"
+                      className="text-xs font-normal gap-1 max-w-full truncate sm:max-w-[min(100%,240px)]"
+                      title={draftTemplateLabel ?? undefined}
+                    >
+                      {draftTemplateLabel ?? "Document template"}
+                    </Badge>
+                  ) : (
+                    <span className="text-xs text-muted-foreground">
+                      None (blank or library letterhead shell)
+                    </span>
+                  )}
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-8 min-h-9 w-full gap-1.5 text-xs sm:h-7 sm:min-h-0 sm:w-auto touch-manipulation"
+                    onClick={() => {
+                      setPickerChoice(null)
+                      setTemplateDialogOpen(true)
+                    }}
                   >
-                    {draftTemplateLabel ?? "Document template"}
-                  </Badge>
-                ) : (
-                  <span className="text-xs text-muted-foreground">
-                    None (blank or library letterhead shell)
-                  </span>
-                )}
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="h-7 gap-1.5 text-xs"
-                  onClick={() => {
-                    setPickerChoice(null)
-                    setTemplateDialogOpen(true)
-                  }}
-                >
-                  <LayoutTemplate className="h-3.5 w-3.5" />
-                  Change template
-                </Button>
+                    <LayoutTemplate className="h-3.5 w-3.5" />
+                    Change template
+                  </Button>
+                </div>
                 <Link
                   href="/protocols?tab=templates"
-                  className="text-xs text-primary hover:underline ml-auto"
+                  className="text-xs text-primary hover:underline sm:ml-auto"
                 >
                   Manage uploads
                 </Link>
@@ -526,7 +568,7 @@ export function ProtocolDesignMode({
             </CardHeader>
 
             {/* ── Editor (mirrors lab notes CardContent) ── */}
-            <CardContent className="flex min-h-0 min-w-0 flex-1 flex-col space-y-3 px-4 sm:px-6">
+            <CardContent className="flex min-h-0 min-w-0 flex-1 flex-col space-y-3 px-3 sm:px-6">
               <div className="relative min-h-0 min-w-0 flex-1 overflow-hidden">
                 <TiptapEditor
                   content={draftContent}
@@ -568,7 +610,7 @@ export function ProtocolDesignMode({
       </Card>
 
       <Dialog open={templateDialogOpen} onOpenChange={setTemplateDialogOpen}>
-        <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto">
+        <DialogContent className="max-h-[min(90dvh,85vh)] w-[calc(100vw-1rem)] max-w-3xl overflow-y-auto p-4 sm:p-6">
           <DialogHeader>
             <DialogTitle>Change template</DialogTitle>
             <DialogDescription>

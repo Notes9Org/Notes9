@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useMemo } from "react"
+import { useState, useMemo, useEffect } from "react"
 import { diffWords } from "diff"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -90,6 +90,11 @@ export function ContentChangeApprovalBar(props: ContentChangeApprovalBarProps) {
 
   const isDirty = savedContent !== draftContent || extraDirty
 
+  /** Collapse the word-level preview when there is nothing pending; avoids re-opening after accept/discard. */
+  useEffect(() => {
+    if (!isDirty) setIsExpanded(false)
+  }, [isDirty])
+
   const diffResult = useMemo(() => {
     let savedText = stripHtmlTags(savedContent)
     let draftText = stripHtmlTags(draftContent)
@@ -166,14 +171,14 @@ export function ContentChangeApprovalBar(props: ContentChangeApprovalBarProps) {
     return (
       <>
         <div className={barShellClass} role="status" aria-live="polite">
-          <div className="flex min-h-10 items-center gap-2 px-3 py-1.5">
+          <div className="flex min-h-11 flex-wrap items-center gap-x-2 gap-y-1.5 px-2 py-2 sm:min-h-10 sm:px-3 sm:py-1.5">
             <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden />
             <span className="text-xs text-muted-foreground">No pending changes</span>
             {statusBadge}
             <Button
               variant="ghost"
               size="sm"
-              className="h-6 gap-1 px-2 text-[11px] text-muted-foreground"
+              className="min-h-9 gap-1 px-2 text-[11px] text-muted-foreground touch-manipulation sm:min-h-6"
               onClick={handleHistoryOpen}
               disabled={historyDisabled}
               title={
@@ -211,12 +216,11 @@ export function ContentChangeApprovalBar(props: ContentChangeApprovalBarProps) {
   return (
     <>
       <div className={barShellClass}>
-        {/* Collapsed header row — same structure as protocol design mode */}
-        <div className="flex items-center gap-2 px-3 py-1.5">
-          <div className="flex min-w-0 flex-1 items-center gap-1.5">
+        <div className="flex flex-col gap-2 px-2 py-2 sm:flex-row sm:items-center sm:gap-2 sm:px-3 sm:py-1.5">
+          <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-1.5 gap-y-1">
             <AlertCircle className="h-3.5 w-3.5 shrink-0 text-amber-500" />
             <span className="text-xs font-medium text-foreground">Pending changes</span>
-            <div className="flex items-center gap-1.5">
+            <div className="flex flex-wrap items-center gap-1.5">
               {changeStats.added > 0 && (
                 <Badge
                   variant="secondary"
@@ -236,26 +240,26 @@ export function ContentChangeApprovalBar(props: ContentChangeApprovalBarProps) {
             </div>
           </div>
 
-          <div className="flex shrink-0 items-center gap-1">
+          <div className="grid w-full grid-cols-2 gap-1.5 sm:flex sm:w-auto sm:shrink-0 sm:items-center sm:gap-1">
             <Button
               variant="ghost"
               size="sm"
-              className="h-6 gap-1 px-2 text-[11px] text-muted-foreground"
+              className="min-h-10 gap-1 px-2 text-[11px] text-muted-foreground touch-manipulation sm:min-h-6"
               onClick={() => setIsExpanded((v) => !v)}
             >
               <ClipboardList className="h-3.5 w-3.5" />
-              {isExpanded ? "Hide diff" : "Review diff"}
+              <span className="truncate">{isExpanded ? "Hide diff" : "Review diff"}</span>
               {isExpanded ? (
-                <ChevronUp className="h-3.5 w-3.5" />
+                <ChevronUp className="h-3.5 w-3.5 shrink-0" />
               ) : (
-                <ChevronDown className="h-3.5 w-3.5" />
+                <ChevronDown className="h-3.5 w-3.5 shrink-0" />
               )}
             </Button>
 
             <Button
               variant="ghost"
               size="sm"
-              className="h-6 gap-1 px-2 text-[11px] text-muted-foreground"
+              className="min-h-10 gap-1 px-2 text-[11px] text-muted-foreground touch-manipulation sm:min-h-6"
               onClick={handleHistoryOpen}
               disabled={historyDisabled}
               title={
@@ -266,27 +270,27 @@ export function ContentChangeApprovalBar(props: ContentChangeApprovalBarProps) {
               History
             </Button>
 
-            <Separator orientation="vertical" className="h-5" />
+            <Separator orientation="vertical" className="hidden h-5 sm:block" />
 
             <Button
               variant="ghost"
               size="sm"
-              className="h-6 gap-1 px-2 text-[11px] text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+              className="min-h-10 min-w-0 gap-1 px-2 text-[11px] text-muted-foreground hover:bg-destructive/10 hover:text-destructive touch-manipulation sm:min-h-6"
               onClick={onReject}
               disabled={isAccepting}
             >
-              <XCircle className="h-3.5 w-3.5" />
-              Discard
+              <XCircle className="h-3.5 w-3.5 shrink-0" />
+              <span className="truncate">Discard</span>
             </Button>
 
             <Button
               size="sm"
-              className="h-6 gap-1 px-2.5 text-[11px]"
+              className="min-h-10 min-w-0 gap-1 px-2 text-[11px] touch-manipulation sm:min-h-6 sm:px-2.5"
               onClick={handleAccept}
               disabled={isAccepting}
             >
-              <CheckCircle2 className="h-3.5 w-3.5" />
-              {isAccepting ? "Saving…" : "Accept & Save"}
+              <CheckCircle2 className="h-3.5 w-3.5 shrink-0" />
+              <span className="truncate">{isAccepting ? "Saving…" : "Accept & Save"}</span>
             </Button>
           </div>
         </div>
@@ -294,14 +298,14 @@ export function ContentChangeApprovalBar(props: ContentChangeApprovalBarProps) {
         {/* Expandable diff preview */}
         {isExpanded && (
           <div className="border-t border-border/50 bg-muted/15">
-            <div className="flex items-center gap-2 px-3 py-1">
+            <div className="flex flex-col gap-0.5 px-2 py-1.5 sm:flex-row sm:items-center sm:gap-2 sm:px-3">
               <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
                 Word-level diff
               </span>
               {expandedHint}
             </div>
-            <div className="max-h-48 overflow-y-auto px-3 pb-3">
-              <p className="text-xs leading-relaxed font-mono whitespace-pre-wrap">
+            <div className="max-h-[40vh] overflow-y-auto overflow-x-auto px-2 pb-3 sm:max-h-48 sm:px-3">
+              <p className="text-xs leading-relaxed font-mono whitespace-pre-wrap break-words">
                 {diffResult.map((part, i) => {
                   if (!part.added && !part.removed) {
                     return (
