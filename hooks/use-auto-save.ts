@@ -71,6 +71,19 @@ export function useAutoSave({
     }
   }, [save])
 
+  /** Clear pending debounced save without persisting (e.g. after reverting draft). */
+  const cancelPendingSave = useCallback(() => {
+    if (timeoutRef.current) {
+      clearTimeout(timeoutRef.current)
+      timeoutRef.current = undefined
+    }
+  }, [])
+
+  /** Call after discard when editor matches last persisted content. */
+  const markSynced = useCallback(() => {
+    setStatus('saved')
+  }, [])
+
   // Cleanup on unmount
   useEffect(() => {
     return () => {
@@ -85,6 +98,8 @@ export function useAutoSave({
     lastSaved,
     debouncedSave,
     forceSave,
+    cancelPendingSave,
+    markSynced,
   }
 }
 

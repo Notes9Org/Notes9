@@ -3,6 +3,7 @@
 import {
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -11,30 +12,35 @@ import { createClient } from "@/lib/supabase/client"
 import { useLiteratureAgentStream } from "@/hooks/use-literature-agent-stream"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
-import { Badge } from "@/components/ui/badge"
 import { ScrollArea } from "@/components/ui/scroll-area"
-import { Separator } from "@/components/ui/separator"
-import { Notes9LoaderGif } from "@/components/brand/notes9-loader-gif"
 import { cn } from "@/lib/utils"
 import {
+  ArrowUp,
   Check,
   ChevronDown,
   ChevronRight,
-  Clipboard,
-  ClipboardCheck,
+  Copy,
+  FileText,
   Loader2,
   MessageSquare,
   Plus,
-  Send,
-  Sparkles,
   Square,
   Trash2,
   X,
   PanelRightClose,
 } from "lucide-react"
-import type { LiteraturePaperItem } from "./protocol-literature-panel"
+import {
+  LITERATURE_PAPER_DRAG_MIME,
+  type LiteraturePaperItem,
+} from "./protocol-literature-panel"
+import { formatDistanceToNow } from "date-fns"
 import { diffWords } from "diff"
 import { MarkdownRenderer, tightenChatMarkdown } from "@/components/catalyst/markdown-renderer"
+import { markdownToHtml } from "@/lib/markdown-to-editor-html"
+import { copyMarkdownForRichPaste } from "@/lib/copy-markdown-rich-paste"
+import { ClipboardInfoIcon } from "@/components/ui/clipboard-info-icon"
+import { useChatSessions } from "@/hooks/use-chat-sessions"
+import type { ChatMessage as DbChatMessage } from "@/hooks/use-chat-sessions"
 
 /* ─── helpers ──────────────────────────────────────────────────────────────── */
 
@@ -69,19 +75,18 @@ interface ChatMessage {
   steps?: string[]
 }
 
-interface ChatSession {
-  id: string
-  title: string
-  messages: ChatMessage[]
-  createdAt: number
-}
-
 export interface ProtocolAiSidechatProps {
+  /** Persists chat history under this protocol (Supabase). */
+  protocolId: string
   templateShellHtml: string
   protocolTitle: string
   currentEditorContent: string
   currentVersion: string
   aiContextPapers: LiteraturePaperItem[]
+  /** Papers shown in the filtered literature panel — used to resolve @ mentions. */
+  literatureCandidates?: LiteraturePaperItem[]
+  /** Add papers to AI context (drag-drop, @ pick). */
+  onAddPapers?: (papers: LiteraturePaperItem[]) => void
   onRemovePaper: (id: string) => void
   /** Called when the user applies an AI suggestion into the editor. */
   onApplyToEditor: (html: string) => void
@@ -89,25 +94,178 @@ export interface ProtocolAiSidechatProps {
   className?: string
 }
 
+function parseLiteratureDragPayload(json: string): LiteraturePaperItem | null {
+  try {
+    const o = JSON.parse(json) as {
+      type?: string
+      id?: string
+      title?: string
+      authors?: string | null
+      journal?: string | null
+      publication_year?: number | null
+    }
+    if (o?.type !== "literature" || !o.id || typeof o.title !== "string") return null
+    return {
+      id: o.id,
+      title: o.title,
+      authors: o.authors ?? null,
+      journal: o.journal ?? null,
+      publication_year: o.publication_year ?? null,
+    }
+  } catch {
+    return null
+  }
+}
+
 /* ─── component ──────────────────────────────────────────────────────────── */
 
+function uiMessageFromDb(
+  row: DbChatMessage,
+  overrides?: Partial<Pick<ChatMessage, "state" | "steps">>
+): ChatMessage {
+  const role = row.role === "assistant" ? "assistant" : "user"
+  return {
+    id: row.id,
+    role,
+    text: row.content,
+    state:
+      overrides?.state ??
+      (role === "assistant" ? "applied" : undefined),
+    steps: overrides?.steps,
+  }
+}
+
 export function ProtocolAiSidechat({
+  protocolId,
   templateShellHtml,
   protocolTitle,
   currentEditorContent,
   currentVersion,
   aiContextPapers,
+  literatureCandidates = [],
+  onAddPapers,
   onRemovePaper,
   onApplyToEditor,
   onClose,
   className,
 }: ProtocolAiSidechatProps) {
-  const [sessions, setSessions] = useState<ChatSession[]>([])
-  const [activeSessionId, setActiveSessionId] = useState<string | null>(null)
+  const {
+    sessions,
+    currentSessionId: activeSessionId,
+    setCurrentSessionId: setActiveSessionId,
+    loading: sessionsLoading,
+    createSession,
+    updateSessionTitle,
+    deleteSession: deleteSessionFromDb,
+    clearSessionMessages,
+    loadMessages,
+    saveMessage,
+  } = useChatSessions(protocolId)
+
+  const [messages, setMessages] = useState<ChatMessage[]>([])
+  const [messagesLoading, setMessagesLoading] = useState(false)
   const [historyOpen, setHistoryOpen] = useState(false)
   const [input, setInput] = useState("")
+  const [mentionMenu, setMentionMenu] = useState<{
+    start: number
+    query: string
+    matches: LiteraturePaperItem[]
+  } | null>(null)
+  const [mentionHighlightIndex, setMentionHighlightIndex] = useState(0)
+  const [dropTargetActive, setDropTargetActive] = useState(false)
+  const dragDepthRef = useRef(0)
+  const mentionQueryKeyRef = useRef<string | null>(null)
+  const mentionListRef = useRef<HTMLDivElement>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const creatingSessionRef = useRef(false)
+
+  const syncMentionFromInput = useCallback(
+    (text: string, cursor: number) => {
+      const before = text.slice(0, cursor)
+      const at = before.lastIndexOf("@")
+      if (at === -1) {
+        mentionQueryKeyRef.current = null
+        setMentionMenu(null)
+        return
+      }
+      const prevChar = at === 0 ? "\n" : before[at - 1]!
+      if (prevChar !== " " && prevChar !== "\n" && at > 0) {
+        mentionQueryKeyRef.current = null
+        setMentionMenu(null)
+        return
+      }
+      const query = before.slice(at + 1)
+      if (/[\s\n]/.test(query)) {
+        mentionQueryKeyRef.current = null
+        setMentionMenu(null)
+        return
+      }
+      const q = query.toLowerCase()
+      const matches = literatureCandidates
+        .filter((p) => !q || p.title.toLowerCase().includes(q))
+        .slice(0, 50)
+      const key = `${at}:${query}`
+      if (mentionQueryKeyRef.current !== key) {
+        mentionQueryKeyRef.current = key
+        setMentionHighlightIndex(0)
+      } else {
+        setMentionHighlightIndex((i) =>
+          Math.min(i, Math.max(0, matches.length - 1))
+        )
+      }
+      setMentionMenu({ start: at, query, matches })
+    },
+    [literatureCandidates]
+  )
+
+  const applyMentionPick = useCallback(
+    (paper: LiteraturePaperItem) => {
+      if (!mentionMenu) return
+      const el = textareaRef.current
+      const cursor = el?.selectionStart ?? input.length
+      const { start } = mentionMenu
+      const before = input.slice(0, start)
+      const after = input.slice(cursor)
+      const next = before + after
+      setInput(next)
+      setMentionMenu(null)
+      mentionQueryKeyRef.current = null
+      onAddPapers?.([paper])
+      requestAnimationFrame(() => {
+        if (!el) return
+        el.focus()
+        const pos = before.length
+        el.setSelectionRange(pos, pos)
+        syncMentionFromInput(next, pos)
+      })
+    },
+    [mentionMenu, input, onAddPapers, syncMentionFromInput]
+  )
+
+  const handleLiteratureDrop = useCallback(
+    (e: React.DragEvent) => {
+      dragDepthRef.current = 0
+      setDropTargetActive(false)
+      const raw = e.dataTransfer.getData(LITERATURE_PAPER_DRAG_MIME)
+      const paper = raw ? parseLiteratureDragPayload(raw) : null
+      if (!paper) return
+      e.preventDefault()
+      onAddPapers?.([paper])
+    },
+    [onAddPapers]
+  )
+
+  const hasLitDragType = (e: React.DragEvent) =>
+    Array.from(e.dataTransfer.types).includes(LITERATURE_PAPER_DRAG_MIME)
+
+  useLayoutEffect(() => {
+    if (!mentionMenu?.matches.length) return
+    const row = mentionListRef.current?.querySelector(
+      `[data-mention-index="${mentionHighlightIndex}"]`
+    )
+    row?.scrollIntoView({ block: "nearest" })
+  }, [mentionHighlightIndex, mentionMenu?.matches.length])
 
   const {
     runRequest,
@@ -121,9 +279,55 @@ export function ProtocolAiSidechat({
     reset,
   } = useLiteratureAgentStream()
 
-  // Active session
-  const activeSession = sessions.find((s) => s.id === activeSessionId) ?? null
-  const messages = activeSession?.messages ?? []
+  // Ensure a DB session exists and a valid active id (Protocol AI is always scoped by protocolId).
+  useEffect(() => {
+    if (sessionsLoading) return
+    if (sessions.length > 0) {
+      creatingSessionRef.current = false
+      if (
+        !activeSessionId ||
+        !sessions.some((s) => s.id === activeSessionId)
+      ) {
+        setActiveSessionId(sessions[0]!.id)
+      }
+      return
+    }
+    if (creatingSessionRef.current) return
+    creatingSessionRef.current = true
+    void createSession().finally(() => {
+      creatingSessionRef.current = false
+    })
+  }, [
+    sessionsLoading,
+    sessions,
+    activeSessionId,
+    createSession,
+    setActiveSessionId,
+  ])
+
+  // Load messages when the active session changes
+  useEffect(() => {
+    if (!activeSessionId) {
+      setMessages([])
+      setMessagesLoading(false)
+      return
+    }
+    let cancelled = false
+    setMessages([])
+    setMessagesLoading(true)
+    void loadMessages(activeSessionId).then((rows) => {
+      if (cancelled) return
+      setMessages(
+        rows
+          .filter((r) => r.role === "user" || r.role === "assistant")
+          .map((r) => uiMessageFromDb(r))
+      )
+      setMessagesLoading(false)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [activeSessionId, loadMessages])
 
   // Scroll to bottom on new messages/steps
   useEffect(() => {
@@ -132,46 +336,25 @@ export function ProtocolAiSidechat({
     }
   }, [messages, steps, error])
 
-  // Create first session on mount
-  useEffect(() => {
-    createNewSession()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
-
   const createNewSession = useCallback(() => {
-    const id = `proto-session-${Date.now()}`
-    const session: ChatSession = {
-      id,
-      title: "New chat",
-      messages: [],
-      createdAt: Date.now(),
-    }
-    setSessions((prev) => [session, ...prev])
-    setActiveSessionId(id)
-    reset()
-  }, [reset])
+    if (isStreaming) return
+    void (async () => {
+      const id = await createSession()
+      if (id) {
+        setMessages([])
+        reset()
+      }
+    })()
+  }, [createSession, isStreaming, reset])
 
   const deleteSession = useCallback(
     (sid: string) => {
-      setSessions((prev) => {
-        const next = prev.filter((s) => s.id !== sid)
-        if (activeSessionId === sid) {
-          const first = next[0]
-          if (first) setActiveSessionId(first.id)
-          else {
-            // create fresh if all deleted
-            const id2 = `proto-session-${Date.now()}`
-            const s2: ChatSession = { id: id2, title: "New chat", messages: [], createdAt: Date.now() }
-            setTimeout(() => {
-              setSessions([s2])
-              setActiveSessionId(s2.id)
-            }, 0)
-          }
-        }
-        return next
-      })
+      void (async () => {
+        await deleteSessionFromDb(sid)
+        if (activeSessionId === sid) reset()
+      })()
     },
-    [activeSessionId]
+    [deleteSessionFromDb, activeSessionId, reset]
   )
 
   const switchSession = useCallback(
@@ -181,7 +364,7 @@ export function ProtocolAiSidechat({
       setHistoryOpen(false)
       reset()
     },
-    [isStreaming, reset]
+    [isStreaming, reset, setActiveSessionId]
   )
 
   const literatureIds = useMemo(
@@ -210,38 +393,26 @@ export function ProtocolAiSidechat({
     [protocolTitle, shellSummary]
   )
 
-  const addMessage = useCallback(
-    (msg: ChatMessage) => {
-      setSessions((prev) =>
-        prev.map((s) => {
-          if (s.id !== activeSessionId) return s
-          const updated = { ...s, messages: [...s.messages, msg] }
-          // Auto-title from first user message
-          if (s.title === "New chat" && msg.role === "user") {
-            updated.title = msg.text.slice(0, 48) + (msg.text.length > 48 ? "…" : "")
-          }
-          return updated
-        })
-      )
-    },
-    [activeSessionId]
-  )
+  const updateMessage = useCallback((id: string, patch: Partial<ChatMessage>) => {
+    setMessages((prev) =>
+      prev.map((m) => (m.id === id ? { ...m, ...patch } : m))
+    )
+  }, [])
 
-  const updateMessage = useCallback(
-    (id: string, patch: Partial<ChatMessage>) => {
-      setSessions((prev) =>
-        prev.map((s) => {
-          if (s.id !== activeSessionId) return s
-          return {
-            ...s,
-            messages: s.messages.map((m) =>
-              m.id === id ? { ...m, ...patch } : m
-            ),
-          }
-        })
-      )
+  const appendAssistantFromDb = useCallback(
+    async (text: string, pending: boolean, capturedSteps: string[]) => {
+      if (!activeSessionId) return
+      const saved = await saveMessage(activeSessionId, "assistant", text)
+      if (!saved) return
+      setMessages((prev) => [
+        ...prev,
+        uiMessageFromDb(saved, {
+          state: pending ? "pending" : "applied",
+          steps: capturedSteps.length ? capturedSteps : undefined,
+        }),
+      ])
     },
-    [activeSessionId]
+    [activeSessionId, saveMessage]
   )
 
   const handleSend = useCallback(async () => {
@@ -256,11 +427,28 @@ export function ProtocolAiSidechat({
     const token = session?.access_token
     if (!token) return
 
-    const history = messages.map((m) => ({ role: m.role, content: m.text }))
+    const savedUser = await saveMessage(activeSessionId, "user", line)
+    if (!savedUser) return
 
-    const userMsgId = `user-${Date.now()}`
-    addMessage({ id: userMsgId, role: "user", text: line })
+    const sessionRow = sessions.find((s) => s.id === activeSessionId)
+    if (sessionRow && !sessionRow.title?.trim()) {
+      void updateSessionTitle(
+        activeSessionId,
+        line.slice(0, 48) + (line.length > 48 ? "…" : "")
+      )
+    }
+
+    const nextMessages: ChatMessage[] = [
+      ...messages,
+      uiMessageFromDb(savedUser),
+    ]
+    setMessages(nextMessages)
     setInput("")
+
+    const history = nextMessages.map((m) => ({
+      role: m.role,
+      content: m.text,
+    }))
 
     const result = await runRequest(
       "biomni",
@@ -276,12 +464,11 @@ export function ProtocolAiSidechat({
     )
 
     if (result.error) {
-      addMessage({
-        id: `err-${Date.now()}`,
-        role: "assistant",
-        text: `Error: ${result.error}`,
-        state: "applied",
-      })
+      const errText = `Error: ${result.error}`
+      const saved = await saveMessage(activeSessionId, "assistant", errText)
+      if (saved) {
+        setMessages((prev) => [...prev, uiMessageFromDb(saved)])
+      }
       return
     }
 
@@ -289,13 +476,7 @@ export function ProtocolAiSidechat({
       const text = (result.donePayload.answer || result.donePayload.content).trim()
       if (text) {
         const capturedSteps = [...steps]
-        addMessage({
-          id: `asst-${Date.now()}`,
-          role: "assistant",
-          text,
-          state: "pending",
-          steps: capturedSteps,
-        })
+        await appendAssistantFromDb(text, true, capturedSteps)
       }
     }
   }, [
@@ -307,18 +488,20 @@ export function ProtocolAiSidechat({
     steps,
     buildQuery,
     runRequest,
-    addMessage,
+    saveMessage,
+    appendAssistantFromDb,
+    sessions,
+    updateSessionTitle,
   ])
 
   const handleApply = useCallback(
     (msg: ChatMessage) => {
-      // Convert markdown to simple paragraphs for the TipTap editor
-      const html = msg.text
-        .split(/\n\n+/)
-        .map((b) => `<p>${b.split("\n").map((l) => l.trim()).join("<br/>")}</p>`)
-        .join("")
-      onApplyToEditor(html)
-      updateMessage(msg.id, { state: "applied" })
+      void (async () => {
+        const md = tightenChatMarkdown(msg.text)
+        const html = await markdownToHtml(md)
+        onApplyToEditor(html)
+        updateMessage(msg.id, { state: "applied" })
+      })()
     },
     [onApplyToEditor, updateMessage]
   )
@@ -341,101 +524,73 @@ export function ProtocolAiSidechat({
   )
 
   const clarifyOptions = clarify?.options ?? []
+  const hasMessages = messages.length > 0
 
   /* ─── render ─────────────────────────────────────────────────────────── */
 
   return (
-    <div className={cn("flex flex-col h-full min-h-0 bg-background border-l relative", className)}>
-
-      {/* ── Header ─────────────────────────────────────────────────────── */}
-      <div className="flex items-center gap-2 px-3 border-b shrink-0 bg-muted/20 h-12 sm:h-14">
-        <div className="flex items-center gap-2 flex-1 min-w-0">
-          <Notes9LoaderGif alt="Protocol AI" widthPx={22} className="translate-y-0" />
-          <span className="text-sm font-semibold truncate">Protocol AI</span>
-          <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 gap-0.5 shrink-0">
-            <Sparkles className="h-3 w-3" />
-            Biomni
-          </Badge>
-        </div>
-        <div className="flex items-center gap-1 shrink-0">
-          {isStreaming && (
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon"
-              className="h-7 w-7 text-muted-foreground hover:text-foreground"
-              onClick={abort}
-              title="Stop generation"
-            >
-              <Square className="h-3.5 w-3.5 fill-current" />
-            </Button>
-          )}
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon"
-            className="h-7 w-7 text-muted-foreground hover:text-foreground"
-            onClick={createNewSession}
-            title="New chat"
-            disabled={isStreaming}
-          >
-            <Plus className="h-3.5 w-3.5" />
-          </Button>
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon"
-            className={cn(
-              "h-7 w-7 text-muted-foreground hover:text-foreground",
-              historyOpen && "bg-muted text-foreground"
-            )}
-            onClick={() => setHistoryOpen((v) => !v)}
-            title="Chat history"
-          >
-            <MessageSquare className="h-3.5 w-3.5" />
-          </Button>
-          {onClose && (
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon"
-              className="h-7 w-7 text-muted-foreground hover:text-foreground"
-              onClick={onClose}
-              title="Close AI panel"
-            >
-              <PanelRightClose className="h-3.5 w-3.5" />
-            </Button>
-          )}
-        </div>
-      </div>
-
-      {/* ── History sidebar (slide-out overlay) ────────────────────────── */}
+    <div
+      className={cn(
+        "flex h-full min-h-0 w-full min-w-0 flex-row overflow-hidden border-l border-border/50 bg-background",
+        className,
+      )}
+    >
+      {/* ── History sidebar (matches CatalystSidebar) ──────────────────── */}
       {historyOpen && (
-        <div className="absolute inset-y-0 right-0 w-full z-10 flex flex-col bg-background border-l shadow-lg"
-          style={{ top: 48 }}
-        >
-          <div className="flex items-center justify-between px-3 py-2.5 border-b">
-            <span className="text-sm font-semibold">Chat History</span>
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon"
-              className="h-7 w-7"
-              onClick={() => setHistoryOpen(false)}
-            >
-              <X className="h-3.5 w-3.5" />
-            </Button>
+        <div className="flex h-full min-h-0 w-48 shrink-0 flex-col overflow-hidden border-r border-border/50 bg-muted/20">
+          {/* Branding (only on empty chat, like CatalystSidebar) */}
+          {!hasMessages && (
+            <div className="flex flex-col items-center justify-center border-b border-border/50 py-6">
+              <div className="mb-2 flex h-10 w-10 items-center justify-center rounded-full bg-primary/10">
+                <ClipboardInfoIcon className="size-5 text-primary" />
+              </div>
+              <span className="text-xs font-semibold text-muted-foreground">Protocol AI</span>
+            </div>
+          )}
+          {/* Header — matches CatalystSidebar (catalyst-sidebar.tsx) */}
+          <div className="flex items-center justify-between px-4 py-3">
+            <h2 className="font-semibold text-sm">Chat History</h2>
+            <div className="flex items-center gap-1">
+              <Button
+                size="icon"
+                variant="ghost"
+                className="size-7 text-muted-foreground hover:text-foreground"
+                onClick={createNewSession}
+                disabled={isStreaming}
+                title="New chat"
+                aria-label="New chat"
+              >
+                <Plus className="size-4" />
+              </Button>
+              <Button
+                size="icon"
+                variant="ghost"
+                className="size-7 text-muted-foreground hover:text-foreground"
+                onClick={() => setHistoryOpen(false)}
+                title="Close sidebar"
+                aria-label="Close history"
+              >
+                <X className="size-4" />
+              </Button>
+            </div>
           </div>
-          <ScrollArea className="flex-1">
-            <div className="space-y-1 p-2">
-              {sessions.length === 0 ? (
-                <p className="text-xs text-muted-foreground text-center py-8">No chats yet</p>
+          {/* Session list */}
+          <ScrollArea className="min-h-0 flex-1 px-1.5">
+            <div className="space-y-0.5 pb-4">
+              {sessionsLoading ? (
+                <p className="px-3 py-6 text-center text-xs text-muted-foreground">Loading…</p>
+              ) : sessions.length === 0 ? (
+                <div className="px-2 py-8 text-center">
+                  <MessageSquare className="mx-auto mb-2 size-6 opacity-30" />
+                  <p className="text-xs font-medium text-muted-foreground">No conversations yet</p>
+                  <p className="mt-1 text-[10px] text-muted-foreground opacity-70">Start a new chat below</p>
+                </div>
               ) : (
                 sessions.map((s) => (
                   <div
                     key={s.id}
                     className={cn(
-                      "group flex items-start gap-2 rounded-lg px-3 py-2.5 cursor-pointer transition-all",
+                      "group flex cursor-pointer items-start gap-1.5 rounded-md px-2 py-2 text-xs transition-colors",
                       s.id === activeSessionId
                         ? "bg-primary/10 text-foreground"
                         : "text-muted-foreground hover:bg-muted hover:text-foreground"
@@ -447,25 +602,25 @@ export function ProtocolAiSidechat({
                       if (e.key === "Enter" || e.key === " ") switchSession(s.id)
                     }}
                   >
-                    <MessageSquare className="mt-0.5 h-3.5 w-3.5 shrink-0 opacity-50" />
-                    <div className="flex-1 min-w-0">
-                      <p className="truncate text-xs font-medium text-foreground">
-                        {s.title}
+                    <MessageSquare className="mt-0.5 size-3.5 shrink-0 opacity-50" />
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate font-medium text-foreground">
+                        {s.title?.trim() ? s.title : "New conversation"}
                       </p>
                       <p className="text-[10px] opacity-60">
-                        {s.messages.length} message{s.messages.length !== 1 ? "s" : ""}
+                        {formatDistanceToNow(new Date(s.updated_at), { addSuffix: true })}
                       </p>
                     </div>
                     <Button
                       variant="ghost"
                       size="icon"
-                      className="h-6 w-6 opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-destructive"
+                      className="size-6 opacity-0 transition-opacity group-hover:opacity-100 text-muted-foreground hover:text-destructive"
                       onClick={(e) => {
                         e.stopPropagation()
                         deleteSession(s.id)
                       }}
                     >
-                      <Trash2 className="h-3 w-3" />
+                      <Trash2 className="size-3" />
                     </Button>
                   </div>
                 ))
@@ -475,190 +630,402 @@ export function ProtocolAiSidechat({
         </div>
       )}
 
-      {/* ── Context papers ─────────────────────────────────────────────── */}
-      {aiContextPapers.length > 0 && (
-        <div className="px-3 py-2 border-b shrink-0 bg-muted/10">
-          <p className="text-[10px] font-medium text-muted-foreground mb-1">
-            Literature context ({aiContextPapers.length})
-          </p>
-          <ul className="space-y-0.5">
-            {aiContextPapers.map((p) => (
-              <li key={p.id} className="flex items-center gap-1.5 rounded-md px-1.5 py-1 hover:bg-muted/60 group/paper">
-                <span className="text-[10px] text-foreground truncate flex-1 min-w-0">{p.title}</span>
-                <button
-                  type="button"
-                  className="shrink-0 rounded p-0.5 opacity-0 group-hover/paper:opacity-100 hover:bg-muted transition-opacity"
-                  onClick={() => onRemovePaper(p.id)}
-                  aria-label={`Remove ${p.title}`}
-                >
-                  <X className="h-3 w-3 text-muted-foreground" />
-                </button>
-              </li>
-            ))}
-          </ul>
+      {/* ── Main chat area (mirrors CatalystChat main area) ─────────────── */}
+      <div
+        className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden"
+        onDragEnter={(e) => {
+          if (!hasLitDragType(e)) return
+          e.preventDefault()
+          dragDepthRef.current += 1
+          if (dragDepthRef.current === 1) setDropTargetActive(true)
+        }}
+        onDragLeave={(e) => {
+          if (!hasLitDragType(e)) return
+          e.preventDefault()
+          dragDepthRef.current -= 1
+          if (dragDepthRef.current <= 0) {
+            dragDepthRef.current = 0
+            setDropTargetActive(false)
+          }
+        }}
+        onDragOver={(e) => {
+          if (!hasLitDragType(e)) return
+          e.preventDefault()
+          e.dataTransfer.dropEffect = "copy"
+        }}
+        onDrop={handleLiteratureDrop}
+      >
+
+        {/* ── Header: toggle + title + close (matches Catalyst header) ── */}
+        <div className="flex h-12 shrink-0 items-center gap-1.5 border-b border-border/50 px-3 min-w-0 sm:h-14 sm:gap-2 sm:px-4">
+          <Button
+            variant="ghost"
+            size="icon"
+            className="size-8 shrink-0 text-muted-foreground hover:text-foreground"
+            onClick={() => setHistoryOpen((v) => !v)}
+            title={historyOpen ? "Hide history" : "Show history"}
+          >
+            {historyOpen ? (
+              <PanelRightClose className="size-4" />
+            ) : (
+              <MessageSquare className="size-4" />
+            )}
+          </Button>
+          <ClipboardInfoIcon className="shrink-0 text-muted-foreground" />
+          <span className="min-w-0 flex-1 truncate text-sm font-medium text-muted-foreground">
+            Protocol AI
+          </span>
+          {/* New Chat — same control as Catalyst in right-sidebar (secondary + label) */}
+          <Button
+            variant="secondary"
+            className="h-8 shrink-0 text-muted-foreground sm:h-9"
+            onClick={createNewSession}
+            disabled={isStreaming}
+            aria-label="New chat"
+            title="New chat"
+          >
+            <Plus className="size-4" />
+            <span>New Chat</span>
+          </Button>
+          {onClose && (
+            <Button
+              variant="ghost"
+              size="icon"
+              className="size-8 shrink-0 text-muted-foreground hover:text-foreground"
+              onClick={onClose}
+              title="Close"
+            >
+              <X className="size-4" />
+            </Button>
+          )}
         </div>
-      )}
 
-      {/* ── Messages ───────────────────────────────────────────────────── */}
-      <ScrollArea className="flex-1 min-h-0 overflow-x-hidden">
-        <div ref={scrollRef} className="px-3 py-3 space-y-3 min-w-0">
+        {/* ── Context papers strip (compact, like Catalyst "context" notion) */}
+        {aiContextPapers.length > 0 && (
+          <div className="shrink-0 border-b border-border/40 bg-muted/10 px-4 py-2">
+            <p className="mb-1.5 flex items-center gap-1.5 text-[10px] font-medium text-muted-foreground">
+              <FileText className="size-3 shrink-0" aria-hidden />
+              Literature context ({aiContextPapers.length})
+            </p>
+            <ul className="flex flex-wrap gap-1">
+              {aiContextPapers.map((p) => (
+                <li
+                  key={p.id}
+                  className="flex items-center gap-1 rounded-full border border-border/50 bg-background px-2 py-0.5 text-[10px] text-foreground"
+                >
+                  <span className="max-w-[120px] truncate">{p.title}</span>
+                  <button
+                    type="button"
+                    className="shrink-0 text-muted-foreground transition-colors hover:text-foreground"
+                    onClick={() => onRemovePaper(p.id)}
+                    aria-label={`Remove ${p.title}`}
+                  >
+                    <X className="size-3" />
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
 
-          {/* Empty state */}
-          {messages.length === 0 && !isStreaming && (
-            <div className="flex flex-col items-center justify-center gap-3 py-10 text-center">
-              <div className="rounded-full bg-muted/60 p-3">
-                <Sparkles className="h-6 w-6 text-muted-foreground" />
-              </div>
-              <div>
-                <p className="text-sm font-medium">Protocol AI</p>
-                <p className="text-xs text-muted-foreground mt-1 max-w-[220px]">
+        {/* ── Messages or greeting ─────────────────────────────────────── */}
+        <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+          {!hasMessages && !isStreaming && !sessionsLoading && !messagesLoading ? (
+            /* ── Empty / greeting (mirrors CatalystGreeting) ── */
+            <div className="flex min-h-0 flex-1 flex-col items-center justify-center overflow-y-auto overscroll-contain px-4 py-4 text-center">
+              <div className="mx-auto w-full max-w-xs">
+                <div className="mb-4 inline-flex h-14 w-14 items-center justify-center rounded-2xl bg-primary/10">
+                  <ClipboardInfoIcon className="size-7 text-primary" />
+                </div>
+                <h2 className="text-lg font-semibold tracking-tight text-foreground">
+                  Protocol AI
+                </h2>
+                <p className="mt-2 text-sm text-muted-foreground">
                   {literatureIds.length === 0
-                    ? "Select papers in the literature panel, then ask me to draft sections."
+                    ? "Drag papers from the Literature list into this panel, or type @ in the composer to pick from the same filtered list."
                     : "Ask me to draft or refine any section of your protocol."}
                 </p>
+                {literatureIds.length > 0 && (
+                  <div className="mt-4 flex flex-wrap justify-center gap-2">
+                    {["Draft methods section", "Add safety notes", "Summarize protocol"].map((s) => (
+                      <button
+                        key={s}
+                        type="button"
+                        className="rounded-full border border-border bg-background px-3 py-1.5 text-xs font-medium text-foreground transition-colors hover:bg-muted"
+                        onClick={() => setInput(s)}
+                      >
+                        {s}
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
             </div>
-          )}
+          ) : (
+            <ScrollArea className="min-h-0 flex-1 [&_[data-slot=scroll-area-viewport]]:overflow-x-hidden [&_[data-slot=scroll-area-viewport]>div]:!max-w-full [&_[data-slot=scroll-area-viewport]>div]:!block">
+              <div
+                ref={scrollRef}
+                className="w-full min-w-0 max-w-full space-y-3 overflow-x-hidden px-3 py-4"
+              >
+                {(sessionsLoading || messagesLoading) && (
+                  <p className="py-6 text-center text-xs text-muted-foreground">Loading chat…</p>
+                )}
 
-          {/* Clarify card */}
-          {clarify && (
-            <div className="rounded-lg border bg-card p-3 space-y-2">
-              <p className="text-xs font-medium text-foreground">{clarify.question}</p>
-              <div className="flex flex-wrap gap-1.5">
-                {clarifyOptions.map((opt) => (
+                {/* Clarify card */}
+                {clarify && (
+                  <div className="space-y-2 rounded-xl border border-border/60 bg-card p-3">
+                    <p className="break-words text-sm font-medium text-foreground">
+                      {clarify.question}
+                    </p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {clarifyOptions.map((opt) => (
+                        <Button
+                          key={opt}
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="h-auto whitespace-normal py-1.5 text-left text-xs"
+                          onClick={async () => {
+                            const supabase = createClient()
+                            const { data: { session } } = await supabase.auth.getSession()
+                            const token = session?.access_token
+                            if (!token) return
+                            const res = await answerClarify(opt, token)
+                            if (res.donePayload?.content) {
+                              const text = (res.donePayload.answer || res.donePayload.content).trim()
+                              if (text) void appendAssistantFromDb(text, true, [...steps])
+                            }
+                          }}
+                        >
+                          {opt}
+                        </Button>
+                      ))}
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="h-auto py-1.5 text-xs"
+                        onClick={async () => {
+                          const supabase = createClient()
+                          const { data: { session } } = await supabase.auth.getSession()
+                          const token = session?.access_token
+                          if (!token) return
+                          const res = await skipClarify(token)
+                          if (res.donePayload?.content) {
+                            const text = (res.donePayload.answer || res.donePayload.content).trim()
+                            if (text) void appendAssistantFromDb(text, true, [...steps])
+                          }
+                        }}
+                      >
+                        Skip
+                      </Button>
+                    </div>
+                  </div>
+                )}
+
+                {/* Message bubbles */}
+                {messages.map((m) => (
+                  <div key={m.id} className="w-full min-w-0 max-w-full">
+                    {m.role === "user" ? (
+                      <div className="flex w-full min-w-0 justify-end">
+                        <div className="max-w-[88%] min-w-0 rounded-2xl rounded-tr-sm bg-primary/10 px-3 py-2 text-sm text-foreground [overflow-wrap:anywhere] break-words whitespace-pre-wrap">
+                          {m.text}
+                        </div>
+                      </div>
+                    ) : (
+                      <AssistantMessage
+                        message={m}
+                        currentEditorContent={currentEditorContent}
+                        currentVersion={currentVersion}
+                        getDiff={getDiff}
+                        onApply={handleApply}
+                        onDiscard={handleDiscard}
+                      />
+                    )}
+                  </div>
+                ))}
+
+                {isStreaming && <ThinkingIndicator steps={steps} />}
+                {error && !isStreaming && (
+                  <p className="break-words text-xs text-destructive">{error}</p>
+                )}
+              </div>
+            </ScrollArea>
+          )}
+        </div>
+
+        {/* ── Input area (matches Catalyst's rounded-2xl container) ──────── */}
+        <div className="mx-auto w-full min-w-0 shrink-0 px-4 pb-4 pt-2">
+          <div
+            className={cn(
+              "relative rounded-2xl border border-border bg-background shadow-sm transition-all focus-within:border-primary/50 focus-within:shadow-md",
+              dropTargetActive && "border-primary/50 ring-2 ring-primary/20"
+            )}
+          >
+            {/* Context hint — inside container like Catalyst's mode toggle */}
+            {aiContextPapers.length === 0 && (
+              <div className="border-b border-border/50 px-3 py-2">
+                <p className="text-[10px] text-amber-700/90 dark:text-amber-400/90">
+                  No papers in context yet — drag from Literature or type @ below to attach papers from the filtered list.
+                </p>
+              </div>
+            )}
+            {dropTargetActive && (
+              <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center rounded-2xl bg-primary/5">
+                <span className="rounded-md bg-background/90 px-2 py-1 text-xs font-medium text-primary shadow-sm">
+                  Drop to add paper
+                </span>
+              </div>
+            )}
+            <div className="relative">
+              {/* @ mention picker — anchored to composer only */}
+              {mentionMenu && (
+                <div
+                  ref={mentionListRef}
+                  className="absolute bottom-full left-0 right-0 z-20 mb-1 max-h-40 overflow-y-auto rounded-lg border border-border/60 bg-popover p-1 text-popover-foreground shadow-md"
+                  role="listbox"
+                  aria-label="Pick a paper"
+                >
+                  {mentionMenu.matches.length === 0 ? (
+                    <p className="px-2 py-3 text-center text-xs text-muted-foreground">
+                      {literatureCandidates.length === 0
+                        ? "No papers in the filtered list — set project/experiment in Literature."
+                        : "No matching papers."}
+                    </p>
+                  ) : (
+                    mentionMenu.matches.map((p, idx) => (
+                      <button
+                        key={p.id}
+                        type="button"
+                        role="option"
+                        data-mention-index={idx}
+                        aria-selected={idx === mentionHighlightIndex}
+                        className={cn(
+                          "flex w-full min-w-0 flex-col rounded-md px-2 py-1.5 text-left text-xs transition-colors",
+                          idx === mentionHighlightIndex
+                            ? "bg-primary/15 text-foreground"
+                            : "hover:bg-muted"
+                        )}
+                        onMouseDown={(e) => {
+                          e.preventDefault()
+                          applyMentionPick(p)
+                        }}
+                      >
+                        <span className="truncate font-medium">{p.title}</span>
+                        {p.authors && (
+                          <span className="truncate text-[10px] text-muted-foreground">
+                            {p.authors}
+                          </span>
+                        )}
+                      </button>
+                    ))
+                  )}
+                </div>
+              )}
+              <Textarea
+              ref={textareaRef}
+              value={input}
+              onChange={(e) => {
+                const v = e.target.value
+                const c = e.target.selectionStart ?? v.length
+                setInput(v)
+                syncMentionFromInput(v, c)
+              }}
+              onSelect={(e) => {
+                const t = e.target as HTMLTextAreaElement
+                syncMentionFromInput(t.value, t.selectionStart ?? t.value.length)
+              }}
+              placeholder={
+                literatureIds.length === 0
+                  ? "Drop papers here or type @ to search literature…"
+                  : "Ask to draft a section, refine steps, add safety notes…"
+              }
+              className="min-h-[72px] resize-none border-0 bg-transparent text-sm shadow-none focus-visible:ring-0 focus-visible:ring-offset-0"
+              disabled={isStreaming}
+              onKeyDown={(e) => {
+                const menu = mentionMenu
+                if (menu && e.key === "Escape") {
+                  e.preventDefault()
+                  mentionQueryKeyRef.current = null
+                  setMentionMenu(null)
+                  return
+                }
+                const canPick =
+                  menu &&
+                  menu.matches.length > 0 &&
+                  !e.shiftKey
+                if (canPick) {
+                  if (e.key === "ArrowDown") {
+                    e.preventDefault()
+                    setMentionHighlightIndex((i) =>
+                      Math.min(i + 1, menu.matches.length - 1)
+                    )
+                    return
+                  }
+                  if (e.key === "ArrowUp") {
+                    e.preventDefault()
+                    setMentionHighlightIndex((i) => Math.max(i - 1, 0))
+                    return
+                  }
+                  if (e.key === "Enter" || e.key === "Tab") {
+                    e.preventDefault()
+                    const pick = menu.matches[mentionHighlightIndex]
+                    if (pick) applyMentionPick(pick)
+                    return
+                  }
+                }
+                if (e.key === "Enter" && !e.shiftKey) {
+                  e.preventDefault()
+                  void handleSend()
+                }
+              }}
+            />
+            </div>
+            <div className="flex items-center justify-between px-3 pb-2.5">
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-7 gap-1.5 text-xs text-muted-foreground hover:text-foreground"
+                onClick={() => {
+                  if (!activeSessionId) return
+                  void clearSessionMessages(activeSessionId).then(() => {
+                    setMessages([])
+                    reset()
+                  })
+                }}
+                disabled={isStreaming || messages.length === 0}
+              >
+                Clear
+              </Button>
+              <div className="flex items-center gap-1">
+                <span className="text-[10px] text-muted-foreground">↵ send</span>
+                {isStreaming ? (
                   <Button
-                    key={opt}
                     type="button"
                     variant="outline"
-                    size="sm"
-                    className="h-7 text-xs"
-                    onClick={async () => {
-                      const supabase = createClient()
-                      const { data: { session } } = await supabase.auth.getSession()
-                      const token = session?.access_token
-                      if (!token) return
-                      const res = await answerClarify(opt, token)
-                      if (res.donePayload?.content) {
-                        const text = (res.donePayload.answer || res.donePayload.content).trim()
-                        if (text) addMessage({ id: `asst-${Date.now()}`, role: "assistant", text, state: "pending", steps: [...steps] })
-                      }
-                    }}
+                    size="icon"
+                    className="size-8 rounded-full"
+                    onClick={abort}
+                    title="Stop generation"
                   >
-                    {opt}
+                    <Square className="size-3 fill-current" />
                   </Button>
-                ))}
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  className="h-7 text-xs"
-                  onClick={async () => {
-                    const supabase = createClient()
-                    const { data: { session } } = await supabase.auth.getSession()
-                    const token = session?.access_token
-                    if (!token) return
-                    const res = await skipClarify(token)
-                    if (res.donePayload?.content) {
-                      const text = (res.donePayload.answer || res.donePayload.content).trim()
-                      if (text) addMessage({ id: `asst-${Date.now()}`, role: "assistant", text, state: "pending", steps: [...steps] })
-                    }
-                  }}
-                >
-                  Skip
-                </Button>
+                ) : (
+                  <Button
+                    type="button"
+                    size="icon"
+                    className="size-8 rounded-full bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+                    disabled={literatureIds.length === 0 || !input.trim()}
+                    onClick={() => void handleSend()}
+                    aria-label="Send message"
+                  >
+                    <ArrowUp className="size-4" />
+                  </Button>
+                )}
               </div>
             </div>
-          )}
-
-          {/* Message bubbles */}
-          {messages.map((m) => (
-            <div key={m.id}>
-              {m.role === "user" ? (
-                <div className="flex justify-end">
-                  <div className="rounded-2xl rounded-tr-sm px-3 py-2 text-sm bg-primary/10 text-foreground max-w-[88%] whitespace-pre-wrap break-words">
-                    {m.text}
-                  </div>
-                </div>
-              ) : (
-                <AssistantMessage
-                  message={m}
-                  currentEditorContent={currentEditorContent}
-                  currentVersion={currentVersion}
-                  getDiff={getDiff}
-                  onApply={handleApply}
-                  onDiscard={handleDiscard}
-                />
-              )}
-            </div>
-          ))}
-
-          {/* Streaming: always show "Thinking…" pill; steps available on expand */}
-          {isStreaming && (
-            <ThinkingIndicator steps={steps} />
-          )}
-          {error && !isStreaming && (
-            <p className="text-xs text-destructive">{error}</p>
-          )}
-        </div>
-      </ScrollArea>
-
-      {/* ── Input ──────────────────────────────────────────────────────── */}
-      <div className="border-t p-2.5 shrink-0 bg-background space-y-2">
-        {aiContextPapers.length === 0 && (
-          <p className="text-[10px] text-amber-700 dark:text-amber-400">
-            Add papers from the literature panel to enable AI drafting.
-          </p>
-        )}
-        <div className="relative">
-          <Textarea
-            ref={textareaRef}
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            placeholder={
-              literatureIds.length === 0
-                ? "Select papers first…"
-                : "Ask to draft a section, refine steps, add safety notes…"
-            }
-            className="min-h-[72px] text-sm resize-none pr-10"
-            disabled={literatureIds.length === 0 || isStreaming}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && !e.shiftKey) {
-                e.preventDefault()
-                void handleSend()
-              }
-            }}
-          />
-          <Button
-            type="button"
-            size="icon"
-            className="absolute bottom-2 right-2 h-7 w-7"
-            disabled={literatureIds.length === 0 || !input.trim() || isStreaming}
-            onClick={() => void handleSend()}
-          >
-            <Send className="h-3.5 w-3.5" />
-          </Button>
-        </div>
-        <div className="flex items-center justify-between">
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            className="h-7 text-xs text-muted-foreground"
-            onClick={() => {
-              setSessions((prev) =>
-                prev.map((s) =>
-                  s.id === activeSessionId ? { ...s, messages: [], title: "New chat" } : s
-                )
-              )
-              reset()
-            }}
-            disabled={isStreaming || messages.length === 0}
-          >
-            Clear chat
-          </Button>
-          <p className="text-[10px] text-muted-foreground">
-            Enter to send · Shift+Enter for newline
-          </p>
+          </div>
         </div>
       </div>
     </div>
@@ -670,28 +1037,36 @@ export function ProtocolAiSidechat({
 function ThinkingIndicator({ steps }: { steps: string[] }) {
   const [expanded, setExpanded] = useState(false)
   return (
-    <div className="space-y-1.5">
+    <div className="w-full min-w-0 max-w-full space-y-1.5 overflow-x-hidden [contain:inline-size]">
       <button
         type="button"
         onClick={() => steps.length > 0 && setExpanded((v) => !v)}
         className={cn(
-          "flex items-center gap-2 text-xs text-muted-foreground py-1 rounded-lg px-2 transition-colors",
-          steps.length > 0 && "hover:bg-muted/60 cursor-pointer"
+          "flex w-full min-w-0 max-w-full items-start gap-2 overflow-hidden rounded-lg px-2 py-1 text-left text-xs text-muted-foreground transition-colors",
+          steps.length > 0 && "cursor-pointer hover:bg-muted/60"
         )}
       >
-        <Loader2 className="h-3.5 w-3.5 animate-spin shrink-0" />
-        <span>Thinking…</span>
+        <Loader2 className="mt-0.5 h-3.5 w-3.5 shrink-0 animate-spin" />
+        <span className="min-w-0 flex-1 break-words [overflow-wrap:anywhere]">
+          Thinking…
+        </span>
         {steps.length > 0 && (
           <ChevronDown
-            className={cn("h-3.5 w-3.5 ml-auto shrink-0 transition-transform", expanded && "rotate-180")}
+            className={cn(
+              "mt-0.5 h-3.5 w-3.5 shrink-0 transition-transform",
+              expanded && "rotate-180"
+            )}
           />
         )}
       </button>
       {expanded && steps.length > 0 && (
-        <ScrollArea className="h-36 rounded-md border bg-muted/20">
-          <div className="p-2 space-y-0.5">
+        <ScrollArea className="h-36 w-full min-w-0 max-w-full overflow-x-hidden rounded-md border bg-muted/20 [&_[data-slot=scroll-area-viewport]]:overflow-x-hidden">
+          <div className="w-full min-w-0 max-w-full space-y-0.5 overflow-x-hidden p-2 [contain:inline-size]">
             {steps.map((s, i) => (
-              <p key={i} className="text-[10px] font-mono text-muted-foreground leading-relaxed">
+              <p
+                key={i}
+                className="max-w-full min-w-0 break-all font-mono text-[10px] leading-relaxed text-muted-foreground [overflow-wrap:anywhere] whitespace-pre-wrap"
+              >
                 {s}
               </p>
             ))}
@@ -742,22 +1117,25 @@ function AssistantMessage({
   const isDiscarded = message.state === "discarded"
   const hasSteps = (message.steps?.length ?? 0) > 0
 
-  const handleCopy = useCallback(() => {
-    navigator.clipboard.writeText(tightenChatMarkdown(message.text)).then(() => {
+  const handleCopy = useCallback(async () => {
+    const md = tightenChatMarkdown(message.text)
+    try {
+      await copyMarkdownForRichPaste(md)
       setCopied(true)
       setTimeout(() => setCopied(false), 2000)
-    })
+    } catch {
+      try {
+        await navigator.clipboard.writeText(md)
+        setCopied(true)
+        setTimeout(() => setCopied(false), 2000)
+      } catch {
+        /* ignore */
+      }
+    }
   }, [message.text])
 
   return (
-    <div
-      className={cn(
-        "rounded-xl border p-3 space-y-2 text-sm min-w-0 overflow-hidden",
-        isPending && "border-primary/30 bg-primary/5",
-        isApplied && "border-emerald-500/20 bg-emerald-500/5 opacity-75",
-        isDiscarded && "border-muted opacity-40"
-      )}
-    >
+    <div className="w-full min-w-0 max-w-full space-y-2 overflow-hidden text-sm text-foreground [overflow-wrap:anywhere]">
       {/* Reasoning toggle */}
       {hasSteps && (
         <button
@@ -773,10 +1151,13 @@ function AssistantMessage({
       )}
 
       {showSteps && hasSteps && (
-        <ScrollArea className="h-36 rounded-md border bg-muted/20">
-          <div className="p-2 space-y-0.5">
+        <ScrollArea className="h-36 w-full min-w-0 max-w-full rounded-md border bg-muted/20">
+          <div className="w-full min-w-0 max-w-full space-y-0.5 p-2">
             {message.steps!.map((s, i) => (
-              <p key={i} className="text-[10px] font-mono text-muted-foreground leading-relaxed">
+              <p
+                key={i}
+                className="max-w-full min-w-0 break-words font-mono text-[10px] leading-relaxed text-muted-foreground [overflow-wrap:anywhere] whitespace-pre-wrap"
+              >
                 {s}
               </p>
             ))}
@@ -785,10 +1166,19 @@ function AssistantMessage({
       )}
 
       {/* Markdown content */}
-      <div className="min-w-0 overflow-hidden">
+      <div className="w-full min-w-0 max-w-full overflow-x-hidden">
         <MarkdownRenderer
           content={message.text}
-          className="text-xs [&_.notes9-md]:text-xs [&_p]:text-xs [&_li]:text-xs [&_h1]:text-sm [&_h2]:text-xs [&_h3]:text-xs break-words"
+          className="
+            w-full min-w-0 max-w-full break-words
+            text-xs
+            [&_.notes9-md]:text-xs [&_p]:text-xs [&_li]:text-xs
+            [&_h1]:text-sm [&_h2]:text-xs [&_h3]:text-xs
+            [word-break:break-word] [overflow-wrap:anywhere]
+            [&_pre]:max-w-full [&_pre]:overflow-x-auto [&_pre]:whitespace-pre-wrap
+            [&_code]:break-all
+            [&_table]:max-w-full [&_table]:table-fixed [&_td]:break-words [&_th]:break-words
+          "
         />
       </div>
 
@@ -798,8 +1188,8 @@ function AssistantMessage({
           <p className="text-[10px] font-medium uppercase text-muted-foreground mb-1.5">
             Changes vs current draft (new version: {bumpVersion(currentVersion)})
           </p>
-          <ScrollArea className="max-h-48">
-            <p className="text-xs font-mono leading-relaxed whitespace-pre-wrap pr-2">
+          <div className="max-h-48 w-full min-w-0 max-w-full overflow-y-auto overflow-x-hidden">
+            <p className="min-w-0 max-w-full break-all pr-2 font-mono text-xs leading-relaxed [overflow-wrap:anywhere] whitespace-pre-wrap [word-break:break-word]">
               {diff.map((part, i) => {
                 if (!part.added && !part.removed) {
                   return (
@@ -822,7 +1212,7 @@ function AssistantMessage({
                 )
               })}
             </p>
-          </ScrollArea>
+          </div>
         </div>
       )}
 
@@ -833,11 +1223,15 @@ function AssistantMessage({
           type="button"
           variant="ghost"
           size="icon"
-          className="h-6 w-6 text-muted-foreground hover:text-foreground"
+          className="size-7 text-muted-foreground hover:text-foreground"
           onClick={handleCopy}
-          title="Copy as Markdown"
+          title="Copy — Markdown and rich paste for the editor"
         >
-          {copied ? <ClipboardCheck className="h-3 w-3 text-emerald-500" /> : <Clipboard className="h-3 w-3" />}
+          {copied ? (
+            <Check className="size-3.5 text-green-500" />
+          ) : (
+            <Copy className="size-3.5" />
+          )}
         </Button>
 
         {isPending && (
@@ -860,7 +1254,7 @@ function AssistantMessage({
               )}
             </Button>
 
-            <div className="flex items-center gap-1 ml-auto">
+            <div className="flex items-center gap-0.5 ml-auto">
               <Button
                 type="button"
                 variant="ghost"
@@ -868,23 +1262,23 @@ function AssistantMessage({
                 className="h-6 text-[10px] gap-1 text-muted-foreground hover:text-destructive hover:bg-destructive/10 px-1.5"
                 onClick={() => onDiscard(message.id)}
               >
-                <X className="h-3 w-3" />
+                <X className="size-3" />
                 Discard
               </Button>
               <Button
                 type="button"
                 size="sm"
-                className="h-6 text-[10px] gap-1 px-2"
+                className="h-6 text-[10px] gap-1 px-2 bg-primary text-primary-foreground hover:bg-primary/90"
                 onClick={() => onApply(message)}
               >
-                <Check className="h-3 w-3" />
+                <Check className="size-3" />
                 Apply
               </Button>
             </div>
           </>
         )}
         {isApplied && (
-          <div className="flex items-center gap-1 text-[10px] text-emerald-600 dark:text-emerald-400 ml-1">
+          <div className="ml-1 flex items-center gap-1 text-[10px] text-muted-foreground">
             <Check className="h-3 w-3" />
             Applied
           </div>

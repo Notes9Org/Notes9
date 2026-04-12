@@ -12,59 +12,82 @@ export function isProtocolContextColumnError(err: { message?: string } | null): 
   )
 }
 
+export function isProtocolDocumentTemplateColumnError(err: { message?: string } | null): boolean {
+  const m = (err?.message ?? "").toLowerCase()
+  return m.includes("document_template_id") || (m.includes("column") && m.includes("document_template"))
+}
+
 type ProtocolInsert = Record<string, unknown>
 
 /**
- * Insert a protocol row. If DB has no project_id/experiment_id columns yet, retries without them.
+ * Insert a protocol row. Retries without optional columns when the schema is behind migrations.
  */
 export async function insertProtocolWithOptionalContext(
   supabase: SupabaseClient,
   row: ProtocolInsert
 ): Promise<{ data: unknown; error: Error | null; contextSaved: boolean }> {
-  const { data, error } = await supabase.from("protocols").insert(row).select().single()
+  let current: ProtocolInsert = { ...row }
+  let contextSaved = true
 
-  if (!error) {
-    return { data, error: null, contextSaved: true }
-  }
+  for (let attempt = 0; attempt < 6; attempt++) {
+    const { data, error } = await supabase.from("protocols").insert(current).select().single()
 
-  if (!isProtocolContextColumnError(error)) {
+    if (!error) {
+      return { data, error: null, contextSaved }
+    }
+
+    if (isProtocolContextColumnError(error)) {
+      const { project_id: _p, experiment_id: _e, ...rest } = current
+      current = rest
+      contextSaved = false
+      continue
+    }
+
+    if (isProtocolDocumentTemplateColumnError(error)) {
+      const { document_template_id: _dt, ...rest } = current
+      current = rest
+      continue
+    }
+
     return { data: null, error: error as Error, contextSaved: false }
   }
 
-  const { project_id: _p, experiment_id: _e, ...rest } = row
-  const retry = await supabase.from("protocols").insert(rest).select().single()
-
-  if (retry.error) {
-    return { data: null, error: retry.error as Error, contextSaved: false }
-  }
-
-  return { data: retry.data, error: null, contextSaved: false }
+  return { data: null, error: new Error("insertProtocolWithOptionalContext: max retries"), contextSaved: false }
 }
 
 /**
- * Update a protocol row. Retries without project_id/experiment_id if columns missing.
+ * Update a protocol row. Retries without optional columns when the schema is behind migrations.
  */
 export async function updateProtocolWithOptionalContext(
   supabase: SupabaseClient,
   id: string,
   patch: ProtocolInsert
 ): Promise<{ error: Error | null; contextSaved: boolean }> {
-  const { error } = await supabase.from("protocols").update(patch).eq("id", id)
+  let current: ProtocolInsert = { ...patch }
+  let contextSaved = true
 
-  if (!error) {
-    return { error: null, contextSaved: true }
-  }
+  for (let attempt = 0; attempt < 6; attempt++) {
+    const { error } = await supabase.from("protocols").update(current).eq("id", id)
 
-  if (!isProtocolContextColumnError(error)) {
+    if (!error) {
+      return { error: null, contextSaved }
+    }
+
+    if (isProtocolContextColumnError(error)) {
+      const { project_id: _p, experiment_id: _e, ...rest } = current
+      current = rest
+      contextSaved = false
+      continue
+    }
+
+    if (isProtocolDocumentTemplateColumnError(error)) {
+      const { document_template_id: _dt, ...rest } = current
+      current = rest
+      continue
+    }
+
     return { error: error as Error, contextSaved: false }
   }
 
-  const { project_id: _p, experiment_id: _e, ...rest } = patch
-  const retry = await supabase.from("protocols").update(rest).eq("id", id)
-
-  if (retry.error) {
-    return { error: retry.error as Error, contextSaved: false }
-  }
-
-  return { error: null, contextSaved: false }
+  return { error: new Error("updateProtocolWithOptionalContext: max retries"), contextSaved: false }
 }

@@ -31,6 +31,10 @@ import {
   FlaskConical,
 } from "lucide-react"
 import Link from "next/link"
+import { cn } from "@/lib/utils"
+
+/** Drag payload MIME — same string used in Protocol AI drop targets. */
+export const LITERATURE_PAPER_DRAG_MIME = "application/literature-paper" as const
 
 export interface LiteraturePaperItem {
   id: string
@@ -58,6 +62,8 @@ interface ProtocolLiteraturePanelProps {
   onAddToAiContext?: (papers: LiteraturePaperItem[]) => void
   /** Hide the whole literature column (toolbar control). */
   onRequestClose?: () => void
+  /** Current filtered paper list (for Protocol AI @-mentions). */
+  onPapersChange?: (papers: LiteraturePaperItem[]) => void
   /**
    * When true, renders project + experiment selector dropdowns at the top.
    * Use when the parent doesn't own the project/experiment selection.
@@ -75,6 +81,7 @@ export function ProtocolLiteraturePanel({
   variant = "citations",
   onAddToAiContext,
   onRequestClose,
+  onPapersChange,
   showFilters = false,
   onContextChange,
 }: ProtocolLiteraturePanelProps) {
@@ -142,6 +149,9 @@ export function ProtocolLiteraturePanel({
   const onContextChangeRef = useRef(onContextChange)
   useEffect(() => { onContextChangeRef.current = onContextChange })
 
+  const onPapersChangeRef = useRef(onPapersChange)
+  useEffect(() => { onPapersChangeRef.current = onPapersChange })
+
   // Bubble context changes up (only depends on the *values* that changed)
   useEffect(() => {
     if (!showFilters) return
@@ -174,6 +184,10 @@ export function ProtocolLiteraturePanel({
     })
   }, [projectId, experimentId])
 
+  useEffect(() => {
+    onPapersChangeRef.current?.(papers)
+  }, [papers])
+
   const toggleSelect = (id: string) => {
     setSelected((prev) => {
       const next = new Set(prev)
@@ -202,15 +216,8 @@ export function ProtocolLiteraturePanel({
     setSelected(new Set())
   }
 
-  const formatFirstAuthor = (authors: string | null) => {
-    if (!authors) return null
-    const first = authors.split(",")[0].trim()
-    const hasMore = authors.includes(",")
-    return hasMore ? `${first} et al.` : first
-  }
-
   const filterSection = showFilters && (
-    <div className="px-3 py-2.5 border-b shrink-0 space-y-2 bg-muted/20 overflow-hidden">
+    <div className="space-y-1.5 border-b border-border/30 bg-transparent px-3 py-2 shrink-0 overflow-hidden">
       <div className="flex items-center gap-1.5">
         <FolderOpen className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
         <Select
@@ -220,7 +227,7 @@ export function ProtocolLiteraturePanel({
             setInternalExperimentId("")
           }}
         >
-          <SelectTrigger className="h-7 text-xs flex-1">
+          <SelectTrigger className="h-6 text-xs flex-1">
             <SelectValue placeholder="Select project…" />
           </SelectTrigger>
           <SelectContent>
@@ -238,7 +245,7 @@ export function ProtocolLiteraturePanel({
           onValueChange={(v) => setInternalExperimentId(v === "_none_" ? "" : v)}
           disabled={!internalProjectId || isLoadingFilterExperiments}
         >
-          <SelectTrigger className="h-7 text-xs flex-1">
+          <SelectTrigger className="h-6 text-xs flex-1">
             <SelectValue placeholder={
               !internalProjectId ? "Select project first" :
               isLoadingFilterExperiments ? "Loading…" : "Select experiment…"
@@ -257,7 +264,7 @@ export function ProtocolLiteraturePanel({
 
   if (!projectId && !experimentId) {
     return (
-      <div className="h-full flex flex-col overflow-hidden">
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
         {filterSection}
         <div className="flex flex-col items-center justify-center gap-3 p-6 text-center flex-1">
           <div className="rounded-full bg-muted/60 p-3">
@@ -277,54 +284,62 @@ export function ProtocolLiteraturePanel({
   }
 
   return (
-    <div className="h-full flex flex-col overflow-hidden">
+    <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
       {filterSection}
-      <div className="px-3 py-2 border-b shrink-0 overflow-hidden">
-        <div className="flex items-center gap-1.5 min-w-0">
-          <span className="text-xs font-semibold truncate min-w-0 flex-1">Linked literature</span>
-          {!isLoading && papers.length > 0 && (
-            <Badge variant="secondary" className="text-[10px] shrink-0 tabular-nums">
-              {papers.length}
-            </Badge>
-          )}
-          {!isLoading && papers.length > 0 && (
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-6 px-2 text-[10px] text-muted-foreground shrink-0"
-              onClick={toggleAll}
-            >
-              {selected.size === papers.length ? "None" : "All"}
-            </Button>
-          )}
-          {onRequestClose && (
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon"
-              className="h-6 w-6 shrink-0"
-              onClick={onRequestClose}
-              aria-label="Hide literature panel"
-            >
-              <PanelLeftClose className="h-3.5 w-3.5" />
-            </Button>
-          )}
+      <div className="shrink-0 overflow-hidden border-b border-border/30 bg-background">
+        {/* h-11 aligns with TipTap panel toolbar (protocol design mode) */}
+        <div className="flex h-11 min-h-11 items-center justify-between gap-1.5 px-3 min-w-0 sm:px-4">
+          <span className="flex items-center gap-2 min-w-0">
+            <BookOpen className="size-3.5 shrink-0 text-muted-foreground" aria-hidden />
+            <span className="sr-only">Literature</span>
+          </span>
+          <div className="flex items-center gap-1.5 shrink-0">
+            {!isLoading && papers.length > 0 && (
+              <Badge variant="secondary" className="text-[10px] shrink-0 tabular-nums">
+                {papers.length}
+              </Badge>
+            )}
+            {!isLoading && papers.length > 0 && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-6 px-2 text-[10px] text-muted-foreground shrink-0"
+                onClick={toggleAll}
+              >
+                {selected.size === papers.length ? "None" : "All"}
+              </Button>
+            )}
+            {onRequestClose && (
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="h-6 w-6 shrink-0"
+                onClick={onRequestClose}
+                aria-label="Hide literature panel"
+              >
+                <PanelLeftClose className="h-3.5 w-3.5" />
+              </Button>
+            )}
+          </div>
         </div>
 
         {selected.size > 0 && (
-          <>
-            <Separator className="my-1.5" />
+          <div className="px-2 pb-1.5 pt-0">
+            <Separator className="my-1" />
             <TooltipProvider>
               <Tooltip>
                 <TooltipTrigger asChild>
                   <Button
+                    type="button"
+                    variant={aiMode ? "secondary" : "default"}
                     size="sm"
-                    className="w-full h-7 text-xs gap-1.5"
+                    className="h-6 w-full justify-start gap-1.5 text-xs"
                     onClick={handlePrimaryAction}
                   >
                     {aiMode ? (
                       <>
-                        <Sparkles className="h-3.5 w-3.5" />
+                        <Sparkles className="size-3.5" />
                         Add {selected.size} to AI
                       </>
                     ) : (
@@ -339,7 +354,7 @@ export function ProtocolLiteraturePanel({
                 )}
               </Tooltip>
             </TooltipProvider>
-          </>
+          </div>
         )}
       </div>
 
@@ -365,33 +380,36 @@ export function ProtocolLiteraturePanel({
             </Button>
           </div>
         ) : (
-          <ul className="flex w-full min-w-0 flex-col gap-0.5 p-1.5">
+          <ul className="flex w-full min-w-0 flex-col gap-0 p-0.5">
             {papers.map((paper) => (
               <li
                 key={paper.id}
                 className="group/paper relative"
-                draggable={!aiMode}
-                onDragStart={
-                  aiMode
-                    ? undefined
-                    : (e) => {
-                        e.dataTransfer.setData(
-                          "application/literature-paper",
-                          JSON.stringify({
-                            type: "literature",
-                            id: paper.id,
-                            title: paper.title,
-                            authors: paper.authors,
-                            journal: paper.journal,
-                            publication_year: paper.publication_year,
-                          })
-                        )
-                        onDragStart?.(paper, e)
-                      }
-                }
+                draggable
+                onDragStart={(e) => {
+                  e.dataTransfer.setData(
+                    LITERATURE_PAPER_DRAG_MIME,
+                    JSON.stringify({
+                      type: "literature",
+                      id: paper.id,
+                      title: paper.title,
+                      authors: paper.authors,
+                      journal: paper.journal,
+                      publication_year: paper.publication_year,
+                    })
+                  )
+                  e.dataTransfer.effectAllowed = "copy"
+                  onDragStart?.(paper, e)
+                }}
               >
                 <div
-                  className={`flex items-start gap-2 rounded-md px-2 py-1.5 transition-colors hover:bg-muted/70 ${selected.has(paper.id) ? "bg-primary/5" : ""}`}
+                  className={cn(
+                    "flex items-start gap-1.5 rounded-md px-1.5 py-0.5 transition-colors hover:bg-muted/60",
+                    selected.has(paper.id) &&
+                      (aiMode
+                        ? "bg-secondary/40 ring-1 ring-border/80 dark:bg-secondary/25"
+                        : "bg-primary/5")
+                  )}
                   role="button"
                   tabIndex={0}
                   onClick={() => toggleSelect(paper.id)}
@@ -402,9 +420,10 @@ export function ProtocolLiteraturePanel({
                     }
                   }}
                 >
-                  {!aiMode && (
-                    <GripVertical className="h-3.5 w-3.5 text-muted-foreground/30 shrink-0 mt-0.5 cursor-grab active:cursor-grabbing group-hover/paper:text-muted-foreground/60" />
-                  )}
+                  <GripVertical
+                    className="h-3.5 w-3.5 shrink-0 cursor-grab text-muted-foreground/30 group-hover/paper:text-muted-foreground/60 active:cursor-grabbing mt-0.5"
+                    aria-hidden
+                  />
                   <Checkbox
                     checked={selected.has(paper.id)}
                     onCheckedChange={() => toggleSelect(paper.id)}
@@ -415,17 +434,6 @@ export function ProtocolLiteraturePanel({
                     <p className="text-xs font-medium leading-snug line-clamp-2 text-foreground">
                       {paper.title}
                     </p>
-                    {(paper.authors || paper.publication_year) && (
-                      <p className="text-[10px] text-muted-foreground mt-0.5 truncate">
-                        {formatFirstAuthor(paper.authors)}
-                        {paper.publication_year ? ` · ${paper.publication_year}` : ""}
-                      </p>
-                    )}
-                    {paper.journal && (
-                      <p className="text-[10px] text-muted-foreground/70 mt-0.5 truncate italic">
-                        {paper.journal}
-                      </p>
-                    )}
                   </div>
                 </div>
               </li>

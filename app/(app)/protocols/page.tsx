@@ -1,10 +1,7 @@
-import { redirect } from 'next/navigation'
+import { Suspense } from "react"
+import { redirect } from "next/navigation"
 import { createClient } from "@/lib/supabase/server"
-import {
-  ProtocolsPageContent,
-  ProtocolsEmptyState,
-  type ProtocolsProjectContext,
-} from './protocols-page-content'
+import { ProtocolsPageContent, type ProtocolsProjectContext } from "./protocols-page-content"
 import { resolveInitialProjectIdParam } from "@/lib/url-project-param"
 import { SetPageBreadcrumb } from "@/components/layout/breadcrumb-context"
 
@@ -111,11 +108,16 @@ export default async function ProtocolsPage({
       ) : (
         <SetPageBreadcrumb segments={[]} />
       )}
-      {enrichedProtocols.length > 0 ? (
+      <Suspense
+        fallback={
+          <div className="space-y-4 animate-pulse">
+            <div className="h-9 w-64 rounded-md bg-muted" />
+            <div className="h-40 rounded-lg bg-muted" />
+          </div>
+        }
+      >
         <ProtocolsPageContent protocols={enrichedProtocols} projectContext={projectContext} />
-      ) : (
-        <ProtocolsEmptyState />
-      )}
+      </Suspense>
     </div>
   )
 }

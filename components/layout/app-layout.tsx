@@ -294,7 +294,9 @@ function AppLayoutBody({ children }: AppLayoutProps) {
     maxWidth: 400,
     direction: 'left',
   })
-  const leftColumnWidth = sidebarOpen ? leftSidebar.width : 64
+  /** Must match `--sidebar-width-icon` (3rem) so the icon rail fills the column with no dead space */
+  const collapsedSidebarWidthPx = 48
+  const leftColumnWidth = sidebarOpen ? leftSidebar.width : collapsedSidebarWidthPx
 
   // Right sidebar resizing
   const rightSidebar = useResizable({
@@ -334,7 +336,7 @@ function AppLayoutBody({ children }: AppLayoutProps) {
             >
               <AppSidebar />
             </div>
-            {sidebarOpen && leftSidebar.width > 64 && (
+            {sidebarOpen && leftSidebar.width > collapsedSidebarWidthPx && (
               <ResizeHandle
                 onMouseDown={leftSidebar.handleMouseDown}
                 isResizing={leftSidebar.isResizing}
@@ -408,7 +410,8 @@ function AppLayoutBody({ children }: AppLayoutProps) {
 
           {/* Main Content — flex column so routes can use h-full / flex-1 (e.g. research map) */}
           <main className="flex min-h-0 flex-1 flex-col overflow-auto p-3 sm:p-4 md:p-6 min-w-0">
-            <div className="flex min-h-0 w-full min-w-0 flex-1 flex-col">
+            {/* h-full lets nested routes use h-full / percentage heights reliably (e.g. protocol design mode) */}
+            <div className="flex h-full min-h-0 w-full min-w-0 flex-1 flex-col">
               {children}
             </div>
           </main>
@@ -422,7 +425,7 @@ function AppLayoutBody({ children }: AppLayoutProps) {
               <SheetContent
                 side="right"
                 showCloseButton={false}
-                className="w-full max-w-full p-0 data-[state=open]:duration-300 data-[state=closed]:duration-200"
+                className="flex h-full max-h-dvh min-h-0 w-full max-w-full flex-col gap-0 overflow-hidden p-0 data-[state=open]:duration-300 data-[state=closed]:duration-200"
               >
                 <SheetHeader className="sr-only">
                   <SheetTitle>Protocol AI</SheetTitle>
@@ -439,7 +442,7 @@ function AppLayoutBody({ children }: AppLayoutProps) {
                   position="left"
                 />
                 <div
-                  className="border-l border-border overflow-hidden h-full min-h-0 flex flex-col"
+                  className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden border-l border-border"
                   style={{ width: rightSidebar.width, minWidth: 0 }}
                 >
                   {headerAi.panel}

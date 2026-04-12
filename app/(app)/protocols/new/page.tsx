@@ -48,8 +48,9 @@ import { TiptapEditor } from "@/components/text-editor/tiptap-editor"
 import { NoteExportMenu } from "@/components/note-export-menu"
 import {
   ProtocolTemplatePicker,
-  type ProtocolTemplate,
+  type ProtocolTemplateChoice,
 } from "@/components/protocols/protocol-template-picker"
+import { buildProtocolDraftHtmlFromExtracted } from "@/lib/build-protocol-draft-from-template"
 import {
   ProtocolLiteraturePanel,
   type LiteraturePaperItem,
@@ -74,6 +75,12 @@ const PROTOCOL_CATEGORIES = [
   "General SOP",
 ]
 
+function templateLabel(choice: ProtocolTemplateChoice | null): string {
+  if (!choice || choice.kind === "blank") return "Blank"
+  if (choice.kind === "protocol") return choice.template.name
+  return choice.name
+}
+
 interface Project {
   id: string
   name: string
@@ -92,12 +99,11 @@ function TemplateStep({
   onContinue,
 }: {
   organizationId: string | null
-  onContinue: (template: ProtocolTemplate | null) => void
+  onContinue: (choice: ProtocolTemplateChoice) => void
 }) {
-  const [selected, setSelected] = useState<ProtocolTemplate | null | "unset">("unset")
+  const [selected, setSelected] = useState<ProtocolTemplateChoice | "unset">("unset")
 
   const ready = selected !== "unset"
-  const value = selected === "unset" ? null : selected
 
   return (
     <Card>
@@ -109,20 +115,21 @@ function TemplateStep({
           Choose a starting template
         </CardTitle>
         <CardDescription>
-          Pick an existing protocol to reuse its title block, letterhead, and images (logos) only — the main procedure body is not copied so you draft fresh steps. Or start blank.
+          Pick an uploaded document template, a protocol from your library (letterhead only), or start blank. Manage
+          uploads under Protocols → Templates.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
         <ProtocolTemplatePicker
           organizationId={organizationId}
-          onSelect={(t) => setSelected(t)}
-          selectedId={selected === "unset" ? "__none__" : selected?.id ?? null}
+          onSelect={(c) => setSelected(c)}
+          selected={selected === "unset" ? null : selected}
         />
 
         <div className="flex justify-end">
           <Button
-            onClick={() => onContinue(value)}
-            disabled={selected === "unset"}
+            onClick={() => ready && onContinue(selected)}
+            disabled={!ready}
             className="gap-2"
           >
             Continue
@@ -142,7 +149,8 @@ function NewProtocolForm() {
   const { toast } = useToast()
 
   const [step, setStep] = useState<"template" | "form">("template")
-  const [selectedTemplate, setSelectedTemplate] = useState<ProtocolTemplate | null>(null)
+  const [selectedChoice, setSelectedChoice] = useState<ProtocolTemplateChoice | null>(null)
+  const [documentTemplateId, setDocumentTemplateId] = useState<string | null>(null)
   const [organizationId, setOrganizationId] = useState<string | null>(null)
   const [returnProjectId, setReturnProjectId] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(false)
@@ -279,25 +287,38 @@ function NewProtocolForm() {
     formData.project_id &&
     formData.experiment_id
 
-  // Apply template — only letterhead shell (headings, logos, short title lines), not full body
-  const applyTemplate = useCallback((template: ProtocolTemplate | null) => {
-    setSelectedTemplate(template)
-    if (template) {
-      const shell = extractProtocolTemplateShell(template.content)
-      setFormData((prev) => ({
-        ...prev,
-        content: shell,
-        category: template.category ?? prev.category,
-        version: "1.0",
-        description: template.description ?? prev.description,
-      }))
-    } else {
+  const applyTemplate = useCallback((choice: ProtocolTemplateChoice) => {
+    setSelectedChoice(choice)
+    if (choice.kind === "blank") {
+      setDocumentTemplateId(null)
       setFormData((prev) => ({
         ...prev,
         content: "",
         category: "",
         version: "1.0",
         description: "",
+      }))
+    } else if (choice.kind === "protocol") {
+      setDocumentTemplateId(null)
+      const t = choice.template
+      const shell = extractProtocolTemplateShell(t.content)
+      setFormData((prev) => ({
+        ...prev,
+        content: shell,
+        category: t.category ?? prev.category,
+        version: "1.0",
+        description: t.description ?? prev.description,
+      }))
+    } else {
+      setDocumentTemplateId(choice.id)
+      const html = buildProtocolDraftHtmlFromExtracted({
+        templateId: choice.id,
+        extracted: choice.extracted,
+      })
+      setFormData((prev) => ({
+        ...prev,
+        content: html,
+        version: "1.0",
       }))
     }
     setStep("form")
@@ -336,6 +357,7 @@ function NewProtocolForm() {
           created_by: user.id,
           project_id: formData.project_id,
           experiment_id: formData.experiment_id,
+          document_template_id: documentTemplateId,
         }
       )
 
@@ -493,10 +515,10 @@ function NewProtocolForm() {
 
         {/* Template indicator + context chips */}
         <div className="flex flex-wrap items-center gap-2 shrink-0">
-          {selectedTemplate && (
+          {selectedChoice && selectedChoice.kind !== "blank" && (
             <span className="inline-flex items-center gap-1.5 text-xs bg-primary/10 text-primary rounded-md px-2 py-1">
               <FileText className="h-3 w-3" />
-              Template: {selectedTemplate.name}
+              Template: {templateLabel(selectedChoice)}
             </span>
           )}
           {selectedProject && (
@@ -643,9 +665,9 @@ function NewProtocolForm() {
                 <div className="px-4 py-2 border-b flex items-center justify-between gap-2 shrink-0">
                   <span className="text-sm font-semibold text-foreground">Protocol draft</span>
                   <div className="flex items-center gap-1.5">
-                    {selectedTemplate && (
+                    {selectedChoice && selectedChoice.kind !== "blank" && (
                       <Badge variant="secondary" className="text-xs">
-                        From: {selectedTemplate.name}
+                        From: {templateLabel(selectedChoice)}
                       </Badge>
                     )}
                     <NoteExportMenu
@@ -668,6 +690,7 @@ function NewProtocolForm() {
                       title={formData.name || "new-protocol"}
                       minHeight="460px"
                       showAITools
+                      showAiWritingDropdown={false}
                       onEditorReady={(editor) => {
                         if (editor) {
                           editorInsertRef.current = (html: string) => {
@@ -744,10 +767,10 @@ function NewProtocolForm() {
               1
             </span>
             <span className="text-sm font-medium">Template</span>
-            {selectedTemplate ? (
+            {selectedChoice && selectedChoice.kind !== "blank" ? (
               <Badge variant="secondary" className="text-xs gap-1">
                 <FileText className="h-3 w-3" />
-                {selectedTemplate.name}
+                {templateLabel(selectedChoice)}
               </Badge>
             ) : (
               <Badge variant="outline" className="text-xs">Blank</Badge>
@@ -778,11 +801,11 @@ function NewProtocolForm() {
           <div className="border-t px-4 pb-4 pt-3">
             <ProtocolTemplatePicker
               organizationId={organizationId}
-              onSelect={(t) => {
-                applyTemplate(t)
+              onSelect={(c) => {
+                applyTemplate(c)
                 setTemplateStepCollapsed(true)
               }}
-              selectedId={selectedTemplate?.id ?? null}
+              selected={selectedChoice}
             />
           </div>
         )}
@@ -904,6 +927,7 @@ function NewProtocolForm() {
                 title={formData.name || "protocol"}
                 minHeight="400px"
                 showAITools={true}
+                showAiWritingDropdown={false}
               />
             </div>
 

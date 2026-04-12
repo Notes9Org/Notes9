@@ -31,6 +31,7 @@ import { createLiteratureSuggestion, LiteratureItem, LiteratureMention } from ".
 import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
 import { Input } from "@/components/ui/input"
+import { Textarea } from "@/components/ui/textarea"
 import {
   Bold,
   Italic,
@@ -53,6 +54,7 @@ import {
   Loader2,
   FlaskConical,
   Sigma,
+  Calculator,
   Underline as UnderlineIcon,
   AlignLeft,
   AlignCenter,
@@ -133,6 +135,7 @@ import { SpreadsheetEmbed } from "./extensions/spreadsheet-embed"
 // @ts-ignore - CSS import for KaTeX math rendering
 import "katex/dist/katex.min.css"
 import * as XLSX from "xlsx"
+import { looksLikeMarkdown, markdownToHtml } from "@/lib/markdown-to-editor-html"
 
 interface Paper {
   id: number
@@ -153,178 +156,6 @@ interface CitationMetadata {
   journal: string
   doi: string
   paperId: string
-}
-
-const escapeHtml = (value: string) =>
-  value
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#39;")
-
-const parseInlineMarkdown = (value: string) => {
-  let html = escapeHtml(value)
-  html = html.replace(/`([^`]+)`/g, "<code>$1</code>")
-  html = html.replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, '<a href="$2">$1</a>')
-  html = html.replace(/\*\*\*([^*]+)\*\*\*/g, "<strong><em>$1</em></strong>")
-  html = html.replace(/___([^_]+)___/g, "<strong><em>$1</em></strong>")
-  html = html.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
-  html = html.replace(/__([^_]+)__/g, "<strong>$1</strong>")
-  html = html.replace(/\*([^*\n]+)\*/g, "<em>$1</em>")
-  html = html.replace(/_([^_\n]+)_/g, "<em>$1</em>")
-  html = html.replace(/~~([^~]+)~~/g, "<s>$1</s>")
-  return html
-}
-
-const looksLikeMarkdown = (value: string) => {
-  const text = value.trim()
-  if (!text) return false
-
-  return [
-    /^#{1,6}\s/m,
-    /^>\s/m,
-    /^[-*+]\s/m,
-    /^\d+\.\s/m,
-    /```/,
-    /\[([^\]]+)\]\((https?:\/\/|mailto:)[^)]+\)/,
-    /\*\*[^*]+\*\*/,
-    /__[^_]+__/,
-    /\|.+\|/,
-    /^-{3,}$|^\*{3,}$/m,
-  ].some((pattern) => pattern.test(text))
-}
-
-const basicMarkdownToHtml = (markdown: string) => {
-  const lines = markdown.replace(/\r\n/g, "\n").split("\n")
-  const blocks: string[] = []
-  let i = 0
-
-  while (i < lines.length) {
-    const rawLine = lines[i]
-    const line = rawLine.trimEnd()
-
-    if (!line.trim()) {
-      i += 1
-      continue
-    }
-
-    const fence = line.match(/^```([\w-]*)\s*$/)
-    if (fence) {
-      const codeLines: string[] = []
-      i += 1
-      while (i < lines.length && !lines[i].trim().startsWith("```")) {
-        codeLines.push(lines[i])
-        i += 1
-      }
-      if (i < lines.length) i += 1
-      const languageClass = fence[1] ? ` class="language-${escapeHtml(fence[1])}"` : ""
-      blocks.push(`<pre><code${languageClass}>${escapeHtml(codeLines.join("\n"))}</code></pre>`)
-      continue
-    }
-
-    if (/^[-*_]{3,}\s*$/.test(line.trim())) {
-      blocks.push("<hr>")
-      i += 1
-      continue
-    }
-
-    const heading = line.match(/^(#{1,6})\s+(.*)$/)
-    if (heading) {
-      const level = heading[1].length
-      blocks.push(`<h${level}>${parseInlineMarkdown(heading[2].trim())}</h${level}>`)
-      i += 1
-      continue
-    }
-
-    if (/^>\s?/.test(line)) {
-      const quoteLines: string[] = []
-      while (i < lines.length && /^>\s?/.test(lines[i].trim())) {
-        quoteLines.push(lines[i].trim().replace(/^>\s?/, ""))
-        i += 1
-      }
-      blocks.push(`<blockquote><p>${parseInlineMarkdown(quoteLines.join("<br>"))}</p></blockquote>`)
-      continue
-    }
-
-    if (/^(\s*)([-*+]|\d+\.)\s+/.test(line)) {
-      const isOrdered = /^\s*\d+\.\s+/.test(line)
-      const listTag = isOrdered ? "ol" : "ul"
-      const items: string[] = []
-
-      while (i < lines.length && /^(\s*)([-*+]|\d+\.)\s+/.test(lines[i].trimEnd())) {
-        const itemLine = lines[i].trim().replace(/^([-*+]|\d+\.)\s+/, "")
-        const task = itemLine.match(/^\[( |x|X)\]\s+(.*)$/)
-        if (task && !isOrdered) {
-          items.push(
-            `<li data-type="taskItem" data-checked="${task[1].toLowerCase() === "x" ? "true" : "false"}"><p>${parseInlineMarkdown(task[2])}</p></li>`
-          )
-        } else {
-          items.push(`<li><p>${parseInlineMarkdown(itemLine)}</p></li>`)
-        }
-        i += 1
-      }
-
-      if (items.some((item) => item.includes('data-type="taskItem"'))) {
-        blocks.push(`<ul data-type="taskList">${items.join("")}</ul>`)
-      } else {
-        blocks.push(`<${listTag}>${items.join("")}</${listTag}>`)
-      }
-      continue
-    }
-
-    if (/^\|(.+)\|\s*$/.test(line) && i + 1 < lines.length && /^\|?[\s:-]+\|[\s|:-]*$/.test(lines[i + 1].trim())) {
-      const headerCells = line
-        .trim()
-        .slice(1, -1)
-        .split("|")
-        .map((cell) => `<th>${parseInlineMarkdown(cell.trim())}</th>`)
-      const rows: string[] = []
-      i += 2
-      while (i < lines.length && /^\|(.+)\|\s*$/.test(lines[i].trim())) {
-        const rowCells = lines[i]
-          .trim()
-          .slice(1, -1)
-          .split("|")
-          .map((cell) => `<td>${parseInlineMarkdown(cell.trim())}</td>`)
-        rows.push(`<tr>${rowCells.join("")}</tr>`)
-        i += 1
-      }
-      blocks.push(`<table><thead><tr>${headerCells.join("")}</tr></thead><tbody>${rows.join("")}</tbody></table>`)
-      continue
-    }
-
-    const paragraphLines: string[] = []
-    while (i < lines.length && lines[i].trim()) {
-      if (
-        /^#{1,6}\s/.test(lines[i]) ||
-        /^>\s?/.test(lines[i]) ||
-        /^(\s*)([-*+]|\d+\.)\s+/.test(lines[i]) ||
-        /^```/.test(lines[i]) ||
-        /^\|(.+)\|\s*$/.test(lines[i].trim())
-      ) {
-        break
-      }
-      paragraphLines.push(lines[i].trim())
-      i += 1
-    }
-    blocks.push(`<p>${parseInlineMarkdown(paragraphLines.join(" "))}</p>`)
-  }
-
-  return blocks.join("")
-}
-
-const markdownToHtml = async (markdown: string) => {
-  try {
-    const markedModule = await (new Function('return import("marked")')() as Promise<{ marked: { parse: (value: string, options?: Record<string, unknown>) => string | Promise<string> } }>)
-    const parsed = await markedModule.marked.parse(markdown, {
-      gfm: true,
-      breaks: true,
-    })
-    return typeof parsed === "string" ? parsed : String(parsed)
-  } catch {
-    return basicMarkdownToHtml(markdown)
-  }
 }
 
 const encodeSpreadsheetWorkbook = (workbook: Record<string, unknown>) =>
@@ -479,6 +310,17 @@ interface TiptapEditorProps {
   enableMath?: boolean
   /** Enable academic paper mode (auto-numbered sections, figures, tables) */
   paperMode?: boolean
+  /**
+   * When true, the editor body uses the parent flex height instead of a viewport-based max-height.
+   * Use inside resizable panels (e.g. protocol design mode) so the formatting toolbar stays visible.
+   */
+  panelEmbed?: boolean
+  /**
+   * Sparkles menu (make shorter/longer, etc.). Disable where AI lives elsewhere (e.g. protocol design header).
+   */
+  showAiWritingDropdown?: boolean
+  /** When the writing dropdown is shown, also show an “AI” label next to the sparkles (e.g. paper writing workspace). */
+  showAiWritingToolbarLabel?: boolean
   /** Callback fired when the editor instance is ready (or changes). Useful for parent components that need direct editor access. */
   onEditorReady?: (editor: ReturnType<typeof useEditor>) => void
   /** HTML content to show as an inline diff widget at the cursor position */
@@ -487,6 +329,13 @@ interface TiptapEditorProps {
   onAcceptInlineDiff?: () => void
   /** Called when user dismisses the inline diff */
   onDismissInlineDiff?: () => void
+  /**
+   * When true, editor body uses max-height 100% inside a flex parent instead of viewport-based caps.
+   * Use with lab notes / panels so the toolbar stays visible and scroll stays in the editor body.
+   */
+  fillParentHeight?: boolean
+  /** Lab notes: opens scientific calculator from the formatting toolbar. */
+  onOpenScientificCalculator?: () => void
 }
 
 // Extension to support background color for table cells
@@ -1606,10 +1455,15 @@ export function TiptapEditor({
   literatureItems = [],
   enableMath = false,
   paperMode = false,
+  panelEmbed = false,
+  showAiWritingDropdown = true,
+  showAiWritingToolbarLabel = false,
   onEditorReady,
   inlineDiffHtml,
   onAcceptInlineDiff,
   onDismissInlineDiff,
+  fillParentHeight = false,
+  onOpenScientificCalculator,
 }: TiptapEditorProps & {
   hideToolbar?: boolean
   /** Accepted for lab-notes compatibility; export UI is toolbar-driven. */
@@ -1666,6 +1520,7 @@ export function TiptapEditor({
   const [linkDialogOpen, setLinkDialogOpen] = useState(false)
   const [linkUrlInput, setLinkUrlInput] = useState("")
   const [linkTextInput, setLinkTextInput] = useState("")
+  const [mathEdit, setMathEdit] = useState<{ pos: number; latex: string; block: boolean } | null>(null)
   const [imageInsertDialogOpen, setImageInsertDialogOpen] = useState(false)
   const [imageUrlInput, setImageUrlInput] = useState("")
   const [imageAltInput, setImageAltInput] = useState("")
@@ -1807,18 +1662,12 @@ export function TiptapEditor({
       ...(enableMath ? [Mathematics.configure({
         inlineOptions: {
           onClick: (node: any, pos: number) => {
-            const latex = prompt('Edit inline equation:', node.attrs.latex)
-            if (latex !== null) {
-              editorRef.current?.chain().setNodeSelection(pos).updateInlineMath({ latex }).focus().run()
-            }
+            setMathEdit({ pos, latex: String(node.attrs?.latex ?? ""), block: false })
           },
         },
         blockOptions: {
           onClick: (node: any, pos: number) => {
-            const latex = prompt('Edit block equation:', node.attrs.latex)
-            if (latex !== null) {
-              editorRef.current?.chain().setNodeSelection(pos).updateBlockMath({ latex }).focus().run()
-            }
+            setMathEdit({ pos, latex: String(node.attrs?.latex ?? ""), block: true })
           },
         },
         katexOptions: {
@@ -3400,6 +3249,19 @@ export function TiptapEditor({
     setLinkDialogOpen(false)
   }, [editor])
 
+  const applyMathEdit = useCallback(() => {
+    if (!mathEdit || !editorRef.current) return
+    const ed = editorRef.current
+    const { pos, latex, block } = mathEdit
+    const chain = ed.chain().focus().setNodeSelection(pos)
+    if (block) {
+      chain.updateBlockMath({ latex }).focus().run()
+    } else {
+      chain.updateInlineMath({ latex }).focus().run()
+    }
+    setMathEdit(null)
+  }, [mathEdit])
+
   const openImageDialog = useCallback(() => {
     setImageInsertDialogOpen(true)
     setToolbarClusterMenu(null)
@@ -4343,6 +4205,27 @@ export function TiptapEditor({
         </DropdownMenuContent>
       </DropdownMenu>
 
+      {onOpenScientificCalculator && (
+        <>
+          <Separator orientation="vertical" className="mx-px h-5 shrink-0" />
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-8 w-8 shrink-0 rounded-lg p-0"
+                onClick={onOpenScientificCalculator}
+                aria-label="Scientific calculator"
+              >
+                <Calculator className="h-4 w-4" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>Scientific calculator (molarity, dilution, …)</TooltipContent>
+          </Tooltip>
+        </>
+      )}
+
       {showAITools && (
         <>
           <Separator orientation="vertical" className="mx-px h-5 shrink-0" />
@@ -4364,42 +4247,58 @@ export function TiptapEditor({
             </TooltipTrigger>
             <TooltipContent>Generate bibliography</TooltipContent>
           </Tooltip>
-          <Separator orientation="vertical" className="mx-px h-5 shrink-0" />
-          <DropdownMenu modal={false} open={toolbarClusterMenu === "ai"} onOpenChange={handleToolbarClusterChange("ai")}>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <DropdownMenuTrigger asChild>
-                  <Button variant="ghost" size="sm" className="h-8 gap-1 rounded-lg px-2 shrink-0" disabled={isAIProcessing}>
-                    {isAIProcessing ? (
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                    ) : (
-                      <Sparkles className="h-4 w-4" />
-                    )}
-                    <span className="text-xs hidden sm:inline">AI</span>
-                  </Button>
-                </DropdownMenuTrigger>
-              </TooltipTrigger>
-              <TooltipContent>AI &amp; dictation</TooltipContent>
-            </Tooltip>
-            <DropdownMenuContent {...dockPopperOpts} className="z-[200] w-56">
-              <DropdownMenuLabel className="flex items-center gap-2 text-xs">
-                <WandSparkles className="h-4 w-4" />
-                Writing
-              </DropdownMenuLabel>
-              <DropdownMenuItem onClick={aiShorter} disabled={isAIProcessing}>
-                Make shorter
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={aiLonger} disabled={isAIProcessing}>
-                Make longer
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={aiSimplify} disabled={isAIProcessing}>
-                Simplify language
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={aiGrammar} disabled={isAIProcessing}>
-                Fix grammar
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+          {showAiWritingDropdown && (
+            <>
+              <Separator orientation="vertical" className="mx-px h-5 shrink-0" />
+              <DropdownMenu modal={false} open={toolbarClusterMenu === "ai"} onOpenChange={handleToolbarClusterChange("ai")}>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <DropdownMenuTrigger asChild>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className={
+                          showAiWritingToolbarLabel
+                            ? "h-8 shrink-0 gap-1 rounded-lg px-2"
+                            : "h-8 w-8 shrink-0 rounded-lg p-0"
+                        }
+                        disabled={isAIProcessing}
+                        aria-label="AI writing tools"
+                      >
+                        {isAIProcessing ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <Sparkles className="h-4 w-4" />
+                        )}
+                        {showAiWritingToolbarLabel && (
+                          <span className="text-xs hidden sm:inline">AI</span>
+                        )}
+                      </Button>
+                    </DropdownMenuTrigger>
+                  </TooltipTrigger>
+                  <TooltipContent>AI &amp; dictation</TooltipContent>
+                </Tooltip>
+                <DropdownMenuContent {...dockPopperOpts} className="z-[200] w-56">
+                  <DropdownMenuLabel className="flex items-center gap-2 text-xs">
+                    <WandSparkles className="h-4 w-4" />
+                    Writing
+                  </DropdownMenuLabel>
+                  <DropdownMenuItem onClick={aiShorter} disabled={isAIProcessing}>
+                    Make shorter
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={aiLonger} disabled={isAIProcessing}>
+                    Make longer
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={aiSimplify} disabled={isAIProcessing}>
+                    Simplify language
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={aiGrammar} disabled={isAIProcessing}>
+                    Fix grammar
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </>
+          )}
         </>
       )}
       </div>
@@ -4410,17 +4309,29 @@ export function TiptapEditor({
   return (
     <>
       <div
-        className={cn("border border-border rounded-lg bg-background flex flex-col h-full w-full max-w-full overflow-hidden", className)}
+        className={cn(
+          "border border-border rounded-lg bg-background flex min-h-0 flex-col h-full w-full max-w-full overflow-hidden",
+          panelEmbed && "rounded-t-none border-t-0",
+          className,
+        )}
         {...(paperMode ? { "data-paper-mode": "" } : {})}
       >
         {!hideToolbar && editor && (
           <div
             ref={toolbarPositionContainerRef}
-            className="border-b border-border/70 bg-background/95 px-3 py-2 backdrop-blur-sm"
+            className={cn(
+              "shrink-0 border-b border-border/70 bg-background/95 backdrop-blur-sm",
+              panelEmbed
+                ? "flex h-11 min-h-11 items-center px-2 py-0"
+                : "px-3 py-2",
+            )}
           >
             <div
               ref={toolbarRailRef}
-              className="flex min-w-0 items-center overflow-x-auto [scrollbar-width:thin]"
+              className={cn(
+                "flex min-h-0 w-full min-w-0 items-center overflow-x-auto [scrollbar-width:thin]",
+                panelEmbed && "h-full",
+              )}
             >
               {renderToolbarDockChildren()}
             </div>
@@ -4428,13 +4339,21 @@ export function TiptapEditor({
         )}
         <div
           ref={setEditorPopoverBoundaryEl}
-          className="flex-1 overflow-hidden relative w-full h-full max-w-full"
-          style={{ minHeight, maxHeight: "calc(100vh - 300px)" }}
+          className="flex-1 min-h-0 overflow-hidden relative w-full h-full max-w-full"
+          style={
+            panelEmbed || fillParentHeight
+              ? { minHeight: 0, maxHeight: "100%" }
+              : { minHeight, maxHeight: "calc(100vh - 300px)" }
+          }
         >
           {/* Editor Content - add right padding to prevent text from going under TOC */}
           <div
-            className="overflow-y-auto overflow-x-auto px-2 pb-2 pr-20 h-full relative w-full max-w-full"
-            style={{ minHeight, maxHeight: "calc(100vh - 300px)" }}
+            className="overflow-y-auto overflow-x-auto px-2 pb-2 pr-20 h-full min-h-0 relative w-full max-w-full"
+            style={
+              panelEmbed || fillParentHeight
+                ? { minHeight: 0, maxHeight: "100%" }
+                : { minHeight, maxHeight: "calc(100vh - 300px)" }
+            }
             ref={(node) => setEditorContainer(node)}
           >
             <EditorContent editor={editor} />
@@ -4762,6 +4681,41 @@ export function TiptapEditor({
             </DialogFooter>
           </DialogContent>
         </Dialog>
+
+        {enableMath && (
+          <Dialog
+            open={!!mathEdit}
+            onOpenChange={(open) => {
+              if (!open) setMathEdit(null)
+            }}
+          >
+            <DialogContent className="max-w-lg">
+              <DialogHeader>
+                <DialogTitle>Edit equation (LaTeX)</DialogTitle>
+                <DialogDescription>
+                  Edit the raw LaTeX for this equation. Changes apply when you click Apply.
+                </DialogDescription>
+              </DialogHeader>
+              <Textarea
+                value={mathEdit?.latex ?? ""}
+                onChange={(e) =>
+                  setMathEdit((m) => (m ? { ...m, latex: e.target.value } : null))
+                }
+                className="min-h-[140px] font-mono text-sm"
+                placeholder="Enter LaTeX (KaTeX)…"
+                autoFocus
+              />
+              <DialogFooter className="gap-2">
+                <Button type="button" variant="outline" onClick={() => setMathEdit(null)}>
+                  Cancel
+                </Button>
+                <Button type="button" onClick={applyMathEdit}>
+                  Apply
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+        )}
 
         <Dialog open={imageInsertDialogOpen} onOpenChange={setImageInsertDialogOpen}>
           <DialogContent className="max-w-lg">

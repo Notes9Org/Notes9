@@ -48,6 +48,9 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet"
+import { useContentDiffs } from "@/hooks/use-content-diffs"
+import { LabNoteChangeApprovalBar } from "@/components/lab-notes/lab-note-change-approval"
+import { ScientificCalculatorSheet } from "@/components/lab-notes/scientific-calculator"
 
 interface LabNote {
   id: string;
@@ -108,12 +111,17 @@ export function LabNotesTab({
     note_type: "general",
   });
 
+  /** Last persisted note body — drives the bottom diff bar (like protocol design mode). */
+  const [savedContent, setSavedContent] = useState("");
+
   // Linked protocols state
   const [linkedProtocols, setLinkedProtocols] = useState<LinkedProtocol[]>([]);
   const [availableProtocols, setAvailableProtocols] = useState<ProtocolItem[]>([]);
 
   // Notebook list panel collapsed for more note-taking space (start closed)
   const [notebookPanelOpen, setNotebookPanelOpen] = useState(false);
+
+  const [scientificCalculatorOpen, setScientificCalculatorOpen] = useState(false);
 
   const isMobile = useMediaQuery("(max-width: 768px)");
 
@@ -125,6 +133,11 @@ export function LabNotesTab({
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const titleInputRef = useRef<HTMLInputElement>(null);
   const noteEditorRef = useRef<Editor | null>(null);
+
+  // Tracks the content at the time of the last successful save, for diff recording
+  const lastSavedContentRef = useRef<string>("");
+
+  const { recordDiff } = useContentDiffs("lab_note", selectedNote?.id);
 
   // Auto-save functionality
   const handleAutoSave = async (content: string, title?: string, noteType?: string) => {
@@ -162,10 +175,14 @@ export function LabNotesTab({
         // Switch to editing mode
         setIsCreating(false);
         setSelectedNote(data);
+        lastSavedContentRef.current = content;
+        setSavedContent(content);
 
         // Refresh notes list
         await fetchNotes();
       } else {
+        const previousContent = lastSavedContentRef.current;
+
         // Update existing note
         const { error } = await supabase
           .from("lab_notes")
@@ -178,6 +195,18 @@ export function LabNotesTab({
           .eq("id", selectedNote.id);
 
         if (error) throw error;
+
+        if (previousContent !== content) {
+          void recordDiff({
+            recordType: "lab_note",
+            recordId: selectedNote.id,
+            previousContent,
+            newContent: content,
+          });
+        }
+        lastSavedContentRef.current = content;
+        // Do not update `savedContent` here: that baseline drives the diff bar vs draft.
+        // Autosave would match them and hide "Pending changes" before the user clicks Accept & Save.
 
         // Update local state
         setNotes(
@@ -204,11 +233,25 @@ export function LabNotesTab({
     status: autoSaveStatus,
     lastSaved,
     debouncedSave,
+    forceSave,
+    cancelPendingSave,
+    markSynced,
   } = useAutoSave({
     onSave: handleAutoSave,
     delay: 2000, // Save 2 seconds after user stops typing
     enabled: true, // Always enabled, even during creation
   });
+
+  // Baseline for diff bar when switching notes
+  useEffect(() => {
+    if (selectedNote) {
+      setSavedContent(selectedNote.content);
+      lastSavedContentRef.current = selectedNote.content;
+    } else {
+      setSavedContent("");
+      lastSavedContentRef.current = "";
+    }
+  }, [selectedNote?.id]);
 
   // Fetch existing lab notes
   const noteIdFromQuery = searchParams.get("noteId");
@@ -484,6 +527,9 @@ export function LabNotesTab({
 
         if (error) throw error;
 
+        setSavedContent(formData.content);
+        lastSavedContentRef.current = formData.content;
+
         toast({
           title: "Note updated",
           description: "Your lab note has been updated successfully.",
@@ -499,6 +545,9 @@ export function LabNotesTab({
         });
 
         if (error) throw error;
+
+        setSavedContent(formData.content);
+        lastSavedContentRef.current = formData.content;
 
         toast({
           title: "Note created",
@@ -645,6 +694,7 @@ export function LabNotesTab({
       content: note.content,
       note_type: note.note_type || "general",
     });
+    lastSavedContentRef.current = note.content;
     fetchLinkedProtocols(note.id);
   };
 
@@ -749,7 +799,7 @@ export function LabNotesTab({
     (formData.title || "").trim() || (selectedNote?.title || "").trim() || "Lab note";
 
   return (
-    <div className="flex w-full min-h-0 flex-1">
+    <div className="flex h-full min-h-0 w-full flex-1 flex-col overflow-hidden">
       {/* Rename note dialog */}
       <Dialog
         open={!!renameNoteId}
@@ -991,7 +1041,7 @@ export function LabNotesTab({
             )}
 
             {/* Editor area - header + content */}
-            <div className="flex flex-1 min-w-0 min-h-0 flex-col py-4 gap-4 relative z-0">
+            <div className="relative z-0 flex min-h-0 min-w-0 flex-1 flex-col gap-4 overflow-hidden py-4">
               <CardHeader className="pb-0 px-4 sm:px-6 shrink-0">
                 <div className="flex items-center justify-between gap-3">
                   <div className="flex flex-1 min-w-0 items-center gap-2">
@@ -1179,7 +1229,7 @@ export function LabNotesTab({
                   </div>
                 </div>
               </CardHeader>
-              <CardContent className="flex min-h-0 min-w-0 flex-1 flex-col space-y-3 px-4 sm:px-6">
+              <CardContent className="flex min-h-0 min-w-0 flex-1 flex-col space-y-3 overflow-hidden px-4 sm:px-6">
                 {!isCreating && !selectedNote ? (
                   <div className="flex flex-col items-center justify-center h-full min-h-[400px] text-muted-foreground">
                     <p className="text-lg font-medium mb-2">No note selected</p>
@@ -1192,31 +1242,59 @@ export function LabNotesTab({
                     </Button>
                   </div>
                 ) : (
-                  /* Rich Text Editor */
-                  <div className="min-h-0 min-w-0 flex-1">
-                    <TiptapEditor
-                      content={formData.content}
-                      onChange={(content) => {
-                        setFormData({ ...formData, content });
-                        // Trigger auto-save (works for both creation and editing)
-                        debouncedSave(content);
-                      }}
-                      placeholder="Write your lab notes here... Use @ to tag protocols"
-                      title={resolvedExportTitle}
-                      minHeight="400px"
-                      showAITools={true}
-                      protocols={availableProtocols.map(p => ({
-                        id: p.id,
-                        name: p.name,
-                        version: p.version,
-                      }))}
-                      hideExportControls
-                      exportIncludeCommentsInPdf
-                      onEditorReady={(ed) => {
-                        noteEditorRef.current = ed;
-                      }}
-                    />
-                  </div>
+                  <>
+                    {/* Same editor + approval column layout as protocol design mode */}
+                    <div className="relative min-h-0 min-w-0 flex-1 overflow-hidden">
+                      <TiptapEditor
+                        content={formData.content}
+                        onChange={(content) => {
+                          setFormData({ ...formData, content });
+                          debouncedSave(content);
+                        }}
+                        placeholder="Write your lab notes here... Use @ to tag protocols"
+                        title={resolvedExportTitle}
+                        minHeight="100%"
+                        fillParentHeight
+                        showAITools={true}
+                        showAiWritingDropdown={false}
+                        protocols={availableProtocols.map(p => ({
+                          id: p.id,
+                          name: p.name,
+                          version: p.version,
+                        }))}
+                        hideExportControls
+                        exportIncludeCommentsInPdf
+                        enableMath
+                        className="min-h-0 flex-1"
+                        onOpenScientificCalculator={() => setScientificCalculatorOpen(true)}
+                        onEditorReady={(ed) => {
+                          noteEditorRef.current = ed;
+                        }}
+                      />
+                      <ScientificCalculatorSheet
+                        open={scientificCalculatorOpen}
+                        onOpenChange={setScientificCalculatorOpen}
+                        getEditor={() => noteEditorRef.current}
+                      />
+                    </div>
+                    {(selectedNote || isCreating) && !!formData.title.trim() && (
+                      <LabNoteChangeApprovalBar
+                        savedContent={savedContent}
+                        draftContent={formData.content}
+                        noteId={selectedNote?.id ?? null}
+                        onAccept={async (newContent) => {
+                          await forceSave();
+                          // Align diff baseline with draft after explicit accept (autosave does not update this).
+                          setSavedContent(newContent);
+                        }}
+                        onReject={() => {
+                          cancelPendingSave();
+                          setFormData((f) => ({ ...f, content: savedContent }));
+                          markSynced();
+                        }}
+                      />
+                    )}
+                  </>
                 )}
               </CardContent>
             </div>

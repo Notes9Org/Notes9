@@ -17,6 +17,11 @@ const decodeWorkbook = (value: string) => {
   }
 }
 
+/** TipTap `updateAttributes` can sync to React via flushSync; never call it synchronously from useEffect. */
+function scheduleSpreadsheetAttrsUpdate(fn: () => void) {
+  window.setTimeout(fn, 0)
+}
+
 const buildFallbackTable = (workbook: any) => {
   const firstSheetId = workbook?.sheetOrder?.[0]
   const sheet = firstSheetId ? workbook?.sheets?.[firstSheetId] : null
@@ -244,12 +249,19 @@ function SpreadsheetEmbedView({ node, updateAttributes }: { node: any; updateAtt
   const [hasInteractiveSheet, setHasInteractiveSheet] = useState(false)
   const lastSavedWorkbookRef = useRef(node.attrs.workbookData || "")
   const isHydratingRef = useRef(false)
+  /** TipTap often passes a new callback identity each render; do not list it in useEffect deps or the effect re-runs every render and can thrash / overflow the stack. */
+  const updateAttributesRef = useRef(updateAttributes)
+  updateAttributesRef.current = updateAttributes
 
   useEffect(() => {
     let disposed = false
     let cleanup: (() => void) | null = null
     let saveTimer: ReturnType<typeof setTimeout> | null = null
     let mountHost: HTMLDivElement | null = null
+
+    const applyAttrs = (attrs: Record<string, unknown>) => {
+      updateAttributesRef.current(attrs)
+    }
 
     const mount = async () => {
       const workbookAttr = node.attrs.workbookData
@@ -263,10 +275,12 @@ function SpreadsheetEmbedView({ node, updateAttributes }: { node: any; updateAtt
         setFallbackHtml(buildFallbackTable(workbook))
         if (normalizedEncoded !== workbookAttr && !isHydratingRef.current) {
           isHydratingRef.current = true
-          updateAttributes({ workbookData: normalizedEncoded })
-          window.setTimeout(() => {
-            isHydratingRef.current = false
-          }, 0)
+          scheduleSpreadsheetAttrsUpdate(() => {
+            applyAttrs({ workbookData: normalizedEncoded })
+            window.setTimeout(() => {
+              isHydratingRef.current = false
+            }, 0)
+          })
         }
 
         const [{ createUniver, LocaleType }, { UniverSheetsCorePreset }] = await Promise.all([
@@ -348,10 +362,12 @@ function SpreadsheetEmbedView({ node, updateAttributes }: { node: any; updateAtt
               lastSavedWorkbookRef.current = encoded
               setFallbackHtml(buildFallbackTable(snapshot))
               isHydratingRef.current = true
-              updateAttributes({ workbookData: encoded })
-              window.setTimeout(() => {
-                isHydratingRef.current = false
-              }, 0)
+              scheduleSpreadsheetAttrsUpdate(() => {
+                applyAttrs({ workbookData: encoded })
+                window.setTimeout(() => {
+                  isHydratingRef.current = false
+                }, 0)
+              })
             } catch (error) {
               console.error("Failed to persist spreadsheet embed", error)
             }
@@ -380,10 +396,12 @@ function SpreadsheetEmbedView({ node, updateAttributes }: { node: any; updateAtt
               if (encoded !== lastSavedWorkbookRef.current) {
                 lastSavedWorkbookRef.current = encoded
                 isHydratingRef.current = true
-                updateAttributes({ workbookData: encoded })
-                window.setTimeout(() => {
-                  isHydratingRef.current = false
-                }, 0)
+                scheduleSpreadsheetAttrsUpdate(() => {
+                  applyAttrs({ workbookData: encoded })
+                  window.setTimeout(() => {
+                    isHydratingRef.current = false
+                  }, 0)
+                })
               }
             }
           } catch {}
@@ -419,7 +437,7 @@ function SpreadsheetEmbedView({ node, updateAttributes }: { node: any; updateAtt
       cleanup?.()
       disposed = true
     }
-  }, [node.attrs.workbookData, updateAttributes])
+  }, [node.attrs.workbookData])
 
   useEffect(() => {
     const boundary = boundaryRef.current
