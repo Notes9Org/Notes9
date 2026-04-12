@@ -203,12 +203,12 @@ function DiffEntry({ diff }: { diff: ContentDiff }) {
   return (
     <div className="group rounded-lg border border-border/60 bg-card overflow-hidden">
       {/* Header row */}
-      <div className="flex items-start gap-3 px-3 py-2.5">
-        <div className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-muted">
+      <div className="flex flex-col gap-2 px-2 py-2.5 sm:flex-row sm:items-start sm:gap-3 sm:px-3">
+        <div className="mt-0.5 hidden h-6 w-6 shrink-0 items-center justify-center rounded-full bg-muted sm:flex">
           <User className="h-3 w-3 text-muted-foreground" />
         </div>
 
-        <div className="min-w-0 flex-1 space-y-0">
+        <div className="min-w-0 flex-1 space-y-0 overflow-hidden">
           <p className="text-xs font-medium leading-snug text-foreground">
             <span className="font-normal text-muted-foreground">User </span>
             {userName}
@@ -237,12 +237,12 @@ function DiffEntry({ diff }: { diff: ContentDiff }) {
           )}
           {hasStructureHints && (
             <p
-              className="mt-2 text-[10px] leading-relaxed text-muted-foreground line-clamp-6"
+              className="mt-2 text-[10px] leading-relaxed text-muted-foreground sm:line-clamp-6"
               title={structureHintsLine}
             >
               <span className="font-medium text-foreground/80">Document / sections</span>
               {": "}
-              {structureHintsLine}
+              <span className="break-words">{structureHintsLine}</span>
             </p>
           )}
         </div>
@@ -250,7 +250,7 @@ function DiffEntry({ diff }: { diff: ContentDiff }) {
         <Button
           variant="ghost"
           size="sm"
-          className="h-6 shrink-0 gap-1 px-1.5 text-[10px] text-muted-foreground"
+          className="h-9 w-full shrink-0 gap-1 px-2 text-[10px] text-muted-foreground touch-manipulation sm:h-6 sm:w-auto sm:self-start sm:px-1.5"
           onClick={() => setExpanded((v) => !v)}
           aria-label={expanded ? "Hide diff" : "Show diff"}
         >
@@ -273,7 +273,7 @@ function DiffEntry({ diff }: { diff: ContentDiff }) {
           <p className="mb-1.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
             Word-level diff · removed / added (unchanged runs shown as ···)
           </p>
-          <div className="max-h-48 overflow-y-auto rounded border border-border/40 bg-background p-2">
+          <div className="max-h-[min(45vh,14rem)] overflow-y-auto rounded border border-border/40 bg-background p-2 sm:max-h-48">
             <p className="font-mono text-[11px] leading-relaxed whitespace-pre-wrap break-words">
               {resolved.segments.map((seg, i) => {
                 if (seg.k === "_") {
@@ -308,12 +308,12 @@ function DiffEntry({ diff }: { diff: ContentDiff }) {
               })}
             </p>
           </div>
-          <div className="mt-2 grid grid-cols-2 gap-2">
+          <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2">
             <div>
               <p className="mb-1 text-[10px] font-medium text-muted-foreground uppercase tracking-wide">
                 Removed
               </p>
-              <div className="max-h-28 overflow-y-auto rounded border border-border/40 bg-background p-1.5">
+              <div className="max-h-[min(28vh,8rem)] overflow-y-auto rounded border border-border/40 bg-background p-1.5 sm:max-h-28">
                 <p className="text-[11px] leading-relaxed text-foreground/80 whitespace-pre-wrap break-words font-mono">
                   {joinRemovedExcerpts(resolved.segments).trim() || "(none)"}
                 </p>
@@ -321,7 +321,7 @@ function DiffEntry({ diff }: { diff: ContentDiff }) {
             </div>
             <div>
               <p className="mb-1 text-[10px] font-medium text-muted-foreground uppercase tracking-wide">Added</p>
-              <div className="max-h-28 overflow-y-auto rounded border border-border/40 bg-background p-1.5">
+              <div className="max-h-[min(28vh,8rem)] overflow-y-auto rounded border border-border/40 bg-background p-1.5 sm:max-h-28">
                 <p className="text-[11px] leading-relaxed text-foreground/80 whitespace-pre-wrap break-words font-mono">
                   {joinAddedExcerpts(resolved.segments).trim() || "(none)"}
                 </p>
@@ -336,7 +336,7 @@ function DiffEntry({ diff }: { diff: ContentDiff }) {
           <p className="mb-1.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
             Word-level diff · previous → current
           </p>
-          <div className="max-h-48 overflow-y-auto rounded border border-border/40 bg-background p-2">
+          <div className="max-h-[min(45vh,14rem)] overflow-y-auto rounded border border-border/40 bg-background p-2 sm:max-h-48">
             <p className="font-mono text-[11px] leading-relaxed whitespace-pre-wrap break-words">
               {legacyParts.map((part, i) => {
                 if (!part.added && !part.removed) {
@@ -361,10 +361,10 @@ function DiffEntry({ diff }: { diff: ContentDiff }) {
               })}
             </p>
           </div>
-          <div className="mt-2 grid grid-cols-2 gap-2">
+          <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2">
             <div>
               <p className="mb-1 text-[10px] font-medium text-muted-foreground uppercase tracking-wide">Previous</p>
-              <div className="max-h-28 overflow-y-auto rounded border border-border/40 bg-background p-1.5">
+              <div className="max-h-[min(28vh,8rem)] overflow-y-auto rounded border border-border/40 bg-background p-1.5 sm:max-h-28">
                 <p className="text-[11px] leading-relaxed text-foreground/80 whitespace-pre-wrap break-words font-mono">
                   {resolved.prevPlain || "(empty)"}
                 </p>
@@ -372,7 +372,7 @@ function DiffEntry({ diff }: { diff: ContentDiff }) {
             </div>
             <div>
               <p className="mb-1 text-[10px] font-medium text-muted-foreground uppercase tracking-wide">Current</p>
-              <div className="max-h-28 overflow-y-auto rounded border border-border/40 bg-background p-1.5">
+              <div className="max-h-[min(28vh,8rem)] overflow-y-auto rounded border border-border/40 bg-background p-1.5 sm:max-h-28">
                 <p className="text-[11px] leading-relaxed text-foreground/80 whitespace-pre-wrap break-words font-mono">
                   {resolved.nextPlain || "(empty)"}
                 </p>
@@ -396,8 +396,8 @@ export function ContentDiffHistoryDialog({
 }: ContentDiffHistoryDialogProps) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-xl w-full flex max-h-[80vh] flex-col gap-0 overflow-hidden p-0">
-        <DialogHeader className="shrink-0 border-b border-border/60 px-4 py-3">
+      <DialogContent className="flex h-[min(90dvh,92vh)] w-[calc(100vw-1rem)] max-w-xl flex-col gap-0 overflow-hidden p-0 sm:h-auto sm:max-h-[80vh]">
+        <DialogHeader className="shrink-0 border-b border-border/60 px-3 py-3 sm:px-4">
           <DialogTitle className="flex items-center gap-2 text-sm font-semibold">
             <History className="h-4 w-4 text-muted-foreground" />
             {title}
@@ -405,7 +405,7 @@ export function ContentDiffHistoryDialog({
         </DialogHeader>
 
         {/* flex-1 min-h-0 + overflow-y-auto keeps the list scrollable inside max-h-[80vh] (Radix ScrollArea alone often grows with content and never scrolls). */}
-        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-3 [scrollbar-gutter:stable]">
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 py-3 [scrollbar-gutter:stable] sm:px-4">
           {loading && (
             <div className="space-y-2">
               {[...Array(3)].map((_, i) => (
@@ -447,7 +447,7 @@ export function ContentDiffHistoryDialog({
         </div>
 
         {!loading && diffs.length > 0 && (
-          <div className="shrink-0 border-t border-border/40 px-4 py-2 flex items-center justify-between gap-2">
+          <div className="flex shrink-0 flex-col gap-2 border-t border-border/40 px-3 py-2 sm:flex-row sm:items-center sm:justify-between sm:gap-2 sm:px-4">
             <p className="text-[10px] text-muted-foreground min-w-0">
               {diffs.length} change{diffs.length !== 1 ? "s" : ""} · append-only log
             </p>
@@ -455,7 +455,7 @@ export function ContentDiffHistoryDialog({
               type="button"
               variant="outline"
               size="sm"
-              className="h-7 gap-1.5 text-[11px] shrink-0"
+              className="h-9 w-full gap-1.5 text-[11px] touch-manipulation sm:h-7 sm:w-auto sm:shrink-0"
               onClick={() =>
                 downloadContentDiffsLog(diffs, {
                   title,

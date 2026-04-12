@@ -146,16 +146,16 @@ export function ProtocolEditor({
     <>
       <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
         <Card className="flex min-h-0 flex-1 flex-col gap-0 overflow-hidden py-0">
-          <CardContent className="flex min-h-0 flex-1 flex-col gap-4 overflow-hidden px-6 pb-4 pt-4">
+          <CardContent className="flex min-h-0 flex-1 flex-col gap-4 overflow-hidden px-4 pb-4 pt-4 sm:px-6">
             <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-lg border border-border bg-background">
-              <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-border/70 px-3 py-2">
+              <div className="flex shrink-0 flex-col gap-2 border-b border-border/70 px-3 py-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between sm:gap-2">
                 <Label className="text-foreground">Protocol body</Label>
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
                   <Button
                     type="button"
                     variant="ghost"
                     size="sm"
-                    className="h-8 gap-1.5 px-2 text-xs text-muted-foreground"
+                    className="min-h-9 gap-1.5 px-2 text-xs text-muted-foreground touch-manipulation sm:min-h-8"
                     onClick={() => {
                       setContentHistoryOpen(true)
                       loadDiffs()
@@ -173,7 +173,7 @@ export function ProtocolEditor({
                         type="button"
                         variant="ghost"
                         size="icon"
-                        className="h-8 w-8"
+                        className="h-9 w-9 touch-manipulation sm:h-8 sm:w-8"
                         aria-label="Export protocol"
                       >
                         <Download className="h-4 w-4" />
