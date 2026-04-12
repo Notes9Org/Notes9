@@ -197,6 +197,7 @@ export function EditProtocolDialog({ protocol }: { protocol: any }) {
               title={formData.name || "protocol"}
               minHeight="300px"
               showAITools={true}
+              showAiWritingDropdown={false}
             />
           </div>
 

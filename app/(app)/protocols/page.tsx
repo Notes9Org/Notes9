@@ -1,10 +1,7 @@
-import { redirect } from 'next/navigation'
+import { Suspense } from "react"
+import { redirect } from "next/navigation"
 import { createClient } from "@/lib/supabase/server"
-import {
-  ProtocolsPageContent,
-  ProtocolsEmptyState,
-  type ProtocolsProjectContext,
-} from './protocols-page-content'
+import { ProtocolsPageContent, type ProtocolsProjectContext } from "./protocols-page-content"
 import { resolveInitialProjectIdParam } from "@/lib/url-project-param"
 import { SetPageBreadcrumb } from "@/components/layout/breadcrumb-context"
 
@@ -76,6 +73,29 @@ export default async function ProtocolsPage({
     .eq("is_active", true)
     .order("name")
 
+  // Attempt to enrich with project/experiment context (requires migration 030).
+  // If the columns don't exist yet the enrichment silently fails and protocols
+  // are displayed without context chips.
+  let enrichedProtocols: any[] = protocols ?? []
+  if (protocols && protocols.length > 0) {
+    try {
+      const { data: ctx } = await supabase
+        .from("protocols")
+        .select("id, project:projects(id, name), experiment:experiments(id, name)")
+        .in("id", protocols.map((p: any) => p.id))
+      if (ctx) {
+        const ctxMap = new Map((ctx as any[]).map((r) => [r.id, r]))
+        enrichedProtocols = protocols.map((p: any) => ({
+          ...p,
+          project: ctxMap.get(p.id)?.project ?? null,
+          experiment: ctxMap.get(p.id)?.experiment ?? null,
+        }))
+      }
+    } catch {
+      // migration not yet applied — show protocols without context
+    }
+  }
+
   return (
     <div className="space-y-6">
       {projectContext ? (
@@ -88,11 +108,16 @@ export default async function ProtocolsPage({
       ) : (
         <SetPageBreadcrumb segments={[]} />
       )}
-      {protocols && protocols.length > 0 ? (
-        <ProtocolsPageContent protocols={protocols} projectContext={projectContext} />
-      ) : (
-        <ProtocolsEmptyState />
-      )}
+      <Suspense
+        fallback={
+          <div className="space-y-4 animate-pulse">
+            <div className="h-9 w-64 rounded-md bg-muted" />
+            <div className="h-40 rounded-lg bg-muted" />
+          </div>
+        }
+      >
+        <ProtocolsPageContent protocols={enrichedProtocols} projectContext={projectContext} />
+      </Suspense>
     </div>
   )
 }

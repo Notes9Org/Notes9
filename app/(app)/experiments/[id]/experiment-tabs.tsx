@@ -44,7 +44,11 @@ export function ExperimentTabs({ experiment, initialTab, experimentPageHref }: E
   }
 
   return (
-    <Tabs id={`experiment-tabs-${baseId}`} defaultValue={initialTab} className="space-y-4">
+    <Tabs
+      id={`experiment-tabs-${baseId}`}
+      defaultValue={initialTab}
+      className="flex min-h-0 flex-1 flex-col gap-4"
+    >
       <TabsList>
         <TabsTrigger
           value="overview"
@@ -222,7 +226,11 @@ export function ExperimentTabs({ experiment, initialTab, experimentPageHref }: E
         <DataFilesTab experimentId={experiment.id} />
       </TabsContent>
 
-      <TabsContent value="notes" id="tab-content-notes" className="flex flex-col gap-3 min-h-0 flex-1">
+      <TabsContent
+        value="notes"
+        id="tab-content-notes"
+        className="mt-0 flex min-h-0 flex-1 flex-col gap-3 overflow-hidden focus-visible:outline-none"
+      >
         <LabNotesTab
           experimentId={experiment.id}
           experimentName={experiment.name}

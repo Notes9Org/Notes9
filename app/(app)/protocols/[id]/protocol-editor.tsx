@@ -1,40 +1,47 @@
 "use client"
 
-import { useMemo, useState } from "react"
+import { useMemo, useState, useCallback, useEffect } from "react"
 import { useRouter } from "next/navigation"
+import Link from "next/link"
 import { createClient } from "@/lib/supabase/client"
 import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
-import { TiptapEditor } from "@/components/text-editor/tiptap-editor"
-import { TextareaWithWordCount } from "@/components/ui/textarea-with-word-count"
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { useToast } from "@/hooks/use-toast"
+import { updateProtocolWithOptionalContext } from "@/lib/protocol-context-supabase"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
+import { TiptapEditor } from "@/components/text-editor/tiptap-editor"
+import { Card, CardContent } from "@/components/ui/card"
 import { NoteExportMenu } from "@/components/note-export-menu"
 import { Download } from "lucide-react"
+import { ProtocolDesignMode } from "@/components/protocols/protocol-design-mode"
 
-const PROTOCOL_CATEGORIES = [
-  "Sample Preparation",
-  "Analysis",
-  "Safety",
-  "Equipment Operation",
-  "Quality Control",
-  "Data Processing",
-  "General SOP",
-]
-
-export function ProtocolEditor({ protocol }: { protocol: any }) {
+export function ProtocolEditor({
+  protocol,
+  defaultDesignMode = false,
+  designModeHref,
+  viewHref,
+}: {
+  protocol: any
+  defaultDesignMode?: boolean
+  designModeHref: string
+  viewHref: string
+}) {
   const router = useRouter()
   const { toast } = useToast()
-  const [isSaving, setIsSaving] = useState(false)
+  const [designModePromptOpen, setDesignModePromptOpen] = useState(false)
+  const [isActiveView, setIsActiveView] = useState(Boolean(protocol.is_active))
+  const [isSavingActive, setIsSavingActive] = useState(false)
+
   const [formData, setFormData] = useState({
     name: protocol.name ?? "",
     description: protocol.description ?? "",
@@ -42,172 +49,184 @@ export function ProtocolEditor({ protocol }: { protocol: any }) {
     content: protocol.content ?? "",
     category: protocol.category ?? "",
     is_active: Boolean(protocol.is_active),
+    project_id: protocol.project_id ?? "",
+    experiment_id: protocol.experiment_id ?? "",
   })
 
-  const hasChanges = useMemo(
-    () =>
-      formData.name !== (protocol.name ?? "") ||
-      formData.description !== (protocol.description ?? "") ||
-      formData.version !== (protocol.version ?? "") ||
-      formData.content !== (protocol.content ?? "") ||
-      formData.category !== (protocol.category ?? "") ||
-      formData.is_active !== Boolean(protocol.is_active),
-    [formData, protocol]
-  )
+  useEffect(() => {
+    setIsActiveView(Boolean(protocol.is_active))
+    setFormData((prev) => ({ ...prev, is_active: Boolean(protocol.is_active) }))
+  }, [protocol.id, protocol.is_active])
 
-  const handleSave = async () => {
-    setIsSaving(true)
+  const handleActiveToggleView = async (checked: boolean) => {
+    const previous = isActiveView
+    setIsActiveView(checked)
+    setIsSavingActive(true)
     try {
       const supabase = createClient()
-      const { error } = await supabase
-        .from("protocols")
-        .update({
-          name: formData.name,
-          description: formData.description || null,
-          version: formData.version,
-          content: formData.content,
-          category: formData.category || null,
-          is_active: formData.is_active,
-        })
-        .eq("id", protocol.id)
-
+      const { error } = await updateProtocolWithOptionalContext(supabase, protocol.id, {
+        is_active: checked,
+      })
       if (error) throw error
-
+      setFormData((prev) => ({ ...prev, is_active: checked }))
       toast({
-        title: "Protocol saved",
-        description: "Your protocol changes have been updated.",
+        title: checked ? "Protocol activated" : "Protocol deactivated",
+        description: checked
+          ? "This protocol can be linked to experiments."
+          : "This protocol is marked inactive.",
       })
       router.refresh()
-    } catch (error: any) {
-      toast({
-        title: "Error",
-        description: error.message || "Failed to save protocol.",
-        variant: "destructive",
-      })
+    } catch (e: unknown) {
+      setIsActiveView(previous)
+      const message = e instanceof Error ? e.message : "Update failed"
+      toast({ title: "Could not update status", description: message, variant: "destructive" })
     } finally {
-      setIsSaving(false)
+      setIsSavingActive(false)
     }
   }
 
+  const handleContextChange = useCallback(
+    (projectId: string | null, experimentId: string | null) => {
+      setFormData((prev) => ({
+        ...prev,
+        project_id: projectId ?? "",
+        experiment_id: experimentId ?? "",
+      }))
+    },
+    []
+  )
+
+  const designProtocol = useMemo(
+    () => ({
+      id: protocol.id,
+      name: formData.name,
+      content: formData.content,
+      version: formData.version,
+      project_id: formData.project_id || null,
+      experiment_id: formData.experiment_id || null,
+      document_template_id: protocol.document_template_id ?? null,
+      document_template: protocol.document_template ?? null,
+    }),
+    [
+      protocol.id,
+      protocol.document_template_id,
+      protocol.document_template,
+      formData.name,
+      formData.content,
+      formData.version,
+      formData.project_id,
+      formData.experiment_id,
+    ]
+  )
+
+  // ─── Design mode (?design=1) — full editing in ProtocolDesignMode ───────
+  if (defaultDesignMode) {
+    return (
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+        <ProtocolDesignMode
+          protocol={designProtocol}
+          onSaved={() => router.refresh()}
+          onExitDesignMode={() => router.push(viewHref)}
+          onContextChange={handleContextChange}
+          onProtocolNameChange={(name) => setFormData((c) => ({ ...c, name }))}
+        />
+      </div>
+    )
+  }
+
+  // ─── View mode — read-only; editing only in Design Mode ───────────────────
   return (
-    <Card>
-      <CardHeader className="space-y-2">
-        <CardTitle className="text-foreground">Protocol Content</CardTitle>
-        <CardDescription>
-          Edit this protocol directly here, similar to working in lab notes.
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-5">
-        <div className="grid gap-4 md:grid-cols-[minmax(0,1.6fr)_minmax(220px,0.8fr)_minmax(220px,0.8fr)]">
-          <div className="space-y-2">
-            <Label htmlFor="protocol-name">Protocol Name</Label>
-            <Input
-              id="protocol-name"
-              value={formData.name}
-              onChange={(e) => setFormData((current) => ({ ...current, name: e.target.value }))}
-            />
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="protocol-version">Version</Label>
-            <Input
-              id="protocol-version"
-              value={formData.version}
-              onChange={(e) => setFormData((current) => ({ ...current, version: e.target.value }))}
-            />
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="protocol-category">Category</Label>
-            <Select
-              value={formData.category || "none"}
-              onValueChange={(value) =>
-                setFormData((current) => ({
-                  ...current,
-                  category: value === "none" ? "" : value,
-                }))
-              }
-            >
-              <SelectTrigger id="protocol-category">
-                <SelectValue placeholder="Select category" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="none">No category</SelectItem>
-                {PROTOCOL_CATEGORIES.map((category) => (
-                  <SelectItem key={category} value={category}>
-                    {category}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-        </div>
-
-        <div className="space-y-2">
-          <Label htmlFor="protocol-description">Brief Description</Label>
-          <TextareaWithWordCount
-            id="protocol-description"
-            rows={2}
-            value={formData.description}
-            onChange={(value) =>
-              setFormData((current) => ({ ...current, description: value }))
-            }
-            maxWords={1000}
-          />
-        </div>
-
-        <div className="rounded-lg border p-3">
-          <div className="mb-2 flex items-center justify-between gap-3">
-            <Label htmlFor="protocol-content">Protocol Body</Label>
-            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              <NoteExportMenu
-                title={formData.name || "protocol"}
-                htmlContent={formData.content || ""}
-                trigger={
-                  <Button type="button" variant="ghost" size="icon" className="h-8 w-8" aria-label="Export protocol">
-                    <Download className="h-4 w-4" />
+    <>
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+        <Card className="flex min-h-0 flex-1 flex-col gap-0 overflow-hidden py-0">
+          <CardContent className="flex min-h-0 flex-1 flex-col gap-4 overflow-hidden px-6 pb-4 pt-4">
+            <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-lg border border-border bg-background">
+              <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-border/70 px-3 py-2">
+                <Label className="text-foreground">Protocol body</Label>
+                <div className="flex items-center gap-2">
+                  <NoteExportMenu
+                    title={protocol.name || "protocol"}
+                    htmlContent={protocol.content || ""}
+                    trigger={
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8"
+                        aria-label="Export protocol"
+                      >
+                        <Download className="h-4 w-4" />
+                      </Button>
+                    }
+                  />
+                  <Button
+                    type="button"
+                    variant="link"
+                    className="h-auto px-2 py-0 text-xs text-muted-foreground"
+                    onClick={() => setDesignModePromptOpen(true)}
+                  >
+                    Why can&apos;t I edit?
                   </Button>
-                }
-              />
-              <span>{hasChanges ? "Unsaved changes" : "Saved"}</span>
+                </div>
+              </div>
+              {/* Must not be a <button>: TipTap renders TOC etc. with inner <button>s (invalid nesting + hydration error). */}
+              <div className="min-h-0 flex-1 overflow-hidden text-left">
+                <TiptapEditor
+                  content={protocol.content ?? ""}
+                  onChange={() => {}}
+                  placeholder=""
+                  title={protocol.name || "protocol"}
+                  minHeight="100%"
+                  fillParentHeight
+                  editable={false}
+                  hideToolbar
+                  showAITools={false}
+                  showAiWritingDropdown={false}
+                  className="min-h-0 flex-1 border-0 shadow-none"
+                />
+              </div>
             </div>
-          </div>
-          <TiptapEditor
-            content={formData.content}
-            onChange={(content) =>
-              setFormData((current) => ({ ...current, content }))
-            }
-            placeholder="Write protocol steps, materials, and guidance..."
-            title={formData.name || "protocol"}
-            minHeight="420px"
-            showAITools
-          />
-        </div>
 
-        <div className="flex flex-col gap-4 rounded-lg border p-4 md:flex-row md:items-center md:justify-between">
-          <div className="space-y-1">
-            <Label htmlFor="protocol-active" className="cursor-pointer">
-              Active Protocol
-            </Label>
-            <p className="text-sm text-muted-foreground">
-              Active protocols can be linked to experiments.
-            </p>
-          </div>
-          <Switch
-            id="protocol-active"
-            checked={formData.is_active}
-            onCheckedChange={(checked) =>
-              setFormData((current) => ({ ...current, is_active: checked }))
-            }
-          />
-        </div>
+            <div className="flex shrink-0 flex-col gap-3 rounded-lg border border-border bg-muted/20 p-4 md:flex-row md:items-center md:justify-between">
+              <div className="space-y-0.5">
+                <Label htmlFor="protocol-active-view" className="text-sm font-medium text-foreground">
+                  Active protocol
+                </Label>
+                <p className="text-xs text-muted-foreground">
+                  Active protocols can be linked to experiments. You can change this here or in
+                  Design Mode.
+                </p>
+              </div>
+              <Switch
+                id="protocol-active-view"
+                checked={isActiveView}
+                disabled={isSavingActive}
+                onCheckedChange={handleActiveToggleView}
+                aria-label={isActiveView ? "Deactivate protocol" : "Activate protocol"}
+              />
+            </div>
+          </CardContent>
+        </Card>
+      </div>
 
-        <div className="flex justify-end">
-          <Button onClick={handleSave} disabled={isSaving || !hasChanges}>
-            {isSaving ? "Saving..." : "Save Protocol"}
-          </Button>
-        </div>
-      </CardContent>
-    </Card>
+      <AlertDialog open={designModePromptOpen} onOpenChange={setDesignModePromptOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Edit in Design Mode</AlertDialogTitle>
+            <AlertDialogDescription>
+              The protocol document can&apos;t be edited on this page. Switch to Design Mode to
+              change the body. Version and category are edited there too (metadata is also on the
+              Details tab). You can toggle Active / inactive below without Design Mode.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Stay here</AlertDialogCancel>
+            <AlertDialogAction asChild>
+              <Link href={designModeHref}>Open Design Mode</Link>
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
   )
 }

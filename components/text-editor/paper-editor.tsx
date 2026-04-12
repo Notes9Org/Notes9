@@ -82,6 +82,7 @@ export function PaperEditor({
       editable={editable}
       minHeight={minHeight}
       showAITools={true}
+      showAiWritingToolbarLabel
       enableMath={true}
       paperMode={true}
       title={title}

@@ -9,6 +9,7 @@ import { AppTour, requestPageHelp } from "@/components/tour/app-tour"
 import { BreadcrumbProvider, useBreadcrumb } from "./breadcrumb-context"
 import { PaperAIProvider, usePaperAI } from "@/contexts/paper-ai-context"
 import { LiteratureMentionProvider } from "@/contexts/literature-mention-context"
+import { HeaderAiProvider, useHeaderAi } from "./header-ai-context"
 import { Button } from "@/components/ui/button"
 import { ResizeHandle } from "@/components/ui/resize-handle"
 import { SidebarProvider, SidebarInset, useSidebar } from "@/components/ui/sidebar"
@@ -221,7 +222,22 @@ function AIToggleButton({ onClick }: { onClick: () => void }) {
 }
 
 export function AppLayout({ children }: AppLayoutProps) {
+  return (
+    <BreadcrumbProvider>
+      <PaperAIProvider>
+        <LiteratureMentionProvider>
+          <HeaderAiProvider>
+            <AppLayoutBody>{children}</AppLayoutBody>
+          </HeaderAiProvider>
+        </LiteratureMentionProvider>
+      </PaperAIProvider>
+    </BreadcrumbProvider>
+  )
+}
+
+function AppLayoutBody({ children }: AppLayoutProps) {
   const pathname = usePathname()
+  const { registration: headerAi } = useHeaderAi()
   const { setTheme, resolvedTheme } = useTheme()
   const [rightSidebarOpen, setRightSidebarOpen] = useState(false)
   const [themeMounted, setThemeMounted] = useState(false)
@@ -242,6 +258,12 @@ export function AppLayout({ children }: AppLayoutProps) {
       setRightSidebarOpen(false)
     }
   }, [isMobile])
+
+  useEffect(() => {
+    if (headerAi?.active) {
+      setRightSidebarOpen(false)
+    }
+  }, [headerAi?.active])
 
   useEffect(() => {
     const openSidebar = () => setRightSidebarOpen(true)
@@ -272,7 +294,9 @@ export function AppLayout({ children }: AppLayoutProps) {
     maxWidth: 400,
     direction: 'left',
   })
-  const leftColumnWidth = sidebarOpen ? leftSidebar.width : 64
+  /** Must match `--sidebar-width-icon` (3rem) so the icon rail fills the column with no dead space */
+  const collapsedSidebarWidthPx = 48
+  const leftColumnWidth = sidebarOpen ? leftSidebar.width : collapsedSidebarWidthPx
 
   // Right sidebar resizing
   const rightSidebar = useResizable({
@@ -283,9 +307,7 @@ export function AppLayout({ children }: AppLayoutProps) {
   })
 
   return (
-    <BreadcrumbProvider>
-      <PaperAIProvider>
-      <LiteratureMentionProvider>
+    <>
       <SidebarProvider defaultOpen={!isMobile} open={sidebarOpen} onOpenChange={setSidebarOpen}>
         <AppTour />
         <div
@@ -314,7 +336,7 @@ export function AppLayout({ children }: AppLayoutProps) {
             >
               <AppSidebar />
             </div>
-            {sidebarOpen && leftSidebar.width > 64 && (
+            {sidebarOpen && leftSidebar.width > collapsedSidebarWidthPx && (
               <ResizeHandle
                 onMouseDown={leftSidebar.handleMouseDown}
                 isResizing={leftSidebar.isResizing}
@@ -367,22 +389,68 @@ export function AppLayout({ children }: AppLayoutProps) {
                 )}
               </Button>
               {/* AI / Right sidebar toggle */}
-                {!rightSidebarOpen && (
+                {headerAi?.active ? (
+                  <Button
+                    id="tour-ai-toggle"
+                    type="button"
+                    variant={headerAi.isOpen ? "secondary" : "ghost"}
+                    size="icon"
+                    className="size-8 sm:size-9"
+                    onClick={headerAi.onToggle}
+                    aria-label={headerAi.ariaLabel ?? "Toggle protocol AI"}
+                    title={headerAi.title ?? "Toggle protocol AI"}
+                  >
+                    <Sparkles className="size-4" />
+                  </Button>
+                ) : !rightSidebarOpen ? (
                   <AIToggleButton onClick={() => setRightSidebarOpen(true)} />
-                )}
+                ) : null}
             </div>
           </header>
 
           {/* Main Content — flex column so routes can use h-full / flex-1 (e.g. research map) */}
           <main className="flex min-h-0 flex-1 flex-col overflow-auto p-3 sm:p-4 md:p-6 min-w-0">
-            <div className="flex min-h-0 w-full min-w-0 flex-1 flex-col">
+            {/* h-full lets nested routes use h-full / percentage heights reliably (e.g. protocol design mode) */}
+            <div className="flex h-full min-h-0 w-full min-w-0 flex-1 flex-col">
               {children}
             </div>
           </main>
         </SidebarInset>
 
         {/* Right Sidebar - Sheet on mobile, panel on desktop */}
-        {isMobile ? (
+        {headerAi?.active ? (
+          /* Protocol AI panel occupies the right sidebar slot */
+          isMobile ? (
+            <Sheet open={headerAi.isOpen} onOpenChange={(open) => { if (!open && headerAi.isOpen) headerAi.onToggle() }}>
+              <SheetContent
+                side="right"
+                showCloseButton={false}
+                className="flex h-full max-h-dvh min-h-0 w-full max-w-full flex-col gap-0 overflow-hidden p-0 data-[state=open]:duration-300 data-[state=closed]:duration-200"
+              >
+                <SheetHeader className="sr-only">
+                  <SheetTitle>Protocol AI</SheetTitle>
+                </SheetHeader>
+                {headerAi.panel}
+              </SheetContent>
+            </Sheet>
+          ) : (
+            headerAi.isOpen && (
+              <div className="flex shrink-0 h-full min-h-0">
+                <ResizeHandle
+                  onMouseDown={rightSidebar.handleMouseDown}
+                  isResizing={rightSidebar.isResizing}
+                  position="left"
+                />
+                <div
+                  className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden border-l border-border"
+                  style={{ width: rightSidebar.width, minWidth: 0 }}
+                >
+                  {headerAi.panel}
+                </div>
+              </div>
+            )
+          )
+        ) : isMobile ? (
           <Sheet open={rightSidebarOpen} onOpenChange={setRightSidebarOpen}>
             <SheetContent
               side="right"
@@ -414,8 +482,6 @@ export function AppLayout({ children }: AppLayoutProps) {
         )}
         </div>
       </SidebarProvider>
-      </LiteratureMentionProvider>
-      </PaperAIProvider>
-    </BreadcrumbProvider>
+    </>
   )
 }

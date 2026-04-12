@@ -11,7 +11,6 @@ import {
   FlaskConical,
   TestTube,
   Microscope,
-  FileText,
   NotebookPen,
   BarChart3,
   Settings,
@@ -68,6 +67,7 @@ import { Popover, PopoverAnchor, PopoverContent } from "@/components/ui/popover"
 import { createClient } from "@/lib/supabase/client"
 import { cn } from "@/lib/utils"
 import { Notes9Brand } from "@/components/brand/notes9-brand"
+import { ClipboardInfoIcon } from "@/components/ui/clipboard-info-icon"
 import { toast } from "sonner"
 import { Button } from "../ui/button"
 
@@ -78,7 +78,7 @@ const navigation = [
   { name: "Lab Notes", href: "/lab-notes", icon: NotebookPen },
   { name: "Samples", href: "/samples", icon: TestTube },
   { name: "Equipment", href: "/equipment", icon: Microscope },
-  { name: "Protocols", href: "/protocols", icon: FileText },
+  { name: "Protocols", href: "/protocols", icon: ClipboardInfoIcon },
   { name: "Literature", href: "/literature-reviews", icon: BookOpen },
   { name: "Research map", href: "/research-map", icon: Network },
   { name: "Writing", href: "/papers", icon: ScrollText },
@@ -538,13 +538,18 @@ export function AppSidebar() {
       className="shadow-[2px_0_18px_-16px_rgba(44,36,24,0.22)] transition-all duration-200 ease-in-out dark:shadow-[2px_0_18px_-16px_rgba(0,0,0,0.45)]"
     >
       {/* Header with Workspace Dropdown */}
-      <SidebarHeader className="p-2">
+      <SidebarHeader
+        className={cn(
+          "p-2 shrink-0",
+          isIconMode && "gap-1 pb-1 pt-1.5"
+        )}
+      >
         <SidebarMenu>
           <SidebarMenuItem>
             {isIconMode ? (
-              // Icon mode: Logo centered, expand button below or as overlay
-              <div className="flex flex-col items-center space-y-2">
-                <SidebarMenuButton size="lg" className="h-10 w-10 p-0">
+              // Icon mode: logo + expand stacked, same width as nav icons (no horizontal gap)
+              <div className="flex w-full flex-col items-center gap-1">
+                <SidebarMenuButton size="lg" className="h-9 w-9 p-0 [&>span]:hidden">
                   <div className="flex aspect-square size-8 items-center justify-center rounded-lg overflow-hidden">
                     <Image
                       src="/notes9-logo-mark-transparent.png"
@@ -556,11 +561,10 @@ export function AppSidebar() {
                   </div>
                 </SidebarMenuButton>
 
-                {/* Expand Button - Below logo in icon mode */}
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="size-8 sm:size-9 text-muted-foreground shrink-0"
+                  className="size-8 text-muted-foreground shrink-0"
                   onClick={toggleSidebarOpen}
                   aria-label="Expand sidebar"
                 >
@@ -600,7 +604,11 @@ export function AppSidebar() {
         </SidebarMenu>
       </SidebarHeader>
 
-      <SidebarContent>
+      <SidebarContent
+        className={cn(
+          isIconMode && "gap-0 overflow-y-auto overflow-x-hidden pt-0"
+        )}
+      >
         {/* Search - Hidden in icon mode */}
         <SidebarGroup className={cn(isIconMode && "hidden")}>
           <SidebarGroupContent className="relative px-2">
@@ -644,7 +652,7 @@ export function AppSidebar() {
                             : item.type === "lab_note"
                               ? NotebookPen
                               : item.type === "protocol"
-                                ? FileText
+                                ? ClipboardInfoIcon
                                 : TestTube
                       return (
                         <li key={`${item.type}-${item.id}`}>
@@ -678,9 +686,13 @@ export function AppSidebar() {
         </SidebarGroup>
 
         {/* Main Navigation - icons only when collapsed; align centered in icon mode */}
-        <SidebarGroup className={cn(isIconMode && "flex flex-col items-center")}>
+        <SidebarGroup
+          className={cn(
+            isIconMode && "flex flex-col items-center px-1.5 pb-1 pt-0 gap-0.5"
+          )}
+        >
           <SidebarGroupContent className={cn(isIconMode && "w-full flex flex-col items-center")}>
-            <SidebarMenu className={cn(isIconMode && "flex flex-col items-center gap-1")} id="tour-main-nav">
+            <SidebarMenu className={cn(isIconMode && "flex w-full flex-col items-center gap-0.5")} id="tour-main-nav">
               {navigation.map((item) => {
                 const Icon = item.icon
                 const pathMatches =
@@ -944,8 +956,8 @@ export function AppSidebar() {
       </SidebarContent>
 
       {/* Footer with Catalyst and User Dropdown */}
-      <SidebarFooter>
-        <SidebarMenu>
+      <SidebarFooter className={cn(isIconMode && "p-1.5 pt-0")}>
+        <SidebarMenu className={cn(isIconMode && "gap-0.5")}>
           {/* Catalyst AI Button */}
 
 
@@ -955,8 +967,17 @@ export function AppSidebar() {
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <SidebarMenuButton
-                    size="lg"
-                    className="data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground"
+                    size={isIconMode ? "default" : "lg"}
+                    tooltip={
+                      isIconMode
+                        ? `${getUserDisplayName()} — Account menu`
+                        : undefined
+                    }
+                    className={cn(
+                      "data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground",
+                      isIconMode &&
+                        "justify-center [&>span:not(:first-child)]:hidden"
+                    )}
                   >
                     <div className="flex aspect-square size-8 shrink-0 items-center justify-center rounded-lg bg-sidebar-accent text-sidebar-accent-foreground">
                       <span className="text-xs font-semibold">{getUserInitials()}</span>
@@ -964,7 +985,12 @@ export function AppSidebar() {
                     <span className="min-w-0 flex-1 truncate text-left text-sm font-semibold">
                       {getUserDisplayName()}
                     </span>
-                    <ChevronUp className="ml-auto size-4 shrink-0" />
+                    <ChevronUp
+                      className={cn(
+                        "ml-auto size-4 shrink-0",
+                        isIconMode && "hidden"
+                      )}
+                    />
                   </SidebarMenuButton>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent
@@ -986,11 +1012,11 @@ export function AppSidebar() {
                 </DropdownMenuContent>
               </DropdownMenu>
             ) : (
-              <SidebarMenuButton size="lg">
+              <SidebarMenuButton size={isIconMode ? "default" : "lg"} className={isIconMode ? "justify-center" : undefined}>
                 <div className="flex aspect-square size-8 shrink-0 items-center justify-center rounded-lg bg-sidebar-accent text-sidebar-accent-foreground">
                   <span className="text-xs font-semibold">...</span>
                 </div>
-                <span className="min-w-0 flex-1 truncate text-left text-sm font-semibold">
+                <span className={cn("min-w-0 flex-1 truncate text-left text-sm font-semibold", isIconMode && "hidden")}>
                   Loading...
                 </span>
               </SidebarMenuButton>

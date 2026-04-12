@@ -8,6 +8,8 @@
     "record:workflow": "tsx scripts/record-workflow.ts",
     "dev": "next dev",
     "lint": "eslint .",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "start": "next start"
   },
   "dependencies": {
@@ -70,6 +72,9 @@
     "@tiptap/react": "^3.17.1",
     "@tiptap/starter-kit": "^3.17.1",
     "@tiptap/suggestion": "^3.17.1",
+    "@univerjs/icons": "^1.1.1",
+    "@univerjs/preset-sheets-core": "^0.20.0",
+    "@univerjs/presets": "^0.20.0",
     "@vercel/analytics": "1.3.1",
     "@xyflow/react": "^12.10.1",
     "ai": "^5.0.115",
@@ -79,6 +84,7 @@
     "cmdk": "1.0.4",
     "dagre": "^0.8.5",
     "date-fns": "4.1.0",
+    "diff": "^8.0.4",
     "docx": "^9.5.1",
     "driver.js": "^1.4.0",
     "embla-carousel-react": "8.5.1",
@@ -95,6 +101,7 @@
     "katex": "^0.16.25",
     "lucide-react": "^0.454.0",
     "mammoth": "^1.11.0",
+    "marked": "^18.0.0",
     "md-to-docx": "^1.6.1",
     "next": "16.0.7",
     "next-themes": "^0.4.6",
@@ -113,6 +120,7 @@
     "remark-gfm": "^4.0.1",
     "remark-math": "^6.0.0",
     "resend": "^6.9.4",
+    "rxjs": "^7.8.2",
     "sonner": "^1.7.4",
     "tailwind-merge": "^2.5.5",
     "tailwindcss-animate": "^1.0.7",
@@ -121,6 +129,7 @@
     "turndown-plugin-gfm": "^1.0.2",
     "usehooks-ts": "^3.1.1",
     "vaul": "^1.1.2",
+    "xlsx": "^0.18.5",
     "yjs": "^13.6.29",
     "zod": "3.25.76"
   },
@@ -130,6 +139,7 @@
     "@hocuspocus/server": "^3.4.3",
     "@tailwindcss/postcss": "^4.1.9",
     "@types/dagre": "^0.7.54",
+    "@types/diff": "^8.0.0",
     "@types/file-saver": "^2.0.7",
     "@types/node": "^22",
     "@types/react": "^19",
@@ -141,7 +151,8 @@
     "tailwindcss": "^4.1.9",
     "tsx": "^4.21.0",
     "tw-animate-css": "1.3.3",
-    "typescript": "^5"
+    "typescript": "^5",
+    "vitest": "^4.1.4"
   },
   "packageManager": "pnpm@10.16.1+sha512.0e155aa2629db8672b49e8475da6226aa4bdea85fdcdfdc15350874946d4f3c91faaf64cbdc4a5d1ab8002f473d5c3fcedcd197989cf0390f9badd3c04678706"
 }

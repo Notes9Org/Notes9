@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Home, Folder, FlaskConical, TestTube, Microscope, FileText, BarChart3, Settings, Search, Plus, ChevronRight, X } from 'lucide-react'
+import { ClipboardInfoIcon } from "@/components/ui/clipboard-info-icon"
 import { cn } from "@/lib/utils"
 
 interface LeftSidebarProps {
@@ -20,7 +21,7 @@ const navigation = [
   { name: "Lab Notes", href: "/lab-notes", icon: FileText },
   { name: "Samples", href: "/samples", icon: TestTube },
   { name: "Equipment", href: "/equipment", icon: Microscope },
-  { name: "Protocols", href: "/protocols", icon: FileText },
+  { name: "Protocols", href: "/protocols", icon: ClipboardInfoIcon },
   { name: "Reports", href: "/reports", icon: BarChart3 },
   { name: "Settings", href: "/settings", icon: Settings },
 ]

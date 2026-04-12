@@ -169,15 +169,17 @@ export default async function ExperimentDetailPage({
           users={users || []}
         />
       </div>
-      <ExperimentTabs
-        experiment={experiment}
-        initialTab={initialTab}
-        experimentPageHref={
-          useProjectScopedHeader && projectFromUrl
-            ? `/experiments/${experiment.id}?project=${projectFromUrl}`
-            : `/experiments/${experiment.id}`
-        }
-      />
+      <div className="flex min-h-0 flex-1 flex-col">
+        <ExperimentTabs
+          experiment={experiment}
+          initialTab={initialTab}
+          experimentPageHref={
+            useProjectScopedHeader && projectFromUrl
+              ? `/experiments/${experiment.id}?project=${projectFromUrl}`
+              : `/experiments/${experiment.id}`
+          }
+        />
+      </div>
     </div>
   )
 }
