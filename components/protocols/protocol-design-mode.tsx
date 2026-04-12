@@ -557,6 +557,7 @@ export function ProtocolDesignMode({
                 draftContent={draftContent}
                 protocolId={protocol.id}
                 currentVersion={currentVersion}
+                documentTitle={protocol.name || null}
                 onAccept={handleAccept}
                 onReject={handleReject}
                 extraDirty={templateMetaDirty}

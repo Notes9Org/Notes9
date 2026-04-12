@@ -50,6 +50,8 @@ export type ContentChangeApprovalBarProps = BaseProps &
         variant: "protocol"
         protocolId: string
         currentVersion: string
+        /** Shown in change history “Document / sections” when heading-based hints are sparse. */
+        documentTitle?: string | null
         onAccept: (newContent: string, newVersion: string) => Promise<void>
       }
     | {
@@ -76,11 +78,15 @@ export function ContentChangeApprovalBar(props: ContentChangeApprovalBarProps) {
   const recordId =
     props.variant === "protocol" ? props.protocolId : props.noteId ?? undefined
 
+  const historyExportContext =
+    props.variant === "protocol"
+      ? { recordType: "protocol" as const, recordId: props.protocolId }
+      : props.noteId
+        ? { recordType: "lab_note" as const, recordId: props.noteId }
+        : undefined
+
   const { diffs, loading: diffsLoading, error: diffsError, loadDiffs, recordDiff } =
     useContentDiffs(recordType, recordId)
-
-  const historyTitle =
-    props.variant === "protocol" ? "Protocol Change History" : "Lab Note Change History"
 
   const isDirty = savedContent !== draftContent || extraDirty
 
@@ -113,6 +119,7 @@ export function ContentChangeApprovalBar(props: ContentChangeApprovalBarProps) {
           recordId: props.protocolId,
           previousContent: savedContent,
           newContent: draftContent,
+          documentTitle: props.documentTitle,
         })
         await props.onAccept(draftContent, newVersion)
       } else {
@@ -181,10 +188,10 @@ export function ContentChangeApprovalBar(props: ContentChangeApprovalBarProps) {
         <ContentDiffHistoryDialog
           open={historyOpen}
           onOpenChange={setHistoryOpen}
-          title={historyTitle}
           diffs={diffs}
           loading={diffsLoading}
           error={diffsError}
+          exportContext={historyExportContext}
         />
       </>
     )
@@ -325,10 +332,10 @@ export function ContentChangeApprovalBar(props: ContentChangeApprovalBarProps) {
       <ContentDiffHistoryDialog
         open={historyOpen}
         onOpenChange={setHistoryOpen}
-        title={historyTitle}
         diffs={diffs}
         loading={diffsLoading}
         error={diffsError}
+        exportContext={historyExportContext}
       />
     </>
   )

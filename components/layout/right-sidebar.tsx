@@ -43,7 +43,6 @@ import {
   X,
   Mic,
   BookOpen,
-  DraftingCompass,
   Loader2,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -86,7 +85,7 @@ import {
 import { usePaperAI } from '@/contexts/paper-ai-context';
 import { PaperAIPanel } from '@/components/text-editor/paper-ai-panel';
 import { FileDropzone } from '@/components/ui/file-dropzone';
-import type { CatalystAgentMode, LiteratureSubMode, LiteratureDragPayload } from '@/lib/catalyst-agent-types';
+import type { CatalystAgentMode, LiteratureDragPayload } from '@/lib/catalyst-agent-types';
 import {
   LITERATURE_DRAG_MIME,
   isLiteratureRoutePath,
@@ -197,7 +196,6 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
   const paperAI = usePaperAI();
   const [input, setInput] = useState('');
   const [agentMode, setAgentMode] = useState<CatalystAgentMode>('general');
-  const [literatureSubMode, setLiteratureSubMode] = useState<LiteratureSubMode>('normal');
   const [taggedLiterature, setTaggedLiterature] = useState<Array<{ id: string; title: string }>>([]);
   const [mentionOpen, setMentionOpen] = useState(false);
   const [mentionFilter, setMentionFilter] = useState('');
@@ -557,9 +555,6 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
     if (onLit) {
       if (!suppressLiteratureAutoModeRef.current) {
         setAgentMode('literature');
-        if (!wasOnLiteratureRouteRef.current) {
-          setLiteratureSubMode('normal');
-        }
       }
       wasOnLiteratureRouteRef.current = true;
       return;
@@ -670,7 +665,6 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
       }
       suppressLiteratureAutoModeRef.current = true;
       setAgentMode(mode);
-      setLiteratureSubMode('normal');
       agentStream.reset();
       literatureAgentStream.reset();
     },
@@ -687,7 +681,6 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
   const goToLiteratureAgent = useCallback(() => {
     suppressLiteratureAutoModeRef.current = false;
     setAgentMode('literature');
-    setLiteratureSubMode('normal');
     if (!isLiteratureRoutePath(pathname ?? null)) {
       router.push('/literature-reviews');
     }
@@ -701,9 +694,7 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
     currentSessionRef.current = currentSessionId;
   }, [currentSessionId]);
   const literatureAwaitingClarify =
-    agentMode === 'literature' &&
-    literatureSubMode === 'research_design' &&
-    Boolean(literatureAgentStream.clarify);
+    agentMode === 'literature' && Boolean(literatureAgentStream.clarify);
 
   const isLoading =
     status === 'streaming' ||
@@ -995,7 +986,7 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
         content: literatureHistoryTurnContent(m),
       }));
 
-      const endpoint = literatureSubMode === 'research_design' ? 'biomni' : 'compare';
+      const endpoint = 'compare' as const;
       const { donePayload, error } = await literatureAgentStream.runRequest(
         endpoint,
         {
@@ -1169,7 +1160,7 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
         }
 
         const litIds = sortedTaggedLiterature.map((t) => t.id);
-        const endpoint = literatureSubMode === 'research_design' ? 'biomni' : 'compare';
+        const endpoint = 'compare' as const;
         const queryFromEdit =
           literatureMessageMarkdownToPlainForModel(newContent).trim() ||
           (litIds.length > 0 ? 'Compare and analyze the tagged papers.' : '');
@@ -1264,7 +1255,6 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
       setMessages,
       regenerate,
       agentMode,
-      literatureSubMode,
       taggedLiterature,
       supabase,
       saveMessage,
@@ -1317,7 +1307,7 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
       }
 
       const litIds = sortedTaggedLiterature.map((t) => t.id);
-      const endpoint = literatureSubMode === 'research_design' ? 'biomni' : 'compare';
+      const endpoint = 'compare' as const;
       const { donePayload, error } = await literatureAgentStream.runRequest(
         endpoint,
         { query, session_id: sid, history, literature_review_ids: litIds },
@@ -1421,7 +1411,6 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
     messages,
     regenerate,
     agentMode,
-    literatureSubMode,
     taggedLiterature,
     supabase,
     saveMessage,
@@ -1828,22 +1817,6 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
-
-            {agentMode === 'literature' && isLiteratureRoute && (
-              <div className="ml-1 flex shrink-0 items-center gap-1.5 whitespace-nowrap border-l border-border/50 pl-2">
-                <DraftingCompass className="size-3.5 shrink-0 text-muted-foreground" aria-hidden />
-                <span className="shrink-0 text-xs font-medium text-muted-foreground">Design</span>
-                <Switch
-                  checked={literatureSubMode === 'research_design'}
-                  onCheckedChange={(on) =>
-                    setLiteratureSubMode(on ? 'research_design' : 'normal')
-                  }
-                  disabled={isLoading}
-                  className="shrink-0 scale-90"
-                  aria-label="Design mode for experiment and protocol generation"
-                />
-              </div>
-            )}
 
             {agentMode === 'general' && (
               <div className="ml-1 flex shrink-0 items-center gap-1.5 whitespace-nowrap border-l border-border/50 pl-2">
@@ -2437,7 +2410,7 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
                             {(() => {
                               const livePreview = previewFromLiteratureSseTokenBuffer(
                                 literatureAgentStream.streamedAnswer,
-                                literatureSubMode === 'research_design' ? 'biomni' : 'compare'
+                                'compare'
                               );
                               if (livePreview.kind === 'empty') return null;
                               if (livePreview.kind === 'waiting_structured') {

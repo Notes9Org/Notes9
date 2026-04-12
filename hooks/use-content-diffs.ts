@@ -3,7 +3,12 @@
 import { useState, useCallback } from "react"
 import { diffWords } from "diff"
 import { createClient } from "@/lib/supabase/client"
-import type { ContentDiff } from "@/lib/db/schema"
+import { buildStoredSegments } from "@/lib/content-diff-segments"
+import {
+  computeStructuralHints,
+  mergeStructureHintsWithContext,
+} from "@/lib/content-diff-structure"
+import type { ContentDiff, ContentDiffStructureHints } from "@/lib/db/schema"
 
 function stripHtml(html: string): string {
   return html.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim()
@@ -32,6 +37,8 @@ export interface RecordDiffInput {
   recordId: string
   previousContent: string
   newContent: string
+  /** Protocol / note display name — fills or prefixes structure hints when HTML trails are sparse. */
+  documentTitle?: string | null
 }
 
 export function useContentDiffs(
@@ -67,7 +74,13 @@ export function useContentDiffs(
 
   const recordDiff = useCallback(
     async (input: RecordDiffInput): Promise<void> => {
-      const { recordType: rt, recordId: rid, previousContent, newContent } = input
+      const {
+        recordType: rt,
+        recordId: rid,
+        previousContent,
+        newContent,
+        documentTitle,
+      } = input
       if (!rid || previousContent === newContent) return
 
       const prevText = stripHtml(previousContent)
@@ -84,6 +97,16 @@ export function useContentDiffs(
       }
 
       const summary = buildSummary(prevText, nextText)
+      let structureHints: ContentDiffStructureHints = { document_title: null, sections: [] }
+      try {
+        structureHints = computeStructuralHints(previousContent, newContent, parts)
+      } catch (e) {
+        console.warn("[useContentDiffs] computeStructuralHints failed (saving diff without hints):", e)
+      }
+
+      structureHints = mergeStructureHintsWithContext(structureHints, {
+        documentTitle,
+      })
 
       try {
         const supabase = createClient()
@@ -97,19 +120,21 @@ export function useContentDiffs(
           record_id: rid,
           user_id: user.id,
           change_summary: summary,
-          previous_content: previousContent,
-          new_content: newContent,
+          diff_segments: buildStoredSegments(prevText, nextText),
+          structure_hints: structureHints,
           words_added: wordsAdded,
           words_removed: wordsRemoved,
         })
         if (err) {
           console.warn("[useContentDiffs] recordDiff insert error:", err)
+          return
         }
+        await loadDiffs()
       } catch (e) {
         console.warn("[useContentDiffs] recordDiff error:", e)
       }
     },
-    []
+    [loadDiffs]
   )
 
   return { diffs, loading, error, loadDiffs, recordDiff }
