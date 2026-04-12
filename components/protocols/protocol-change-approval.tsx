@@ -7,6 +7,8 @@ export interface ProtocolChangeApprovalProps {
   draftContent: string
   protocolId: string
   currentVersion: string
+  /** Protocol name — enriches stored structure hints like lab note change history. */
+  documentTitle?: string | null
   onAccept: (newContent: string, newVersion: string) => Promise<void>
   onReject: () => void
   /** @deprecated Kept for compatibility; the bar stays mounted — use draft vs saved only. */
@@ -19,6 +21,7 @@ export function ProtocolChangeApprovalBar({
   draftContent,
   protocolId,
   currentVersion,
+  documentTitle,
   onAccept,
   onReject,
   isVisible = true,
@@ -31,6 +34,7 @@ export function ProtocolChangeApprovalBar({
       draftContent={draftContent}
       protocolId={protocolId}
       currentVersion={currentVersion}
+      documentTitle={documentTitle}
       onAccept={onAccept}
       onReject={onReject}
       isVisible={isVisible}

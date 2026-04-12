@@ -208,40 +208,42 @@ function DiffEntry({ diff }: { diff: ContentDiff }) {
           <User className="h-3 w-3 text-muted-foreground" />
         </div>
 
-        <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
-            <span className="text-xs font-medium text-foreground">{userName}</span>
-            <span className="text-[10px] text-muted-foreground" title={`${date} at ${time}`}>
-              {relative} · {date} at {time}
-            </span>
-          </div>
-          {diff.change_summary && (
-            <p className="mt-0.5 text-xs text-muted-foreground line-clamp-2 leading-relaxed">
-              {diff.change_summary}
-            </p>
-          )}
-          <div className="mt-1 flex items-center gap-2">
-            {diff.words_added > 0 && (
-              <span className="inline-flex items-center gap-0.5 text-[10px] text-emerald-600 dark:text-emerald-400">
-                <Plus className="h-2.5 w-2.5" />
-                {diff.words_added} words added
-              </span>
-            )}
-            {diff.words_removed > 0 && (
-              <span className="inline-flex items-center gap-0.5 text-[10px] text-destructive">
-                <Minus className="h-2.5 w-2.5" />
-                {diff.words_removed} words removed
-              </span>
-            )}
-          </div>
-          {hasStructureHints && (
-            <div className="mt-1.5 text-[10px] leading-snug text-muted-foreground">
-              <p className="line-clamp-4" title={structureHintsLine}>
-                <span className="font-medium text-foreground/75">Document / sections</span>
-                {": "}
-                {structureHintsLine}
-              </p>
+        <div className="min-w-0 flex-1 space-y-0">
+          <p className="text-xs font-medium leading-snug text-foreground">
+            <span className="font-normal text-muted-foreground">User </span>
+            {userName}
+          </p>
+          <p className="mt-0.5 text-[10px] leading-snug text-muted-foreground" title={`${date} at ${time}`}>
+            {relative} · {date} at {time}
+          </p>
+          {diff.change_summary ? (
+            <p className="mt-2 text-xs leading-relaxed text-foreground/90 line-clamp-4">{diff.change_summary}</p>
+          ) : null}
+          {(diff.words_added > 0 || diff.words_removed > 0) && (
+            <div className="mt-2 flex flex-col gap-0.5 text-[10px]">
+              {diff.words_added > 0 && (
+                <span className="inline-flex items-center gap-1 text-emerald-600 dark:text-emerald-400">
+                  <Plus className="h-2.5 w-2.5 shrink-0" aria-hidden />
+                  {diff.words_added} word{diff.words_added === 1 ? "" : "s"} added
+                </span>
+              )}
+              {diff.words_removed > 0 && (
+                <span className="inline-flex items-center gap-1 text-destructive">
+                  <Minus className="h-2.5 w-2.5 shrink-0" aria-hidden />
+                  {diff.words_removed} word{diff.words_removed === 1 ? "" : "s"} removed
+                </span>
+              )}
             </div>
+          )}
+          {hasStructureHints && (
+            <p
+              className="mt-2 text-[10px] leading-relaxed text-muted-foreground line-clamp-6"
+              title={structureHintsLine}
+            >
+              <span className="font-medium text-foreground/80">Document / sections</span>
+              {": "}
+              {structureHintsLine}
+            </p>
           )}
         </div>
 

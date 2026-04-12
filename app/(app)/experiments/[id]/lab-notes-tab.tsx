@@ -202,6 +202,7 @@ export function LabNotesTab({
             recordId: selectedNote.id,
             previousContent,
             newContent: content,
+            documentTitle: titleToSave.trim() || null,
           });
         }
         lastSavedContentRef.current = content;

@@ -161,6 +161,29 @@ export function formatStructureHintsDisplay(h: ContentDiffStructureHints): strin
 }
 
 /**
+ * When HTML-derived heading trails are empty or lack a document title, use an optional
+ * display name (e.g. protocol or lab note title) so change logs match the rich lab-note shape.
+ */
+export function mergeStructureHintsWithContext(
+  hints: ContentDiffStructureHints,
+  opts: { documentTitle?: string | null }
+): ContentDiffStructureHints {
+  const t = opts.documentTitle?.trim()
+  if (!t) return hints
+
+  const hasDocTitle = Boolean(hints.document_title?.trim())
+  const hasSections = hints.sections.length > 0
+
+  if (!hasDocTitle && !hasSections) {
+    return { document_title: t, sections: [] }
+  }
+  if (!hasDocTitle && hasSections) {
+    return { document_title: t, sections: hints.sections }
+  }
+  return hints
+}
+
+/**
  * Longest added/removed runs first — these best indicate *where* the edit happened.
  * Deduped, capped, so we do not sweep every small word match across the document.
  */

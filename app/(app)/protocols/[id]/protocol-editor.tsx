@@ -1,6 +1,8 @@
 "use client"
 
 import { useMemo, useState, useCallback, useEffect } from "react"
+import { useContentDiffs } from "@/hooks/use-content-diffs"
+import { ContentDiffHistoryDialog } from "@/components/content-diff-history-dialog"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
 import { createClient } from "@/lib/supabase/client"
@@ -22,7 +24,7 @@ import {
 import { TiptapEditor } from "@/components/text-editor/tiptap-editor"
 import { Card, CardContent } from "@/components/ui/card"
 import { NoteExportMenu } from "@/components/note-export-menu"
-import { Download } from "lucide-react"
+import { Download, History } from "lucide-react"
 import { ProtocolDesignMode } from "@/components/protocols/protocol-design-mode"
 
 export function ProtocolEditor({
@@ -41,6 +43,11 @@ export function ProtocolEditor({
   const [designModePromptOpen, setDesignModePromptOpen] = useState(false)
   const [isActiveView, setIsActiveView] = useState(Boolean(protocol.is_active))
   const [isSavingActive, setIsSavingActive] = useState(false)
+  const [contentHistoryOpen, setContentHistoryOpen] = useState(false)
+  const { diffs, loading: diffsLoading, error: diffsError, loadDiffs } = useContentDiffs(
+    "protocol",
+    protocol.id
+  )
 
   const [formData, setFormData] = useState({
     name: protocol.name ?? "",
@@ -144,6 +151,20 @@ export function ProtocolEditor({
               <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-border/70 px-3 py-2">
                 <Label className="text-foreground">Protocol body</Label>
                 <div className="flex items-center gap-2">
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="h-8 gap-1.5 px-2 text-xs text-muted-foreground"
+                    onClick={() => {
+                      setContentHistoryOpen(true)
+                      loadDiffs()
+                    }}
+                    aria-label="Change history"
+                  >
+                    <History className="h-3.5 w-3.5" />
+                    Change history
+                  </Button>
                   <NoteExportMenu
                     title={protocol.name || "protocol"}
                     htmlContent={protocol.content || ""}
@@ -212,7 +233,7 @@ export function ProtocolEditor({
       <AlertDialog open={designModePromptOpen} onOpenChange={setDesignModePromptOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Edit in Design Mode</AlertDialogTitle>
+            <AlertDialogTitle>Edit</AlertDialogTitle>
             <AlertDialogDescription>
               The protocol document can&apos;t be edited on this page. Switch to Design Mode to
               change the body. Version and category are edited there too (metadata is also on the
@@ -227,6 +248,15 @@ export function ProtocolEditor({
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <ContentDiffHistoryDialog
+        open={contentHistoryOpen}
+        onOpenChange={setContentHistoryOpen}
+        diffs={diffs}
+        loading={diffsLoading}
+        error={diffsError}
+        exportContext={{ recordType: "protocol", recordId: protocol.id }}
+      />
     </>
   )
 }

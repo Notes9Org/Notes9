@@ -4,7 +4,10 @@ import { useState, useCallback } from "react"
 import { diffWords } from "diff"
 import { createClient } from "@/lib/supabase/client"
 import { buildStoredSegments } from "@/lib/content-diff-segments"
-import { computeStructuralHints } from "@/lib/content-diff-structure"
+import {
+  computeStructuralHints,
+  mergeStructureHintsWithContext,
+} from "@/lib/content-diff-structure"
 import type { ContentDiff, ContentDiffStructureHints } from "@/lib/db/schema"
 
 function stripHtml(html: string): string {
@@ -34,6 +37,8 @@ export interface RecordDiffInput {
   recordId: string
   previousContent: string
   newContent: string
+  /** Protocol / note display name — fills or prefixes structure hints when HTML trails are sparse. */
+  documentTitle?: string | null
 }
 
 export function useContentDiffs(
@@ -69,7 +74,13 @@ export function useContentDiffs(
 
   const recordDiff = useCallback(
     async (input: RecordDiffInput): Promise<void> => {
-      const { recordType: rt, recordId: rid, previousContent, newContent } = input
+      const {
+        recordType: rt,
+        recordId: rid,
+        previousContent,
+        newContent,
+        documentTitle,
+      } = input
       if (!rid || previousContent === newContent) return
 
       const prevText = stripHtml(previousContent)
@@ -92,6 +103,10 @@ export function useContentDiffs(
       } catch (e) {
         console.warn("[useContentDiffs] computeStructuralHints failed (saving diff without hints):", e)
       }
+
+      structureHints = mergeStructureHintsWithContext(structureHints, {
+        documentTitle,
+      })
 
       try {
         const supabase = createClient()
