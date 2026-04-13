@@ -180,6 +180,19 @@ export function ExperimentDataTabularDialog({
 
   const gridHeightClass = fullPage ? "min-h-0 flex-1 h-[min(72vh,calc(100vh-11rem))]" : "min-h-[420px] h-[560px]"
 
+  const preventDialogDismissForUniverPopup = (e: { target: EventTarget | null; preventDefault: () => void }) => {
+    const target = e.target as Element | null
+    if (
+      target?.closest?.("#univer-popup-portal") ||
+      target?.closest?.('[data-u-comp="rect-popup"]') ||
+      target?.closest?.('[data-u-comp="rect-popup-mask"]') ||
+      target?.closest?.(".univer-popup") ||
+      target?.closest?.(".univer-popup-mask")
+    ) {
+      e.preventDefault()
+    }
+  }
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
@@ -195,14 +208,10 @@ export function ExperimentDataTabularDialog({
           // rendered as position:fixed elements outside the dialog DOM via React portals.
           // Radix DismissableLayer treats clicks on them as "outside" and would close the
           // dialog. Prevent that so users can interact with Univer's popups normally.
-          const target = e.target as Element | null
-          if (
-            target?.closest?.(".univer-popup") ||
-            target?.closest?.(".univer-popup-mask")
-          ) {
-            e.preventDefault()
-          }
+          preventDialogDismissForUniverPopup(e)
         }}
+        onPointerDownOutside={preventDialogDismissForUniverPopup}
+        onFocusOutside={preventDialogDismissForUniverPopup}
       >
         <DialogHeader className="px-4 pt-4 pb-2 shrink-0 border-b sm:px-6 sm:pt-6">
           <div className="flex flex-wrap items-center justify-between gap-2 pr-8">

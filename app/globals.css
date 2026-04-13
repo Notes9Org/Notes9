@@ -832,13 +832,14 @@ mark {
 }
 
 /*
- * Univer toolbar dropdowns (color picker, font picker, border panel, etc.) render as
- * `position: fixed` elements with class `.univer-popup` at z-index 1070.
- * When a Radix modal Dialog is open, DismissableLayer sets `body { pointer-events: none }`
- * to block interaction outside the dialog. Univer's portaled popups inherit this value,
- * making them visible but unclickable. Restore pointer-events explicitly so they work
- * normally inside a Dialog context.
+ * Univer mounts ribbon/context UI into `#univer-popup-portal` (see app/layout.tsx). Without
+ * that node, React portals render nothing — font/color menus appear to do nothing.
+ *
+ * Radix Dialog also sets `body { pointer-events: none }` while open; ensure portaled UI
+ * stays interactive (legacy `.univer-popup` class + rect popup nodes from @univerjs/ui).
  */
+#univer-popup-portal [data-u-comp="rect-popup"],
+#univer-popup-portal [data-u-comp="rect-popup-mask"],
 .univer-popup,
 .univer-popup-mask {
   pointer-events: auto;

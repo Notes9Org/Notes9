@@ -13,6 +13,25 @@ import {
   scheduleMicrotask,
 } from "@/components/spreadsheet/spreadsheet-univer-shared"
 
+function canonicalEncodedFromProp(enc: string, fileName?: string): string | null {
+  try {
+    const parsed = JSON.parse(decodeWorkbookAttr(enc))
+    const workbook = normalizeWorkbookSnapshot(parsed, fileName)
+    return encodeWorkbookAttr(JSON.stringify(workbook))
+  } catch {
+    return null
+  }
+}
+
+function canonicalJsonFromSnapshot(snap: Record<string, unknown>, fileName?: string): string | null {
+  try {
+    const workbook = normalizeWorkbookSnapshot(snap, fileName)
+    return JSON.stringify(workbook)
+  } catch {
+    return null
+  }
+}
+
 export type UniverWorkbookViewProps = {
   /** TipTap-style URI-encoded JSON workbook string */
   workbookEncoded?: string
@@ -49,6 +68,7 @@ export function UniverWorkbookView({
   const boundaryRef = useRef<HTMLDivElement | null>(null)
   const [fallbackHtml, setFallbackHtml] = useState<string | null>(null)
   const [hasInteractiveSheet, setHasInteractiveSheet] = useState(false)
+  const [dataRevision, setDataRevision] = useState(0)
   const lastSavedEncodedRef = useRef(workbookEncoded || "")
   const lastSavedSnapshotJsonRef = useRef(
     workbookSnapshot ? JSON.stringify(workbookSnapshot) : ""
@@ -59,10 +79,38 @@ export function UniverWorkbookView({
   onPersistEncodedRef.current = onPersistEncoded
   onPersistSnapshotRef.current = onPersistSnapshot
 
-  const serializedInput =
-    workbookEncoded ??
-    (workbookSnapshot ? JSON.stringify(workbookSnapshot) : "") ??
-    ""
+  const workbookEncodedPropRef = useRef(workbookEncoded)
+  const workbookSnapshotPropRef = useRef(workbookSnapshot)
+  workbookEncodedPropRef.current = workbookEncoded
+  workbookSnapshotPropRef.current = workbookSnapshot
+
+  const mountedRef = useRef(false)
+
+  /** When the parent had no workbook yet (e.g. loading) and data arrives, the mount effect must run without tying to every save. */
+  const canAttemptMount =
+    (workbookEncoded != null && workbookEncoded.length > 0) || workbookSnapshot != null
+
+  /** When props change to a different workbook than the live instance (undo, server replace), bump revision to remount. */
+  useEffect(() => {
+    if (!mountedRef.current || isHydratingRef.current) return
+
+    const enc = workbookEncoded
+    const snap = workbookSnapshot
+
+    if (enc) {
+      const canonical = canonicalEncodedFromProp(enc, fileName)
+      if (canonical == null) return
+      if (canonical === lastSavedEncodedRef.current) return
+      setDataRevision((r) => r + 1)
+      return
+    }
+    if (snap) {
+      const canonical = canonicalJsonFromSnapshot(snap, fileName)
+      if (canonical == null) return
+      if (canonical === lastSavedSnapshotJsonRef.current) return
+      setDataRevision((r) => r + 1)
+    }
+  }, [workbookEncoded, workbookSnapshot, fileName])
 
   useEffect(() => {
     let disposed = false
@@ -73,12 +121,15 @@ export function UniverWorkbookView({
     const mount = async () => {
       if (!containerRef.current) return
 
+      const encProp = workbookEncodedPropRef.current
+      const snapProp = workbookSnapshotPropRef.current
+
       let parsed: unknown
       try {
-        if (workbookEncoded) {
-          parsed = JSON.parse(decodeWorkbookAttr(workbookEncoded))
-        } else if (workbookSnapshot) {
-          parsed = workbookSnapshot
+        if (encProp) {
+          parsed = JSON.parse(decodeWorkbookAttr(encProp))
+        } else if (snapProp) {
+          parsed = snapProp
         } else {
           return
         }
@@ -94,7 +145,10 @@ export function UniverWorkbookView({
         setFallbackHtml(buildFallbackTable(workbook))
 
         const shouldHydrateEncoded =
-          workbookEncoded != null && normalizedEncoded !== workbookEncoded && !isHydratingRef.current
+          encProp != null &&
+          encProp !== "" &&
+          normalizedEncoded !== encProp &&
+          !isHydratingRef.current
         if (shouldHydrateEncoded && onPersistEncodedRef.current) {
           isHydratingRef.current = true
           scheduleMicrotask(() => {
@@ -118,7 +172,6 @@ export function UniverWorkbookView({
         if (!host) return
         host.replaceChildren(mountHost)
 
-        const isWorkspace = variant === "workspace"
         const presetConfig: Record<string, unknown> = {
           container: mountHost,
           header: true,
@@ -128,7 +181,8 @@ export function UniverWorkbookView({
           menu: true,
           contextMenu: true,
           statusBarStatistic: true,
-          disableAutoFocus: !isWorkspace,
+          // Always disable Univer auto-focus so it does not fight Radix Dialog focus / cell editor.
+          disableAutoFocus: true,
           ribbonType: "classic",
         }
 
@@ -150,6 +204,7 @@ export function UniverWorkbookView({
         if (!hasUniverWorkbookApi(univerAPI)) {
           console.warn("Univer workbook API missing; using fallback table only.")
           setHasInteractiveSheet(false)
+          mountedRef.current = false
           cleanup = () => {
             const el = containerRef.current
             if (el && el === mountHost?.parentElement) {
@@ -159,14 +214,16 @@ export function UniverWorkbookView({
           return
         }
 
-        let fWorkbook: { save?: () => Record<string, unknown>; endEditing?: (v: boolean) => Promise<void> }
+        let fWorkbook: { save?: () => Record<string, unknown> }
         try {
           fWorkbook = univerAPI.createWorkbook(workbook)
         } catch (error) {
           console.error("Failed to create Univer workbook from snapshot", error)
           setHasInteractiveSheet(false)
+          mountedRef.current = false
           return
         }
+        mountedRef.current = true
         setHasInteractiveSheet(true)
 
         const persistWorkbook = () => {
@@ -176,11 +233,7 @@ export function UniverWorkbookView({
             clearTimeout(saveTimer)
           }
 
-          saveTimer = setTimeout(async () => {
-            try {
-              await fWorkbook.endEditing?.(true)
-            } catch {}
-
+          saveTimer = setTimeout(() => {
             try {
               const snapshot = fWorkbook.save?.()
               if (!snapshot) return
@@ -189,7 +242,7 @@ export function UniverWorkbookView({
               if (encoded === lastSavedEncodedRef.current && snapJson === lastSavedSnapshotJsonRef.current) return
               lastSavedEncodedRef.current = encoded
               lastSavedSnapshotJsonRef.current = snapJson
-              setFallbackHtml(buildFallbackTable(snapshot))
+              // Avoid setState while the user is typing — re-renders can steal focus from the cell editor.
               isHydratingRef.current = true
               scheduleMicrotask(() => {
                 onPersistEncodedRef.current?.(encoded)
@@ -218,6 +271,7 @@ export function UniverWorkbookView({
             ]
 
         cleanup = () => {
+          mountedRef.current = false
           if (saveTimer) {
             clearTimeout(saveTimer)
           }
@@ -264,6 +318,7 @@ export function UniverWorkbookView({
       } catch (error) {
         console.error("Failed to mount Univer workbook view", error)
         setHasInteractiveSheet(false)
+        mountedRef.current = false
       }
     }
 
@@ -273,7 +328,7 @@ export function UniverWorkbookView({
       cleanup?.()
       disposed = true
     }
-  }, [serializedInput, fileName, readOnly, instanceKey, variant])
+  }, [instanceKey, variant, readOnly, fileName, dataRevision, canAttemptMount])
 
   useEffect(() => {
     const boundary = boundaryRef.current

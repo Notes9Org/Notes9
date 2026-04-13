@@ -10,6 +10,15 @@ import { scheduleMicrotask } from "@/components/spreadsheet/spreadsheet-univer-s
 function SpreadsheetEmbedView({ node, updateAttributes }: { node: any; updateAttributes: (attrs: Record<string, unknown>) => void }) {
   const updateAttributesRef = useRef(updateAttributes)
   updateAttributesRef.current = updateAttributes
+  /** Stable per node-view instance so Univer does not remount when `workbookData` updates from saves. */
+  const instanceKeyRef = useRef<string | null>(null)
+  if (instanceKeyRef.current == null) {
+    instanceKeyRef.current =
+      typeof crypto !== "undefined" && crypto.randomUUID
+        ? crypto.randomUUID()
+        : `sheet-${Math.random().toString(36).slice(2, 12)}`
+  }
+  const instanceKey = instanceKeyRef.current
 
   return (
     <NodeViewWrapper
@@ -23,7 +32,7 @@ function SpreadsheetEmbedView({ node, updateAttributes }: { node: any; updateAtt
       </div>
 
       <UniverWorkbookView
-        key={node.attrs.workbookData}
+        instanceKey={instanceKey}
         variant="embed"
         workbookEncoded={node.attrs.workbookData}
         fileName={node.attrs.fileName}
