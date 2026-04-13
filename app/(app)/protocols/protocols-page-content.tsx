@@ -5,7 +5,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import { useMediaQuery } from "@/hooks/use-media-query"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { Plus, FileText, Grid3x3, List, PenBox } from "lucide-react"
+import { Plus, FileText, Grid3x3, List, PenBox, X } from "lucide-react"
 import Link from "next/link"
 import { ProtocolList } from "./protocol-list"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
@@ -149,6 +149,14 @@ export function ProtocolsPageContent({
           Standard Operating Procedures library
         </p>
         <div className="flex items-center gap-2 shrink-0 self-end sm:self-auto">
+          {projectContext ? (
+            <Button asChild variant="outline" size="sm" className="gap-2">
+              <Link href="/protocols">
+                <X className="h-4 w-4" />
+                Remove project filter
+              </Link>
+            </Button>
+          ) : null}
           {mainTab === "library" ? (
             <div className="inline-flex gap-1 rounded-lg border p-1">
               <Button

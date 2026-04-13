@@ -9,6 +9,13 @@ import { createClient } from "@/lib/supabase/client"
 import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 import { useToast } from "@/hooks/use-toast"
 import { updateProtocolWithOptionalContext } from "@/lib/protocol-context-supabase"
 import {
@@ -24,7 +31,7 @@ import {
 import { TiptapEditor } from "@/components/text-editor/tiptap-editor"
 import { Card, CardContent } from "@/components/ui/card"
 import { NoteExportMenu } from "@/components/note-export-menu"
-import { Download, History } from "lucide-react"
+import { Download, FlaskConical, FolderOpen, History, Save } from "lucide-react"
 import { ProtocolDesignMode } from "@/components/protocols/protocol-design-mode"
 import {
   DOCUMENT_HIGHLIGHT_EVENT,
@@ -34,6 +41,9 @@ import {
   type HighlightTarget,
 } from "@/lib/document-highlight"
 import type { Editor } from "@tiptap/react"
+
+type ProjectOption = { id: string; name: string }
+type ExperimentOption = { id: string; name: string; project_id: string }
 
 export function ProtocolEditor({
   protocol,
@@ -51,6 +61,14 @@ export function ProtocolEditor({
   const [designModePromptOpen, setDesignModePromptOpen] = useState(false)
   const [isActiveView, setIsActiveView] = useState(Boolean(protocol.is_active))
   const [isSavingActive, setIsSavingActive] = useState(false)
+  const [isSavingContext, setIsSavingContext] = useState(false)
+  const [projects, setProjects] = useState<ProjectOption[]>([])
+  const [experiments, setExperiments] = useState<ExperimentOption[]>([])
+  const [isLoadingExperiments, setIsLoadingExperiments] = useState(false)
+  const [savedContext, setSavedContext] = useState({
+    project_id: protocol.project_id ?? "",
+    experiment_id: protocol.experiment_id ?? "",
+  })
   const [contentHistoryOpen, setContentHistoryOpen] = useState(false)
   const searchParams = useSearchParams()
   const protocolEditorRef = useRef<Editor | null>(null)
@@ -76,6 +94,88 @@ export function ProtocolEditor({
     setIsActiveView(Boolean(protocol.is_active))
     setFormData((prev) => ({ ...prev, is_active: Boolean(protocol.is_active) }))
   }, [protocol.id, protocol.is_active])
+
+  useEffect(() => {
+    setSavedContext({
+      project_id: protocol.project_id ?? "",
+      experiment_id: protocol.experiment_id ?? "",
+    })
+    setFormData((prev) => ({
+      ...prev,
+      project_id: protocol.project_id ?? "",
+      experiment_id: protocol.experiment_id ?? "",
+    }))
+  }, [protocol.id, protocol.project_id, protocol.experiment_id])
+
+  useEffect(() => {
+    let cancelled = false
+
+    const run = async () => {
+      const supabase = createClient()
+      const {
+        data: { user },
+      } = await supabase.auth.getUser()
+      if (!user || cancelled) return
+
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("organization_id")
+        .eq("id", user.id)
+        .single()
+
+      if (!profile?.organization_id || cancelled) return
+
+      const { data: projectRows } = await supabase
+        .from("projects")
+        .select("id, name")
+        .eq("organization_id", profile.organization_id)
+        .order("name")
+
+      if (cancelled) return
+      setProjects((projectRows as ProjectOption[] | null) ?? [])
+    }
+
+    void run()
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!formData.project_id) {
+      setExperiments([])
+      setIsLoadingExperiments(false)
+      setFormData((prev) =>
+        prev.experiment_id ? { ...prev, experiment_id: "" } : prev
+      )
+      return
+    }
+
+    let cancelled = false
+    setIsLoadingExperiments(true)
+
+    const run = async () => {
+      const supabase = createClient()
+      const { data } = await supabase
+        .from("experiments")
+        .select("id, name, project_id")
+        .eq("project_id", formData.project_id)
+        .order("name")
+
+      if (cancelled) return
+      const next = (data as ExperimentOption[] | null) ?? []
+      setExperiments(next)
+      setIsLoadingExperiments(false)
+      if (formData.experiment_id && !next.some((e) => e.id === formData.experiment_id)) {
+        setFormData((prev) => ({ ...prev, experiment_id: "" }))
+      }
+    }
+
+    void run()
+    return () => {
+      cancelled = true
+    }
+  }, [formData.project_id, formData.experiment_id])
 
   // Highlight from AI reference navigation — retries until content is loaded
   const highlightParam = searchParams.get(HIGHLIGHT_PARAM)
@@ -181,6 +281,55 @@ export function ProtocolEditor({
     []
   )
 
+  const hasContextChanges =
+    formData.project_id !== savedContext.project_id ||
+    formData.experiment_id !== savedContext.experiment_id
+
+  const handleContextSave = useCallback(async () => {
+    setIsSavingContext(true)
+    try {
+      const supabase = createClient()
+      const { error, contextSaved } = await updateProtocolWithOptionalContext(supabase, protocol.id, {
+        project_id: formData.project_id || null,
+        experiment_id: formData.experiment_id || null,
+      })
+      if (error) throw error
+
+      setSavedContext({
+        project_id: formData.project_id,
+        experiment_id: formData.experiment_id,
+      })
+      if (!contextSaved) {
+        toast({
+          title: "Context not saved",
+          description:
+            "This database does not yet support protocol project or experiment links. Run migration 030 and try again.",
+          variant: "destructive",
+        })
+        return
+      }
+
+      toast({
+        title: "Protocol links updated",
+        description: formData.experiment_id
+          ? "This protocol is now linked to the selected project and experiment."
+          : formData.project_id
+            ? "This protocol is now linked to the selected project."
+            : "Project and experiment links were cleared.",
+      })
+      router.refresh()
+    } catch (e: unknown) {
+      const message = e instanceof Error ? e.message : "Update failed"
+      toast({
+        title: "Could not update protocol links",
+        description: message,
+        variant: "destructive",
+      })
+    } finally {
+      setIsSavingContext(false)
+    }
+  }, [formData.project_id, formData.experiment_id, protocol.id, router, toast])
+
   const designProtocol = useMemo(
     () => ({
       id: protocol.id,
@@ -281,6 +430,94 @@ export function ProtocolEditor({
                   >
                     Why can&apos;t I edit?
                   </Button>
+                </div>
+              </div>
+              <div className="flex shrink-0 flex-col gap-3 border-b border-border/70 bg-muted/20 px-3 py-3">
+                <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+                  <div className="grid flex-1 grid-cols-1 gap-3 sm:grid-cols-2">
+                    <div className="space-y-1.5">
+                      <Label htmlFor="protocol-project-link" className="text-xs text-muted-foreground">
+                        Linked project
+                      </Label>
+                      <Select
+                        value={formData.project_id || "__none__"}
+                        onValueChange={(value) =>
+                          setFormData((prev) => ({
+                            ...prev,
+                            project_id: value === "__none__" ? "" : value,
+                            experiment_id:
+                              value === "__none__" || prev.project_id !== value ? "" : prev.experiment_id,
+                          }))
+                        }
+                      >
+                        <SelectTrigger id="protocol-project-link" className="h-9">
+                          <SelectValue placeholder="Select a project" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="__none__">No project</SelectItem>
+                          {projects.map((project) => (
+                            <SelectItem key={project.id} value={project.id}>
+                              <span className="flex items-center gap-1.5">
+                                <FolderOpen className="h-3.5 w-3.5 text-muted-foreground" />
+                                {project.name}
+                              </span>
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label htmlFor="protocol-experiment-link" className="text-xs text-muted-foreground">
+                        Linked experiment
+                      </Label>
+                      <Select
+                        value={formData.experiment_id || "__none__"}
+                        onValueChange={(value) =>
+                          setFormData((prev) => ({
+                            ...prev,
+                            experiment_id: value === "__none__" ? "" : value,
+                          }))
+                        }
+                        disabled={!formData.project_id || isLoadingExperiments}
+                      >
+                        <SelectTrigger id="protocol-experiment-link" className="h-9">
+                          <SelectValue
+                            placeholder={
+                              !formData.project_id
+                                ? "Select a project first"
+                                : isLoadingExperiments
+                                  ? "Loading…"
+                                  : "Select an experiment"
+                            }
+                          />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="__none__">No experiment</SelectItem>
+                          {experiments.map((experiment) => (
+                            <SelectItem key={experiment.id} value={experiment.id}>
+                              <span className="flex items-center gap-1.5">
+                                <FlaskConical className="h-3.5 w-3.5 text-muted-foreground" />
+                                {experiment.name}
+                              </span>
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                  <div className="flex shrink-0 items-center justify-end">
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      className="gap-1.5"
+                      onClick={() => void handleContextSave()}
+                      disabled={isSavingContext || !hasContextChanges}
+                    >
+                      <Save className="h-3.5 w-3.5" />
+                      {isSavingContext ? "Saving…" : "Save links"}
+                    </Button>
+                  </div>
                 </div>
               </div>
               {/* Must not be a <button>: TipTap renders TOC etc. with inner <button>s (invalid nesting + hydration error). */}

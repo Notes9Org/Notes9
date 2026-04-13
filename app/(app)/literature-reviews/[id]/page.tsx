@@ -1,8 +1,11 @@
 import { redirect, notFound } from 'next/navigation'
 import { createClient } from "@/lib/supabase/server"
 import { SetPageBreadcrumb } from "@/components/layout/breadcrumb-context"
+import { Button } from "@/components/ui/button"
 import { LiteratureDetailView } from '@/components/literature-reviews/literature-detail-view'
 import { resolveInitialProjectIdParam } from "@/lib/url-project-param"
+import Link from "next/link"
+import { X } from "lucide-react"
 
 export default async function LiteratureReviewDetailPage({
   params,
@@ -94,6 +97,16 @@ export default async function LiteratureReviewDetailPage({
   return (
     <div className="space-y-6">
       <SetPageBreadcrumb segments={breadcrumbSegments} />
+      {projectFromUrl ? (
+        <div className="flex justify-end">
+          <Button asChild variant="outline" size="sm">
+            <Link href={`/literature-reviews/${literature.id}`}>
+              <X className="h-4 w-4 mr-2" />
+              Remove project filter
+            </Link>
+          </Button>
+        </div>
+      ) : null}
       {/* Literature Detail */}
       <LiteratureDetailView
         literature={literature}

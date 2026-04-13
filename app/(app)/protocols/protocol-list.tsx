@@ -13,7 +13,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
-import { FileText, Calendar, Eye, Grid3x3, List, Pencil, FolderOpen, FlaskConical } from "lucide-react"
+import { FileText, Calendar, ArrowUpRight, Grid3x3, List, Pencil, FolderOpen, FlaskConical } from "lucide-react"
 import Link from "next/link"
 import type { Protocol } from "./protocols-page-content"
 
@@ -155,7 +155,7 @@ export function ProtocolList({
                 <div className="flex gap-2 mt-auto shrink-0">
                   <Button variant="outline" size="sm" className="flex-1" asChild>
                     <Link href={protocolDetailHref(item.id, linkProjectId)}>
-                      <Eye className="h-4 w-4 mr-2" />
+                      <ArrowUpRight className="h-4 w-4 mr-2" />
                       <span className="truncate">View</span>
                     </Link>
                   </Button>
@@ -250,7 +250,7 @@ export function ProtocolList({
                         <div className="flex items-center justify-end gap-1">
                           <Button variant="ghost" size="sm" asChild>
                             <Link href={protocolDetailHref(item.id, linkProjectId)}>
-                              <Eye className="h-4 w-4" />
+                              <ArrowUpRight className="h-4 w-4" />
                             </Link>
                           </Button>
                           <Button variant="ghost" size="sm" asChild>

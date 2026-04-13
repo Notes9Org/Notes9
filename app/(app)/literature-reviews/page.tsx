@@ -1,7 +1,7 @@
 import { redirect } from 'next/navigation'
 import { createClient } from "@/lib/supabase/server"
 import { Button } from "@/components/ui/button"
-import { Plus } from 'lucide-react'
+import { Plus, X } from 'lucide-react'
 import Link from 'next/link'
 import { LiteratureTabs } from '@/components/literature-reviews/literature-tabs'
 import type { StagingLiteratureRow } from "@/components/literature-reviews/staging-tab"
@@ -12,7 +12,7 @@ import { SetPageBreadcrumb } from "@/components/layout/breadcrumb-context"
 export default async function LiteratureReviewsPage({
   searchParams,
 }: {
-  searchParams?: Promise<{ project?: string }>
+  searchParams?: Promise<{ project?: string; tab?: string }>
 }) {
   const sp = searchParams ? await searchParams : {}
   const supabase = await createClient()
@@ -67,6 +67,12 @@ export default async function LiteratureReviewsPage({
     sp.project,
     safeProjects.map((p) => p.id)
   )
+  const initialTab =
+    sp.tab === "repo" || sp.tab === "staging" || sp.tab === "search"
+      ? sp.tab
+      : initialProjectId
+        ? "repo"
+        : "search"
   const scopedProject = initialProjectId
     ? safeProjects.find((p) => p.id === initialProjectId)
     : null
@@ -92,6 +98,14 @@ export default async function LiteratureReviewsPage({
           </p>
         </div>
         <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
+          {initialProjectId ? (
+            <Button asChild variant="outline" className="w-full sm:w-auto">
+              <Link href="/literature-reviews">
+                <X className="h-4 w-4 mr-2" />
+                Remove project filter
+              </Link>
+            </Button>
+          ) : null}
           <UploadLiteraturePdfDialog
             literatureReviews={(literatureReviews ?? []) as any}
             projects={safeProjects}
@@ -123,6 +137,7 @@ export default async function LiteratureReviewsPage({
         projects={safeProjects}
         experiments={safeExperiments}
         initialProjectId={initialProjectId}
+        initialTab={initialTab}
       />
     </div>
   )

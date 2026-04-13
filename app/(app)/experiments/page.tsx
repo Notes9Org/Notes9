@@ -2,7 +2,7 @@ import { redirect } from 'next/navigation'
 import { createClient } from "@/lib/supabase/server"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { Plus } from 'lucide-react'
+import { Plus, X } from 'lucide-react'
 import Link from 'next/link'
 import { ExperimentsPageContent } from './experiment-list'
 import { SetPageBreadcrumb } from "@/components/layout/breadcrumb-context"
@@ -79,17 +79,27 @@ export default async function ExperimentsPage({
               <p className="text-muted-foreground">
                 Manage and track all experimental procedures
               </p>
-              <Button id="tour-create-experiment" asChild size="icon" variant="ghost" className="shrink-0 size-8 rounded-md text-muted-foreground hover:bg-muted hover:text-foreground transition-colors" aria-label="New experiment">
-                <Link
-                  href={
-                    projectContext
-                      ? `/experiments/new?project=${projectContext.id}`
-                      : "/experiments/new"
-                  }
-                >
-                  <Plus className="size-4" />
-                </Link>
-              </Button>
+              <div className="flex items-center gap-2">
+                {projectContext ? (
+                  <Button asChild variant="outline" size="sm" className="gap-2">
+                    <Link href="/experiments">
+                      <X className="h-4 w-4" />
+                      Remove project filter
+                    </Link>
+                  </Button>
+                ) : null}
+                <Button id="tour-create-experiment" asChild size="icon" variant="ghost" className="shrink-0 size-8 rounded-md text-muted-foreground hover:bg-muted hover:text-foreground transition-colors" aria-label="New experiment">
+                  <Link
+                    href={
+                      projectContext
+                        ? `/experiments/new?project=${projectContext.id}`
+                        : "/experiments/new"
+                    }
+                  >
+                    <Plus className="size-4" />
+                  </Link>
+                </Button>
+              </div>
             </div>
             <Card>
               <CardContent className="flex flex-col items-center justify-center py-12">

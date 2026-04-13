@@ -13,7 +13,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
-import { ArrowLeft, CheckCircle, Pencil } from 'lucide-react'
+import { ArrowLeft, CheckCircle, Pencil, X } from 'lucide-react'
 import Link from 'next/link'
 import { ProtocolActions } from './protocol-actions'
 import { ProtocolEditor } from './protocol-editor'
@@ -225,7 +225,17 @@ export default async function ProtocolDetailPage({
               ) : null}
             </div>
           </div>
-          <ProtocolActions protocol={protocol} usageCount={experimentUsageRows.length} />
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            {projectFromUrl ? (
+              <Button asChild variant="outline" size="sm" className="gap-2">
+                <Link href={`/protocols/${protocol.id}`}>
+                  <X className="h-4 w-4" />
+                  Remove project filter
+                </Link>
+              </Button>
+            ) : null}
+            <ProtocolActions protocol={protocol} usageCount={experimentUsageRows.length} />
+          </div>
         </div>
 
         {/* Tabs + Design Mode entry on one row (button hidden from DOM when Usage/Details active is OK — still navigates to design) */}
