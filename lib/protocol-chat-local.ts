@@ -22,6 +22,7 @@ export type LocalChatMessage = {
   role: 'user' | 'assistant' | 'system';
   content: string;
   created_at: string;
+  metadata?: Record<string, unknown>;
 };
 
 function storeKey(protocolId: string) {
@@ -40,6 +41,7 @@ type LocalMessageRow = {
   role: 'user' | 'assistant';
   content: string;
   created_at: string;
+  metadata?: Record<string, unknown>;
 };
 
 type LocalStore = {
@@ -97,7 +99,7 @@ export function localProtocolCreateSession(
   protocolId: string,
   userId: string,
   title?: string | null
-): ChatSession {
+): LocalChatSession {
   const st = readStore(protocolId);
   const now = new Date().toISOString();
   const id = crypto.randomUUID();
@@ -163,6 +165,7 @@ export function localProtocolLoadMessages(
       role: m.role,
       content: m.content,
       created_at: m.created_at,
+      metadata: m.metadata,
     }));
 }
 
@@ -170,7 +173,8 @@ export function localProtocolSaveMessage(
   protocolId: string,
   sessionId: string,
   role: 'user' | 'assistant',
-  content: string
+  content: string,
+  metadata?: Record<string, unknown>
 ): LocalChatMessage | null {
   const st = readStore(protocolId);
   const list = st.messagesBySessionId[sessionId] ?? [];
@@ -184,7 +188,7 @@ export function localProtocolSaveMessage(
 
   const now = new Date().toISOString();
   const id = crypto.randomUUID();
-  const row: LocalMessageRow = { id, role, content, created_at: now };
+  const row: LocalMessageRow = { id, role, content, created_at: now, metadata: metadata ?? {} };
   st.messagesBySessionId[sessionId] = [...list, row];
   const s = st.sessions.find((x) => x.id === sessionId);
   if (s) s.updated_at = now;
@@ -195,5 +199,6 @@ export function localProtocolSaveMessage(
     role,
     content,
     created_at: now,
+    metadata: metadata ?? {},
   };
 }

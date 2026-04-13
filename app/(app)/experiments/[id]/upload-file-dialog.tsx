@@ -24,6 +24,12 @@ import { useToast } from "@/hooks/use-toast"
 import { Upload, File, X, CheckCircle2, AlertCircle, Files } from "lucide-react"
 import { Card } from "@/components/ui/card"
 import { FileDropzone } from "@/components/ui/file-dropzone"
+import {
+  buildSpreadsheetWorkbookSnapshot,
+  inferTabularFormatFromFileName,
+  isSpreadsheetFile,
+  readSpreadsheetWorkbook,
+} from "@/lib/spreadsheet-workbook"
 
 // File size limit: 10 MB for MVP
 const MAX_FILE_SIZE = 10 * 1024 * 1024 // 10 MB in bytes
@@ -220,6 +226,16 @@ export function UploadFileDialog({ experimentId, onUploadComplete }: UploadFileD
             idx === i ? { ...f, progress: 80 } : f
           ))
 
+          const tabularPayload: Record<string, unknown> = {}
+          if (isSpreadsheetFile(file)) {
+            const buf = await file.arrayBuffer()
+            const wb = readSpreadsheetWorkbook(buf, file.name)
+            const fmt = inferTabularFormatFromFileName(file.name)
+            tabularPayload.workbook_snapshot = buildSpreadsheetWorkbookSnapshot(file.name, wb)
+            tabularPayload.tabular_format = fmt
+            tabularPayload.snapshot_updated_at = new Date().toISOString()
+          }
+
           // Save metadata to database
           const { error: dbError } = await supabase
             .from('experiment_data')
@@ -235,7 +251,8 @@ export function UploadFileDialog({ experimentId, onUploadComplete }: UploadFileD
                 original_name: file.name,
                 upload_date: new Date().toISOString(),
                 storage_path: fileName
-              }
+              },
+              ...tabularPayload,
             })
 
           if (dbError) throw dbError

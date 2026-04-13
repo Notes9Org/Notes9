@@ -830,3 +830,16 @@ mark {
 .text-secondary-foreground {
   color: var(--secondary-foreground);
 }
+
+/*
+ * Univer toolbar dropdowns (color picker, font picker, border panel, etc.) render as
+ * `position: fixed` elements with class `.univer-popup` at z-index 1070.
+ * When a Radix modal Dialog is open, DismissableLayer sets `body { pointer-events: none }`
+ * to block interaction outside the dialog. Univer's portaled popups inherit this value,
+ * making them visible but unclickable. Restore pointer-events explicitly so they work
+ * normally inside a Dialog context.
+ */
+.univer-popup,
+.univer-popup-mask {
+  pointer-events: auto;
+}

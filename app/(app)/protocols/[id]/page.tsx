@@ -19,6 +19,7 @@ import { ProtocolActions } from './protocol-actions'
 import { ProtocolEditor } from './protocol-editor'
 import { resolveInitialProjectIdParam } from "@/lib/url-project-param"
 import { SetPageBreadcrumb } from "@/components/layout/breadcrumb-context"
+import { loadProtocolExperimentUsage } from "@/lib/protocol-experiment-usage"
 
 export default async function ProtocolDetailPage({
   params,
@@ -113,6 +114,12 @@ export default async function ProtocolDetailPage({
   if (error || !protocol) {
     notFound()
   }
+
+  const experimentUsageRows = await loadProtocolExperimentUsage(
+    supabase,
+    protocol.id,
+    (protocol as { experiment_id?: string | null }).experiment_id
+  )
 
   let projectContextBanner: { id: string; name: string } | null = null
   if (projectFromUrl) {
@@ -218,7 +225,7 @@ export default async function ProtocolDetailPage({
               ) : null}
             </div>
           </div>
-          <ProtocolActions protocol={protocol} />
+          <ProtocolActions protocol={protocol} usageCount={experimentUsageRows.length} />
         </div>
 
         {/* Tabs + Design Mode entry on one row (button hidden from DOM when Usage/Details active is OK — still navigates to design) */}
@@ -254,11 +261,11 @@ export default async function ProtocolDetailPage({
               <CardHeader>
                 <CardTitle className="text-foreground">Experiments Using This Protocol</CardTitle>
                 <CardDescription>
-                  Experiments that reference this SOP
+                  Experiments and lab-note contexts that reference this SOP
                 </CardDescription>
               </CardHeader>
               <CardContent>
-                {protocol.experiment_protocols && protocol.experiment_protocols.length > 0 ? (
+                {experimentUsageRows.length > 0 ? (
                   <Table>
                     <TableHeader>
                       <TableRow>
@@ -269,28 +276,20 @@ export default async function ProtocolDetailPage({
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {protocol.experiment_protocols.map((ep: any) => (
-                        <TableRow key={ep.experiment.id}>
+                      {experimentUsageRows.map((row) => (
+                        <TableRow key={row.key}>
                           <TableCell className="font-medium text-foreground">
-                            {ep.experiment.name}
+                            {row.experimentName}
                           </TableCell>
                           <TableCell className="text-muted-foreground">
-                            {ep.experiment.project?.name || "—"}
+                            {row.projectName || "—"}
                           </TableCell>
                           <TableCell>
-                            <Badge variant="outline">{ep.experiment.status}</Badge>
+                            <Badge variant="outline">{row.status}</Badge>
                           </TableCell>
                           <TableCell className="text-right">
                             <Button variant="ghost" size="sm" asChild>
-                              <Link
-                                href={
-                                  ep.experiment.project?.id
-                                    ? `/experiments/${ep.experiment.id}?project=${ep.experiment.project.id}`
-                                    : `/experiments/${ep.experiment.id}`
-                                }
-                              >
-                                View
-                              </Link>
+                              <Link href={row.actionHref}>View</Link>
                             </Button>
                           </TableCell>
                         </TableRow>
@@ -379,7 +378,8 @@ export default async function ProtocolDetailPage({
                   <div>
                     <h3 className="text-sm font-medium text-muted-foreground mb-1">Usage Count</h3>
                     <p className="text-sm text-foreground">
-                      {protocol.experiment_protocols?.length || 0} experiments
+                      {experimentUsageRows.length} experiment
+                      {experimentUsageRows.length === 1 ? "" : "s"} / contexts
                     </p>
                   </div>
                 </div>

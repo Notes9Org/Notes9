@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server"
 import { ProtocolsPageContent, type ProtocolsProjectContext } from "./protocols-page-content"
 import { resolveInitialProjectIdParam } from "@/lib/url-project-param"
 import { SetPageBreadcrumb } from "@/components/layout/breadcrumb-context"
+import { loadProjectWorkspaceProtocols } from "@/lib/project-workspace-protocols"
 
 export default async function ProtocolsPage({
   searchParams,
@@ -46,20 +47,8 @@ export default async function ProtocolsPage({
         .select("id")
         .eq("project_id", projectParam)
       const expIds = (exps ?? []).map((e) => e.id)
-      let protocolIds: string[] = []
-      if (expIds.length > 0) {
-        const { data: links } = await supabase
-          .from("experiment_protocols")
-          .select("protocol_id")
-          .in("experiment_id", expIds)
-        protocolIds = [
-          ...new Set(
-            (links ?? [])
-              .map((l) => l.protocol_id)
-              .filter((x): x is string => Boolean(x))
-          ),
-        ]
-      }
+      const workspaceProtocols = await loadProjectWorkspaceProtocols(supabase, proj.id, expIds)
+      const protocolIds = workspaceProtocols.map((p) => p.id)
       projectContext = { id: proj.id, name: proj.name, protocolIds }
     }
   }

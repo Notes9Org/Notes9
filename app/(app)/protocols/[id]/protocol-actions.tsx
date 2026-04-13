@@ -8,7 +8,8 @@ import {
 } from "@/components/ui/tooltip"
 import { DeleteProtocolDialog } from './delete-protocol-dialog'
 
-export function ProtocolActions({ protocol }: { protocol: any }) {
+export function ProtocolActions({ protocol, usageCount }: { protocol: any; usageCount?: number }) {
+  const resolvedUsage = usageCount ?? protocol.experiment_protocols?.length ?? 0
   return (
     <TooltipProvider>
       <div className="flex items-center gap-1">
@@ -18,7 +19,7 @@ export function ProtocolActions({ protocol }: { protocol: any }) {
               <DeleteProtocolDialog 
                 protocolId={protocol.id} 
                 protocolName={protocol.name}
-                usageCount={protocol.experiment_protocols?.length || 0}
+                usageCount={resolvedUsage}
               />
             </span>
           </TooltipTrigger>

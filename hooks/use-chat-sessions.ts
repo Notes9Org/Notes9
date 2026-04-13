@@ -55,6 +55,7 @@ export interface ChatMessage {
   role: 'user' | 'assistant' | 'system';
   content: string;
   created_at: string;
+  metadata?: Record<string, unknown>;
 }
 
 /**
@@ -306,11 +307,12 @@ export function useChatSessions(protocolId?: string) {
   const saveMessage = useCallback(async (
     sessionId: string,
     role: 'user' | 'assistant',
-    content: string
+    content: string,
+    metadata?: Record<string, unknown>
   ): Promise<ChatMessage | null> => {
     try {
       if (protocolId && protocolUseLocalRef.current) {
-        return localProtocolSaveMessage(protocolId, sessionId, role, content) as ChatMessage | null;
+        return localProtocolSaveMessage(protocolId, sessionId, role, content, metadata) as ChatMessage | null;
       }
 
       const { data: existing } = await supabase
@@ -332,6 +334,7 @@ export function useChatSessions(protocolId?: string) {
           session_id: sessionId,
           role,
           content,
+          metadata: metadata ?? {},
         })
         .select()
         .single();

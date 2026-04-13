@@ -11,6 +11,7 @@ import { Plus, FileText } from 'lucide-react'
 import { ProjectActions } from './project-actions'
 import { ProjectWorkspace } from './project-workspace'
 import { HtmlContent } from '@/components/html-content'
+import { loadProjectWorkspaceProtocols } from "@/lib/project-workspace-protocols"
 
 export default async function ProjectDetailPage({
   params,
@@ -62,28 +63,13 @@ export default async function ProjectDetailPage({
     .order("created_at", { ascending: false })
     .limit(8)
 
-  const protocolsQuery =
-    experimentIds.length > 0
-      ? supabase
-          .from("experiment_protocols")
-          .select("protocol:protocols(id, name, version)")
-          .in("experiment_id", experimentIds)
-      : Promise.resolve({ data: [] as { protocol: { id: string; name: string; version: string | null } | null }[] })
+  const protocolsPromise = loadProjectWorkspaceProtocols(supabase, id, experimentIds)
 
-  const [literatureRes, protocolsRes] = await Promise.all([
-    literatureQuery,
-    protocolsQuery,
-  ])
+  const [literatureRes, protocolList] = await Promise.all([literatureQuery, protocolsPromise])
 
   const literatureRows = literatureRes.data ?? []
   const literatureCount = literatureRes.count ?? literatureRows.length
 
-  const protocolMap = new Map<string, { id: string; name: string; version: string | null }>()
-  for (const row of protocolsRes.data ?? []) {
-    const p = row.protocol as { id: string; name: string; version: string | null } | null
-    if (p?.id) protocolMap.set(p.id, p)
-  }
-  const protocolList = [...protocolMap.values()]
   const protocolCount = protocolList.length
   const protocolsPreview = protocolList.slice(0, 8)
 

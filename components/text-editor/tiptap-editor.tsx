@@ -134,7 +134,12 @@ import { SimpleShape, type SimpleShapeVariant } from "./extensions/simple-shape"
 import { SpreadsheetEmbed } from "./extensions/spreadsheet-embed"
 // @ts-ignore - CSS import for KaTeX math rendering
 import "katex/dist/katex.min.css"
-import * as XLSX from "xlsx"
+import {
+  buildSpreadsheetWorkbookSnapshot,
+  encodeSpreadsheetWorkbook,
+  isSpreadsheetFile,
+  readSpreadsheetWorkbook,
+} from "@/lib/spreadsheet-workbook"
 import { looksLikeMarkdown, markdownToHtml } from "@/lib/markdown-to-editor-html"
 
 interface Paper {
@@ -156,140 +161,6 @@ interface CitationMetadata {
   journal: string
   doi: string
   paperId: string
-}
-
-const encodeSpreadsheetWorkbook = (workbook: Record<string, unknown>) =>
-  encodeURIComponent(JSON.stringify(workbook))
-
-const buildSpreadsheetWorkbookSnapshot = (fileName: string, workbook: XLSX.WorkBook) => {
-  const workbookId = `spreadsheet-${Math.random().toString(36).slice(2, 10)}`
-  const sheetOrder: string[] = []
-  const sheets: Record<string, Record<string, unknown>> = {}
-
-  workbook.SheetNames.forEach((sheetName, index) => {
-    const worksheet = workbook.Sheets[sheetName]
-    if (!worksheet) return
-
-    const sheetId = `sheet-${index + 1}-${Math.random().toString(36).slice(2, 8)}`
-    sheetOrder.push(sheetId)
-
-    const range = worksheet["!ref"] ? XLSX.utils.decode_range(worksheet["!ref"]) : { s: { r: 0, c: 0 }, e: { r: 24, c: 9 } }
-    const rowCount = Math.max(range.e.r + 1, 25)
-    const columnCount = Math.max(range.e.c + 1, 10)
-    const cellData: Record<number, Record<number, Record<string, unknown>>> = {}
-
-    Object.keys(worksheet).forEach((key) => {
-      if (key.startsWith("!")) return
-      const cell = worksheet[key]
-      if (!cell) return
-      const decoded = XLSX.utils.decode_cell(key)
-      if (!cellData[decoded.r]) {
-        cellData[decoded.r] = {}
-      }
-
-      const cellEntry: Record<string, unknown> = {}
-      if (cell.f) {
-        cellEntry.f = `=${cell.f}`
-      }
-
-      if (cell.t === "n") {
-        cellEntry.v = typeof cell.v === "number" ? cell.v : Number(cell.v ?? 0)
-        cellEntry.t = 2
-      } else if (cell.t === "b") {
-        cellEntry.v = Boolean(cell.v)
-        cellEntry.t = 3
-      } else {
-        cellEntry.v = cell.w ?? cell.v ?? ""
-        cellEntry.t = 1
-      }
-
-      cellData[decoded.r][decoded.c] = cellEntry
-    })
-
-    const mergeData = Array.isArray(worksheet["!merges"])
-      ? worksheet["!merges"].map((merge) => ({
-          startRow: merge.s.r,
-          startColumn: merge.s.c,
-          endRow: merge.e.r,
-          endColumn: merge.e.c,
-        }))
-      : []
-
-    const columnData = Array.isArray(worksheet["!cols"])
-      ? worksheet["!cols"].reduce<Record<number, Record<string, unknown>>>((acc, col, colIndex) => {
-          if (!col) return acc
-          if (typeof col.wpx === "number") {
-            acc[colIndex] = { ...(acc[colIndex] ?? {}), w: col.wpx }
-          } else if (typeof col.width === "number") {
-            acc[colIndex] = { ...(acc[colIndex] ?? {}), w: Math.round(col.width * 8) }
-          }
-          if (col.hidden) {
-            acc[colIndex] = { ...(acc[colIndex] ?? {}), hd: 1 }
-          }
-          return acc
-        }, {})
-      : {}
-
-    const rowData = Array.isArray(worksheet["!rows"])
-      ? worksheet["!rows"].reduce<Record<number, Record<string, unknown>>>((acc, row, rowIndex) => {
-          if (!row) return acc
-          if (typeof row.hpx === "number") {
-            acc[rowIndex] = { ...(acc[rowIndex] ?? {}), h: row.hpx }
-          } else if (typeof row.hpt === "number") {
-            acc[rowIndex] = { ...(acc[rowIndex] ?? {}), h: Math.round(row.hpt * 1.3333) }
-          }
-          if (row.hidden) {
-            acc[rowIndex] = { ...(acc[rowIndex] ?? {}), hd: 1 }
-          }
-          return acc
-        }, {})
-      : {}
-
-    sheets[sheetId] = {
-      id: sheetId,
-      name: sheetName,
-      tabColor: "",
-      hidden: 0,
-      freeze: { xSplit: 0, ySplit: 0, startRow: 0, startColumn: 0 },
-      rowCount,
-      columnCount,
-      zoomRatio: 1,
-      scrollTop: 0,
-      scrollLeft: 0,
-      defaultColumnWidth: 96,
-      defaultRowHeight: 24,
-      mergeData,
-      cellData,
-      rowData,
-      columnData,
-      rowHeader: { width: 46 },
-      columnHeader: { height: 28 },
-      showGridlines: 1,
-      rightToLeft: 0,
-    }
-  })
-
-  return {
-    id: workbookId,
-    name: fileName.replace(/\.[^.]+$/, "") || "Spreadsheet",
-    appVersion: "0.20.0",
-    locale: "enUS",
-    styles: {},
-    sheetOrder,
-    sheets,
-  }
-}
-
-const isSpreadsheetFile = (file: File) => {
-  const lower = file.name.toLowerCase()
-  return (
-    lower.endsWith(".xlsx") ||
-    lower.endsWith(".xls") ||
-    lower.endsWith(".csv") ||
-    file.type.includes("spreadsheet") ||
-    file.type.includes("excel") ||
-    file.type.includes("csv")
-  )
 }
 
 interface TiptapEditorProps {
@@ -3323,7 +3194,7 @@ export function TiptapEditor({
     if (!isSpreadsheetFile(file)) return
 
     const arrayBuffer = await file.arrayBuffer()
-    const workbook = XLSX.read(arrayBuffer, { type: "array", cellFormula: true, cellDates: true })
+    const workbook = readSpreadsheetWorkbook(arrayBuffer, file.name)
     const workbookSnapshot = buildSpreadsheetWorkbookSnapshot(file.name, workbook)
 
     editor
