@@ -9,7 +9,7 @@ import { loadProjectWorkspaceProtocols } from "@/lib/project-workspace-protocols
 export default async function ProtocolsPage({
   searchParams,
 }: {
-  searchParams?: Promise<{ project?: string }>
+  searchParams?: Promise<{ project?: string; selectForDesign?: string }>
 }) {
   const supabase = await createClient()
 

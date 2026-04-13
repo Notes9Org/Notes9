@@ -9,6 +9,8 @@ import {
   useState,
 } from "react"
 import { createClient } from "@/lib/supabase/client"
+import { chat as notes9Chat } from "@/lib/notes9-api"
+import { useAgentStream } from "@/hooks/use-agent-stream"
 import { useLiteratureAgentStream } from "@/hooks/use-literature-agent-stream"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
@@ -59,6 +61,12 @@ import { useChatSessions } from "@/hooks/use-chat-sessions"
 import type { ChatMessage as DbChatMessage } from "@/hooks/use-chat-sessions"
 import { LiteratureSourcesDropdown } from "@/components/literature-sources-dropdown"
 import { formatLiteratureAssistantMarkdown } from "@/lib/literature-agent-chat-format"
+import { formatNotes9AssistantMarkdown } from "@/lib/notes9-chat-format"
+import {
+  appendSourcesMarkdownSection,
+  assistantContentFromNotes9ChatPayload,
+  extractSourceListFromChatPayload,
+} from "@/lib/chat-response-sources"
 import {
   parseLiteratureAssistantStoredContent,
   serializeLiteratureAssistantStoredContent,
@@ -287,6 +295,7 @@ export function ProtocolAiSidechat({
   const [activeViewerTabKey, setActiveViewerTabKey] = useState<string | null>(null)
   const [viewerOpen, setViewerOpen] = useState(true)
   const [agentMode, setAgentMode] = useState<ProtocolSidebarAgentMode>("protocol")
+  const [generalLoading, setGeneralLoading] = useState(false)
   const dragDepthRef = useRef(0)
   const mentionQueryKeyRef = useRef<string | null>(null)
   const mentionListRef = useRef<HTMLDivElement>(null)
@@ -430,6 +439,13 @@ export function ProtocolAiSidechat({
   }, [mentionHighlightIndex, mentionMenu?.matches.length])
 
   const {
+    runStream,
+    error: notes9Error,
+    isStreaming: notes9Streaming,
+    reset: resetNotes9,
+  } = useAgentStream()
+
+  const {
     runRequest,
     isStreaming,
     steps,
@@ -440,6 +456,16 @@ export function ProtocolAiSidechat({
     abort,
     reset,
   } = useLiteratureAgentStream()
+  const isAnyStreaming = isStreaming || notes9Streaming || generalLoading
+
+  useEffect(() => {
+    if (!pathname?.startsWith("/protocols")) return
+    setAgentMode((current) =>
+      current === "protocol" || current === "general" || current === "notes9"
+        ? current
+        : "protocol"
+    )
+  }, [pathname])
 
   // Ensure a DB session exists and a valid active id (Protocol AI is always scoped by protocolId).
   useEffect(() => {
@@ -499,34 +525,42 @@ export function ProtocolAiSidechat({
   }, [messages, steps, error])
 
   const createNewSession = useCallback(() => {
-    if (isStreaming) return
+    if (isAnyStreaming) return
     void (async () => {
       const id = await createSession()
       if (id) {
         setMessages([])
         reset()
+        resetNotes9()
+        setGeneralLoading(false)
       }
     })()
-  }, [createSession, isStreaming, reset])
+  }, [createSession, isAnyStreaming, reset, resetNotes9])
 
   const deleteSession = useCallback(
     (sid: string) => {
       void (async () => {
         await deleteSessionFromDb(sid)
-        if (activeSessionId === sid) reset()
+        if (activeSessionId === sid) {
+          reset()
+          resetNotes9()
+          setGeneralLoading(false)
+        }
       })()
     },
-    [deleteSessionFromDb, activeSessionId, reset]
+    [deleteSessionFromDb, activeSessionId, reset, resetNotes9]
   )
 
   const switchSession = useCallback(
     (sid: string) => {
-      if (isStreaming) return
+      if (isAnyStreaming) return
       setActiveSessionId(sid)
       setHistoryOpen(false)
       reset()
+      resetNotes9()
+      setGeneralLoading(false)
     },
-    [isStreaming, reset, setActiveSessionId]
+    [isAnyStreaming, reset, resetNotes9, setActiveSessionId]
   )
 
   const literatureIds = useMemo(
@@ -608,10 +642,36 @@ export function ProtocolAiSidechat({
     [activeSessionId, saveMessage]
   )
 
+  const appendPlainAssistantFromDb = useCallback(
+    async (text: string) => {
+      if (!activeSessionId) return
+      const saved = await saveMessage(activeSessionId, "assistant", text)
+      if (!saved) return
+      setMessages((prev) => [...prev, uiMessageFromDb(saved)])
+    },
+    [activeSessionId, saveMessage]
+  )
+
+  const startFreshChatInMode = useCallback(
+    async (mode: Exclude<ProtocolSidebarAgentMode, "protocol">) => {
+      if (isAnyStreaming) return
+      const id = await createSession()
+      if (!id) return
+      setActiveSessionId(id)
+      setMessages([])
+      reset()
+      resetNotes9()
+      setGeneralLoading(false)
+      setAgentMode(mode)
+      setHistoryOpen(false)
+    },
+    [createSession, isAnyStreaming, reset, resetNotes9, setActiveSessionId]
+  )
+
   const handleSend = useCallback(async () => {
     const line = input.trim()
-    if (!line || isStreaming || !activeSessionId) return
-    if (!hasAnyContext) return
+    if (!line || isAnyStreaming || !activeSessionId) return
+    if (agentMode === "protocol" && !hasAnyContext) return
 
     const supabase = createClient()
     const {
@@ -642,6 +702,63 @@ export function ProtocolAiSidechat({
       role: m.role,
       content: m.text,
     }))
+
+    if (agentMode === "general") {
+      setGeneralLoading(true)
+      try {
+        const response = (await notes9Chat(
+          {
+            content: line,
+            session_id: activeSessionId,
+            history,
+            web_search: "on",
+            response_format: "json",
+          },
+          token
+        )) as unknown as Record<string, unknown>
+
+        let assistantText = assistantContentFromNotes9ChatPayload(response)
+        assistantText = appendSourcesMarkdownSection(
+          assistantText,
+          extractSourceListFromChatPayload(response),
+          { searchedWeb: response.searched_web === true }
+        )
+        if (assistantText.trim()) {
+          await appendPlainAssistantFromDb(assistantText)
+        }
+      } catch (err) {
+        const errText =
+          err instanceof Error ? `Error: ${err.message}` : "Error: Failed to run General agent"
+        await appendPlainAssistantFromDb(errText)
+      } finally {
+        setGeneralLoading(false)
+      }
+      return
+    }
+
+    if (agentMode === "notes9") {
+      const result = await runStream(
+        {
+          query: buildQuery(line),
+          session_id: activeSessionId,
+          history,
+        },
+        token
+      )
+      if (result.error) {
+        await appendPlainAssistantFromDb(`Error: ${result.error}`)
+        return
+      }
+      if (result.donePayload) {
+        const formattedAnswer = stripQuestionsForYouSection(
+          formatNotes9AssistantMarkdown(result.donePayload)
+        )
+        if (formattedAnswer.trim()) {
+          await appendPlainAssistantFromDb(formattedAnswer)
+        }
+      }
+      return
+    }
 
     const result = await runRequest(
       "biomni",
@@ -675,6 +792,7 @@ export function ProtocolAiSidechat({
     }
   }, [
     input,
+    isAnyStreaming,
     isStreaming,
     activeSessionId,
     literatureIds,
@@ -685,7 +803,10 @@ export function ProtocolAiSidechat({
     runRequest,
     saveMessage,
     appendAssistantFromDb,
+    appendPlainAssistantFromDb,
+    agentMode,
     sessions,
+    runStream,
     updateSessionTitle,
   ])
 
@@ -723,15 +844,19 @@ export function ProtocolAiSidechat({
   const activeViewerTab = viewerTabs.find((t) => t.key === activeViewerTabKey) ?? null
   const goToLiteratureAgent = useCallback(() => {
     if (!pathname?.startsWith("/literature-reviews")) {
+      window.dispatchEvent(new Event("notes9:tour-open-ai-sidebar"))
       router.push("/literature-reviews")
     }
   }, [pathname, router])
+  const goToProtocolAgent = useCallback(() => {
+    setAgentMode("protocol")
+  }, [])
   const goToGeneralAgent = useCallback(() => {
-    setAgentMode("general")
-  }, [])
+    void startFreshChatInMode("general")
+  }, [startFreshChatInMode])
   const goToNotes9Agent = useCallback(() => {
-    setAgentMode("notes9")
-  }, [])
+    void startFreshChatInMode("notes9")
+  }, [startFreshChatInMode])
 
   /* ─── render ─────────────────────────────────────────────────────────── */
 
@@ -751,7 +876,7 @@ export function ProtocolAiSidechat({
               <div className="mb-2 flex h-10 w-10 items-center justify-center rounded-full bg-primary/10">
                 <ClipboardInfoIcon className="size-5 text-primary" />
               </div>
-              <span className="text-xs font-semibold text-muted-foreground">Protocol AI</span>
+              <span className="text-xs font-semibold text-muted-foreground">Protocol</span>
             </div>
           )}
           {/* Header — matches CatalystSidebar (catalyst-sidebar.tsx) */}
@@ -865,34 +990,34 @@ export function ProtocolAiSidechat({
 
         {/* ── Header: styled to match RightSidebar shell ── */}
         <header className="h-12 sm:h-14 flex items-center justify-between px-2 sm:px-4 border-b border-border/40 shrink-0 bg-[color:var(--n9-header-bg)]/80 backdrop-blur-md z-10 text-xs select-none min-w-0">
-          <div className="flex min-w-0 items-center gap-1.5 sm:gap-2">
-            <Button
-              variant="ghost"
-              size="icon"
-              className="size-8 sm:size-9 text-muted-foreground shrink-0"
-              onClick={() => setHistoryOpen((v) => !v)}
-              title={historyOpen ? "Hide history" : "Show history"}
-              aria-label="Show chat history"
-            >
-              {historyOpen ? <PanelRightClose className="size-4" /> : <History className="size-4" />}
-            </Button>
-            <ClipboardInfoIcon className="shrink-0 text-muted-foreground" />
-            <span className="min-w-0 truncate text-sm font-medium text-muted-foreground">
-              Protocol AI
-            </span>
+          <div className="flex min-w-0 flex-1 items-center gap-1 overflow-hidden">
+            <ScrollArea className="w-full whitespace-nowrap scrollbar-hide">
+              <div className="flex items-center gap-1">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="size-8 sm:size-9 text-muted-foreground shrink-0"
+                  onClick={() => setHistoryOpen((v) => !v)}
+                  title={historyOpen ? "Hide history" : "Show history"}
+                  aria-label="Show chat history"
+                >
+                  {historyOpen ? <PanelRightClose className="size-4" /> : <History className="size-4" />}
+                </Button>
+                <Button
+                  variant="secondary"
+                  className="h-8 sm:h-9 text-muted-foreground shrink-0"
+                  onClick={createNewSession}
+                  disabled={isAnyStreaming}
+                  aria-label="New chat"
+                  title="New chat"
+                >
+                  <Plus className="size-4" />
+                  <span>New Chat</span>
+                </Button>
+              </div>
+            </ScrollArea>
           </div>
-          <div className="flex shrink-0 items-center gap-1.5">
-            <Button
-              variant="secondary"
-              className="h-8 sm:h-9 text-muted-foreground"
-              onClick={createNewSession}
-              disabled={isStreaming}
-              aria-label="New chat"
-              title="New chat"
-            >
-              <Plus className="size-4" />
-              <span>New Chat</span>
-            </Button>
+          <div className="flex shrink-0 items-center gap-1 pl-2">
             {onClose && (
               <Button
                 variant="ghost"
@@ -1040,7 +1165,7 @@ export function ProtocolAiSidechat({
                   Catalyst AI
                 </h2>
                 <h3 className="text-sm font-semibold tracking-tight bg-gradient-to-r from-orange-500 to-pink-600 bg-clip-text text-transparent">
-                  For Protocols
+                  For Protocol Design
                 </h3>
                 <p className="mt-2 text-sm text-muted-foreground">
                   {!hasAnyContext
@@ -1164,8 +1289,23 @@ export function ProtocolAiSidechat({
                 ))}
 
                 {isStreaming && <ThinkingIndicator steps={steps} />}
+                {notes9Streaming && (
+                  <div className="flex items-center gap-2 px-2 py-1 text-xs text-muted-foreground">
+                    <Loader2 className="size-3.5 animate-spin" />
+                    <span>Notes9 is thinking…</span>
+                  </div>
+                )}
+                {generalLoading && (
+                  <div className="flex items-center gap-2 px-2 py-1 text-xs text-muted-foreground">
+                    <Loader2 className="size-3.5 animate-spin" />
+                    <span>General is searching the web…</span>
+                  </div>
+                )}
                 {error && !isStreaming && (
                   <p className="break-words text-xs text-destructive">{error}</p>
+                )}
+                {notes9Error && !notes9Streaming && (
+                  <p className="break-words text-xs text-destructive">{notes9Error}</p>
                 )}
               </div>
             </ScrollArea>
@@ -1254,7 +1394,7 @@ export function ProtocolAiSidechat({
                 syncMentionFromInput(t.value, t.selectionStart ?? t.value.length)
               }}
               placeholder={
-                !hasAnyContext
+                agentMode === "protocol" && !hasAnyContext
                   ? "Add papers/protocols first, then ask your prompt…"
                   : agentMode === "protocol"
                     ? "Ask to draft a section, refine steps, add safety notes…"
@@ -1263,7 +1403,7 @@ export function ProtocolAiSidechat({
                       : "Ask anything about your work…"
               }
               className="w-full min-h-[68px] resize-none border-0 bg-transparent px-4 py-2.5 text-sm placeholder:text-muted-foreground/60 shadow-none focus:outline-none focus-visible:ring-0 focus-visible:ring-offset-0 scrollbar-hide"
-              disabled={isStreaming}
+              disabled={isAnyStreaming}
               onKeyDown={(e) => {
                 const menu = mentionMenu
                 if (menu && e.key === "Escape") {
@@ -1314,7 +1454,7 @@ export function ProtocolAiSidechat({
                       className="h-7 gap-1.5 rounded-md bg-muted/50 px-2 text-xs font-medium text-muted-foreground hover:bg-muted shrink-0"
                     >
                       {agentMode === "protocol" ? (
-                        <PenBox className="size-3.5" />
+                        <ClipboardInfoIcon className="size-3.5" />
                       ) : agentMode === "notes9" ? (
                         <NotebookPen className="size-3.5" />
                       ) : (
@@ -1325,6 +1465,9 @@ export function ProtocolAiSidechat({
                     </Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="start" className="w-[200px]">
+                    <DropdownMenuItem onClick={goToProtocolAgent} className="gap-2 text-xs">
+                      <ClipboardInfoIcon className="size-3.5" /> Protocol
+                    </DropdownMenuItem>
                     <DropdownMenuItem onClick={goToLiteratureAgent} className="gap-2 text-xs">
                       <BookOpen className="size-3.5" /> Literature
                     </DropdownMenuItem>
@@ -1346,9 +1489,11 @@ export function ProtocolAiSidechat({
                     void clearSessionMessages(activeSessionId).then(() => {
                       setMessages([])
                       reset()
+                      resetNotes9()
+                      setGeneralLoading(false)
                     })
                   }}
-                  disabled={isStreaming || messages.length === 0}
+                  disabled={isAnyStreaming || messages.length === 0}
                 >
                   Clear
                 </Button>
@@ -1357,13 +1502,18 @@ export function ProtocolAiSidechat({
                 <span className="mr-1 hidden text-[11px] text-muted-foreground sm:inline">
                   {input.length}/4096
                 </span>
-                {isStreaming ? (
+                {isAnyStreaming ? (
                   <Button
                     type="button"
                     variant="secondary"
                     size="icon"
                     className="size-7 animate-pulse"
-                    onClick={abort}
+                    onClick={() => {
+                      if (isStreaming) {
+                        abort()
+                        return
+                      }
+                    }}
                     title="Stop generation"
                   >
                     <Square className="size-3 fill-current" />
@@ -1375,9 +1525,9 @@ export function ProtocolAiSidechat({
                     variant="ghost"
                     className={cn(
                       "size-7 text-muted-foreground transition-colors hover:text-primary",
-                      hasAnyContext && !!input.trim() && "text-primary",
+                      (agentMode !== "protocol" || hasAnyContext) && !!input.trim() && "text-primary",
                     )}
-                    disabled={!hasAnyContext || !input.trim()}
+                    disabled={(agentMode === "protocol" && !hasAnyContext) || !input.trim()}
                     onClick={() => void handleSend()}
                     aria-label="Send message"
                   >

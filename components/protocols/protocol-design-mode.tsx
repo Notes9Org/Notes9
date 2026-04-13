@@ -807,7 +807,7 @@ export function ProtocolDesignMode({
                     <TiptapEditor
                       content={draftContent}
                       onChange={setDraftContent}
-                      placeholder="Draft your protocol… In Protocol AI (header): drag papers from Literature or type @ to attach from the filtered list."
+                      placeholder="Draft your protocol… In Protocol (header): drag papers from Literature or type @ to attach from the filtered list."
                       title={protocol.name}
                       minHeight="100%"
                       fillParentHeight

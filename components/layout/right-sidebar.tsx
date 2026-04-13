@@ -10,7 +10,7 @@ import {
   type ChangeEvent,
   type DragEvent,
 } from 'react';
-import { usePathname, useRouter } from 'next/navigation';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useChat } from '@ai-sdk/react';
 import { DefaultChatTransport } from 'ai';
 import { Button } from '@/components/ui/button';
@@ -87,6 +87,7 @@ import {
 import { usePaperAI } from '@/contexts/paper-ai-context';
 import { PaperAIPanel } from '@/components/text-editor/paper-ai-panel';
 import { FileDropzone } from '@/components/ui/file-dropzone';
+import { ClipboardInfoIcon } from '@/components/ui/clipboard-info-icon';
 import type { CatalystAgentMode, LiteratureDragPayload } from '@/lib/catalyst-agent-types';
 import {
   LITERATURE_DRAG_MIME,
@@ -209,6 +210,7 @@ interface RightSidebarProps {
 export function RightSidebar({ onClose }: RightSidebarProps = {}) {
   const router = useRouter();
   const pathname = usePathname();
+  const searchParams = useSearchParams();
   const paperAI = usePaperAI();
   const [input, setInput] = useState('');
   const [agentMode, setAgentMode] = useState<CatalystAgentMode>('general');
@@ -343,7 +345,9 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
   const literatureAgentStream = useLiteratureAgentStream();
   const contextMentionCandidates = useLiteratureMentionCandidates();
   const isLiteratureRoute = isLiteratureRoutePath(pathname ?? null);
-  const isProtocolRoute = Boolean((pathname ?? '').startsWith('/protocols'));
+  const isProtocolDesignRoute =
+    Boolean((pathname ?? '').startsWith('/protocols/')) &&
+    searchParams.get('design') === '1';
   const effectiveMentionCandidates =
     contextMentionCandidates.length > 0 ? contextMentionCandidates : fallbackMentionCandidates;
 
@@ -569,7 +573,9 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
 
   useEffect(() => {
     const onLit = isLiteratureRoutePath(pathname ?? null);
-    const onProtocol = (pathname ?? '').startsWith('/protocols');
+    const onProtocolDesign =
+      Boolean((pathname ?? '').startsWith('/protocols/')) &&
+      searchParams.get('design') === '1';
     if (onLit) {
       if (!suppressLiteratureAutoModeRef.current) {
         setAgentMode('literature');
@@ -577,7 +583,7 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
       wasOnLiteratureRouteRef.current = true;
       return;
     }
-    if (onProtocol) {
+    if (onProtocolDesign) {
       setAgentMode('protocol');
       return;
     }
@@ -590,7 +596,7 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
     setAgentMode((m) =>
       m === 'literature' || m === 'protocol' ? savedModeOutsideLiteratureRef.current : m
     );
-  }, [pathname]);
+  }, [pathname, searchParams]);
 
   const applyLiteratureMentionFromMenu = useCallback(
     (pick: { id: string; title: string }) => {
@@ -704,17 +710,20 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
     suppressLiteratureAutoModeRef.current = false;
     setAgentMode('literature');
     if (!isLiteratureRoutePath(pathname ?? null)) {
+      window.dispatchEvent(new Event("notes9:tour-open-ai-sidebar"));
       router.push('/literature-reviews');
     }
   }, [pathname, router]);
 
   const goToProtocolAgent = useCallback(() => {
     suppressLiteratureAutoModeRef.current = true;
-    setAgentMode('protocol');
-    if (!(pathname ?? '').startsWith('/protocols')) {
-      router.push('/protocols');
+    if (isProtocolDesignRoute) {
+      setAgentMode('protocol');
+      return;
     }
-  }, [pathname, router]);
+    toast.message('Select a protocol, then click Design to open Protocol.');
+    router.push('/protocols?selectForDesign=1');
+  }, [isProtocolDesignRoute, router]);
 
   const MAX_PAST_CHATS = 5;
   const pastChatsToShow = showAllPastChats ? sessions : sessions.slice(0, MAX_PAST_CHATS);
@@ -1802,8 +1811,8 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
                     </>
                   ) : agentMode === 'protocol' ? (
                     <>
-                      <PenBox className="size-3.5" />
-                      Protocol AI
+                      <ClipboardInfoIcon className="size-3.5" />
+                      Protocol
                     </>
                   ) : agentMode === 'notes9' ? (
                     <>
@@ -1824,7 +1833,7 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
                   }}
                   className="gap-2 text-xs"
                 >
-                  <PenBox className="size-3.5" /> Protocol AI
+                  <ClipboardInfoIcon className="size-3.5" /> Protocol
                 </DropdownMenuItem>
                 <DropdownMenuItem
                   onClick={() => {
@@ -2052,6 +2061,12 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
     }
     return s;
   }
+
+  const showLiteratureEmptyState = agentMode === 'literature' && isLiteratureRoute;
+  const emptyStateSubheading = showLiteratureEmptyState ? 'For Literature' : null;
+  const emptyStateDescription = showLiteratureEmptyState
+    ? 'Ask about papers, compare findings, and cross-check cited source passages. Use @ to link papers or drop literature rows into the composer.'
+    : 'Your intelligent research assistant. Ask anything about your lab notes, experiments, or protocols.';
 
   return (
     <div className={cn(
@@ -2306,8 +2321,13 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
                     <h2 className="text-lg font-bold tracking-tight bg-gradient-to-r from-orange-500 to-pink-600 bg-clip-text text-transparent">
                       Catalyst AI
                     </h2>
+                    {emptyStateSubheading ? (
+                      <h3 className="text-sm font-semibold tracking-tight bg-gradient-to-r from-orange-500 to-pink-600 bg-clip-text text-transparent">
+                        {emptyStateSubheading}
+                      </h3>
+                    ) : null}
                     <p className="text-muted-foreground text-center max-w-xs text-sm">
-                      Your intelligent research assistant. Ask anything about your lab notes, experiments, or protocols.
+                      {emptyStateDescription}
                     </p>
                   </div>
 
