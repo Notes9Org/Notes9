@@ -132,11 +132,11 @@ export function ProjectWorkspace({
 
         <SectionCard
           title="Protocols"
-          description="SOPs linked via this project’s experiments"
+          description="SOPs linked via experiments, lab notes in this project, or protocol project fields"
           icon={ClipboardList}
           count={protocolCount}
           emptyTitle="No protocols linked yet"
-          emptyBody="Protocols are linked from experiment pages. Use the Experiments card to add a run, or browse the library here."
+          emptyBody="Link from an experiment (Protocol & Assays), from a lab note, or set project/experiment on the protocol. You can also browse the library here."
           primaryCta={{ label: "Browse protocols", href: `/protocols?project=${projectId}` }}
         >
           {protocols.slice(0, 5).map((row) => (

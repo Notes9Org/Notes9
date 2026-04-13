@@ -830,3 +830,17 @@ mark {
 .text-secondary-foreground {
   color: var(--secondary-foreground);
 }
+
+/*
+ * Univer mounts ribbon/context UI into `#univer-popup-portal` (see app/layout.tsx). Without
+ * that node, React portals render nothing — font/color menus appear to do nothing.
+ *
+ * Radix Dialog also sets `body { pointer-events: none }` while open; ensure portaled UI
+ * stays interactive (legacy `.univer-popup` class + rect popup nodes from @univerjs/ui).
+ */
+#univer-popup-portal [data-u-comp="rect-popup"],
+#univer-popup-portal [data-u-comp="rect-popup-mask"],
+.univer-popup,
+.univer-popup-mask {
+  pointer-events: auto;
+}

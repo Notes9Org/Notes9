@@ -82,6 +82,16 @@ export default function RootLayout({
           {children}
           <Toaster />
           <Sonner />
+          {/*
+            Univer UI portals toolbar/menu popups here (default id `univer-popup-portal`).
+            If this node is missing, createPortal returns null — font/color dropdowns never appear.
+            Zero-size + pointer-events-none so the host never blocks the page; popups set their own hit targets.
+          */}
+          <div
+            id="univer-popup-portal"
+            className="pointer-events-none fixed left-0 top-0 z-[300] h-0 w-0 overflow-visible"
+            aria-hidden
+          />
         </ThemeProvider>
       </body>
     </html>

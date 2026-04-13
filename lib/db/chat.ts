@@ -2,12 +2,18 @@
 import { createClient } from "@/lib/supabase/server";
 import { ChatMessage } from "@/lib/redis";
 
-export async function saveChatMessage(sessionId: string, role: string, content: string) {
+export async function saveChatMessage(
+  sessionId: string,
+  role: string,
+  content: string,
+  metadata: Record<string, unknown> = {}
+) {
     const supabase = await createClient();
     const { error } = await supabase.from('chat_messages').insert({
         session_id: sessionId,
         role,
         content,
+        metadata,
     });
 
     if (error) {
