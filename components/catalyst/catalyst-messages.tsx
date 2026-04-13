@@ -10,6 +10,11 @@ import { MarkdownRenderer } from './markdown-renderer';
 import { MessageActions } from './message-actions';
 import { MessageEditor } from './message-editor';
 import { AgentStreamReply } from './agent-stream-reply';
+import {
+  AgentCitationsPanel,
+  groundingResourceToPanelItem,
+} from '@/components/catalyst/agent-citations-panel';
+import { parseNotes9AssistantStoredContent } from '@/lib/notes9-chat-format';
 import type { Vote } from '@/lib/db/schema';
 import type { ThinkingPayload, RagChunksPayload, DonePayload } from '@/lib/agent-stream-types';
 
@@ -106,6 +111,19 @@ export function CatalystMessages({
               message.role === 'user' &&
               index === messages.length - 1;
 
+            const notes9Parsed =
+              message.role === 'assistant'
+                ? parseNotes9AssistantStoredContent(content)
+                : null;
+            const assistantDisplayMarkdown =
+              message.role === 'assistant' && notes9Parsed
+                ? notes9Parsed.bodyMarkdown
+                : content;
+            const notes9Sources =
+              notes9Parsed && notes9Parsed.resources.length > 0
+                ? notes9Parsed.resources
+                : null;
+
             return (
               <div
                 key={message.id}
@@ -151,7 +169,18 @@ export function CatalystMessages({
                         {message.role === 'user' ? (
                           <div className="whitespace-pre-wrap">{content}</div>
                         ) : (
-                          <MarkdownRenderer content={content} />
+                          <>
+                            <MarkdownRenderer content={assistantDisplayMarkdown} />
+                            {notes9Sources && (
+                              <AgentCitationsPanel
+                                items={notes9Sources.map((c, i) =>
+                                  groundingResourceToPanelItem(c, i)
+                                )}
+                                triggerLabel="All citations"
+                                className="mt-2"
+                              />
+                            )}
+                          </>
                         )}
                       </div>
 

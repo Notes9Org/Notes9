@@ -1,12 +1,12 @@
 'use client';
 
-import Link from 'next/link';
-import { MapPin } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { MarkdownRenderer } from './markdown-renderer';
-import { formatCitationDisplay } from '@/lib/utils';
-import { buildHighlightUrl, type HighlightTarget } from '@/lib/document-highlight';
-import type { ThinkingPayload, RagChunksPayload, DonePayload, GroundingResource } from '@/lib/agent-stream-types';
+import {
+  AgentCitationsPanel,
+  mergeGroundingAndRagItems,
+} from '@/components/catalyst/agent-citations-panel';
+import type { ThinkingPayload, RagChunksPayload, DonePayload } from '@/lib/agent-stream-types';
 
 interface AgentStreamReplyProps {
   thinkingSteps: ThinkingPayload[];
@@ -21,40 +21,6 @@ interface AgentStreamReplyProps {
    * When false, all collected steps are listed (after the stream finishes).
    */
   isThinkingStreaming?: boolean;
-}
-
-function getCitationRoute(citation: { source_type: string; source_id?: string | null }): string {
-  const id = citation.source_id;
-  if (id == null || id === '') return '';
-  switch (citation.source_type) {
-    case 'literature_review':
-      return `/literature-reviews/${id}`;
-    case 'protocol':
-      return `/protocols/${id}`;
-    case 'project':
-      return `/projects/${id}`;
-    case 'lab_note':
-      return `/lab-notes/${id}`;
-    case 'report':
-    default:
-      return '';
-  }
-}
-
-function buildCitationHighlightUrl(citation: GroundingResource): string | null {
-  const id = citation.source_id;
-  const excerpt = citation.excerpt;
-  if (!id || !excerpt) return null;
-
-  const target: HighlightTarget = {
-    sourceType: citation.source_type,
-    sourceId: id,
-    excerpt,
-    chunkId: citation.chunk_id,
-  };
-
-  const url = buildHighlightUrl(target);
-  return url || null;
 }
 
 const TOOL_LABELS: Record<string, string> = {
@@ -80,6 +46,13 @@ export function AgentStreamReply({
     donePayload?.resources?.length
       ? donePayload.resources
       : donePayload?.citations ?? [];
+
+  const mergedCitationItems = mergeGroundingAndRagItems(grounding, ragChunks?.chunks);
+  const hasCitationPanel = mergedCitationItems.length > 0;
+  const citationTriggerLabel =
+    donePayload?.resources?.length || donePayload?.citations?.length
+      ? 'All citations'
+      : ragChunks?.message?.trim() || 'Retrieved chunks';
 
   if (error) {
     return (
@@ -157,30 +130,6 @@ export function AgentStreamReply({
         </div>
       )}
 
-      {/* RAG chunks */}
-      {ragChunks && ragChunks.chunks.length > 0 && (
-        <div className="rounded-xl border border-border/60 overflow-hidden">
-          <div className="flex items-center gap-2 px-3 py-2 border-b border-border/50 bg-muted/30">
-            <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
-              {ragChunks.message}
-            </span>
-          </div>
-          <div className="divide-y divide-border/40 max-h-48 overflow-y-auto">
-            {ragChunks.chunks.map((chunk, i) => (
-              <div
-                key={i}
-                className="px-3 py-2.5 text-sm hover:bg-muted/20 transition-colors"
-              >
-                <p className="text-muted-foreground text-xs mb-1">
-                  {chunk.source_name ?? chunk.source_type.replace(/_/g, ' ')} • {(chunk.relevance * 100).toFixed(0)}% relevant
-                </p>
-                <p className="text-foreground line-clamp-3">{chunk.excerpt}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
       {/* Answer with optional confidence and tool_used (per Notes9 API) */}
       {(displayAnswer || (!donePayload && streamedAnswer === '')) && (
         <div className="space-y-2">
@@ -218,42 +167,9 @@ export function AgentStreamReply({
         </div>
       )}
 
-      {/* Citations (from done payload); use display_label or source_name as title */}
-      {grounding.length > 0 && (
-        <div className="rounded-lg border border-border/50 px-3 py-2">
-          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2">
-            References
-          </p>
-          <ul className="space-y-1.5 text-sm break-words [overflow-wrap:anywhere]">
-            {grounding.map((citation, index) => {
-              const route = getCitationRoute(citation);
-              const highlightUrl = buildCitationHighlightUrl(citation);
-              const displayText = formatCitationDisplay({
-                ...citation,
-                excerpt: citation.excerpt ?? undefined,
-              });
-              const title = citation.display_label ?? citation.source_name ?? citation.source_type.replace(/_/g, ' ');
-              const href = highlightUrl || route;
-              return (
-                <li key={index} className="flex items-start gap-1.5">
-                  {href ? (
-                    <Link
-                      href={href}
-                      className="text-primary hover:underline inline-flex items-start gap-1"
-                    >
-                      {highlightUrl && <MapPin className="size-3 mt-1 shrink-0 text-primary/70" />}
-                      [{index + 1}] {title}: {displayText}
-                    </Link>
-                  ) : (
-                    <span>
-                      [{index + 1}] {title}: {displayText}
-                    </span>
-                  )}
-                </li>
-              );
-            })}
-          </ul>
-        </div>
+      {/* RAG chunks + done `resources`, merged and deduped; each row links with ?highlight= (excerpt in payload). */}
+      {hasCitationPanel && (
+        <AgentCitationsPanel items={mergedCitationItems} triggerLabel={citationTriggerLabel} />
       )}
     </div>
   );

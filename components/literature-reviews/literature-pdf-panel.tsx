@@ -22,6 +22,7 @@ interface LiteraturePdfPanelProps {
   openInNewTabFallbackUrl?: string | null
   /** If set, the viewer will search for this text and temporarily highlight the match. */
   highlightExcerpt?: string | null
+  highlightPageNumber?: number | null
 }
 
 export function LiteraturePdfPanel({
@@ -30,6 +31,7 @@ export function LiteraturePdfPanel({
   pdfFileName,
   openInNewTabFallbackUrl,
   highlightExcerpt,
+  highlightPageNumber,
 }: LiteraturePdfPanelProps) {
   const { toast } = useToast()
   const [annotations, setAnnotations] = useState<LiteraturePdfAnnotation[]>([])
@@ -91,7 +93,10 @@ export function LiteraturePdfPanel({
         setTimeout(tryHighlight, delays[Math.min(attempt, delays.length - 1)])
         return
       }
-      const found = await handle.highlightExcerpt(highlightExcerpt)
+      const found = await handle.highlightExcerpt(
+        highlightExcerpt,
+        highlightPageNumber ?? undefined,
+      )
       if (!found && attempt < maxAttempts - 1) {
         attempt++
         setTimeout(tryHighlight, delays[Math.min(attempt, delays.length - 1)])
@@ -102,7 +107,7 @@ export function LiteraturePdfPanel({
 
     setTimeout(tryHighlight, delays[0])
     return () => { cancelled = true }
-  }, [highlightExcerpt, loadingAnnotations])
+  }, [highlightExcerpt, highlightPageNumber, loadingAnnotations])
 
   const createAnnotation = async (payload: {
     type: "highlight" | "note" | "comment"

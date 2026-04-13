@@ -125,12 +125,17 @@ function ReferenceBlock({ item: r }: { item: PaperAnalyzerReference }) {
 export interface LiteratureSourcesDropdownProps {
   refs: PaperAnalyzerReference[];
   className?: string;
+  defaultOpen?: boolean;
 }
 
 /**
  * One source: compact inline link. Multiple sources: collapsed-by-default panel listing all citations.
  */
-export function LiteratureSourcesDropdown({ refs, className }: LiteratureSourcesDropdownProps) {
+export function LiteratureSourcesDropdown({
+  refs,
+  className,
+  defaultOpen = false,
+}: LiteratureSourcesDropdownProps) {
   const sorted = [...refs].sort((a, b) => a.index - b.index);
   if (sorted.length === 0) return null;
 
@@ -168,7 +173,7 @@ export function LiteratureSourcesDropdown({ refs, className }: LiteratureSources
     );
   }
 
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(defaultOpen);
 
   return (
     <Collapsible open={open} onOpenChange={setOpen} className={cn('min-w-0 max-w-xl', className)}>

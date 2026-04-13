@@ -24,8 +24,11 @@ export interface RagChunk {
   source_id: string;
   source_name?: string;
   chunk_id?: string | null;
+  page_number?: number | null;
   excerpt: string;
   relevance: number;
+  /** e.g. abstract vs pdf — drives literature deep-link tab + highlight surface */
+  content_surface?: string | null;
 }
 
 export interface RagChunksPayload {
@@ -48,6 +51,8 @@ export interface GroundingResource {
   excerpt?: string | null;
   source_id?: string | null;
   chunk_id?: string | null;
+  page_number?: number | null;
+  content_surface?: string | null;
 }
 
 /** @deprecated Use GroundingResource; kept for imports that still say Citation */

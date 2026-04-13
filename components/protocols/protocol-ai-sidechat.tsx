@@ -47,12 +47,28 @@ import {
 import { formatDistanceToNow } from "date-fns"
 import { diffWords } from "diff"
 import { MarkdownRenderer, tightenChatMarkdown } from "@/components/catalyst/markdown-renderer"
+import {
+  AgentCitationsPanel,
+  groundingResourceToPanelItem,
+} from "@/components/catalyst/agent-citations-panel"
 import { markdownToHtml } from "@/lib/markdown-to-editor-html"
 import { copyMarkdownForRichPaste } from "@/lib/copy-markdown-rich-paste"
 import { ClipboardInfoIcon } from "@/components/ui/clipboard-info-icon"
 import { Notes9LoaderGif } from "@/components/brand/notes9-loader-gif"
 import { useChatSessions } from "@/hooks/use-chat-sessions"
 import type { ChatMessage as DbChatMessage } from "@/hooks/use-chat-sessions"
+import { LiteratureSourcesDropdown } from "@/components/literature-sources-dropdown"
+import { formatLiteratureAssistantMarkdown } from "@/lib/literature-agent-chat-format"
+import {
+  parseLiteratureAssistantStoredContent,
+  serializeLiteratureAssistantStoredContent,
+} from "@/lib/literature-assistant-stored"
+import { parseNotes9AssistantStoredContent } from "@/lib/notes9-chat-format"
+import type { GroundingResource } from "@/lib/agent-stream-types"
+import type {
+  LiteratureAgentDonePayload,
+  PaperAnalyzerReference,
+} from "@/lib/literature-agent-types"
 
 /* ─── helpers ──────────────────────────────────────────────────────────────── */
 
@@ -63,6 +79,15 @@ function stripHtml(s: string): string {
 function truncate(s: string, max: number): string {
   const t = s.trim()
   return t.length <= max ? t : t.slice(0, max) + "…"
+}
+
+function stripQuestionsForYouSection(markdown: string): string {
+  return markdown
+    .replace(
+      /\n{2,}(?:#{1,6}\s*Questions\s+for\s+You|\*\*Questions\s+for\s+You\*\*)[\s\S]*$/i,
+      ""
+    )
+    .trimEnd()
 }
 
 function bumpVersion(version: string): string {
@@ -81,6 +106,8 @@ interface ChatMessage {
   id: string
   role: "user" | "assistant"
   text: string
+  literatureRefs?: PaperAnalyzerReference[]
+  notes9Sources?: GroundingResource[]
   /** For assistant messages: pending = user hasn't applied/discarded yet */
   state?: "pending" | "applied" | "discarded"
   /** Background steps captured at stream completion */
@@ -170,15 +197,46 @@ function uiMessageFromDb(
   overrides?: Partial<Pick<ChatMessage, "state" | "steps">>
 ): ChatMessage {
   const role = row.role === "assistant" ? "assistant" : "user"
+  const parsed =
+    role === "assistant" ? parseAssistantStoredMessage(row.content) : null
   return {
     id: row.id,
     role,
-    text: row.content,
+    text: parsed?.text ?? row.content,
+    literatureRefs: parsed?.literatureRefs,
+    notes9Sources: parsed?.notes9Sources,
     state:
       overrides?.state ??
       (role === "assistant" ? "applied" : undefined),
     steps: overrides?.steps,
   }
+}
+
+function parseAssistantStoredMessage(raw: string): {
+  text: string
+  literatureRefs?: PaperAnalyzerReference[]
+  notes9Sources?: GroundingResource[]
+} {
+  const literatureParsed = parseLiteratureAssistantStoredContent(raw)
+  const notes9Parsed = parseNotes9AssistantStoredContent(literatureParsed.bodyMarkdown)
+  return {
+    text: notes9Parsed.bodyMarkdown,
+    literatureRefs:
+      literatureParsed.refs.length > 0 ? literatureParsed.refs : undefined,
+    notes9Sources:
+      notes9Parsed.resources.length > 0 ? notes9Parsed.resources : undefined,
+  }
+}
+
+function buildAssistantStoredMessage(
+  donePayload: LiteratureAgentDonePayload,
+  endpoint: 'compare' | 'biomni'
+): string {
+  const bodyMarkdown = stripQuestionsForYouSection(
+    formatLiteratureAssistantMarkdown(donePayload, endpoint)
+  )
+  const refs = donePayload.structured?.references ?? []
+  return serializeLiteratureAssistantStoredContent(bodyMarkdown, refs)
 }
 
 export function ProtocolAiSidechat({
@@ -529,9 +587,15 @@ export function ProtocolAiSidechat({
   }, [])
 
   const appendAssistantFromDb = useCallback(
-    async (text: string, pending: boolean, capturedSteps: string[]) => {
+    async (
+      donePayload: LiteratureAgentDonePayload,
+      endpoint: 'compare' | 'biomni',
+      pending: boolean,
+      capturedSteps: string[]
+    ) => {
       if (!activeSessionId) return
-      const saved = await saveMessage(activeSessionId, "assistant", text)
+      const stored = buildAssistantStoredMessage(donePayload, endpoint)
+      const saved = await saveMessage(activeSessionId, "assistant", stored)
       if (!saved) return
       setMessages((prev) => [
         ...prev,
@@ -601,11 +665,12 @@ export function ProtocolAiSidechat({
       return
     }
 
-    if (result.donePayload?.content) {
+    if (result.donePayload) {
       const text = (result.donePayload.answer || result.donePayload.content).trim()
-      if (text) {
+      const hasRefs = (result.donePayload.structured?.references?.length ?? 0) > 0
+      if (text || hasRefs) {
         const capturedSteps = [...steps]
-        await appendAssistantFromDb(text, true, capturedSteps)
+        await appendAssistantFromDb(result.donePayload, "biomni", true, capturedSteps)
       }
     }
   }, [
@@ -1028,9 +1093,17 @@ export function ProtocolAiSidechat({
                             const token = session?.access_token
                             if (!token) return
                             const res = await answerClarify(opt, token)
-                            if (res.donePayload?.content) {
+                            if (res.donePayload) {
                               const text = (res.donePayload.answer || res.donePayload.content).trim()
-                              if (text) void appendAssistantFromDb(text, true, [...steps])
+                              const hasRefs = (res.donePayload.structured?.references?.length ?? 0) > 0
+                              if (text || hasRefs) {
+                                void appendAssistantFromDb(
+                                  res.donePayload,
+                                  res.finalizeTag ?? "biomni",
+                                  true,
+                                  [...steps]
+                                )
+                              }
                             }
                           }}
                         >
@@ -1048,9 +1121,17 @@ export function ProtocolAiSidechat({
                           const token = session?.access_token
                           if (!token) return
                           const res = await skipClarify(token)
-                          if (res.donePayload?.content) {
+                          if (res.donePayload) {
                             const text = (res.donePayload.answer || res.donePayload.content).trim()
-                            if (text) void appendAssistantFromDb(text, true, [...steps])
+                            const hasRefs = (res.donePayload.structured?.references?.length ?? 0) > 0
+                            if (text || hasRefs) {
+                              void appendAssistantFromDb(
+                                res.donePayload,
+                                res.finalizeTag ?? "biomni",
+                                true,
+                                [...steps]
+                              )
+                            }
                           }
                         }}
                       >
@@ -1461,6 +1542,18 @@ function AssistantMessage({
           "
         />
       </div>
+
+      {message.literatureRefs && message.literatureRefs.length > 0 && (
+        <LiteratureSourcesDropdown refs={message.literatureRefs} defaultOpen />
+      )}
+
+      {message.notes9Sources && message.notes9Sources.length > 0 && (
+        <AgentCitationsPanel
+          items={message.notes9Sources.map((c, i) => groundingResourceToPanelItem(c, i))}
+          triggerLabel="All citations"
+          defaultOpen
+        />
+      )}
 
       {/* Diff preview */}
       {showDiff && (

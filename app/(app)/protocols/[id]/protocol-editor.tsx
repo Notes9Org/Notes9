@@ -26,7 +26,13 @@ import { Card, CardContent } from "@/components/ui/card"
 import { NoteExportMenu } from "@/components/note-export-menu"
 import { Download, History } from "lucide-react"
 import { ProtocolDesignMode } from "@/components/protocols/protocol-design-mode"
-import { HIGHLIGHT_PARAM, decodeHighlightParam } from "@/lib/document-highlight"
+import {
+  DOCUMENT_HIGHLIGHT_EVENT,
+  HIGHLIGHT_PARAM,
+  decodeHighlightParam,
+  normalizeAgentSourceType,
+  type HighlightTarget,
+} from "@/lib/document-highlight"
 import type { Editor } from "@tiptap/react"
 
 export function ProtocolEditor({
@@ -49,6 +55,7 @@ export function ProtocolEditor({
   const searchParams = useSearchParams()
   const protocolEditorRef = useRef<Editor | null>(null)
   const [protocolEditorReady, setProtocolEditorReady] = useState(false)
+  const [inlineHighlightTarget, setInlineHighlightTarget] = useState<HighlightTarget | null>(null)
   const { diffs, loading: diffsLoading, error: diffsError, loadDiffs } = useContentDiffs(
     "protocol",
     protocol.id
@@ -73,10 +80,37 @@ export function ProtocolEditor({
   // Highlight from AI reference navigation — retries until content is loaded
   const highlightParam = searchParams.get(HIGHLIGHT_PARAM)
   const highlightFiredRef = useRef<string | null>(null)
+  const urlHighlightTarget = highlightParam ? decodeHighlightParam(highlightParam) : null
+  const activeHighlightTarget =
+    inlineHighlightTarget &&
+    normalizeAgentSourceType(inlineHighlightTarget.sourceType) === "protocol" &&
+    inlineHighlightTarget.sourceId === protocol.id
+      ? inlineHighlightTarget
+      : urlHighlightTarget &&
+          normalizeAgentSourceType(urlHighlightTarget.sourceType) === "protocol" &&
+          urlHighlightTarget.sourceId === protocol.id
+        ? urlHighlightTarget
+        : null
+
   useEffect(() => {
-    if (!highlightParam || !protocolEditorReady || !protocolEditorRef.current) return
-    const target = decodeHighlightParam(highlightParam)
-    if (!target || highlightFiredRef.current === highlightParam) return
+    const onHighlight = (event: Event) => {
+      const target = (event as CustomEvent<HighlightTarget>).detail
+      if (normalizeAgentSourceType(target.sourceType) !== "protocol") return
+      if (target.sourceId !== protocol.id) return
+      event.preventDefault()
+      setInlineHighlightTarget(target)
+      highlightFiredRef.current = null
+    }
+    window.addEventListener(DOCUMENT_HIGHLIGHT_EVENT, onHighlight as EventListener)
+    return () => {
+      window.removeEventListener(DOCUMENT_HIGHLIGHT_EVENT, onHighlight as EventListener)
+    }
+  }, [protocol.id])
+
+  useEffect(() => {
+    if (!activeHighlightTarget || !protocolEditorReady || !protocolEditorRef.current) return
+    const highlightKey = JSON.stringify(activeHighlightTarget)
+    if (highlightFiredRef.current === highlightKey) return
 
     let cancelled = false
     const retryDelays = [400, 800, 1500, 2500]
@@ -86,12 +120,12 @@ export function ProtocolEditor({
       if (cancelled) return
       const editor = protocolEditorRef.current
       if (!editor) return
-      editor.commands.setRagHighlight(target.excerpt)
+      editor.commands.setRagHighlight(activeHighlightTarget.excerpt)
       requestAnimationFrame(() => {
         if (cancelled) return
         const el = editor.view.dom.querySelector('.rag-chunk-highlight')
         if (el) {
-          highlightFiredRef.current = highlightParam
+          highlightFiredRef.current = highlightKey
           el.scrollIntoView({ behavior: 'smooth', block: 'center' })
           setTimeout(() => {
             document.querySelectorAll('.rag-chunk-highlight').forEach((e) => e.classList.add('fading'))
@@ -107,7 +141,7 @@ export function ProtocolEditor({
 
     const initialTimer = setTimeout(tryHighlight, retryDelays[0])
     return () => { cancelled = true; clearTimeout(initialTimer) }
-  }, [highlightParam, protocolEditorReady])
+  }, [activeHighlightTarget, protocolEditorReady])
 
   const handleActiveToggleView = async (checked: boolean) => {
     const previous = isActiveView

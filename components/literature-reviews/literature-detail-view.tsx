@@ -1,7 +1,13 @@
 "use client";
 
-import { useState, useEffect, Suspense } from "react";
+import { useState, useEffect, useRef, useMemo, Suspense } from "react";
 import { useHighlightNavigation } from "@/hooks/use-highlight-navigation";
+import {
+  DOCUMENT_HIGHLIGHT_EVENT,
+  normalizeAgentSourceType,
+  type HighlightTarget,
+} from "@/lib/document-highlight";
+import { fuzzyFindExcerpt } from "@/lib/fuzzy-text-match";
 import {
   Card,
   CardContent,
@@ -29,6 +35,56 @@ import { formatLiteratureAbstractPlain } from "@/lib/literature-abstract-display
 
 const NLM_PMC_OA_WEB_SERVICE = "https://pmc.ncbi.nlm.nih.gov/tools/oa-service/";
 const NLM_EUTILS_OVERVIEW = "https://www.ncbi.nlm.nih.gov/books/NBK25501/";
+
+function LiteratureAbstractHighlight({
+  plainText,
+  excerpt,
+}: {
+  plainText: string;
+  excerpt: string | null;
+}) {
+  const markRef = useRef<HTMLElement | null>(null);
+  const match = useMemo(() => {
+    const q = excerpt?.trim();
+    if (!q) return null;
+    return fuzzyFindExcerpt(plainText, q);
+  }, [plainText, excerpt]);
+
+  useEffect(() => {
+    if (!match || !markRef.current) return;
+    markRef.current.scrollIntoView({ behavior: "smooth", block: "center" });
+  }, [match]);
+
+  if (!match) {
+    return (
+      <p className="text-sm text-foreground whitespace-pre-wrap">{plainText}</p>
+    );
+  }
+  const before = plainText.slice(0, match.start);
+  const hl = plainText.slice(match.start, match.end);
+  const after = plainText.slice(match.end);
+  return (
+    <p className="text-sm text-foreground whitespace-pre-wrap">
+      {before}
+      <mark ref={markRef} className="rag-chunk-highlight rounded px-0.5">
+        {hl}
+      </mark>
+      {after}
+    </p>
+  );
+}
+
+function literatureHighlightForRow(
+  literatureId: string,
+  target: HighlightTarget | null,
+): HighlightTarget | null {
+  if (!target) return null;
+  if (normalizeAgentSourceType(target.sourceType) !== "literature_review") {
+    return null;
+  }
+  if (target.sourceId !== literatureId) return null;
+  return target;
+}
 
 interface LiteratureData {
   id: string;
@@ -82,15 +138,48 @@ function LiteratureDetailViewInner({
   onRefresh,
   initialTab = "overview",
 }: LiteratureDetailViewProps) {
-  const { highlightTarget, clearHighlight } = useHighlightNavigation();
-  const [activeTab, setActiveTab] = useState<string>(
-    highlightTarget ? "pdf" : initialTab
+  const { highlightTarget } = useHighlightNavigation();
+  const [inlineHighlightTarget, setInlineHighlightTarget] =
+    useState<HighlightTarget | null>(null);
+  const litHighlight = literatureHighlightForRow(literature.id, highlightTarget);
+  const inlineLitHighlight = literatureHighlightForRow(
+    literature.id,
+    inlineHighlightTarget,
   );
+  const activeLitHighlight = inlineLitHighlight ?? litHighlight;
+  const highlightSurface = activeLitHighlight
+    ? activeLitHighlight.contentSurface ?? "pdf"
+    : null;
 
-  // Sync tab when prop changes (e.g. clicking PDF icon in list for already open paper)
+  const [activeTab, setActiveTab] = useState<string>(initialTab);
+
+  // Deep-link: switch tab for RAG highlight (abstract → Overview, body/PDF → PDF)
   useEffect(() => {
-    setActiveTab(highlightTarget ? "pdf" : initialTab);
-  }, [initialTab, highlightTarget]);
+    if (!activeLitHighlight) {
+      setActiveTab(initialTab);
+      return;
+    }
+    setActiveTab(highlightSurface === "abstract" ? "overview" : "pdf");
+  }, [initialTab, activeLitHighlight, highlightSurface]);
+
+  useEffect(() => {
+    const onHighlight = (event: Event) => {
+      const target = literatureHighlightForRow(
+        literature.id,
+        (event as CustomEvent<HighlightTarget>).detail,
+      );
+      if (!target) return;
+      event.preventDefault();
+      setInlineHighlightTarget(target);
+    };
+    window.addEventListener(DOCUMENT_HIGHLIGHT_EVENT, onHighlight as EventListener);
+    return () => {
+      window.removeEventListener(
+        DOCUMENT_HIGHLIGHT_EVENT,
+        onHighlight as EventListener,
+      );
+    };
+  }, [literature.id]);
   const formatDate = (date: string | null) => {
     if (!date) return "—";
     return new Date(date).toLocaleDateString();
@@ -344,9 +433,18 @@ ER  - `;
                 <CardTitle>Abstract</CardTitle>
               </CardHeader>
               <CardContent>
-                <p className="text-sm text-foreground whitespace-pre-wrap">
-                  {formatLiteratureAbstractPlain(literature.abstract)}
-                </p>
+                {activeLitHighlight && highlightSurface === "abstract" ? (
+                  <LiteratureAbstractHighlight
+                    plainText={formatLiteratureAbstractPlain(
+                      literature.abstract,
+                    )}
+                    excerpt={activeLitHighlight.excerpt}
+                  />
+                ) : (
+                  <p className="text-sm text-foreground whitespace-pre-wrap">
+                    {formatLiteratureAbstractPlain(literature.abstract)}
+                  </p>
+                )}
               </CardContent>
             </Card>
           )}
@@ -524,7 +622,16 @@ ER  - `;
                     pdfUrl={`/api/literature/${literature.id}/viewer-pdf`}
                     pdfFileName={literature.pdf_file_name}
                     openInNewTabFallbackUrl={literature.pdf_file_url ?? undefined}
-                    highlightExcerpt={highlightTarget?.excerpt ?? null}
+                    highlightExcerpt={
+                      activeLitHighlight && highlightSurface === "pdf"
+                        ? activeLitHighlight.excerpt
+                        : null
+                    }
+                    highlightPageNumber={
+                      activeLitHighlight && highlightSurface === "pdf"
+                        ? activeLitHighlight.pageNumber ?? null
+                        : null
+                    }
                   />
                 </>
               ) : !["pending", "failed", "none"].includes(String(literature.pdf_import_status)) ? (

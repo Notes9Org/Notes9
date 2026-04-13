@@ -13,6 +13,11 @@ import {
   extractSseTokenPiece,
   mergeTokenBufferIntoAssistantRaw,
 } from '@/lib/sse-stream-assistant-merge';
+import {
+  coalesceAgentExcerpt,
+  coalesceAgentSourceId,
+  normalizeAgentRelevance0to1,
+} from '@/lib/document-highlight';
 
 /** Request shape for POST /notes9/stream (proxied via /api/agent/stream). */
 export interface AgentStreamParams {
@@ -87,15 +92,35 @@ function ragFromPayload(data: Record<string, unknown> | null): RagChunksPayload 
   for (const item of chunksRaw) {
     if (!item || typeof item !== 'object') continue;
     const c = item as Record<string, unknown>;
-    if (typeof c.source_type !== 'string' || typeof c.source_id !== 'string') continue;
-    if (typeof c.excerpt !== 'string' || typeof c.relevance !== 'number') continue;
+    const sourceType = typeof c.source_type === 'string' ? c.source_type : null;
+    const sourceId = coalesceAgentSourceId(c);
+    const excerpt = coalesceAgentExcerpt(c);
+    if (!sourceType || !sourceId || !excerpt) continue;
+    let relevance = 0;
+    if (typeof c.relevance === 'number' && Number.isFinite(c.relevance)) {
+      relevance = normalizeAgentRelevance0to1(c.relevance);
+    } else if (typeof c.score === 'number' && Number.isFinite(c.score)) {
+      relevance = normalizeAgentRelevance0to1(c.score);
+    }
     chunks.push({
-      source_type: c.source_type,
-      source_id: c.source_id,
+      source_type: sourceType,
+      source_id: sourceId,
       source_name: typeof c.source_name === 'string' ? c.source_name : undefined,
       chunk_id: typeof c.chunk_id === 'string' || c.chunk_id === null ? (c.chunk_id as string | null) : undefined,
-      excerpt: c.excerpt,
-      relevance: c.relevance,
+      page_number:
+        typeof c.page_number === 'number' && Number.isFinite(c.page_number)
+          ? c.page_number
+          : typeof c.page === 'number' && Number.isFinite(c.page)
+            ? c.page
+            : undefined,
+      excerpt,
+      relevance,
+      content_surface:
+        typeof c.content_surface === 'string'
+          ? c.content_surface
+          : c.content_surface === null
+            ? null
+            : undefined,
     });
   }
   return {

@@ -49,6 +49,8 @@ import { cn } from '@/lib/utils';
 import {
   formatNotes9AssistantMarkdown,
   isPersistedChatMessageId,
+  parseNotes9AssistantStoredContent,
+  notes9PlainTextForApiHistory,
 } from '@/lib/notes9-chat-format';
 import { formatLiteratureAssistantMarkdown } from '@/lib/literature-agent-chat-format';
 import { previewFromLiteratureSseTokenBuffer } from '@/lib/literature-stream-preview';
@@ -95,6 +97,10 @@ import { useLiteratureAgentStream } from '@/hooks/use-literature-agent-stream';
 import type { LiteratureAgentDonePayload } from '@/lib/literature-agent-types';
 import { ClarifyCard } from '@/components/clarify-card';
 import { LiteratureSourcesDropdown } from '@/components/literature-sources-dropdown';
+import {
+  AgentCitationsPanel,
+  groundingResourceToPanelItem,
+} from '@/components/catalyst/agent-citations-panel';
 import {
   LiteratureAgentThinkingPanel,
   LiteratureStreamProgressHint,
@@ -161,6 +167,16 @@ function literatureHistoryTurnContent(msg: {
   const raw = getPlainTextFromMessage(msg);
   if (msg.role === 'user') return literatureMessageMarkdownToPlainForModel(raw);
   return parseLiteratureAssistantStoredContent(raw).bodyMarkdown;
+}
+
+/** Notes9 agent: assistant turns omit §§NOTES9_GROUNDING§§ payload from API history. */
+function notes9HistoryTurnContent(msg: {
+  role: string;
+  content?: unknown;
+  parts?: Array<{ type?: string; text?: string }>;
+}): string {
+  const raw = getPlainTextFromMessage(msg);
+  return notes9PlainTextForApiHistory(raw, msg.role);
 }
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024;
@@ -1055,7 +1071,7 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
 
       const history = messages.map((m) => ({
         role: m.role,
-        content: getPlainTextFromMessage(m),
+        content: notes9HistoryTurnContent(m),
       }));
 
       setNotes9Loading(true);
@@ -1130,7 +1146,9 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
         content:
           agentMode === 'literature'
             ? literatureHistoryTurnContent(m)
-            : getPlainTextFromMessage(m),
+            : agentMode === 'notes9'
+              ? notes9HistoryTurnContent(m)
+              : getPlainTextFromMessage(m),
       }));
 
       setMessages((currentMessages) => {
@@ -1357,7 +1375,7 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
       const query = getPlainTextFromMessage(lastUserMessage);
       const history = messages.slice(0, lastAssistantIndex - 1).map((m) => ({
         role: m.role,
-        content: getPlainTextFromMessage(m),
+        content: notes9HistoryTurnContent(m),
       }));
 
       const { data: { session } } = await supabase.auth.getSession();
@@ -2318,12 +2336,26 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
                           message.role === 'assistant'
                             ? parseLiteratureAssistantStoredContent(rawContent)
                             : null;
-                        const content = literatureParsed
-                          ? literatureParsed.bodyMarkdown
-                          : rawContent;
-                        const literatureSources =
+                        const hasLitRefs = Boolean(
                           literatureParsed && literatureParsed.refs.length > 0
-                            ? literatureParsed.refs
+                        );
+                        const notes9Parsed =
+                          message.role === 'assistant' && !hasLitRefs
+                            ? parseNotes9AssistantStoredContent(
+                                literatureParsed?.bodyMarkdown ?? rawContent
+                              )
+                            : null;
+                        const content = hasLitRefs
+                          ? literatureParsed!.bodyMarkdown
+                          : notes9Parsed
+                            ? notes9Parsed.bodyMarkdown
+                            : rawContent;
+                        const literatureSources = hasLitRefs
+                          ? literatureParsed!.refs
+                          : null;
+                        const notes9Sources =
+                          notes9Parsed && notes9Parsed.resources.length > 0
+                            ? notes9Parsed.resources
                             : null;
                         const userLiteratureMarkdown =
                           message.role === 'user' &&
@@ -2390,6 +2422,15 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
                                   {literatureSources && (
                                     <LiteratureSourcesDropdown
                                       refs={literatureSources}
+                                      className="mt-2 self-start"
+                                    />
+                                  )}
+                                  {notes9Sources && (
+                                    <AgentCitationsPanel
+                                      items={notes9Sources.map((c, i) =>
+                                        groundingResourceToPanelItem(c, i)
+                                      )}
+                                      triggerLabel="All citations"
                                       className="mt-2 self-start"
                                     />
                                   )}

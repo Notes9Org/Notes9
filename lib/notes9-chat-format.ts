@@ -1,12 +1,12 @@
 import type { DonePayload, GroundingResource } from '@/lib/agent-stream-types';
-import { escapeMarkdownLinkLabel } from '@/lib/chat-response-sources';
 
 /** Chat message rows use DB UUIDs once persisted. */
 export function isPersistedChatMessageId(id: string): boolean {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
 }
 
-const EXCERPT_MAX = 320;
+/** Appended to saved assistant markdown; stripped for display, history, and parsing. */
+export const NOTES9_GROUNDING_MARKER = '\n§§NOTES9_GROUNDING§§\n';
 
 const TOOL_USED_LABEL: Record<string, string> = {
   sql: 'From database',
@@ -15,50 +15,48 @@ const TOOL_USED_LABEL: Record<string, string> = {
   none: '',
 };
 
-function resolveNotes9ResourceRoute(c: GroundingResource): string {
-  const id = c.source_id;
-  if (id == null || String(id).trim() === '') return '';
-  switch (c.source_type) {
-    case 'literature_review':
-      return `/literature-reviews/${id}`;
-    case 'protocol':
-      return `/protocols/${id}`;
-    case 'project':
-      return `/projects/${id}`;
-    case 'experiment':
-      return `/experiments/${id}`;
-    case 'lab_note':
-    case 'report':
-    default:
-      return '';
-  }
+function utf8ToBase64(text: string): string {
+  const bytes = new TextEncoder().encode(text);
+  let binary = '';
+  for (const b of bytes) binary += String.fromCharCode(b);
+  return btoa(binary);
 }
 
-/** Single reference line for POST /notes9 `resources[]` (RAG/SQL grounding). */
-function formatNotes9ResourceLine(citation: GroundingResource, index: number): string {
-  const n = index + 1;
-  const route = resolveNotes9ResourceRoute(citation);
-  const title =
-    citation.display_label?.trim() ||
-    citation.source_name?.trim() ||
-    citation.source_type.replace(/_/g, ' ');
-  const safeTitle = escapeMarkdownLinkLabel(title);
+function base64ToUtf8(b64: string): string {
+  const binary = atob(b64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  return new TextDecoder().decode(bytes);
+}
 
-  let line = route
-    ? `[${n}] [${safeTitle}](${route})`
-    : `[${n}] **${safeTitle}**`;
+/** Remove model-echoed reference lists from the answer body before we attach structured grounding. */
+function stripTrailingPlainTextReferencesFromModel(body: string): string {
+  let s = body.trimEnd();
+  s = s.replace(/\n\n\*\*References:\*\*\n[\s\S]*$/i, '');
+  s = s.replace(/\n\nReferences:\s*[^\n]*\n[\s\S]*$/i, '');
+  return s.trimEnd();
+}
 
-  const excerpt = citation.excerpt?.trim();
-  if (excerpt) {
-    const clipped = excerpt.length > EXCERPT_MAX ? `${excerpt.slice(0, EXCERPT_MAX - 1)}…` : excerpt;
-    line += ` — ${clipped}`;
+function stripLegacyMarkdownReferencesSection(md: string): string {
+  const boldRef = /\n\n\*\*References:\*\*/;
+  const boldMatch = boldRef.exec(md);
+  if (boldMatch && boldMatch.index != null) {
+    const start = boldMatch.index;
+    const tail = md.slice(start);
+    const hr = tail.indexOf('\n\n---\n\n');
+    if (hr !== -1) return md.slice(0, start) + tail.slice(hr);
+    return md.slice(0, start).trimEnd();
   }
-
-  if (typeof citation.relevance === 'number' && citation.relevance >= 0 && citation.relevance <= 1) {
-    line += ` *(${Math.round(citation.relevance * 100)}% match)*`;
+  const plainRef = /\n\nReferences:/i;
+  const pm = plainRef.exec(md);
+  if (pm && pm.index != null) {
+    const start = pm.index;
+    const tail = md.slice(start);
+    const hr = tail.indexOf('\n\n---\n\n');
+    if (hr !== -1) return md.slice(0, start) + tail.slice(hr);
+    return md.slice(0, start).trimEnd();
   }
-
-  return line;
+  return md;
 }
 
 function formatNotes9Footer(donePayload: DonePayload): string {
@@ -76,21 +74,59 @@ function formatNotes9Footer(donePayload: DonePayload): string {
 }
 
 /**
- * Turn POST /notes9 assistant payload into markdown for chat history:
- * main `content`, then **References** from `resources` / `citations`, then optional tool/confidence footnote.
+ * Persist assistant turn: answer markdown + footer + opaque grounding payload (like literature agent).
+ * UI parses {@link parseNotes9AssistantStoredContent} to show “All citations” with deep-links.
  */
 export function formatNotes9AssistantMarkdown(donePayload: DonePayload): string {
   const refs =
     donePayload.resources?.length
       ? donePayload.resources
       : donePayload.citations ?? [];
-  let formattedAnswer = donePayload.content ?? donePayload.answer ?? '';
+
+  let body = stripTrailingPlainTextReferencesFromModel(donePayload.content ?? donePayload.answer ?? '');
+  let out = body + formatNotes9Footer(donePayload);
 
   if (refs.length > 0) {
-    formattedAnswer += '\n\n**References:**\n';
-    formattedAnswer += refs.map((citation, index) => formatNotes9ResourceLine(citation, index)).join('\n');
+    const payload = utf8ToBase64(JSON.stringify(refs));
+    out += NOTES9_GROUNDING_MARKER + payload;
   }
 
-  formattedAnswer += formatNotes9Footer(donePayload);
-  return formattedAnswer;
+  return out;
+}
+
+/**
+ * Split stored assistant markdown into display body and structured resources for {@link AgentCitationsPanel}.
+ */
+export function parseNotes9AssistantStoredContent(stored: string): {
+  bodyMarkdown: string;
+  resources: GroundingResource[];
+} {
+  const i = stored.lastIndexOf(NOTES9_GROUNDING_MARKER);
+  if (i === -1) {
+    return {
+      bodyMarkdown: stripLegacyMarkdownReferencesSection(stored),
+      resources: [],
+    };
+  }
+
+  const bodyMarkdown = stored.slice(0, i);
+  const b64 = stored.slice(i + NOTES9_GROUNDING_MARKER.length).trim();
+
+  try {
+    const json = base64ToUtf8(b64);
+    const parsed = JSON.parse(json) as unknown;
+    if (!Array.isArray(parsed)) {
+      return { bodyMarkdown, resources: [] };
+    }
+    const resources = parsed as GroundingResource[];
+    return { bodyMarkdown, resources };
+  } catch {
+    return { bodyMarkdown: stored.slice(0, i), resources: [] };
+  }
+}
+
+/** Strip grounding appendix before sending assistant turns in Notes9 API history. */
+export function notes9PlainTextForApiHistory(full: string, role: string): string {
+  if (role !== 'assistant') return full;
+  return parseNotes9AssistantStoredContent(full).bodyMarkdown;
 }
