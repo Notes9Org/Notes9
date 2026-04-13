@@ -327,6 +327,7 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
   const literatureAgentStream = useLiteratureAgentStream();
   const contextMentionCandidates = useLiteratureMentionCandidates();
   const isLiteratureRoute = isLiteratureRoutePath(pathname ?? null);
+  const isProtocolRoute = Boolean((pathname ?? '').startsWith('/protocols'));
   const effectiveMentionCandidates =
     contextMentionCandidates.length > 0 ? contextMentionCandidates : fallbackMentionCandidates;
 
@@ -552,11 +553,16 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
 
   useEffect(() => {
     const onLit = isLiteratureRoutePath(pathname ?? null);
+    const onProtocol = (pathname ?? '').startsWith('/protocols');
     if (onLit) {
       if (!suppressLiteratureAutoModeRef.current) {
         setAgentMode('literature');
       }
       wasOnLiteratureRouteRef.current = true;
+      return;
+    }
+    if (onProtocol) {
+      setAgentMode('protocol');
       return;
     }
     wasOnLiteratureRouteRef.current = false;
@@ -566,7 +572,7 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
     literatureEditableRef.current?.replaceChildren();
     setLiteraturePlainLen(0);
     setAgentMode((m) =>
-      m === 'literature' ? savedModeOutsideLiteratureRef.current : m
+      m === 'literature' || m === 'protocol' ? savedModeOutsideLiteratureRef.current : m
     );
   }, [pathname]);
 
@@ -683,6 +689,14 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
     setAgentMode('literature');
     if (!isLiteratureRoutePath(pathname ?? null)) {
       router.push('/literature-reviews');
+    }
+  }, [pathname, router]);
+
+  const goToProtocolAgent = useCallback(() => {
+    suppressLiteratureAutoModeRef.current = true;
+    setAgentMode('protocol');
+    if (!(pathname ?? '').startsWith('/protocols')) {
+      router.push('/protocols');
     }
   }, [pathname, router]);
 
@@ -1625,13 +1639,13 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
       agentMode === 'literature' && isLiteratureRoute ? (
         <Popover open={mentionOpen} onOpenChange={setMentionOpen}>
           <PopoverAnchor asChild>
-            <div className="w-full min-h-[52px] rounded-md border border-transparent bg-transparent px-1 ring-offset-background focus-within:ring-1 focus-within:ring-ring/50">
+            <div className="w-full min-h-[68px] bg-transparent px-1">
               <div
                 ref={literatureEditableRef}
                 contentEditable
                 suppressContentEditableWarning
                 data-placeholder={`Ask about papers… Use @ to link papers (max ${MAX_LITERATURE_TAGS}), or drop rows here`}
-                className="outline-none empty:before:pointer-events-none empty:before:content-[attr(data-placeholder)] empty:before:text-muted-foreground min-h-[52px] w-full px-3 py-2.5 text-sm max-h-[300px] overflow-y-auto scrollbar-hide"
+                className="outline-none empty:before:pointer-events-none empty:before:content-[attr(data-placeholder)] empty:before:text-muted-foreground min-h-[68px] w-full px-3 py-2.5 text-sm max-h-[300px] overflow-y-auto scrollbar-hide"
                 onBeforeInput={(e) => {
                   const ie = e.nativeEvent as InputEvent;
                   if (!ie.inputType?.startsWith('insert')) return;
@@ -1741,7 +1755,7 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
           onNonFileDrop={handleNonFileDrop}
           accept={ALLOWED_TYPES}
           description="Drop files or literature papers to attach"
-          activeClassName="ring-2 ring-primary border-primary bg-primary/5"
+          activeClassName="ring-2 ring-primary border-primary bg-primary/5 min-h-[132px]"
         >
           {literatureComposer ?? (
             <textarea
@@ -1750,7 +1764,7 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
               onChange={handleTextareaChange}
               onKeyDown={handleKeyDown}
               placeholder="Plan, @ for context, / for commands"
-              className="w-full min-h-[52px] resize-none bg-transparent px-4 py-2.5 text-sm placeholder:text-muted-foreground/60 focus:outline-none scrollbar-hide"
+              className="w-full min-h-[68px] resize-none bg-transparent px-4 py-2.5 text-sm placeholder:text-muted-foreground/60 focus:outline-none scrollbar-hide"
               disabled={isLoading || contextLoading}
               autoFocus
               maxLength={MAX_CHAT_CHARS}
@@ -1768,6 +1782,11 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
                       <BookOpen className="size-3.5" />
                       Literature
                     </>
+                  ) : agentMode === 'protocol' ? (
+                    <>
+                      <PenBox className="size-3.5" />
+                      Protocol AI
+                    </>
                   ) : agentMode === 'notes9' ? (
                     <>
                       <NotebookPen className="size-3.5" /> Notes9
@@ -1781,6 +1800,14 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="start" className="w-[200px]">
+                <DropdownMenuItem
+                  onClick={() => {
+                    goToProtocolAgent();
+                  }}
+                  className="gap-2 text-xs"
+                >
+                  <PenBox className="size-3.5" /> Protocol AI
+                </DropdownMenuItem>
                 <DropdownMenuItem
                   onClick={() => {
                     goToLiteratureAgent();
@@ -2279,7 +2306,7 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
                   {/* Messages Area — native scroll so we can detect position (ScrollArea viewport is not exposed) */}
                   <div
                     ref={chatScrollRef}
-                    className="flex-1 min-h-0 basis-0 overflow-y-auto overflow-x-hidden overscroll-contain [scrollbar-gutter:stable]"
+                    className="flex-1 min-h-0 basis-0 overflow-y-auto overscroll-contain [scrollbar-gutter:stable]"
                     onScroll={onChatScroll}
                     role="log"
                     aria-label="Chat messages"
@@ -2338,7 +2365,7 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
                                 <>
                                   <div
                                     className={cn(
-                                      'text-sm leading-[1.45] break-words overflow-visible',
+                                      'text-sm leading-[1.45] break-words',
                                       message.role === 'user'
                                         ? 'whitespace-pre-wrap bg-primary/5 text-foreground px-4 py-2.5 rounded-2xl rounded-tr-sm'
                                         : 'min-w-0 text-foreground whitespace-normal'
@@ -2346,12 +2373,18 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
                                   >
                                     {message.role === 'user' ? (
                                       userLiteratureMarkdown ? (
-                                        <MarkdownRenderer content={content} className="text-sm text-foreground" />
+                                        <MarkdownRenderer
+                                          content={content}
+                                          className="text-sm text-foreground break-words [overflow-wrap:anywhere] [&_pre]:max-w-full [&_pre]:overflow-auto [&_pre]:whitespace-pre [&_code]:break-all"
+                                        />
                                       ) : (
                                         content
                                       )
                                     ) : (
-                                      <MarkdownRenderer content={content} className="text-sm text-foreground" />
+                                      <MarkdownRenderer
+                                        content={content}
+                                        className="text-sm text-foreground break-words [overflow-wrap:anywhere] [&_pre]:max-w-full [&_pre]:overflow-auto [&_pre]:whitespace-pre [&_code]:break-all"
+                                      />
                                     )}
                                   </div>
                                   {literatureSources && (

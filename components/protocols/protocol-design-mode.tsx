@@ -437,6 +437,21 @@ export function ProtocolDesignMode({
         onRemovePaper={removeAiPaper}
         onRemoveProtocol={removeAiProtocol}
         onApplyToEditor={handleAiApply}
+        onHighlightInEditor={(excerpt) => {
+          const editor = protocolEditorRef.current
+          if (!editor) return
+          editor.commands.setRagHighlight(excerpt)
+          requestAnimationFrame(() => {
+            const el = editor.view.dom.querySelector('.rag-chunk-highlight')
+            if (el) {
+              el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+              setTimeout(() => {
+                document.querySelectorAll('.rag-chunk-highlight').forEach((e) => e.classList.add('fading'))
+                setTimeout(() => { try { editor.commands.clearRagHighlight() } catch {} }, 1_200)
+              }, 12_000)
+            }
+          })
+        }}
         onClose={() => setShowAiPanel(false)}
         className="h-full"
       />

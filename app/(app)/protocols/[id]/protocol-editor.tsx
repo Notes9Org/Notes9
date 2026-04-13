@@ -1,9 +1,9 @@
 "use client"
 
-import { useMemo, useState, useCallback, useEffect } from "react"
+import { useMemo, useState, useCallback, useEffect, useRef } from "react"
 import { useContentDiffs } from "@/hooks/use-content-diffs"
 import { ContentDiffHistoryDialog } from "@/components/content-diff-history-dialog"
-import { useRouter } from "next/navigation"
+import { useRouter, useSearchParams } from "next/navigation"
 import Link from "next/link"
 import { createClient } from "@/lib/supabase/client"
 import { Button } from "@/components/ui/button"
@@ -26,6 +26,8 @@ import { Card, CardContent } from "@/components/ui/card"
 import { NoteExportMenu } from "@/components/note-export-menu"
 import { Download, History } from "lucide-react"
 import { ProtocolDesignMode } from "@/components/protocols/protocol-design-mode"
+import { HIGHLIGHT_PARAM, decodeHighlightParam } from "@/lib/document-highlight"
+import type { Editor } from "@tiptap/react"
 
 export function ProtocolEditor({
   protocol,
@@ -44,6 +46,9 @@ export function ProtocolEditor({
   const [isActiveView, setIsActiveView] = useState(Boolean(protocol.is_active))
   const [isSavingActive, setIsSavingActive] = useState(false)
   const [contentHistoryOpen, setContentHistoryOpen] = useState(false)
+  const searchParams = useSearchParams()
+  const protocolEditorRef = useRef<Editor | null>(null)
+  const [protocolEditorReady, setProtocolEditorReady] = useState(false)
   const { diffs, loading: diffsLoading, error: diffsError, loadDiffs } = useContentDiffs(
     "protocol",
     protocol.id
@@ -64,6 +69,45 @@ export function ProtocolEditor({
     setIsActiveView(Boolean(protocol.is_active))
     setFormData((prev) => ({ ...prev, is_active: Boolean(protocol.is_active) }))
   }, [protocol.id, protocol.is_active])
+
+  // Highlight from AI reference navigation — retries until content is loaded
+  const highlightParam = searchParams.get(HIGHLIGHT_PARAM)
+  const highlightFiredRef = useRef<string | null>(null)
+  useEffect(() => {
+    if (!highlightParam || !protocolEditorReady || !protocolEditorRef.current) return
+    const target = decodeHighlightParam(highlightParam)
+    if (!target || highlightFiredRef.current === highlightParam) return
+
+    let cancelled = false
+    const retryDelays = [400, 800, 1500, 2500]
+    let attempt = 0
+
+    const tryHighlight = () => {
+      if (cancelled) return
+      const editor = protocolEditorRef.current
+      if (!editor) return
+      editor.commands.setRagHighlight(target.excerpt)
+      requestAnimationFrame(() => {
+        if (cancelled) return
+        const el = editor.view.dom.querySelector('.rag-chunk-highlight')
+        if (el) {
+          highlightFiredRef.current = highlightParam
+          el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+          setTimeout(() => {
+            document.querySelectorAll('.rag-chunk-highlight').forEach((e) => e.classList.add('fading'))
+            setTimeout(() => { try { editor.commands.clearRagHighlight() } catch {} }, 1_200)
+          }, 12_000)
+        } else if (attempt < retryDelays.length - 1) {
+          try { editor.commands.clearRagHighlight() } catch {}
+          attempt++
+          setTimeout(tryHighlight, retryDelays[attempt])
+        }
+      })
+    }
+
+    const initialTimer = setTimeout(tryHighlight, retryDelays[0])
+    return () => { cancelled = true; clearTimeout(initialTimer) }
+  }, [highlightParam, protocolEditorReady])
 
   const handleActiveToggleView = async (checked: boolean) => {
     const previous = isActiveView
@@ -219,6 +263,7 @@ export function ProtocolEditor({
                   showAITools={false}
                   showAiWritingDropdown={false}
                   className="min-h-0 flex-1 border-0 shadow-none"
+                  onEditorReady={(ed) => { protocolEditorRef.current = ed; setProtocolEditorReady(!!ed) }}
                 />
               </div>
             </div>

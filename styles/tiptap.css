@@ -194,6 +194,14 @@
   border-radius: 0.125rem;
 }
 
+/* RAG deep-link highlight — beats generic mark/table styles */
+.ProseMirror .rag-chunk-highlight {
+  background-color: rgba(253, 230, 138, 0.38) !important;
+  box-shadow: inset 0 0 0 1px rgba(180, 130, 40, 0.28) !important;
+  color: inherit;
+  padding: 0.05em 0;
+}
+
 /* Selection */
 .ProseMirror .ProseMirror-selectednode {
   outline: 2px solid var(--primary);

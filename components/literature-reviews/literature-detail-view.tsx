@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, Suspense } from "react";
+import { useHighlightNavigation } from "@/hooks/use-highlight-navigation";
 import {
   Card,
   CardContent,
@@ -74,19 +75,22 @@ interface LiteratureDetailViewProps {
   initialTab?: "overview" | "pdf" | "citation" | "linked";
 }
 
-export function LiteratureDetailView({
+function LiteratureDetailViewInner({
   literature,
   showBreadcrumb = true,
   showActions = true,
   onRefresh,
   initialTab = "overview",
 }: LiteratureDetailViewProps) {
-  const [activeTab, setActiveTab] = useState<string>(initialTab);
+  const { highlightTarget, clearHighlight } = useHighlightNavigation();
+  const [activeTab, setActiveTab] = useState<string>(
+    highlightTarget ? "pdf" : initialTab
+  );
 
   // Sync tab when prop changes (e.g. clicking PDF icon in list for already open paper)
   useEffect(() => {
-    setActiveTab(initialTab);
-  }, [initialTab]);
+    setActiveTab(highlightTarget ? "pdf" : initialTab);
+  }, [initialTab, highlightTarget]);
   const formatDate = (date: string | null) => {
     if (!date) return "—";
     return new Date(date).toLocaleDateString();
@@ -520,6 +524,7 @@ ER  - `;
                     pdfUrl={`/api/literature/${literature.id}/viewer-pdf`}
                     pdfFileName={literature.pdf_file_name}
                     openInNewTabFallbackUrl={literature.pdf_file_url ?? undefined}
+                    highlightExcerpt={highlightTarget?.excerpt ?? null}
                   />
                 </>
               ) : !["pending", "failed", "none"].includes(String(literature.pdf_import_status)) ? (
@@ -653,5 +658,13 @@ ER  - `;
         </TabsContent>
       </Tabs>
     </div>
+  );
+}
+
+export function LiteratureDetailView(props: LiteratureDetailViewProps) {
+  return (
+    <Suspense>
+      <LiteratureDetailViewInner {...props} />
+    </Suspense>
   );
 }

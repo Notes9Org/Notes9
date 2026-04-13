@@ -25,10 +25,19 @@ import {
 import { TiptapEditor } from "@/components/text-editor/tiptap-editor"
 import { useToast } from "@/hooks/use-toast"
 import { LiteraturePdfLinkService } from "@/lib/literature-pdf-link-service"
+import { fuzzyFindExcerpt } from "@/lib/fuzzy-text-match"
 import type { LiteraturePdfAnnotation } from "@/types/literature-pdf"
 
 export type LiteraturePdfViewerHandle = {
   scrollToAnnotation: (annotation: LiteraturePdfAnnotation) => void
+  /** Search the PDF text layer for `excerpt` and temporarily highlight the best match. */
+  highlightExcerpt: (excerpt: string, pageHint?: number) => Promise<boolean>
+  clearExcerptHighlight: () => void
+}
+
+type RagHighlightRect = {
+  pageNumber: number
+  rects: Array<{ top: number; left: number; width: number; height: number }>
 }
 
 interface LiteraturePdfViewerProps {
@@ -72,6 +81,7 @@ function LiteraturePdfPageBlock({
   fitScale,
   zoom,
   pageAnnotations,
+  ragHighlightRects,
   selectionState,
   onSelectionChangeRef,
   onPagePointerDown,
@@ -86,6 +96,7 @@ function LiteraturePdfPageBlock({
   fitScale: number
   zoom: number
   pageAnnotations: LiteraturePdfAnnotation[]
+  ragHighlightRects: Array<{ top: number; left: number; width: number; height: number }>
   selectionState: PdfSelectionState | null
   onSelectionChangeRef: MutableRefObject<(pageNum: number, next: PdfSelectionState | null) => void>
   onPagePointerDown: (pageNum: number, relative: { x: number; y: number }) => void
@@ -323,6 +334,18 @@ function LiteraturePdfPageBlock({
               </div>
             )
           })}
+        {ragHighlightRects.map((rect, index) => (
+          <div
+            key={`rag-hl-${index}`}
+            className="pdf-rag-highlight pointer-events-none"
+            style={{
+              left: `${rect.left * 100}%`,
+              top: `${rect.top * 100}%`,
+              width: `${rect.width * 100}%`,
+              height: `${rect.height * 100}%`,
+            }}
+          />
+        ))}
         {selectionState?.pageNumber === pageNumber && (
           <div
             className="absolute z-20 flex items-center gap-1 rounded-full border bg-background/95 p-1 shadow-lg"
@@ -404,6 +427,8 @@ export const LiteraturePdfViewer = forwardRef<LiteraturePdfViewerHandle, Literat
     anchor: null,
     content: "",
   })
+  const [ragHighlightRects, setRagHighlightRects] = useState<RagHighlightRect[]>([])
+  const ragHighlightTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const onSelectionChangeRef = useRef((pageNum: number, next: PdfSelectionState | null) => {
     setSelectionState((current) => {
@@ -430,12 +455,14 @@ export const LiteraturePdfViewer = forwardRef<LiteraturePdfViewerHandle, Literat
       }
       if (yWithinPage != null && Number.isFinite(yWithinPage)) {
         const pageTop = elementTopInScrollContent(el, frame)
-        const margin = Math.min(120, frame.clientHeight * 0.22)
-        const desiredTop = pageTop + yWithinPage - margin
+        const centerOffset = frame.clientHeight / 2
+        // Nudge scroll slightly further down so the match sits a bit below dead-center (easier to read).
+        const scrollNudgeDown = Math.round(frame.clientHeight * 0.15)
+        const desiredTop = pageTop + yWithinPage - centerOffset + scrollNudgeDown
         const maxScroll = Math.max(0, frame.scrollHeight - frame.clientHeight)
         frame.scrollTo({ top: Math.max(0, Math.min(desiredTop, maxScroll)), behavior: "smooth" })
       } else {
-        el.scrollIntoView({ behavior: "smooth", block: "start", inline: "nearest" })
+        el.scrollIntoView({ behavior: "smooth", block: "center", inline: "nearest" })
       }
     }
 
@@ -465,6 +492,127 @@ export const LiteraturePdfViewer = forwardRef<LiteraturePdfViewerHandle, Literat
       setFocusedAnnotationId(null)
       setRenderedEndPage((p) => Math.max(p, annotation.page_number))
       setNavigateRequest(annotation)
+    },
+
+    async highlightExcerpt(excerpt: string, pageHint?: number): Promise<boolean> {
+      if (!pdfDocument || !excerpt.trim()) return false
+
+      // Clear any existing RAG highlight
+      if (ragHighlightTimerRef.current) clearTimeout(ragHighlightTimerRef.current)
+      setRagHighlightRects([])
+
+      const totalPages: number = pdfDocument.numPages ?? pageCount
+
+      // Build ordered page list: hint page first, then neighbours, then rest
+      const order: number[] = []
+      if (pageHint && pageHint >= 1 && pageHint <= totalPages) {
+        order.push(pageHint)
+        for (let d = 1; d <= 3; d++) {
+          if (pageHint - d >= 1) order.push(pageHint - d)
+          if (pageHint + d <= totalPages) order.push(pageHint + d)
+        }
+      }
+      for (let p = 1; p <= totalPages; p++) {
+        if (!order.includes(p)) order.push(p)
+      }
+
+      for (const pgNum of order) {
+        try {
+          const page = await pdfDocument.getPage(pgNum)
+          const textContent = await page.getTextContent({ includeMarkedContent: false })
+          const items: Array<{ str: string; transform: number[]; width: number; height: number }> = textContent.items
+
+          // Build concatenated text with space separators between items so that
+          // words split across items don't run together for the fuzzy matcher.
+          // itemMap[charIdx] holds the items[] index for that character (-1 for separators).
+          let fullText = ""
+          const itemMap: number[] = []
+          for (let ii = 0; ii < items.length; ii++) {
+            const item = items[ii]
+            if (!item.str) continue
+            if (fullText.length > 0) {
+              fullText += " "
+              itemMap.push(-1) // separator
+            }
+            for (let ci = 0; ci < item.str.length; ci++) {
+              itemMap.push(ii)
+            }
+            fullText += item.str
+          }
+
+          if (!fullText.trim()) continue
+          const match = fuzzyFindExcerpt(fullText, excerpt, { threshold: 0.3 })
+          if (!match || match.score < 0.3) continue
+
+          // Collect which items are covered by the matched range
+          const matchedItemIndices = new Set<number>()
+          for (let ci = match.start; ci < match.end && ci < itemMap.length; ci++) {
+            const idx = itemMap[ci]
+            if (idx >= 0) matchedItemIndices.add(idx)
+          }
+          if (matchedItemIndices.size === 0) continue
+
+          const baseViewport = page.getViewport({ scale: 1 })
+          const pw = baseViewport.width
+          const ph = baseViewport.height
+
+          // Build one rect per matched item.
+          // PDF coordinates: origin bottom-left, y increases upward.
+          // CSS coordinates: origin top-left, y increases downward.
+          // text TOP (CSS) = 1 - (ty + fontSize) / ph
+          // highlight HEIGHT = fontSize * 1.3 / ph  (covers ascenders + slight leading)
+          const rects: Array<{ top: number; left: number; width: number; height: number }> = []
+          for (const ii of [...matchedItemIndices].sort((a, b) => a - b)) {
+            const item = items[ii]
+            if (!item.str || !item.transform) continue
+            const tx = item.transform[4]
+            const ty = item.transform[5]
+            const fontSize = Math.abs(item.transform[3]) || Math.abs(item.transform[0]) || 12
+            const iw = item.width > 0 ? item.width : item.str.length * fontSize * 0.55
+            rects.push({
+              left: tx / pw,
+              top: 1 - (ty + fontSize) / ph,
+              width: iw / pw,
+              height: (fontSize * 1.3) / ph,
+            })
+          }
+
+          if (rects.length === 0) continue
+
+          // Ensure the page is rendered
+          setRenderedEndPage((p) => Math.max(p, pgNum))
+          setRagHighlightRects([{ pageNumber: pgNum, rects }])
+
+          // Scroll to the highlight, centered vertically.
+          // yWithinPage must be in rendered pixel units (base × scale).
+          const renderedY = rects[0].top * ph * fitScale * zoom
+          requestAnimationFrame(() => {
+            requestAnimationFrame(() => {
+              scrollPdfToPage(pgNum, renderedY)
+            })
+          })
+
+          // Fade then remove after 12 seconds
+          ragHighlightTimerRef.current = setTimeout(() => {
+            document.querySelectorAll('.pdf-rag-highlight').forEach((el) => el.classList.add('fading'))
+            setTimeout(() => {
+              setRagHighlightRects([])
+              ragHighlightTimerRef.current = null
+            }, 1_200)
+          }, 12_000)
+
+          return true
+        } catch {
+          continue
+        }
+      }
+      return false
+    },
+
+    clearExcerptHighlight() {
+      if (ragHighlightTimerRef.current) clearTimeout(ragHighlightTimerRef.current)
+      setRagHighlightRects([])
+      ragHighlightTimerRef.current = null
     },
   }))
 
@@ -790,6 +938,7 @@ export const LiteraturePdfViewer = forwardRef<LiteraturePdfViewerHandle, Literat
               fitScale={fitScale}
               zoom={zoom}
               pageAnnotations={annotations.filter((a) => a.page_number === num)}
+              ragHighlightRects={ragHighlightRects.find((r) => r.pageNumber === num)?.rects ?? []}
               selectionState={selectionState}
               onSelectionChangeRef={onSelectionChangeRef}
               onPagePointerDown={onPagePointerDown}

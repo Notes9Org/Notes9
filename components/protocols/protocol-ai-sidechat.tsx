@@ -16,19 +16,30 @@ import { ScrollArea } from "@/components/ui/scroll-area"
 import { cn } from "@/lib/utils"
 import {
   ArrowUp,
+  BookOpen,
   Check,
   ChevronDown,
   ChevronRight,
   Copy,
   FileText,
+  History,
   Loader2,
   MessageSquare,
+  NotebookPen,
+  PenBox,
   Plus,
   Square,
   Trash2,
   X,
   PanelRightClose,
 } from "lucide-react"
+import { usePathname, useRouter } from "next/navigation"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import {
   LITERATURE_PAPER_DRAG_MIME,
   type LiteraturePaperItem,
@@ -39,6 +50,7 @@ import { MarkdownRenderer, tightenChatMarkdown } from "@/components/catalyst/mar
 import { markdownToHtml } from "@/lib/markdown-to-editor-html"
 import { copyMarkdownForRichPaste } from "@/lib/copy-markdown-rich-paste"
 import { ClipboardInfoIcon } from "@/components/ui/clipboard-info-icon"
+import { Notes9LoaderGif } from "@/components/brand/notes9-loader-gif"
 import { useChatSessions } from "@/hooks/use-chat-sessions"
 import type { ChatMessage as DbChatMessage } from "@/hooks/use-chat-sessions"
 
@@ -92,6 +104,8 @@ interface ViewerTab {
   content?: string | null
 }
 
+type ProtocolSidebarAgentMode = "protocol" | "general" | "notes9"
+
 export interface ProtocolAiSidechatProps {
   /** Persists chat history under this protocol (Supabase). */
   protocolId: string
@@ -110,6 +124,8 @@ export interface ProtocolAiSidechatProps {
   onRemoveProtocol: (id: string) => void
   /** Called when the user applies an AI suggestion into the editor. */
   onApplyToEditor: (html: string) => void
+  /** Highlight a text excerpt in the protocol editor (same-page navigation). */
+  onHighlightInEditor?: (excerpt: string) => void
   onClose?: () => void
   className?: string
 }
@@ -179,9 +195,12 @@ export function ProtocolAiSidechat({
   onRemovePaper,
   onRemoveProtocol,
   onApplyToEditor,
+  onHighlightInEditor,
   onClose,
   className,
 }: ProtocolAiSidechatProps) {
+  const router = useRouter()
+  const pathname = usePathname()
   const {
     sessions,
     currentSessionId: activeSessionId,
@@ -209,6 +228,7 @@ export function ProtocolAiSidechat({
   const [viewerTabs, setViewerTabs] = useState<ViewerTab[]>([])
   const [activeViewerTabKey, setActiveViewerTabKey] = useState<string | null>(null)
   const [viewerOpen, setViewerOpen] = useState(true)
+  const [agentMode, setAgentMode] = useState<ProtocolSidebarAgentMode>("protocol")
   const dragDepthRef = useRef(0)
   const mentionQueryKeyRef = useRef<string | null>(null)
   const mentionListRef = useRef<HTMLDivElement>(null)
@@ -464,6 +484,20 @@ export function ProtocolAiSidechat({
 
   const buildQuery = useCallback(
     (userLine: string) => {
+      if (agentMode === "general") {
+        return userLine
+      }
+      if (agentMode === "notes9") {
+        return [
+          "You are Notes9, an assistant for scientific teams.",
+          "Be concise, practical, and actionable.",
+          "",
+          `Current protocol title: ${protocolTitle || "Untitled protocol"}`,
+          "",
+          "User request:",
+          userLine,
+        ].join("\n")
+      }
       return [
         "You are a scientific writing assistant helping draft a laboratory protocol.",
         `Protocol title: ${protocolTitle || "Untitled protocol"}`,
@@ -485,7 +519,7 @@ export function ProtocolAiSidechat({
         userLine,
       ].join("\n")
     },
-    [protocolTitle, shellSummary, aiContextProtocols]
+    [agentMode, protocolTitle, shellSummary, aiContextProtocols]
   )
 
   const updateMessage = useCallback((id: string, patch: Partial<ChatMessage>) => {
@@ -622,6 +656,17 @@ export function ProtocolAiSidechat({
   const clarifyOptions = clarify?.options ?? []
   const hasMessages = messages.length > 0
   const activeViewerTab = viewerTabs.find((t) => t.key === activeViewerTabKey) ?? null
+  const goToLiteratureAgent = useCallback(() => {
+    if (!pathname?.startsWith("/literature-reviews")) {
+      router.push("/literature-reviews")
+    }
+  }, [pathname, router])
+  const goToGeneralAgent = useCallback(() => {
+    setAgentMode("general")
+  }, [])
+  const goToNotes9Agent = useCallback(() => {
+    setAgentMode("notes9")
+  }, [])
 
   /* ─── render ─────────────────────────────────────────────────────────── */
 
@@ -753,49 +798,49 @@ export function ProtocolAiSidechat({
         onDrop={handleLiteratureDrop}
       >
 
-        {/* ── Header: toggle + title + close (matches Catalyst header) ── */}
-        <div className="flex h-12 shrink-0 items-center gap-1.5 border-b border-border/50 px-3 min-w-0 sm:h-14 sm:gap-2 sm:px-4">
-          <Button
-            variant="ghost"
-            size="icon"
-            className="size-8 shrink-0 text-muted-foreground hover:text-foreground"
-            onClick={() => setHistoryOpen((v) => !v)}
-            title={historyOpen ? "Hide history" : "Show history"}
-          >
-            {historyOpen ? (
-              <PanelRightClose className="size-4" />
-            ) : (
-              <MessageSquare className="size-4" />
-            )}
-          </Button>
-          <ClipboardInfoIcon className="shrink-0 text-muted-foreground" />
-          <span className="min-w-0 flex-1 truncate text-sm font-medium text-muted-foreground">
-            Protocol AI
-          </span>
-          {/* New Chat — same control as Catalyst in right-sidebar (secondary + label) */}
-          <Button
-            variant="secondary"
-            className="h-8 shrink-0 text-muted-foreground sm:h-9"
-            onClick={createNewSession}
-            disabled={isStreaming}
-            aria-label="New chat"
-            title="New chat"
-          >
-            <Plus className="size-4" />
-            <span>New Chat</span>
-          </Button>
-          {onClose && (
+        {/* ── Header: styled to match RightSidebar shell ── */}
+        <header className="h-12 sm:h-14 flex items-center justify-between px-2 sm:px-4 border-b border-border/40 shrink-0 bg-[color:var(--n9-header-bg)]/80 backdrop-blur-md z-10 text-xs select-none min-w-0">
+          <div className="flex min-w-0 items-center gap-1.5 sm:gap-2">
             <Button
               variant="ghost"
               size="icon"
-              className="size-8 shrink-0 text-muted-foreground hover:text-foreground"
-              onClick={onClose}
-              title="Close"
+              className="size-8 sm:size-9 text-muted-foreground shrink-0"
+              onClick={() => setHistoryOpen((v) => !v)}
+              title={historyOpen ? "Hide history" : "Show history"}
+              aria-label="Show chat history"
             >
-              <X className="size-4" />
+              {historyOpen ? <PanelRightClose className="size-4" /> : <History className="size-4" />}
             </Button>
-          )}
-        </div>
+            <ClipboardInfoIcon className="shrink-0 text-muted-foreground" />
+            <span className="min-w-0 truncate text-sm font-medium text-muted-foreground">
+              Protocol AI
+            </span>
+          </div>
+          <div className="flex shrink-0 items-center gap-1.5">
+            <Button
+              variant="secondary"
+              className="h-8 sm:h-9 text-muted-foreground"
+              onClick={createNewSession}
+              disabled={isStreaming}
+              aria-label="New chat"
+              title="New chat"
+            >
+              <Plus className="size-4" />
+              <span>New Chat</span>
+            </Button>
+            {onClose && (
+              <Button
+                variant="ghost"
+                size="icon"
+                className="size-8 sm:size-9 text-muted-foreground"
+                onClick={onClose}
+                title="Close"
+              >
+                <X className="size-4" />
+              </Button>
+            )}
+          </div>
+        </header>
 
         {viewerTabs.length > 0 && (
           <div className="shrink-0 border-b border-border/40 bg-muted/10">
@@ -923,12 +968,15 @@ export function ProtocolAiSidechat({
             /* ── Empty / greeting (mirrors CatalystGreeting) ── */
             <div className="flex min-h-0 flex-1 flex-col items-center justify-center overflow-y-auto overscroll-contain px-4 py-4 text-center">
               <div className="mx-auto w-full max-w-xs">
-                <div className="mb-4 inline-flex h-14 w-14 items-center justify-center rounded-2xl bg-primary/10">
-                  <ClipboardInfoIcon className="size-7 text-primary" />
+                <div className="relative mb-3 inline-flex items-center justify-center">
+                  <Notes9LoaderGif alt="Catalyst AI loader" widthPx={64} />
                 </div>
-                <h2 className="text-lg font-semibold tracking-tight text-foreground">
-                  Protocol AI
+                <h2 className="text-lg font-bold tracking-tight bg-gradient-to-r from-orange-500 to-pink-600 bg-clip-text text-transparent">
+                  Catalyst AI
                 </h2>
+                <h3 className="text-sm font-semibold tracking-tight bg-gradient-to-r from-orange-500 to-pink-600 bg-clip-text text-transparent">
+                  For Protocols
+                </h3>
                 <p className="mt-2 text-sm text-muted-foreground">
                   {!hasAnyContext
                     ? "Add papers from Literature or select existing protocols below to provide context."
@@ -1043,12 +1091,12 @@ export function ProtocolAiSidechat({
           )}
         </div>
 
-        {/* ── Input area (matches Catalyst's rounded-2xl container) ──────── */}
+        {/* ── Input area (mirrors Literature AI sidebar composer) ───────── */}
         <div className="mx-auto w-full min-w-0 shrink-0 px-4 pb-4 pt-2">
           <div
             className={cn(
-              "relative rounded-2xl border border-border bg-background shadow-sm transition-all focus-within:border-primary/50 focus-within:shadow-md",
-              dropTargetActive && "border-primary/50 ring-2 ring-primary/20"
+              "relative rounded-xl border bg-card/50 shadow-sm focus-within:ring-1 focus-within:ring-ring/50 focus-within:border-ring transition-all overflow-hidden",
+              dropTargetActive && "ring-2 ring-primary border-primary bg-primary/5"
             )}
           >
             {/* Context hint — inside container like Catalyst's mode toggle */}
@@ -1060,7 +1108,7 @@ export function ProtocolAiSidechat({
               </div>
             )}
             {dropTargetActive && (
-              <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center rounded-2xl bg-primary/5">
+              <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center rounded-xl bg-primary/5">
                 <span className="rounded-md bg-background/90 px-2 py-1 text-xs font-medium text-primary shadow-sm">
                   Drop to add paper
                 </span>
@@ -1127,9 +1175,13 @@ export function ProtocolAiSidechat({
               placeholder={
                 !hasAnyContext
                   ? "Add papers/protocols first, then ask your prompt…"
-                  : "Ask to draft a section, refine steps, add safety notes…"
+                  : agentMode === "protocol"
+                    ? "Ask to draft a section, refine steps, add safety notes…"
+                    : agentMode === "notes9"
+                      ? "Ask Notes9 about workflows, planning, or next steps…"
+                      : "Ask anything about your work…"
               }
-              className="min-h-[72px] resize-none border-0 bg-transparent text-sm shadow-none focus-visible:ring-0 focus-visible:ring-offset-0"
+              className="w-full min-h-[68px] resize-none border-0 bg-transparent px-4 py-2.5 text-sm placeholder:text-muted-foreground/60 shadow-none focus:outline-none focus-visible:ring-0 focus-visible:ring-offset-0 scrollbar-hide"
               disabled={isStreaming}
               onKeyDown={(e) => {
                 const menu = mentionMenu
@@ -1170,31 +1222,66 @@ export function ProtocolAiSidechat({
               }}
             />
             </div>
-            <div className="flex items-center justify-between px-3 pb-2.5">
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                className="h-7 gap-1.5 text-xs text-muted-foreground hover:text-foreground"
-                onClick={() => {
-                  if (!activeSessionId) return
-                  void clearSessionMessages(activeSessionId).then(() => {
-                    setMessages([])
-                    reset()
-                  })
-                }}
-                disabled={isStreaming || messages.length === 0}
-              >
-                Clear
-              </Button>
-              <div className="flex items-center gap-1">
-                <span className="text-[10px] text-muted-foreground">↵ send</span>
+            <div className="mt-1 flex min-h-9 items-center justify-between gap-2 px-2 pb-2">
+              <div className="flex min-w-0 flex-1 flex-nowrap items-center gap-1.5 overflow-x-auto">
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      id="tour-ai-mode"
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 gap-1.5 rounded-md bg-muted/50 px-2 text-xs font-medium text-muted-foreground hover:bg-muted shrink-0"
+                    >
+                      {agentMode === "protocol" ? (
+                        <PenBox className="size-3.5" />
+                      ) : agentMode === "notes9" ? (
+                        <NotebookPen className="size-3.5" />
+                      ) : (
+                        <MessageSquare className="size-3.5" />
+                      )}
+                      {agentMode === "protocol" ? "Protocol" : agentMode === "notes9" ? "Notes9" : "General"}
+                      <ChevronDown className="size-3 opacity-50" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="start" className="w-[200px]">
+                    <DropdownMenuItem onClick={goToLiteratureAgent} className="gap-2 text-xs">
+                      <BookOpen className="size-3.5" /> Literature
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={goToGeneralAgent} className="gap-2 text-xs">
+                      <MessageSquare className="size-3.5" /> General
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={goToNotes9Agent} className="gap-2 text-xs">
+                      <NotebookPen className="size-3.5" /> Notes9
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 gap-1.5 rounded-md bg-muted/50 px-2 text-xs font-medium text-muted-foreground hover:bg-muted hover:text-foreground shrink-0"
+                  onClick={() => {
+                    if (!activeSessionId) return
+                    void clearSessionMessages(activeSessionId).then(() => {
+                      setMessages([])
+                      reset()
+                    })
+                  }}
+                  disabled={isStreaming || messages.length === 0}
+                >
+                  Clear
+                </Button>
+              </div>
+              <div className="flex h-9 shrink-0 items-center justify-end gap-1">
+                <span className="mr-1 hidden text-[11px] text-muted-foreground sm:inline">
+                  {input.length}/4096
+                </span>
                 {isStreaming ? (
                   <Button
                     type="button"
-                    variant="outline"
+                    variant="secondary"
                     size="icon"
-                    className="size-8 rounded-full"
+                    className="size-7 animate-pulse"
                     onClick={abort}
                     title="Stop generation"
                   >
@@ -1204,7 +1291,11 @@ export function ProtocolAiSidechat({
                   <Button
                     type="button"
                     size="icon"
-                    className="size-8 rounded-full bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+                    variant="ghost"
+                    className={cn(
+                      "size-7 text-muted-foreground transition-colors hover:text-primary",
+                      hasAnyContext && !!input.trim() && "text-primary",
+                    )}
                     disabled={!hasAnyContext || !input.trim()}
                     onClick={() => void handleSend()}
                     aria-label="Send message"

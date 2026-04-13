@@ -1,10 +1,12 @@
 'use client';
 
 import Link from 'next/link';
+import { MapPin } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { MarkdownRenderer } from './markdown-renderer';
 import { formatCitationDisplay } from '@/lib/utils';
-import type { ThinkingPayload, RagChunksPayload, DonePayload } from '@/lib/agent-stream-types';
+import { buildHighlightUrl, type HighlightTarget } from '@/lib/document-highlight';
+import type { ThinkingPayload, RagChunksPayload, DonePayload, GroundingResource } from '@/lib/agent-stream-types';
 
 interface AgentStreamReplyProps {
   thinkingSteps: ThinkingPayload[];
@@ -32,10 +34,27 @@ function getCitationRoute(citation: { source_type: string; source_id?: string | 
     case 'project':
       return `/projects/${id}`;
     case 'lab_note':
+      return `/lab-notes/${id}`;
     case 'report':
     default:
       return '';
   }
+}
+
+function buildCitationHighlightUrl(citation: GroundingResource): string | null {
+  const id = citation.source_id;
+  const excerpt = citation.excerpt;
+  if (!id || !excerpt) return null;
+
+  const target: HighlightTarget = {
+    sourceType: citation.source_type,
+    sourceId: id,
+    excerpt,
+    chunkId: citation.chunk_id,
+  };
+
+  const url = buildHighlightUrl(target);
+  return url || null;
 }
 
 const TOOL_LABELS: Record<string, string> = {
@@ -165,9 +184,12 @@ export function AgentStreamReply({
       {/* Answer with optional confidence and tool_used (per Notes9 API) */}
       {(displayAnswer || (!donePayload && streamedAnswer === '')) && (
         <div className="space-y-2">
-          <div className="rounded-2xl px-4 py-3 text-sm text-foreground">
+          <div className="rounded-2xl px-4 py-3 text-sm text-foreground min-w-0 max-w-full max-h-[60vh] overflow-auto">
             {displayAnswer ? (
-              <MarkdownRenderer content={displayAnswer} />
+              <MarkdownRenderer
+                content={displayAnswer}
+                className="[&_pre]:max-w-full [&_pre]:max-h-[40vh] [&_pre]:overflow-auto [&_table]:max-h-[40vh] [&_table]:overflow-auto"
+              />
             ) : (
               <span className="text-muted-foreground italic">Generating answer...</span>
             )}
@@ -202,22 +224,25 @@ export function AgentStreamReply({
           <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2">
             References
           </p>
-          <ul className="space-y-1.5 text-sm">
+          <ul className="space-y-1.5 text-sm break-words [overflow-wrap:anywhere]">
             {grounding.map((citation, index) => {
               const route = getCitationRoute(citation);
+              const highlightUrl = buildCitationHighlightUrl(citation);
               const displayText = formatCitationDisplay({
                 ...citation,
                 excerpt: citation.excerpt ?? undefined,
               });
               const title = citation.display_label ?? citation.source_name ?? citation.source_type.replace(/_/g, ' ');
+              const href = highlightUrl || route;
               return (
-                <li key={index}>
-                  {route ? (
+                <li key={index} className="flex items-start gap-1.5">
+                  {href ? (
                     <Link
-                      href={route}
-                      className="text-primary hover:underline"
+                      href={href}
+                      className="text-primary hover:underline inline-flex items-start gap-1"
                     >
-                      [{index + 1}] View {title}: {displayText}
+                      {highlightUrl && <MapPin className="size-3 mt-1 shrink-0 text-primary/70" />}
+                      [{index + 1}] {title}: {displayText}
                     </Link>
                   ) : (
                     <span>

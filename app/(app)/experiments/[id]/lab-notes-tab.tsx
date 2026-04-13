@@ -51,6 +51,7 @@ import {
 import { useContentDiffs } from "@/hooks/use-content-diffs"
 import { LabNoteChangeApprovalBar } from "@/components/lab-notes/lab-note-change-approval"
 import { ScientificCalculatorSheet } from "@/components/lab-notes/scientific-calculator"
+import { HIGHLIGHT_PARAM, decodeHighlightParam } from "@/lib/document-highlight"
 
 interface LabNote {
   id: string;
@@ -133,6 +134,48 @@ export function LabNotesTab({
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const titleInputRef = useRef<HTMLInputElement>(null);
   const noteEditorRef = useRef<Editor | null>(null);
+  const [noteEditorReady, setNoteEditorReady] = useState(false);
+
+  // Highlight from AI reference navigation — retries until content is loaded
+  const highlightParam = searchParams.get(HIGHLIGHT_PARAM);
+  const highlightFiredRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!highlightParam || !noteEditorReady || !noteEditorRef.current) return;
+    const target = decodeHighlightParam(highlightParam);
+    if (!target || highlightFiredRef.current === highlightParam) return;
+
+    let cancelled = false;
+    const retryDelays = [400, 800, 1500, 2500];
+    let attempt = 0;
+
+    const tryHighlight = () => {
+      if (cancelled) return;
+      const editor = noteEditorRef.current;
+      if (!editor) return;
+      editor.commands.setRagHighlight(target.excerpt);
+      requestAnimationFrame(() => {
+        if (cancelled) return;
+        const el = editor.view.dom.querySelector('.rag-chunk-highlight');
+        if (el) {
+          // Found it — mark done, scroll to it, schedule fade
+          highlightFiredRef.current = highlightParam;
+          el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          setTimeout(() => {
+            document.querySelectorAll('.rag-chunk-highlight').forEach((e) => e.classList.add('fading'));
+            setTimeout(() => { try { editor.commands.clearRagHighlight(); } catch {} }, 1_200);
+          }, 12_000);
+        } else if (attempt < retryDelays.length - 1) {
+          // No element yet — clear and retry after a longer delay
+          try { editor.commands.clearRagHighlight(); } catch {}
+          attempt++;
+          setTimeout(tryHighlight, retryDelays[attempt]);
+        }
+      });
+    };
+
+    const initialTimer = setTimeout(tryHighlight, retryDelays[0]);
+    return () => { cancelled = true; clearTimeout(initialTimer); };
+  }, [highlightParam, selectedNote?.id, noteEditorReady]);
 
   // Tracks the content at the time of the last successful save, for diff recording
   const lastSavedContentRef = useRef<string>("");
@@ -1270,6 +1313,7 @@ export function LabNotesTab({
                         onOpenScientificCalculator={() => setScientificCalculatorOpen(true)}
                         onEditorReady={(ed) => {
                           noteEditorRef.current = ed;
+                          setNoteEditorReady(!!ed);
                         }}
                       />
                       <ScientificCalculatorSheet
