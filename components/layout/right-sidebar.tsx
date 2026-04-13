@@ -1820,7 +1820,16 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
 
             {agentMode === 'general' && (
               <div className="ml-1 flex shrink-0 items-center gap-1.5 whitespace-nowrap border-l border-border/50 pl-2">
-                <Globe className="size-3.5 shrink-0 text-muted-foreground" aria-hidden />
+                <TooltipProvider delayDuration={150}>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Globe className="size-3.5 shrink-0 text-muted-foreground" aria-hidden />
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <p>Web Search</p>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
                 <Switch
                   checked={webSearchEnabled}
                   onCheckedChange={setWebSearchEnabled}

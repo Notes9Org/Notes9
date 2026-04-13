@@ -72,6 +72,23 @@ interface ProtocolDesignModeProps {
   onProtocolNameChange?: (name: string) => void
 }
 
+interface ProtocolContextItem {
+  id: string
+  name: string
+  content: string
+  version: string | null
+}
+
+interface ContextViewerTab {
+  key: string
+  kind: "literature" | "protocol"
+  id: string
+  title: string
+  pdfUrl?: string | null
+  abstract?: string | null
+  content?: string | null
+}
+
 export function ProtocolDesignMode({
   protocol,
   onSaved,
@@ -89,6 +106,14 @@ export function ProtocolDesignMode({
   const titleInputRef = useRef<HTMLInputElement>(null)
 
   const [aiContextPapers, setAiContextPapers] = useState<LiteraturePaperItem[]>([])
+  const [aiContextProtocols, setAiContextProtocols] = useState<ProtocolContextItem[]>([])
+  const [protocolContextCandidates, setProtocolContextCandidates] = useState<
+    ProtocolContextItem[]
+  >([])
+  const [literatureViewerMeta, setLiteratureViewerMeta] = useState<
+    Record<string, { title: string; abstract: string | null; pdfUrl: string | null }>
+  >({})
+  const [activeMainTabKey, setActiveMainTabKey] = useState<string>("editor")
   /** Filtered repo papers from the literature panel — same list as @-mention picker. */
   const [literaturePanelPapers, setLiteraturePanelPapers] = useState<
     LiteraturePaperItem[]
@@ -184,6 +209,122 @@ export function ProtocolDesignMode({
   const removeAiPaper = useCallback((id: string) => {
     setAiContextPapers((prev) => prev.filter((p) => p.id !== id))
   }, [])
+
+  const addAiProtocols = useCallback((items: ProtocolContextItem[]) => {
+    setAiContextProtocols((prev) => {
+      const m = new Map(prev.map((p) => [p.id, p]))
+      for (const p of items) m.set(p.id, p)
+      return Array.from(m.values())
+    })
+  }, [])
+
+  const removeAiProtocol = useCallback((id: string) => {
+    setAiContextProtocols((prev) => prev.filter((p) => p.id !== id))
+  }, [])
+
+  useEffect(() => {
+    let cancelled = false
+    if (!organizationId) {
+      setProtocolContextCandidates([])
+      return
+    }
+
+    const run = async () => {
+      const supabase = createClient()
+      let query = supabase
+        .from("protocols")
+        .select("id, name, content, version")
+        .eq("organization_id", organizationId)
+        .neq("id", protocol.id)
+        .order("updated_at", { ascending: false })
+        .limit(80)
+
+      if (protocol.project_id) query = query.eq("project_id", protocol.project_id)
+      if (protocol.experiment_id) query = query.eq("experiment_id", protocol.experiment_id)
+
+      const { data, error } = await query
+      if (cancelled) return
+      if (error) {
+        setProtocolContextCandidates([])
+        return
+      }
+      setProtocolContextCandidates((data as ProtocolContextItem[]) ?? [])
+    }
+
+    void run()
+    return () => {
+      cancelled = true
+    }
+  }, [organizationId, protocol.id, protocol.project_id, protocol.experiment_id])
+
+  useEffect(() => {
+    const ids = aiContextPapers.map((p) => p.id).filter(Boolean)
+    if (ids.length === 0) return
+    let cancelled = false
+    const run = async () => {
+      const supabase = createClient()
+      const { data } = await supabase
+        .from("literature_reviews")
+        .select("id, title, abstract, pdf_file_url")
+        .in("id", ids)
+      if (cancelled) return
+      const rows = (data ??
+        []) as Array<{
+        id: string
+        title: string
+        abstract: string | null
+        pdf_file_url: string | null
+      }>
+      setLiteratureViewerMeta((prev) => {
+        const next = { ...prev }
+        for (const row of rows) {
+          next[row.id] = {
+            title: row.title,
+            abstract: row.abstract ?? null,
+            // Always prefer same-origin authenticated stream route for in-app viewing.
+            pdfUrl: `/api/literature/${row.id}/viewer-pdf`,
+          }
+        }
+        return next
+      })
+    }
+    void run()
+    return () => {
+      cancelled = true
+    }
+  }, [aiContextPapers])
+
+  const contextViewerTabs = useMemo<ContextViewerTab[]>(() => {
+    const literatureTabs = aiContextPapers.map((p) => {
+      const meta = literatureViewerMeta[p.id]
+      return {
+        key: `literature:${p.id}`,
+        kind: "literature" as const,
+        id: p.id,
+        title: meta?.title || p.title,
+        pdfUrl: meta?.pdfUrl ?? null,
+        abstract: meta?.abstract ?? null,
+      }
+    })
+    const protocolTabs = aiContextProtocols.map((p) => ({
+      key: `protocol:${p.id}`,
+      kind: "protocol" as const,
+      id: p.id,
+      title: p.name || "Untitled protocol",
+      content: p.content ?? "",
+    }))
+    return [...literatureTabs, ...protocolTabs]
+  }, [aiContextPapers, aiContextProtocols, literatureViewerMeta])
+
+  useEffect(() => {
+    if (activeMainTabKey === "editor") return
+    if (!contextViewerTabs.some((t) => t.key === activeMainTabKey)) {
+      setActiveMainTabKey("editor")
+    }
+  }, [contextViewerTabs, activeMainTabKey])
+
+  const activeContextTab =
+    contextViewerTabs.find((tab) => tab.key === activeMainTabKey) ?? null
 
   const handleAccept = useCallback(
     async (newContent: string, newVersion: string) => {
@@ -289,9 +430,12 @@ export function ProtocolDesignMode({
         currentEditorContent={draftContent}
         currentVersion={currentVersion}
         aiContextPapers={aiContextPapers}
+        aiContextProtocols={aiContextProtocols}
         literatureCandidates={literaturePanelPapers}
         onAddPapers={addPapersToAiContext}
+        onAddProtocols={addAiProtocols}
         onRemovePaper={removeAiPaper}
+        onRemoveProtocol={removeAiProtocol}
         onApplyToEditor={handleAiApply}
         onClose={() => setShowAiPanel(false)}
         className="h-full"
@@ -304,9 +448,13 @@ export function ProtocolDesignMode({
       draftContent,
       currentVersion,
       aiContextPapers,
+      aiContextProtocols,
       literaturePanelPapers,
       addPapersToAiContext,
+      protocolContextCandidates,
+      addAiProtocols,
       removeAiPaper,
+      removeAiProtocol,
       handleAiApply,
     ]
   )
@@ -353,8 +501,10 @@ export function ProtocolDesignMode({
                     setShowAiPanel(true)
                   }}
                   onPapersChange={setLiteraturePanelPapers}
-                  showFilters={!protocol.project_id && !protocol.experiment_id}
+                  showFilters={Boolean(onContextChange)}
                   onContextChange={onContextChange}
+                  protocolCandidates={protocolContextCandidates}
+                  onAddProtocols={addAiProtocols}
                 />
               </aside>
             </>
@@ -381,8 +531,10 @@ export function ProtocolDesignMode({
                       setShowAiPanel(true)
                     }}
                     onPapersChange={setLiteraturePanelPapers}
-                    showFilters={!protocol.project_id && !protocol.experiment_id}
+                    showFilters={Boolean(onContextChange)}
                     onContextChange={onContextChange}
+                    protocolCandidates={protocolContextCandidates}
+                    onAddProtocols={addAiProtocols}
                   />
                 )}
               </aside>
@@ -399,9 +551,76 @@ export function ProtocolDesignMode({
 
           {/* ── Main editor area ──────────────────────────────────────── */}
           <div className="relative z-0 flex min-h-0 min-w-0 flex-1 flex-col gap-3 py-3 sm:gap-4 sm:py-4">
+            {contextViewerTabs.length > 0 && (
+              <div className="shrink-0 px-3 sm:px-6">
+                <div className="rounded-xl border border-border/60 bg-background/80 shadow-sm backdrop-blur">
+                  <div className="flex gap-1.5 overflow-x-auto px-2 py-2">
+                    <button
+                      type="button"
+                      className={cn(
+                        "shrink-0 rounded-lg px-3 py-1.5 text-[11px] font-medium transition-all",
+                        activeMainTabKey === "editor"
+                          ? "bg-primary text-primary-foreground shadow-sm"
+                          : "text-muted-foreground hover:bg-muted/70 hover:text-foreground"
+                      )}
+                      onClick={() => setActiveMainTabKey("editor")}
+                    >
+                      Editor
+                    </button>
+                    {contextViewerTabs.length > 0 && (
+                      <span className="shrink-0 px-1 py-1.5 text-xs text-muted-foreground/70">
+                        |
+                      </span>
+                    )}
+                    {contextViewerTabs.map((tab) => (
+                      <div
+                        key={tab.key}
+                        className={cn(
+                          "flex shrink-0 items-center rounded-lg transition-all",
+                          tab.key === activeMainTabKey
+                            ? "bg-primary text-primary-foreground shadow-sm"
+                            : "text-muted-foreground hover:bg-muted/70 hover:text-foreground"
+                        )}
+                      >
+                        <button
+                          type="button"
+                          className="max-w-[220px] truncate px-3 py-1.5 text-[11px] font-medium"
+                          onClick={() => setActiveMainTabKey(tab.key)}
+                          title={tab.title}
+                        >
+                          {tab.title}
+                        </button>
+                        <button
+                          type="button"
+                          className={cn(
+                            "mr-1 rounded p-0.5 transition-colors",
+                            tab.key === activeMainTabKey
+                              ? "hover:bg-primary-foreground/20"
+                              : "hover:bg-muted"
+                          )}
+                          aria-label={`Close ${tab.title}`}
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            if (tab.kind === "literature") {
+                              removeAiPaper(tab.id)
+                            } else {
+                              removeAiProtocol(tab.id)
+                            }
+                          }}
+                        >
+                          <X className="h-3 w-3" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
 
-            {/* ── Document chrome (mirrors lab notes CardHeader) ── */}
-            <CardHeader className="shrink-0 px-3 pb-0 sm:px-6">
+            {activeMainTabKey === "editor" ? (
+              <>
+                {/* ── Document chrome (mirrors lab notes CardHeader) ── */}
+                <CardHeader className="shrink-0 px-3 pb-0 sm:px-6">
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
                 <div className="flex min-w-0 flex-1 items-center gap-2">
                   {/* Literature toggle — mirrors the notes-list toggle in lab notes */}
@@ -565,46 +784,72 @@ export function ProtocolDesignMode({
                   Manage uploads
                 </Link>
               </div>
-            </CardHeader>
+                </CardHeader>
 
-            {/* ── Editor (mirrors lab notes CardContent) ── */}
-            <CardContent className="flex min-h-0 min-w-0 flex-1 flex-col space-y-3 px-3 sm:px-6">
-              <div className="relative min-h-0 min-w-0 flex-1 overflow-hidden">
-                <TiptapEditor
-                  content={draftContent}
-                  onChange={setDraftContent}
-                  placeholder="Draft your protocol… In Protocol AI (header): drag papers from Literature or type @ to attach from the filtered list."
-                  title={protocol.name}
-                  minHeight="100%"
-                  fillParentHeight
-                  showAITools
-                  showAiWritingDropdown={false}
-                  enableMath
-                  className="min-h-0 flex-1"
-                  onOpenScientificCalculator={() => setScientificCalculatorOpen(true)}
-                  onEditorReady={(ed) => {
-                    protocolEditorRef.current = ed
-                  }}
-                />
-                <ScientificCalculatorSheet
-                  open={scientificCalculatorOpen}
-                  onOpenChange={setScientificCalculatorOpen}
-                  getEditor={() => protocolEditorRef.current}
-                />
+                {/* ── Editor (mirrors lab notes CardContent) ── */}
+                <CardContent className="flex min-h-0 min-w-0 flex-1 flex-col space-y-3 px-3 sm:px-6">
+                  <div className="relative min-h-0 min-w-0 flex-1 overflow-hidden">
+                    <TiptapEditor
+                      content={draftContent}
+                      onChange={setDraftContent}
+                      placeholder="Draft your protocol… In Protocol AI (header): drag papers from Literature or type @ to attach from the filtered list."
+                      title={protocol.name}
+                      minHeight="100%"
+                      fillParentHeight
+                      showAITools
+                      showAiWritingDropdown={false}
+                      enableMath
+                      className="min-h-0 flex-1"
+                      onOpenScientificCalculator={() => setScientificCalculatorOpen(true)}
+                      onEditorReady={(ed) => {
+                        protocolEditorRef.current = ed
+                      }}
+                    />
+                    <ScientificCalculatorSheet
+                      open={scientificCalculatorOpen}
+                      onOpenChange={setScientificCalculatorOpen}
+                      getEditor={() => protocolEditorRef.current}
+                    />
+                  </div>
+
+                  {/* Approval bar sits at the bottom inside the content column */}
+                  <ProtocolChangeApprovalBar
+                    savedContent={savedContent}
+                    draftContent={draftContent}
+                    protocolId={protocol.id}
+                    currentVersion={currentVersion}
+                    documentTitle={protocol.name || null}
+                    onAccept={handleAccept}
+                    onReject={handleReject}
+                    extraDirty={templateMetaDirty}
+                  />
+                </CardContent>
+              </>
+            ) : (
+              <div className="min-h-0 flex-1 px-3 sm:px-6">
+                <div className="h-full min-h-0 rounded-lg border border-border/50 bg-background p-3">
+                  {activeContextTab?.kind === "literature" && activeContextTab.pdfUrl ? (
+                    <iframe
+                      src={activeContextTab.pdfUrl}
+                      title={activeContextTab.title}
+                      className="h-full min-h-0 w-full rounded-md border"
+                    />
+                  ) : activeContextTab?.kind === "protocol" ? (
+                    <div className="h-full min-h-0 overflow-y-auto rounded-md border bg-muted/20 p-3 text-xs text-foreground">
+                      {activeContextTab.content ? (
+                        <div dangerouslySetInnerHTML={{ __html: activeContextTab.content }} />
+                      ) : (
+                        <p className="text-muted-foreground">No protocol content available.</p>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="h-full min-h-0 overflow-y-auto rounded-md border bg-muted/20 p-3 text-xs text-foreground">
+                      <p>{activeContextTab?.abstract || "No PDF available for this literature item."}</p>
+                    </div>
+                  )}
+                </div>
               </div>
-
-              {/* Approval bar sits at the bottom inside the content column */}
-              <ProtocolChangeApprovalBar
-                savedContent={savedContent}
-                draftContent={draftContent}
-                protocolId={protocol.id}
-                currentVersion={currentVersion}
-                documentTitle={protocol.name || null}
-                onAccept={handleAccept}
-                onReject={handleReject}
-                extraDirty={templateMetaDirty}
-              />
-            </CardContent>
+            )}
           </div>
         </div>
       </Card>

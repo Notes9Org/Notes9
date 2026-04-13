@@ -151,6 +151,21 @@ export function ProtocolEditor({
               <div className="flex shrink-0 flex-col gap-2 border-b border-border/70 px-3 py-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between sm:gap-2">
                 <Label className="text-foreground">Protocol body</Label>
                 <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
+                  <div className="flex items-center gap-2 rounded-md border border-border/60 bg-muted/30 px-2 py-1">
+                    <Label
+                      htmlFor="protocol-active-view"
+                      className="text-xs font-medium text-muted-foreground"
+                    >
+                      Active
+                    </Label>
+                    <Switch
+                      id="protocol-active-view"
+                      checked={isActiveView}
+                      disabled={isSavingActive}
+                      onCheckedChange={handleActiveToggleView}
+                      aria-label={isActiveView ? "Deactivate protocol" : "Activate protocol"}
+                    />
+                  </div>
                   <Button
                     type="button"
                     variant="ghost"
@@ -207,25 +222,6 @@ export function ProtocolEditor({
                 />
               </div>
             </div>
-
-            <div className="flex shrink-0 flex-col gap-3 rounded-lg border border-border bg-muted/20 p-4 md:flex-row md:items-center md:justify-between">
-              <div className="space-y-0.5">
-                <Label htmlFor="protocol-active-view" className="text-sm font-medium text-foreground">
-                  Active protocol
-                </Label>
-                <p className="text-xs text-muted-foreground">
-                  Active protocols can be linked to experiments. You can change this here or in
-                  Design Mode.
-                </p>
-              </div>
-              <Switch
-                id="protocol-active-view"
-                checked={isActiveView}
-                disabled={isSavingActive}
-                onCheckedChange={handleActiveToggleView}
-                aria-label={isActiveView ? "Deactivate protocol" : "Activate protocol"}
-              />
-            </div>
           </CardContent>
         </Card>
       </div>
@@ -237,7 +233,7 @@ export function ProtocolEditor({
             <AlertDialogDescription>
               The protocol document can&apos;t be edited on this page. Switch to Design Mode to
               change the body. Version and category are edited there too (metadata is also on the
-              Details tab). You can toggle Active / inactive below without Design Mode.
+              Details tab). You can toggle Active / inactive in the header without Design Mode.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
