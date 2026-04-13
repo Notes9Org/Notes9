@@ -540,6 +540,13 @@ function SidebarMenuButton({
     return button
   }
 
+  // Avoid mounting tooltip wrappers unless they can actually render.
+  // This prevents nested trigger compositions (e.g. dropdown + tooltip + asChild)
+  // from entering update loops on non-collapsed or mobile sidebar states.
+  if (state !== 'collapsed' || isMobile) {
+    return button
+  }
+
   if (typeof tooltip === 'string') {
     tooltip = {
       children: tooltip,
@@ -552,7 +559,6 @@ function SidebarMenuButton({
       <TooltipContent
         side="right"
         align="center"
-        hidden={state !== 'collapsed' || isMobile}
         {...tooltip}
       />
     </Tooltip>

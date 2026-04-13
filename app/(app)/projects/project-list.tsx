@@ -7,7 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Users, Eye, Grid3x3, List, Plus, FlaskConical } from 'lucide-react'
+import { Users, ArrowUpRight, Grid3x3, List, Plus, FlaskConical } from 'lucide-react'
 import {
   FILTER_ALL,
   ResourceFilterRow,
@@ -292,7 +292,7 @@ export function ProjectList({ projects, viewMode: controlledView, setViewMode: s
                 </div>
                 <Button variant="outline" size="sm" className="w-full mt-auto shrink-0" asChild>
                   <Link href={`/projects/${project.id}`}>
-                    <Eye className="h-4 w-4 mr-2" />
+                    <ArrowUpRight className="h-4 w-4 mr-2" />
                     <span className="truncate">View Project</span>
                   </Link>
                 </Button>
@@ -392,7 +392,7 @@ export function ProjectList({ projects, viewMode: controlledView, setViewMode: s
                       <TableCell className="text-right">
                         <Button variant="ghost" size="sm" asChild>
                           <Link href={`/projects/${project.id}`}>
-                            <Eye className="h-4 w-4" />
+                            <ArrowUpRight className="h-4 w-4" />
                           </Link>
                         </Button>
                       </TableCell>

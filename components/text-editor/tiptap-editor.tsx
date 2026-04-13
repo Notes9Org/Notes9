@@ -130,6 +130,7 @@ import {
 } from "@/components/ui/dialog"
 import { ChemicalFormula, formatChemicalFormula } from "./extensions/chemical-formula"
 import { ChemistryHighlight } from "./extensions/chemistry-highlight"
+import { RagHighlight } from "./extensions/rag-highlight"
 import { SimpleShape, type SimpleShapeVariant } from "./extensions/simple-shape"
 import { SpreadsheetEmbed } from "./extensions/spreadsheet-embed"
 // @ts-ignore - CSS import for KaTeX math rendering
@@ -1558,6 +1559,7 @@ export function TiptapEditor({
       Superscript,
       ChemicalFormula,
       ChemistryHighlight,
+      RagHighlight,
       SimpleShape,
       SpreadsheetEmbed,
       Alignment,

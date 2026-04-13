@@ -1,6 +1,6 @@
 import type { ReactNode } from "react"
 import Link from "next/link"
-import { BookOpen, ClipboardList, FlaskConical, ArrowRight } from "lucide-react"
+import { BookOpen, ClipboardList, FlaskConical, ArrowRight, ArrowUpRight } from "lucide-react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -44,16 +44,21 @@ function SectionCard({
   const isEmpty = count === 0
 
   return (
-    <Card className="flex flex-col h-full min-h-[220px]">
-      <CardHeader className="pb-2">
-        <div className="flex items-start justify-between gap-2">
-          <div className="flex items-center gap-2 min-w-0">
-            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border bg-muted/50">
-              <Icon className="h-4 w-4 text-muted-foreground" />
+    <Card className="h-full min-h-[220px] gap-0 py-2.5">
+      <CardHeader className="pb-0 pt-2">
+        <div className="flex items-start justify-between gap-1.5">
+          <div className="flex min-w-0 flex-1 items-start gap-1.5">
+            <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border bg-muted/50">
+              <Icon className="h-3.5 w-3.5 text-muted-foreground" />
             </div>
-            <div className="min-w-0">
-              <CardTitle className="text-base font-semibold leading-tight">{title}</CardTitle>
-              <CardDescription className="text-xs mt-0.5 line-clamp-2">{description}</CardDescription>
+            {/* Fixed block so the first list row lines up across Literature / Protocols / Experiments */}
+            <div className="min-h-[4.5rem] min-w-0 flex-1">
+              <CardTitle className="text-base font-semibold leading-tight line-clamp-2">
+                {title}
+              </CardTitle>
+              <CardDescription className="mt-0 text-xs leading-tight line-clamp-2">
+                {description}
+              </CardDescription>
             </div>
           </div>
           <Badge variant={isEmpty ? "secondary" : "default"} className="shrink-0 tabular-nums">
@@ -61,7 +66,7 @@ function SectionCard({
           </Badge>
         </div>
       </CardHeader>
-      <CardContent className="flex flex-col flex-1 gap-3 pt-0">
+      <CardContent className="flex flex-1 flex-col gap-2 pt-0">
         {isEmpty ? (
           <div className="flex flex-1 flex-col justify-center rounded-lg border border-dashed bg-muted/20 px-3 py-4 text-center">
             <p className="text-sm font-medium text-foreground">{emptyTitle}</p>
@@ -98,14 +103,14 @@ export function ProjectWorkspace({
   experimentsCount,
 }: ProjectWorkspaceProps) {
   return (
-    <div className="space-y-3">
+    <div className="space-y-2">
       <div>
-        <h2 className="text-lg font-semibold tracking-tight">Project workspace</h2>
-        <p className="text-sm text-muted-foreground mt-0.5">
+        <h2 className="text-lg font-semibold leading-tight tracking-tight">Project workspace</h2>
+        <p className="mt-0 text-sm leading-snug text-muted-foreground">
           Jump into literature, protocols, or experiments. Lab notes live under each experiment.
         </p>
       </div>
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         <SectionCard
           title="Literature & search"
           description="References and discovery linked to this project"
@@ -115,16 +120,30 @@ export function ProjectWorkspace({
           emptyBody="Search literature and save papers to this project from your repository."
           primaryCta={{
             label: "Open literature",
-            href: `/literature-reviews?project=${projectId}`,
+            href: `/literature-reviews?project=${projectId}&tab=repo`,
+          }}
+          secondaryCta={{
+            label: "Find",
+            href: `/literature-reviews?project=${projectId}&tab=search`,
           }}
         >
           {literature.slice(0, 5).map((row) => (
             <li key={row.id}>
               <Link
-                href={`/literature-reviews/${row.id}?project=${projectId}`}
-                className="line-clamp-2 text-foreground hover:text-primary hover:underline block"
+                href={`/literature-reviews?project=${projectId}&tab=repo`}
+                className="group flex items-start gap-3 rounded-md px-1 py-1.5 text-sm transition-colors hover:bg-muted/40"
               >
-                {row.title || "Untitled"}
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-foreground group-hover:text-primary">
+                    {row.title || "Untitled"}
+                  </span>
+                  {row.status ? (
+                    <span className="block truncate text-xs text-muted-foreground">
+                      {row.status.replace(/_/g, " ")}
+                    </span>
+                  ) : null}
+                </span>
+                <ArrowUpRight className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground group-hover:text-primary" />
               </Link>
             </li>
           ))}
@@ -137,18 +156,32 @@ export function ProjectWorkspace({
           count={protocolCount}
           emptyTitle="No protocols linked yet"
           emptyBody="Link from an experiment (Protocol & Assays), from a lab note, or set project/experiment on the protocol. You can also browse the library here."
-          primaryCta={{ label: "Browse protocols", href: `/protocols?project=${projectId}` }}
+          primaryCta={{
+            label: "New protocol",
+            href: `/protocols/new?project=${projectId}`,
+          }}
+          secondaryCta={{
+            label: "Browse protocols",
+            href: `/protocols?project=${projectId}`,
+          }}
         >
           {protocols.slice(0, 5).map((row) => (
             <li key={row.id}>
               <Link
                 href={`/protocols/${row.id}?project=${projectId}`}
-                className="line-clamp-2 text-foreground hover:text-primary hover:underline block"
+                className="group flex items-start gap-3 rounded-md px-1 py-1.5 text-sm transition-colors hover:bg-muted/40"
               >
-                {row.name}
-                {row.version ? (
-                  <span className="text-muted-foreground font-normal"> · v{row.version}</span>
-                ) : null}
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-foreground group-hover:text-primary">
+                    {row.name || "Untitled"}
+                  </span>
+                  {row.version ? (
+                    <span className="block truncate text-xs text-muted-foreground">
+                      Version {row.version}
+                    </span>
+                  ) : null}
+                </span>
+                <ArrowUpRight className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground group-hover:text-primary" />
               </Link>
             </li>
           ))}
@@ -174,9 +207,14 @@ export function ProjectWorkspace({
             <li key={row.id}>
               <Link
                 href={`/experiments/${row.id}?project=${projectId}`}
-                className="line-clamp-2 text-foreground hover:text-primary hover:underline block"
+                className="group flex items-start gap-3 rounded-md px-1 py-1.5 text-sm transition-colors hover:bg-muted/40"
               >
-                {row.name || "Untitled"}
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-foreground group-hover:text-primary">
+                    {row.name || "Untitled"}
+                  </span>
+                </span>
+                <ArrowUpRight className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground group-hover:text-primary" />
               </Link>
             </li>
           ))}

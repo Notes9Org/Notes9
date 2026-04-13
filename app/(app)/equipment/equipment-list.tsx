@@ -13,7 +13,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
-import { Microscope, MapPin, Eye, Grid3x3, List } from 'lucide-react'
+import { Microscope, MapPin, ArrowUpRight, Grid3x3, List } from 'lucide-react'
 import Link from 'next/link'
 
 interface Equipment {
@@ -134,7 +134,7 @@ export function EquipmentList({ equipment, viewMode: controlledView, setViewMode
                 </div>
                 <Button variant="outline" size="sm" className="w-full mt-auto shrink-0" asChild>
                   <Link href={`/equipment/${item.id}`}>
-                    <Eye className="h-4 w-4 mr-2" />
+                    <ArrowUpRight className="h-4 w-4 mr-2" />
                     <span className="truncate">View Details</span>
                   </Link>
                 </Button>
@@ -206,7 +206,7 @@ export function EquipmentList({ equipment, viewMode: controlledView, setViewMode
                       <TableCell className="text-right">
                         <Button variant="ghost" size="sm" asChild>
                           <Link href={`/equipment/${item.id}`}>
-                            <Eye className="h-4 w-4" />
+                            <ArrowUpRight className="h-4 w-4" />
                           </Link>
                         </Button>
                       </TableCell>

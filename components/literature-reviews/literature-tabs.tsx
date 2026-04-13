@@ -52,6 +52,7 @@ interface LiteratureTabsProps {
   experiments: { id: string; name: string; project_id: string }[]
   /** Deep link from `/literature-reviews?project=…` — opens My Repository filtered to this project. */
   initialProjectId?: string | null
+  initialTab?: "search" | "staging" | "repo"
 }
 
 export function LiteratureTabs({
@@ -60,6 +61,7 @@ export function LiteratureTabs({
   projects,
   experiments,
   initialProjectId = null,
+  initialTab = "search",
 }: LiteratureTabsProps) {
   const router = useRouter()
 
@@ -335,7 +337,7 @@ export function LiteratureTabs({
     }
   }
 
-  const literatureDefaultTab = "search"
+  const literatureDefaultTab = initialTab
 
   return (
     <Tabs defaultValue={literatureDefaultTab} className="w-full">

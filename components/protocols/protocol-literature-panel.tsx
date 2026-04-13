@@ -32,6 +32,7 @@ import {
 } from "lucide-react"
 import Link from "next/link"
 import { cn } from "@/lib/utils"
+import { ClipboardInfoIcon } from "@/components/ui/clipboard-info-icon"
 
 /** Drag payload MIME — same string used in Protocol AI drop targets. */
 export const LITERATURE_PAPER_DRAG_MIME = "application/literature-paper" as const
@@ -46,6 +47,7 @@ export interface LiteraturePaperItem {
 
 interface ProjectItem { id: string; name: string }
 interface ExperimentItem { id: string; name: string; project_id: string }
+interface ProtocolContextItem { id: string; name: string; content: string; version: string | null }
 
 interface ProtocolLiteraturePanelProps {
   projectId: string | null
@@ -71,6 +73,10 @@ interface ProtocolLiteraturePanelProps {
   showFilters?: boolean
   /** Emitted when the internal filters change (only when showFilters=true). */
   onContextChange?: (projectId: string | null, experimentId: string | null) => void
+  /** Existing protocols that can be attached as AI context. */
+  protocolCandidates?: ProtocolContextItem[]
+  /** Add selected protocol(s) to AI context. */
+  onAddProtocols?: (protocols: ProtocolContextItem[]) => void
 }
 
 export function ProtocolLiteraturePanel({
@@ -84,6 +90,8 @@ export function ProtocolLiteraturePanel({
   onPapersChange,
   showFilters = false,
   onContextChange,
+  protocolCandidates = [],
+  onAddProtocols,
 }: ProtocolLiteraturePanelProps) {
   const [papers, setPapers] = useState<LiteraturePaperItem[]>([])
   const [isLoading, setIsLoading] = useState(false)
@@ -94,7 +102,15 @@ export function ProtocolLiteraturePanel({
   const [filterExperiments, setFilterExperiments] = useState<ExperimentItem[]>([])
   const [internalProjectId, setInternalProjectId] = useState<string>("")
   const [internalExperimentId, setInternalExperimentId] = useState<string>("")
+  const [internalProtocolFilterId, setInternalProtocolFilterId] = useState<string>("")
   const [isLoadingFilterExperiments, setIsLoadingFilterExperiments] = useState(false)
+
+  // Keep internal selector state aligned when parent context is provided.
+  useEffect(() => {
+    if (!showFilters) return
+    setInternalProjectId(projectIdProp ?? "")
+    setInternalExperimentId(experimentIdProp ?? "")
+  }, [showFilters, projectIdProp, experimentIdProp])
 
   // Resolved IDs: prefer external props, fall back to internal filter
   const projectId = showFilters ? (internalProjectId || null) : projectIdProp
@@ -227,7 +243,7 @@ export function ProtocolLiteraturePanel({
             setInternalExperimentId("")
           }}
         >
-          <SelectTrigger className="h-6 text-xs flex-1">
+          <SelectTrigger className="h-6 w-full min-w-0 flex-1 text-xs">
             <SelectValue placeholder="Select project…" />
           </SelectTrigger>
           <SelectContent>
@@ -245,7 +261,7 @@ export function ProtocolLiteraturePanel({
           onValueChange={(v) => setInternalExperimentId(v === "_none_" ? "" : v)}
           disabled={!internalProjectId || isLoadingFilterExperiments}
         >
-          <SelectTrigger className="h-6 text-xs flex-1">
+          <SelectTrigger className="h-6 w-full min-w-0 flex-1 text-xs">
             <SelectValue placeholder={
               !internalProjectId ? "Select project first" :
               isLoadingFilterExperiments ? "Loading…" : "Select experiment…"
@@ -259,6 +275,43 @@ export function ProtocolLiteraturePanel({
           </SelectContent>
         </Select>
       </div>
+      {aiMode && (
+        <div className="flex items-center gap-1.5">
+          <ClipboardInfoIcon className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+          <Select
+            value={internalProtocolFilterId || "_none_"}
+            onValueChange={(v) => {
+              if (v === "_none_") {
+                setInternalProtocolFilterId("")
+                return
+              }
+              setInternalProtocolFilterId(v)
+              const picked = protocolCandidates.find((p) => p.id === v)
+              if (picked) onAddProtocols?.([picked])
+            }}
+          >
+            <SelectTrigger className="h-6 w-full min-w-0 flex-1 text-xs">
+              <SelectValue
+                placeholder={
+                  protocolCandidates.length === 0
+                    ? "No protocols available"
+                    : "Add existing Protocols"
+                }
+              />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="_none_">Add existing Protocols</SelectItem>
+              {protocolCandidates.length === 0 ? (
+                <SelectItem value="_empty_" disabled>No protocols available</SelectItem>
+              ) : (
+                protocolCandidates.map((p) => (
+                  <SelectItem key={p.id} value={p.id}>{p.name || "Untitled protocol"}</SelectItem>
+                ))
+              )}
+            </SelectContent>
+          </Select>
+        </div>
+      )}
     </div>
   )
 

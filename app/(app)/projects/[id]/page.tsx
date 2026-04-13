@@ -3,7 +3,6 @@ import { createClient } from "@/lib/supabase/server"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { Progress } from "@/components/ui/progress"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { SetPageBreadcrumb } from "@/components/layout/breadcrumb-context"
@@ -216,34 +215,6 @@ export default async function ProjectDetailPage({
             />
 
             <div className="grid gap-4 grid-cols-1 md:grid-cols-2">
-              <Card>
-                <CardHeader>
-                  <CardTitle>Project Progress</CardTitle>
-                  <CardDescription>Overall completion status</CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between text-sm">
-                      <span>Total Progress</span>
-                      <span className="font-medium">75%</span>
-                    </div>
-                    <Progress value={75} />
-                  </div>
-                  <div className="grid grid-cols-2 gap-3 sm:gap-4 text-sm">
-                    <div>
-                      <p className="text-muted-foreground">Total Experiments</p>
-                      <p className="text-2xl font-bold">{project.experiments?.length || 0}</p>
-                    </div>
-                    <div>
-                      <p className="text-muted-foreground">Completed</p>
-                      <p className="text-2xl font-bold">
-                        {project.experiments?.filter((e: any) => e.status === "completed").length || 0}
-                      </p>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-
               <Card>
                 <CardHeader>
                   <CardTitle>Project Details</CardTitle>

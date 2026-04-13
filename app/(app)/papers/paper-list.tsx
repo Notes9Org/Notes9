@@ -7,7 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { FileText, Calendar, Grid3x3, List, Eye } from "lucide-react"
+import { FileText, Calendar, Grid3x3, List, ArrowUpRight } from "lucide-react"
 
 export interface PaperListItem {
   id: string
@@ -113,12 +113,12 @@ export function PaperList({
           )}
           {onSelectPaper ? (
             <div className="mt-auto flex w-full shrink-0 items-center justify-center gap-2 rounded-md border border-input bg-background px-3 py-2 text-xs font-medium text-foreground">
-              <Eye className="h-3.5 w-3.5" />
+              <ArrowUpRight className="h-3.5 w-3.5" />
               Open in editor
             </div>
           ) : (
             <div className="mt-auto flex items-center gap-1 text-xs text-muted-foreground">
-              <Eye className="h-3.5 w-3.5" />
+              <ArrowUpRight className="h-3.5 w-3.5" />
               Open full page
             </div>
           )}

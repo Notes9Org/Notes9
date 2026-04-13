@@ -10,7 +10,7 @@ import {
   type ChangeEvent,
   type DragEvent,
 } from 'react';
-import { usePathname, useRouter } from 'next/navigation';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useChat } from '@ai-sdk/react';
 import { DefaultChatTransport } from 'ai';
 import { Button } from '@/components/ui/button';
@@ -49,6 +49,8 @@ import { cn } from '@/lib/utils';
 import {
   formatNotes9AssistantMarkdown,
   isPersistedChatMessageId,
+  parseNotes9AssistantStoredContent,
+  notes9PlainTextForApiHistory,
 } from '@/lib/notes9-chat-format';
 import { formatLiteratureAssistantMarkdown } from '@/lib/literature-agent-chat-format';
 import { previewFromLiteratureSseTokenBuffer } from '@/lib/literature-stream-preview';
@@ -85,6 +87,7 @@ import {
 import { usePaperAI } from '@/contexts/paper-ai-context';
 import { PaperAIPanel } from '@/components/text-editor/paper-ai-panel';
 import { FileDropzone } from '@/components/ui/file-dropzone';
+import { ClipboardInfoIcon } from '@/components/ui/clipboard-info-icon';
 import type { CatalystAgentMode, LiteratureDragPayload } from '@/lib/catalyst-agent-types';
 import {
   LITERATURE_DRAG_MIME,
@@ -95,6 +98,10 @@ import { useLiteratureAgentStream } from '@/hooks/use-literature-agent-stream';
 import type { LiteratureAgentDonePayload } from '@/lib/literature-agent-types';
 import { ClarifyCard } from '@/components/clarify-card';
 import { LiteratureSourcesDropdown } from '@/components/literature-sources-dropdown';
+import {
+  AgentCitationsPanel,
+  groundingResourceToPanelItem,
+} from '@/components/catalyst/agent-citations-panel';
 import {
   LiteratureAgentThinkingPanel,
   LiteratureStreamProgressHint,
@@ -163,6 +170,16 @@ function literatureHistoryTurnContent(msg: {
   return parseLiteratureAssistantStoredContent(raw).bodyMarkdown;
 }
 
+/** Notes9 agent: assistant turns omit §§NOTES9_GROUNDING§§ payload from API history. */
+function notes9HistoryTurnContent(msg: {
+  role: string;
+  content?: unknown;
+  parts?: Array<{ type?: string; text?: string }>;
+}): string {
+  const raw = getPlainTextFromMessage(msg);
+  return notes9PlainTextForApiHistory(raw, msg.role);
+}
+
 const MAX_FILE_SIZE = 10 * 1024 * 1024;
 const ALLOWED_TYPES = [
   'image/jpeg',
@@ -193,6 +210,7 @@ interface RightSidebarProps {
 export function RightSidebar({ onClose }: RightSidebarProps = {}) {
   const router = useRouter();
   const pathname = usePathname();
+  const searchParams = useSearchParams();
   const paperAI = usePaperAI();
   const [input, setInput] = useState('');
   const [agentMode, setAgentMode] = useState<CatalystAgentMode>('general');
@@ -327,6 +345,9 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
   const literatureAgentStream = useLiteratureAgentStream();
   const contextMentionCandidates = useLiteratureMentionCandidates();
   const isLiteratureRoute = isLiteratureRoutePath(pathname ?? null);
+  const isProtocolDesignRoute =
+    Boolean((pathname ?? '').startsWith('/protocols/')) &&
+    searchParams.get('design') === '1';
   const effectiveMentionCandidates =
     contextMentionCandidates.length > 0 ? contextMentionCandidates : fallbackMentionCandidates;
 
@@ -552,11 +573,18 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
 
   useEffect(() => {
     const onLit = isLiteratureRoutePath(pathname ?? null);
+    const onProtocolDesign =
+      Boolean((pathname ?? '').startsWith('/protocols/')) &&
+      searchParams.get('design') === '1';
     if (onLit) {
       if (!suppressLiteratureAutoModeRef.current) {
         setAgentMode('literature');
       }
       wasOnLiteratureRouteRef.current = true;
+      return;
+    }
+    if (onProtocolDesign) {
+      setAgentMode('protocol');
       return;
     }
     wasOnLiteratureRouteRef.current = false;
@@ -566,9 +594,9 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
     literatureEditableRef.current?.replaceChildren();
     setLiteraturePlainLen(0);
     setAgentMode((m) =>
-      m === 'literature' ? savedModeOutsideLiteratureRef.current : m
+      m === 'literature' || m === 'protocol' ? savedModeOutsideLiteratureRef.current : m
     );
-  }, [pathname]);
+  }, [pathname, searchParams]);
 
   const applyLiteratureMentionFromMenu = useCallback(
     (pick: { id: string; title: string }) => {
@@ -682,9 +710,20 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
     suppressLiteratureAutoModeRef.current = false;
     setAgentMode('literature');
     if (!isLiteratureRoutePath(pathname ?? null)) {
+      window.dispatchEvent(new Event("notes9:tour-open-ai-sidebar"));
       router.push('/literature-reviews');
     }
   }, [pathname, router]);
+
+  const goToProtocolAgent = useCallback(() => {
+    suppressLiteratureAutoModeRef.current = true;
+    if (isProtocolDesignRoute) {
+      setAgentMode('protocol');
+      return;
+    }
+    toast.message('Select a protocol, then click Design to open Protocol.');
+    router.push('/protocols?selectForDesign=1');
+  }, [isProtocolDesignRoute, router]);
 
   const MAX_PAST_CHATS = 5;
   const pastChatsToShow = showAllPastChats ? sessions : sessions.slice(0, MAX_PAST_CHATS);
@@ -1041,7 +1080,7 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
 
       const history = messages.map((m) => ({
         role: m.role,
-        content: getPlainTextFromMessage(m),
+        content: notes9HistoryTurnContent(m),
       }));
 
       setNotes9Loading(true);
@@ -1116,7 +1155,9 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
         content:
           agentMode === 'literature'
             ? literatureHistoryTurnContent(m)
-            : getPlainTextFromMessage(m),
+            : agentMode === 'notes9'
+              ? notes9HistoryTurnContent(m)
+              : getPlainTextFromMessage(m),
       }));
 
       setMessages((currentMessages) => {
@@ -1343,7 +1384,7 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
       const query = getPlainTextFromMessage(lastUserMessage);
       const history = messages.slice(0, lastAssistantIndex - 1).map((m) => ({
         role: m.role,
-        content: getPlainTextFromMessage(m),
+        content: notes9HistoryTurnContent(m),
       }));
 
       const { data: { session } } = await supabase.auth.getSession();
@@ -1625,13 +1666,13 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
       agentMode === 'literature' && isLiteratureRoute ? (
         <Popover open={mentionOpen} onOpenChange={setMentionOpen}>
           <PopoverAnchor asChild>
-            <div className="w-full min-h-[52px] rounded-md border border-transparent bg-transparent px-1 ring-offset-background focus-within:ring-1 focus-within:ring-ring/50">
+            <div className="w-full min-h-[68px] bg-transparent px-1">
               <div
                 ref={literatureEditableRef}
                 contentEditable
                 suppressContentEditableWarning
                 data-placeholder={`Ask about papers… Use @ to link papers (max ${MAX_LITERATURE_TAGS}), or drop rows here`}
-                className="outline-none empty:before:pointer-events-none empty:before:content-[attr(data-placeholder)] empty:before:text-muted-foreground min-h-[52px] w-full px-3 py-2.5 text-sm max-h-[300px] overflow-y-auto scrollbar-hide"
+                className="outline-none empty:before:pointer-events-none empty:before:content-[attr(data-placeholder)] empty:before:text-muted-foreground min-h-[68px] w-full px-3 py-2.5 text-sm max-h-[300px] overflow-y-auto scrollbar-hide"
                 onBeforeInput={(e) => {
                   const ie = e.nativeEvent as InputEvent;
                   if (!ie.inputType?.startsWith('insert')) return;
@@ -1741,7 +1782,7 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
           onNonFileDrop={handleNonFileDrop}
           accept={ALLOWED_TYPES}
           description="Drop files or literature papers to attach"
-          activeClassName="ring-2 ring-primary border-primary bg-primary/5"
+          activeClassName="ring-2 ring-primary border-primary bg-primary/5 min-h-[132px]"
         >
           {literatureComposer ?? (
             <textarea
@@ -1750,7 +1791,7 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
               onChange={handleTextareaChange}
               onKeyDown={handleKeyDown}
               placeholder="Plan, @ for context, / for commands"
-              className="w-full min-h-[52px] resize-none bg-transparent px-4 py-2.5 text-sm placeholder:text-muted-foreground/60 focus:outline-none scrollbar-hide"
+              className="w-full min-h-[68px] resize-none bg-transparent px-4 py-2.5 text-sm placeholder:text-muted-foreground/60 focus:outline-none scrollbar-hide"
               disabled={isLoading || contextLoading}
               autoFocus
               maxLength={MAX_CHAT_CHARS}
@@ -1768,6 +1809,11 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
                       <BookOpen className="size-3.5" />
                       Literature
                     </>
+                  ) : agentMode === 'protocol' ? (
+                    <>
+                      <ClipboardInfoIcon className="size-3.5" />
+                      Protocol
+                    </>
                   ) : agentMode === 'notes9' ? (
                     <>
                       <NotebookPen className="size-3.5" /> Notes9
@@ -1781,6 +1827,14 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="start" className="w-[200px]">
+                <DropdownMenuItem
+                  onClick={() => {
+                    goToProtocolAgent();
+                  }}
+                  className="gap-2 text-xs"
+                >
+                  <ClipboardInfoIcon className="size-3.5" /> Protocol
+                </DropdownMenuItem>
                 <DropdownMenuItem
                   onClick={() => {
                     goToLiteratureAgent();
@@ -1820,7 +1874,16 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
 
             {agentMode === 'general' && (
               <div className="ml-1 flex shrink-0 items-center gap-1.5 whitespace-nowrap border-l border-border/50 pl-2">
-                <Globe className="size-3.5 shrink-0 text-muted-foreground" aria-hidden />
+                <TooltipProvider delayDuration={150}>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Globe className="size-3.5 shrink-0 text-muted-foreground" aria-hidden />
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <p>Web Search</p>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
                 <Switch
                   checked={webSearchEnabled}
                   onCheckedChange={setWebSearchEnabled}
@@ -1998,6 +2061,12 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
     }
     return s;
   }
+
+  const showLiteratureEmptyState = agentMode === 'literature' && isLiteratureRoute;
+  const emptyStateSubheading = showLiteratureEmptyState ? 'For Literature' : null;
+  const emptyStateDescription = showLiteratureEmptyState
+    ? 'Ask about papers, compare findings, and cross-check cited source passages. Use @ to link papers or drop literature rows into the composer.'
+    : 'Your intelligent research assistant. Ask anything about your lab notes, experiments, or protocols.';
 
   return (
     <div className={cn(
@@ -2252,8 +2321,13 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
                     <h2 className="text-lg font-bold tracking-tight bg-gradient-to-r from-orange-500 to-pink-600 bg-clip-text text-transparent">
                       Catalyst AI
                     </h2>
+                    {emptyStateSubheading ? (
+                      <h3 className="text-sm font-semibold tracking-tight bg-gradient-to-r from-orange-500 to-pink-600 bg-clip-text text-transparent">
+                        {emptyStateSubheading}
+                      </h3>
+                    ) : null}
                     <p className="text-muted-foreground text-center max-w-xs text-sm">
-                      Your intelligent research assistant. Ask anything about your lab notes, experiments, or protocols.
+                      {emptyStateDescription}
                     </p>
                   </div>
 
@@ -2270,7 +2344,7 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
                   {/* Messages Area — native scroll so we can detect position (ScrollArea viewport is not exposed) */}
                   <div
                     ref={chatScrollRef}
-                    className="flex-1 min-h-0 basis-0 overflow-y-auto overflow-x-hidden overscroll-contain [scrollbar-gutter:stable]"
+                    className="flex-1 min-h-0 basis-0 overflow-y-auto overscroll-contain [scrollbar-gutter:stable]"
                     onScroll={onChatScroll}
                     role="log"
                     aria-label="Chat messages"
@@ -2282,12 +2356,26 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
                           message.role === 'assistant'
                             ? parseLiteratureAssistantStoredContent(rawContent)
                             : null;
-                        const content = literatureParsed
-                          ? literatureParsed.bodyMarkdown
-                          : rawContent;
-                        const literatureSources =
+                        const hasLitRefs = Boolean(
                           literatureParsed && literatureParsed.refs.length > 0
-                            ? literatureParsed.refs
+                        );
+                        const notes9Parsed =
+                          message.role === 'assistant' && !hasLitRefs
+                            ? parseNotes9AssistantStoredContent(
+                                literatureParsed?.bodyMarkdown ?? rawContent
+                              )
+                            : null;
+                        const content = hasLitRefs
+                          ? literatureParsed!.bodyMarkdown
+                          : notes9Parsed
+                            ? notes9Parsed.bodyMarkdown
+                            : rawContent;
+                        const literatureSources = hasLitRefs
+                          ? literatureParsed!.refs
+                          : null;
+                        const notes9Sources =
+                          notes9Parsed && notes9Parsed.resources.length > 0
+                            ? notes9Parsed.resources
                             : null;
                         const userLiteratureMarkdown =
                           message.role === 'user' &&
@@ -2329,7 +2417,7 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
                                 <>
                                   <div
                                     className={cn(
-                                      'text-sm leading-[1.45] break-words overflow-visible',
+                                      'text-sm leading-[1.45] break-words',
                                       message.role === 'user'
                                         ? 'whitespace-pre-wrap bg-primary/5 text-foreground px-4 py-2.5 rounded-2xl rounded-tr-sm'
                                         : 'min-w-0 text-foreground whitespace-normal'
@@ -2337,17 +2425,32 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
                                   >
                                     {message.role === 'user' ? (
                                       userLiteratureMarkdown ? (
-                                        <MarkdownRenderer content={content} className="text-sm text-foreground" />
+                                        <MarkdownRenderer
+                                          content={content}
+                                          className="text-sm text-foreground break-words [overflow-wrap:anywhere] [&_pre]:max-w-full [&_pre]:overflow-auto [&_pre]:whitespace-pre [&_code]:break-all"
+                                        />
                                       ) : (
                                         content
                                       )
                                     ) : (
-                                      <MarkdownRenderer content={content} className="text-sm text-foreground" />
+                                      <MarkdownRenderer
+                                        content={content}
+                                        className="text-sm text-foreground break-words [overflow-wrap:anywhere] [&_pre]:max-w-full [&_pre]:overflow-auto [&_pre]:whitespace-pre [&_code]:break-all"
+                                      />
                                     )}
                                   </div>
                                   {literatureSources && (
                                     <LiteratureSourcesDropdown
                                       refs={literatureSources}
+                                      className="mt-2 self-start"
+                                    />
+                                  )}
+                                  {notes9Sources && (
+                                    <AgentCitationsPanel
+                                      items={notes9Sources.map((c, i) =>
+                                        groundingResourceToPanelItem(c, i)
+                                      )}
+                                      triggerLabel="All citations"
                                       className="mt-2 self-start"
                                     />
                                   )}

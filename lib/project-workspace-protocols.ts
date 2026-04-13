@@ -14,6 +14,17 @@ export async function loadProjectWorkspaceProtocols(
 ): Promise<ProjectWorkspaceProtocol[]> {
   const map = new Map<string, ProjectWorkspaceProtocol>()
 
+  const coerceProtocolRow = (value: unknown): ProjectWorkspaceProtocol | null => {
+    if (!value || Array.isArray(value) || typeof value !== "object") return null
+    const row = value as Record<string, unknown>
+    if (typeof row.id !== "string" || typeof row.name !== "string") return null
+    return {
+      id: row.id,
+      name: row.name,
+      version: typeof row.version === "string" ? row.version : null,
+    }
+  }
+
   const addFromProtocolRow = (p: { id: string; name: string; version: string | null } | null) => {
     if (p?.id) map.set(p.id, { id: p.id, name: p.name, version: p.version ?? null })
   }
@@ -24,7 +35,7 @@ export async function loadProjectWorkspaceProtocols(
       .select("protocol:protocols(id, name, version)")
       .in("experiment_id", experimentIds)
     for (const row of epRows ?? []) {
-      addFromProtocolRow(row.protocol as ProjectWorkspaceProtocol | null)
+      addFromProtocolRow(coerceProtocolRow(row.protocol))
     }
   }
 
@@ -41,7 +52,7 @@ export async function loadProjectWorkspaceProtocols(
       .select("protocol:protocols(id, name, version)")
       .in("lab_note_id", noteIds)
     for (const row of lnpRows ?? []) {
-      addFromProtocolRow(row.protocol as ProjectWorkspaceProtocol | null)
+      addFromProtocolRow(coerceProtocolRow(row.protocol))
     }
   }
 
@@ -52,7 +63,6 @@ export async function loadProjectWorkspaceProtocols(
   const { data: directRows } = await supabase
     .from("protocols")
     .select("id, name, version")
-    .eq("is_active", true)
     .or(protocolOrParts.join(","))
 
   for (const p of directRows ?? []) {

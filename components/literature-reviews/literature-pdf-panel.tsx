@@ -20,6 +20,9 @@ interface LiteraturePdfPanelProps {
   pdfFileName?: string | null
   /** Direct Supabase/public URL for “Open” when `pdfUrl` is the authenticated viewer proxy. */
   openInNewTabFallbackUrl?: string | null
+  /** If set, the viewer will search for this text and temporarily highlight the match. */
+  highlightExcerpt?: string | null
+  highlightPageNumber?: number | null
 }
 
 export function LiteraturePdfPanel({
@@ -27,6 +30,8 @@ export function LiteraturePdfPanel({
   pdfUrl,
   pdfFileName,
   openInNewTabFallbackUrl,
+  highlightExcerpt,
+  highlightPageNumber,
 }: LiteraturePdfPanelProps) {
   const { toast } = useToast()
   const [annotations, setAnnotations] = useState<LiteraturePdfAnnotation[]>([])
@@ -67,6 +72,42 @@ export function LiteraturePdfPanel({
   useEffect(() => {
     loadAnnotations()
   }, [literatureId])
+
+  // Trigger excerpt highlight when the prop is set (e.g. from a reference click).
+  // Retries until the PDF viewer is loaded and the excerpt is found.
+  const highlightExcerptFiredRef = useRef<string | null>(null)
+  useEffect(() => {
+    if (!highlightExcerpt || loadingAnnotations) return
+    if (highlightExcerptFiredRef.current === highlightExcerpt) return
+
+    let cancelled = false
+    let attempt = 0
+    const maxAttempts = 12
+    const delays = [500, 800, 1200, 1500, 2000, 2500, 3000, 3500, 4000, 5000, 6000, 8000]
+
+    const tryHighlight = async () => {
+      if (cancelled || attempt >= maxAttempts) return
+      const handle = viewerRef.current
+      if (!handle) {
+        attempt++
+        setTimeout(tryHighlight, delays[Math.min(attempt, delays.length - 1)])
+        return
+      }
+      const found = await handle.highlightExcerpt(
+        highlightExcerpt,
+        highlightPageNumber ?? undefined,
+      )
+      if (!found && attempt < maxAttempts - 1) {
+        attempt++
+        setTimeout(tryHighlight, delays[Math.min(attempt, delays.length - 1)])
+      } else {
+        highlightExcerptFiredRef.current = highlightExcerpt
+      }
+    }
+
+    setTimeout(tryHighlight, delays[0])
+    return () => { cancelled = true }
+  }, [highlightExcerpt, highlightPageNumber, loadingAnnotations])
 
   const createAnnotation = async (payload: {
     type: "highlight" | "note" | "comment"

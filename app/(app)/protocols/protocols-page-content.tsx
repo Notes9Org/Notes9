@@ -5,7 +5,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import { useMediaQuery } from "@/hooks/use-media-query"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { Plus, FileText, Grid3x3, List } from "lucide-react"
+import { Plus, FileText, Grid3x3, List, PenBox, X } from "lucide-react"
 import Link from "next/link"
 import { ProtocolList } from "./protocol-list"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
@@ -57,6 +57,7 @@ export function ProtocolsPageContent({
   const pathname = usePathname()
   const searchParams = useSearchParams()
   const mainTab = searchParams.get("tab") === "templates" ? "templates" : "library"
+  const selectForDesign = searchParams.get("selectForDesign") === "1"
 
   const setMainTab = useCallback(
     (value: string) => {
@@ -148,6 +149,14 @@ export function ProtocolsPageContent({
           Standard Operating Procedures library
         </p>
         <div className="flex items-center gap-2 shrink-0 self-end sm:self-auto">
+          {projectContext ? (
+            <Button asChild variant="outline" size="sm" className="gap-2">
+              <Link href="/protocols">
+                <X className="h-4 w-4" />
+                Remove project filter
+              </Link>
+            </Button>
+          ) : null}
           {mainTab === "library" ? (
             <div className="inline-flex gap-1 rounded-lg border p-1">
               <Button
@@ -185,6 +194,23 @@ export function ProtocolsPageContent({
           </Button>
         </div>
       </div>
+
+      {selectForDesign ? (
+        <Card className="border-primary/30 bg-primary/5">
+          <CardContent className="flex flex-col gap-2 py-4 text-sm sm:flex-row sm:items-center sm:justify-between">
+            <div className="min-w-0">
+              <p className="font-medium text-foreground">Protocol works in design mode only.</p>
+              <p className="text-muted-foreground">
+                Select the protocol you want to edit, then click <span className="font-medium text-foreground">Design</span> to open it with Protocol.
+              </p>
+            </div>
+            <div className="flex shrink-0 items-center gap-2 text-xs text-muted-foreground">
+              <PenBox className="h-4 w-4" />
+              <span>Pick a protocol below</span>
+            </div>
+          </CardContent>
+        </Card>
+      ) : null}
 
       <Tabs value={mainTab} onValueChange={setMainTab} className="space-y-4">
         <TabsList className="h-9 w-fit">

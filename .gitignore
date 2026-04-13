@@ -46,6 +46,8 @@ next-env.d.ts
 # IDE
 .vscode/
 .idea/
+.cursor/
+.codex/
 *.sublime-project
 *.sublime-workspace
 

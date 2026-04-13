@@ -3,7 +3,7 @@ import { createClient } from "@/lib/supabase/server"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { SetPageBreadcrumb } from "@/components/layout/breadcrumb-context"
-import { FlaskConical, Calendar, User, FileText, ChevronDown, Plus } from 'lucide-react'
+import { FlaskConical, Calendar, User, FileText, ChevronDown, Plus, X } from 'lucide-react'
 import { cn } from "@/lib/utils"
 import { notFound } from 'next/navigation'
 import Link from 'next/link'
@@ -153,21 +153,31 @@ export default async function ExperimentDetailPage({
             </Badge>
           </div>
         </div>
-        <ExperimentActions
-          experiment={{
-            id: experimentData.id,
-            name: experimentData.name,
-            description: experimentData.description,
-            hypothesis: experimentData.hypothesis,
-            status: experimentData.status,
-            start_date: experimentData.start_date,
-            completion_date: experimentData.completion_date,
-            project_id: experimentData.project_id,
-            assigned_to: experimentData.assigned_to,
-          }}
-          projects={projects || []}
-          users={users || []}
-        />
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          {projectFromUrl ? (
+            <Button asChild variant="outline" size="sm" className="gap-2">
+              <Link href={`/experiments/${experiment.id}`}>
+                <X className="h-4 w-4" />
+                Remove project filter
+              </Link>
+            </Button>
+          ) : null}
+          <ExperimentActions
+            experiment={{
+              id: experimentData.id,
+              name: experimentData.name,
+              description: experimentData.description,
+              hypothesis: experimentData.hypothesis,
+              status: experimentData.status,
+              start_date: experimentData.start_date,
+              completion_date: experimentData.completion_date,
+              project_id: experimentData.project_id,
+              assigned_to: experimentData.assigned_to,
+            }}
+            projects={projects || []}
+            users={users || []}
+          />
+        </div>
       </div>
       <div className="flex min-h-0 flex-1 flex-col">
         <ExperimentTabs

@@ -6,7 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { NotebookPen, Grid3x3, List, Eye } from "lucide-react"
+import { NotebookPen, Grid3x3, List, ArrowUpRight } from "lucide-react"
 
 type LabNote = {
   id: string
@@ -159,7 +159,7 @@ export default function LabNotesList({
                   )}
                 </div>
                 <Button variant="outline" size="sm" className="w-full mt-auto shrink-0">
-                  <Eye className="h-4 w-4 mr-2" />
+                  <ArrowUpRight className="h-4 w-4 mr-2" />
                   <span className="truncate">View Details</span>
                 </Button>
               </CardContent>
@@ -223,7 +223,7 @@ export default function LabNotesList({
                           size="sm"
                           onClick={() => handleSelectNote(note)}
                         >
-                          <Eye className="h-4 w-4" />
+                          <ArrowUpRight className="h-4 w-4" />
                         </Button>
                       </TableCell>
                     </TableRow>

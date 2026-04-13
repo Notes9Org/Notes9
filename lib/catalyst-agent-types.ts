@@ -1,5 +1,5 @@
 /** Catalyst sidebar + full-page chat agent modes */
-export type CatalystAgentMode = 'general' | 'notes9' | 'literature';
+export type CatalystAgentMode = 'general' | 'notes9' | 'literature' | 'protocol';
 
 /** Literature agent sub-modes (paper comparison vs Biomni research design) */
 export type LiteratureSubMode = 'normal' | 'research_design';

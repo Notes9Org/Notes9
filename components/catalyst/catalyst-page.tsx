@@ -20,6 +20,7 @@ import { useAgentStream } from '@/hooks/use-agent-stream';
 import {
   formatNotes9AssistantMarkdown,
   isPersistedChatMessageId,
+  notes9PlainTextForApiHistory,
 } from '@/lib/notes9-chat-format';
 
 interface CatalystChatProps {
@@ -337,7 +338,7 @@ export function CatalystChat({ sessionId }: CatalystChatProps) {
 
       const history = messages.map((m) => ({
         role: m.role,
-        content: getMessageContent(m),
+        content: notes9PlainTextForApiHistory(getMessageContent(m), m.role),
       }));
 
       setNotes9Loading(true);
@@ -441,7 +442,7 @@ export function CatalystChat({ sessionId }: CatalystChatProps) {
 
       const history = messages.slice(0, messageIndex).map((m) => ({
         role: m.role,
-        content: getMessageContent(m),
+        content: notes9PlainTextForApiHistory(getMessageContent(m), m.role),
       }));
 
       setMessages((currentMessages) => {
@@ -568,7 +569,7 @@ export function CatalystChat({ sessionId }: CatalystChatProps) {
       const query = getMessageContent(lastUserMessage);
       const history = messages.slice(0, lastAssistantIndex - 1).map((m) => ({
         role: m.role,
-        content: getMessageContent(m),
+        content: notes9PlainTextForApiHistory(getMessageContent(m), m.role),
       }));
 
       const {

@@ -7,7 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { FlaskConical, User, Eye, Grid3x3, List, Plus } from 'lucide-react'
+import { FlaskConical, User, ArrowUpRight, Grid3x3, List, Plus, X } from 'lucide-react'
 import { HtmlContentTruncated } from '@/components/html-content'
 import {
   FILTER_ALL,
@@ -116,6 +116,14 @@ export function ExperimentsPageContent({
           Manage and track all experimental procedures
         </p>
         <div className="flex items-center gap-2 shrink-0">
+          {projectContext ? (
+            <Button asChild variant="outline" size="sm" className="gap-2">
+              <Link href="/experiments">
+                <X className="h-4 w-4" />
+                Remove project filter
+              </Link>
+            </Button>
+          ) : null}
           <div className="inline-flex gap-1 rounded-lg border p-1">
             <Button
               variant={viewMode === "grid" ? "default" : "ghost"}
@@ -346,7 +354,7 @@ export function ExperimentList({
                 </div>
                 <Button variant="outline" size="sm" className="w-full mt-auto shrink-0" asChild>
                   <Link href={experimentDetailHref(experiment.id, linkProjectId)}>
-                    <Eye className="h-4 w-4 mr-2" />
+                    <ArrowUpRight className="h-4 w-4 mr-2" />
                     <span className="truncate">View Details</span>
                   </Link>
                 </Button>
@@ -433,7 +441,7 @@ export function ExperimentList({
                       <TableCell className="text-right">
                         <Button variant="ghost" size="sm" asChild>
                           <Link href={experimentDetailHref(experiment.id, linkProjectId)}>
-                            <Eye className="h-4 w-4" />
+                            <ArrowUpRight className="h-4 w-4" />
                           </Link>
                         </Button>
                       </TableCell>

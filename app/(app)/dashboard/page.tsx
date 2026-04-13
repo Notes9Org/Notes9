@@ -17,7 +17,7 @@ import {
   Microscope,
   FileText,
   BookOpen,
-  Eye,
+  ArrowUpRight,
 } from "lucide-react";
 import { TodoPanel } from "./todo-panel";
 
@@ -252,7 +252,7 @@ export default async function DashboardPage() {
                       </Badge>
                       <Link href={`/experiments/${exp.id}`}>
                         <Button variant="ghost" size="icon" className="h-8 w-8">
-                          <Eye className="h-4 w-4" />
+                          <ArrowUpRight className="h-4 w-4" />
                           <span className="sr-only">View experiment</span>
                         </Button>
                       </Link>
@@ -312,7 +312,7 @@ export default async function DashboardPage() {
                         }
                       >
                         <Button variant="ghost" size="icon" className="h-8 w-8">
-                          <Eye className="h-4 w-4" />
+                          <ArrowUpRight className="h-4 w-4" />
                           <span className="sr-only">View note</span>
                         </Button>
                       </Link>

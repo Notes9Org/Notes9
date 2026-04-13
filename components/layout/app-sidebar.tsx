@@ -712,10 +712,9 @@ export function AppSidebar() {
                     <SidebarMenuButton
                       asChild
                       isActive={isActive}
-                      tooltip={isIconMode ? item.name : undefined}
                       className="group transition-all duration-150 hover:bg-[color:color-mix(in_oklab,var(--background)_78%,var(--primary)_22%)] hover:text-sidebar-foreground active:scale-[0.985] active:bg-[color:color-mix(in_oklab,var(--background)_70%,var(--primary)_30%)] dark:hover:bg-sidebar-accent dark:hover:text-sidebar-accent-foreground dark:active:scale-[0.985] dark:active:bg-sidebar-accent/90 data-[active=true]:bg-transparent data-[active=true]:text-sidebar-foreground"
                     >
-                      <Link href={item.href}>
+                      <Link href={item.href} title={isIconMode ? item.name : undefined}>
                         <Icon />
                         <span className={cn(isIconMode && "hidden")}>
                           <span className={cn("truncate", isActive && "font-semibold")}>{item.name}</span>
@@ -795,7 +794,6 @@ export function AppSidebar() {
                                   <SidebarMenuButton
                                     asChild
                                     isActive={mounted && pathname === `/projects/${project.id}`}
-                                    tooltip={project.name}
                                     className="group min-w-0 flex-1 gap-2 pl-0 transition-all duration-150 hover:bg-[color:color-mix(in_oklab,var(--background)_78%,var(--primary)_22%)] hover:text-sidebar-foreground active:scale-[0.985] active:bg-[color:color-mix(in_oklab,var(--background)_70%,var(--primary)_30%)] dark:hover:bg-sidebar-accent dark:hover:text-sidebar-accent-foreground dark:active:scale-[0.985] dark:active:bg-sidebar-accent/90 data-[active=true]:bg-transparent data-[active=true]:text-sidebar-foreground"
                                   >
                                     <Link

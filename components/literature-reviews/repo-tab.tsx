@@ -176,11 +176,16 @@ export function RepoTab({
   };
 
   useEffect(() => {
-    if (!initialProjectFilterId) return;
+    if (!initialProjectFilterId) {
+      if (!lockProjectFilter) {
+        setSelectedProjectId("all");
+      }
+      return;
+    }
     if (projects.some((p) => p.id === initialProjectFilterId)) {
       setSelectedProjectId(initialProjectFilterId);
     }
-  }, [initialProjectFilterId, projects]);
+  }, [initialProjectFilterId, lockProjectFilter, projects]);
 
   useEffect(() => {
     if (!lockProjectFilter || !initialProjectFilterId) return;

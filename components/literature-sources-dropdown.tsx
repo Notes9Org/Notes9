@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
-import { BookOpen, ChevronDown, ExternalLink } from 'lucide-react';
+import { BookOpen, ChevronDown, ExternalLink, MapPin } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
   Collapsible,
@@ -10,6 +10,7 @@ import {
   CollapsibleTrigger,
 } from '@/components/ui/collapsible';
 import { cn } from '@/lib/utils';
+import { buildHighlightUrl } from '@/lib/document-highlight';
 import type { PaperAnalyzerReference } from '@/lib/literature-agent-types';
 
 const SENTENCE_PREVIEW = 320;
@@ -27,15 +28,28 @@ function ReferenceBlock({ item: r }: { item: PaperAnalyzerReference }) {
   const id = r.literature_review_id?.trim();
   const title = r.title?.trim() || 'Untitled reference';
   const sentences = r.supporting_sentences?.filter(Boolean) ?? [];
+
+  // Build highlight link using the first supporting sentence
+  const highlightHref = id && sentences.length > 0
+    ? buildHighlightUrl({
+        sourceType: 'literature_review',
+        sourceId: id,
+        excerpt: sentences[0],
+      })
+    : null;
+
+  const titleHref = highlightHref || (id ? literatureReviewPath(id) : null);
+
   return (
     <li className="px-3 py-2.5 text-sm">
       <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
         <span className="font-mono text-xs text-muted-foreground tabular-nums">[{r.index}]</span>
-        {id ? (
+        {titleHref ? (
           <Link
-            href={literatureReviewPath(id)}
-            className="min-w-0 flex-1 font-medium text-primary hover:underline"
+            href={titleHref}
+            className="min-w-0 flex-1 font-medium text-primary hover:underline inline-flex items-baseline gap-1"
           >
+            {highlightHref && <MapPin className="size-3 shrink-0 self-center text-primary/70" />}
             {title}
           </Link>
         ) : (
@@ -78,8 +92,25 @@ function ReferenceBlock({ item: r }: { item: PaperAnalyzerReference }) {
           </p>
           {sentences.map((s, i) => {
             let t = s.trim();
+            const fullText = t;
             if (t.length > SENTENCE_PREVIEW) t = `${t.slice(0, SENTENCE_PREVIEW - 1)}…`;
-            return (
+            const sentenceHighlightHref = id
+              ? buildHighlightUrl({
+                  sourceType: 'literature_review',
+                  sourceId: id,
+                  excerpt: fullText,
+                })
+              : null;
+            return sentenceHighlightHref ? (
+              <Link
+                key={i}
+                href={sentenceHighlightHref}
+                className="flex items-start gap-1 text-xs leading-snug text-muted-foreground hover:text-foreground transition-colors"
+              >
+                <MapPin className="size-3 mt-0.5 shrink-0 text-primary/60" />
+                <span>{t}</span>
+              </Link>
+            ) : (
               <p key={i} className="text-xs leading-snug text-muted-foreground">
                 {t}
               </p>
@@ -94,12 +125,17 @@ function ReferenceBlock({ item: r }: { item: PaperAnalyzerReference }) {
 export interface LiteratureSourcesDropdownProps {
   refs: PaperAnalyzerReference[];
   className?: string;
+  defaultOpen?: boolean;
 }
 
 /**
  * One source: compact inline link. Multiple sources: collapsed-by-default panel listing all citations.
  */
-export function LiteratureSourcesDropdown({ refs, className }: LiteratureSourcesDropdownProps) {
+export function LiteratureSourcesDropdown({
+  refs,
+  className,
+  defaultOpen = false,
+}: LiteratureSourcesDropdownProps) {
   const sorted = [...refs].sort((a, b) => a.index - b.index);
   if (sorted.length === 0) return null;
 
@@ -107,6 +143,15 @@ export function LiteratureSourcesDropdown({ refs, className }: LiteratureSources
     const r = sorted[0];
     const id = r.literature_review_id?.trim();
     const title = r.title?.trim() || 'Untitled reference';
+    const sentences = r.supporting_sentences?.filter(Boolean) ?? [];
+    const singleHighlightHref = id && sentences.length > 0
+      ? buildHighlightUrl({
+          sourceType: 'literature_review',
+          sourceId: id,
+          excerpt: sentences[0],
+        })
+      : null;
+    const singleHref = singleHighlightHref || (id ? literatureReviewPath(id) : null);
     return (
       <div
         className={cn(
@@ -116,8 +161,9 @@ export function LiteratureSourcesDropdown({ refs, className }: LiteratureSources
       >
         <BookOpen className="size-3.5 shrink-0" aria-hidden />
         <span className="font-mono tabular-nums text-muted-foreground/80">[{r.index}]</span>
-        {id ? (
-          <Link href={literatureReviewPath(id)} className="font-medium text-primary hover:underline">
+        {singleHref ? (
+          <Link href={singleHref} className="font-medium text-primary hover:underline inline-flex items-center gap-1">
+            {singleHighlightHref && <MapPin className="size-3 shrink-0 text-primary/70" />}
             {title}
           </Link>
         ) : (
@@ -127,7 +173,7 @@ export function LiteratureSourcesDropdown({ refs, className }: LiteratureSources
     );
   }
 
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(defaultOpen);
 
   return (
     <Collapsible open={open} onOpenChange={setOpen} className={cn('min-w-0 max-w-xl', className)}>

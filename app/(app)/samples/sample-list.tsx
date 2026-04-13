@@ -13,7 +13,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
-import { TestTube, Package, Eye, Grid3x3, List } from "lucide-react"
+import { TestTube, Package, ArrowUpRight, Grid3x3, List } from "lucide-react"
 import Link from "next/link"
 
 interface Sample {
@@ -143,7 +143,7 @@ export function SampleList({ samples, viewMode: controlledView, setViewMode: set
                 </div>
                 <Button variant="outline" size="sm" className="w-full mt-auto shrink-0" asChild>
                   <Link href={`/samples/${item.id}`}>
-                    <Eye className="h-4 w-4 mr-2" />
+                    <ArrowUpRight className="h-4 w-4 mr-2" />
                     <span className="truncate">View Details</span>
                   </Link>
                 </Button>
@@ -216,7 +216,7 @@ export function SampleList({ samples, viewMode: controlledView, setViewMode: set
                       <TableCell className="text-right">
                         <Button variant="ghost" size="sm" asChild>
                           <Link href={`/samples/${item.id}`}>
-                            <Eye className="h-4 w-4" />
+                            <ArrowUpRight className="h-4 w-4" />
                           </Link>
                         </Button>
                       </TableCell>

@@ -9,6 +9,8 @@ import {
   useState,
 } from "react"
 import { createClient } from "@/lib/supabase/client"
+import { chat as notes9Chat } from "@/lib/notes9-api"
+import { useAgentStream } from "@/hooks/use-agent-stream"
 import { useLiteratureAgentStream } from "@/hooks/use-literature-agent-stream"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
@@ -16,19 +18,30 @@ import { ScrollArea } from "@/components/ui/scroll-area"
 import { cn } from "@/lib/utils"
 import {
   ArrowUp,
+  BookOpen,
   Check,
   ChevronDown,
   ChevronRight,
   Copy,
   FileText,
+  History,
   Loader2,
   MessageSquare,
+  NotebookPen,
+  PenBox,
   Plus,
   Square,
   Trash2,
   X,
   PanelRightClose,
 } from "lucide-react"
+import { usePathname, useRouter } from "next/navigation"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import {
   LITERATURE_PAPER_DRAG_MIME,
   type LiteraturePaperItem,
@@ -36,11 +49,34 @@ import {
 import { formatDistanceToNow } from "date-fns"
 import { diffWords } from "diff"
 import { MarkdownRenderer, tightenChatMarkdown } from "@/components/catalyst/markdown-renderer"
+import {
+  AgentCitationsPanel,
+  groundingResourceToPanelItem,
+} from "@/components/catalyst/agent-citations-panel"
 import { markdownToHtml } from "@/lib/markdown-to-editor-html"
 import { copyMarkdownForRichPaste } from "@/lib/copy-markdown-rich-paste"
 import { ClipboardInfoIcon } from "@/components/ui/clipboard-info-icon"
+import { Notes9LoaderGif } from "@/components/brand/notes9-loader-gif"
 import { useChatSessions } from "@/hooks/use-chat-sessions"
 import type { ChatMessage as DbChatMessage } from "@/hooks/use-chat-sessions"
+import { LiteratureSourcesDropdown } from "@/components/literature-sources-dropdown"
+import { formatLiteratureAssistantMarkdown } from "@/lib/literature-agent-chat-format"
+import { formatNotes9AssistantMarkdown } from "@/lib/notes9-chat-format"
+import {
+  appendSourcesMarkdownSection,
+  assistantContentFromNotes9ChatPayload,
+  extractSourceListFromChatPayload,
+} from "@/lib/chat-response-sources"
+import {
+  parseLiteratureAssistantStoredContent,
+  serializeLiteratureAssistantStoredContent,
+} from "@/lib/literature-assistant-stored"
+import { parseNotes9AssistantStoredContent } from "@/lib/notes9-chat-format"
+import type { GroundingResource } from "@/lib/agent-stream-types"
+import type {
+  LiteratureAgentDonePayload,
+  PaperAnalyzerReference,
+} from "@/lib/literature-agent-types"
 
 /* ─── helpers ──────────────────────────────────────────────────────────────── */
 
@@ -51,6 +87,15 @@ function stripHtml(s: string): string {
 function truncate(s: string, max: number): string {
   const t = s.trim()
   return t.length <= max ? t : t.slice(0, max) + "…"
+}
+
+function stripQuestionsForYouSection(markdown: string): string {
+  return markdown
+    .replace(
+      /\n{2,}(?:#{1,6}\s*Questions\s+for\s+You|\*\*Questions\s+for\s+You\*\*)[\s\S]*$/i,
+      ""
+    )
+    .trimEnd()
 }
 
 function bumpVersion(version: string): string {
@@ -69,11 +114,32 @@ interface ChatMessage {
   id: string
   role: "user" | "assistant"
   text: string
+  literatureRefs?: PaperAnalyzerReference[]
+  notes9Sources?: GroundingResource[]
   /** For assistant messages: pending = user hasn't applied/discarded yet */
   state?: "pending" | "applied" | "discarded"
   /** Background steps captured at stream completion */
   steps?: string[]
 }
+
+interface ProtocolContextItem {
+  id: string
+  name: string
+  content: string
+  version: string | null
+}
+
+interface ViewerTab {
+  key: string
+  kind: "literature" | "protocol"
+  id: string
+  title: string
+  pdfUrl?: string | null
+  abstract?: string | null
+  content?: string | null
+}
+
+type ProtocolSidebarAgentMode = "protocol" | "general" | "notes9"
 
 export interface ProtocolAiSidechatProps {
   /** Persists chat history under this protocol (Supabase). */
@@ -83,13 +149,18 @@ export interface ProtocolAiSidechatProps {
   currentEditorContent: string
   currentVersion: string
   aiContextPapers: LiteraturePaperItem[]
+  aiContextProtocols: ProtocolContextItem[]
   /** Papers shown in the filtered literature panel — used to resolve @ mentions. */
   literatureCandidates?: LiteraturePaperItem[]
   /** Add papers to AI context (drag-drop, @ pick). */
   onAddPapers?: (papers: LiteraturePaperItem[]) => void
+  onAddProtocols?: (protocols: ProtocolContextItem[]) => void
   onRemovePaper: (id: string) => void
+  onRemoveProtocol: (id: string) => void
   /** Called when the user applies an AI suggestion into the editor. */
   onApplyToEditor: (html: string) => void
+  /** Highlight a text excerpt in the protocol editor (same-page navigation). */
+  onHighlightInEditor?: (excerpt: string) => void
   onClose?: () => void
   className?: string
 }
@@ -117,6 +188,16 @@ function parseLiteratureDragPayload(json: string): LiteraturePaperItem | null {
   }
 }
 
+function parseProtocolDragPayload(json: string): { id: string; name: string } | null {
+  try {
+    const o = JSON.parse(json) as { type?: string; id?: string; name?: string }
+    if (o?.type !== "protocol" || !o.id) return null
+    return { id: o.id, name: o.name || "Untitled protocol" }
+  } catch {
+    return null
+  }
+}
+
 /* ─── component ──────────────────────────────────────────────────────────── */
 
 function uiMessageFromDb(
@@ -124,15 +205,46 @@ function uiMessageFromDb(
   overrides?: Partial<Pick<ChatMessage, "state" | "steps">>
 ): ChatMessage {
   const role = row.role === "assistant" ? "assistant" : "user"
+  const parsed =
+    role === "assistant" ? parseAssistantStoredMessage(row.content) : null
   return {
     id: row.id,
     role,
-    text: row.content,
+    text: parsed?.text ?? row.content,
+    literatureRefs: parsed?.literatureRefs,
+    notes9Sources: parsed?.notes9Sources,
     state:
       overrides?.state ??
       (role === "assistant" ? "applied" : undefined),
     steps: overrides?.steps,
   }
+}
+
+function parseAssistantStoredMessage(raw: string): {
+  text: string
+  literatureRefs?: PaperAnalyzerReference[]
+  notes9Sources?: GroundingResource[]
+} {
+  const literatureParsed = parseLiteratureAssistantStoredContent(raw)
+  const notes9Parsed = parseNotes9AssistantStoredContent(literatureParsed.bodyMarkdown)
+  return {
+    text: notes9Parsed.bodyMarkdown,
+    literatureRefs:
+      literatureParsed.refs.length > 0 ? literatureParsed.refs : undefined,
+    notes9Sources:
+      notes9Parsed.resources.length > 0 ? notes9Parsed.resources : undefined,
+  }
+}
+
+function buildAssistantStoredMessage(
+  donePayload: LiteratureAgentDonePayload,
+  endpoint: 'compare' | 'biomni'
+): string {
+  const bodyMarkdown = stripQuestionsForYouSection(
+    formatLiteratureAssistantMarkdown(donePayload, endpoint)
+  )
+  const refs = donePayload.structured?.references ?? []
+  return serializeLiteratureAssistantStoredContent(bodyMarkdown, refs)
 }
 
 export function ProtocolAiSidechat({
@@ -142,13 +254,19 @@ export function ProtocolAiSidechat({
   currentEditorContent,
   currentVersion,
   aiContextPapers,
+  aiContextProtocols,
   literatureCandidates = [],
   onAddPapers,
+  onAddProtocols,
   onRemovePaper,
+  onRemoveProtocol,
   onApplyToEditor,
+  onHighlightInEditor,
   onClose,
   className,
 }: ProtocolAiSidechatProps) {
+  const router = useRouter()
+  const pathname = usePathname()
   const {
     sessions,
     currentSessionId: activeSessionId,
@@ -173,6 +291,11 @@ export function ProtocolAiSidechat({
   } | null>(null)
   const [mentionHighlightIndex, setMentionHighlightIndex] = useState(0)
   const [dropTargetActive, setDropTargetActive] = useState(false)
+  const [viewerTabs, setViewerTabs] = useState<ViewerTab[]>([])
+  const [activeViewerTabKey, setActiveViewerTabKey] = useState<string | null>(null)
+  const [viewerOpen, setViewerOpen] = useState(true)
+  const [agentMode, setAgentMode] = useState<ProtocolSidebarAgentMode>("protocol")
+  const [generalLoading, setGeneralLoading] = useState(false)
   const dragDepthRef = useRef(0)
   const mentionQueryKeyRef = useRef<string | null>(null)
   const mentionListRef = useRef<HTMLDivElement>(null)
@@ -244,20 +367,68 @@ export function ProtocolAiSidechat({
   )
 
   const handleLiteratureDrop = useCallback(
-    (e: React.DragEvent) => {
+    async (e: React.DragEvent) => {
       dragDepthRef.current = 0
       setDropTargetActive(false)
+
       const raw = e.dataTransfer.getData(LITERATURE_PAPER_DRAG_MIME)
       const paper = raw ? parseLiteratureDragPayload(raw) : null
-      if (!paper) return
+      if (paper) {
+        e.preventDefault()
+        onAddPapers?.([paper])
+        const supabase = createClient()
+        const { data } = await supabase
+          .from("literature_reviews")
+          .select("id, title, abstract, pdf_file_url")
+          .eq("id", paper.id)
+          .single()
+        const row = data as
+          | { id: string; title: string; abstract: string | null; pdf_file_url: string | null }
+          | null
+        const tab: ViewerTab = {
+          key: `literature:${paper.id}`,
+          kind: "literature",
+          id: paper.id,
+          title: row?.title || paper.title,
+          // Use authenticated same-origin stream route; avoids broken public bucket URLs.
+          pdfUrl: `/api/literature/${paper.id}/viewer-pdf`,
+          abstract: row?.abstract ?? null,
+        }
+        setViewerTabs((prev) => [...prev.filter((t) => t.key !== tab.key), tab])
+        setActiveViewerTabKey(tab.key)
+        setViewerOpen(true)
+        return
+      }
+
+      const rawJson = e.dataTransfer.getData("application/json")
+      const droppedProtocol = rawJson ? parseProtocolDragPayload(rawJson) : null
+      if (!droppedProtocol) return
       e.preventDefault()
-      onAddPapers?.([paper])
+      const supabase = createClient()
+      const { data } = await supabase
+        .from("protocols")
+        .select("id, name, content, version")
+        .eq("id", droppedProtocol.id)
+        .single()
+      const protocolRow = data as ProtocolContextItem | null
+      if (protocolRow) onAddProtocols?.([protocolRow])
+      const tab: ViewerTab = {
+        key: `protocol:${droppedProtocol.id}`,
+        kind: "protocol",
+        id: droppedProtocol.id,
+        title: protocolRow?.name || droppedProtocol.name,
+        content: protocolRow?.content ?? null,
+      }
+      setViewerTabs((prev) => [...prev.filter((t) => t.key !== tab.key), tab])
+      setActiveViewerTabKey(tab.key)
+      setViewerOpen(true)
     },
-    [onAddPapers]
+    [onAddPapers, onAddProtocols]
   )
 
-  const hasLitDragType = (e: React.DragEvent) =>
-    Array.from(e.dataTransfer.types).includes(LITERATURE_PAPER_DRAG_MIME)
+  const hasKnownDragType = (e: React.DragEvent) =>
+    Array.from(e.dataTransfer.types).includes(LITERATURE_PAPER_DRAG_MIME) ||
+    Array.from(e.dataTransfer.types).includes("application/json")
 
   useLayoutEffect(() => {
     if (!mentionMenu?.matches.length) return
@@ -266,6 +437,13 @@ export function ProtocolAiSidechat({
     )
     row?.scrollIntoView({ block: "nearest" })
   }, [mentionHighlightIndex, mentionMenu?.matches.length])
+
+  const {
+    runStream,
+    error: notes9Error,
+    isStreaming: notes9Streaming,
+    reset: resetNotes9,
+  } = useAgentStream()
 
   const {
     runRequest,
@@ -278,6 +456,16 @@ export function ProtocolAiSidechat({
     abort,
     reset,
   } = useLiteratureAgentStream()
+  const isAnyStreaming = isStreaming || notes9Streaming || generalLoading
+
+  useEffect(() => {
+    if (!pathname?.startsWith("/protocols")) return
+    setAgentMode((current) =>
+      current === "protocol" || current === "general" || current === "notes9"
+        ? current
+        : "protocol"
+    )
+  }, [pathname])
 
   // Ensure a DB session exists and a valid active id (Protocol AI is always scoped by protocolId).
   useEffect(() => {
@@ -337,40 +525,49 @@ export function ProtocolAiSidechat({
   }, [messages, steps, error])
 
   const createNewSession = useCallback(() => {
-    if (isStreaming) return
+    if (isAnyStreaming) return
     void (async () => {
       const id = await createSession()
       if (id) {
         setMessages([])
         reset()
+        resetNotes9()
+        setGeneralLoading(false)
       }
     })()
-  }, [createSession, isStreaming, reset])
+  }, [createSession, isAnyStreaming, reset, resetNotes9])
 
   const deleteSession = useCallback(
     (sid: string) => {
       void (async () => {
         await deleteSessionFromDb(sid)
-        if (activeSessionId === sid) reset()
+        if (activeSessionId === sid) {
+          reset()
+          resetNotes9()
+          setGeneralLoading(false)
+        }
       })()
     },
-    [deleteSessionFromDb, activeSessionId, reset]
+    [deleteSessionFromDb, activeSessionId, reset, resetNotes9]
   )
 
   const switchSession = useCallback(
     (sid: string) => {
-      if (isStreaming) return
+      if (isAnyStreaming) return
       setActiveSessionId(sid)
       setHistoryOpen(false)
       reset()
+      resetNotes9()
+      setGeneralLoading(false)
     },
-    [isStreaming, reset, setActiveSessionId]
+    [isAnyStreaming, reset, resetNotes9, setActiveSessionId]
   )
 
   const literatureIds = useMemo(
     () => aiContextPapers.map((p) => p.id),
     [aiContextPapers]
   )
+  const hasAnyContext = aiContextPapers.length > 0 || aiContextProtocols.length > 0
 
   const shellSummary = useMemo(
     () => truncate(stripHtml(templateShellHtml), 4000),
@@ -379,6 +576,20 @@ export function ProtocolAiSidechat({
 
   const buildQuery = useCallback(
     (userLine: string) => {
+      if (agentMode === "general") {
+        return userLine
+      }
+      if (agentMode === "notes9") {
+        return [
+          "You are Notes9, an assistant for scientific teams.",
+          "Be concise, practical, and actionable.",
+          "",
+          `Current protocol title: ${protocolTitle || "Untitled protocol"}`,
+          "",
+          "User request:",
+          userLine,
+        ].join("\n")
+      }
       return [
         "You are a scientific writing assistant helping draft a laboratory protocol.",
         `Protocol title: ${protocolTitle || "Untitled protocol"}`,
@@ -386,11 +597,21 @@ export function ProtocolAiSidechat({
         "Current protocol template / shell (maintain tone and structure):",
         shellSummary || "(no template provided)",
         "",
+        "Related protocols to use as additional context:",
+        aiContextProtocols.length > 0
+          ? aiContextProtocols
+              .map((p, idx) => {
+                const snippet = truncate(stripHtml(p.content || ""), 1000)
+                return `Protocol ${idx + 1}: ${p.name || "Untitled"}${p.version ? ` (v${p.version})` : ""}\n${snippet || "(no content)"}`
+              })
+              .join("\n\n")
+          : "(none selected)",
+        "",
         "User request:",
         userLine,
       ].join("\n")
     },
-    [protocolTitle, shellSummary]
+    [agentMode, protocolTitle, shellSummary, aiContextProtocols]
   )
 
   const updateMessage = useCallback((id: string, patch: Partial<ChatMessage>) => {
@@ -400,9 +621,15 @@ export function ProtocolAiSidechat({
   }, [])
 
   const appendAssistantFromDb = useCallback(
-    async (text: string, pending: boolean, capturedSteps: string[]) => {
+    async (
+      donePayload: LiteratureAgentDonePayload,
+      endpoint: 'compare' | 'biomni',
+      pending: boolean,
+      capturedSteps: string[]
+    ) => {
       if (!activeSessionId) return
-      const saved = await saveMessage(activeSessionId, "assistant", text)
+      const stored = buildAssistantStoredMessage(donePayload, endpoint)
+      const saved = await saveMessage(activeSessionId, "assistant", stored)
       if (!saved) return
       setMessages((prev) => [
         ...prev,
@@ -415,10 +642,36 @@ export function ProtocolAiSidechat({
     [activeSessionId, saveMessage]
   )
 
+  const appendPlainAssistantFromDb = useCallback(
+    async (text: string) => {
+      if (!activeSessionId) return
+      const saved = await saveMessage(activeSessionId, "assistant", text)
+      if (!saved) return
+      setMessages((prev) => [...prev, uiMessageFromDb(saved)])
+    },
+    [activeSessionId, saveMessage]
+  )
+
+  const startFreshChatInMode = useCallback(
+    async (mode: Exclude<ProtocolSidebarAgentMode, "protocol">) => {
+      if (isAnyStreaming) return
+      const id = await createSession()
+      if (!id) return
+      setActiveSessionId(id)
+      setMessages([])
+      reset()
+      resetNotes9()
+      setGeneralLoading(false)
+      setAgentMode(mode)
+      setHistoryOpen(false)
+    },
+    [createSession, isAnyStreaming, reset, resetNotes9, setActiveSessionId]
+  )
+
   const handleSend = useCallback(async () => {
     const line = input.trim()
-    if (!line || isStreaming || !activeSessionId) return
-    if (literatureIds.length === 0) return
+    if (!line || isAnyStreaming || !activeSessionId) return
+    if (agentMode === "protocol" && !hasAnyContext) return
 
     const supabase = createClient()
     const {
@@ -450,6 +703,63 @@ export function ProtocolAiSidechat({
       content: m.text,
     }))
 
+    if (agentMode === "general") {
+      setGeneralLoading(true)
+      try {
+        const response = (await notes9Chat(
+          {
+            content: line,
+            session_id: activeSessionId,
+            history,
+            web_search: "on",
+            response_format: "json",
+          },
+          token
+        )) as unknown as Record<string, unknown>
+
+        let assistantText = assistantContentFromNotes9ChatPayload(response)
+        assistantText = appendSourcesMarkdownSection(
+          assistantText,
+          extractSourceListFromChatPayload(response),
+          { searchedWeb: response.searched_web === true }
+        )
+        if (assistantText.trim()) {
+          await appendPlainAssistantFromDb(assistantText)
+        }
+      } catch (err) {
+        const errText =
+          err instanceof Error ? `Error: ${err.message}` : "Error: Failed to run General agent"
+        await appendPlainAssistantFromDb(errText)
+      } finally {
+        setGeneralLoading(false)
+      }
+      return
+    }
+
+    if (agentMode === "notes9") {
+      const result = await runStream(
+        {
+          query: buildQuery(line),
+          session_id: activeSessionId,
+          history,
+        },
+        token
+      )
+      if (result.error) {
+        await appendPlainAssistantFromDb(`Error: ${result.error}`)
+        return
+      }
+      if (result.donePayload) {
+        const formattedAnswer = stripQuestionsForYouSection(
+          formatNotes9AssistantMarkdown(result.donePayload)
+        )
+        if (formattedAnswer.trim()) {
+          await appendPlainAssistantFromDb(formattedAnswer)
+        }
+      }
+      return
+    }
+
     const result = await runRequest(
       "biomni",
       {
@@ -472,25 +782,31 @@ export function ProtocolAiSidechat({
       return
     }
 
-    if (result.donePayload?.content) {
+    if (result.donePayload) {
       const text = (result.donePayload.answer || result.donePayload.content).trim()
-      if (text) {
+      const hasRefs = (result.donePayload.structured?.references?.length ?? 0) > 0
+      if (text || hasRefs) {
         const capturedSteps = [...steps]
-        await appendAssistantFromDb(text, true, capturedSteps)
+        await appendAssistantFromDb(result.donePayload, "biomni", true, capturedSteps)
       }
     }
   }, [
     input,
+    isAnyStreaming,
     isStreaming,
     activeSessionId,
     literatureIds,
+    hasAnyContext,
     messages,
     steps,
     buildQuery,
     runRequest,
     saveMessage,
     appendAssistantFromDb,
+    appendPlainAssistantFromDb,
+    agentMode,
     sessions,
+    runStream,
     updateSessionTitle,
   ])
 
@@ -525,6 +841,22 @@ export function ProtocolAiSidechat({
 
   const clarifyOptions = clarify?.options ?? []
   const hasMessages = messages.length > 0
+  const activeViewerTab = viewerTabs.find((t) => t.key === activeViewerTabKey) ?? null
+  const goToLiteratureAgent = useCallback(() => {
+    if (!pathname?.startsWith("/literature-reviews")) {
+      window.dispatchEvent(new Event("notes9:tour-open-ai-sidebar"))
+      router.push("/literature-reviews")
+    }
+  }, [pathname, router])
+  const goToProtocolAgent = useCallback(() => {
+    setAgentMode("protocol")
+  }, [])
+  const goToGeneralAgent = useCallback(() => {
+    void startFreshChatInMode("general")
+  }, [startFreshChatInMode])
+  const goToNotes9Agent = useCallback(() => {
+    void startFreshChatInMode("notes9")
+  }, [startFreshChatInMode])
 
   /* ─── render ─────────────────────────────────────────────────────────── */
 
@@ -544,7 +876,7 @@ export function ProtocolAiSidechat({
               <div className="mb-2 flex h-10 w-10 items-center justify-center rounded-full bg-primary/10">
                 <ClipboardInfoIcon className="size-5 text-primary" />
               </div>
-              <span className="text-xs font-semibold text-muted-foreground">Protocol AI</span>
+              <span className="text-xs font-semibold text-muted-foreground">Protocol</span>
             </div>
           )}
           {/* Header — matches CatalystSidebar (catalyst-sidebar.tsx) */}
@@ -634,13 +966,13 @@ export function ProtocolAiSidechat({
       <div
         className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden"
         onDragEnter={(e) => {
-          if (!hasLitDragType(e)) return
+          if (!hasKnownDragType(e)) return
           e.preventDefault()
           dragDepthRef.current += 1
           if (dragDepthRef.current === 1) setDropTargetActive(true)
         }}
         onDragLeave={(e) => {
-          if (!hasLitDragType(e)) return
+          if (!hasKnownDragType(e)) return
           e.preventDefault()
           dragDepthRef.current -= 1
           if (dragDepthRef.current <= 0) {
@@ -649,63 +981,139 @@ export function ProtocolAiSidechat({
           }
         }}
         onDragOver={(e) => {
-          if (!hasLitDragType(e)) return
+          if (!hasKnownDragType(e)) return
           e.preventDefault()
           e.dataTransfer.dropEffect = "copy"
         }}
         onDrop={handleLiteratureDrop}
       >
 
-        {/* ── Header: toggle + title + close (matches Catalyst header) ── */}
-        <div className="flex h-12 shrink-0 items-center gap-1.5 border-b border-border/50 px-3 min-w-0 sm:h-14 sm:gap-2 sm:px-4">
-          <Button
-            variant="ghost"
-            size="icon"
-            className="size-8 shrink-0 text-muted-foreground hover:text-foreground"
-            onClick={() => setHistoryOpen((v) => !v)}
-            title={historyOpen ? "Hide history" : "Show history"}
-          >
-            {historyOpen ? (
-              <PanelRightClose className="size-4" />
-            ) : (
-              <MessageSquare className="size-4" />
+        {/* ── Header: styled to match RightSidebar shell ── */}
+        <header className="h-12 sm:h-14 flex items-center justify-between px-2 sm:px-4 border-b border-border/40 shrink-0 bg-[color:var(--n9-header-bg)]/80 backdrop-blur-md z-10 text-xs select-none min-w-0">
+          <div className="flex min-w-0 flex-1 items-center gap-1 overflow-hidden">
+            <ScrollArea className="w-full whitespace-nowrap scrollbar-hide">
+              <div className="flex items-center gap-1">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="size-8 sm:size-9 text-muted-foreground shrink-0"
+                  onClick={() => setHistoryOpen((v) => !v)}
+                  title={historyOpen ? "Hide history" : "Show history"}
+                  aria-label="Show chat history"
+                >
+                  {historyOpen ? <PanelRightClose className="size-4" /> : <History className="size-4" />}
+                </Button>
+                <Button
+                  variant="secondary"
+                  className="h-8 sm:h-9 text-muted-foreground shrink-0"
+                  onClick={createNewSession}
+                  disabled={isAnyStreaming}
+                  aria-label="New chat"
+                  title="New chat"
+                >
+                  <Plus className="size-4" />
+                  <span>New Chat</span>
+                </Button>
+              </div>
+            </ScrollArea>
+          </div>
+          <div className="flex shrink-0 items-center gap-1 pl-2">
+            {onClose && (
+              <Button
+                variant="ghost"
+                size="icon"
+                className="size-8 sm:size-9 text-muted-foreground"
+                onClick={onClose}
+                title="Close"
+              >
+                <X className="size-4" />
+              </Button>
             )}
-          </Button>
-          <ClipboardInfoIcon className="shrink-0 text-muted-foreground" />
-          <span className="min-w-0 flex-1 truncate text-sm font-medium text-muted-foreground">
-            Protocol AI
-          </span>
-          {/* New Chat — same control as Catalyst in right-sidebar (secondary + label) */}
-          <Button
-            variant="secondary"
-            className="h-8 shrink-0 text-muted-foreground sm:h-9"
-            onClick={createNewSession}
-            disabled={isStreaming}
-            aria-label="New chat"
-            title="New chat"
-          >
-            <Plus className="size-4" />
-            <span>New Chat</span>
-          </Button>
-          {onClose && (
-            <Button
-              variant="ghost"
-              size="icon"
-              className="size-8 shrink-0 text-muted-foreground hover:text-foreground"
-              onClick={onClose}
-              title="Close"
-            >
-              <X className="size-4" />
-            </Button>
-          )}
-        </div>
+          </div>
+        </header>
 
-        {/* ── Context papers strip (compact, like Catalyst "context" notion) */}
-        {aiContextPapers.length > 0 && (
+        {viewerTabs.length > 0 && (
+          <div className="shrink-0 border-b border-border/40 bg-muted/10">
+            <div className="flex items-center justify-between gap-2 px-3 py-2">
+              <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                Open context documents
+              </p>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-6 px-2 text-[10px]"
+                onClick={() => setViewerOpen((v) => !v)}
+              >
+                {viewerOpen ? "Hide" : "Show"}
+              </Button>
+            </div>
+            <div className="flex gap-1 overflow-x-auto px-3 pb-2">
+              {viewerTabs.map((tab) => (
+                <button
+                  key={tab.key}
+                  type="button"
+                  className={cn(
+                    "shrink-0 rounded-full border px-2 py-1 text-[10px] transition-colors",
+                    tab.key === activeViewerTabKey
+                      ? "border-primary/50 bg-primary/10 text-foreground"
+                      : "border-border/60 bg-background text-muted-foreground hover:text-foreground"
+                  )}
+                  onClick={() => {
+                    setActiveViewerTabKey(tab.key)
+                    setViewerOpen(true)
+                  }}
+                >
+                  {tab.title}
+                </button>
+              ))}
+            </div>
+            {viewerOpen && activeViewerTab && (
+              <div className="border-t border-border/40 bg-background px-3 py-2">
+                <div className="mb-2 flex items-center justify-between gap-2">
+                  <p className="truncate text-xs font-medium text-foreground">
+                    {activeViewerTab.title}
+                  </p>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="h-6 px-2 text-[10px]"
+                    onClick={() => setViewerOpen(false)}
+                  >
+                    Back to editing
+                  </Button>
+                </div>
+                {activeViewerTab.kind === "literature" && activeViewerTab.pdfUrl ? (
+                  <iframe
+                    src={activeViewerTab.pdfUrl}
+                    title={activeViewerTab.title}
+                    className="h-56 w-full rounded-md border"
+                  />
+                ) : activeViewerTab.kind === "protocol" ? (
+                  <div className="max-h-56 overflow-y-auto rounded-md border bg-muted/20 p-2 text-xs text-foreground">
+                    {activeViewerTab.content ? (
+                      <div dangerouslySetInnerHTML={{ __html: activeViewerTab.content }} />
+                    ) : (
+                      <p className="text-muted-foreground">No protocol content available.</p>
+                    )}
+                  </div>
+                ) : (
+                  <div className="max-h-56 overflow-y-auto rounded-md border bg-muted/20 p-2 text-xs text-foreground">
+                    <p>{activeViewerTab.abstract || "No PDF preview available for this literature item."}</p>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ── Context strip (papers + protocols) */}
+        {(aiContextPapers.length > 0 || aiContextProtocols.length > 0) && (
           <div className="shrink-0 border-b border-border/40 bg-muted/10 px-4 py-2">
             <p className="mb-1.5 flex items-center gap-1.5 text-[10px] font-medium text-muted-foreground">
               <FileText className="size-3 shrink-0" aria-hidden />
-              Literature context ({aiContextPapers.length})
+              AI context ({aiContextPapers.length} papers, {aiContextProtocols.length} protocols)
             </p>
             <ul className="flex flex-wrap gap-1">
               {aiContextPapers.map((p) => (
@@ -724,6 +1132,22 @@ export function ProtocolAiSidechat({
                   </button>
                 </li>
               ))}
+              {aiContextProtocols.map((p) => (
+                <li
+                  key={p.id}
+                  className="flex items-center gap-1 rounded-full border border-border/50 bg-background px-2 py-0.5 text-[10px] text-foreground"
+                >
+                  <span className="max-w-[120px] truncate">Protocol: {p.name}</span>
+                  <button
+                    type="button"
+                    className="shrink-0 text-muted-foreground transition-colors hover:text-foreground"
+                    onClick={() => onRemoveProtocol(p.id)}
+                    aria-label={`Remove ${p.name}`}
+                  >
+                    <X className="size-3" />
+                  </button>
+                </li>
+              ))}
             </ul>
           </div>
         )}
@@ -734,18 +1158,21 @@ export function ProtocolAiSidechat({
             /* ── Empty / greeting (mirrors CatalystGreeting) ── */
             <div className="flex min-h-0 flex-1 flex-col items-center justify-center overflow-y-auto overscroll-contain px-4 py-4 text-center">
               <div className="mx-auto w-full max-w-xs">
-                <div className="mb-4 inline-flex h-14 w-14 items-center justify-center rounded-2xl bg-primary/10">
-                  <ClipboardInfoIcon className="size-7 text-primary" />
+                <div className="relative mb-3 inline-flex items-center justify-center">
+                  <Notes9LoaderGif alt="Catalyst AI loader" widthPx={64} />
                 </div>
-                <h2 className="text-lg font-semibold tracking-tight text-foreground">
-                  Protocol AI
+                <h2 className="text-lg font-bold tracking-tight bg-gradient-to-r from-orange-500 to-pink-600 bg-clip-text text-transparent">
+                  Catalyst AI
                 </h2>
+                <h3 className="text-sm font-semibold tracking-tight bg-gradient-to-r from-orange-500 to-pink-600 bg-clip-text text-transparent">
+                  For Protocol Design
+                </h3>
                 <p className="mt-2 text-sm text-muted-foreground">
-                  {literatureIds.length === 0
-                    ? "Drag papers from the Literature list into this panel, or type @ in the composer to pick from the same filtered list."
+                  {!hasAnyContext
+                    ? "Add papers from Literature or select existing protocols below to provide context."
                     : "Ask me to draft or refine any section of your protocol."}
                 </p>
-                {literatureIds.length > 0 && (
+                {hasAnyContext && (
                   <div className="mt-4 flex flex-wrap justify-center gap-2">
                     {["Draft methods section", "Add safety notes", "Summarize protocol"].map((s) => (
                       <button
@@ -791,9 +1218,17 @@ export function ProtocolAiSidechat({
                             const token = session?.access_token
                             if (!token) return
                             const res = await answerClarify(opt, token)
-                            if (res.donePayload?.content) {
+                            if (res.donePayload) {
                               const text = (res.donePayload.answer || res.donePayload.content).trim()
-                              if (text) void appendAssistantFromDb(text, true, [...steps])
+                              const hasRefs = (res.donePayload.structured?.references?.length ?? 0) > 0
+                              if (text || hasRefs) {
+                                void appendAssistantFromDb(
+                                  res.donePayload,
+                                  res.finalizeTag ?? "biomni",
+                                  true,
+                                  [...steps]
+                                )
+                              }
                             }
                           }}
                         >
@@ -811,9 +1246,17 @@ export function ProtocolAiSidechat({
                           const token = session?.access_token
                           if (!token) return
                           const res = await skipClarify(token)
-                          if (res.donePayload?.content) {
+                          if (res.donePayload) {
                             const text = (res.donePayload.answer || res.donePayload.content).trim()
-                            if (text) void appendAssistantFromDb(text, true, [...steps])
+                            const hasRefs = (res.donePayload.structured?.references?.length ?? 0) > 0
+                            if (text || hasRefs) {
+                              void appendAssistantFromDb(
+                                res.donePayload,
+                                res.finalizeTag ?? "biomni",
+                                true,
+                                [...steps]
+                              )
+                            }
                           }
                         }}
                       >
@@ -846,32 +1289,47 @@ export function ProtocolAiSidechat({
                 ))}
 
                 {isStreaming && <ThinkingIndicator steps={steps} />}
+                {notes9Streaming && (
+                  <div className="flex items-center gap-2 px-2 py-1 text-xs text-muted-foreground">
+                    <Loader2 className="size-3.5 animate-spin" />
+                    <span>Notes9 is thinking…</span>
+                  </div>
+                )}
+                {generalLoading && (
+                  <div className="flex items-center gap-2 px-2 py-1 text-xs text-muted-foreground">
+                    <Loader2 className="size-3.5 animate-spin" />
+                    <span>General is searching the web…</span>
+                  </div>
+                )}
                 {error && !isStreaming && (
                   <p className="break-words text-xs text-destructive">{error}</p>
+                )}
+                {notes9Error && !notes9Streaming && (
+                  <p className="break-words text-xs text-destructive">{notes9Error}</p>
                 )}
               </div>
             </ScrollArea>
           )}
         </div>
 
-        {/* ── Input area (matches Catalyst's rounded-2xl container) ──────── */}
+        {/* ── Input area (mirrors Literature AI sidebar composer) ───────── */}
         <div className="mx-auto w-full min-w-0 shrink-0 px-4 pb-4 pt-2">
           <div
             className={cn(
-              "relative rounded-2xl border border-border bg-background shadow-sm transition-all focus-within:border-primary/50 focus-within:shadow-md",
-              dropTargetActive && "border-primary/50 ring-2 ring-primary/20"
+              "relative rounded-xl border bg-card/50 shadow-sm focus-within:ring-1 focus-within:ring-ring/50 focus-within:border-ring transition-all overflow-hidden",
+              dropTargetActive && "ring-2 ring-primary border-primary bg-primary/5"
             )}
           >
             {/* Context hint — inside container like Catalyst's mode toggle */}
-            {aiContextPapers.length === 0 && (
+            {!hasAnyContext && (
               <div className="border-b border-border/50 px-3 py-2">
                 <p className="text-[10px] text-amber-700/90 dark:text-amber-400/90">
-                  No papers in context yet — drag from Literature or type @ below to attach papers from the filtered list.
+                  No context yet — drag papers from Literature, use @ for papers, or add existing protocols.
                 </p>
               </div>
             )}
             {dropTargetActive && (
-              <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center rounded-2xl bg-primary/5">
+              <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center rounded-xl bg-primary/5">
                 <span className="rounded-md bg-background/90 px-2 py-1 text-xs font-medium text-primary shadow-sm">
                   Drop to add paper
                 </span>
@@ -936,12 +1394,16 @@ export function ProtocolAiSidechat({
                 syncMentionFromInput(t.value, t.selectionStart ?? t.value.length)
               }}
               placeholder={
-                literatureIds.length === 0
-                  ? "Drop papers here or type @ to search literature…"
-                  : "Ask to draft a section, refine steps, add safety notes…"
+                agentMode === "protocol" && !hasAnyContext
+                  ? "Add papers/protocols first, then ask your prompt…"
+                  : agentMode === "protocol"
+                    ? "Ask to draft a section, refine steps, add safety notes…"
+                    : agentMode === "notes9"
+                      ? "Ask Notes9 about workflows, planning, or next steps…"
+                      : "Ask anything about your work…"
               }
-              className="min-h-[72px] resize-none border-0 bg-transparent text-sm shadow-none focus-visible:ring-0 focus-visible:ring-offset-0"
-              disabled={isStreaming}
+              className="w-full min-h-[68px] resize-none border-0 bg-transparent px-4 py-2.5 text-sm placeholder:text-muted-foreground/60 shadow-none focus:outline-none focus-visible:ring-0 focus-visible:ring-offset-0 scrollbar-hide"
+              disabled={isAnyStreaming}
               onKeyDown={(e) => {
                 const menu = mentionMenu
                 if (menu && e.key === "Escape") {
@@ -981,32 +1443,77 @@ export function ProtocolAiSidechat({
               }}
             />
             </div>
-            <div className="flex items-center justify-between px-3 pb-2.5">
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                className="h-7 gap-1.5 text-xs text-muted-foreground hover:text-foreground"
-                onClick={() => {
-                  if (!activeSessionId) return
-                  void clearSessionMessages(activeSessionId).then(() => {
-                    setMessages([])
-                    reset()
-                  })
-                }}
-                disabled={isStreaming || messages.length === 0}
-              >
-                Clear
-              </Button>
-              <div className="flex items-center gap-1">
-                <span className="text-[10px] text-muted-foreground">↵ send</span>
-                {isStreaming ? (
+            <div className="mt-1 flex min-h-9 items-center justify-between gap-2 px-2 pb-2">
+              <div className="flex min-w-0 flex-1 flex-nowrap items-center gap-1.5 overflow-x-auto">
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      id="tour-ai-mode"
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 gap-1.5 rounded-md bg-muted/50 px-2 text-xs font-medium text-muted-foreground hover:bg-muted shrink-0"
+                    >
+                      {agentMode === "protocol" ? (
+                        <ClipboardInfoIcon className="size-3.5" />
+                      ) : agentMode === "notes9" ? (
+                        <NotebookPen className="size-3.5" />
+                      ) : (
+                        <MessageSquare className="size-3.5" />
+                      )}
+                      {agentMode === "protocol" ? "Protocol" : agentMode === "notes9" ? "Notes9" : "General"}
+                      <ChevronDown className="size-3 opacity-50" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="start" className="w-[200px]">
+                    <DropdownMenuItem onClick={goToProtocolAgent} className="gap-2 text-xs">
+                      <ClipboardInfoIcon className="size-3.5" /> Protocol
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={goToLiteratureAgent} className="gap-2 text-xs">
+                      <BookOpen className="size-3.5" /> Literature
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={goToGeneralAgent} className="gap-2 text-xs">
+                      <MessageSquare className="size-3.5" /> General
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={goToNotes9Agent} className="gap-2 text-xs">
+                      <NotebookPen className="size-3.5" /> Notes9
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 gap-1.5 rounded-md bg-muted/50 px-2 text-xs font-medium text-muted-foreground hover:bg-muted hover:text-foreground shrink-0"
+                  onClick={() => {
+                    if (!activeSessionId) return
+                    void clearSessionMessages(activeSessionId).then(() => {
+                      setMessages([])
+                      reset()
+                      resetNotes9()
+                      setGeneralLoading(false)
+                    })
+                  }}
+                  disabled={isAnyStreaming || messages.length === 0}
+                >
+                  Clear
+                </Button>
+              </div>
+              <div className="flex h-9 shrink-0 items-center justify-end gap-1">
+                <span className="mr-1 hidden text-[11px] text-muted-foreground sm:inline">
+                  {input.length}/4096
+                </span>
+                {isAnyStreaming ? (
                   <Button
                     type="button"
-                    variant="outline"
+                    variant="secondary"
                     size="icon"
-                    className="size-8 rounded-full"
-                    onClick={abort}
+                    className="size-7 animate-pulse"
+                    onClick={() => {
+                      if (isStreaming) {
+                        abort()
+                        return
+                      }
+                    }}
                     title="Stop generation"
                   >
                     <Square className="size-3 fill-current" />
@@ -1015,8 +1522,12 @@ export function ProtocolAiSidechat({
                   <Button
                     type="button"
                     size="icon"
-                    className="size-8 rounded-full bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
-                    disabled={literatureIds.length === 0 || !input.trim()}
+                    variant="ghost"
+                    className={cn(
+                      "size-7 text-muted-foreground transition-colors hover:text-primary",
+                      (agentMode !== "protocol" || hasAnyContext) && !!input.trim() && "text-primary",
+                    )}
+                    disabled={(agentMode === "protocol" && !hasAnyContext) || !input.trim()}
                     onClick={() => void handleSend()}
                     aria-label="Send message"
                   >
@@ -1181,6 +1692,18 @@ function AssistantMessage({
           "
         />
       </div>
+
+      {message.literatureRefs && message.literatureRefs.length > 0 && (
+        <LiteratureSourcesDropdown refs={message.literatureRefs} defaultOpen />
+      )}
+
+      {message.notes9Sources && message.notes9Sources.length > 0 && (
+        <AgentCitationsPanel
+          items={message.notes9Sources.map((c, i) => groundingResourceToPanelItem(c, i))}
+          triggerLabel="All citations"
+          defaultOpen
+        />
+      )}
 
       {/* Diff preview */}
       {showDiff && (

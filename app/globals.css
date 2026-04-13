@@ -844,3 +844,56 @@ mark {
 .univer-popup-mask {
   pointer-events: auto;
 }
+
+/* ── RAG deep-link highlights (loaded here — app imports this file, not styles/globals.css) ── */
+
+@keyframes rag-highlight-pulse {
+  0% { background-color: rgba(253, 230, 138, 0.32); }
+  50% { background-color: rgba(254, 243, 199, 0.48); }
+  100% { background-color: rgba(253, 230, 138, 0.32); }
+}
+
+@keyframes rag-highlight-fade {
+  from { background-color: rgba(253, 230, 138, 0.4); }
+  to { background-color: rgba(253, 230, 138, 0); }
+}
+
+.rag-chunk-highlight {
+  background-color: rgba(253, 230, 138, 0.38) !important;
+  border-radius: 3px;
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+  box-shadow: inset 0 0 0 1px rgba(180, 130, 40, 0.28);
+  animation: rag-highlight-pulse 1s ease-in-out 3;
+}
+
+.dark .rag-chunk-highlight {
+  background-color: rgba(251, 191, 36, 0.22) !important;
+  box-shadow: inset 0 0 0 1px rgba(251, 191, 36, 0.35);
+}
+
+.rag-chunk-highlight.fading {
+  animation: rag-highlight-fade 1.2s ease forwards;
+  box-shadow: none;
+}
+
+.pdf-rag-highlight {
+  position: absolute;
+  z-index: 25;
+  border-radius: 2px;
+  pointer-events: none;
+  background-color: rgba(253, 230, 138, 0.4);
+  outline: 1px solid rgba(180, 130, 40, 0.35);
+  outline-offset: -1px;
+  animation: rag-highlight-pulse 1s ease-in-out 3;
+}
+
+.dark .pdf-rag-highlight {
+  background-color: rgba(251, 191, 36, 0.24);
+  outline-color: rgba(251, 191, 36, 0.4);
+}
+
+.pdf-rag-highlight.fading {
+  animation: rag-highlight-fade 1.2s ease forwards;
+  outline: none;
+}

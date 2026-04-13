@@ -1,9 +1,11 @@
 'use client';
 
-import Link from 'next/link';
 import { cn } from '@/lib/utils';
 import { MarkdownRenderer } from './markdown-renderer';
-import { formatCitationDisplay } from '@/lib/utils';
+import {
+  AgentCitationsPanel,
+  mergeGroundingAndRagItems,
+} from '@/components/catalyst/agent-citations-panel';
 import type { ThinkingPayload, RagChunksPayload, DonePayload } from '@/lib/agent-stream-types';
 
 interface AgentStreamReplyProps {
@@ -19,23 +21,6 @@ interface AgentStreamReplyProps {
    * When false, all collected steps are listed (after the stream finishes).
    */
   isThinkingStreaming?: boolean;
-}
-
-function getCitationRoute(citation: { source_type: string; source_id?: string | null }): string {
-  const id = citation.source_id;
-  if (id == null || id === '') return '';
-  switch (citation.source_type) {
-    case 'literature_review':
-      return `/literature-reviews/${id}`;
-    case 'protocol':
-      return `/protocols/${id}`;
-    case 'project':
-      return `/projects/${id}`;
-    case 'lab_note':
-    case 'report':
-    default:
-      return '';
-  }
 }
 
 const TOOL_LABELS: Record<string, string> = {
@@ -61,6 +46,13 @@ export function AgentStreamReply({
     donePayload?.resources?.length
       ? donePayload.resources
       : donePayload?.citations ?? [];
+
+  const mergedCitationItems = mergeGroundingAndRagItems(grounding, ragChunks?.chunks);
+  const hasCitationPanel = mergedCitationItems.length > 0;
+  const citationTriggerLabel =
+    donePayload?.resources?.length || donePayload?.citations?.length
+      ? 'All citations'
+      : ragChunks?.message?.trim() || 'Retrieved chunks';
 
   if (error) {
     return (
@@ -138,36 +130,15 @@ export function AgentStreamReply({
         </div>
       )}
 
-      {/* RAG chunks */}
-      {ragChunks && ragChunks.chunks.length > 0 && (
-        <div className="rounded-xl border border-border/60 overflow-hidden">
-          <div className="flex items-center gap-2 px-3 py-2 border-b border-border/50 bg-muted/30">
-            <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
-              {ragChunks.message}
-            </span>
-          </div>
-          <div className="divide-y divide-border/40 max-h-48 overflow-y-auto">
-            {ragChunks.chunks.map((chunk, i) => (
-              <div
-                key={i}
-                className="px-3 py-2.5 text-sm hover:bg-muted/20 transition-colors"
-              >
-                <p className="text-muted-foreground text-xs mb-1">
-                  {chunk.source_name ?? chunk.source_type.replace(/_/g, ' ')} • {(chunk.relevance * 100).toFixed(0)}% relevant
-                </p>
-                <p className="text-foreground line-clamp-3">{chunk.excerpt}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
       {/* Answer with optional confidence and tool_used (per Notes9 API) */}
       {(displayAnswer || (!donePayload && streamedAnswer === '')) && (
         <div className="space-y-2">
-          <div className="rounded-2xl px-4 py-3 text-sm text-foreground">
+          <div className="rounded-2xl px-4 py-3 text-sm text-foreground min-w-0 max-w-full max-h-[60vh] overflow-auto">
             {displayAnswer ? (
-              <MarkdownRenderer content={displayAnswer} />
+              <MarkdownRenderer
+                content={displayAnswer}
+                className="[&_pre]:max-w-full [&_pre]:max-h-[40vh] [&_pre]:overflow-auto [&_table]:max-h-[40vh] [&_table]:overflow-auto"
+              />
             ) : (
               <span className="text-muted-foreground italic">Generating answer...</span>
             )}
@@ -196,39 +167,9 @@ export function AgentStreamReply({
         </div>
       )}
 
-      {/* Citations (from done payload); use display_label or source_name as title */}
-      {grounding.length > 0 && (
-        <div className="rounded-lg border border-border/50 px-3 py-2">
-          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2">
-            References
-          </p>
-          <ul className="space-y-1.5 text-sm">
-            {grounding.map((citation, index) => {
-              const route = getCitationRoute(citation);
-              const displayText = formatCitationDisplay({
-                ...citation,
-                excerpt: citation.excerpt ?? undefined,
-              });
-              const title = citation.display_label ?? citation.source_name ?? citation.source_type.replace(/_/g, ' ');
-              return (
-                <li key={index}>
-                  {route ? (
-                    <Link
-                      href={route}
-                      className="text-primary hover:underline"
-                    >
-                      [{index + 1}] View {title}: {displayText}
-                    </Link>
-                  ) : (
-                    <span>
-                      [{index + 1}] {title}: {displayText}
-                    </span>
-                  )}
-                </li>
-              );
-            })}
-          </ul>
-        </div>
+      {/* RAG chunks + done `resources`, merged and deduped; each row links with ?highlight= (excerpt in payload). */}
+      {hasCitationPanel && (
+        <AgentCitationsPanel items={mergedCitationItems} triggerLabel={citationTriggerLabel} />
       )}
     </div>
   );
