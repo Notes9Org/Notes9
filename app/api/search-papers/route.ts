@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { searchPapers } from '@/lib/paper-search'
+import { searchPapers, searchPapersWithMeta } from '@/lib/paper-search'
 import type { PaperSearchSortMode } from '@/types/paper-search'
 
 function parseSort(param: string | null): PaperSearchSortMode {
@@ -29,11 +29,25 @@ export async function GET(request: NextRequest) {
       searchParams.get('openAccessOnly') === '1' ||
       searchParams.get('openAccessOnly') === 'true'
 
-    const results = await searchPapers(query, {
+    const debug =
+      searchParams.get('debug') === '1' || searchParams.get('debug') === 'true'
+
+    const opts = {
       sort,
       ...(recentYears != null ? { recentYears } : {}),
       openAccessOnly,
-    })
+    }
+
+    if (debug) {
+      const { papers, variants, pipeline } = await searchPapersWithMeta(query, opts)
+      return NextResponse.json({
+        papers,
+        totalCount: papers.length,
+        meta: { variants, pipeline },
+      })
+    }
+
+    const results = await searchPapers(query, opts)
 
     return NextResponse.json({
       papers: results,

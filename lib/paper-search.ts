@@ -1,6 +1,8 @@
 /**
  * Literature search aggregates PubMed, Europe PMC (preprints + non-preprint index), and OpenAlex.
- * - Expanded PubMed queries (acronyms → MeSH-friendly terms) and optional second-pass from DOIs/titles.
+ * - Query variants + synonym / MeSH hints for PubMed (`paper-query-variants`); verbose NL → compact line for OpenAlex/Europe/preprints + PubMed OR-token fallback.
+ * - Bounded second OpenAlex pass when PubMed is thin.
+ * - Relevance sort: BM25 on title+abstract plus citation and source signals (`paper-search-bm25`); second PubMed pass from DOIs/titles when the first pass is thin.
  * - Europe PMC: journal/year/authors from journalInfo, firstPublicationDate, authorList.
  * - Sort modes: relevance (“best match” — re-ranks the **full merged** pool, no extra cap), recent (year descending), cited.
  * - Queries with recency wording ("recent papers", …) add a publication-year floor in relevance mode.
@@ -10,6 +12,29 @@
  * For Elsevier `10.1016/` DOIs we set `articlePageUrl` (PII article page) so "View source" opens the publisher page where PDF download works in-browser.
  */
 import type { PaperSearchOptions, PaperSearchSortMode, SearchPaper } from "@/types/paper-search"
+import {
+  broadPubMedFallbackOrClause,
+  buildExpandedPubMedTerm,
+  capExpandedPubMedTermEncodedLength,
+  expandEuropeFreeTextQuery,
+  expandQueryForLexicalScoring,
+  generateQueryVariants,
+  literatureApiSearchQuery,
+} from "@/lib/paper-query-variants"
+import { bm25Scores, normalizeScoresMinMax } from "@/lib/paper-search-bm25"
+import { citationBoostForSearchRank } from "@/lib/paper-search-citation-boost"
+
+export {
+  buildExpandedPubMedTerm,
+  broadPubMedFallbackOrClause,
+  capExpandedPubMedTermEncodedLength,
+  generateQueryVariants,
+  literatureApiSearchQuery,
+  normalizeAcademicSearchText,
+  PUBMED_EXPANDED_TERM_MAX_ENCODED,
+  pubMedAuthorHintClause,
+} from "@/lib/paper-query-variants"
+export { citationBoostForSearchRank } from "@/lib/paper-search-citation-boost"
 
 /** PubMed IDs retrieved per search (efetch follows with same count). */
 const PUBMED_RETMAX = 80
@@ -17,7 +42,11 @@ const PUBMED_RETMAX = 80
 const EUROPE_PMC_PAGE = 60
 /** OpenAlex `per_page` (max 200). */
 const OPENALEX_PER_PAGE = 60
-/** When first-pass PubMed returns fewer than this, run a second esearch from OpenAlex/Europe PMC DOIs & titles. */
+/**
+ * When first-pass PubMed returns fewer than this many rows, run follow-up retrieval:
+ * optional second OpenAlex query (`variants[1]`), then a second PubMed `esearch` from DOIs/titles found elsewhere.
+ * Tune for recall vs latency (typical 12–20).
+ */
 const PUBMED_SECOND_PASS_THRESHOLD = 14
 const MAX_SECOND_PASS_DOIS = 10
 const MAX_SECOND_PASS_TITLE_CLAUSES = 4
@@ -128,7 +157,10 @@ function mergePaperRows(a: SearchPaper, b: SearchPaper): SearchPaper {
   return merged
 }
 
-/** Merge batches in order. Later duplicates enrich earlier rows. */
+/**
+ * Merge batches in order. Later duplicates enrich earlier rows.
+ * Deduplication: same PMID, same normalized DOI, or same title+year fingerprint (`dedupeKeyForPaper`).
+ */
 function mergeOrderedBatches(batches: SearchPaper[][]): SearchPaper[] {
   const map = new Map<string, SearchPaper>()
   const order: string[] = []
@@ -149,32 +181,6 @@ function mergeOrderedBatches(batches: SearchPaper[][]): SearchPaper[] {
 /** Append-first batch merge: keeps order of `base`, appends new keys from `extra`. */
 function mergeFlatFollowedByBatch(base: SearchPaper[], extra: SearchPaper[]): SearchPaper[] {
   return mergeOrderedBatches([base, extra])
-}
-
-/**
- * Keep the raw query for PubMed term mapping, and OR explicit [tiab] clauses for common acronyms.
- */
-export function buildExpandedPubMedTerm(userQuery: string): string {
-  const q = userQuery.trim()
-  if (!q) return q
-
-  const extra: string[] = []
-  if (/\basos?\b/i.test(q)) {
-    extra.push("antisense oligonucleotide[tiab]")
-  }
-  if (/\bmrna\b/i.test(q)) {
-    extra.push("messenger RNA[tiab]")
-  }
-  if (/\begfr\b/i.test(q)) {
-    extra.push("EGFR protein[tiab]")
-  }
-  if (/\bpkc\b/i.test(q)) {
-    extra.push("protein kinase C[tiab]")
-  }
-
-  if (extra.length === 0) return q
-
-  return `(${q}) OR (${extra.join(" OR ")})`
 }
 
 /**
@@ -526,12 +532,19 @@ function rerankByRelevance(
   originalQuery: string,
   yearFloor: number | null,
 ): SearchPaper[] {
-  const rawLower = originalQuery.trim().toLowerCase()
-  const omitChaff = yearFloor != null
-  const tokens = buildRelevanceTokens(originalQuery, omitChaff)
+  const lexQuery = expandQueryForLexicalScoring(originalQuery)
+  const docs = papers.map((p) => `${p.title} ${p.abstract}`)
+  const bm25Raw = bm25Scores(docs, lexQuery)
+  const bm25Norm = normalizeScoresMinMax(bm25Raw)
   const cy = new Date().getFullYear()
+  const maxPriority = 100
   const scored = papers.map((p, idx) => {
-    let s = relevanceScore(p, tokens, rawLower, omitChaff)
+    let s = (bm25Norm[idx] ?? 0) * 58
+    s += citationBoostForSearchRank(p.citedByCount)
+    s += ((SOURCE_PRIORITY[p.source] ?? 60) / maxPriority) * 14
+    if (p.abstract && p.abstract !== "No abstract available.") s += 2
+    if (p.pmid) s += 1
+
     if (yearFloor != null) {
       const y = p.year
       if (y >= yearFloor && y <= cy) {
@@ -862,18 +875,6 @@ function mapEuropePmcArticle(
   }
 }
 
-/** Optional: light expansion for Europe PMC free-text (same acronym ideas, no [tiab]). */
-function expandEuropeFreeTextQuery(userQuery: string): string {
-  let q = userQuery.trim()
-  if (/\basos?\b/i.test(q) && !/antisense oligonucleotide/i.test(q)) {
-    q += " OR antisense oligonucleotide"
-  }
-  if (/\begfr\b/i.test(q) && !/epidermal growth factor/i.test(q)) {
-    q += " OR epidermal growth factor receptor"
-  }
-  return q
-}
-
 /** Preprints only (BioRxiv, MedRxiv, etc.) */
 export async function searchPreprints(
   query: string,
@@ -1093,36 +1094,93 @@ function normalizePaperSearchOptions(options: PaperSearchOptions | undefined): {
   }
 }
 
-export async function searchPapers(
+export type PaperSearchPipelineMeta = {
+  /** Keyword line sent to OpenAlex / Europe PMC / preprints (NL questions use a compact form). */
+  apiSearchQuery: string
+  /** PubMed `term` included a leading token-OR group for verbose / question-style queries. */
+  pubMedBroadOrUsed: boolean
+  pubmedFirstPassHits: number
+  /** `encodeURIComponent(pubMedTerm)` length after expansion + date filter (actual esearch URL is longer). */
+  pubMedTermEncodedLength: number
+  pubMedTermClipped: boolean
+  /** True when a second OpenAlex query was issued (PubMed thin + alternate variant exists). */
+  secondPassOpenAlexAttempted: boolean
+  /** True when the second OpenAlex call returned at least one work and was merged. */
+  secondPassOpenAlexMerged: boolean
+  /** True when DOI/title second PubMed `esearch` ran and returned rows. */
+  secondPassPubMedRan: boolean
+}
+
+const emptyPipelineMeta = (): PaperSearchPipelineMeta => ({
+  apiSearchQuery: "",
+  pubMedBroadOrUsed: false,
+  pubmedFirstPassHits: 0,
+  pubMedTermEncodedLength: 0,
+  pubMedTermClipped: false,
+  secondPassOpenAlexAttempted: false,
+  secondPassOpenAlexMerged: false,
+  secondPassPubMedRan: false,
+})
+
+/**
+ * Full pipeline with `variants` plus `pipeline` stats for debugging / observability (`?debug=1` on the API route).
+ */
+export async function searchPapersWithMeta(
   query: string,
   options: PaperSearchOptions = {},
-): Promise<SearchPaper[]> {
+): Promise<{ papers: SearchPaper[]; variants: string[]; pipeline: PaperSearchPipelineMeta }> {
   const trimmed = query.trim()
-  if (!trimmed) return []
+  if (!trimmed) return { papers: [], variants: [], pipeline: emptyPipelineMeta() }
 
   try {
+    const variants = generateQueryVariants(trimmed, 4)
+    const apiSearch = literatureApiSearchQuery(trimmed)
+    const pubMedBroadOrUsed = Boolean(broadPubMedFallbackOrClause(trimmed))
     const { sort, recentYears, openAccessOnly } = normalizePaperSearchOptions(options)
     const yearFloor = resolveYearFloorForSearch(trimmed, sort, recentYears)
-    const pubMedTerm = appendPubMedDateFilter(buildExpandedPubMedTerm(trimmed), yearFloor)
+    const expandedRaw = buildExpandedPubMedTerm(trimmed)
+    const capped = capExpandedPubMedTermEncodedLength(expandedRaw)
+    const pubMedTerm = appendPubMedDateFilter(capped.term, yearFloor)
+    const pubMedTermEncodedLength = encodeURIComponent(pubMedTerm).length
     const pubMedEsort = sort === "recent" ? "pub_date" : "relevance"
     const openAlexPrimarySort = sort === "cited" ? "cited_by_count" : "relevance"
 
     const [pubMedResults, preprintResults, europeIndexed, openAlexResults] = await Promise.all([
       fetchPubMedByTerm(pubMedTerm, { esearchSort: pubMedEsort }),
-      searchPreprints(trimmed, yearFloor),
-      searchEuropePMCIndexed(trimmed, yearFloor),
-      searchOpenAlex(trimmed, { yearFloor, primarySort: openAlexPrimarySort }),
+      searchPreprints(apiSearch, yearFloor),
+      searchEuropePMCIndexed(apiSearch, yearFloor),
+      searchOpenAlex(apiSearch, { yearFloor, primarySort: openAlexPrimarySort }),
     ])
+
+    let openAlexBatch = openAlexResults
+    const secondPassOpenAlexAttempted =
+      variants.length > 1 &&
+      variants[1].trim().toLowerCase() !== trimmed.toLowerCase() &&
+      pubMedResults.length < PUBMED_SECOND_PASS_THRESHOLD
+
+    let secondPassOpenAlexMerged = false
+    if (secondPassOpenAlexAttempted) {
+      const secondOaQuery = literatureApiSearchQuery(variants[1])
+      const extraOa = await searchOpenAlex(secondOaQuery, {
+        yearFloor,
+        primarySort: openAlexPrimarySort,
+      })
+      if (extraOa.length > 0) {
+        secondPassOpenAlexMerged = true
+        openAlexBatch = mergeOrderedBatches([openAlexResults, extraOa])
+      }
+    }
 
     let merged = mergeOrderedBatches([
       pubMedResults,
       preprintResults,
       europeIndexed,
-      openAlexResults,
+      openAlexBatch,
     ])
 
+    let secondPassPubMedRan = false
     if (pubMedResults.length < PUBMED_SECOND_PASS_THRESHOLD) {
-      const candidates = [...openAlexResults, ...europeIndexed, ...preprintResults]
+      const candidates = [...openAlexBatch, ...europeIndexed, ...preprintResults]
       const secondTerm = buildSecondPassPubMedTerm(candidates, collectPmids(pubMedResults))
       if (secondTerm) {
         const secondWithDates = appendPubMedDateFilter(secondTerm, yearFloor)
@@ -1130,6 +1188,7 @@ export async function searchPapers(
           esearchSort: pubMedEsort,
         })
         if (extraPubmed.length > 0) {
+          secondPassPubMedRan = true
           merged = mergeFlatFollowedByBatch(merged, extraPubmed)
         }
       }
@@ -1141,9 +1200,29 @@ export async function searchPapers(
     if (openAccessOnly) {
       ranked = ranked.filter((p) => p.isOpenAccess)
     }
-    return ranked
+    return {
+      papers: ranked,
+      variants,
+      pipeline: {
+        apiSearchQuery: apiSearch,
+        pubMedBroadOrUsed,
+        pubmedFirstPassHits: pubMedResults.length,
+        pubMedTermEncodedLength,
+        pubMedTermClipped: capped.clipped,
+        secondPassOpenAlexAttempted,
+        secondPassOpenAlexMerged,
+        secondPassPubMedRan,
+      },
+    }
   } catch (error) {
     console.error("Paper search error:", error)
-    return []
+    return { papers: [], variants: [], pipeline: emptyPipelineMeta() }
   }
+}
+
+export async function searchPapers(
+  query: string,
+  options: PaperSearchOptions = {},
+): Promise<SearchPaper[]> {
+  return (await searchPapersWithMeta(query, options)).papers
 }
