@@ -191,23 +191,6 @@ function AIToggleButton({ onClick }: { onClick: () => void }) {
   const paperAI = usePaperAI()
   const isPaper = paperAI?.isActive
 
-  if (isPaper) {
-    return (
-      <Button
-        id="tour-ai-toggle"
-        variant="ghost"
-        size="sm"
-        className="h-8 sm:h-9 gap-1.5 px-3 bg-gradient-to-r from-blue-500/10 via-violet-500/10 to-purple-500/10 hover:from-blue-500/20 hover:via-violet-500/20 hover:to-purple-500/20 border border-blue-500/20"
-        onClick={onClick}
-      >
-        <Sparkles className="size-3.5 text-violet-500" />
-        <span className="text-xs font-bold bg-gradient-to-r from-blue-600 to-violet-600 dark:from-blue-400 dark:to-violet-400 bg-clip-text text-transparent">
-          Write with AI
-        </span>
-      </Button>
-    )
-  }
-
   return (
     <Button
       id="tour-ai-toggle"
@@ -215,6 +198,7 @@ function AIToggleButton({ onClick }: { onClick: () => void }) {
       size="icon"
       className="size-8 sm:size-9"
       onClick={onClick}
+      aria-label={isPaper ? "Write with AI" : "Open AI assistant"}
     >
       <Sparkles className="size-4" />
     </Button>

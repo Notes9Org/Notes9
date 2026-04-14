@@ -83,6 +83,25 @@ function shortAuthorString(authors: string[] | undefined | null): string | null 
   return `${lastName(authors[0])} et al.`
 }
 
+/** Prefer explicit year; else first 4-digit 19xx/20xx in title, journal, or URL. */
+export function getEffectivePublicationYear(
+  meta: Pick<CitationMetadata, 'year' | 'title' | 'journal' | 'url'>,
+): number | null {
+  if (meta.year > 0 && Number.isFinite(meta.year)) return meta.year
+  const blob = [meta.title, meta.journal, meta.url].filter(Boolean).join(' ')
+  const m = blob.match(/\b(19|20)\d{2}\b/)
+  if (!m) return null
+  const y = parseInt(m[0], 10)
+  if (y >= 1800 && y <= 2100) return y
+  return null
+}
+
+function citationYearString(meta: CitationMetadata | null | undefined): string {
+  if (!meta) return ''
+  const y = getEffectivePublicationYear(meta)
+  return y != null ? String(y) : ''
+}
+
 // ---------------------------------------------------------------------------
 // Format an inline citation marker for a given style
 // ---------------------------------------------------------------------------
@@ -93,18 +112,18 @@ export function formatInlineCitation(
   style: string,
 ): string {
   const authorStr = shortAuthorString(meta?.authors) || `#${num}`
-  const yearStr = meta?.year && meta.year > 0 ? meta.year.toString() : 'n.d.'
+  const yearStr = citationYearString(meta)
 
   switch (style) {
     case 'APA':
     case 'APA (6th Ed.)':
-      return `(${authorStr}, ${yearStr})`
+      return yearStr ? `(${authorStr}, ${yearStr})` : `(${authorStr})`
     case 'MLA':
       return `(${authorStr}${meta?.title ? ' ' + meta.title.split(' ').slice(0, 3).join(' ') : ''})`
     case 'Chicago (Author-Date)':
     case 'ASA':
     case 'Harvard':
-      return `(${authorStr} ${yearStr})`
+      return yearStr ? `(${authorStr} ${yearStr})` : `(${authorStr})`
     case 'Chicago (Notes & Bib)':
     case 'Nature':
     case 'Science':
@@ -126,49 +145,101 @@ export function formatInlineCitation(
 // Format a full reference-list entry for a given style
 // ---------------------------------------------------------------------------
 
-export function formatCitation(metadata: CitationMetadata, style: string): string {
-  const { authors, year, title, journal, url } = metadata
-  const authorStr = authorString(authors) || 'Unknown Author'
-  const yearStr = year && year > 0 ? year.toString() : 'n.d.'
+/** When authors are missing, lead with title (no "Unknown author" placeholders). */
+function formatCitationNoAuthor(metadata: CitationMetadata, style: string): string {
+  const { title, journal, url } = metadata
+  const yearStr = citationYearString(metadata)
+  const t = title?.trim() || ''
 
   switch (style) {
     case 'APA':
-      return `${authorStr} (${yearStr}). ${title}. ${journal ? `<em>${journal}</em>. ` : ''}${url ? `Retrieved from ${url}` : ''}`
+    case 'APA (6th Ed.)':
+      return `${t}.${yearStr ? ` (${yearStr}).` : ''} ${journal ? `<em>${journal}</em>. ` : ''}${url ? `Retrieved from ${url}` : ''}`
     case 'MLA':
-      return `${authorStr}. "${title}." ${journal ? `<em>${journal}</em>, ` : ''}${yearStr}. ${url ? `Web. ${url}` : ''}`
+      return `"${t}." ${journal ? `<em>${journal}</em>, ` : ''}${yearStr ? `${yearStr}. ` : ''}${url ? `Web. ${url}` : ''}`
     case 'Chicago':
     case 'Chicago (Author-Date)':
-      return `${authorStr}. "${title}." ${journal ? `<em>${journal}</em> ` : ''}(${yearStr}). ${url || ''}`
+      return `"${t}." ${journal ? `<em>${journal}</em> ` : ''}${yearStr ? `(${yearStr}). ` : ''}${url || ''}`
     case 'Chicago (Notes & Bib)':
-      return `${authorStr}, "${title}," ${journal ? `<em>${journal}</em> ` : ''}(${yearStr}). ${url || ''}`
+      return `"${t}," ${journal ? `<em>${journal}</em> ` : ''}${yearStr ? `(${yearStr}). ` : ''}${url || ''}`
     case 'Harvard':
-      return `${authorStr}, ${yearStr}. ${title}. ${journal ? `<em>${journal}</em>. ` : ''}${url ? `Available at: ${url}` : ''}`
+      return `${yearStr ? `${yearStr}. ` : ''}${t}. ${journal ? `<em>${journal}</em>. ` : ''}${url ? `Available at: ${url}` : ''}`
     case 'IEEE':
-      return `${authorStr}, "${title}," ${journal ? `<em>${journal}</em>, ` : ''}${yearStr}. ${url ? `[Online]. Available: ${url}` : ''}`
+      return `"${t}," ${journal ? `<em>${journal}</em>, ` : ''}${yearStr ? `${yearStr}. ` : ''}${url ? `[Online]. Available: ${url}` : ''}`
     case 'Vancouver':
-      return `${authorStr}. ${title}. ${journal ? `${journal}. ` : ''}${yearStr}. ${url ? `Available from: ${url}` : ''}`
+      return `${t}. ${journal ? `${journal}. ` : ''}${yearStr ? `${yearStr}. ` : ''}${url ? `Available from: ${url}` : ''}`
     case 'AMA':
-      return `${authorStr}. ${title}. ${journal ? `<em>${journal}</em>. ` : ''}${yearStr}. ${url ? `doi:${url}` : ''}`
+      return `${t}. ${journal ? `<em>${journal}</em>. ` : ''}${yearStr ? `${yearStr}. ` : ''}${url ? `doi:${url}` : ''}`
     case 'Nature':
-      return `${authorStr}. ${title}. ${journal ? `<em>${journal}</em> ` : ''}(${yearStr}). ${url || ''}`
+      return `${t}. ${journal ? `<em>${journal}</em> ` : ''}${yearStr ? `(${yearStr}). ` : ''}${url || ''}`
     case 'Science':
-      return `${authorStr}, ${title}. ${journal ? `<em>${journal}</em> ` : ''}(${yearStr}). ${url || ''}`
-    case 'APA (6th Ed.)':
-      return `${authorStr} (${yearStr}). ${title}. ${journal ? `<em>${journal}</em>. ` : ''}${url ? `Retrieved from ${url}` : ''}`
+      return `${t}. ${journal ? `<em>${journal}</em> ` : ''}${yearStr ? `(${yearStr}). ` : ''}${url || ''}`
     case 'CSE':
-      return `${authorStr}. ${yearStr}. ${title}. ${journal ? `${journal}. ` : ''}${url ? `Available from: ${url}` : ''}`
+      return `${yearStr ? `${yearStr}. ` : ''}${t}. ${journal ? `${journal}. ` : ''}${url ? `Available from: ${url}` : ''}`
     case 'ASA':
-      return `${authorStr}. ${yearStr}. "${title}." ${journal ? `<em>${journal}</em>. ` : ''}${url ? `Retrieved ${url}` : ''}`
+      return `${yearStr ? `${yearStr}. ` : ''}"${t}." ${journal ? `<em>${journal}</em>. ` : ''}${url ? `Retrieved ${url}` : ''}`
     case 'APS':
-      return `${authorStr}, ${title}, ${journal ? `${journal} ` : ''}(${yearStr}). ${url || ''}`
+      return `${t}, ${journal ? `${journal} ` : ''}${yearStr ? `(${yearStr}). ` : ''}${url || ''}`
     case 'AIP':
-      return `${authorStr}, "${title}," ${journal ? `${journal} ` : ''}(${yearStr}). ${url || ''}`
-    case 'BibTeX':
-      return `@article{ref${yearStr},<br/>&nbsp;&nbsp;author = {${authorStr}},<br/>&nbsp;&nbsp;title = {${title}},${journal ? `<br/>&nbsp;&nbsp;journal = {${journal}},` : ''}<br/>&nbsp;&nbsp;year = {${yearStr}}${url ? `,<br/>&nbsp;&nbsp;url = {${url}}` : ''}<br/>}`
+      return `"${t}," ${journal ? `${journal} ` : ''}${yearStr ? `(${yearStr}). ` : ''}${url || ''}`
+    case 'BibTeX': {
+      const key = `ref${yearStr || 'X'}${t ? `_${t.slice(0, 12).replace(/\W+/g, '')}` : ''}`
+      return `@article{${key},<br/>&nbsp;&nbsp;title = {${t}},${journal ? `<br/>&nbsp;&nbsp;journal = {${journal}},` : ''}${yearStr ? `<br/>&nbsp;&nbsp;year = {${yearStr}}` : ''}${url ? `,<br/>&nbsp;&nbsp;url = {${url}}` : ''}<br/>}`
+    }
     case 'RIS':
-      return `TY  - JOUR<br/>AU  - ${authorStr}<br/>TI  - ${title}${journal ? `<br/>JO  - ${journal}` : ''}<br/>PY  - ${yearStr}${url ? `<br/>UR  - ${url}` : ''}<br/>ER  -`
+      return `TY  - JOUR<br/>TI  - ${t}${journal ? `<br/>JO  - ${journal}` : ''}${yearStr ? `<br/>PY  - ${yearStr}` : ''}${url ? `<br/>UR  - ${url}` : ''}<br/>ER  -`
     default:
-      return `${authorStr} (${yearStr}). ${title}. ${url || ''}`
+      return `${t}.${yearStr ? ` (${yearStr}).` : ''} ${journal ? `<em>${journal}</em>. ` : ''}${url || ''}`
+  }
+}
+
+export function formatCitation(metadata: CitationMetadata, style: string): string {
+  const { authors, title, journal, url } = metadata
+  const authorStr = authorString(authors)
+  const yearStr = citationYearString(metadata)
+
+  if (!authorStr) {
+    return formatCitationNoAuthor(metadata, style)
+  }
+
+  switch (style) {
+    case 'APA':
+      return `${authorStr}${yearStr ? ` (${yearStr})` : ''}. ${title}. ${journal ? `<em>${journal}</em>. ` : ''}${url ? `Retrieved from ${url}` : ''}`
+    case 'MLA':
+      return `${authorStr}. "${title}." ${journal ? `<em>${journal}</em>, ` : ''}${yearStr ? `${yearStr}. ` : ''}${url ? `Web. ${url}` : ''}`
+    case 'Chicago':
+    case 'Chicago (Author-Date)':
+      return `${authorStr}. "${title}." ${journal ? `<em>${journal}</em> ` : ''}${yearStr ? `(${yearStr}). ` : ''}${url || ''}`
+    case 'Chicago (Notes & Bib)':
+      return `${authorStr}, "${title}," ${journal ? `<em>${journal}</em> ` : ''}${yearStr ? `(${yearStr}). ` : ''}${url || ''}`
+    case 'Harvard':
+      return `${authorStr}, ${yearStr ? `${yearStr}. ` : ''}${title}. ${journal ? `<em>${journal}</em>. ` : ''}${url ? `Available at: ${url}` : ''}`
+    case 'IEEE':
+      return `${authorStr}, "${title}," ${journal ? `<em>${journal}</em>, ` : ''}${yearStr ? `${yearStr}. ` : ''}${url ? `[Online]. Available: ${url}` : ''}`
+    case 'Vancouver':
+      return `${authorStr}. ${title}. ${journal ? `${journal}. ` : ''}${yearStr ? `${yearStr}. ` : ''}${url ? `Available from: ${url}` : ''}`
+    case 'AMA':
+      return `${authorStr}. ${title}. ${journal ? `<em>${journal}</em>. ` : ''}${yearStr ? `${yearStr}. ` : ''}${url ? `doi:${url}` : ''}`
+    case 'Nature':
+      return `${authorStr}. ${title}. ${journal ? `<em>${journal}</em> ` : ''}${yearStr ? `(${yearStr}). ` : ''}${url || ''}`
+    case 'Science':
+      return `${authorStr}, ${title}. ${journal ? `<em>${journal}</em> ` : ''}${yearStr ? `(${yearStr}). ` : ''}${url || ''}`
+    case 'APA (6th Ed.)':
+      return `${authorStr}${yearStr ? ` (${yearStr})` : ''}. ${title}. ${journal ? `<em>${journal}</em>. ` : ''}${url ? `Retrieved from ${url}` : ''}`
+    case 'CSE':
+      return `${authorStr}. ${yearStr ? `${yearStr}. ` : ''}${title}. ${journal ? `${journal}. ` : ''}${url ? `Available from: ${url}` : ''}`
+    case 'ASA':
+      return `${authorStr}. ${yearStr ? `${yearStr}. ` : ''}"${title}." ${journal ? `<em>${journal}</em>. ` : ''}${url ? `Retrieved ${url}` : ''}`
+    case 'APS':
+      return `${authorStr}, ${title}, ${journal ? `${journal} ` : ''}${yearStr ? `(${yearStr}). ` : ''}${url || ''}`
+    case 'AIP':
+      return `${authorStr}, "${title}," ${journal ? `${journal} ` : ''}${yearStr ? `(${yearStr}). ` : ''}${url || ''}`
+    case 'BibTeX':
+      return `@article{ref${yearStr || 'X'},<br/>&nbsp;&nbsp;author = {${authorStr}},<br/>&nbsp;&nbsp;title = {${title}},${journal ? `<br/>&nbsp;&nbsp;journal = {${journal}},` : ''}${yearStr ? `<br/>&nbsp;&nbsp;year = {${yearStr}}` : ''}${url ? `,<br/>&nbsp;&nbsp;url = {${url}}` : ''}<br/>}`
+    case 'RIS':
+      return `TY  - JOUR<br/>AU  - ${authorStr}<br/>TI  - ${title}${journal ? `<br/>JO  - ${journal}` : ''}${yearStr ? `<br/>PY  - ${yearStr}` : ''}${url ? `<br/>UR  - ${url}` : ''}<br/>ER  -`
+    default:
+      return `${authorStr}${yearStr ? ` (${yearStr})` : ''}. ${title}. ${url || ''}`
   }
 }
 
@@ -192,15 +263,25 @@ export function metadataFromAttrs(attrs: string, num: number): CitationMetadata 
     } catch { /* ignore */ }
   }
 
+  const url = hrefMatch ? hrefMatch[1] : ''
+  const title = titleMatch ? titleMatch[1].replace(/&quot;/g, '"') : ''
+  const journal = journalMatch ? journalMatch[1].replace(/&quot;/g, '"') : ''
+  let year = 0
+  if (yearMatch) {
+    const p = parseInt(String(yearMatch[1]).trim(), 10)
+    if (!Number.isNaN(p) && p > 0) year = p
+  }
+  const resolvedYear = getEffectivePublicationYear({ year, title, journal, url })
+
   return {
     citationNumber: num,
-    url: hrefMatch ? hrefMatch[1] : '',
+    url,
     paperId: paperIdMatch ? paperIdMatch[1] : '',
-    title: titleMatch ? titleMatch[1].replace(/&quot;/g, '"') : '',
+    title,
     doi: doiMatch ? doiMatch[1] : '',
     authors,
-    year: yearMatch ? parseInt(yearMatch[1]) || 0 : 0,
-    journal: journalMatch ? journalMatch[1].replace(/&quot;/g, '"') : '',
+    year: resolvedYear ?? 0,
+    journal,
   }
 }
 
@@ -233,7 +314,7 @@ export function parseCitationsFromHtml(html: string): ParsedCitation[] {
       number: counter++,
       url: meta.url,
       paperId: meta.paperId,
-      title: meta.title || 'Unknown Title',
+      title: meta.title || '',
       doi: meta.doi,
       authors: meta.authors,
       year: meta.year,
@@ -281,17 +362,19 @@ export function parseCitationsFromHtml(html: string): ParsedCitation[] {
 // Reformat all inline citations in HTML to match a given style
 // ---------------------------------------------------------------------------
 
+/** Match citation links with optional nested HTML inside the anchor (TipTap may wrap content). */
+const CITATION_ANCHOR_WITH_BODY_SOURCE =
+  '<a([^>]*data-paper-title="[^"]*"[^>]*)>([\\s\\S]*?)</a>'
+
 export function reformatInlineCitations(html: string, style: string): string {
   let counter = 1
-  return html.replace(
-    new RegExp(CITATION_ANCHOR_REGEX.source, 'g'),
-    (_match: string, attrs: string) => {
-      const num = counter++
-      const meta = metadataFromAttrs(attrs, num)
-      const label = formatInlineCitation(num, meta, style)
-      return `<a${attrs}>${label}</a>`
-    },
-  )
+  const re = new RegExp(CITATION_ANCHOR_WITH_BODY_SOURCE, "gi")
+  return html.replace(re, (_match: string, attrs: string) => {
+    const num = counter++
+    const meta = metadataFromAttrs(attrs, num)
+    const label = formatInlineCitation(num, meta, style)
+    return `<a${attrs}>${label}</a>`
+  })
 }
 
 // ---------------------------------------------------------------------------

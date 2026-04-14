@@ -154,11 +154,15 @@ import {
 import {
   CitationContext,
   useCitationReducer,
-  syncStoreFromHtml,
   applyStoreToHtml,
   buildMetadataMap,
   type CitationEntry,
 } from "./use-citation-store"
+import {
+  writePaperCitationStyle,
+  PAPER_CITATION_STYLE_EVENT,
+  isValidTiptapCitationStyle,
+} from "./paper-citation-style-sync"
 
 interface Paper {
   id: number
@@ -1410,7 +1414,7 @@ export function TiptapEditor({
   const [selectedPapers, setSelectedPapers] = useState<Set<number>>(new Set())
   const [citationInsertPosition, setCitationInsertPosition] = useState<number>(0)
   // Citation store (single source of truth for citations + style)
-  const [citationState, citationDispatch] = useCitationReducer()
+  const [citationState, citationDispatch] = useCitationReducer(paperMode)
   const selectedCitationStyle = citationState.style
   const citationMetadata = buildMetadataMap(citationState)
   const [isCommenting, setIsCommenting] = useState(false)
@@ -1422,6 +1426,8 @@ export function TiptapEditor({
   const lastFinalIndexRef = useRef<number>(0)
   const lastInterimTextRef = useRef<string>("")
   const editorRef = useRef<ReturnType<typeof useEditor> | null>(null)
+  /** Skip one cross-window event after we broadcast from the toolbar (avoid duplicate reformat loop). */
+  const skipNextPaperCitationEventRef = useRef(false)
 
   const clearInterimFromEditor = useCallback(() => {
     const ed = editorRef.current
@@ -1743,6 +1749,73 @@ export function TiptapEditor({
       },
     },
   })
+
+  const applyCitationStyleChange = useCallback(
+    (newStyle: string) => {
+      if (!editor) {
+        citationDispatch({ type: "SET_STYLE", style: newStyle })
+        if (paperMode) {
+          skipNextPaperCitationEventRef.current = true
+          writePaperCitationStyle(newStyle)
+        }
+        return
+      }
+
+      const html = editor.getHTML()
+      const parsed = parseCitationsFromHtml(html)
+      const entriesFromDoc: CitationEntry[] = parsed.map((p, i) => ({
+        key: p.paperId || `cite-${p.number}-${i}`,
+        metadata: {
+          citationNumber: i + 1,
+          url: p.url,
+          title: p.title,
+          authors: p.authors,
+          year: p.year,
+          journal: p.journal,
+          doi: p.doi,
+          paperId: p.paperId,
+        },
+      }))
+
+      citationDispatch({ type: "SET_STYLE", style: newStyle })
+      citationDispatch({ type: "SYNC_FROM_HTML", entries: entriesFromDoc })
+
+      if (paperMode) {
+        skipNextPaperCitationEventRef.current = true
+        writePaperCitationStyle(newStyle)
+      }
+
+      const metaMap = buildMetadataMap({
+        entries: entriesFromDoc,
+        style: newStyle,
+      })
+
+      let updated = reformatInlineCitations(html, newStyle)
+      if (metaMap.size > 0) {
+        updated = reformatBibliography(updated, metaMap, newStyle)
+      }
+      if (updated !== html) {
+        editor.commands.setContent(updated)
+      }
+    },
+    [paperMode, editor, citationDispatch]
+  )
+
+  useEffect(() => {
+    if (!paperMode || !editor) return
+    const handler = (e: Event) => {
+      if (skipNextPaperCitationEventRef.current) {
+        skipNextPaperCitationEventRef.current = false
+        return
+      }
+      const v = (e as CustomEvent<string>).detail
+      if (!v || !isValidTiptapCitationStyle(v)) return
+      if (v === citationState.style) return
+      applyCitationStyleChange(v)
+    }
+    window.addEventListener(PAPER_CITATION_STYLE_EVENT, handler)
+    return () => window.removeEventListener(PAPER_CITATION_STYLE_EVENT, handler)
+  }, [paperMode, editor, citationState.style, applyCitationStyleChange])
 
   useEffect(() => {
     editorRef.current = editor
@@ -2240,7 +2313,7 @@ export function TiptapEditor({
         metadata: {
           citationNumber: c.number,
           url: c.url,
-          title: c.title || 'Unknown Title',
+          title: c.title || '',
           authors: c.authors || [],
           year: c.year || 0,
           journal: c.journal || '',
@@ -3994,30 +4067,7 @@ export function TiptapEditor({
             <TooltipTrigger asChild>
               <select
                 value={selectedCitationStyle}
-                onChange={(e) => {
-                  const newStyle = e.target.value
-                  citationDispatch({ type: 'SET_STYLE', style: newStyle })
-                  // Auto-reformat inline citations AND bibliography when style changes
-                  if (editor) {
-                    const html = editor.getHTML()
-                    // Sync store from HTML if empty (user hasn't opened bibliography yet)
-                    if (citationState.entries.length === 0) {
-                      syncStoreFromHtml(html, citationDispatch)
-                    }
-                    const metaMap = citationState.entries.length > 0 ? citationMetadata : buildMetadataMap({
-                      ...citationState,
-                      entries: parseCitationsFromHtml(html).map((p, i) => ({
-                        key: p.paperId || `cite-${p.number}`,
-                        metadata: { citationNumber: i + 1, url: p.url, title: p.title, authors: p.authors, year: p.year, journal: p.journal, doi: p.doi, paperId: p.paperId },
-                      })),
-                    })
-                    let updated = reformatInlineCitations(html, newStyle)
-                    if (metaMap.size > 0) {
-                      updated = reformatBibliography(updated, metaMap, newStyle)
-                    }
-                    if (updated !== html) editor.commands.setContent(updated)
-                  }
-                }}
+                onChange={(e) => applyCitationStyleChange(e.target.value)}
                 className="h-8 px-2 rounded-lg border border-border bg-background text-xs cursor-pointer shrink-0 max-w-[100px]"
                 title="Citation style"
               >

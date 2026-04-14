@@ -97,11 +97,13 @@ export function ProtocolLiteraturePanel({
   const [isLoading, setIsLoading] = useState(false)
   const [selected, setSelected] = useState<Set<string>>(new Set())
 
-  // Internal filter state (only used when showFilters=true)
+  // Internal filter state (only used when showFilters=true).
+  // Initialize from props so the first paint matches protocol context (avoids a race with the
+  // experiments-loading effect, which previously cleared experiment id while project was still "").
   const [filterProjects, setFilterProjects] = useState<ProjectItem[]>([])
   const [filterExperiments, setFilterExperiments] = useState<ExperimentItem[]>([])
-  const [internalProjectId, setInternalProjectId] = useState<string>("")
-  const [internalExperimentId, setInternalExperimentId] = useState<string>("")
+  const [internalProjectId, setInternalProjectId] = useState(() => projectIdProp ?? "")
+  const [internalExperimentId, setInternalExperimentId] = useState(() => experimentIdProp ?? "")
   const [internalProtocolFilterId, setInternalProtocolFilterId] = useState<string>("")
   const [isLoadingFilterExperiments, setIsLoadingFilterExperiments] = useState(false)
 
@@ -139,11 +141,12 @@ export function ProtocolLiteraturePanel({
     })
   }, [showFilters])
 
-  // Load experiments when internal project changes
+  // Load experiments when internal project changes.
+  // Do not call setInternalExperimentId here when project is empty — that fought the prop-sync
+  // effect on mount and could loop parent setState → Radix Select updates.
   useEffect(() => {
     if (!showFilters || !internalProjectId) {
       setFilterExperiments([])
-      setInternalExperimentId("")
       return
     }
     setIsLoadingFilterExperiments(true)
@@ -168,10 +171,17 @@ export function ProtocolLiteraturePanel({
   const onPapersChangeRef = useRef(onPapersChange)
   useEffect(() => { onPapersChangeRef.current = onPapersChange })
 
-  // Bubble context changes up (only depends on the *values* that changed)
+  const lastEmittedContext = useRef<{ p: string | null; e: string | null } | null>(null)
+
+  // Bubble context changes up; skip duplicate emissions to avoid setState loops in the parent.
   useEffect(() => {
     if (!showFilters) return
-    onContextChangeRef.current?.(internalProjectId || null, internalExperimentId || null)
+    const p = internalProjectId || null
+    const e = internalExperimentId || null
+    const prev = lastEmittedContext.current
+    if (prev?.p === p && prev?.e === e) return
+    lastEmittedContext.current = { p, e }
+    onContextChangeRef.current?.(p, e)
   }, [showFilters, internalProjectId, internalExperimentId])
 
   const aiMode = variant === "aiContext"
@@ -248,6 +258,10 @@ export function ProtocolLiteraturePanel({
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="_none_">— No project —</SelectItem>
+            {internalProjectId &&
+              !filterProjects.some((x) => x.id === internalProjectId) && (
+                <SelectItem value={internalProjectId}>Linked project</SelectItem>
+              )}
             {filterProjects.map((p) => (
               <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
             ))}
@@ -269,6 +283,10 @@ export function ProtocolLiteraturePanel({
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="_none_">— No experiment —</SelectItem>
+            {internalExperimentId &&
+              !filterExperiments.some((x) => x.id === internalExperimentId) && (
+                <SelectItem value={internalExperimentId}>Linked experiment</SelectItem>
+              )}
             {filterExperiments.map((e) => (
               <SelectItem key={e.id} value={e.id}>{e.name}</SelectItem>
             ))}
