@@ -1,9 +1,26 @@
 "use client"
 
-import { useState, useRef, useEffect, useCallback } from "react"
+import { useState, useRef, useEffect, useLayoutEffect, useCallback } from "react"
 import {
-  X, Send, Sparkles, Loader2, RotateCcw, Check, XIcon, Eye, FileText,
-  History, ChevronDown, CornerDownLeft, Trash2, Plus,
+  X,
+  Loader2,
+  Check,
+  XIcon,
+  Eye,
+  FileText,
+  History,
+  ChevronDown,
+  CornerDownLeft,
+  Trash2,
+  Plus,
+  ArrowUp,
+  Sparkles,
+  MessageSquare,
+  BookOpen,
+  NotebookPen,
+  Minimize2,
+  Maximize2,
+  RotateCcw,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
@@ -12,11 +29,29 @@ import { cn } from "@/lib/utils"
 import { toast } from "sonner"
 import { createClient } from "@/lib/supabase/client"
 import { usePaperChatHistory, type PaperChatMessage } from "@/hooks/use-paper-chat-history"
-import { ALL_CITATION_STYLES, DEFAULT_CITATION_STYLE, getCitationStyle } from "@/lib/citation-styles"
 import {
-  DropdownMenu, DropdownMenuContent, DropdownMenuItem,
-  DropdownMenuTrigger, DropdownMenuLabel, DropdownMenuSeparator,
+  CITATION_STYLE_OPTIONS,
+  DEFAULT_CITATION_STYLE as DEFAULT_TIPTAP_CITATION_STYLE,
+} from "@/components/text-editor/citation-utils"
+import {
+  readPaperCitationStyle,
+  writePaperCitationStyle,
+  getPaperAiCitationPrompt,
+  PAPER_CITATION_STYLE_EVENT,
+  PAPER_CITATION_STYLE_STORAGE_KEY,
+  isValidTiptapCitationStyle,
+} from "@/components/text-editor/paper-citation-style-sync"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu"
+import { Notes9LoaderGif } from "@/components/brand/notes9-loader-gif"
+import { ClipboardInfoIcon } from "@/components/ui/clipboard-info-icon"
+import type { CatalystAgentMode } from "@/lib/catalyst-agent-types"
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -43,6 +78,10 @@ interface PaperAIPanelProps {
   paperId?: string
   getEditorContext?: () => { before: string; after: string }
   embedded?: boolean
+  /** Switch to main Catalyst sidebar with another agent (Writing panel hides until user picks Writing again). */
+  onSwitchToCatalystAgent?: (mode: CatalystAgentMode) => void
+  isExpanded?: boolean
+  onToggleExpand?: () => void
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -92,22 +131,57 @@ function stripDuplicateHeaders(html: string, paperContent: string): string {
 
 // ─── Component ───────────────────────────────────────────────────────────────
 
-export function PaperAIPanel({ open, onClose, getContent, onInsert, paperTitle, paperId, getEditorContext, embedded }: PaperAIPanelProps) {
+export function PaperAIPanel({
+  open,
+  onClose,
+  getContent,
+  onInsert,
+  paperTitle,
+  paperId,
+  getEditorContext,
+  embedded,
+  onSwitchToCatalystAgent,
+  isExpanded,
+  onToggleExpand,
+}: PaperAIPanelProps) {
   const chatHistory = usePaperChatHistory(paperId || "default")
   const [messages, setMessages] = useState<PaperChatMessage[]>([])
   const [input, setInput] = useState("")
   const [isLoading, setIsLoading] = useState(false)
   const [diffPreview, setDiffPreview] = useState<DiffPreview | null>(null)
-  const [citationStyleId, setCitationStyleId] = useState(DEFAULT_CITATION_STYLE)
+  const [citationStyleTiptap, setCitationStyleTiptap] = useState(
+    () => readPaperCitationStyle() ?? DEFAULT_TIPTAP_CITATION_STYLE
+  )
   const [showHistory, setShowHistory] = useState(false)
   const scrollRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const endRef = useRef<HTMLDivElement>(null)
 
-  // Load saved citation style
+  /** Stay aligned with TipTap toolbar + other tabs (storage + event). */
   useEffect(() => {
-    const saved = localStorage.getItem("paper-ai-citation-style")
-    if (saved) setCitationStyleId(saved)
+    const handler = (e: Event) => {
+      const v = (e as CustomEvent<string>).detail
+      if (v && isValidTiptapCitationStyle(v)) setCitationStyleTiptap(v)
+    }
+    window.addEventListener(PAPER_CITATION_STYLE_EVENT, handler)
+    return () => window.removeEventListener(PAPER_CITATION_STYLE_EVENT, handler)
+  }, [])
+
+  /** Same tick as open — pick up toolbar changes before paint. */
+  useLayoutEffect(() => {
+    if (!open) return
+    const s = readPaperCitationStyle()
+    if (s && isValidTiptapCitationStyle(s)) setCitationStyleTiptap(s)
+  }, [open])
+
+  /** Other browser tabs updating localStorage */
+  useEffect(() => {
+    const onStorage = (e: StorageEvent) => {
+      if (e.key !== PAPER_CITATION_STYLE_STORAGE_KEY || e.newValue == null) return
+      if (isValidTiptapCitationStyle(e.newValue)) setCitationStyleTiptap(e.newValue)
+    }
+    window.addEventListener("storage", onStorage)
+    return () => window.removeEventListener("storage", onStorage)
   }, [])
 
   // When a session is selected, load its messages
@@ -157,7 +231,7 @@ export function PaperAIPanel({ open, onClose, getContent, onInsert, paperTitle, 
       // Call getContent() at send time to get the CURRENT paper content
       const plainPaper = getPlainText(getContent())
       const history = messages.map(m => ({ role: m.role, content: m.content }))
-      const style = getCitationStyle(citationStyleId)
+      const citationStylePrompt = getPaperAiCitationPrompt(citationStyleTiptap)
 
       const res = await fetch("/api/ai/paper-chat", {
         method: "POST",
@@ -171,7 +245,7 @@ export function PaperAIPanel({ open, onClose, getContent, onInsert, paperTitle, 
           paperContent: plainPaper,
           paperTitle: paperTitle || "Untitled",
           sessionId,
-          citationStylePrompt: style?.promptInstructions,
+          citationStylePrompt,
           mode: mode || undefined,
         }),
       })
@@ -195,7 +269,7 @@ export function PaperAIPanel({ open, onClose, getContent, onInsert, paperTitle, 
     } finally {
       setIsLoading(false)
     }
-  }, [isLoading, messages, getContent, paperTitle, getPlainText, chatHistory, citationStyleId])
+  }, [isLoading, messages, getContent, paperTitle, getPlainText, chatHistory, citationStyleTiptap])
 
   const handleSubmit = useCallback(() => {
     sendMessage(input)
@@ -293,33 +367,74 @@ export function PaperAIPanel({ open, onClose, getContent, onInsert, paperTitle, 
 
   const maxLineNum = diffPreview ? Math.max(...diffPreview.lines.filter(l => l.lineNumber).map(l => l.lineNumber!), 0) : 0
   const gutterWidth = Math.max(3, String(maxLineNum).length)
-  const currentStyle = getCitationStyle(citationStyleId)
+  const currentCitationLabel =
+    CITATION_STYLE_OPTIONS.find((o) => o.value === citationStyleTiptap)?.label ?? citationStyleTiptap
 
   return (
-    <div className={cn("flex flex-col h-full bg-background", embedded ? "w-full min-w-0" : "w-[400px] min-w-[400px] border-l border-border")}>
-      {/* Header */}
-      <div className="flex h-12 sm:h-14 shrink-0 items-center justify-between border-b border-border/45 px-3 sm:px-4">
-        <div className="flex min-w-0 items-center gap-2">
-          <Sparkles className="h-4 w-4 shrink-0 text-primary" />
-          <span className="truncate text-sm font-medium">Write with AI</span>
-        </div>
-        <div className="flex shrink-0 items-center gap-1">
-          <Button variant="ghost" size="icon" className="size-8" onClick={() => setShowHistory(!showHistory)} title="Chat history">
-            <History className="size-3.5" />
+    <div
+      className={cn(
+        "flex h-full min-h-0 flex-col bg-background",
+        embedded ? "min-w-0 w-full flex-1" : "w-[400px] min-w-[400px] border-l border-border"
+      )}
+    >
+      {/* Header — aligned with main Catalyst sidebar */}
+      <header className="flex h-12 shrink-0 items-center justify-between gap-2 border-b border-border/40 bg-[color:var(--n9-header-bg)]/80 px-2 backdrop-blur-md sm:h-14 sm:px-4">
+        <div className="flex min-w-0 items-center gap-1 overflow-hidden">
+          <Button
+            variant="ghost"
+            size="icon"
+            className="size-8 shrink-0 text-muted-foreground sm:size-9"
+            onClick={() => setShowHistory(!showHistory)}
+            aria-label="Chat history"
+            title="Chat history"
+          >
+            <History className="size-4" />
           </Button>
-          <Button variant="ghost" size="icon" className="size-8" onClick={handleNewChat} title="New chat">
-            <Plus className="size-3.5" />
+          <Button
+            variant="secondary"
+            className="h-8 shrink-0 text-muted-foreground sm:h-9"
+            onClick={handleNewChat}
+            aria-label="New chat"
+          >
+            <Plus className="size-4" />
+            <span className="hidden sm:inline">New Chat</span>
           </Button>
-          {messages.length > 0 && (
-            <Button variant="ghost" size="icon" className="size-8" onClick={handleClear} title="Clear">
+          {messages.length > 0 ? (
+            <Button
+              variant="ghost"
+              size="icon"
+              className="size-8 shrink-0 text-muted-foreground sm:size-9"
+              onClick={handleClear}
+              title="Clear conversation"
+              aria-label="Clear conversation"
+            >
               <RotateCcw className="size-3.5" />
             </Button>
-          )}
-          <Button variant="ghost" size="icon" className="size-8" onClick={onClose}>
+          ) : null}
+        </div>
+        <div className="flex shrink-0 items-center justify-end gap-1">
+          {onToggleExpand ? (
+            <Button
+              variant="ghost"
+              size="icon"
+              className="size-8 text-muted-foreground sm:size-9"
+              onClick={onToggleExpand}
+              aria-label={isExpanded ? "Exit full screen" : "Expand chat"}
+            >
+              {isExpanded ? <Minimize2 className="size-4" /> : <Maximize2 className="size-4" />}
+            </Button>
+          ) : null}
+          <Button
+            variant="ghost"
+            size="icon"
+            className="size-8 text-muted-foreground sm:size-9"
+            onClick={onClose}
+            aria-label="Close"
+          >
             <X className="size-4" />
           </Button>
         </div>
-      </div>
+      </header>
 
       {/* History sidebar */}
       {showHistory ? (
@@ -399,16 +514,35 @@ export function PaperAIPanel({ open, onClose, getContent, onInsert, paperTitle, 
           {/* Messages */}
           <div ref={scrollRef} className="flex-1 overflow-y-auto">
             {messages.length === 0 ? (
-              <div className="flex flex-col items-center justify-center h-full px-6 text-center gap-3">
-                <Sparkles className="h-8 w-8 text-primary/50" />
-                <div>
-                  <p className="text-sm font-semibold">Writing Assistant</p>
-                  <p className="text-xs text-muted-foreground mt-1">Write sections, improve text, add citations, or get expert feedback.</p>
+              <div className="flex h-full flex-col items-center justify-center gap-3 px-6 text-center">
+                <div className="relative mb-1">
+                  <Notes9LoaderGif alt="Catalyst AI" widthPx={64} className="!translate-y-0" />
                 </div>
-                <div className="flex flex-col gap-1.5 w-full mt-2">
-                  {["Write an abstract for this paper", "Improve the introduction section", "Add citations to the results section", "Suggest a methodology structure"].map(s => (
-                    <button key={s} className="text-xs text-left px-3 py-2 rounded-md border border-border hover:bg-accent transition-colors text-foreground/70"
-                      onClick={() => { setInput(s); textareaRef.current?.focus() }}>
+                <h2 className="text-lg font-bold tracking-tight text-transparent bg-gradient-to-r from-orange-500 to-pink-600 bg-clip-text">
+                  Catalyst AI
+                </h2>
+                <h3 className="text-lg font-semibold tracking-tight text-transparent bg-gradient-to-r from-orange-500 to-pink-600 bg-clip-text">
+                  For Writing
+                </h3>
+                <p className="mt-1 max-w-xs text-sm text-muted-foreground">
+                  Write sections, improve text, add citations, or get expert feedback on your draft.
+                </p>
+                <div className="mt-2 flex w-full flex-col gap-1.5">
+                  {[
+                    "Write an abstract for this paper",
+                    "Improve the introduction section",
+                    "Add citations to the results section",
+                    "Suggest a methodology structure",
+                  ].map((s) => (
+                    <button
+                      key={s}
+                      type="button"
+                      className="rounded-md border border-border px-3 py-2 text-left text-xs text-foreground/70 transition-colors hover:bg-accent"
+                      onClick={() => {
+                        setInput(s)
+                        textareaRef.current?.focus()
+                      }}
+                    >
                       {s}
                     </button>
                   ))}
@@ -470,44 +604,123 @@ export function PaperAIPanel({ open, onClose, getContent, onInsert, paperTitle, 
             )}
           </div>
 
-          {/* Toolbar + Input */}
-          <div className="border-t border-border">
-            {/* Action toolbar */}
-            <div className="flex items-center gap-1 px-3 py-1.5 border-b border-border/40 overflow-x-auto">
-              {/* Citation style picker */}
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button variant="ghost" size="sm" className="h-7 text-[11px] gap-1 px-2 shrink-0">
-                    <span className="text-muted-foreground">Cite:</span>
-                    <span>{currentStyle?.name || "Vancouver"}</span>
-                    <ChevronDown className="h-3 w-3" />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="start" className="w-56">
-                  <DropdownMenuLabel className="text-xs">Citation Style</DropdownMenuLabel>
-                  <DropdownMenuSeparator />
-                  {ALL_CITATION_STYLES.map(s => (
-                    <DropdownMenuItem key={s.id} onClick={() => { setCitationStyleId(s.id); localStorage.setItem("paper-ai-citation-style", s.id) }}>
-                      <div className="flex flex-col gap-0.5">
-                        <span className="text-xs font-medium">{s.name} <span className="text-muted-foreground font-normal ml-1">{s.inlineExample}</span></span>
-                        <span className="text-[10px] text-muted-foreground">{s.description}</span>
-                      </div>
-                    </DropdownMenuItem>
-                  ))}
-                </DropdownMenuContent>
-              </DropdownMenu>
-
-              <div className="w-px h-4 bg-border/60 mx-0.5" />
-            </div>
-
-            {/* Text input */}
-            <div className="p-3">
-              <div className="relative">
-                <Textarea ref={textareaRef} value={input} onChange={e => setInput(e.target.value)} onKeyDown={handleKeyDown}
-                  placeholder="Ask about your paper..." className="min-h-[60px] max-h-[120px] resize-none pr-10 text-sm" disabled={isLoading} />
-                <Button size="icon" className="absolute bottom-2 right-2 h-7 w-7 rounded-full" onClick={handleSubmit} disabled={!input.trim() || isLoading}>
-                  {isLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
-                </Button>
+          {/* Composer — Cursor-style card + agent row (matches main Catalyst sidebar) */}
+          <div className="flex-shrink-0 border-t border-border bg-background/95 p-4 backdrop-blur">
+            <div className="mx-auto min-w-0 max-w-3xl">
+              <div
+                className={cn(
+                  "rounded-xl border bg-card/50 shadow-sm transition-all focus-within:border-ring focus-within:ring-1 focus-within:ring-ring/50",
+                  "overflow-hidden"
+                )}
+              >
+                <Textarea
+                  ref={textareaRef}
+                  value={input}
+                  onChange={(e) => setInput(e.target.value)}
+                  onKeyDown={handleKeyDown}
+                  placeholder="Ask about your paper…"
+                  className="min-h-[68px] max-h-[200px] w-full resize-none border-0 bg-transparent px-4 py-2.5 text-sm shadow-none placeholder:text-muted-foreground/60 focus-visible:ring-0"
+                  disabled={isLoading}
+                />
+                <div className="mt-1 flex min-h-9 items-center justify-between gap-2 px-2 pb-2">
+                  <div className="flex min-w-0 flex-1 flex-nowrap items-center gap-1.5 overflow-x-auto">
+                    {onSwitchToCatalystAgent ? (
+                      <>
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button
+                              id="tour-paper-ai-mode"
+                              variant="ghost"
+                              size="sm"
+                              className="h-7 shrink-0 gap-1.5 rounded-md bg-muted/50 px-2 text-xs font-medium text-muted-foreground hover:bg-muted"
+                            >
+                              <Sparkles className="size-3.5" />
+                              Writing
+                              <ChevronDown className="size-3 opacity-50" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="start" className="w-[200px]">
+                            <DropdownMenuItem
+                              onClick={() => onSwitchToCatalystAgent("protocol")}
+                              className="gap-2 text-xs"
+                            >
+                              <ClipboardInfoIcon className="size-3.5" /> Protocol
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              onClick={() => onSwitchToCatalystAgent("literature")}
+                              className="gap-2 text-xs"
+                            >
+                              <BookOpen className="size-3.5" /> Literature
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              onClick={() => onSwitchToCatalystAgent("general")}
+                              className="gap-2 text-xs"
+                            >
+                              <MessageSquare className="size-3.5" /> General
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              onClick={() => onSwitchToCatalystAgent("notes9")}
+                              className="gap-2 text-xs"
+                            >
+                              <NotebookPen className="size-3.5" /> Notes9
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                        <div className="mx-0.5 h-4 w-px shrink-0 bg-border/60" />
+                      </>
+                    ) : null}
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-7 shrink-0 gap-1 px-2 text-[11px] text-muted-foreground"
+                        >
+                          <span className="text-muted-foreground">Cite:</span>
+                          <span>{currentCitationLabel}</span>
+                          <ChevronDown className="h-3 w-3" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="start" className="w-56">
+                        <DropdownMenuLabel className="text-xs">Citation Style</DropdownMenuLabel>
+                        <DropdownMenuSeparator />
+                        {CITATION_STYLE_OPTIONS.map((opt) => (
+                          <DropdownMenuItem
+                            key={opt.value}
+                            onClick={() => {
+                              setCitationStyleTiptap(opt.value)
+                              writePaperCitationStyle(opt.value)
+                            }}
+                          >
+                            <div className="flex flex-col gap-0.5">
+                              <span className="text-xs font-medium">{opt.longLabel}</span>
+                            </div>
+                          </DropdownMenuItem>
+                        ))}
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </div>
+                  <div className="flex h-9 shrink-0 items-center justify-end gap-1">
+                    <Button
+                      type="button"
+                      size="icon"
+                      variant="ghost"
+                      className={cn(
+                        "size-7 text-muted-foreground transition-colors hover:text-primary",
+                        input.trim() && !isLoading && "text-primary"
+                      )}
+                      onClick={handleSubmit}
+                      disabled={!input.trim() || isLoading}
+                      aria-label="Send"
+                    >
+                      {isLoading ? (
+                        <Loader2 className="size-4 animate-spin" />
+                      ) : (
+                        <ArrowUp className="size-4" />
+                      )}
+                    </Button>
+                  </div>
+                </div>
               </div>
             </div>
           </div>

@@ -17,6 +17,7 @@ import {
   reformatInlineCitations,
   reformatBibliography,
 } from './citation-utils'
+import { isValidTiptapCitationStyle, readPaperCitationStyle } from './paper-citation-style-sync'
 
 // Re-export for convenience
 export { CITATION_STYLE_OPTIONS }
@@ -119,8 +120,19 @@ export function useCitationStore(): CitationStore {
 // Hook: initialise reducer (to be called inside the provider component)
 // ---------------------------------------------------------------------------
 
-export function useCitationReducer() {
-  return useReducer(citationReducer, INITIAL_STATE)
+export function useCitationReducer(syncWithPaperStorage = false) {
+  return useReducer(
+    citationReducer,
+    INITIAL_STATE,
+    (base: CitationState) => {
+      if (!syncWithPaperStorage || typeof window === "undefined") return base
+      const saved = readPaperCitationStyle()
+      if (saved && isValidTiptapCitationStyle(saved)) {
+        return { ...base, style: saved }
+      }
+      return base
+    }
+  )
 }
 
 // ---------------------------------------------------------------------------

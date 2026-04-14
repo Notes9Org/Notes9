@@ -76,6 +76,7 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Switch } from '@/components/ui/switch';
@@ -242,6 +243,8 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
   const [isExpanded, setIsExpanded] = useState(false);
   const [expandedHistoryOpen, setExpandedHistoryOpen] = useState(true);
   const [showAllPastChats, setShowAllPastChats] = useState(false);
+  /** When set, show main Catalyst chat instead of the paper Writing panel (paper context stays registered). */
+  const [paperUiSuppressed, setPaperUiSuppressed] = useState(false);
   const previousPathnameRef = useRef(pathname);
   const savedModeOutsideLiteratureRef = useRef<CatalystAgentMode>('general');
   const wasOnLiteratureRouteRef = useRef(false);
@@ -724,6 +727,26 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
     toast.message('Select a protocol, then click Design to open Protocol.');
     router.push('/protocols?selectForDesign=1');
   }, [isProtocolDesignRoute, router]);
+
+  const switchFromWritingToCatalystAgent = useCallback(
+    (mode: CatalystAgentMode) => {
+      setPaperUiSuppressed(true);
+      if (mode === 'literature') {
+        goToLiteratureAgent();
+      } else if (mode === 'protocol') {
+        goToProtocolAgent();
+      } else {
+        setAgentMode(mode);
+      }
+    },
+    [goToLiteratureAgent, goToProtocolAgent]
+  );
+
+  useEffect(() => {
+    if (!paperAI?.isActive) {
+      setPaperUiSuppressed(false);
+    }
+  }, [paperAI?.isActive]);
 
   const MAX_PAST_CHATS = 5;
   const pastChatsToShow = showAllPastChats ? sessions : sessions.slice(0, MAX_PAST_CHATS);
@@ -1827,6 +1850,17 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="start" className="w-[200px]">
+                {paperAI?.isActive && paperUiSuppressed ? (
+                  <>
+                    <DropdownMenuItem
+                      onClick={() => setPaperUiSuppressed(false)}
+                      className="gap-2 text-xs"
+                    >
+                      <Sparkles className="size-3.5" /> Writing
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                  </>
+                ) : null}
                 <DropdownMenuItem
                   onClick={() => {
                     goToProtocolAgent();
@@ -2082,7 +2116,7 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
         <div className="flex flex-1 items-center justify-center">
           <Sparkles className="size-6 -translate-y-[5px] text-muted-foreground/50 animate-pulse" />
         </div>
-      ) : paperAI?.isActive ? (
+      ) : paperAI?.isActive && !paperUiSuppressed ? (
         <PaperAIPanel
           open
           embedded
@@ -2092,6 +2126,9 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
           paperTitle={paperAI.paperTitle}
           paperId={paperAI.paperId}
           getEditorContext={paperAI.getEditorContext}
+          onSwitchToCatalystAgent={switchFromWritingToCatalystAgent}
+          isExpanded={isExpanded}
+          onToggleExpand={() => setIsExpanded((v) => !v)}
         />
       ) : (
         <>

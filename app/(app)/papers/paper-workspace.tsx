@@ -7,6 +7,7 @@ import { createClient } from "@/lib/supabase/client"
 import { PaperEditor, DEFAULT_PAPER_TEMPLATE } from "@/components/text-editor/paper-editor"
 import { usePaperAI } from "@/contexts/paper-ai-context"
 import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 import { ArrowLeft, Loader2, Download, Upload } from "lucide-react"
 import { toast } from "sonner"
@@ -16,7 +17,8 @@ import { PaperActions } from "./[id]/paper-actions"
 import { IS_PAPERS_MOCKED, getMockPaper, updateMockPaper } from "@/lib/papers-mock"
 import { downloadLatex } from "@/lib/latex-export"
 import { JOURNAL_TEMPLATES } from "@/lib/latex-templates"
-import { downloadBibtex, parseBibtex, parseAuthors, type CitationForBib } from "@/lib/bibtex"
+import { downloadBibtex, parseBibtex, parseAuthors, type CitationForBib, type BibEntry } from "@/lib/bibtex"
+import { getEffectivePublicationYear } from "@/components/text-editor/citation-utils"
 import { latexToHtml } from "@/lib/latex-import"
 import {
   DropdownMenu,
@@ -29,12 +31,27 @@ import {
 import { FileDropzone } from "@/components/ui/file-dropzone"
 import { NoteExportMenu } from "@/components/note-export-menu"
 
+function publicationYearFromBib(entry: BibEntry, title: string, journal: string): string {
+  const raw = entry.year?.trim() ?? ""
+  const parsed = parseInt(raw, 10)
+  const yNum = !Number.isNaN(parsed) && parsed > 0 ? parsed : 0
+  const y = getEffectivePublicationYear({
+    year: yNum,
+    title,
+    journal,
+    url: entry.url ?? "",
+  })
+  return y != null ? String(y) : ""
+}
+
 export type PaperWorkspaceProps = {
   paperId: string
   /** When set, show a back control to return to the writing hub (or elsewhere). */
   backLink?: { href: string }
   /** Called after delete or status change so parent lists/tabs can refresh. */
   onPaperMutated?: () => void
+  /** Called when the paper title is saved so hub tabs / lists can update without a full refetch. */
+  onPaperTitleUpdated?: (paperId: string, title: string) => void
 }
 
 function statusVariant(status: string): "default" | "outline" | "success" {
@@ -50,11 +67,12 @@ function statusVariant(status: string): "default" | "outline" | "success" {
   }
 }
 
-export function PaperWorkspace({ paperId, backLink, onPaperMutated }: PaperWorkspaceProps) {
+export function PaperWorkspace({ paperId, backLink, onPaperMutated, onPaperTitleUpdated }: PaperWorkspaceProps) {
   const router = useRouter()
   const id = paperId
 
   const [paper, setPaper] = useState<Record<string, unknown> | null>(null)
+  const [titleInput, setTitleInput] = useState("")
   const [loading, setLoading] = useState(true)
   const [content, setContent] = useState("")
   const bibInputRef = useRef<HTMLInputElement>(null)
@@ -97,6 +115,11 @@ export function PaperWorkspace({ paperId, backLink, onPaperMutated }: PaperWorks
     void fetchPaper()
   }, [id, router])
 
+  useEffect(() => {
+    if (!paper) return
+    setTitleInput(((paper.title as string) || "").trim() || "Untitled")
+  }, [id, paper?.title])
+
   const handleAutoSave = useCallback(
     async (newContent: string) => {
       if (IS_PAPERS_MOCKED) {
@@ -132,16 +155,46 @@ export function PaperWorkspace({ paperId, backLink, onPaperMutated }: PaperWorks
     editorRef.current = editor
   }, [])
 
+  const commitTitle = useCallback(async () => {
+    const next = titleInput.trim() || "Untitled"
+    const current = ((paper?.title as string) || "").trim() || "Untitled"
+    if (!paper || next === current) return
+
+    if (IS_PAPERS_MOCKED) {
+      updateMockPaper(id, { title: next })
+      setPaper((p) => (p ? { ...p, title: next } : p))
+      onPaperTitleUpdated?.(id, next)
+      router.refresh()
+      return
+    }
+
+    const supabase = createClient()
+    const { error } = await supabase
+      .from("papers")
+      .update({ title: next, updated_at: new Date().toISOString() })
+      .eq("id", id)
+
+    if (error) {
+      toast.error("Could not save title")
+      setTitleInput(current)
+      return
+    }
+    setPaper((p) => (p ? { ...p, title: next } : p))
+    onPaperTitleUpdated?.(id, next)
+    router.refresh()
+  }, [titleInput, paper, id, onPaperTitleUpdated, router])
+
   useEffect(() => {
     contentRef.current = content
   }, [content])
 
+  const displayTitle = titleInput.trim() || "Untitled"
+
   useEffect(() => {
     if (!paper || !paperAI) return
-    const title = (paper.title as string) || "Untitled"
     paperAI.register({
-      title,
       id,
+      title: displayTitle,
       getContent: () => contentRef.current,
       onInsert: (html: string) => {
         const editor = editorRef.current
@@ -160,7 +213,7 @@ export function PaperWorkspace({ paperId, backLink, onPaperMutated }: PaperWorks
       },
     })
     return () => paperAI.unregister()
-  }, [paper, paperAI])
+  }, [paper, paperAI, displayTitle, id])
 
   const extractCitationsFromContent = useCallback((): CitationForBib[] => {
     const linkRegex = /<a[^>]*>\[\d+\]<\/a>/g
@@ -222,13 +275,21 @@ export function PaperWorkspace({ paperId, backLink, onPaperMutated }: PaperWorks
         let refsHtml = "<h2>References</h2>"
         entries.forEach((entry, idx) => {
           const authors = parseAuthors(entry.author)
-          const authorStr = authors.length > 0 ? authors.join(", ") : "Unknown"
-          const year = entry.year || "n.d."
+          const authorStr = authors.length > 0 ? authors.join(", ") : ""
           const t = entry.title || "Untitled"
           const journal = entry.journal || ""
+          const year = publicationYearFromBib(entry, t, journal)
           const doi = entry.doi || ""
 
-          refsHtml += `<p>[${idx + 1}] ${authorStr} (${year}). ${t}.`
+          if (authorStr) {
+            refsHtml += year
+              ? `<p>[${idx + 1}] ${authorStr} (${year}). ${t}.`
+              : `<p>[${idx + 1}] ${authorStr}. ${t}.`
+          } else {
+            refsHtml += year
+              ? `<p>[${idx + 1}] ${t}. (${year}).`
+              : `<p>[${idx + 1}] ${t}.`
+          }
           if (journal) refsHtml += ` <em>${journal}</em>.`
           if (doi) refsHtml += ` DOI: ${doi}`
           refsHtml += `</p>`
@@ -284,13 +345,12 @@ export function PaperWorkspace({ paperId, backLink, onPaperMutated }: PaperWorks
 
   if (!paper) return null
 
-  const title = (paper.title as string) || "Untitled"
   const status = String(paper.status || "draft")
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-4">
       <div className="flex items-center justify-between gap-2">
-        <div className="flex min-w-0 items-center gap-3">
+        <div className="flex min-w-0 flex-1 items-center gap-3">
           {backLink ? (
             <Button variant="ghost" size="icon" asChild>
               <Link href={backLink.href}>
@@ -298,7 +358,19 @@ export function PaperWorkspace({ paperId, backLink, onPaperMutated }: PaperWorks
               </Link>
             </Button>
           ) : null}
-          <h1 className="truncate text-2xl font-bold">{title}</h1>
+          <Input
+            value={titleInput}
+            onChange={(e) => setTitleInput(e.target.value)}
+            onBlur={() => void commitTitle()}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault()
+                ;(e.target as HTMLInputElement).blur()
+              }
+            }}
+            aria-label="Paper title"
+            className="min-w-0 flex-1 border-0 bg-transparent px-0 py-0.5 text-2xl font-bold shadow-none focus-visible:ring-1 focus-visible:ring-ring/40 md:text-2xl"
+          />
           <Badge variant={statusVariant(status)}>{status.replace("_", " ")}</Badge>
           <SaveStatusIndicator status={saveStatus} />
         </div>
@@ -318,7 +390,7 @@ export function PaperWorkspace({ paperId, backLink, onPaperMutated }: PaperWorks
                   key={tmpl.id}
                   onClick={() => {
                     downloadLatex(content, {
-                      title,
+                      title: displayTitle,
                       templateId: tmpl.id,
                     })
                     toast.success(`Exported as ${tmpl.name} LaTeX`)
@@ -341,7 +413,7 @@ export function PaperWorkspace({ paperId, backLink, onPaperMutated }: PaperWorks
                     })
                     return
                   }
-                  downloadBibtex(citations, title || "references")
+                  downloadBibtex(citations, displayTitle || "references")
                   toast.success(`Exported ${citations.length} references as .bib`)
                 }}
               >
@@ -377,9 +449,9 @@ export function PaperWorkspace({ paperId, backLink, onPaperMutated }: PaperWorks
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
-          <NoteExportMenu title={title} htmlContent={content} />
+          <NoteExportMenu title={displayTitle} htmlContent={content} />
           <PaperActions
-            paper={{ id, title, status }}
+            paper={{ id, title: displayTitle, status }}
             onAfterMutation={onPaperMutated}
           />
         </div>
@@ -415,12 +487,20 @@ export function PaperWorkspace({ paperId, backLink, onPaperMutated }: PaperWorks
                 let refsHtml = "<h2>References</h2>"
                 entries.forEach((entry, idx) => {
                   const authors = parseAuthors(entry.author)
-                  const authorStr = authors.length > 0 ? authors.join(", ") : "Unknown"
-                  const year = entry.year || "n.d."
+                  const authorStr = authors.length > 0 ? authors.join(", ") : ""
                   const t = entry.title || "Untitled"
                   const journal = entry.journal || ""
+                  const year = publicationYearFromBib(entry, t, journal)
                   const doi = entry.doi || ""
-                  refsHtml += `<p>[${idx + 1}] ${authorStr} (${year}). ${t}.`
+                  if (authorStr) {
+                    refsHtml += year
+                      ? `<p>[${idx + 1}] ${authorStr} (${year}). ${t}.`
+                      : `<p>[${idx + 1}] ${authorStr}. ${t}.`
+                  } else {
+                    refsHtml += year
+                      ? `<p>[${idx + 1}] ${t}. (${year}).`
+                      : `<p>[${idx + 1}] ${t}.`
+                  }
                   if (journal) refsHtml += ` <em>${journal}</em>.`
                   if (doi) refsHtml += ` DOI: ${doi}`
                   refsHtml += `</p>`
@@ -446,7 +526,7 @@ export function PaperWorkspace({ paperId, backLink, onPaperMutated }: PaperWorks
             content={content}
             onChange={handleContentChange}
             minHeight="calc(100vh - 180px)"
-            title={title}
+            title={displayTitle}
             autoSave
             onAutoSave={handleAutoSave}
             onEditorReady={handleEditorReady}
