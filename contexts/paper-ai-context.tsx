@@ -3,12 +3,14 @@
 import { createContext, useContext, useState, useCallback, useRef, type ReactNode } from "react"
 
 interface PaperAIContextValue {
-  /** Whether a paper editor is currently active and providing context */
   isActive: boolean
   paperTitle: string
-  paperContent: string
+  paperId: string
+  /** Returns the current paper HTML content (always fresh) */
+  getContent: () => string
   /** Register the paper editor — called by paper detail page */
   register: (opts: {
+    id: string
     title: string
     getContent: () => string
     onInsert: (html: string) => void
@@ -27,16 +29,19 @@ const PaperAIContext = createContext<PaperAIContextValue | null>(null)
 export function PaperAIProvider({ children }: { children: ReactNode }) {
   const [isActive, setIsActive] = useState(false)
   const [paperTitle, setPaperTitle] = useState("")
+  const [paperId, setPaperId] = useState("")
   const getContentRef = useRef<() => string>(() => "")
   const onInsertRef = useRef<(html: string) => void>(() => {})
   const getEditorContextRef = useRef<() => { before: string; after: string }>(() => ({ before: "", after: "" }))
 
   const register = useCallback((opts: {
+    id: string
     title: string
     getContent: () => string
     onInsert: (html: string) => void
     getEditorContext: () => { before: string; after: string }
   }) => {
+    setPaperId(opts.id)
     setPaperTitle(opts.title)
     getContentRef.current = opts.getContent
     onInsertRef.current = opts.onInsert
@@ -47,6 +52,7 @@ export function PaperAIProvider({ children }: { children: ReactNode }) {
   const unregister = useCallback(() => {
     setIsActive(false)
     setPaperTitle("")
+    setPaperId("")
     getContentRef.current = () => ""
     onInsertRef.current = () => {}
     getEditorContextRef.current = () => ({ before: "", after: "" })
@@ -60,12 +66,17 @@ export function PaperAIProvider({ children }: { children: ReactNode }) {
     return getEditorContextRef.current()
   }, [])
 
+  const getContent = useCallback(() => {
+    return isActive ? getContentRef.current() : ""
+  }, [isActive])
+
   return (
     <PaperAIContext.Provider
       value={{
         isActive,
         paperTitle,
-        paperContent: isActive ? getContentRef.current() : "",
+        paperId,
+        getContent,
         register,
         unregister,
         onInsert,
