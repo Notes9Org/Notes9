@@ -518,7 +518,7 @@ export function PaperAIPanel({
                 <div className="relative mb-1">
                   <Notes9LoaderGif alt="Catalyst AI" widthPx={64} className="!translate-y-0" />
                 </div>
-                <h2 className="text-lg font-bold tracking-tight text-transparent bg-gradient-to-r from-orange-500 to-pink-600 bg-clip-text">
+                <h2 className="text-xl font-bold tracking-tight text-transparent bg-gradient-to-r from-orange-500 to-pink-600 bg-clip-text">
                   Catalyst AI
                 </h2>
                 <h3 className="text-lg font-semibold tracking-tight text-transparent bg-gradient-to-r from-orange-500 to-pink-600 bg-clip-text">
