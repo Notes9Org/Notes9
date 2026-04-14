@@ -142,6 +142,23 @@ import {
   readSpreadsheetWorkbook,
 } from "@/lib/spreadsheet-workbook"
 import { looksLikeMarkdown, markdownToHtml } from "@/lib/markdown-to-editor-html"
+import {
+  type CitationMetadata,
+  CITATION_STYLE_OPTIONS,
+  formatInlineCitation,
+  formatCitation,
+  parseCitationsFromHtml,
+  reformatInlineCitations,
+  reformatBibliography,
+} from "./citation-utils"
+import {
+  CitationContext,
+  useCitationReducer,
+  syncStoreFromHtml,
+  applyStoreToHtml,
+  buildMetadataMap,
+  type CitationEntry,
+} from "./use-citation-store"
 
 interface Paper {
   id: number
@@ -151,17 +168,6 @@ interface Paper {
   journal: string
   source_url: string
   doi: string
-}
-
-interface CitationMetadata {
-  citationNumber: number
-  url: string
-  title: string
-  authors: string[]
-  year: number
-  journal: string
-  doi: string
-  paperId: string
 }
 
 interface TiptapEditorProps {
@@ -1403,8 +1409,10 @@ export function TiptapEditor({
   const [foundPapers, setFoundPapers] = useState<Paper[]>([])
   const [selectedPapers, setSelectedPapers] = useState<Set<number>>(new Set())
   const [citationInsertPosition, setCitationInsertPosition] = useState<number>(0)
-  const [citationMetadata, setCitationMetadata] = useState<Map<number, CitationMetadata>>(new Map())
-  const [selectedCitationStyle, setSelectedCitationStyle] = useState<'APA' | 'MLA' | 'Chicago' | 'Harvard' | 'IEEE' | 'Vancouver'>('APA')
+  // Citation store (single source of truth for citations + style)
+  const [citationState, citationDispatch] = useCitationReducer()
+  const selectedCitationStyle = citationState.style
+  const citationMetadata = buildMetadataMap(citationState)
   const [isCommenting, setIsCommenting] = useState(false)
   const [commentText, setCommentText] = useState("")
   const [commentsSidebarOpen, setCommentsSidebarOpen] = useState(false)
@@ -2083,7 +2091,9 @@ export function TiptapEditor({
           headers: {
             'Content-Type': 'application/json',
           },
-          body: JSON.stringify({ text: selectedText }),
+          body: JSON.stringify({
+            text: `${selectedText} -site:wikipedia.org -site:en.wikipedia.org scholarly peer-reviewed research article`,
+          }),
           signal: controller.signal,
         }
       )
@@ -2095,9 +2105,18 @@ export function TiptapEditor({
 
       const data: Paper[] = await response.json()
 
-      if (data && data.length > 0) {
+      // Deduplicate by title (case-insensitive)
+      const seen = new Set<string>()
+      const uniqueData = data.filter((paper) => {
+        const key = (paper.title || '').trim().toLowerCase()
+        if (!key || seen.has(key)) return false
+        seen.add(key)
+        return true
+      })
+
+      if (uniqueData && uniqueData.length > 0) {
         // Store papers and open modal
-        setFoundPapers(data)
+        setFoundPapers(uniqueData)
         setSelectedPapers(new Set())
         setCitationInsertPosition(to)
         setCitationModalOpen(true)
@@ -2123,92 +2142,58 @@ export function TiptapEditor({
   const handleCiteSelected = useCallback(() => {
     if (!editor || selectedPapers.size === 0) return
 
-    // Get all citation links in the document with their positions
     const html = editor.getHTML()
-    const citations: { pos: number; number: number; url: string }[] = []
 
-    // Find all existing citations with their positions
-    const citationRegex = /<a[^>]*href="([^"]*)"[^>]*>\[(\d+)\]<\/a>/g
-    let match
+    // Determine insert position among existing citations by counting
+    // how many citation anchors appear before the cursor position
+    const beforeCursor = html.substring(0, editor.state.selection.from)
+    const existingBeforeCursor = (beforeCursor.match(/<a[^>]*data-paper-title="[^"]*"[^>]*>[^<]*<\/a>/g) || []).length
+    // Also count plain-text [N] before cursor
+    const strippedBefore = beforeCursor.replace(/<a[^>]*>[^<]*<\/a>/g, '')
+    const plainBefore = (strippedBefore.match(/\[(\d+)\]/g) || []).length
+    const insertAfterNumber = existingBeforeCursor + plainBefore
 
-    while ((match = citationRegex.exec(html)) !== null) {
-      const citationNumber = parseInt(match[2])
-      const url = match[1]
-      // Find position in document (approximate based on text content)
-      const textBefore = html.substring(0, match.index).replace(/<[^>]*>/g, '').length
-      citations.push({ pos: textBefore, number: citationNumber, url })
-    }
-
-    // Add new citations at the insert position
+    // Build new citation entries from selected papers
     const sortedIndices = Array.from(selectedPapers).sort((a, b) => a - b)
-    const newCitations = sortedIndices.map((index) => {
+    const newEntries: CitationEntry[] = sortedIndices.map((index) => {
       const paper = foundPapers[index]
-      console.log('Paper data being stored:', paper) // Debug log
       return {
-        pos: citationInsertPosition,
-        number: 0, // Will be assigned later
-        url: paper?.source_url || '',
-        paperId: paper?.id?.toString() || '',
-        title: paper?.title || '',
-        authors: paper?.authors || [],
-        year: paper?.year || 0,
-        journal: paper?.journal || '',
-        doi: paper?.doi || ''
+        key: paper?.id?.toString() || `new-${Date.now()}-${index}`,
+        metadata: {
+          citationNumber: 0, // will be assigned by reducer
+          url: paper?.source_url || '',
+          title: paper?.title || '',
+          authors: paper?.authors || [],
+          year: paper?.year || 0,
+          journal: paper?.journal || '',
+          doi: paper?.doi || '',
+          paperId: paper?.id?.toString() || '',
+        },
       }
     })
 
-    // Combine and sort all citations by position
-    const allCitations = [...citations, ...newCitations].sort((a, b) => a.pos - b.pos)
+    // Add to store — reducer handles renumbering everything
+    citationDispatch({ type: 'ADD_CITATIONS', citations: newEntries, afterNumber: insertAfterNumber })
 
-    // Renumber all citations sequentially
-    allCitations.forEach((citation, index) => {
-      citation.number = index + 1
-    })
-
-    // Create the new citation text to insert
+    // Build the HTML for the new citations to insert at cursor
+    // We need to compute the numbers they'll get after insertion
+    const startNumber = insertAfterNumber + 1
     let citationText = ''
-    newCitations.forEach((newCit) => {
-      const finalNumber = allCitations.find(c => c.pos === newCit.pos && c.url === newCit.url)?.number || 1
-      if (newCit.url) {
-        // Store paper metadata in data attributes for later bibliography generation
-        // Encode complex data as JSON to preserve arrays
-        const authorsJson = JSON.stringify(newCit.authors || []).replace(/"/g, '&quot;')
-        const citationHtml = `<a href="${newCit.url}" data-paper-id="${newCit.paperId}" data-paper-title="${newCit.title.replace(/"/g, '&quot;')}" data-paper-authors="${authorsJson}" data-paper-year="${newCit.year}" data-paper-journal="${(newCit.journal || '').replace(/"/g, '&quot;')}" data-paper-doi="${newCit.doi || ''}" target="_blank" rel="noopener noreferrer">[${finalNumber}]</a>`
-        console.log('Citation HTML being inserted:', citationHtml) // Debug log
-        citationText += citationHtml
-      } else {
-        citationText += `[${finalNumber}]`
-      }
+    newEntries.forEach((entry, i) => {
+      const num = startNumber + i
+      const meta = { ...entry.metadata, citationNumber: num }
+      const inlineLabel = formatInlineCitation(num, meta, selectedCitationStyle)
+      const authorsJson = JSON.stringify(meta.authors || []).replace(/"/g, '&quot;')
+      citationText += `<a href="${meta.url}" data-paper-id="${meta.paperId}" data-paper-title="${meta.title.replace(/"/g, '&quot;')}" data-paper-authors="${authorsJson}" data-paper-year="${meta.year}" data-paper-journal="${(meta.journal || '').replace(/"/g, '&quot;')}" data-paper-doi="${meta.doi || ''}" target="_blank" rel="noopener noreferrer">${inlineLabel}</a>`
     })
 
-    // Insert new citations
+    // Insert at cursor position
     editor.chain().focus().setTextSelection(citationInsertPosition).insertContent(citationText).run()
 
-    // Now renumber all existing citations in the document
+    // Renumber all existing citations in the document to match store order
     setTimeout(() => {
       const updatedHtml = editor.getHTML()
-      let newHtml = updatedHtml
-
-      // Replace all citation numbers with their new sequential numbers
-      const allCitationMatches = Array.from(updatedHtml.matchAll(/<a([^>]*href="[^"]*"[^>]*)>\[(\d+)\]<\/a>/g))
-
-      // Sort by position to maintain order
-      const citationMap = new Map<string, number>()
-      let counter = 1
-
-      allCitationMatches.forEach((match) => {
-        const fullMatch = match[0]
-        const attributes = match[1]
-
-        if (!citationMap.has(fullMatch)) {
-          citationMap.set(fullMatch, counter)
-          const newCitation = `<a${attributes}>[${counter}]</a>`
-          newHtml = newHtml.replace(fullMatch, newCitation)
-          counter++
-        }
-      })
-
-      // Update the editor content with renumbered citations
+      const newHtml = reformatInlineCitations(updatedHtml, selectedCitationStyle)
       if (newHtml !== updatedHtml) {
         editor.commands.setContent(newHtml)
       }
@@ -2218,7 +2203,7 @@ export function TiptapEditor({
     setCitationModalOpen(false)
     setFoundPapers([])
     setSelectedPapers(new Set())
-  }, [editor, selectedPapers, foundPapers, citationInsertPosition])
+  }, [editor, selectedPapers, foundPapers, citationInsertPosition, selectedCitationStyle, citationDispatch])
 
   const togglePaperSelection = useCallback((index: number) => {
     setSelectedPapers(prev => {
@@ -2232,165 +2217,59 @@ export function TiptapEditor({
     })
   }, [])
 
-  const formatCitation = useCallback((metadata: CitationMetadata, style: string): string => {
-    const { authors, year, title, journal, url } = metadata
-    const authorStr = authors && authors.length > 0
-      ? authors.length === 1
-        ? authors[0]
-        : authors.length === 2
-          ? `${authors[0]} & ${authors[1]}`
-          : `${authors[0]} et al.`
-      : 'Unknown Author'
-
-    const yearStr = year && year > 0 ? year.toString() : 'n.d.'
-
-    switch (style) {
-      case 'APA':
-        return `${authorStr} (${yearStr}). ${title}. ${journal ? `<em>${journal}</em>. ` : ''}${url ? `Retrieved from ${url}` : ''}`
-
-      case 'MLA':
-        return `${authorStr}. "${title}." ${journal ? `<em>${journal}</em>, ` : ''}${yearStr}. ${url ? `Web. ${url}` : ''}`
-
-      case 'Chicago':
-        return `${authorStr}. "${title}." ${journal ? `<em>${journal}</em> ` : ''}(${yearStr}). ${url || ''}`
-
-      case 'Harvard':
-        return `${authorStr}, ${yearStr}. ${title}. ${journal ? `<em>${journal}</em>. ` : ''}${url ? `Available at: ${url}` : ''}`
-
-      case 'IEEE':
-        return `${authorStr}, "${title}," ${journal ? `<em>${journal}</em>, ` : ''}${yearStr}. ${url ? `[Online]. Available: ${url}` : ''}`
-
-      case 'Vancouver':
-        // Vancouver style: Author(s). Title. Journal. Year;volume(issue):pages.
-        return `${authorStr}. ${title}. ${journal ? `${journal}. ` : ''}${yearStr}. ${url ? `Available from: ${url}` : ''}`
-
-      default:
-        return `${authorStr} (${yearStr}). ${title}. ${url || ''}`
-    }
-  }, [])
-
   const handleGenerateBibliography = useCallback(async () => {
     if (!editor) return
 
-    // Extract all citation links from the document
     const html = editor.getHTML()
+    const citations = parseCitationsFromHtml(html)
 
-    // Parse citations more flexibly - attributes can be in any order
-    const citations: { number: number; url: string; paperId: string; title: string; doi: string; authors: string[]; year: number; journal: string }[] = []
-
-    // Find all citation links
-    const linkRegex = /<a[^>]*>\[(\d+)\]<\/a>/g
-    let match
-
-    while ((match = linkRegex.exec(html)) !== null) {
-      const fullTag = match[0]
-      const citationNumber = parseInt(match[1])
-
-      // Extract attributes from the tag
-      const hrefMatch = fullTag.match(/href="([^"]*)"/)
-      const paperIdMatch = fullTag.match(/data-paper-id="([^"]*)"/)
-      const paperTitleMatch = fullTag.match(/data-paper-title="([^"]*)"/)
-      const paperSourceMatch = fullTag.match(/data-paper-doi="([^"]*)"/)
-      const paperAuthorsMatch = fullTag.match(/data-paper-authors="([^"]*)"/)
-      const paperYearMatch = fullTag.match(/data-paper-year="([^"]*)"/)
-      const paperJournalMatch = fullTag.match(/data-paper-journal="([^"]*)"/)
-
-      if (hrefMatch) {
-        // Parse authors from JSON
-        let authors: string[] = []
-        if (paperAuthorsMatch) {
-          try {
-            const authorsStr = paperAuthorsMatch[1].replace(/&quot;/g, '"')
-            authors = JSON.parse(authorsStr)
-          } catch (e) {
-            console.error('Failed to parse authors:', e)
-          }
-        }
-
-        const citation = {
-          number: citationNumber,
-          url: hrefMatch[1],
-          paperId: paperIdMatch ? paperIdMatch[1] : '',
-          title: paperTitleMatch ? paperTitleMatch[1].replace(/&quot;/g, '"') : '',
-          doi: paperSourceMatch ? paperSourceMatch[1] : '',
-          authors: authors,
-          year: paperYearMatch ? parseInt(paperYearMatch[1]) || 0 : 0,
-          journal: paperJournalMatch ? paperJournalMatch[1].replace(/&quot;/g, '"') : ''
-        }
-
-        console.log('Extracted citation data:', citation) // Debug log
-        citations.push(citation)
-      }
-    }
-
-    // Check if there are any citations
     if (citations.length === 0) {
       toast.error('No citations found', {
-        description: 'Add citations using "Cite with AI" before generating bibliography.',
-        duration: 4000
+        description: 'Add citations using "Cite with AI" or paste text containing [1], [2] style references.',
+        duration: 4000,
       })
       return
     }
 
-    console.log('Found citations:', citations) // Debug log
-
-    // Fetch metadata for each citation using the paper ID
     setIsCiteProcessing(true)
-    const citationMetadataMap = new Map<number, CitationMetadata>()
 
     try {
-      for (const citation of citations) {
-        citationMetadataMap.set(citation.number, {
-          citationNumber: citation.number,
-          url: citation.url,
-          title: citation.title || 'Unknown Title',
-          authors: citation.authors || [],
-          year: citation.year || 0,
-          journal: citation.journal || '',
-          doi: citation.doi || '',
-          paperId: citation.paperId
-        })
-      }
-
-      // Store the metadata and open modal
-      setCitationMetadata(citationMetadataMap)
+      // Sync store with parsed citations
+      const entries: CitationEntry[] = citations.map(c => ({
+        key: c.paperId || `cite-${c.number}`,
+        metadata: {
+          citationNumber: c.number,
+          url: c.url,
+          title: c.title || 'Unknown Title',
+          authors: c.authors || [],
+          year: c.year || 0,
+          journal: c.journal || '',
+          doi: c.doi || '',
+          paperId: c.paperId,
+        },
+      }))
+      citationDispatch({ type: 'SYNC_FROM_HTML', entries })
       setBibliographyModalOpen(true)
-
     } catch (error) {
       console.error('Error generating bibliography:', error)
-      toast.error('Failed to generate bibliography', {
-        description: 'Please try again.',
-        duration: 4000
-      })
+      toast.error('Failed to generate bibliography', { description: 'Please try again.', duration: 4000 })
     } finally {
       setIsCiteProcessing(false)
     }
   }, [editor])
 
   const handleInsertBibliography = useCallback(() => {
-    if (!editor || citationMetadata.size === 0) return
+    if (!editor || citationState.entries.length === 0) return
 
-    // Sort citations by number
-    const sortedCitations = Array.from(citationMetadata.entries())
-      .sort((a, b) => a[0] - b[0])
+    const currentHtml = editor.getHTML()
+    const updatedHtml = applyStoreToHtml(currentHtml, citationState)
 
-    // Generate bibliography HTML
-    let bibliographyHtml = '<h2>References</h2><div class="bibliography">'
-
-    sortedCitations.forEach(([number, metadata]) => {
-      const formattedCitation = formatCitation(metadata, selectedCitationStyle)
-      bibliographyHtml += `<p class="bibliography-entry">[${number}] ${formattedCitation}</p>`
-    })
-
-    bibliographyHtml += '</div>'
-
-    // Insert at the end of the document
-    const endPos = editor.state.doc.content.size
-    editor.chain().focus().setTextSelection(endPos).insertContent(bibliographyHtml).run()
-
+    if (updatedHtml !== currentHtml) {
+      editor.commands.setContent(updatedHtml)
+    }
     setBibliographyModalOpen(false)
-    toast.success('Bibliography inserted successfully')
-  }, [editor, citationMetadata, selectedCitationStyle, formatCitation])
+    toast.success('Bibliography updated successfully')
+  }, [editor, citationState])
 
   const insertScientificSymbol = useCallback((symbol: string) => {
     if (!editor) return
@@ -4113,6 +3992,44 @@ export function TiptapEditor({
           </Tooltip>
           <Tooltip>
             <TooltipTrigger asChild>
+              <select
+                value={selectedCitationStyle}
+                onChange={(e) => {
+                  const newStyle = e.target.value
+                  citationDispatch({ type: 'SET_STYLE', style: newStyle })
+                  // Auto-reformat inline citations AND bibliography when style changes
+                  if (editor) {
+                    const html = editor.getHTML()
+                    // Sync store from HTML if empty (user hasn't opened bibliography yet)
+                    if (citationState.entries.length === 0) {
+                      syncStoreFromHtml(html, citationDispatch)
+                    }
+                    const metaMap = citationState.entries.length > 0 ? citationMetadata : buildMetadataMap({
+                      ...citationState,
+                      entries: parseCitationsFromHtml(html).map((p, i) => ({
+                        key: p.paperId || `cite-${p.number}`,
+                        metadata: { citationNumber: i + 1, url: p.url, title: p.title, authors: p.authors, year: p.year, journal: p.journal, doi: p.doi, paperId: p.paperId },
+                      })),
+                    })
+                    let updated = reformatInlineCitations(html, newStyle)
+                    if (metaMap.size > 0) {
+                      updated = reformatBibliography(updated, metaMap, newStyle)
+                    }
+                    if (updated !== html) editor.commands.setContent(updated)
+                  }
+                }}
+                className="h-8 px-2 rounded-lg border border-border bg-background text-xs cursor-pointer shrink-0 max-w-[100px]"
+                title="Citation style"
+              >
+                {CITATION_STYLE_OPTIONS.map(opt => (
+                  <option key={opt.value} value={opt.value}>{opt.label}</option>
+                ))}
+              </select>
+            </TooltipTrigger>
+            <TooltipContent>Citation style — affects inline citations &amp; bibliography</TooltipContent>
+          </Tooltip>
+          <Tooltip>
+            <TooltipTrigger asChild>
               <Button variant="ghost" size="sm" className="h-8 gap-1 rounded-lg px-2 shrink-0" onClick={handleGenerateBibliography} disabled={isCiteProcessing}>
                 <BookOpen className="h-4 w-4" />
                 <span className="text-xs hidden sm:inline">Bibliography</span>
@@ -4179,7 +4096,10 @@ export function TiptapEditor({
     )
   }
 
+  const citationStoreValue = { state: citationState, dispatch: citationDispatch }
+
   return (
+    <CitationContext.Provider value={citationStoreValue}>
     <>
       <div
         className={cn(
@@ -4736,30 +4656,11 @@ export function TiptapEditor({
             <DialogHeader>
               <DialogTitle>Generate Bibliography</DialogTitle>
               <DialogDescription>
-                Select citation style and preview your formatted bibliography
+                Preview your formatted bibliography ({citationMetadata.size} citation{citationMetadata.size !== 1 ? 's' : ''}, {selectedCitationStyle} style)
               </DialogDescription>
             </DialogHeader>
 
             <div className="flex-1 overflow-y-auto space-y-3 py-2">
-              {/* Citation Style Selector - More compact */}
-              <div className="flex items-center gap-3">
-                <label className="text-sm font-medium whitespace-nowrap">Citation Style:</label>
-                <select
-                  value={selectedCitationStyle}
-                  onChange={(e) => setSelectedCitationStyle(e.target.value as any)}
-                  className="flex-1 h-9 px-3 rounded-md border border-border bg-background text-sm"
-                >
-                  <option value="APA">APA</option>
-                  <option value="MLA">MLA</option>
-                  <option value="Chicago">Chicago</option>
-                  <option value="Harvard">Harvard</option>
-                  <option value="IEEE">IEEE</option>
-                  <option value="Vancouver">Vancouver</option>
-                </select>
-                <span className="text-xs text-muted-foreground whitespace-nowrap">
-                  {citationMetadata.size} citation{citationMetadata.size !== 1 ? 's' : ''}
-                </span>
-              </div>
 
               {/* Preview - More compact */}
               <div className="space-y-2">
@@ -4800,5 +4701,6 @@ export function TiptapEditor({
         </Dialog >
       </div >
     </>
+    </CitationContext.Provider>
   );
 }

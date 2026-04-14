@@ -8,7 +8,7 @@ import { PaperEditor, DEFAULT_PAPER_TEMPLATE } from "@/components/text-editor/pa
 import { usePaperAI } from "@/contexts/paper-ai-context"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { ArrowLeft, Loader2, Download } from "lucide-react"
+import { ArrowLeft, Loader2, Download, Upload } from "lucide-react"
 import { toast } from "sonner"
 import { SaveStatusIndicator } from "@/components/ui/save-status"
 import { useAutoSave } from "@/hooks/use-auto-save"
@@ -17,6 +17,7 @@ import { IS_PAPERS_MOCKED, getMockPaper, updateMockPaper } from "@/lib/papers-mo
 import { downloadLatex } from "@/lib/latex-export"
 import { JOURNAL_TEMPLATES } from "@/lib/latex-templates"
 import { downloadBibtex, parseBibtex, parseAuthors, type CitationForBib } from "@/lib/bibtex"
+import { latexToHtml } from "@/lib/latex-import"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -57,6 +58,7 @@ export function PaperWorkspace({ paperId, backLink, onPaperMutated }: PaperWorks
   const [loading, setLoading] = useState(true)
   const [content, setContent] = useState("")
   const bibInputRef = useRef<HTMLInputElement>(null)
+  const texInputRef = useRef<HTMLInputElement>(null)
   const editorRef = useRef<any>(null)
   const contentRef = useRef("")
   const paperAI = usePaperAI()
@@ -139,6 +141,7 @@ export function PaperWorkspace({ paperId, backLink, onPaperMutated }: PaperWorks
     const title = (paper.title as string) || "Untitled"
     paperAI.register({
       title,
+      id,
       getContent: () => contentRef.current,
       onInsert: (html: string) => {
         const editor = editorRef.current
@@ -245,6 +248,32 @@ export function PaperWorkspace({ paperId, backLink, onPaperMutated }: PaperWorks
     [debouncedSave]
   )
 
+  const handleTexImport = useCallback(
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0]
+      if (!file) return
+
+      const reader = new FileReader()
+      reader.onload = (ev) => {
+        const tex = ev.target?.result as string
+        if (!tex) return
+
+        const html = latexToHtml(tex)
+        if (!html.trim()) {
+          toast.error("Could not parse .tex file")
+          return
+        }
+
+        setContent(html)
+        debouncedSave(html)
+        toast.success("Imported LaTeX document")
+      }
+      reader.readAsText(file)
+      e.target.value = ""
+    },
+    [debouncedSave]
+  )
+
   if (loading) {
     return (
       <div className="flex h-64 items-center justify-center">
@@ -274,9 +303,10 @@ export function PaperWorkspace({ paperId, backLink, onPaperMutated }: PaperWorks
           <SaveStatusIndicator status={saveStatus} />
         </div>
         <div className="flex shrink-0 items-center gap-2">
+          {/* Export dropdown */}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="outline" size="icon">
+              <Button variant="outline" size="icon" title="Export">
                 <Download className="h-4 w-4" />
               </Button>
             </DropdownMenuTrigger>
@@ -320,6 +350,25 @@ export function PaperWorkspace({ paperId, backLink, onPaperMutated }: PaperWorks
                   <span className="text-xs text-muted-foreground">Download citations as BibTeX file</span>
                 </div>
               </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+
+          {/* Import dropdown */}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" size="icon" title="Import">
+                <Upload className="h-4 w-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-64">
+              <DropdownMenuLabel>Import</DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={() => texInputRef.current?.click()}>
+                <div className="flex flex-col gap-0.5">
+                  <span className="text-sm">Import LaTeX (.tex)</span>
+                  <span className="text-xs text-muted-foreground">Replace paper content from a .tex file</span>
+                </div>
+              </DropdownMenuItem>
               <DropdownMenuItem onClick={() => bibInputRef.current?.click()}>
                 <div className="flex flex-col gap-0.5">
                   <span className="text-sm">Import BibTeX (.bib)</span>
@@ -339,8 +388,21 @@ export function PaperWorkspace({ paperId, backLink, onPaperMutated }: PaperWorks
       <div style={{ height: "calc(100vh - 180px)" }}>
         <FileDropzone
           onFilesDrop={(files) => {
+            const texFile = files.find(f => f.name.endsWith('.tex'))
             const bibFile = files.find(f => f.name.endsWith('.bib'))
-            if (bibFile) {
+            if (texFile) {
+              const reader = new FileReader()
+              reader.onload = (ev) => {
+                const tex = ev.target?.result as string
+                if (!tex) return
+                const html = latexToHtml(tex)
+                if (!html.trim()) { toast.error("Could not parse .tex file"); return }
+                setContent(html)
+                debouncedSave(html)
+                toast.success("Imported LaTeX document")
+              }
+              reader.readAsText(texFile)
+            } else if (bibFile) {
               const reader = new FileReader()
               reader.onload = (ev) => {
                 const text = ev.target?.result as string
@@ -372,11 +434,11 @@ export function PaperWorkspace({ paperId, backLink, onPaperMutated }: PaperWorks
               }
               reader.readAsText(bibFile)
             } else {
-              toast.error("Please drop a .bib file")
+              toast.error("Please drop a .tex or .bib file")
             }
           }}
-          accept={[".bib"]}
-          description="Drop .bib file to import references"
+          accept={[".bib", ".tex"]}
+          description="Drop .tex or .bib file to import"
           activeClassName="ring-4 ring-primary ring-inset bg-primary/5 rounded-xl"
           className="h-full"
         >
@@ -398,6 +460,13 @@ export function PaperWorkspace({ paperId, backLink, onPaperMutated }: PaperWorks
         accept=".bib"
         className="hidden"
         onChange={handleBibImport}
+      />
+      <input
+        ref={texInputRef}
+        type="file"
+        accept=".tex"
+        className="hidden"
+        onChange={handleTexImport}
       />
     </div>
   )

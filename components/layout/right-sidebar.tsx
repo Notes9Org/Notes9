@@ -2087,9 +2087,10 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
           open
           embedded
           onClose={() => onClose?.()}
-          paperContent={paperAI.paperContent}
+          getContent={paperAI.getContent}
           onInsert={paperAI.onInsert}
           paperTitle={paperAI.paperTitle}
+          paperId={paperAI.paperId}
           getEditorContext={paperAI.getEditorContext}
         />
       ) : (
