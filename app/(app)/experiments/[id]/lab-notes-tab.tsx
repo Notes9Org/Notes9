@@ -29,7 +29,20 @@ import { NoteExportMenu, NotePrintButton } from "@/components/note-export-menu"
 import { useToast } from "@/hooks/use-toast"
 import { useAutoSave } from "@/hooks/use-auto-save"
 import { SaveStatusIndicator } from "@/components/ui/save-status"
-import { Plus, NotebookPen, Download, FileCode, Globe, Loader2, ChevronLeft, MoreVertical, Trash2, List, Pencil } from "lucide-react"
+import {
+  Plus,
+  NotebookPen,
+  Download,
+  FileCode,
+  Globe,
+  Loader2,
+  ChevronLeft,
+  MoreVertical,
+  Trash2,
+  List,
+  Pencil,
+  X,
+} from "lucide-react"
 import {
   Table,
   TableBody,
@@ -140,6 +153,13 @@ export function LabNotesTab({
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const titleInputRef = useRef<HTMLInputElement>(null);
   const noteEditorRef = useRef<Editor | null>(null);
+  /**
+   * Notes list column + editor column — Tiptap region fullscreen applies `position: fixed` to this shell so the
+   * whole block tracks SidebarInset `main` (notes rail and editor move together, no inset math).
+   */
+  const labNotesFullscreenShellRef = useRef<HTMLDivElement>(null);
+  const notesAsideRef = useRef<HTMLElement | null>(null);
+  const [noteEditorFullscreen, setNoteEditorFullscreen] = useState(false);
   const [noteEditorReady, setNoteEditorReady] = useState(false);
   const [inlineHighlightTarget, setInlineHighlightTarget] =
     useState<HighlightTarget | null>(null);
@@ -880,6 +900,140 @@ export function LabNotesTab({
   const resolvedExportTitle =
     (formData.title || "").trim() || (selectedNote?.title || "").trim() || "Lab note";
 
+  /** Fullscreen note: list + title + save share one row with Tiptap toolbar (… | tools | …). */
+  const labNoteMergedFullscreenToolbar =
+    noteEditorFullscreen && (selectedNote != null || isCreating);
+
+  const labNoteFullscreenToolbarLeading = labNoteMergedFullscreenToolbar ? (
+    <div className="flex min-w-0 w-full max-w-[min(11rem,min(56vw,100%))] items-center gap-1.5 sm:max-w-[min(18rem,38%)] sm:gap-2">
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon"
+        className="h-8 w-8 shrink-0 text-muted-foreground hover:text-foreground pointer-events-auto"
+        onClick={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          setNotebookPanelOpen((open) => !open);
+        }}
+        aria-label={notebookPanelOpen ? "Hide notes" : "Show notes"}
+        title={notebookPanelOpen ? "Hide notes list" : `Show notes (${notes.length})`}
+      >
+        {notebookPanelOpen ? (
+          <ChevronLeft className="h-4 w-4 pointer-events-none" />
+        ) : (
+          <List className="h-4 w-4 pointer-events-none" />
+        )}
+      </Button>
+      <div className="flex min-w-0 flex-1 items-center gap-1">
+        <div className="min-w-0 flex-1">
+          {isEditingTitle && selectedNote ? (
+            <input
+              ref={titleInputRef}
+              type="text"
+              value={formData.title}
+              onChange={(e) => setFormData((f) => ({ ...f, title: e.target.value }))}
+              onBlur={handleInlineTitleSave}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  titleInputRef.current?.blur();
+                }
+                if (e.key === "Escape") {
+                  setFormData((f) => ({ ...f, title: selectedNote.title || "" }));
+                  setIsEditingTitle(false);
+                  titleInputRef.current?.blur();
+                }
+              }}
+              className="w-full border-b border-transparent bg-transparent pb-0.5 text-base font-semibold leading-none text-foreground outline-none focus:border-primary"
+              aria-label="Edit note title"
+            />
+          ) : (
+            <div
+              className={cn(
+                "truncate",
+                !isCreating && selectedNote && "cursor-pointer rounded px-1 -mx-1 hover:bg-muted/60 hover:text-foreground"
+              )}
+              onClick={() => {
+                if (!isCreating && selectedNote) setIsEditingTitle(true);
+              }}
+              role={!isCreating && selectedNote ? "button" : undefined}
+              tabIndex={!isCreating && selectedNote ? 0 : undefined}
+              onKeyDown={(e) => {
+                if (!isCreating && selectedNote && (e.key === "Enter" || e.key === " ")) {
+                  e.preventDefault();
+                  setIsEditingTitle(true);
+                }
+              }}
+              aria-label={!isCreating && selectedNote ? "Click to edit title" : undefined}
+            >
+              <CardTitle className="truncate text-base font-semibold leading-none text-foreground">
+                {isCreating
+                  ? "New Lab Note"
+                  : (!selectedNote ? "Lab Notes" : formData.title || "New Lab Note")}
+              </CardTitle>
+            </div>
+          )}
+        </div>
+        <SaveStatusIndicator
+          status={autoSaveStatus}
+          lastSaved={lastSaved}
+          variant="icon"
+          onClick={handleSave}
+          disabled={isSaving || !formData.title.trim()}
+        />
+      </div>
+    </div>
+  ) : undefined;
+
+  const labNoteFullscreenToolbarTrailing = labNoteMergedFullscreenToolbar ? (
+    <>
+      <Button
+        variant="ghost"
+        size="icon"
+        className="h-8 w-8 m-0 shrink-0 text-muted-foreground hover:text-foreground"
+        disabled={isCreatingNew}
+        onClick={() => {
+          setNotebookPanelOpen(true);
+          handleNewNote();
+        }}
+        aria-label="New lab note"
+      >
+        {isCreatingNew ? (
+          <Loader2 className="h-4 w-4 animate-spin" />
+        ) : (
+          <Plus className="h-4 w-4" />
+        )}
+      </Button>
+      {!isCreating && selectedNote ? (
+        <>
+          <NotePrintButton
+            getHtmlContent={() => formData.content || ""}
+            title={resolvedExportTitle}
+            includeCommentsInPdf
+          />
+          <NoteExportMenu
+            title={resolvedExportTitle}
+            htmlContent={formData.content || ""}
+            getHtmlContent={() => formData.content || ""}
+            getTiptapJson={() => noteEditorRef.current?.getJSON() ?? null}
+            includeCommentsInPdf
+            trigger={
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8 shrink-0 text-muted-foreground hover:text-foreground"
+                aria-label="Export"
+              >
+                <Download className="h-4 w-4" />
+              </Button>
+            }
+          />
+        </>
+      ) : null}
+    </>
+  ) : undefined;
+
   return (
     <div className="flex h-full min-h-0 w-full flex-1 flex-col overflow-hidden">
       {/* Rename note dialog */}
@@ -920,12 +1074,22 @@ export function LabNotesTab({
       {/* Single Card: notes list (when open) + editor */}
       <div className="flex-1 min-w-0 min-h-0 flex flex-col">
         <Card className="flex h-full min-h-0 flex-col gap-0 py-0">
-          <div className="flex min-h-0 min-w-0 flex-1 flex-row">
+          <div
+            ref={labNotesFullscreenShellRef}
+            className="flex h-full min-h-0 min-w-0 flex-1 flex-row items-stretch overflow-hidden"
+          >
             {/* Notes list - inside card, left side (hidden on mobile; use Sheet instead) */}
             <aside
+              ref={notesAsideRef}
               className={cn(
-                "flex shrink-0 flex-col overflow-hidden border-r border-border bg-muted/30 relative",
-                !isMobile && notebookPanelOpen ? "w-52 min-w-[13rem] z-10 bg-card" : "w-0 min-w-0 border-r-0 overflow-hidden"
+                "flex min-h-0 shrink-0 flex-col self-stretch overflow-hidden border-r border-border bg-muted/30 relative",
+                !isMobile && notebookPanelOpen
+                  ? cn(
+                      "w-52 min-w-[13rem] bg-card",
+                      /* Above editor column (z-0) and TipTap chrome — critical when workspace is fullscreen z-110 */
+                      noteEditorFullscreen ? "z-[120]" : "z-10",
+                    )
+                  : "w-0 min-w-0 border-r-0 overflow-hidden",
               )}
               aria-hidden={!notebookPanelOpen || isMobile}
             >
@@ -1025,11 +1189,33 @@ export function LabNotesTab({
             {/* Mobile: notes list in a Sheet overlay so it doesn't squeeze the editor */}
             {isMobile && (
               <Sheet open={notebookPanelOpen} onOpenChange={setNotebookPanelOpen}>
-                <SheetContent side="left" className="flex flex-col p-0 w-[85%] max-w-[320px] sm:max-w-sm">
-                  <SheetHeader className="p-4 pb-2">
-                    <SheetTitle>Notes</SheetTitle>
+                <SheetContent
+                  side="left"
+                  showCloseButton={false}
+                  /* TipTap workspace fullscreen uses z-110 — portal must stack above it */
+                  overlayClassName="z-[120]"
+                  className={cn(
+                    "z-[120] flex h-[100dvh] max-h-[100dvh] min-h-0 flex-col gap-0 p-0",
+                    /* Beat sheet.tsx defaults (w-full / sm:w-3/4) so width stays predictable on all phone sizes */
+                    "w-[min(88vw,20rem)] max-w-[min(20rem,calc(100vw-1.5rem))] border-r sm:w-[min(88vw,24rem)] sm:max-w-sm",
+                    "pt-[env(safe-area-inset-top,0px)] pl-[env(safe-area-inset-left,0px)]",
+                  )}
+                >
+                  <SheetHeader className="!flex-row shrink-0 items-center justify-between gap-2 border-b border-border/60 px-4 py-3 pb-3">
+                    <SheetTitle className="text-base leading-none">Notes</SheetTitle>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="h-9 w-9 shrink-0 touch-manipulation"
+                      onClick={() => setNotebookPanelOpen(false)}
+                      aria-label="Close notes list"
+                    >
+                      <X className="h-5 w-5" aria-hidden />
+                    </Button>
                   </SheetHeader>
-                  <div className="flex min-h-0 flex-1 flex-col gap-0.5 overflow-auto px-2 pb-4">
+                  <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+                    <div className="flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto overscroll-y-contain px-3 pb-[max(1rem,env(safe-area-inset-bottom,0px))] pt-2">
                     {notes.length > 0 ? (
                       <ul className="flex w-full min-w-0 flex-col gap-0.5">
                         {notes.map((note) => {
@@ -1055,7 +1241,7 @@ export function LabNotesTab({
                                 data-note-id={note.id}
                                 title={`Created: ${createdStr} · Updated: ${updatedStr}`}
                                 className={cn(
-                                  "grid w-full min-h-8 grid-cols-[auto_1fr_auto] items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm outline-none transition-colors hover:bg-muted/80",
+                                  "grid w-full min-h-10 grid-cols-[auto_1fr_auto] items-center gap-2 rounded-md px-2 py-2 text-left text-sm outline-none transition-colors hover:bg-muted/80 active:bg-muted/90",
                                   isActive && "bg-muted font-medium"
                                 )}
                               >
@@ -1068,7 +1254,7 @@ export function LabNotesTab({
                                     <Button
                                       variant="ghost"
                                       size="icon"
-                                      className="size-7 shrink-0 opacity-70 hover:opacity-100"
+                                      className="size-8 shrink-0 touch-manipulation opacity-70 hover:opacity-100"
                                       onClick={(e) => e.stopPropagation()}
                                       aria-label="Note options"
                                     >
@@ -1117,14 +1303,30 @@ export function LabNotesTab({
                         </Button>
                       </div>
                     )}
+                    </div>
                   </div>
                 </SheetContent>
               </Sheet>
             )}
 
-            {/* Editor area - header + content */}
-            <div className="relative z-0 flex min-h-0 min-w-0 flex-1 flex-col gap-4 overflow-hidden py-4">
-              <CardHeader className="pb-0 px-4 sm:px-6 shrink-0">
+            {/* Editor area - header + content (fullscreen lives on parent shell: notes list + this column) */}
+            <div
+              className={cn(
+                "relative z-0 flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden",
+                noteEditorFullscreen
+                  ? "gap-0 py-0 sm:py-0"
+                  : "gap-4 py-4",
+              )}
+            >
+              {!labNoteMergedFullscreenToolbar && (
+              <CardHeader
+                className={cn(
+                  "shrink-0",
+                  noteEditorFullscreen
+                    ? "gap-1 border-b border-border/70 px-3 py-1.5 sm:px-4 [.border-b]:pb-1.5 items-center"
+                    : "pb-0 px-4 sm:px-6",
+                )}
+              >
                 <div className="flex items-center justify-between gap-3">
                   <div className="flex flex-1 min-w-0 items-center gap-2">
                     <Button
@@ -1166,7 +1368,10 @@ export function LabNotesTab({
                                 titleInputRef.current?.blur();
                               }
                             }}
-                            className="w-full bg-transparent text-lg font-semibold text-foreground leading-none outline-none border-b border-transparent focus:border-primary"
+                            className={cn(
+                              "w-full bg-transparent font-semibold text-foreground leading-none outline-none border-b border-transparent focus:border-primary",
+                              noteEditorFullscreen ? "text-base" : "text-lg",
+                            )}
                             aria-label="Edit note title"
                           />
                         ) : (
@@ -1188,7 +1393,12 @@ export function LabNotesTab({
                             }}
                             aria-label={!isCreating && selectedNote ? "Click to edit title" : undefined}
                           >
-                            <CardTitle className="text-lg font-semibold text-foreground truncate leading-none">
+                            <CardTitle
+                              className={cn(
+                                "font-semibold text-foreground truncate leading-none",
+                                noteEditorFullscreen ? "text-base" : "text-lg",
+                              )}
+                            >
                               {isCreating
                                 ? "New Lab Note"
                                 : (!selectedNote ? "Lab Notes" : formData.title || "New Lab Note")}
@@ -1249,68 +1459,10 @@ export function LabNotesTab({
                         />
                       </>
                     )}
-                    {/* Share Button - Google Docs style */}
-
-                    {/* Publish button temporarily hidden */}
-                    {/* {!isCreating && selectedNote && (
-                  <div className="flex items-center gap-2">
-                    {publicUrl ? (
-                      <div className="flex items-center gap-2">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="text-green-600 border-green-200 hover:bg-green-50 hover:text-green-700"
-                          onClick={() => {
-                            navigator.clipboard.writeText(publicUrl)
-                            toast({ title: "Copied!", description: "Public link copied to clipboard." })
-                          }}
-                        >
-                          <Globe className="h-4 w-4 mr-2" />
-                          Published
-                        </Button>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={handlePublish}
-                          disabled={isPublishing}
-                        >
-                          {isPublishing ? <Loader2 className="h-4 w-4 animate-spin" /> : "Republish"}
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="text-muted-foreground hover:text-destructive"
-                          disabled={isPublishing}
-                          onClick={handleUnpublish}
-                        >
-                          Unpublish
-                        </Button>
-                      </div>
-                    ) : (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={handlePublish}
-                        disabled={isPublishing}
-                      >
-                        {isPublishing ? (
-                          <>
-                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                            Publishing...
-                          </>
-                        ) : (
-                          <>
-                            <Globe className="h-4 w-4 mr-2" />
-                            Publish
-                          </>
-                        )}
-                      </Button>
-                    )}
-                  </div>
-                )} */}
                   </div>
                 </div>
               </CardHeader>
+              )}
               <CardContent className="flex min-h-0 min-w-0 flex-1 flex-col space-y-3 overflow-hidden px-4 sm:px-6">
                 {!isCreating && !selectedNote ? (
                   <div className="flex flex-col items-center justify-center h-full min-h-[400px] text-muted-foreground">
@@ -1337,6 +1489,10 @@ export function LabNotesTab({
                         title={resolvedExportTitle}
                         minHeight="100%"
                         fillParentHeight
+                        fullscreenWorkspaceRef={labNotesFullscreenShellRef}
+                        onEditorFullscreenChange={setNoteEditorFullscreen}
+                        leadingToolbarSlot={labNoteFullscreenToolbarLeading}
+                        trailingToolbarSlot={labNoteFullscreenToolbarTrailing}
                         showAITools={true}
                         showAiWritingDropdown={false}
                         protocols={availableProtocols.map(p => ({

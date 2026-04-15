@@ -86,7 +86,16 @@ import { TextSelection } from "@tiptap/pm/state"
 import { Decoration, DecorationSet } from "@tiptap/pm/view"
 import { cn } from "@/lib/utils"
 import { useAwsTranscribe } from "@/hooks/use-aws-transcribe"
-import { useCallback, useEffect, useRef, useState } from "react"
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+  type ReactNode,
+  type RefObject,
+} from "react"
 import { createPortal } from "react-dom"
 import "@/styles/inline-diff.css"
 // @ts-ignore
@@ -218,6 +227,32 @@ interface TiptapEditorProps {
   fillParentHeight?: boolean
   /** Lab notes: opens scientific calculator from the formatting toolbar. */
   onOpenScientificCalculator?: () => void
+  /**
+   * When set, region fullscreen is applied to this element (e.g. lab notes column including title row)
+   * instead of only the editor card. Bounds still track the app `SidebarInset` main area.
+   */
+  fullscreenWorkspaceRef?: RefObject<HTMLElement | null>
+  /** Fires when editor region fullscreen is toggled (Esc or button). */
+  onEditorFullscreenChange?: (open: boolean) => void
+  /**
+   * When set, the fullscreen document title (shown only if fullscreen covers the page title — no fullscreenWorkspaceRef)
+   * is editable with the same click-to-edit / blur-commit pattern as protocol design.
+   */
+  onDocumentTitleChange?: (value: string) => void
+  /** Called after the inline fullscreen title blurs or commits with Enter; parent should persist (e.g. save to DB). */
+  onDocumentTitleCommit?: () => void | Promise<void>
+  /**
+   * With fullscreenWorkspaceRef, shift the fixed shell right by this many px and reduce width (e.g. notes list
+   * panel width when open), like the main layout shifting beside a sidebar.
+   */
+  fullscreenMainStartInsetPx?: number
+  /**
+   * Prepended to the formatting toolbar row (after optional fullscreen doc title). Lab notes fullscreen uses this
+   * with fullscreenWorkspaceRef so list + title + save share one row with the toolbar, separated by "|".
+   */
+  leadingToolbarSlot?: ReactNode
+  /** Appended after the fullscreen control (e.g. lab notes new / print / export). */
+  trailingToolbarSlot?: ReactNode
 }
 
 // Extension to support background color for table cells
@@ -1346,6 +1381,13 @@ export function TiptapEditor({
   onDismissInlineDiff,
   fillParentHeight = false,
   onOpenScientificCalculator,
+  fullscreenWorkspaceRef,
+  onEditorFullscreenChange,
+  onDocumentTitleChange,
+  onDocumentTitleCommit,
+  fullscreenMainStartInsetPx = 0,
+  leadingToolbarSlot,
+  trailingToolbarSlot,
 }: TiptapEditorProps & {
   hideToolbar?: boolean
   /** Accepted for lab-notes compatibility; export UI is toolbar-driven. */
@@ -1355,10 +1397,160 @@ export function TiptapEditor({
   const [activeTable, setActiveTable] = useState<HTMLTableElement | null>(null)
   const [editorContainer, setEditorContainer] = useState<HTMLElement | null>(null)
   const [mounted, setMounted] = useState(false)
+  const editorShellRef = useRef<HTMLDivElement | null>(null)
+  const [editorRegionFullscreen, setEditorRegionFullscreen] = useState(false)
+  const [editorFullscreenStyle, setEditorFullscreenStyle] = useState<CSSProperties | undefined>(
+    undefined,
+  )
+  const [fullscreenDocTitleEditing, setFullscreenDocTitleEditing] = useState(false)
+  const fullscreenDocTitleInputRef = useRef<HTMLInputElement | null>(null)
+
+  const getSidebarInsetMain = useCallback((): HTMLElement | null => {
+    const root = fullscreenWorkspaceRef?.current ?? editorShellRef.current
+    if (!root) return null
+    const inset = root.closest('[data-slot="sidebar-inset"]')
+    if (!inset) return null
+    return inset.querySelector(":scope > main") as HTMLElement | null
+  }, [fullscreenWorkspaceRef])
+
+  const syncEditorFullscreenBounds = useCallback(() => {
+    if (!editorRegionFullscreen) return
+    const mainEl = getSidebarInsetMain()
+    if (!mainEl) {
+      // Respect notches / home indicator when we cannot anchor to SidebarInset main.
+      const pad = "max(env(safe-area-inset-top, 0px), 0.75rem)"
+      setEditorFullscreenStyle({
+        position: "fixed",
+        top: pad,
+        right: "max(env(safe-area-inset-right, 0px), 0.75rem)",
+        bottom: "max(env(safe-area-inset-bottom, 0px), 0.75rem)",
+        left: "max(env(safe-area-inset-left, 0px), 0.75rem)",
+        zIndex: 110,
+        margin: 0,
+        width: "auto",
+        height: "auto",
+      })
+      return
+    }
+    const rect = mainEl.getBoundingClientRect()
+    const startInset = Math.max(0, fullscreenMainStartInsetPx ?? 0)
+    const width = Math.max(160, Math.round(rect.width - startInset))
+    // Use bottom − top so the shell matches the visible main column edge-to-edge (avoids 1px gaps).
+    const height = Math.max(200, Math.round(rect.bottom - rect.top))
+    setEditorFullscreenStyle({
+      position: "fixed",
+      top: `${Math.round(rect.top)}px`,
+      left: `${Math.round(rect.left + startInset)}px`,
+      width: `${width}px`,
+      height: `${height}px`,
+      zIndex: 110,
+      margin: 0,
+    })
+  }, [editorRegionFullscreen, getSidebarInsetMain, fullscreenMainStartInsetPx])
 
   useEffect(() => {
     setMounted(true)
   }, [])
+
+  useEffect(() => {
+    if (!editorRegionFullscreen) {
+      setEditorFullscreenStyle(undefined)
+      return
+    }
+    syncEditorFullscreenBounds()
+    window.addEventListener("resize", syncEditorFullscreenBounds)
+    window.addEventListener("scroll", syncEditorFullscreenBounds, true)
+    return () => {
+      window.removeEventListener("resize", syncEditorFullscreenBounds)
+      window.removeEventListener("scroll", syncEditorFullscreenBounds, true)
+    }
+  }, [editorRegionFullscreen, syncEditorFullscreenBounds])
+
+  useEffect(() => {
+    if (!editorRegionFullscreen) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setEditorRegionFullscreen(false)
+    }
+    window.addEventListener("keydown", onKey)
+    return () => window.removeEventListener("keydown", onKey)
+  }, [editorRegionFullscreen])
+
+  useEffect(() => {
+    onEditorFullscreenChange?.(editorRegionFullscreen)
+  }, [editorRegionFullscreen, onEditorFullscreenChange])
+
+  /** Apply fixed bounds to workspace shell or editor card (not both). */
+  useLayoutEffect(() => {
+    const el = fullscreenWorkspaceRef?.current ?? editorShellRef.current
+    if (!el) return
+
+    const reset = () => {
+      el.style.removeProperty("position")
+      el.style.removeProperty("top")
+      el.style.removeProperty("left")
+      el.style.removeProperty("right")
+      el.style.removeProperty("bottom")
+      el.style.removeProperty("width")
+      el.style.removeProperty("height")
+      el.style.removeProperty("inset")
+      el.style.removeProperty("z-index")
+      el.style.removeProperty("margin")
+      el.removeAttribute("data-n9-editor-fullscreen")
+    }
+
+    if (!editorRegionFullscreen) {
+      reset()
+      return
+    }
+
+    if (!editorFullscreenStyle) {
+      return
+    }
+
+    const s = editorFullscreenStyle
+    el.style.position = typeof s.position === "string" ? s.position : "fixed"
+    el.style.zIndex = String(s.zIndex ?? 110)
+    el.style.margin = typeof s.margin === "string" ? s.margin : "0"
+    if (s.inset != null) {
+      el.style.inset = String(s.inset)
+      el.style.width = "auto"
+      el.style.height = "auto"
+    } else {
+      el.style.removeProperty("inset")
+      if (s.top != null) el.style.top = String(s.top)
+      if (s.left != null) el.style.left = String(s.left)
+      if (s.width != null) el.style.width = String(s.width)
+      if (s.height != null) el.style.height = String(s.height)
+    }
+    el.setAttribute("data-n9-editor-fullscreen", "")
+    return reset
+  }, [editorRegionFullscreen, editorFullscreenStyle, fullscreenWorkspaceRef])
+
+  useEffect(() => {
+    if (!editorRegionFullscreen) return
+    const mainEl = getSidebarInsetMain()
+    if (!mainEl || typeof ResizeObserver === "undefined") return
+    const ro = new ResizeObserver(() => {
+      syncEditorFullscreenBounds()
+    })
+    ro.observe(mainEl)
+    return () => ro.disconnect()
+  }, [editorRegionFullscreen, getSidebarInsetMain, syncEditorFullscreenBounds])
+
+  useEffect(() => {
+    if (!editorRegionFullscreen) {
+      setFullscreenDocTitleEditing(false)
+    }
+  }, [editorRegionFullscreen])
+
+  useEffect(() => {
+    if (!fullscreenDocTitleEditing) return
+    const id = requestAnimationFrame(() => {
+      fullscreenDocTitleInputRef.current?.focus()
+      fullscreenDocTitleInputRef.current?.select()
+    })
+    return () => cancelAnimationFrame(id)
+  }, [fullscreenDocTitleEditing])
 
   // Track table hover with hide delay
   useEffect(() => {
@@ -4148,13 +4340,98 @@ export function TiptapEditor({
 
   const citationStoreValue = { state: citationState, dispatch: citationDispatch }
 
+  /** When fullscreen targets only the editor shell, the page-level title is covered — surface `title` here. */
+  const fullscreenTitleRaw = String(title ?? "")
+  const fullscreenTitleDisplay = fullscreenTitleRaw.trim() || "Untitled"
+  const fullscreenTitleEditable = Boolean(onDocumentTitleChange) && editable
+  const showFullscreenDocTitleInToolbar =
+    editorRegionFullscreen &&
+    fullscreenWorkspaceRef == null &&
+    (fullscreenTitleEditable || fullscreenTitleRaw.trim().length > 0)
+
+  /** Title / notes / protocol actions merged into toolbar row — needs extra layout on small screens. */
+  const toolbarMergedLayout =
+    leadingToolbarSlot != null ||
+    trailingToolbarSlot != null ||
+    showFullscreenDocTitleInToolbar
+
+  const renderFullscreenDocumentTitle = (variant: "toolbar" | "floated") => {
+    const wrapClass =
+      variant === "toolbar"
+        ? "min-w-0 max-w-[min(10rem,52vw)] shrink sm:max-w-[min(18rem,36vw)]"
+        : "pointer-events-auto absolute left-2 top-2 z-20 max-w-[calc(100%-6rem)] min-w-0 rounded-md border border-border/60 bg-background/95 px-2 py-0.5 shadow-sm backdrop-blur-sm"
+
+    const endTitleEdit = () => {
+      setFullscreenDocTitleEditing(false)
+      void onDocumentTitleCommit?.()
+    }
+
+    const inner = !fullscreenTitleEditable ? (
+      <span
+        className={cn(
+          "truncate text-base font-semibold leading-none text-foreground",
+          variant === "floated" && "block",
+        )}
+        title={fullscreenTitleDisplay}
+      >
+        {fullscreenTitleDisplay}
+      </span>
+    ) : fullscreenDocTitleEditing ? (
+      <input
+        ref={fullscreenDocTitleInputRef}
+        type="text"
+        value={fullscreenTitleRaw}
+        onChange={(e) => onDocumentTitleChange?.(e.target.value)}
+        onBlur={endTitleEdit}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") {
+            e.preventDefault()
+            fullscreenDocTitleInputRef.current?.blur()
+          }
+          if (e.key === "Escape") {
+            setFullscreenDocTitleEditing(false)
+            fullscreenDocTitleInputRef.current?.blur()
+          }
+        }}
+        className="w-full min-w-0 bg-transparent text-base font-semibold leading-none text-foreground outline-none border-b border-transparent pb-0.5 focus:border-primary"
+        aria-label="Edit document title"
+      />
+    ) : (
+      <div
+        className={cn(
+          "truncate rounded px-0.5 -mx-0.5 cursor-pointer hover:bg-muted/60 hover:text-foreground",
+          variant === "floated" && "px-1 -mx-1",
+        )}
+        onClick={() => setFullscreenDocTitleEditing(true)}
+        role="button"
+        tabIndex={0}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault()
+            setFullscreenDocTitleEditing(true)
+          }
+        }}
+        aria-label="Click to edit document title"
+      >
+        <span className="text-base font-semibold leading-none text-foreground truncate">
+          {fullscreenTitleDisplay}
+        </span>
+      </div>
+    )
+
+    return <div className={wrapClass}>{inner}</div>
+  }
+
   return (
     <CitationContext.Provider value={citationStoreValue}>
     <>
       <div
+        ref={editorShellRef}
         className={cn(
           "border border-border rounded-lg bg-background flex min-h-0 flex-col h-full w-full max-w-full overflow-hidden",
-          panelEmbed && "rounded-t-none border-t-0",
+          hideToolbar && "relative",
+          editorRegionFullscreen && !fullscreenWorkspaceRef && "rounded-xl border-border bg-background shadow-lg",
+          panelEmbed && !editorRegionFullscreen && "rounded-t-none border-t-0",
           className,
         )}
         {...(paperMode ? { "data-paper-mode": "" } : {})}
@@ -4164,27 +4441,122 @@ export function TiptapEditor({
             ref={toolbarPositionContainerRef}
             className={cn(
               "shrink-0 border-b border-border/70 bg-background/95 backdrop-blur-sm",
-              panelEmbed
-                ? "flex h-11 min-h-11 items-center px-2 py-0"
-                : "px-3 py-2",
+              toolbarMergedLayout
+                ? cn(
+                    /* minmax(0,1fr) let column 1 shrink to 0 — lab notes / protocol title vanished beside fullscreen + actions */
+                    "max-sm:grid max-sm:[grid-template-columns:minmax(9rem,1fr)_auto] max-sm:items-center max-sm:gap-x-1 max-sm:gap-y-1.5 max-sm:px-1.5 max-sm:py-1.5",
+                    "sm:flex sm:flex-nowrap sm:items-center sm:gap-1 sm:px-2 sm:pl-3",
+                    panelEmbed ? "sm:h-11 sm:min-h-11 sm:py-0" : "sm:py-2",
+                  )
+                : cn(
+                    "flex items-center gap-1 px-2 py-2 sm:pl-3",
+                    panelEmbed && "h-11 min-h-11 py-0 px-2",
+                  ),
             )}
           >
-            <div
-              ref={toolbarRailRef}
-              className={cn(
-                "flex min-h-0 w-full min-w-0 items-center overflow-x-auto [scrollbar-width:thin]",
-                panelEmbed && "h-full",
-              )}
-            >
-              {renderToolbarDockChildren()}
-            </div>
+            {toolbarMergedLayout ? (
+              <>
+                <div className="flex min-w-0 items-center gap-0.5 sm:gap-1 max-sm:col-start-1 max-sm:row-start-1 max-sm:overflow-hidden">
+                  {leadingToolbarSlot}
+                  {showFullscreenDocTitleInToolbar && renderFullscreenDocumentTitle("toolbar")}
+                  {(leadingToolbarSlot || showFullscreenDocTitleInToolbar) && (
+                    <span
+                      className="shrink-0 select-none px-1 text-center text-sm text-muted-foreground/70 sm:px-2"
+                      aria-hidden
+                    >
+                      |
+                    </span>
+                  )}
+                </div>
+                <div
+                  ref={toolbarRailRef}
+                  className={cn(
+                    "flex min-h-0 min-w-0 items-center overflow-x-auto [scrollbar-width:thin] touch-pan-x",
+                    "max-sm:col-span-2 max-sm:row-start-2 max-sm:min-h-9 max-sm:w-full max-sm:border-t max-sm:border-border/40 max-sm:pt-1.5",
+                    "sm:flex-1 sm:col-auto sm:row-auto sm:border-t-0 sm:pt-0",
+                    panelEmbed && "sm:h-full",
+                  )}
+                >
+                  {renderToolbarDockChildren()}
+                </div>
+                <div className="flex min-w-0 shrink-0 items-center gap-0.5 sm:gap-1 max-sm:col-start-2 max-sm:row-start-1 max-sm:justify-self-end">
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8 shrink-0 touch-manipulation text-muted-foreground hover:text-foreground"
+                    onClick={() => setEditorRegionFullscreen((v) => !v)}
+                    aria-label={editorRegionFullscreen ? "Exit fullscreen" : "Fullscreen editor"}
+                    title={editorRegionFullscreen ? "Exit fullscreen (Esc)" : "Fullscreen editor"}
+                  >
+                    {editorRegionFullscreen ? (
+                      <Minimize2 className="h-4 w-4" />
+                    ) : (
+                      <Maximize2 className="h-4 w-4" />
+                    )}
+                  </Button>
+                  {trailingToolbarSlot ? (
+                    <div className="flex min-w-0 max-w-[min(100%,48vw)] items-center justify-end gap-0.5 overflow-x-auto [scrollbar-width:thin] sm:max-w-none sm:gap-1 sm:overflow-visible">
+                      {trailingToolbarSlot}
+                    </div>
+                  ) : null}
+                </div>
+              </>
+            ) : (
+              <>
+                <div
+                  ref={toolbarRailRef}
+                  className={cn(
+                    "flex min-h-0 min-w-0 flex-1 items-center overflow-x-auto [scrollbar-width:thin] touch-pan-x",
+                    panelEmbed && "h-full",
+                  )}
+                >
+                  {renderToolbarDockChildren()}
+                </div>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8 shrink-0 touch-manipulation text-muted-foreground hover:text-foreground"
+                  onClick={() => setEditorRegionFullscreen((v) => !v)}
+                  aria-label={editorRegionFullscreen ? "Exit fullscreen" : "Fullscreen editor"}
+                  title={editorRegionFullscreen ? "Exit fullscreen (Esc)" : "Fullscreen editor"}
+                >
+                  {editorRegionFullscreen ? (
+                    <Minimize2 className="h-4 w-4" />
+                  ) : (
+                    <Maximize2 className="h-4 w-4" />
+                  )}
+                </Button>
+              </>
+            )}
           </div>
+        )}
+        {hideToolbar && (
+          <>
+            {showFullscreenDocTitleInToolbar && renderFullscreenDocumentTitle("floated")}
+            <Button
+              type="button"
+              variant="secondary"
+              size="icon"
+              className="absolute z-20 h-8 w-8 border border-border/70 bg-background/95 text-muted-foreground shadow-sm backdrop-blur-sm hover:text-foreground max-sm:right-[max(0.5rem,env(safe-area-inset-right,0px))] max-sm:top-[max(0.5rem,env(safe-area-inset-top,0px))] sm:right-2 sm:top-2"
+              onClick={() => setEditorRegionFullscreen((v) => !v)}
+              aria-label={editorRegionFullscreen ? "Exit fullscreen" : "Fullscreen editor"}
+              title={editorRegionFullscreen ? "Exit fullscreen (Esc)" : "Fullscreen editor"}
+            >
+              {editorRegionFullscreen ? (
+                <Minimize2 className="h-4 w-4" />
+              ) : (
+                <Maximize2 className="h-4 w-4" />
+              )}
+            </Button>
+          </>
         )}
         <div
           ref={setEditorPopoverBoundaryEl}
           className="flex-1 min-h-0 overflow-hidden relative w-full h-full max-w-full"
           style={
-            panelEmbed || fillParentHeight
+            panelEmbed || fillParentHeight || editorRegionFullscreen
               ? { minHeight: 0, maxHeight: "100%" }
               : { minHeight, maxHeight: "calc(100vh - 300px)" }
           }
@@ -4193,7 +4565,7 @@ export function TiptapEditor({
           <div
             className="overflow-y-auto overflow-x-auto px-2 pb-2 pr-20 h-full min-h-0 relative w-full max-w-full"
             style={
-              panelEmbed || fillParentHeight
+              panelEmbed || fillParentHeight || editorRegionFullscreen
                 ? { minHeight: 0, maxHeight: "100%" }
                 : { minHeight, maxHeight: "calc(100vh - 300px)" }
             }

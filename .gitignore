@@ -43,11 +43,11 @@ next-env.d.ts
 *.swo
 *~
 
-# IDE
+# IDE / local tooling (Cursor, Codex CLI)
 .vscode/
 .idea/
-.cursor/
-.codex/
+.cursor
+.codex
 *.sublime-project
 *.sublime-workspace
 

@@ -1,12 +1,7 @@
 "use client"
 
-import { useCallback, useEffect, useRef, useState } from "react"
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog"
+import { useCallback, useEffect, useId, useRef, useState } from "react"
+import { createPortal } from "react-dom"
 import { Button } from "@/components/ui/button"
 import { UniverWorkbookView } from "@/components/spreadsheet/univer-workbook-view"
 import {
@@ -15,7 +10,7 @@ import {
 } from "@/lib/spreadsheet-workbook"
 import { cn } from "@/lib/utils"
 import { useToast } from "@/hooks/use-toast"
-import { Download, FileSpreadsheet, Loader2, Maximize2, Minimize2 } from "lucide-react"
+import { FileSpreadsheet, Loader2, Maximize2, Minimize2, X } from "lucide-react"
 
 export function isTabularExperimentFile(file: {
   file_name: string
@@ -35,6 +30,11 @@ type Props = {
   fileName: string
 }
 
+/**
+ * Spreadsheet viewer for Data & Files — uses a plain portal overlay instead of Radix Dialog.
+ * Radix modal dialogs trap focus / pointer behavior in ways that break Univer toolbar
+ * dropdowns (menus render via portals under `body`).
+ */
 export function ExperimentDataTabularDialog({
   open,
   onOpenChange,
@@ -43,6 +43,7 @@ export function ExperimentDataTabularDialog({
   fileName,
 }: Props) {
   const { toast } = useToast()
+  const titleId = useId()
   const [snapshot, setSnapshot] = useState<Record<string, unknown> | null>(null)
   const [loading, setLoading] = useState(false)
   const [fullPage, setFullPage] = useState(false)
@@ -87,6 +88,24 @@ export function ExperimentDataTabularDialog({
     },
     [flushSave]
   )
+
+  useEffect(() => {
+    if (!open) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onOpenChange(false)
+    }
+    window.addEventListener("keydown", onKey)
+    return () => window.removeEventListener("keydown", onKey)
+  }, [open, onOpenChange])
+
+  useEffect(() => {
+    if (!open) return
+    const prev = document.body.style.overflow
+    document.body.style.overflow = "hidden"
+    return () => {
+      document.body.style.overflow = prev
+    }
+  }, [open])
 
   useEffect(() => {
     if (!open) {
@@ -180,78 +199,77 @@ export function ExperimentDataTabularDialog({
 
   const gridHeightClass = fullPage ? "min-h-0 flex-1 h-[min(72vh,calc(100vh-11rem))]" : "min-h-[420px] h-[560px]"
 
-  const preventDialogDismissForUniverPopup = (e: { target: EventTarget | null; preventDefault: () => void }) => {
-    const target = e.target as Element | null
-    if (
-      target?.closest?.("#univer-popup-portal") ||
-      target?.closest?.('[data-u-comp="rect-popup"]') ||
-      target?.closest?.('[data-u-comp="rect-popup-mask"]') ||
-      target?.closest?.(".univer-popup") ||
-      target?.closest?.(".univer-popup-mask")
-    ) {
-      e.preventDefault()
-    }
-  }
+  if (!open) return null
 
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent
-        showCloseButton={!loading}
+  const overlay = (
+    <div className="fixed inset-0 z-[100] flex items-start justify-center overflow-y-auto p-4 sm:p-6">
+      <button
+        type="button"
+        className="absolute inset-0 bg-black/50"
+        aria-label="Close spreadsheet"
+        onClick={() => onOpenChange(false)}
+      />
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
         className={cn(
-          "overflow-hidden flex flex-col gap-0 p-0",
+          "relative z-10 flex w-full flex-col overflow-visible rounded-lg border bg-background shadow-lg",
           fullPage
-            ? "top-4 left-4 right-4 max-h-[calc(100vh-2rem)] h-[calc(100vh-2rem)] w-[calc(100vw-2rem)] max-w-none translate-x-0 translate-y-0 sm:max-w-none data-[state=closed]:zoom-out-100 data-[state=open]:zoom-in-100"
-            : "max-h-[90vh] max-w-5xl sm:max-w-5xl"
+            ? "mt-2 max-h-[calc(100vh-2rem)] min-h-0 h-[calc(100vh-2rem)] max-w-[calc(100vw-2rem)]"
+            : "mt-[5vh] max-h-[90vh] max-w-5xl"
         )}
-        onInteractOutside={(e) => {
-          // Univer toolbar popups (color picker, font picker, border panel, etc.) are
-          // rendered as position:fixed elements outside the dialog DOM via React portals.
-          // Radix DismissableLayer treats clicks on them as "outside" and would close the
-          // dialog. Prevent that so users can interact with Univer's popups normally.
-          preventDialogDismissForUniverPopup(e)
-        }}
-        onPointerDownOutside={preventDialogDismissForUniverPopup}
-        onFocusOutside={preventDialogDismissForUniverPopup}
+        onClick={(e) => e.stopPropagation()}
       >
-        <DialogHeader className="px-4 pt-4 pb-2 shrink-0 border-b sm:px-6 sm:pt-6">
-          <div className="flex flex-wrap items-center justify-between gap-2 pr-8">
-            <DialogTitle className="flex min-w-0 items-center gap-2 text-base">
-              <FileSpreadsheet className="h-5 w-5 shrink-0 text-emerald-600" />
-              <span className="truncate">{fileName}</span>
-            </DialogTitle>
-            <div className="flex flex-wrap items-center gap-2">
+        <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b px-4 pb-2 pt-4 sm:px-6 sm:pt-6">
+          <h2 id={titleId} className="flex min-w-0 items-center gap-2 text-base font-semibold leading-none">
+            <FileSpreadsheet className="h-5 w-5 shrink-0 text-emerald-600" />
+            <span className="truncate">{fileName}</span>
+          </h2>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="gap-1.5"
+              onClick={() => setFullPage((v) => !v)}
+              title={fullPage ? "Exit full page" : "Full page"}
+            >
+              {fullPage ? (
+                <>
+                  <Minimize2 className="h-4 w-4" />
+                  <span className="hidden sm:inline">Exit full page</span>
+                </>
+              ) : (
+                <>
+                  <Maximize2 className="h-4 w-4" />
+                  <span className="hidden sm:inline">Full page</span>
+                </>
+              )}
+            </Button>
+            <Button type="button" variant="outline" size="sm" onClick={handleExportCsv} disabled={!snapshot}>
+              Export CSV
+            </Button>
+            <Button type="button" variant="outline" size="sm" onClick={handleExportXlsx} disabled={!snapshot}>
+              Export XLSX
+            </Button>
+            <Button type="button" size="sm" onClick={handleSaveAndSync} disabled={!snapshot}>
+              Save & sync file
+            </Button>
+            {!loading && (
               <Button
                 type="button"
-                variant="outline"
-                size="sm"
-                className="gap-1.5"
-                onClick={() => setFullPage((v) => !v)}
-                title={fullPage ? "Exit full page" : "Full page"}
+                variant="ghost"
+                size="icon"
+                className="shrink-0"
+                onClick={() => onOpenChange(false)}
+                aria-label="Close"
               >
-                {fullPage ? (
-                  <>
-                    <Minimize2 className="h-4 w-4" />
-                    <span className="hidden sm:inline">Exit full page</span>
-                  </>
-                ) : (
-                  <>
-                    <Maximize2 className="h-4 w-4" />
-                    <span className="hidden sm:inline">Full page</span>
-                  </>
-                )}
+                <X className="h-4 w-4" />
               </Button>
-              <Button type="button" variant="outline" size="sm" onClick={handleExportCsv} disabled={!snapshot}>
-                Export CSV
-              </Button>
-              <Button type="button" variant="outline" size="sm" onClick={handleExportXlsx} disabled={!snapshot}>
-                Export XLSX
-              </Button>
-              <Button type="button" size="sm" onClick={handleSaveAndSync} disabled={!snapshot}>
-                Save & sync file
-              </Button>
-            </div>
+            )}
           </div>
-        </DialogHeader>
+        </div>
 
         <div className={cn("flex min-h-0 flex-1 flex-col px-1 pb-2 sm:px-2 sm:pb-3", fullPage && "min-h-0")}>
           {loading && (
@@ -275,7 +293,9 @@ export function ExperimentDataTabularDialog({
             </div>
           )}
         </div>
-      </DialogContent>
-    </Dialog>
+      </div>
+    </div>
   )
+
+  return typeof document !== "undefined" ? createPortal(overlay, document.body) : null
 }

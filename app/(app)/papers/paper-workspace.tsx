@@ -526,7 +526,9 @@ export function PaperWorkspace({ paperId, backLink, onPaperMutated, onPaperTitle
             content={content}
             onChange={handleContentChange}
             minHeight="calc(100vh - 180px)"
-            title={displayTitle}
+            title={titleInput}
+            onDocumentTitleChange={setTitleInput}
+            onDocumentTitleCommit={() => void commitTitle()}
             autoSave
             onAutoSave={handleAutoSave}
             onEditorReady={handleEditorReady}

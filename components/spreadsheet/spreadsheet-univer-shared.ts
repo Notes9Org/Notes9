@@ -243,3 +243,39 @@ export function handleSpreadsheetWheel(event: WheelEvent, boundary: HTMLElement 
   scrollNode.scrollTop += event.deltaY
   scrollNode.scrollLeft += event.deltaX
 }
+
+let embedWheelIsolationRefCount = 0
+let embedWheelIsolationHandler: ((e: WheelEvent) => void) | null = null
+
+/**
+ * TipTap embeds: the grid is mostly a canvas (no native overflow scroll), so wheel "defaults"
+ * can scroll the **editor** instead — especially at the top/bottom edge (scroll chaining).
+ *
+ * One `document` listener in the **bubble** phase runs after Univer's handlers on the canvas,
+ * then `preventDefault()` cancels only the browser default (parent scroll), without synthetic
+ * `wheel` events or capture-phase interception.
+ */
+export function registerSpreadsheetEmbedWheelIsolation(): () => void {
+  if (typeof document === "undefined") return () => {}
+
+  if (embedWheelIsolationRefCount === 0) {
+    embedWheelIsolationHandler = (e: WheelEvent) => {
+      const t = e.target
+      const el = t instanceof Element ? t : t.parentElement
+      if (!el?.closest("[data-spreadsheet-embed-root]")) return
+      e.preventDefault()
+    }
+    document.addEventListener("wheel", embedWheelIsolationHandler, {
+      passive: false,
+      capture: false,
+    })
+  }
+  embedWheelIsolationRefCount += 1
+  return () => {
+    embedWheelIsolationRefCount -= 1
+    if (embedWheelIsolationRefCount === 0 && embedWheelIsolationHandler) {
+      document.removeEventListener("wheel", embedWheelIsolationHandler, false)
+      embedWheelIsolationHandler = null
+    }
+  }
+}

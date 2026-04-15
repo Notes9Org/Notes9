@@ -56,6 +56,9 @@ interface PaperEditorProps {
   onAcceptInlineDiff?: () => void
   /** Called when user dismisses the inline diff */
   onDismissInlineDiff?: () => void
+  /** Inline fullscreen title (when page title is covered) — same pattern as protocol design. */
+  onDocumentTitleChange?: (value: string) => void
+  onDocumentTitleCommit?: () => void | Promise<void>
 }
 
 export function PaperEditor({
@@ -71,6 +74,8 @@ export function PaperEditor({
   inlineDiffHtml,
   onAcceptInlineDiff,
   onDismissInlineDiff,
+  onDocumentTitleChange,
+  onDocumentTitleCommit,
 }: PaperEditorProps) {
   const initialContent = content && content.trim().length > 0 ? content : DEFAULT_PAPER_TEMPLATE
 
@@ -86,6 +91,8 @@ export function PaperEditor({
       enableMath={true}
       paperMode={true}
       title={title}
+      onDocumentTitleChange={onDocumentTitleChange}
+      onDocumentTitleCommit={onDocumentTitleCommit}
       autoSave={autoSave}
       onAutoSave={onAutoSave}
       onEditorReady={onEditorReady}

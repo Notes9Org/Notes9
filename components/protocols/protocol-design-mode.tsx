@@ -124,6 +124,10 @@ export function ProtocolDesignMode({
   const [showAiPanel, setShowAiPanel] = useState(false)
   const [scientificCalculatorOpen, setScientificCalculatorOpen] = useState(false)
   const protocolEditorRef = useRef<Editor | null>(null)
+  /** Literature column + editor column — Tiptap region fullscreen covers this whole strip. */
+  const protocolDesignWorkspaceRef = useRef<HTMLDivElement>(null)
+  /** Tiptap app-region fullscreen: collapse heavy chrome; keep literature + essentials. */
+  const [tiptapRegionFullscreen, setTiptapRegionFullscreen] = useState(false)
 
   const [organizationId, setOrganizationId] = useState<string | null>(null)
   const [draftDocumentTemplateId, setDraftDocumentTemplateId] = useState<string | null>(
@@ -489,22 +493,138 @@ export function ProtocolDesignMode({
     return () => setRegistration(null)
   }, [setRegistration])
 
+  /** Fullscreen editor: literature + title share one row with Tiptap toolbar (same pattern as lab notes). */
+  const protocolMergedFullscreenToolbar =
+    tiptapRegionFullscreen && activeMainTabKey === "editor"
+
+  const protocolFullscreenToolbarLeading = protocolMergedFullscreenToolbar ? (
+    <div className="flex min-w-0 max-w-[min(11rem,56vw)] shrink-0 items-center gap-1.5 sm:max-w-[min(18rem,38%)] sm:gap-2">
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon"
+        className="h-8 w-8 shrink-0 text-muted-foreground hover:text-foreground"
+        onClick={() => setShowLiteraturePanel((v) => !v)}
+        aria-pressed={showLiteraturePanel}
+        aria-expanded={showLiteraturePanel}
+        aria-controls={isNarrow ? "protocol-literature-mobile" : "protocol-literature-desktop"}
+        title={showLiteraturePanel ? "Hide literature" : "Show literature"}
+      >
+        {showLiteraturePanel ? (
+          <PanelLeftClose className="h-4 w-4" aria-hidden />
+        ) : (
+          <BookOpen className="h-4 w-4" aria-hidden />
+        )}
+      </Button>
+      <div className="min-w-0 flex-1">
+        {isEditingTitle ? (
+          <input
+            ref={titleInputRef}
+            type="text"
+            value={protocol.name}
+            onChange={(e) => onProtocolNameChange?.(e.target.value)}
+            onBlur={() => setIsEditingTitle(false)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault()
+                titleInputRef.current?.blur()
+              }
+              if (e.key === "Escape") {
+                setIsEditingTitle(false)
+                titleInputRef.current?.blur()
+              }
+            }}
+            className="w-full border-b border-transparent bg-transparent pb-0.5 text-base font-semibold leading-none text-foreground outline-none focus:border-primary"
+            aria-label="Edit protocol title"
+          />
+        ) : (
+          <div
+            className={cn(
+              "truncate",
+              onProtocolNameChange &&
+                "cursor-pointer rounded px-1 -mx-1 hover:bg-muted/60 hover:text-foreground",
+            )}
+            onClick={() => {
+              if (onProtocolNameChange) setIsEditingTitle(true)
+            }}
+            role={onProtocolNameChange ? "button" : undefined}
+            tabIndex={onProtocolNameChange ? 0 : undefined}
+            onKeyDown={(e) => {
+              if (onProtocolNameChange && (e.key === "Enter" || e.key === " ")) {
+                e.preventDefault()
+                setIsEditingTitle(true)
+              }
+            }}
+            aria-label={onProtocolNameChange ? "Click to edit title" : undefined}
+          >
+            <h2 className="truncate text-base font-semibold leading-none text-foreground">
+              {protocol.name || "Untitled protocol"}
+            </h2>
+          </div>
+        )}
+      </div>
+    </div>
+  ) : undefined
+
+  const protocolFullscreenToolbarTrailing = protocolMergedFullscreenToolbar ? (
+    <>
+      <SaveStatusIndicator
+        status={hasPendingChanges ? "unsaved" : "saved"}
+        variant="icon"
+      />
+      <Badge variant="outline" className="shrink-0 text-[10px] font-normal">
+        v{currentVersion}
+      </Badge>
+      <NoteExportMenu
+        title={protocol.name}
+        htmlContent={draftContent}
+        trigger={
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8 shrink-0 text-muted-foreground hover:text-foreground"
+            aria-label="Export protocol"
+          >
+            <Download className="h-4 w-4" />
+          </Button>
+        }
+      />
+      {onExitDesignMode ? (
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          className="h-8 w-8 shrink-0 text-muted-foreground hover:text-foreground"
+          onClick={onExitDesignMode}
+          aria-label="Exit design mode"
+          title="Exit design mode"
+        >
+          <X className="h-4 w-4" />
+        </Button>
+      ) : null}
+    </>
+  ) : undefined
+
   return (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
       {/* ── Card shell (matches lab notes Card) ──────────────────────────── */}
       <Card className="flex min-h-0 min-w-0 flex-1 w-full flex-col gap-0 rounded-none border-0 border-t border-border/40 py-0 shadow-none">
-        <div className="relative flex min-h-0 min-w-0 flex-1 flex-row items-stretch overflow-hidden">
+        <div
+          ref={protocolDesignWorkspaceRef}
+          className="relative flex min-h-0 min-w-0 flex-1 flex-row items-stretch overflow-hidden"
+        >
           {/* Mobile: literature as full-height sheet over the editor */}
           {isNarrow && showLiteraturePanel && (
             <>
               <button
                 type="button"
-                className="fixed inset-0 z-40 bg-black/40"
+                className="fixed inset-0 z-[115] bg-black/40"
                 aria-label="Close literature panel"
                 onClick={() => setShowLiteraturePanel(false)}
               />
               <aside
-                className="fixed inset-y-0 left-0 z-50 flex w-[min(22rem,calc(100vw-0.75rem))] min-w-0 flex-col overflow-hidden border-r border-border bg-background shadow-xl"
+                className="fixed inset-y-0 left-0 z-[120] flex w-[min(22rem,calc(100vw-0.75rem))] min-w-0 flex-col overflow-hidden border-r border-border bg-background shadow-xl"
                 id="protocol-literature-mobile"
               >
                 <ProtocolLiteraturePanel
@@ -520,6 +640,7 @@ export function ProtocolDesignMode({
                   onContextChange={onContextChange}
                   protocolCandidates={protocolContextCandidates}
                   onAddProtocols={addAiProtocols}
+                  onRequestClose={() => setShowLiteraturePanel(false)}
                 />
               </aside>
             </>
@@ -531,7 +652,12 @@ export function ProtocolDesignMode({
               <aside
                 className={cn(
                   "flex min-h-0 shrink-0 flex-col self-stretch overflow-hidden border-r border-border bg-background transition-all duration-200",
-                  showLiteraturePanel ? "w-64 min-w-[16rem]" : "w-0 min-w-0 border-r-0"
+                  showLiteraturePanel
+                    ? cn(
+                        "w-64 min-w-[16rem]",
+                        tiptapRegionFullscreen && "relative z-[120]",
+                      )
+                    : "w-0 min-w-0 border-r-0",
                 )}
                 aria-hidden={!showLiteraturePanel}
                 id="protocol-literature-desktop"
@@ -550,6 +676,7 @@ export function ProtocolDesignMode({
                     onContextChange={onContextChange}
                     protocolCandidates={protocolContextCandidates}
                     onAddProtocols={addAiProtocols}
+                    onRequestClose={() => setShowLiteraturePanel(false)}
                   />
                 )}
               </aside>
@@ -565,8 +692,15 @@ export function ProtocolDesignMode({
           )}
 
           {/* ── Main editor area ──────────────────────────────────────── */}
-          <div className="relative z-0 flex min-h-0 min-w-0 flex-1 flex-col gap-3 py-3 sm:gap-4 sm:py-4">
-            {contextViewerTabs.length > 0 && (
+          <div
+            className={cn(
+              "relative z-0 flex min-h-0 min-w-0 flex-1 flex-col",
+              tiptapRegionFullscreen
+                ? "gap-0 py-0 sm:py-0"
+                : "gap-3 py-3 sm:gap-4 sm:py-4",
+            )}
+          >
+            {contextViewerTabs.length > 0 && !tiptapRegionFullscreen && (
               <div className="shrink-0 px-3 sm:px-6">
                 <div className="rounded-xl border border-border/60 bg-background/80 shadow-sm backdrop-blur">
                   <div className="flex gap-1.5 overflow-x-auto px-2 py-2">
@@ -634,8 +768,86 @@ export function ProtocolDesignMode({
 
             {activeMainTabKey === "editor" ? (
               <>
-                {/* ── Document chrome (mirrors lab notes CardHeader) ── */}
-                <CardHeader className="shrink-0 px-3 pb-0 sm:px-6">
+                {/* ── Document chrome — compact CardHeader when fullscreen without merged toolbar; merged mode uses Tiptap slots ── */}
+                {!protocolMergedFullscreenToolbar &&
+                  (tiptapRegionFullscreen ? (
+                  <CardHeader className="shrink-0 gap-1 border-b border-border/70 px-3 py-1.5 sm:px-4 [.border-b]:pb-1.5 items-center">
+                    <div className="flex min-w-0 items-center gap-2">
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8 shrink-0 text-muted-foreground hover:text-foreground"
+                        onClick={() => setShowLiteraturePanel((v) => !v)}
+                        aria-pressed={showLiteraturePanel}
+                        aria-expanded={showLiteraturePanel}
+                        aria-controls={
+                          isNarrow ? "protocol-literature-mobile" : "protocol-literature-desktop"
+                        }
+                        title={showLiteraturePanel ? "Hide literature" : "Show literature"}
+                      >
+                        {showLiteraturePanel ? (
+                          <PanelLeftClose className="h-4 w-4" aria-hidden />
+                        ) : (
+                          <BookOpen className="h-4 w-4" aria-hidden />
+                        )}
+                      </Button>
+                      <div className="min-w-0 flex-1">
+                        {isEditingTitle ? (
+                          <input
+                            ref={titleInputRef}
+                            type="text"
+                            value={protocol.name}
+                            onChange={(e) => onProtocolNameChange?.(e.target.value)}
+                            onBlur={() => setIsEditingTitle(false)}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") {
+                                e.preventDefault()
+                                titleInputRef.current?.blur()
+                              }
+                              if (e.key === "Escape") {
+                                setIsEditingTitle(false)
+                                titleInputRef.current?.blur()
+                              }
+                            }}
+                            className="w-full bg-transparent text-base font-semibold leading-none text-foreground outline-none border-b border-transparent pb-0.5 focus:border-primary"
+                            aria-label="Edit protocol title"
+                          />
+                        ) : (
+                          <div
+                            className={cn(
+                              "truncate",
+                              onProtocolNameChange &&
+                                "cursor-pointer rounded px-1 -mx-1 hover:bg-muted/60 hover:text-foreground",
+                            )}
+                            onClick={() => {
+                              if (onProtocolNameChange) setIsEditingTitle(true)
+                            }}
+                            role={onProtocolNameChange ? "button" : undefined}
+                            tabIndex={onProtocolNameChange ? 0 : undefined}
+                            onKeyDown={(e) => {
+                              if (
+                                onProtocolNameChange &&
+                                (e.key === "Enter" || e.key === " ")
+                              ) {
+                                e.preventDefault()
+                                setIsEditingTitle(true)
+                              }
+                            }}
+                            aria-label={
+                              onProtocolNameChange ? "Click to edit title" : undefined
+                            }
+                          >
+                            <h2 className="text-base font-semibold leading-none text-foreground truncate">
+                              {protocol.name || "Untitled protocol"}
+                            </h2>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </CardHeader>
+                ) : (
+                  <CardHeader className="shrink-0 px-3 pb-0 sm:px-6">
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
                 <div className="flex min-w-0 flex-1 items-center gap-2">
                   {/* Literature toggle — mirrors the notes-list toggle in lab notes */}
@@ -800,6 +1012,7 @@ export function ProtocolDesignMode({
                 </Link>
               </div>
                 </CardHeader>
+                ))}
 
                 {/* ── Editor (mirrors lab notes CardContent) ── */}
                 <CardContent className="flex min-h-0 min-w-0 flex-1 flex-col space-y-3 px-3 sm:px-6">
@@ -811,6 +1024,9 @@ export function ProtocolDesignMode({
                       title={protocol.name}
                       minHeight="100%"
                       fillParentHeight
+                      fullscreenWorkspaceRef={protocolDesignWorkspaceRef}
+                      leadingToolbarSlot={protocolFullscreenToolbarLeading}
+                      trailingToolbarSlot={protocolFullscreenToolbarTrailing}
                       showAITools
                       showAiWritingDropdown={false}
                       enableMath
@@ -819,6 +1035,7 @@ export function ProtocolDesignMode({
                       onEditorReady={(ed) => {
                         protocolEditorRef.current = ed
                       }}
+                      onEditorFullscreenChange={setTiptapRegionFullscreen}
                     />
                     <ScientificCalculatorSheet
                       open={scientificCalculatorOpen}
