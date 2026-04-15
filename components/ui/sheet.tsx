@@ -49,15 +49,18 @@ function SheetContent({
   children,
   side = 'right',
   showCloseButton = true,
+  overlayClassName,
   ...props
 }: React.ComponentProps<typeof SheetPrimitive.Content> & {
   side?: 'top' | 'right' | 'bottom' | 'left'
   /** When false, omit the default corner X (e.g. when content provides its own close). */
   showCloseButton?: boolean
+  /** Merged into `SheetOverlay` — use e.g. `z-[120]` when this sheet must sit above TipTap region fullscreen (z-110). */
+  overlayClassName?: string
 }) {
   return (
     <SheetPortal>
-      <SheetOverlay />
+      <SheetOverlay className={overlayClassName} />
       <SheetPrimitive.Content
         data-slot="sheet-content"
         className={cn(

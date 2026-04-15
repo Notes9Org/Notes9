@@ -838,11 +838,33 @@ mark {
  * Radix Dialog also sets `body { pointer-events: none }` while open; ensure portaled UI
  * stays interactive (legacy `.univer-popup` class + rect popup nodes from @univerjs/ui).
  */
+#univer-popup-portal *,
 #univer-popup-portal [data-u-comp="rect-popup"],
 #univer-popup-portal [data-u-comp="rect-popup-mask"],
 .univer-popup,
 .univer-popup-mask {
   pointer-events: auto;
+}
+
+/* TipTap spreadsheet embed: limit wheel scroll chaining into the parent editor. */
+[data-spreadsheet-embed-root] {
+  overscroll-behavior: contain;
+}
+
+/* Tiptap region fullscreen (lab notes / protocol) — shell covers SidebarInset main. */
+[data-n9-editor-fullscreen] {
+  @apply rounded-xl border border-border bg-background shadow-lg;
+  box-sizing: border-box;
+  /* Keep chrome above iOS home indicator & rounded display edges without overlapping. */
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+  padding-left: env(safe-area-inset-left, 0px);
+  padding-right: env(safe-area-inset-right, 0px);
+}
+
+/* Dropdown/popover wrappers mounted by Radix (used by Univer toolbar controls in dialogs). */
+body > [data-radix-popper-content-wrapper] {
+  pointer-events: auto !important;
+  z-index: 400 !important;
 }
 
 /* ── RAG deep-link highlights (loaded here — app imports this file, not styles/globals.css) ── */

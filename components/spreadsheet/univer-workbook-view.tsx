@@ -10,6 +10,7 @@ import {
   handleSpreadsheetWheel,
   hasUniverWorkbookApi,
   normalizeWorkbookSnapshot,
+  registerSpreadsheetEmbedWheelIsolation,
   scheduleMicrotask,
 } from "@/components/spreadsheet/spreadsheet-univer-shared"
 
@@ -331,6 +332,10 @@ export function UniverWorkbookView({
   }, [instanceKey, variant, readOnly, fileName, dataRevision, canAttemptMount])
 
   useEffect(() => {
+    if (variant === "embed") {
+      return registerSpreadsheetEmbedWheelIsolation()
+    }
+
     const boundary = boundaryRef.current
     if (!boundary) return
 
@@ -342,7 +347,7 @@ export function UniverWorkbookView({
     return () => {
       boundary.removeEventListener("wheel", onWheel, true)
     }
-  }, [])
+  }, [variant, instanceKey])
 
   return (
     <div

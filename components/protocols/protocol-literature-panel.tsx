@@ -29,6 +29,7 @@ import {
   BookOpen,
   FolderOpen,
   FlaskConical,
+  X,
 } from "lucide-react"
 import Link from "next/link"
 import { cn } from "@/lib/utils"
@@ -336,6 +337,20 @@ export function ProtocolLiteraturePanel({
   if (!projectId && !experimentId) {
     return (
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+        {onRequestClose && (
+          <div className="flex h-12 shrink-0 items-center justify-end border-b border-border/40 px-2 sm:hidden">
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className="h-10 w-10 touch-manipulation"
+              onClick={onRequestClose}
+              aria-label="Close literature panel"
+            >
+              <X className="h-5 w-5" aria-hidden />
+            </Button>
+          </div>
+        )}
         {filterSection}
         <div className="flex flex-col items-center justify-center gap-3 p-6 text-center flex-1">
           <div className="rounded-full bg-muted/60 p-3">
@@ -385,11 +400,16 @@ export function ProtocolLiteraturePanel({
                 type="button"
                 variant="ghost"
                 size="icon"
-                className="h-6 w-6 shrink-0"
+                className="size-9 shrink-0 touch-manipulation sm:size-6"
                 onClick={onRequestClose}
-                aria-label="Hide literature panel"
+                aria-label="Close literature panel"
+                title="Close literature panel"
               >
-                <PanelLeftClose className="h-3.5 w-3.5" />
+                {/* Mobile: clear dismiss; desktop keeps narrow “hide rail” affordance */}
+                <>
+                  <X className="size-5 sm:hidden" aria-hidden />
+                  <PanelLeftClose className="hidden size-3.5 sm:block" aria-hidden />
+                </>
               </Button>
             )}
           </div>

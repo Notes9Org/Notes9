@@ -325,7 +325,7 @@ function AppLayoutBody({ children }: AppLayoutProps) {
                 onMouseDown={leftSidebar.handleMouseDown}
                 isResizing={leftSidebar.isResizing}
                 position="right"
-                className="z-10 shrink-0"
+                className="z-[121] shrink-0"
               />
             )}
           </div>
@@ -409,7 +409,8 @@ function AppLayoutBody({ children }: AppLayoutProps) {
               <SheetContent
                 side="right"
                 showCloseButton={false}
-                className="flex h-full max-h-dvh min-h-0 w-full max-w-full flex-col gap-0 overflow-hidden p-0 data-[state=open]:duration-300 data-[state=closed]:duration-200"
+                overlayClassName="z-[120]"
+                className="z-[120] flex h-full max-h-dvh min-h-0 w-full max-w-full flex-col gap-0 overflow-hidden p-0 data-[state=open]:duration-300 data-[state=closed]:duration-200"
               >
                 <SheetHeader className="sr-only">
                   <SheetTitle>Protocol AI</SheetTitle>
@@ -419,7 +420,7 @@ function AppLayoutBody({ children }: AppLayoutProps) {
             </Sheet>
           ) : (
             headerAi.isOpen && (
-              <div className="flex shrink-0 h-full min-h-0">
+              <div className="relative z-[120] flex h-full min-h-0 shrink-0">
                 <ResizeHandle
                   onMouseDown={rightSidebar.handleMouseDown}
                   isResizing={rightSidebar.isResizing}
@@ -439,7 +440,8 @@ function AppLayoutBody({ children }: AppLayoutProps) {
             <SheetContent
               side="right"
               showCloseButton={false}
-              className="w-full max-w-full p-0 data-[state=open]:duration-300 data-[state=closed]:duration-200"
+              overlayClassName="z-[120]"
+              className="z-[120] w-full max-w-full p-0 data-[state=open]:duration-300 data-[state=closed]:duration-200"
             >
               <SheetHeader className="sr-only">
                 <SheetTitle>AI Assistant</SheetTitle>
@@ -449,14 +451,14 @@ function AppLayoutBody({ children }: AppLayoutProps) {
           </Sheet>
         ) : (
           rightSidebarOpen && (
-            <div className="flex shrink-0 h-full min-h-0">
+            <div className="relative z-[120] flex h-full min-h-0 shrink-0">
               <ResizeHandle
                 onMouseDown={rightSidebar.handleMouseDown}
                 isResizing={rightSidebar.isResizing}
                 position="left"
               />
               <div
-                className="border-l border-border overflow-hidden h-full min-h-0 flex flex-col"
+                className="flex h-full min-h-0 flex-col overflow-hidden border-l border-border"
                 style={{ width: rightSidebar.width, minWidth: 0 }}
               >
                 <RightSidebar onClose={() => setRightSidebarOpen(false)} />
