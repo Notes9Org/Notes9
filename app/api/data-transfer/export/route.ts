@@ -11,6 +11,7 @@ import {
 } from "@/lib/data-transfer"
 import { textToPdf } from "@/lib/simple-pdf"
 import { createZip } from "@/lib/zip"
+import { USER_STORAGE_BUCKET, resolveExperimentDataStoragePath } from "@/lib/user-storage-bucket"
 
 type ProjectRow = Record<string, any>
 type ExperimentRow = Record<string, any>
@@ -444,18 +445,17 @@ async function downloadExperimentFile(
   row: Record<string, any>,
   warnings: string[],
 ) {
-  const storagePath =
-    row?.metadata?.storage_path ??
-    getStoragePathFromUrl(typeof row.file_url === "string" ? row.file_url : "")
+  const storagePath = resolveExperimentDataStoragePath({
+    file_url: typeof row.file_url === "string" ? row.file_url : "",
+    metadata: row.metadata,
+  })
 
   if (!storagePath) {
     warnings.push(`Missing storage path for experiment_data row ${row.id}`)
     return null
   }
 
-  const { data, error } = await supabase.storage
-    .from("experiment-files")
-    .download(storagePath)
+  const { data, error } = await supabase.storage.from(USER_STORAGE_BUCKET).download(storagePath)
 
   if (error || !data) {
     warnings.push(`Failed to download file ${row.file_name || row.id}: ${error?.message || "unknown error"}`)
@@ -464,13 +464,6 @@ async function downloadExperimentFile(
 
   const buffer = await data.arrayBuffer()
   return new Uint8Array(buffer)
-}
-
-function getStoragePathFromUrl(value: string) {
-  const marker = "/experiment-files/"
-  const index = value.indexOf(marker)
-  if (index < 0) return null
-  return value.slice(index + marker.length)
 }
 
 function stripHtml(value: string) {

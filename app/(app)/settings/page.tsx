@@ -20,6 +20,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { LogOut, Sun, Moon, Monitor, Loader2 } from 'lucide-react'
 import { ChangePasswordDialog } from "@/components/change-password-dialog"
 import { useToast } from "@/hooks/use-toast"
+import { USER_STORAGE_BUCKET, createProfileAvatarStoragePath } from "@/lib/user-storage-bucket"
 
 export default function SettingsPage() {
   const router = useRouter()
@@ -152,15 +153,15 @@ export default function SettingsPage() {
     try {
       const supabase = createClient()
       const ext = file.name.split(".").pop()?.toLowerCase() || "jpg"
-      const path = `${profile.id}/avatar.${ext}`
+      const path = createProfileAvatarStoragePath(profile.id, ext)
 
-      const { error: uploadError } = await supabase.storage
-        .from("avatars")
-        .upload(path, file, { upsert: true })
+      const { error: uploadError } = await supabase.storage.from(USER_STORAGE_BUCKET).upload(path, file, {
+        upsert: true,
+      })
 
       if (uploadError) throw uploadError
 
-      const { data: urlData } = supabase.storage.from("avatars").getPublicUrl(path)
+      const { data: urlData } = supabase.storage.from(USER_STORAGE_BUCKET).getPublicUrl(path)
       const publicUrl = urlData.publicUrl
 
       const { error: updateError } = await supabase
@@ -179,7 +180,9 @@ export default function SettingsPage() {
     } catch (err: any) {
       toast({
         title: "Upload failed",
-        description: err.message ?? "Could not update avatar. Ensure the avatars storage bucket exists.",
+        description:
+          err.message ??
+          "Could not update avatar. Ensure the `user` storage bucket exists and profile policies are applied (scripts/045).",
         variant: "destructive",
       })
     } finally {

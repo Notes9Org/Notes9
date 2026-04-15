@@ -147,7 +147,7 @@ export function LiteraturePdfPanel({
       const buf = await response.arrayBuffer()
       const { buildLiteraturePdfWithAnnotationsEmbedded } = await import("@/lib/export-literature-pdf-with-annotations")
       const out = await buildLiteraturePdfWithAnnotationsEmbedded(buf, annotations)
-      const blob = new Blob([out], { type: "application/pdf" })
+      const blob = new Blob([out.buffer as ArrayBuffer], { type: "application/pdf" })
       const url = URL.createObjectURL(blob)
       const a = document.createElement("a")
       a.href = url

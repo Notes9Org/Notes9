@@ -14,6 +14,42 @@ import {
   scheduleMicrotask,
 } from "@/components/spreadsheet/spreadsheet-univer-shared"
 
+/** Dark-mode color palette for Univer: grays are inverted, white/black swapped. */
+function buildDarkUniverTheme(base: Record<string, unknown>): Record<string, unknown> {
+  return {
+    ...base,
+    white: "#1C1D22",   // cell / panel background
+    black: "#E4E6EF",   // primary text
+    gray: {
+      50:  "#2A2B30",
+      100: "#323440",
+      200: "#3C3F4D",
+      300: "#8B92A5",
+      400: "#9198AD",
+      500: "#A4AAB8",
+      600: "#C4C8D4",
+      700: "#D4D7E2",
+      800: "#E0E2EC",
+      900: "#EBEDF5",
+    },
+  }
+}
+
+/** React hook: true when the `dark` class is present on <html>. */
+function useIsDark(): boolean {
+  const [isDark, setIsDark] = useState(
+    () => typeof document !== "undefined" && document.documentElement.classList.contains("dark")
+  )
+  useEffect(() => {
+    const check = () => setIsDark(document.documentElement.classList.contains("dark"))
+    check()
+    const observer = new MutationObserver(check)
+    observer.observe(document.documentElement, { attributeFilter: ["class"] })
+    return () => observer.disconnect()
+  }, [])
+  return isDark
+}
+
 function canonicalEncodedFromProp(enc: string, fileName?: string): string | null {
   try {
     const parsed = JSON.parse(decodeWorkbookAttr(enc))
@@ -65,6 +101,7 @@ export function UniverWorkbookView({
   heightClass = "h-[520px]",
   instanceKey = 0,
 }: UniverWorkbookViewProps) {
+  const isDark = useIsDark()
   const containerRef = useRef<HTMLDivElement | null>(null)
   const boundaryRef = useRef<HTMLDivElement | null>(null)
   const [fallbackHtml, setFallbackHtml] = useState<string | null>(null)
@@ -160,7 +197,7 @@ export function UniverWorkbookView({
           })
         }
 
-        const [{ createUniver, LocaleType }, { UniverSheetsCorePreset }] = await Promise.all([
+        const [{ createUniver, LocaleType, defaultTheme }, { UniverSheetsCorePreset }] = await Promise.all([
           import("@univerjs/presets"),
           import("@univerjs/preset-sheets-core"),
         ])
@@ -169,6 +206,7 @@ export function UniverWorkbookView({
 
         mountHost = document.createElement("div")
         mountHost.className = "h-full w-full"
+        if (isDark) mountHost.setAttribute("data-univer-dark", "true")
         const host = containerRef.current
         if (!host) return
         host.replaceChildren(mountHost)
@@ -187,11 +225,14 @@ export function UniverWorkbookView({
           ribbonType: "classic",
         }
 
+        const theme = isDark ? buildDarkUniverTheme(defaultTheme as Record<string, unknown>) : defaultTheme
+
         const { univer, univerAPI } = createUniver({
           locale: LocaleType.EN_US,
           locales: {
             [LocaleType.EN_US]: sheetsCoreEnUS,
           },
+          theme,
           presets: [
             [
               UniverSheetsCorePreset(presetConfig),
@@ -329,7 +370,7 @@ export function UniverWorkbookView({
       cleanup?.()
       disposed = true
     }
-  }, [instanceKey, variant, readOnly, fileName, dataRevision, canAttemptMount])
+  }, [instanceKey, variant, readOnly, fileName, dataRevision, canAttemptMount, isDark])
 
   useEffect(() => {
     if (variant === "embed") {

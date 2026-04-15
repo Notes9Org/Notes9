@@ -63,6 +63,10 @@ import {
 } from "@/components/ui/sheet"
 import { useContentDiffs } from "@/hooks/use-content-diffs"
 import { LabNoteChangeApprovalBar } from "@/components/lab-notes/lab-note-change-approval"
+import {
+  USER_STORAGE_BUCKET,
+  createPublishedLabNoteStoragePath,
+} from "@/lib/user-storage-bucket"
 import { ScientificCalculatorSheet } from "@/components/lab-notes/scientific-calculator"
 import {
   DOCUMENT_HIGHLIGHT_EVENT,
@@ -433,21 +437,22 @@ export function LabNotesTab({
     }
   }, [selectedNote?.id, isCreating]);
 
-  // Check if note is published when selected
+  // Published if public API returns JSON (works for any viewer; storage may be author-only)
   useEffect(() => {
     const checkPublicStatus = async () => {
       setPublicUrl(null);
       if (!selectedNote) return;
 
-      const supabase = createClient();
-      const { data } = await supabase.storage
-        .from("lab_notes_public")
-        .list("", {
-          search: `${selectedNote.id}.json`,
+      try {
+        const res = await fetch(`/api/share/note/${encodeURIComponent(selectedNote.id)}`, {
+          method: "GET",
+          cache: "no-store",
         });
-
-      if (data && data.length > 0) {
-        setPublicUrl(`${window.location.origin}/share/note/${selectedNote.id}`);
+        if (res.ok) {
+          setPublicUrl(`${window.location.origin}/share/note/${selectedNote.id}`);
+        }
+      } catch {
+        /* ignore */
       }
     };
 
@@ -496,6 +501,18 @@ export function LabNotesTab({
     try {
       setIsPublishing(true);
       const supabase = createClient();
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user || user.id !== selectedNote.created_by) {
+        toast({
+          title: "Cannot publish",
+          description: "Only the note author can publish to storage.",
+          variant: "destructive",
+        });
+        setIsPublishing(false);
+        return;
+      }
 
       const jsonBlob = new Blob(
         [
@@ -508,12 +525,14 @@ export function LabNotesTab({
         { type: "application/json" }
       );
 
-      const { error } = await supabase.storage
-        .from("lab_notes_public")
-        .upload(`${selectedNote.id}.json`, jsonBlob, {
-          upsert: true,
-          contentType: "application/json",
-        });
+      const objectPath = createPublishedLabNoteStoragePath(
+        selectedNote.created_by,
+        selectedNote.id
+      );
+      const { error } = await supabase.storage.from(USER_STORAGE_BUCKET).upload(objectPath, jsonBlob, {
+        upsert: true,
+        contentType: "application/json",
+      });
 
       if (error) throw error;
 
@@ -540,10 +559,24 @@ export function LabNotesTab({
     try {
       setIsPublishing(true);
       const supabase = createClient();
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user || user.id !== selectedNote.created_by) {
+        toast({
+          title: "Cannot unpublish",
+          description: "Only the note author can remove the published file.",
+          variant: "destructive",
+        });
+        setIsPublishing(false);
+        return;
+      }
 
-      const { error } = await supabase.storage
-        .from("lab_notes_public")
-        .remove([`${selectedNote.id}.json`]);
+      const objectPath = createPublishedLabNoteStoragePath(
+        selectedNote.created_by,
+        selectedNote.id
+      );
+      const { error } = await supabase.storage.from(USER_STORAGE_BUCKET).remove([objectPath]);
 
       if (error) throw error;
 

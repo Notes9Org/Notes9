@@ -1,5 +1,6 @@
-import { NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase/server';
+import { NextResponse } from "next/server"
+import { createClient } from "@/lib/supabase/server"
+import { USER_STORAGE_BUCKET } from "@/lib/user-storage-bucket"
 
 // Max file size: 10MB
 const MAX_FILE_SIZE = 10 * 1024 * 1024;
@@ -64,28 +65,19 @@ export async function POST(request: Request) {
     const timestamp = Date.now();
     const ext = file.name.split('.').pop() || 'bin';
     const safeName = file.name.replace(/[^a-zA-Z0-9.-]/g, '_');
-    const storagePath = `chat-attachments/${user.id}/${timestamp}-${safeName}`;
+    const storagePath = `${user.id}/chat-attachments/${timestamp}-${safeName}`
 
-    // Upload to Supabase Storage
-    const { data: uploadData, error: uploadError } = await supabase.storage
-      .from('experiment-files') // Reuse existing bucket
-      .upload(storagePath, file, {
-        cacheControl: '3600',
-        upsert: false,
-      });
+    const { error: uploadError } = await supabase.storage.from(USER_STORAGE_BUCKET).upload(storagePath, file, {
+      cacheControl: "3600",
+      upsert: false,
+    })
 
     if (uploadError) {
-      console.error('Upload error:', uploadError);
-      return NextResponse.json(
-        { error: 'Failed to upload file' },
-        { status: 500 }
-      );
+      console.error("Upload error:", uploadError)
+      return NextResponse.json({ error: "Failed to upload file" }, { status: 500 })
     }
 
-    // Get public URL
-    const { data: urlData } = supabase.storage
-      .from('experiment-files')
-      .getPublicUrl(storagePath);
+    const { data: urlData } = supabase.storage.from(USER_STORAGE_BUCKET).getPublicUrl(storagePath)
 
     return NextResponse.json({
       url: urlData.publicUrl,

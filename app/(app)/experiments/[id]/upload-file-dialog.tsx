@@ -30,6 +30,11 @@ import {
   isSpreadsheetFile,
   readSpreadsheetWorkbook,
 } from "@/lib/spreadsheet-workbook"
+import { fetchOrganizationIdForExperiment } from "@/lib/experiment-storage"
+import {
+  USER_STORAGE_BUCKET,
+  createExperimentDataStoragePath,
+} from "@/lib/user-storage-bucket"
 
 // File size limit: 10 MB for MVP
 const MAX_FILE_SIZE = 10 * 1024 * 1024 // 10 MB in bytes
@@ -184,6 +189,11 @@ export function UploadFileDialog({ experimentId, onUploadComplete }: UploadFileD
       
       if (!user) throw new Error("Not authenticated")
 
+      const organizationId = await fetchOrganizationIdForExperiment(supabase, experimentId)
+      if (!organizationId) {
+        throw new Error("Could not resolve organization for this experiment")
+      }
+
       let successCount = 0
       let errorCount = 0
 
@@ -198,13 +208,17 @@ export function UploadFileDialog({ experimentId, onUploadComplete }: UploadFileD
 
         try {
           const file = fileStatus.file
-          const timestamp = Date.now()
-          const fileName = `${experimentId}/${timestamp}-${file.name}`
+          const dataFileId = crypto.randomUUID()
+          const storagePath = createExperimentDataStoragePath(
+            organizationId,
+            experimentId,
+            dataFileId,
+            file.name
+          )
 
-          // Upload to Supabase Storage
-          const { data: uploadData, error: uploadError } = await supabase.storage
-            .from('experiment-files')
-            .upload(fileName, file, {
+          const { error: uploadError } = await supabase.storage
+            .from(USER_STORAGE_BUCKET)
+            .upload(storagePath, file, {
               cacheControl: '3600',
               upsert: false
             })
@@ -216,10 +230,9 @@ export function UploadFileDialog({ experimentId, onUploadComplete }: UploadFileD
             idx === i ? { ...f, progress: 60 } : f
           ))
 
-          // Get public URL
           const { data: urlData } = supabase.storage
-            .from('experiment-files')
-            .getPublicUrl(fileName)
+            .from(USER_STORAGE_BUCKET)
+            .getPublicUrl(storagePath)
 
           // Update progress
           setSelectedFiles(prev => prev.map((f, idx) => 
@@ -240,6 +253,7 @@ export function UploadFileDialog({ experimentId, onUploadComplete }: UploadFileD
           const { error: dbError } = await supabase
             .from('experiment_data')
             .insert({
+              id: dataFileId,
               experiment_id: experimentId,
               data_type: dataType,
               file_name: file.name,
@@ -250,7 +264,7 @@ export function UploadFileDialog({ experimentId, onUploadComplete }: UploadFileD
               metadata: {
                 original_name: file.name,
                 upload_date: new Date().toISOString(),
-                storage_path: fileName
+                storage_path: storagePath
               },
               ...tabularPayload,
             })

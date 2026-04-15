@@ -7,6 +7,7 @@ import {
   workbookSnapshotToCsvBuffer,
   workbookSnapshotToXlsxBuffer,
 } from "@/lib/spreadsheet-workbook"
+import { USER_STORAGE_BUCKET, resolveExperimentDataStoragePath } from "@/lib/user-storage-bucket"
 
 type RouteParams = { params: Promise<{ experimentId: string; fileId: string }> }
 
@@ -89,8 +90,10 @@ export async function PATCH(request: Request, { params }: RouteParams) {
 
   let file_size: number | undefined
   if (body.sync_storage) {
-    const meta = row.metadata as { storage_path?: string } | null
-    const storagePath = meta?.storage_path
+    const storagePath = resolveExperimentDataStoragePath({
+      metadata: row.metadata as { storage_path?: string } | null,
+      file_url: row.file_url,
+    })
     const format = (row.tabular_format as string | null) || inferTabularFormatFromFileName(row.file_name || "")
     if (storagePath && format) {
       try {
@@ -104,7 +107,7 @@ export async function PATCH(request: Request, { params }: RouteParams) {
               ? "text/csv"
               : "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         })
-        const { error: upErr } = await supabase.storage.from("experiment-files").update(storagePath, blob, {
+        const { error: upErr } = await supabase.storage.from(USER_STORAGE_BUCKET).update(storagePath, blob, {
           cacheControl: "3600",
           upsert: true,
         })

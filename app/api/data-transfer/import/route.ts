@@ -1,6 +1,11 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { normalizeRequestedTables, type BackupPayload, type ExportTable } from "@/lib/data-transfer"
+import {
+  USER_STORAGE_BUCKET,
+  createExperimentDataStoragePath,
+  createUserDataTransferStagingPath,
+} from "@/lib/user-storage-bucket"
 
 type DbRow = Record<string, any>
 type ImportCategory =
@@ -201,12 +206,14 @@ async function importResearchFolder({
       })
     }
 
-    const storagePath = `${projectId}/${experimentId ?? "unassigned"}/${Date.now()}-${sanitizeFileName(
-      file.name,
-    )}`
+    const dataFileId = crypto.randomUUID()
+    const storagePath =
+      experimentId != null
+        ? createExperimentDataStoragePath(organizationId, experimentId, dataFileId, sanitizeFileName(file.name))
+        : createUserDataTransferStagingPath(userId, dataFileId, sanitizeFileName(file.name))
 
     const upload = await supabase.storage
-      .from("experiment-files")
+      .from(USER_STORAGE_BUCKET)
       .upload(storagePath, file, { cacheControl: "3600", upsert: false })
 
     if (upload.error) {
@@ -218,9 +225,7 @@ async function importResearchFolder({
       continue
     }
 
-    const { data: publicUrlData } = supabase.storage
-      .from("experiment-files")
-      .getPublicUrl(storagePath)
+    const { data: publicUrlData } = supabase.storage.from(USER_STORAGE_BUCKET).getPublicUrl(storagePath)
     const fileUrl = publicUrlData.publicUrl
 
     try {
@@ -229,6 +234,7 @@ async function importResearchFolder({
         file,
         fileUrl,
         storagePath,
+        dataFileId,
         projectId,
         experimentId,
         category: fileEntry.category,
@@ -257,6 +263,7 @@ async function persistImportedFile({
   file,
   fileUrl,
   storagePath,
+  dataFileId,
   projectId,
   experimentId,
   category,
@@ -267,6 +274,7 @@ async function persistImportedFile({
   file: File
   fileUrl: string
   storagePath: string
+  dataFileId: string
   projectId: string
   experimentId: string | null
   category: ImportCategory
@@ -334,6 +342,7 @@ async function persistImportedFile({
   }
 
   const { error } = await supabase.from("experiment_data").insert({
+    id: dataFileId,
     experiment_id: experimentId,
     data_type: inferDataType(file),
     file_name: file.name,

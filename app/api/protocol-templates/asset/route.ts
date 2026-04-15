@@ -2,7 +2,7 @@ import { NextResponse } from "next/server"
 
 import { createClient } from "@/lib/supabase/server"
 import type { ProtocolTemplateExtracted } from "@/lib/protocol-template-types"
-import { resolveProtocolTemplateStorageBucket } from "@/lib/protocol-templates-storage"
+import { USER_STORAGE_BUCKET } from "@/lib/user-storage-bucket"
 
 export async function GET(request: Request) {
   try {
@@ -43,22 +43,9 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: "Image not found" }, { status: 404 })
     }
 
-    const bucket = resolveProtocolTemplateStorageBucket(logo.storage_path)
-    let blob: Blob | null = null
-    let dlErr: { message: string } | null = null
-
-    const tryDownload = async (b: string) => {
-      const r = await supabase.storage.from(b).download(logo.storage_path)
-      return r
-    }
-
-    ;({ data: blob, error: dlErr } = await tryDownload(bucket))
-    if ((dlErr || !blob) && bucket === "user") {
-      ;({ data: blob, error: dlErr } = await tryDownload("protocol-templates"))
-    }
-    if ((dlErr || !blob) && bucket === "protocol-templates") {
-      ;({ data: blob, error: dlErr } = await tryDownload("user"))
-    }
+    const { data: blob, error: dlErr } = await supabase.storage
+      .from(USER_STORAGE_BUCKET)
+      .download(logo.storage_path)
 
     if (dlErr || !blob) {
       return NextResponse.json({ error: "Could not load file" }, { status: 500 })
