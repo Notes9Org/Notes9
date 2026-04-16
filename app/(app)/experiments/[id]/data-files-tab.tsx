@@ -42,6 +42,12 @@ import {
   isTabularExperimentFile,
 } from "@/components/experiments/experiment-data-tabular-dialog"
 import { createEmptyWorkbookSnapshot } from "@/components/spreadsheet/spreadsheet-univer-shared"
+import { fetchOrganizationIdForExperiment } from "@/lib/experiment-storage"
+import {
+  USER_STORAGE_BUCKET,
+  createExperimentDataStoragePath,
+  resolveExperimentDataStoragePath,
+} from "@/lib/user-storage-bucket"
 
 interface ExperimentFile {
   id: string
@@ -122,14 +128,10 @@ export function DataFilesTab({ experimentId }: { experimentId: string }) {
     try {
       const supabase = createClient()
 
-      // Extract storage path from metadata or construct it
-      const storagePath = file.file_url.split('/experiment-files/').pop()
+      const storagePath = resolveExperimentDataStoragePath(file)
       if (!storagePath) throw new Error("Invalid file path")
 
-      // Delete from storage
-      const { error: storageError } = await supabase.storage
-        .from('experiment-files')
-        .remove([storagePath])
+      const { error: storageError } = await supabase.storage.from(USER_STORAGE_BUCKET).remove([storagePath])
 
       if (storageError) {
         console.warn("Storage deletion warning:", storageError)
@@ -173,23 +175,28 @@ export function DataFilesTab({ experimentId }: { experimentId: string }) {
       } = await supabase.auth.getUser()
       if (!user) throw new Error("Not signed in")
 
+      const orgId = await fetchOrganizationIdForExperiment(supabase, experimentId)
+      if (!orgId) throw new Error("Could not resolve organization for this experiment")
+
       const stamp = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19)
       const fileName = `Spreadsheet-${stamp}.csv`
-      const storagePath = `${experimentId}/${Date.now()}-${fileName}`
+      const dataFileId = crypto.randomUUID()
+      const storagePath = createExperimentDataStoragePath(orgId, experimentId, dataFileId, fileName)
       const snapshot = createEmptyWorkbookSnapshot(fileName)
 
       const blob = new Blob([""], { type: "text/csv;charset=utf-8" })
-      const { error: uploadError } = await supabase.storage.from("experiment-files").upload(storagePath, blob, {
+      const { error: uploadError } = await supabase.storage.from(USER_STORAGE_BUCKET).upload(storagePath, blob, {
         cacheControl: "3600",
         upsert: false,
       })
       if (uploadError) throw uploadError
 
-      const { data: urlData } = supabase.storage.from("experiment-files").getPublicUrl(storagePath)
+      const { data: urlData } = supabase.storage.from(USER_STORAGE_BUCKET).getPublicUrl(storagePath)
 
       const { data: inserted, error: dbError } = await supabase
         .from("experiment_data")
         .insert({
+          id: dataFileId,
           experiment_id: experimentId,
           data_type: "raw",
           file_name: fileName,

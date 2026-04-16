@@ -202,10 +202,11 @@ export function ExperimentDataTabularDialog({
   if (!open) return null
 
   const overlay = (
-    <div className="fixed inset-0 z-[100] flex items-start justify-center overflow-y-auto p-4 sm:p-6">
+    // z-[130] places this above the sidebar (z-[120]) so the backdrop properly covers it.
+    <div className="fixed inset-0 z-[130] flex items-start justify-center overflow-y-auto p-4 sm:p-6">
       <button
         type="button"
-        className="absolute inset-0 bg-black/50"
+        className="absolute inset-0 bg-black/60 dark:bg-black/70"
         aria-label="Close spreadsheet"
         onClick={() => onOpenChange(false)}
       />
@@ -214,7 +215,7 @@ export function ExperimentDataTabularDialog({
         aria-modal="true"
         aria-labelledby={titleId}
         className={cn(
-          "relative z-10 flex w-full flex-col overflow-visible rounded-lg border bg-background shadow-lg",
+          "relative z-10 flex w-full flex-col overflow-visible rounded-lg border bg-background shadow-xl",
           fullPage
             ? "mt-2 max-h-[calc(100vh-2rem)] min-h-0 h-[calc(100vh-2rem)] max-w-[calc(100vw-2rem)]"
             : "mt-[5vh] max-h-[90vh] max-w-5xl"

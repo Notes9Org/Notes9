@@ -36,8 +36,8 @@ export function createProtocolTemplateAssetKey(
 }
 
 /**
- * New layout uses bucket `user` with a `protocol` path segment.
- * Legacy uploads used bucket `protocol-templates` with `{org}/{template}/...` (no `protocol` segment).
+ * All template assets live in bucket `user` with `{org_id}/protocol/{template_id}/...` keys.
+ * Legacy `protocol-templates` objects should be migrated in Supabase Storage (see scripts/046).
  */
 /** True when `storagePath` matches the reserved key for this org + template + extension. */
 export function isReservedProtocolTemplateSourcePath(
@@ -51,12 +51,8 @@ export function isReservedProtocolTemplateSourcePath(
   )
 }
 
-export function resolveProtocolTemplateStorageBucket(storagePath: string): "user" | "protocol-templates" {
-  const parts = storagePath.split("/").filter(Boolean)
-  if (parts.length >= 2 && parts[1] === "protocol") {
-    return "user"
-  }
-  return "protocol-templates"
+export function resolveProtocolTemplateStorageBucket(_storagePath: string): typeof LITERATURE_STORAGE_BUCKET {
+  return LITERATURE_STORAGE_BUCKET
 }
 
 export async function removeProtocolTemplateStorageObjects(

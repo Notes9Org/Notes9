@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from "react"
 import { useParams } from "next/navigation"
-import { createClient } from "@/lib/supabase/client"
 import { TiptapEditor } from "@/components/text-editor/tiptap-editor"
 import { Loader2, AlertCircle, Calendar, Clock, Globe } from "lucide-react"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
@@ -25,15 +24,8 @@ export default function PublicNotePage() {
         const fetchNote = async () => {
             try {
                 setLoading(true)
-                // Fetch JSON directly from public storage bucket with cache-busting
-                const supabase = createClient()
-                const { data: urlData } = supabase.storage
-                    .from('lab_notes_public')
-                    .getPublicUrl(`${id}.json`)
-
-                // Add timestamp to bypass browser/CDN cache
-                const response = await fetch(`${urlData.publicUrl}?t=${Date.now()}`, {
-                    cache: 'no-store'
+                const response = await fetch(`/api/share/note/${encodeURIComponent(String(id))}?t=${Date.now()}`, {
+                    cache: "no-store",
                 })
 
                 if (!response.ok) {
