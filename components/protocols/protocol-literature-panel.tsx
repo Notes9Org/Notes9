@@ -245,7 +245,7 @@ export function ProtocolLiteraturePanel({
 
   const filterSection = showFilters && (
     <div className="space-y-1.5 border-b border-border/30 bg-transparent px-3 py-2 shrink-0 overflow-hidden">
-      <div className="flex items-center gap-1.5">
+      <div className="flex min-w-0 items-center gap-1.5">
         <FolderOpen className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
         <Select
           value={internalProjectId || "_none_"}
@@ -269,7 +269,7 @@ export function ProtocolLiteraturePanel({
           </SelectContent>
         </Select>
       </div>
-      <div className="flex items-center gap-1.5">
+      <div className="flex min-w-0 items-center gap-1.5">
         <FlaskConical className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
         <Select
           value={internalExperimentId || "_none_"}
@@ -295,7 +295,7 @@ export function ProtocolLiteraturePanel({
         </Select>
       </div>
       {aiMode && (
-        <div className="flex items-center gap-1.5">
+        <div className="flex min-w-0 items-center gap-1.5">
           <ClipboardInfoIcon className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
           <Select
             value={internalProtocolFilterId || "_none_"}

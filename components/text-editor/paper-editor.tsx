@@ -90,6 +90,7 @@ export function PaperEditor({
       showAiWritingToolbarLabel
       enableMath={true}
       paperMode={true}
+      fillParentHeight
       title={title}
       onDocumentTitleChange={onDocumentTitleChange}
       onDocumentTitleCommit={onDocumentTitleCommit}

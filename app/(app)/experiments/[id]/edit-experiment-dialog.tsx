@@ -215,7 +215,7 @@ export function EditExperimentDialog({
           </div>
 
           {/* Project */}
-          <div className="space-y-2">
+          <div className="min-w-0 space-y-2">
             <Label htmlFor="project">
               Project <span className="text-destructive">*</span>
             </Label>

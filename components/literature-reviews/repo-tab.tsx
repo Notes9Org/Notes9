@@ -546,7 +546,7 @@ export function RepoTab({
           />
         </div>
 
-        <div className="flex flex-col gap-3 lg:flex-row lg:flex-wrap lg:items-center">
+        <div className="flex min-w-0 flex-col gap-3 lg:flex-row lg:flex-wrap lg:items-center">
           {lockProjectFilter && initialProjectFilterId ? (
             <div className="flex h-9 w-full min-w-0 items-center rounded-md border border-input bg-muted/40 px-3 text-sm text-foreground lg:w-[180px]">
               <span className="truncate">
@@ -579,7 +579,7 @@ export function RepoTab({
             value={selectedExperimentId}
             onValueChange={setSelectedExperimentId}
           >
-            <SelectTrigger className="w-full lg:w-[180px]">
+            <SelectTrigger className="min-w-0 max-w-full w-full lg:w-[180px]">
               <SelectValue placeholder="Experiment" />
             </SelectTrigger>
             <SelectContent>
@@ -594,7 +594,7 @@ export function RepoTab({
 
           {statusOptions.length > 0 && (
             <Select value={selectedStatus} onValueChange={setSelectedStatus}>
-              <SelectTrigger className="w-full lg:w-[160px]">
+              <SelectTrigger className="min-w-0 max-w-full w-full lg:w-[160px]">
                 <SelectValue placeholder="Status" />
               </SelectTrigger>
               <SelectContent>

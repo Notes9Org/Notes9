@@ -403,8 +403,8 @@ function NewProtocolForm() {
 
   // ─── Step 2: Form + optional design mode ───────────────────────────────────
   const contextHeaderContent = (
-    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-      <div className="space-y-2">
+    <div className="grid min-w-0 grid-cols-1 gap-4 sm:grid-cols-2">
+      <div className="min-w-0 space-y-2">
         <Label htmlFor="project_id">
           Project <span className="text-destructive">*</span>
         </Label>
@@ -427,7 +427,7 @@ function NewProtocolForm() {
         </Select>
       </div>
 
-      <div className="space-y-2">
+      <div className="min-w-0 space-y-2">
         <Label htmlFor="experiment_id">
           Experiment <span className="text-destructive">*</span>
         </Label>
@@ -457,9 +457,9 @@ function NewProtocolForm() {
             ) : (
               experiments.map((e) => (
                 <SelectItem key={e.id} value={e.id}>
-                  <span className="flex items-center gap-1.5">
-                    <FlaskConical className="h-3.5 w-3.5 text-muted-foreground" />
-                    {e.name}
+                  <span className="flex min-w-0 max-w-full items-center gap-1.5">
+                    <FlaskConical className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                    <span className="min-w-0 truncate">{e.name}</span>
                   </span>
                 </SelectItem>
               ))
@@ -757,18 +757,27 @@ function NewProtocolForm() {
 
       {/* Template indicator (collapsible) */}
       <Card className="overflow-hidden">
-        <button
-          type="button"
-          onClick={() => setTemplateStepCollapsed((v) => !v)}
-          className="w-full flex items-center justify-between gap-3 px-4 py-3 text-left hover:bg-muted/30 transition-colors"
-        >
-          <div className="flex items-center gap-2">
-            <span className="flex h-5 w-5 items-center justify-center rounded-full bg-primary/10 text-primary text-xs font-bold shrink-0">
+        {/* Left toggle is a div[role=button] — never a <button> — so "Change" (Button) is never nested in a native button */}
+        <div className="flex w-full items-center justify-between gap-2 px-4 py-3 transition-colors hover:bg-muted/30">
+          <div
+            role="button"
+            tabIndex={0}
+            aria-expanded={!templateStepCollapsed}
+            onClick={() => setTemplateStepCollapsed((v) => !v)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault()
+                setTemplateStepCollapsed((v) => !v)
+              }
+            }}
+            className="flex min-w-0 flex-1 cursor-pointer items-center gap-2 rounded-md text-left outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+          >
+            <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-bold text-primary">
               1
             </span>
             <span className="text-sm font-medium">Template</span>
             {selectedChoice && selectedChoice.kind !== "blank" ? (
-              <Badge variant="secondary" className="text-xs gap-1">
+              <Badge variant="secondary" className="gap-1 text-xs">
                 <FileText className="h-3 w-3" />
                 {templateLabel(selectedChoice)}
               </Badge>
@@ -776,27 +785,34 @@ function NewProtocolForm() {
               <Badge variant="outline" className="text-xs">Blank</Badge>
             )}
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex shrink-0 items-center gap-1">
             <Button
               type="button"
               variant="ghost"
               size="sm"
               className="h-6 px-2 text-xs text-muted-foreground"
-              onClick={(e) => {
-                e.stopPropagation()
+              onClick={() => {
                 setStep("template")
                 setTemplateStepCollapsed(false)
               }}
             >
               Change
             </Button>
-            {templateStepCollapsed ? (
-              <ChevronDown className="h-4 w-4 text-muted-foreground" />
-            ) : (
-              <ChevronUp className="h-4 w-4 text-muted-foreground" />
-            )}
+            <button
+              type="button"
+              aria-expanded={!templateStepCollapsed}
+              aria-label={templateStepCollapsed ? "Expand template section" : "Collapse template section"}
+              className="rounded p-1.5 text-muted-foreground hover:bg-muted/60"
+              onClick={() => setTemplateStepCollapsed((v) => !v)}
+            >
+              {templateStepCollapsed ? (
+                <ChevronDown className="h-4 w-4" aria-hidden />
+              ) : (
+                <ChevronUp className="h-4 w-4" aria-hidden />
+              )}
+            </button>
           </div>
-        </button>
+        </div>
         {!templateStepCollapsed && (
           <div className="border-t px-4 pb-4 pt-3">
             <ProtocolTemplatePicker
