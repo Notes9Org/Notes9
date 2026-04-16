@@ -424,15 +424,17 @@ export function LiteratureTabs({
                 Choose a project to narrow the experiment options.
               </p>
             </div>
-            <div className="grid gap-4 md:grid-cols-2">
-              <div className="space-y-2">
+            <div className="grid min-w-0 gap-4 md:grid-cols-2">
+              <div className="min-w-0 space-y-2">
                 <Label htmlFor="link-project">Project</Label>
                 {lockedProjectId && lockedProjectName ? (
                   <div
                     id="link-project"
-                    className="flex h-10 items-center rounded-md border border-input bg-muted/40 px-3 text-sm"
+                    className="flex h-10 min-w-0 items-center overflow-hidden rounded-md border border-input bg-muted/40 px-3 text-sm"
                   >
-                    <span className="font-medium text-foreground">{lockedProjectName}</span>
+                    <span className="min-w-0 truncate font-medium text-foreground" title={lockedProjectName}>
+                      {lockedProjectName}
+                    </span>
                   </div>
                 ) : (
                   <Select
@@ -453,7 +455,7 @@ export function LiteratureTabs({
                   </Select>
                 )}
               </div>
-              <div className="space-y-2">
+              <div className="min-w-0 space-y-2">
                 <Label htmlFor="link-experiment">Experiment</Label>
                 <Select
                   value={selectedExperimentId || "none"}

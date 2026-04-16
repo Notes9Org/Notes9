@@ -434,8 +434,8 @@ export function ProtocolEditor({
               </div>
               <div className="flex shrink-0 flex-col gap-3 border-b border-border/70 bg-muted/20 px-3 py-3">
                 <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
-                  <div className="grid flex-1 grid-cols-1 gap-3 sm:grid-cols-2">
-                    <div className="space-y-1.5">
+                  <div className="grid min-w-0 flex-1 grid-cols-1 gap-3 sm:grid-cols-2">
+                    <div className="min-w-0 space-y-1.5">
                       <Label htmlFor="protocol-project-link" className="text-xs text-muted-foreground">
                         Linked project
                       </Label>
@@ -457,16 +457,16 @@ export function ProtocolEditor({
                           <SelectItem value="__none__">No project</SelectItem>
                           {projects.map((project) => (
                             <SelectItem key={project.id} value={project.id}>
-                              <span className="flex items-center gap-1.5">
-                                <FolderOpen className="h-3.5 w-3.5 text-muted-foreground" />
-                                {project.name}
+                              <span className="flex min-w-0 max-w-full items-center gap-1.5">
+                                <FolderOpen className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                                <span className="min-w-0 truncate">{project.name}</span>
                               </span>
                             </SelectItem>
                           ))}
                         </SelectContent>
                       </Select>
                     </div>
-                    <div className="space-y-1.5">
+                    <div className="min-w-0 space-y-1.5">
                       <Label htmlFor="protocol-experiment-link" className="text-xs text-muted-foreground">
                         Linked experiment
                       </Label>
@@ -495,9 +495,9 @@ export function ProtocolEditor({
                           <SelectItem value="__none__">No experiment</SelectItem>
                           {experiments.map((experiment) => (
                             <SelectItem key={experiment.id} value={experiment.id}>
-                              <span className="flex items-center gap-1.5">
-                                <FlaskConical className="h-3.5 w-3.5 text-muted-foreground" />
-                                {experiment.name}
+                              <span className="flex min-w-0 max-w-full items-center gap-1.5">
+                                <FlaskConical className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                                <span className="min-w-0 truncate">{experiment.name}</span>
                               </span>
                             </SelectItem>
                           ))}

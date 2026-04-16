@@ -155,7 +155,6 @@ export function PaperAIPanel({
   const [showHistory, setShowHistory] = useState(false)
   const scrollRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
-  const endRef = useRef<HTMLDivElement>(null)
 
   /** Stay aligned with TipTap toolbar + other tabs (storage + event). */
   useEffect(() => {
@@ -191,8 +190,15 @@ export function PaperAIPanel({
     }
   }, [chatHistory.currentSession])
 
+  /** Scroll only the chat list — avoid scrollIntoView (scrolls ancestors / breaks under TipTap fullscreen). */
   useEffect(() => {
-    endRef.current?.scrollIntoView({ behavior: "smooth" })
+    const el = scrollRef.current
+    if (!el) return
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        el.scrollTo({ top: el.scrollHeight, behavior: "smooth" })
+      })
+    })
   }, [messages, diffPreview])
 
   useEffect(() => {
@@ -599,7 +605,6 @@ export function PaperAIPanel({
                     <Loader2 className="h-3 w-3 animate-spin" /><span>Writing...</span>
                   </div>
                 )}
-                <div ref={endRef} />
               </div>
             )}
           </div>

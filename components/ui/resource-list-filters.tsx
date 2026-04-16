@@ -37,7 +37,7 @@ export function ResourceListFilter({
   triggerClassName,
 }: ResourceListFilterProps) {
   return (
-    <div className={cn("flex min-w-[min(100%,11rem)] flex-col gap-1.5", className)}>
+    <div className={cn("flex min-w-0 max-w-full flex-col gap-1.5", className)}>
       <Label className="text-xs text-muted-foreground">{label}</Label>
       <Select value={value} onValueChange={onValueChange}>
         <SelectTrigger className={cn("h-9", triggerClassName)} aria-label={label}>

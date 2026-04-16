@@ -199,8 +199,8 @@ export function NewLabNoteDialog({
             Choose the project and experiment this note belongs to. The note will be linked there and you can open it to edit.
           </DialogDescription>
         </DialogHeader>
-        <div className="space-y-4 py-2">
-          <div className="space-y-2">
+        <div className="min-w-0 space-y-4 py-2">
+          <div className="min-w-0 space-y-2">
             <Label>Project</Label>
             <Select
               value={selectedProjectId}
@@ -219,7 +219,7 @@ export function NewLabNoteDialog({
               </SelectContent>
             </Select>
           </div>
-          <div className="space-y-2">
+          <div className="min-w-0 space-y-2">
             <Label>Experiment</Label>
             <Select
               value={selectedExperimentId}
@@ -247,11 +247,19 @@ export function NewLabNoteDialog({
             </Select>
           </div>
           {(selectedProject || selectedExperiment) && (
-            <div className="rounded-md border bg-muted/50 px-3 py-2 text-sm text-muted-foreground">
+            <div className="min-w-0 overflow-hidden rounded-md border bg-muted/50 px-3 py-2 text-sm text-muted-foreground">
               <span className="font-medium text-foreground">Link to: </span>
-              {selectedProject && <span>{selectedProject.name}</span>}
+              {selectedProject && (
+                <span className="inline-block max-w-full truncate align-bottom" title={selectedProject.name}>
+                  {selectedProject.name}
+                </span>
+              )}
               {selectedProject && selectedExperiment && " → "}
-              {selectedExperiment && <span>{selectedExperiment.name}</span>}
+              {selectedExperiment && (
+                <span className="inline-block max-w-full truncate align-bottom" title={selectedExperiment.name}>
+                  {selectedExperiment.name}
+                </span>
+              )}
             </div>
           )}
           <div className="space-y-2">
