@@ -9,7 +9,8 @@ import LabNotesList from "@/app/(app)/lab-notes-list/[id]/lab-notes-list"
 import { NewLabNoteDialog } from "@/app/(app)/lab-notes/new-lab-note-dialog"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
-import { Loader2, Plus, Grid3x3, List } from "lucide-react"
+import { Loader2, Plus, Grid3x3, List, NotebookPen } from "lucide-react"
+import { Card, CardContent } from "@/components/ui/card"
 import { useBreadcrumb } from "@/components/layout/breadcrumb-context"
 import {
   FILTER_ALL,
@@ -241,6 +242,7 @@ export default function LabNotesPage() {
               size="sm"
               onClick={() => setViewMode("grid")}
               className="gap-2"
+              aria-label="Switch to grid view"
             >
               <Grid3x3 className="h-4 w-4" />
               Grid
@@ -252,6 +254,7 @@ export default function LabNotesPage() {
               className="gap-2"
               disabled={isMobile}
               aria-disabled={isMobile}
+              aria-label="Switch to table view"
             >
               <List className="h-4 w-4" />
               Table
@@ -298,6 +301,21 @@ export default function LabNotesPage() {
           <Loader2 className="h-4 w-4 animate-spin" />
           <span>Loading lab notes...</span>
         </div>
+      ) : notes.length === 0 ? (
+        <Card>
+          <CardContent className="flex flex-col items-center justify-center py-12">
+            <NotebookPen className="h-12 w-12 text-muted-foreground mb-4" />
+            <p className="text-muted-foreground mb-4">No lab notes yet</p>
+            <Button onClick={handleNewNote}>
+              <NotebookPen className="h-4 w-4 mr-2" />
+              Create First Lab Note
+            </Button>
+          </CardContent>
+        </Card>
+      ) : filteredNotes.length === 0 ? (
+        <p className="py-10 text-center text-sm text-muted-foreground">
+          No lab notes match the selected filters.
+        </p>
       ) : (
         <LabNotesList
           notes={filteredNotes}

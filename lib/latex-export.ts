@@ -281,6 +281,19 @@ export function htmlToLatex(html: string, options: LaTeXExportOptions): string {
   const parser = new DOMParser()
   const doc = parser.parseFromString(html, "text/html")
 
+  // Extract the first <h1> from the editor content as the document title.
+  // The editor places the paper title as the first <h1> in the body.
+  // If found, use it for \title{} and remove it from the body so it
+  // doesn't also appear as a \section* in the output.
+  const firstH1 = doc.body.querySelector("h1")
+  const editorTitle = firstH1 ? clean(firstH1.textContent || "") : ""
+  if (firstH1) {
+    firstH1.remove()
+  }
+
+  // Use the editor title if available, otherwise fall back to the paper name
+  const resolvedTitle = editorTitle || options.title
+
   // Convert all body children (pass template for section command)
   const bodyContent = Array.from(doc.body.childNodes)
     .map((n) => convertNode(n, template))
@@ -323,7 +336,7 @@ export function htmlToLatex(html: string, options: LaTeXExportOptions): string {
     "\\newcommand{\\QQ}{\\mathbb{Q}}",
     "\\newcommand{\\CC}{\\mathbb{C}}",
     "",
-    `\\title{${escapeLatex(options.title)}}`,
+    `\\title{${escapeLatex(resolvedTitle)}}`,
     options.authors ? `\\author{${escapeLatex(options.authors)}}` : "\\author{}",
     "\\date{\\today}",
     "",

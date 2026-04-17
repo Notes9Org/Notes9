@@ -41,3 +41,42 @@
 .dark .marketing-theme .marketing-mesh {
   background-image: url("data:image/svg+xml,%3Csvg width='40' height='40' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M0 20h40M20 0v40' stroke='%234a4540' stroke-width='0.25' fill='none'/%3E%3C/svg%3E");
 }
+
+/* Respect reduced motion preferences */
+@media (prefers-reduced-motion: reduce) {
+  .marketing-theme *,
+  .marketing-theme *::before,
+  .marketing-theme *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* Smooth scroll for anchor links */
+.marketing-theme {
+  scroll-behavior: smooth;
+}
+
+/* Drifting gradient orbs */
+@keyframes drift {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  25% { transform: translate(30px, -20px) scale(1.05); }
+  50% { transform: translate(-20px, 15px) scale(0.97); }
+  75% { transform: translate(15px, 25px) scale(1.03); }
+}
+
+/* Bounce for hero mascot */
+@keyframes hero-bounce {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-10px); }
+}
+
+.hero-pendulum {
+  animation: hero-bounce 2s ease-in-out infinite;
+  filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.12));
+}
+
+/* Hide scrollbar on product reel */
+.marketing-theme .scrollbar-none::-webkit-scrollbar { display: none; }
+.marketing-theme .scrollbar-none { -ms-overflow-style: none; scrollbar-width: none; }

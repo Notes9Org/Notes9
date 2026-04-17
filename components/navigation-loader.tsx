@@ -1,12 +1,12 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { usePathname } from "next/navigation"
 import { Notes9LoaderVariant, Notes9VideoLoader } from "@/components/brand/notes9-video-loader"
 
-const MIN_LOADER_DURATION_MS = 350
-const MAX_LOADER_DURATION_MS = 8000
-const AUTH_MAX_LOADER_DURATION_MS = 12000
+export const MIN_LOADER_DURATION_MS = 350
+export const MAX_LOADER_DURATION_MS = 8000
+export const AUTH_MAX_LOADER_DURATION_MS = 12000
 
 const RESEARCH_FUN_FACTS = [
   "Researchers often spend more time finding prior context than rewriting the final paragraph.",
@@ -19,7 +19,16 @@ const RESEARCH_FUN_FACTS = [
   "Literature retrieval gets easier when keywords, methods, and findings are stored in one workflow.",
 ]
 
-function isMarketingPath(path: string | null | undefined) {
+export function extractPathname(href: string): string {
+  return href.split("?")[0]?.split("#")[0] || href
+}
+
+export function isSamePage(href: string, currentPathname: string): boolean {
+  const hrefPathname = extractPathname(href)
+  return hrefPathname === currentPathname
+}
+
+export function isMarketingPath(path: string | null | undefined) {
   if (!path) return false
   if (path === "/") return true
   return (
@@ -198,6 +207,7 @@ export function NavigationLoader() {
     "Loading your next view.",
   ])
   const [loadingStartedAt, setLoadingStartedAt] = useState<number | null>(null)
+  const destinationPathRef = useRef<string | null>(null)
   const pathname = usePathname()
 
   // Prevent hydration mismatch by only rendering after mount
@@ -224,6 +234,7 @@ export function NavigationLoader() {
     let timeoutId: NodeJS.Timeout | null = null
     const startSafetyTimeout = (variant: Notes9LoaderVariant) => {
       timeoutId = setTimeout(() => {
+        console.warn(`[NavigationLoader] Safety timeout fired for route: ${destinationPathRef.current}`)
         setIsLoading(false)
         setLoadingStartedAt(null)
       }, variant === "auth" ? AUTH_MAX_LOADER_DURATION_MS : MAX_LOADER_DURATION_MS)
@@ -241,7 +252,7 @@ export function NavigationLoader() {
         
         // Only show loader for internal navigation (not external links or new tabs)
         if (href && href.startsWith("/") && targetAttr !== "_blank") {
-          const destinationPath = href.split("?")[0]?.split("#")[0] || href
+          const destinationPath = extractPathname(href)
           if (isMarketingPath(pathname) && isMarketingPath(destinationPath)) {
             return
           }
@@ -249,10 +260,11 @@ export function NavigationLoader() {
             return
           }
           // Don't show loader if clicking the current page or hash links
-          const isSamePage = href === pathname || href.split("?")[0] === pathname
+          const samePage = isSamePage(href, pathname ?? "")
           const isHashLink = href.startsWith("/#") || href.includes("#")
           
-          if (!isSamePage && !isHashLink) {
+          if (!samePage && !isHashLink) {
+            destinationPathRef.current = destinationPath
             const label = getActionLabel(target)
             const variant = inferLoaderVariant(label, href)
             triggerLoader(label, variant, setLoaderTitle, setLoaderCaptions, setLoaderVariant, setIsLoading, setLoadingStartedAt)
