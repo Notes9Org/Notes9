@@ -1,0 +1,258 @@
+# Implementation Plan: UX Journey Improvements
+
+## Overview
+
+This plan implements UX improvements across the Notes9 research lab application: skeleton loading states via `loading.tsx` files, NavigationLoader hardening, sidebar error recovery, sign-up email validation, empty state standardization, accessibility aria-labels, settings loading timeout, error boundaries, and comprehensive property-based and unit tests. Requirements 10, 11, 12, and 15 are already fully implemented and require only verification tests.
+
+## Tasks
+
+- [x] 1. Add skeleton loading files for all server-rendered routes
+  - [x] 1.1 Create `app/(app)/dashboard/loading.tsx` with skeleton for welcome section, quick actions card, 2-column grid (experiments + notes), and todo panel
+    - Use `<div className="animate-pulse">` with `bg-muted rounded-md` blocks matching the real dashboard layout
+    - _Requirements: 1.2_
+  - [x] 1.2 Create `app/(app)/projects/loading.tsx` with skeleton for description row, toggle row, and 3-column card grid
+    - _Requirements: 1.1_
+  - [x] 1.3 Create `app/(app)/experiments/loading.tsx` with skeleton for description row, toggle row, and 3-column card grid
+    - _Requirements: 1.1_
+  - [x] 1.4 Create `app/(app)/samples/loading.tsx` with skeleton for description row, toggle row, 4-column status cards, and card grid
+    - _Requirements: 1.1_
+  - [x] 1.5 Create `app/(app)/equipment/loading.tsx` with skeleton for description row, toggle row, 4-column status cards, and card grid
+    - _Requirements: 1.1_
+  - [x] 1.6 Create `app/(app)/protocols/loading.tsx` with skeleton for description row, toggle row, and card grid
+    - _Requirements: 1.1_
+  - [x] 1.7 Create `app/(app)/lab-notes/loading.tsx` with skeleton for description row, toggle row, filter row, and card grid
+    - _Requirements: 1.1_
+  - [x] 1.8 Create `app/(app)/literature-reviews/loading.tsx` with skeleton for header and tabs
+    - _Requirements: 1.1_
+  - [x] 1.9 Create `app/(app)/papers/loading.tsx` with skeleton for description, button, and tabs
+    - _Requirements: 1.1_
+  - [x] 1.10 Write unit tests for skeleton loading components
+    - Verify each `loading.tsx` renders expected animate-pulse structure
+    - Test file: `__tests__/unit/loading-skeletons.test.tsx`
+    - _Requirements: 1.1, 1.2, 1.3, 1.4_
+
+- [x] 2. Harden NavigationLoader with console warning and query-string same-page detection
+  - [x] 2.1 Add `console.warn` on safety timeout in `components/navigation-loader.tsx`
+    - When `MAX_LOADER_DURATION_MS` or `AUTH_MAX_LOADER_DURATION_MS` fires, log `console.warn("[NavigationLoader] Safety timeout fired for route: ${destinationPath}")`
+    - Store `destinationPath` in a ref so it's available in the timeout callback
+    - _Requirements: 2.2, 2.6_
+  - [x] 2.2 Improve same-page detection to handle query-string-only changes in `components/navigation-loader.tsx`
+    - Update the `isSamePage` check: extract pathname from `href` by splitting on `?` and `#`, then compare against current `pathname`
+    - Ensure `?tab=notes` or `?project=xxx` changes on the same path do not trigger the loader
+    - _Requirements: 2.3_
+  - [x] 2.3 Write property test for same-page click detection (Property 2)
+    - **Property 2: Same-page clicks do not trigger navigation loader**
+    - Generate random pathnames with arbitrary query strings and hash fragments; verify `isSamePage` logic returns true when base paths match
+    - Test file: `__tests__/properties/navigation-loader.property.test.ts`
+    - **Validates: Requirements 2.3**
+  - [x] 2.4 Write property test for external/blank-target link exclusion (Property 3)
+    - **Property 3: External and blank-target links do not trigger navigation loader**
+    - Generate random hrefs not starting with `/` or with `target="_blank"`; verify no activation
+    - Test file: `__tests__/properties/navigation-loader.property.test.ts`
+    - **Validates: Requirements 2.4**
+  - [x] 2.5 Write property test for marketing-to-marketing exclusion (Property 4)
+    - **Property 4: Marketing-to-marketing navigation does not trigger loader**
+    - Generate pairs of marketing paths; verify `isMarketingPath()` returns true for both
+    - Test file: `__tests__/properties/navigation-loader.property.test.ts`
+    - **Validates: Requirements 2.5**
+  - [x] 2.6 Write unit tests for NavigationLoader timeout values and console warning
+    - Verify `MAX_LOADER_DURATION_MS` is 8000 and `AUTH_MAX_LOADER_DURATION_MS` is 12000
+    - Verify `console.warn` is called when safety timeout fires
+    - Test file: `__tests__/unit/navigation-loader.test.tsx`
+    - _Requirements: 2.2, 2.6_
+
+- [x] 3. Checkpoint - Ensure all tests pass
+  - Ensure all tests pass, ask the user if questions arise.
+
+- [x] 4. Add sidebar error recovery with retry button
+  - [x] 4.1 Add `fetchError` state and retry button to `components/layout/app-sidebar.tsx`
+    - Add a `fetchError` boolean state, set to `true` when `projectsError` occurs in `fetchData()`
+    - Below the "No active projects" text, render a retry `<button>` that calls `fetchData()` again and resets `fetchError`
+    - Clear `fetchError` at the start of each `fetchData()` call
+    - _Requirements: 3.2_
+  - [x] 4.2 Write unit tests for sidebar error recovery
+    - Verify retry button appears when fetch fails
+    - Verify clicking retry calls fetchData again
+    - Test file: `__tests__/unit/sidebar-error-recovery.test.tsx`
+    - _Requirements: 3.2_
+
+- [x] 5. Improve sign-up form email existence check
+  - [x] 5.1 Add "Sign in with this email instead" link to the inline email error in `app/auth/sign-up/page.tsx`
+    - The debounced email check already exists and sets `emailError` state
+    - The "Sign in with this email instead" link already renders below the submit button when `emailError` is set
+    - Move or duplicate the sign-in link to appear directly below the email input alongside the error message, within 500ms of the user stopping typing (the existing 500ms debounce satisfies this)
+    - _Requirements: 4.5, 9.6_
+  - [x] 5.2 Write unit tests for sign-up email existence check
+    - Verify inline error and sign-in link appear when email exists
+    - Verify submit button is disabled while checking
+    - Test file: `__tests__/unit/auth-pages.test.tsx`
+    - _Requirements: 4.5, 9.6_
+
+- [x] 6. Standardize empty states for lab notes and protocols
+  - [x] 6.1 Add empty state with icon, message, and CTA to lab notes page
+    - In `app/(app)/lab-notes/page.tsx`, when notes array is empty, render an empty state card with a relevant icon (e.g., `NotebookPen`), "No lab notes yet" message, and a "Create First Lab Note" button
+    - _Requirements: 5.1_
+  - [x] 6.2 Add filter-no-match message to lab notes page
+    - When filters are active and no notes match, display "No lab notes match the selected filters" message distinct from the zero-data empty state
+    - _Requirements: 5.6_
+  - [x] 6.3 Add filter-no-match message to protocols page
+    - In `app/(app)/protocols/protocols-page-content.tsx`, when filters exclude all items, display "No protocols match the selected filters" message
+    - _Requirements: 5.6_
+  - [x] 6.4 Write property test for empty state rendering (Property 7)
+    - **Property 7: Empty state rendering for zero-item resource lists**
+    - For each Resource_List_Page rendered with empty data, verify it renders a descriptive message and CTA button
+    - Test file: `__tests__/properties/empty-states.property.test.ts`
+    - **Validates: Requirements 5.1**
+  - [x] 6.5 Write property test for filter-no-match message (Property 8)
+    - **Property 8: Filter-no-match message distinct from empty state**
+    - Verify filter-specific "no matches" message is textually distinct from zero-data empty state
+    - Test file: `__tests__/properties/empty-states.property.test.ts`
+    - **Validates: Requirements 5.6**
+  - [x] 6.6 Write unit tests for specific empty state messages
+    - Verify exact text for each resource type (Projects, Experiments, Samples, Equipment, Lab Notes)
+    - Test file: `__tests__/unit/empty-states.test.tsx`
+    - _Requirements: 5.2, 5.3, 5.4, 5.5_
+
+- [x] 7. Checkpoint - Ensure all tests pass
+  - Ensure all tests pass, ask the user if questions arise.
+
+- [x] 8. Add grid/table toggle aria-labels
+  - [x] 8.1 Add `aria-label` attributes to grid/table toggle buttons across all resource list pages
+    - Add `aria-label="Switch to grid view"` and `aria-label="Switch to table view"` to the toggle buttons in: `projects/project-list.tsx`, `experiments/experiment-list.tsx`, `samples/samples-page-content.tsx`, `equipment/equipment-page-content.tsx`, `lab-notes/page.tsx` (or its list component), `papers/paper-list.tsx`
+    - _Requirements: 13.3_
+  - [x] 8.2 Write unit tests for accessibility attributes
+    - Verify `aria-label` values on grid/table toggle buttons
+    - Verify other existing accessibility attributes (mobile menu, password toggle, NavigationLoader pointer-events, right sidebar SheetTitle)
+    - Test file: `__tests__/unit/accessibility.test.tsx`
+    - _Requirements: 13.1, 13.2, 13.3, 13.4, 13.5_
+
+- [x] 9. Add settings loading timeout
+  - [x] 9.1 Add a 10-second timeout to the settings profile loading state in `app/(app)/settings/page.tsx`
+    - Add a `loadingTimedOut` state that becomes `true` after 10 seconds if `loading` is still `true`
+    - When timed out, display an error message instead of the indefinite "Loading..." text: "Failed to load profile. Please try refreshing the page."
+    - _Requirements: 8.3_
+
+- [x] 10. Add error boundary files for server-rendered routes
+  - [x] 10.1 Create `app/(app)/dashboard/error.tsx` with "use client" directive, error message display, and a "Try again" button that calls `reset()`
+    - _Requirements: 8.4_
+  - [x] 10.2 Create `app/(app)/projects/error.tsx` with the same error boundary pattern
+    - _Requirements: 8.4_
+  - [x] 10.3 Create `app/(app)/experiments/error.tsx` with the same error boundary pattern
+    - _Requirements: 8.4_
+  - [x] 10.4 Create `app/(app)/samples/error.tsx` with the same error boundary pattern
+    - _Requirements: 8.4_
+  - [x] 10.5 Create `app/(app)/equipment/error.tsx` with the same error boundary pattern
+    - _Requirements: 8.4_
+  - [x] 10.6 Create `app/(app)/protocols/error.tsx` with the same error boundary pattern
+    - _Requirements: 8.4_
+  - [x] 10.7 Create `app/(app)/lab-notes/error.tsx` with the same error boundary pattern
+    - _Requirements: 8.4_
+  - [x] 10.8 Create `app/(app)/literature-reviews/error.tsx` with the same error boundary pattern
+    - _Requirements: 8.4_
+  - [x] 10.9 Create `app/(app)/papers/error.tsx` with the same error boundary pattern
+    - _Requirements: 8.4_
+
+- [x] 11. Checkpoint - Ensure all tests pass
+  - Ensure all tests pass, ask the user if questions arise.
+
+- [x] 12. Write property-based tests for navigation, forms, breadcrumbs, and data display
+  - [x] 12.1 Write property test for NavigationLoader pathname dismissal (Property 1)
+    - **Property 1: Navigation loader dismisses on pathname change**
+    - Generate random pathnames, simulate pathname change, verify loader dismisses within MIN_LOADER_DURATION_MS
+    - Test file: `__tests__/properties/navigation-loader.property.test.ts`
+    - **Validates: Requirements 2.1**
+  - [x] 12.2 Write property test for date order validation (Property 5)
+    - **Property 5: Date order validation rejects invalid date pairs**
+    - Generate random date pairs where end < start, verify `isEndDateBeforeStartDate()` returns true
+    - Test file: `__tests__/properties/form-validation.property.test.ts`
+    - **Validates: Requirements 4.2**
+  - [x] 12.3 Write property test for password mismatch validation (Property 6)
+    - **Property 6: Password mismatch validation**
+    - Generate pairs of distinct strings, verify mismatch detection prevents submission
+    - Test file: `__tests__/properties/form-validation.property.test.ts`
+    - **Validates: Requirements 4.6**
+  - [x] 12.4 Write property test for breadcrumb accuracy (Property 9)
+    - **Property 9: Breadcrumb accuracy for experiment pages**
+    - Generate project/experiment name pairs, verify breadcrumb segments match expected structure
+    - Test file: `__tests__/properties/breadcrumbs.property.test.ts`
+    - **Validates: Requirements 6.1, 6.2**
+  - [x] 12.5 Write property test for breadcrumb label truncation (Property 10)
+    - **Property 10: Breadcrumb label truncation on mobile**
+    - Generate strings > 18 chars, verify `shortenLabel()` returns 18 chars ending with "…" and preserves full label in title
+    - Test file: `__tests__/properties/breadcrumbs.property.test.ts`
+    - **Validates: Requirements 6.5**
+  - [x] 12.6 Write property test for mobile viewport grid lock (Property 11)
+    - **Property 11: Mobile viewport forces grid view**
+    - Simulate mobile viewport, verify view mode is locked to "grid" and table toggle is disabled
+    - Test file: `__tests__/properties/empty-states.property.test.ts`
+    - **Validates: Requirements 7.1, 7.2**
+  - [x] 12.7 Write property test for fetch error alert display (Property 12)
+    - **Property 12: Fetch error displays destructive alert**
+    - Generate error messages, verify Alert renders with `variant="destructive"`
+    - Test file: `__tests__/properties/empty-states.property.test.ts`
+    - **Validates: Requirements 8.1, 8.2, 8.4**
+  - [x] 12.8 Write property test for dashboard recent items cap (Property 15)
+    - **Property 15: Dashboard recent items capped at 3**
+    - Generate experiment/note lists of varying lengths (0–100), verify at most 3 rendered
+    - Test file: `__tests__/properties/dashboard-limits.property.test.ts`
+    - **Validates: Requirements 10.2, 10.3**
+
+- [x] 13. Write property-based tests for auth flow and project scoping (verification of existing behavior)
+  - [x] 13.1 Write property test for unauthenticated redirect (Property 13)
+    - **Property 13: Unauthenticated access redirects to login**
+    - Generate (app) route paths, verify redirect for unauthenticated users
+    - Test file: `__tests__/properties/auth-flow.property.test.ts`
+    - **Validates: Requirements 9.2**
+  - [x] 13.2 Write property test for login email pre-fill (Property 14)
+    - **Property 14: Login email pre-fill from query parameter**
+    - Generate email strings, verify pre-fill behavior on login page
+    - Test file: `__tests__/properties/auth-flow.property.test.ts`
+    - **Validates: Requirements 9.5**
+  - [x] 13.3 Write property test for project URL parameter pre-filtering (Property 16)
+    - **Property 16: Project URL parameter pre-filters resource pages**
+    - Generate project IDs, verify pre-filter behavior on experiments/literature/protocols
+    - Test file: `__tests__/properties/project-scoping.property.test.ts`
+    - **Validates: Requirements 12.1, 12.2, 12.3**
+  - [x] 13.4 Write property test for active project filter remove button (Property 17)
+    - **Property 17: Active project filter shows remove button**
+    - Generate project filter states, verify remove button presence
+    - Test file: `__tests__/properties/project-scoping.property.test.ts`
+    - **Validates: Requirements 12.4**
+  - [x] 13.5 Write property test for project-scoped breadcrumb link (Property 18)
+    - **Property 18: Project-scoped breadcrumb includes project link**
+    - Generate project names/IDs, verify breadcrumb includes clickable link to `/projects/{projectId}`
+    - Test file: `__tests__/properties/project-scoping.property.test.ts`
+    - **Validates: Requirements 12.5**
+  - [x] 13.6 Write property test for sidebar active state (Property 19)
+    - **Property 19: Sidebar active state matches current pathname**
+    - Generate pathname/nav-item pairs, verify active state logic including project-scoped suppression
+    - Test file: `__tests__/properties/sidebar-active-state.property.test.ts`
+    - **Validates: Requirements 15.1, 15.2**
+
+- [x] 14. Write unit tests for already-implemented requirements (verification only)
+  - [x] 14.1 Write unit tests for dashboard quick actions and recent items
+    - Verify 3 quick action buttons render (Create New Project, Add Experiment, Record Sample)
+    - Verify "No recent experiments" and "No recent notes" fallback text
+    - Test file: `__tests__/unit/dashboard.test.tsx`
+    - _Requirements: 10.1, 10.4, 10.5_
+  - [x] 14.2 Write unit tests for settings theme toggle hydration safety
+    - Verify `mounted` guard prevents SSR rendering of theme buttons
+    - Verify theme change applies immediately via `setTheme()`
+    - Test file: `__tests__/unit/settings-hydration.test.tsx`
+    - _Requirements: 11.1, 11.2, 11.3_
+  - [x] 14.3 Write unit tests for toast providers in root layout
+    - Verify both `Toaster` (shadcn) and `Sonner` render in `app/layout.tsx`
+    - Test file: `__tests__/unit/accessibility.test.tsx`
+    - _Requirements: 14.1_
+
+- [x] 15. Final checkpoint - Ensure all tests pass
+  - Ensure all tests pass, ask the user if questions arise.
+
+## Notes
+
+- Tasks marked with `*` are optional and can be skipped for faster MVP
+- Requirements 10 (Dashboard Quick Actions), 11 (Settings Theme Toggle), 12 (Project-Scoped Navigation), and 15 (Sidebar Active State) are already fully implemented — tasks 13 and 14 provide verification tests only
+- Each `error.tsx` file follows the same pattern: "use client", receives `{ error, reset }` props, displays error message, and provides a "Try again" button
+- Each `loading.tsx` file uses the Next.js App Router convention for automatic Suspense fallback during streaming
+- Property tests use `fast-check` with minimum 100 iterations per property
+- Checkpoints ensure incremental validation across implementation phases

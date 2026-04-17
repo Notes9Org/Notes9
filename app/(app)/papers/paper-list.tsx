@@ -151,6 +151,7 @@ export function PaperList({
               size="sm"
               onClick={() => setViewMode("grid")}
               className="gap-2"
+              aria-label="Switch to grid view"
             >
               <Grid3x3 className="h-4 w-4" />
               Grid
@@ -162,6 +163,7 @@ export function PaperList({
               className="gap-2"
               disabled={isMobile}
               aria-disabled={isMobile}
+              aria-label="Switch to table view"
             >
               <List className="h-4 w-4" />
               Table

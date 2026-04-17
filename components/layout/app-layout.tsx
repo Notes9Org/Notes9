@@ -43,9 +43,9 @@ function getHeaderTitle(pathname: string): string {
   return "Notes9"
 }
 
-const MOBILE_BREADCRUMB_MAX_LABEL_LENGTH = 18
+export const MOBILE_BREADCRUMB_MAX_LABEL_LENGTH = 18
 
-function shortenLabel(label: string, maxLen: number = MOBILE_BREADCRUMB_MAX_LABEL_LENGTH): string {
+export function shortenLabel(label: string, maxLen: number = MOBILE_BREADCRUMB_MAX_LABEL_LENGTH): string {
   if (label.length <= maxLen) return label
   return label.slice(0, maxLen - 1) + "…"
 }

@@ -145,6 +145,7 @@ export function AppSidebar() {
   const [openExperiments, setOpenExperiments] = useState<Record<string, boolean>>({})
   const [searchResults, setSearchResults] = useState<SearchResultItem[]>([])
   const [searchLoading, setSearchLoading] = useState(false)
+  const [fetchError, setFetchError] = useState(false)
   const supabase = createClient()
 
   const isIconMode = !open
@@ -180,304 +181,305 @@ export function AppSidebar() {
     return () => clearTimeout(t)
   }, [searchQuery])
 
-  useEffect(() => {
-    async function fetchData() {
-      try {
-        setLoading(true)
+  async function fetchData() {
+    try {
+      setLoading(true)
+      setFetchError(false)
 
-        // Verify Supabase client is initialized
-        if (!supabase) {
-          console.error("Supabase client is not initialized")
-          toast.error("Database connection error. Please check your configuration.")
-          setLoading(false)
-          return
-        }
+      // Verify Supabase client is initialized
+      if (!supabase) {
+        console.error("Supabase client is not initialized")
+        toast.error("Database connection error. Please check your configuration.")
+        setLoading(false)
+        return
+      }
 
-        // Get current user
-        const { data: { user: currentUser }, error: userError } = await supabase.auth.getUser()
+      // Get current user
+      const { data: { user: currentUser }, error: userError } = await supabase.auth.getUser()
 
-        if (userError) {
-          console.error("Error fetching user:", userError)
-          toast.error("Authentication error. Please try logging in again.")
-          setLoading(false)
-          return
-        }
+      if (userError) {
+        console.error("Error fetching user:", userError)
+        toast.error("Authentication error. Please try logging in again.")
+        setLoading(false)
+        return
+      }
 
-        setUser(currentUser as User)
+      setUser(currentUser as User)
 
-        if (!currentUser) {
-          setLoading(false)
-          return
-        }
+      if (!currentUser) {
+        setLoading(false)
+        return
+      }
 
-        // Verify user has a profile with organization
-        const { data: userProfile, error: profileCheckError } = await supabase
-          .from("profiles")
-          .select("id, organization_id, first_name, last_name")
-          .eq("id", currentUser.id)
-          .single()
+      // Verify user has a profile with organization
+      const { data: userProfile, error: profileCheckError } = await supabase
+        .from("profiles")
+        .select("id, organization_id, first_name, last_name")
+        .eq("id", currentUser.id)
+        .single()
 
-        let userProfileData = userProfile
+      let userProfileData = userProfile
 
-        if (profileCheckError || !userProfileData) {
-          // Log detailed error information
-          const errorInfo = profileCheckError ? {
-            message: profileCheckError.message,
-            details: profileCheckError.details,
-            hint: profileCheckError.hint,
-            code: profileCheckError.code,
-          } : { message: 'Profile not found', code: 'PGRST116' }
+      if (profileCheckError || !userProfileData) {
+        // Log detailed error information
+        const errorInfo = profileCheckError ? {
+          message: profileCheckError.message,
+          details: profileCheckError.details,
+          hint: profileCheckError.hint,
+          code: profileCheckError.code,
+        } : { message: 'Profile not found', code: 'PGRST116' }
 
-          console.error("User profile not found or error:", errorInfo)
-          console.error("User ID:", currentUser.id)
-          console.error("User email:", currentUser.email)
-          console.error("Full error object:", profileCheckError)
+        console.error("User profile not found or error:", errorInfo)
+        console.error("User ID:", currentUser.id)
+        console.error("User email:", currentUser.email)
+        console.error("Full error object:", profileCheckError)
 
-          // Try to create profile if it doesn't exist (error code PGRST116 = no rows returned)
-          const errorCode = profileCheckError?.code || (userProfileData ? null : 'PGRST116')
-          if (!userProfileData || errorCode === 'PGRST116') {
-            // Profile doesn't exist, try to create it
-            console.log("Profile not found, attempting to create...")
+        // Try to create profile if it doesn't exist (error code PGRST116 = no rows returned)
+        const errorCode = profileCheckError?.code || (userProfileData ? null : 'PGRST116')
+        if (!userProfileData || errorCode === 'PGRST116') {
+          // Profile doesn't exist, try to create it
+          console.log("Profile not found, attempting to create...")
 
-            // Extract name from user metadata
-            let firstName = currentUser.user_metadata?.first_name ||
-              currentUser.user_metadata?.given_name ||
-              currentUser.user_metadata?.name?.split(' ')[0] ||
-              ''
-            let lastName = currentUser.user_metadata?.last_name ||
-              currentUser.user_metadata?.family_name ||
-              currentUser.user_metadata?.name?.split(' ').slice(1).join(' ') ||
-              ''
+          // Extract name from user metadata
+          let firstName = currentUser.user_metadata?.first_name ||
+            currentUser.user_metadata?.given_name ||
+            currentUser.user_metadata?.name?.split(' ')[0] ||
+            ''
+          let lastName = currentUser.user_metadata?.last_name ||
+            currentUser.user_metadata?.family_name ||
+            currentUser.user_metadata?.name?.split(' ').slice(1).join(' ') ||
+            ''
 
-            if (!firstName && !lastName && currentUser.user_metadata?.full_name) {
-              const nameParts = currentUser.user_metadata.full_name.split(' ')
-              firstName = nameParts[0] || ''
-              lastName = nameParts.slice(1).join(' ') || ''
-            }
+          if (!firstName && !lastName && currentUser.user_metadata?.full_name) {
+            const nameParts = currentUser.user_metadata.full_name.split(' ')
+            firstName = nameParts[0] || ''
+            lastName = nameParts.slice(1).join(' ') || ''
+          }
 
-            if (!firstName) {
-              firstName = currentUser.email?.split('@')[0] || 'User'
-            }
+          if (!firstName) {
+            firstName = currentUser.email?.split('@')[0] || 'User'
+          }
 
-            // Create organization first (or find existing one)
-            let orgId: string | null = null
+          // Create organization first (or find existing one)
+          let orgId: string | null = null
 
-            // Try to find existing organization by email
-            const { data: existingOrg } = await supabase
+          // Try to find existing organization by email
+          const { data: existingOrg } = await supabase
+            .from("organizations")
+            .select("id")
+            .eq("email", currentUser.email || '')
+            .single()
+
+          if (existingOrg) {
+            orgId = existingOrg.id
+            console.log("Found existing organization:", orgId)
+          } else {
+            // Create new organization
+            const userFullName = `${firstName} ${lastName}`.trim() || firstName
+            const { data: newOrg, error: orgError } = await supabase
               .from("organizations")
-              .select("id")
-              .eq("email", currentUser.email || '')
+              .insert({
+                name: `${userFullName}'s Lab`,
+                email: currentUser.email || ''
+              })
+              .select()
               .single()
 
-            if (existingOrg) {
-              orgId = existingOrg.id
-              console.log("Found existing organization:", orgId)
-            } else {
-              // Create new organization
-              const userFullName = `${firstName} ${lastName}`.trim() || firstName
-              const { data: newOrg, error: orgError } = await supabase
-                .from("organizations")
-                .insert({
-                  name: `${userFullName}'s Lab`,
-                  email: currentUser.email || ''
-                })
-                .select()
-                .single()
-
-              if (orgError) {
-                console.error("Error creating organization:", {
-                  message: orgError.message,
-                  details: orgError.details,
-                  hint: orgError.hint,
-                  code: orgError.code
-                })
-                // If duplicate, try to fetch it
-                if (orgError.message?.includes('duplicate') || orgError.code === '23505') {
-                  const { data: dupOrg } = await supabase
-                    .from("organizations")
-                    .select("id")
-                    .eq("email", currentUser.email || '')
-                    .single()
-                  orgId = dupOrg?.id || null
-                } else {
-                  toast.error("Failed to set up account. Please try signing out and back in.")
-                  setLoading(false)
-                  return
-                }
-              } else {
-                orgId = newOrg?.id || null
-                console.log("Created new organization:", orgId)
-              }
-            }
-
-            if (!orgId) {
-              console.error("Could not get or create organization")
-              toast.error("Failed to set up account. Please try signing out and back in.")
-              setLoading(false)
-              return
-            }
-
-            // Create profile
-            const { error: createProfileError } = await supabase
-              .from("profiles")
-              .insert({
-                id: currentUser.id,
-                email: currentUser.email || '',
-                first_name: firstName || 'User',
-                last_name: lastName || '',
-                role: currentUser.user_metadata?.role || 'researcher',
-                organization_id: orgId
+            if (orgError) {
+              console.error("Error creating organization:", {
+                message: orgError.message,
+                details: orgError.details,
+                hint: orgError.hint,
+                code: orgError.code
               })
-
-            if (createProfileError) {
-              console.error("Error creating profile:", {
-                message: createProfileError.message,
-                details: createProfileError.details,
-                hint: createProfileError.hint,
-                code: createProfileError.code
-              })
-
-              // If profile already exists (race condition), fetch it
-              if (createProfileError.message?.includes('duplicate') || createProfileError.code === '23505') {
-                const { data: existingProfile } = await supabase
-                  .from("profiles")
-                  .select("id, organization_id, first_name, last_name")
-                  .eq("id", currentUser.id)
+              // If duplicate, try to fetch it
+              if (orgError.message?.includes('duplicate') || orgError.code === '23505') {
+                const { data: dupOrg } = await supabase
+                  .from("organizations")
+                  .select("id")
+                  .eq("email", currentUser.email || '')
                   .single()
-
-                if (existingProfile?.organization_id) {
-                  // Profile exists, continue
-                  console.log("Profile already exists, continuing...")
-                } else {
-                  toast.error("Failed to set up account. Please try signing out and back in.")
-                  setLoading(false)
-                  return
-                }
+                orgId = dupOrg?.id || null
               } else {
                 toast.error("Failed to set up account. Please try signing out and back in.")
                 setLoading(false)
                 return
               }
             } else {
-              console.log("Profile created successfully")
+              orgId = newOrg?.id || null
+              console.log("Created new organization:", orgId)
             }
+          }
 
-            // Retry fetching profile
-            const { data: retryProfile } = await supabase
-              .from("profiles")
-              .select("id, organization_id, first_name, last_name")
-              .eq("id", currentUser.id)
-              .single()
-
-            if (!retryProfile || !retryProfile.organization_id) {
-              console.error("Profile still missing after creation attempt")
-              toast.error("Account setup incomplete. Please contact support.")
-              setLoading(false)
-              return
-            }
-
-            // Update userProfileData for rest of function
-            userProfileData = retryProfile
-          } else {
-            console.error("Unexpected profile error:", errorInfo)
-            toast.error("Profile setup incomplete. Please contact support.")
+          if (!orgId) {
+            console.error("Could not get or create organization")
+            toast.error("Failed to set up account. Please try signing out and back in.")
             setLoading(false)
             return
           }
-        }
 
-        if (!userProfileData?.organization_id) {
-          console.error("User profile missing organization_id")
-          toast.error("Organization not set up. Showing empty workspace.")
-          setProjects([])
-          setCounts({ projects: 0, experiments: 0, samples: 0, literature: 0 })
+          // Create profile
+          const { error: createProfileError } = await supabase
+            .from("profiles")
+            .insert({
+              id: currentUser.id,
+              email: currentUser.email || '',
+              first_name: firstName || 'User',
+              last_name: lastName || '',
+              role: currentUser.user_metadata?.role || 'researcher',
+              organization_id: orgId
+            })
+
+          if (createProfileError) {
+            console.error("Error creating profile:", {
+              message: createProfileError.message,
+              details: createProfileError.details,
+              hint: createProfileError.hint,
+              code: createProfileError.code
+            })
+
+            // If profile already exists (race condition), fetch it
+            if (createProfileError.message?.includes('duplicate') || createProfileError.code === '23505') {
+              const { data: existingProfile } = await supabase
+                .from("profiles")
+                .select("id, organization_id, first_name, last_name")
+                .eq("id", currentUser.id)
+                .single()
+
+              if (existingProfile?.organization_id) {
+                // Profile exists, continue
+                console.log("Profile already exists, continuing...")
+              } else {
+                toast.error("Failed to set up account. Please try signing out and back in.")
+                setLoading(false)
+                return
+              }
+            } else {
+              toast.error("Failed to set up account. Please try signing out and back in.")
+              setLoading(false)
+              return
+            }
+          } else {
+            console.log("Profile created successfully")
+          }
+
+          // Retry fetching profile
+          const { data: retryProfile } = await supabase
+            .from("profiles")
+            .select("id, organization_id, first_name, last_name")
+            .eq("id", currentUser.id)
+            .single()
+
+          if (!retryProfile || !retryProfile.organization_id) {
+            console.error("Profile still missing after creation attempt")
+            toast.error("Account setup incomplete. Please contact support.")
+            setLoading(false)
+            return
+          }
+
+          // Update userProfileData for rest of function
+          userProfileData = retryProfile
+        } else {
+          console.error("Unexpected profile error:", errorInfo)
+          toast.error("Profile setup incomplete. Please contact support.")
           setLoading(false)
           return
         }
+      }
 
-        setUserProfile({
-          first_name: userProfileData.first_name ?? null,
-          last_name: userProfileData.last_name ?? null,
-        })
+      if (!userProfileData?.organization_id) {
+        console.error("User profile missing organization_id")
+        toast.error("Organization not set up. Showing empty workspace.")
+        setProjects([])
+        setLoading(false)
+        return
+      }
 
-        // Fetch projects for this organization (all statuses)
-        const { data: projectsData, error: projectsError } = await supabase
-          .from("projects")
-          .select("id, name, status, created_at")
-          .eq("organization_id", userProfileData.organization_id)
-          .order("created_at", { ascending: false })
-          .limit(5)
+      setUserProfile({
+        first_name: userProfileData.first_name ?? null,
+        last_name: userProfileData.last_name ?? null,
+      })
 
-        if (projectsError) {
-          console.error("Error fetching projects:", projectsError)
-          toast.error(`Failed to load projects: ${projectsError.message || 'Unknown error'}`)
-          setProjects([])
-        } else {
-          const projectIds = (projectsData || []).map((p) => p.id)
+      // Fetch projects for this organization (all statuses)
+      const { data: projectsData, error: projectsError } = await supabase
+        .from("projects")
+        .select("id, name, status, created_at")
+        .eq("organization_id", userProfileData.organization_id)
+        .order("created_at", { ascending: false })
+        .limit(5)
 
-          // Fetch experiments for these projects
-          let experimentsData: ExperimentSummary[] = []
-          if (projectIds.length > 0) {
-            const { data: exps, error: expsError } = await supabase
-              .from("experiments")
-              .select("id, name, project_id")
-              .in("project_id", projectIds)
+      if (projectsError) {
+        console.error("Error fetching projects:", projectsError)
+        toast.error(`Failed to load projects: ${projectsError.message || 'Unknown error'}`)
+        setFetchError(true)
+        setProjects([])
+      } else {
+        const projectIds = (projectsData || []).map((p) => p.id)
 
-            if (expsError) throw expsError
-            experimentsData = exps || []
-          }
+        // Fetch experiments for these projects
+        let experimentsData: ExperimentSummary[] = []
+        if (projectIds.length > 0) {
+          const { data: exps, error: expsError } = await supabase
+            .from("experiments")
+            .select("id, name, project_id")
+            .in("project_id", projectIds)
 
-          // Fetch lab notes for these experiments
-          const experimentIds = experimentsData.map((e) => e.id)
-          let labNotesData: LabNoteSummary[] = []
-          if (experimentIds.length > 0) {
-            const { data: notes, error: notesError } = await supabase
-              .from("lab_notes")
-              .select("id, title, experiment_id")
-              .in("experiment_id", experimentIds)
-              .order("created_at", { ascending: false })
-
-            if (notesError) throw notesError
-            labNotesData = notes || []
-          }
-
-          // Group lab notes into experiments
-          const expMap: Record<string, ExperimentSummary> = {}
-          experimentsData.forEach((exp) => {
-            expMap[exp.id] = { ...exp, lab_notes: [] }
-          })
-          labNotesData.forEach((note) => {
-            const exp = note.experiment_id ? expMap[note.experiment_id] : null
-            if (exp) {
-              exp.lab_notes = exp.lab_notes || []
-              exp.lab_notes.push(note)
-            }
-          })
-
-          // Group experiments into projects
-          const projMap: Record<string, Project> = {}
-          projectsData?.forEach((proj) => {
-            projMap[proj.id] = { ...proj, experiment_count: 0, experiments: [] }
-          })
-          Object.values(expMap).forEach((exp) => {
-            const proj = projMap[exp.project_id]
-            if (proj) {
-              proj.experiments = proj.experiments || []
-              proj.experiments.push(exp)
-              proj.experiment_count = (proj.experiment_count || 0) + 1
-            }
-          })
-
-          setProjects(Object.values(projMap))
+          if (expsError) throw expsError
+          experimentsData = exps || []
         }
 
-      } catch (error) {
-        console.error("Error loading sidebar data:", error)
-      } finally {
-        setLoading(false)
-      }
-    }
+        // Fetch lab notes for these experiments
+        const experimentIds = experimentsData.map((e) => e.id)
+        let labNotesData: LabNoteSummary[] = []
+        if (experimentIds.length > 0) {
+          const { data: notes, error: notesError } = await supabase
+            .from("lab_notes")
+            .select("id, title, experiment_id")
+            .in("experiment_id", experimentIds)
+            .order("created_at", { ascending: false })
 
+          if (notesError) throw notesError
+          labNotesData = notes || []
+        }
+
+        // Group lab notes into experiments
+        const expMap: Record<string, ExperimentSummary> = {}
+        experimentsData.forEach((exp) => {
+          expMap[exp.id] = { ...exp, lab_notes: [] }
+        })
+        labNotesData.forEach((note) => {
+          const exp = note.experiment_id ? expMap[note.experiment_id] : null
+          if (exp) {
+            exp.lab_notes = exp.lab_notes || []
+            exp.lab_notes.push(note)
+          }
+        })
+
+        // Group experiments into projects
+        const projMap: Record<string, Project> = {}
+        projectsData?.forEach((proj) => {
+          projMap[proj.id] = { ...proj, experiment_count: 0, experiments: [] }
+        })
+        Object.values(expMap).forEach((exp) => {
+          const proj = projMap[exp.project_id]
+          if (proj) {
+            proj.experiments = proj.experiments || []
+            proj.experiments.push(exp)
+            proj.experiment_count = (proj.experiment_count || 0) + 1
+          }
+        })
+
+        setProjects(Object.values(projMap))
+      }
+
+    } catch (error) {
+      console.error("Error loading sidebar data:", error)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => {
     fetchData()
 
     // Subscribe to real-time updates for projects
@@ -764,8 +766,19 @@ export function AppSidebar() {
                           ))
                         ) : projects.length === 0 ? (
                           <SidebarMenuItem>
-                            <div className="flex h-8 items-center rounded-md px-2 text-xs text-sidebar-foreground/70">
-                              No active projects
+                            <div className="flex flex-col gap-1 rounded-md px-2 py-1">
+                              <div className="flex h-8 items-center text-xs text-sidebar-foreground/70">
+                                No active projects
+                              </div>
+                              {fetchError && (
+                                <button
+                                  type="button"
+                                  onClick={() => fetchData()}
+                                  className="flex h-7 items-center justify-center rounded-md px-2 text-xs text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground transition-colors"
+                                >
+                                  Try again
+                                </button>
+                              )}
                             </div>
                           </SidebarMenuItem>
                         ) : (

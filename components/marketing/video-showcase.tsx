@@ -1,18 +1,19 @@
 "use client"
 
-import { useCallback, useEffect, useState } from "react"
+import { useState } from "react"
 import Image from "next/image"
 import { useTheme } from "next-themes"
-import { BookOpen, Database, FlaskConical, LineChart, Network, Sparkles, TestTube2, FileText } from "lucide-react"
+import { motion, AnimatePresence } from "framer-motion"
 import {
-  Carousel,
-  CarouselContent,
-  CarouselItem,
-  CarouselNext,
-  CarouselPrevious,
-  type CarouselApi,
-} from "@/components/ui/carousel"
-import { ProductFrame } from "@/components/marketing/three-d-card"
+  BookOpen,
+  Database,
+  FlaskConical,
+  LineChart,
+  Network,
+  Sparkles,
+  TestTube2,
+  FileText,
+} from "lucide-react"
 import { resolveDemoScreenshot } from "@/components/marketing/demo-asset"
 
 const slides = [
@@ -58,7 +59,7 @@ const slides = [
   },
   {
     id: "samples",
-    label: "Sample Inventory",
+    label: "Samples",
     icon: TestTube2,
     title: "Track physical materials securely",
     description:
@@ -88,7 +89,7 @@ const slides = [
   },
   {
     id: "writing",
-    label: "Writing & AI",
+    label: "AI Writing",
     icon: Sparkles,
     title: "Draft publications with AI assistance",
     description:
@@ -100,96 +101,104 @@ const slides = [
 
 export function ProductShowcase() {
   const { resolvedTheme } = useTheme()
-  const [api, setApi] = useState<CarouselApi>()
-  const [current, setCurrent] = useState(0)
-
-  const onSelect = useCallback((api: CarouselApi) => {
-    if (!api) return
-    setCurrent(api.selectedScrollSnap())
-  }, [])
-
-  useEffect(() => {
-    if (!api) return
-    onSelect(api)
-    api.on("select", onSelect)
-    return () => {
-      api.off("select", onSelect)
-    }
-  }, [api, onSelect])
-
-  useEffect(() => {
-    if (!api) return
-    const interval = setInterval(() => api.scrollNext(), 6000)
-    return () => clearInterval(interval)
-  }, [api])
+  const [active, setActive] = useState(0)
+  const current = slides[active]
 
   return (
-    <section id="explore" className="bg-[var(--n9-accent-light)] dark:bg-muted/20">
+    <section id="explore" className="border-t border-border/40 bg-[var(--n9-accent-light)]/30 dark:bg-muted/10">
       <div className="container mx-auto px-4 py-20 sm:px-6 lg:px-8">
-        <div className="mx-auto max-w-3xl text-center">
+        <motion.div
+          initial={{ opacity: 0, y: 16 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5 }}
+          viewport={{ once: true }}
+          className="mx-auto max-w-3xl text-center"
+        >
           <h2 className="font-serif text-3xl tracking-tight text-foreground sm:text-4xl">
             Explore Notes9
           </h2>
           <p className="mt-4 text-lg leading-7 text-muted-foreground">
-            One connected layer for the full research workflow.
+            Click any feature to see it in action.
           </p>
-        </div>
+        </motion.div>
 
-        <div className="mx-auto mt-12 max-w-5xl">
-          <Carousel
-            setApi={setApi}
-            opts={{ align: "start", loop: true }}
-            className="w-full"
-          >
-            <CarouselContent>
-              {slides.map((slide) => (
-                <CarouselItem key={slide.id}>
-                  <div className="grid gap-8 lg:grid-cols-[0.9fr_1.1fr] lg:items-stretch">
-                    <div className="order-2 flex h-full flex-col justify-start text-center lg:order-1 lg:text-left">
-                      <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-[var(--n9-accent)]/30 bg-[var(--n9-accent-light)] px-4 py-2 text-sm font-semibold uppercase tracking-[0.2em] text-[var(--n9-accent)]">
-                        <slide.icon className="h-3.5 w-3.5" />
-                        {slide.label}
-                      </div>
-                      <h3 className="text-2xl font-semibold tracking-tight text-foreground">
-                        {slide.title}
-                      </h3>
-                      <p className="mt-4 text-lg leading-7 text-muted-foreground">
-                        {slide.description}
-                      </p>
+        <div className="mx-auto mt-10 max-w-6xl">
+          {/* Feature tabs */}
+          <div className="mb-8 overflow-x-auto scrollbar-none">
+            <div className="flex justify-center gap-1.5 min-w-max px-4">
+              {slides.map((slide, i) => {
+                const Icon = slide.icon
+                const isActive = i === active
+                return (
+                  <button
+                    key={slide.id}
+                    onClick={() => setActive(i)}
+                    className={`relative inline-flex items-center gap-2 rounded-full px-4 py-2.5 text-sm font-medium transition-all duration-200 cursor-pointer ${
+                      isActive
+                        ? "bg-[var(--n9-accent)] text-white shadow-[0_8px_24px_-8px_var(--n9-accent-glow)]"
+                        : "text-muted-foreground hover:bg-muted/80 hover:text-foreground"
+                    }`}
+                  >
+                    <Icon className="h-4 w-4" />
+                    <span className="hidden sm:inline">{slide.label}</span>
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+
+          {/* Screenshot — full width, prominent */}
+          <AnimatePresence mode="wait">
+            <motion.div
+              key={current.id}
+              initial={{ opacity: 0, y: 12 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -12 }}
+              transition={{ duration: 0.3 }}
+            >
+              <div className="relative">
+                {/* Subtle glow */}
+                <div className="absolute -inset-3 rounded-2xl bg-[var(--n9-accent)]/[0.04] blur-xl" />
+
+                <div className="relative overflow-hidden rounded-xl border border-border/60 bg-background shadow-[0_40px_100px_-30px_rgba(44,36,24,0.18)] dark:shadow-[0_40px_100px_-30px_rgba(0,0,0,0.5)]">
+                  {/* Browser bar */}
+                  <div className="flex h-9 items-center gap-2 border-b border-border/40 bg-muted/50 px-4">
+                    <div className="flex gap-1.5">
+                      <div className="h-2.5 w-2.5 rounded-full bg-red-400/80" />
+                      <div className="h-2.5 w-2.5 rounded-full bg-yellow-400/80" />
+                      <div className="h-2.5 w-2.5 rounded-full bg-green-400/80" />
                     </div>
-                    <div className="order-1 flex h-full items-start lg:order-2">
-                      <ProductFrame>
-                        <Image
-                          src={resolveDemoScreenshot(slide.screenshot, resolvedTheme)}
-                          alt={slide.alt}
-                          width={1200}
-                          height={800}
-                          className="block w-full"
-                        />
-                      </ProductFrame>
+                    <div className="ml-3 flex-1 max-w-[220px]">
+                      <div className="h-5 rounded-md bg-muted/80 px-3 flex items-center text-[10px] text-muted-foreground/50 font-medium">
+                        notes9.com/{current.id}
+                      </div>
                     </div>
                   </div>
-                </CarouselItem>
-              ))}
-            </CarouselContent>
-            <CarouselPrevious className="-left-4 border-border bg-background/95 hover:bg-muted sm:-left-6 md:-left-10" />
-            <CarouselNext className="-right-4 border-border bg-background/95 hover:bg-muted sm:-right-6 md:-right-10" />
-          </Carousel>
+                  <Image
+                    src={resolveDemoScreenshot(current.screenshot, resolvedTheme)}
+                    alt={current.alt}
+                    width={1920}
+                    height={1080}
+                    className="block w-full"
+                  />
+                </div>
+              </div>
 
-          <div className="mt-8 flex justify-center gap-2">
-            {slides.map((_, i) => (
-              <button
-                key={i}
-                onClick={() => api?.scrollTo(i)}
-                className={`h-2 rounded-full transition-all ${
-                  i === current
-                    ? "w-6 bg-[var(--n9-accent)]"
-                    : "w-2 bg-border hover:bg-muted-foreground/40"
-                }`}
-                aria-label={`Go to slide ${i + 1}`}
-              />
-            ))}
-          </div>
+              {/* Title + description below screenshot */}
+              <div className="mt-8 text-center">
+                <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-[var(--n9-accent)]/30 bg-[var(--n9-accent-light)] px-3 py-1 text-xs font-semibold uppercase tracking-[0.15em] text-[var(--n9-accent)]">
+                  <current.icon className="h-3 w-3" />
+                  {current.label}
+                </div>
+                <h3 className="text-2xl font-semibold tracking-tight text-foreground">
+                  {current.title}
+                </h3>
+                <p className="mx-auto mt-3 max-w-xl text-lg leading-7 text-muted-foreground">
+                  {current.description}
+                </p>
+              </div>
+            </motion.div>
+          </AnimatePresence>
         </div>
       </div>
     </section>

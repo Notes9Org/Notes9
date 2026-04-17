@@ -31,6 +31,7 @@ export default function SettingsPage() {
   const [lastName, setLastName] = useState("")
   const [role, setRole] = useState("")
   const [loading, setLoading] = useState(true)
+  const [loadingTimedOut, setLoadingTimedOut] = useState(false)
   const [saving, setSaving] = useState(false)
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null)
   const [avatarUploading, setAvatarUploading] = useState(false)
@@ -40,6 +41,14 @@ export default function SettingsPage() {
   useEffect(() => {
     setMounted(true)
   }, [])
+
+  useEffect(() => {
+    if (!loading) return
+    const timer = setTimeout(() => {
+      setLoadingTimedOut(true)
+    }, 10000)
+    return () => clearTimeout(timer)
+  }, [loading])
 
   useEffect(() => {
     const loadProfile = async () => {
@@ -194,7 +203,11 @@ export default function SettingsPage() {
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
-        <p className="text-muted-foreground">Loading...</p>
+        {loadingTimedOut ? (
+          <p className="text-destructive">Failed to load profile. Please try refreshing the page.</p>
+        ) : (
+          <p className="text-muted-foreground">Loading...</p>
+        )}
       </div>
     )
   }

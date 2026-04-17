@@ -302,7 +302,16 @@ export default function SignUpPage() {
                       className={emailError ? "border-destructive" : ""}
                     />
                     {emailError && (
-                      <p className="text-sm text-destructive">{emailError}</p>
+                      <div className="flex flex-col gap-1">
+                        <p className="text-sm text-destructive">{emailError}</p>
+                        <Link
+                          href={`/auth/login?email=${encodeURIComponent(email)}`}
+                          className="text-sm text-primary underline underline-offset-4 hover:text-primary/80"
+                          data-testid="inline-sign-in-link"
+                        >
+                          Sign in with this email instead
+                        </Link>
+                      </div>
                     )}
                     {checkingEmail && (
                       <p className="text-sm text-muted-foreground">Checking email...</p>
@@ -345,16 +354,7 @@ export default function SignUpPage() {
                   >
                     {isLoading ? "Creating account..." : "Create Account"}
                   </Button>
-                  {emailError && (
-                    <div className="text-center text-sm">
-                      <Link
-                        href={`/auth/login?email=${encodeURIComponent(email)}`}
-                        className="text-primary underline underline-offset-4 hover:text-primary/80"
-                      >
-                        Sign in with this email instead
-                      </Link>
-                    </div>
-                  )}
+
                 </div>
                 <div className="mt-4 text-center text-sm">
                   Already have an account?{" "}
