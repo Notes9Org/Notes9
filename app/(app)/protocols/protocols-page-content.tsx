@@ -28,6 +28,7 @@ export interface Protocol {
   description: string | null
   version: string
   category: string | null
+  created_at: string
   updated_at: string
   project_id: string | null
   experiment_id: string | null
@@ -74,7 +75,7 @@ export function ProtocolsPageContent({
   )
 
   const isMobile = useMediaQuery("(max-width: 768px)")
-  const [viewMode, setViewMode] = useState<"grid" | "table">("grid")
+  const [viewMode, setViewMode] = useState<"grid" | "table">("table")
   const [categoryFilter, setCategoryFilter] = useState(FILTER_ALL)
   const [versionFilter, setVersionFilter] = useState(FILTER_ALL)
   const [usageFilter, setUsageFilter] = useState(FILTER_ALL)

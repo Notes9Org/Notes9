@@ -22,7 +22,7 @@ export function PapersPageInner() {
   const [loading, setLoading] = useState(true)
   const [fetchError, setFetchError] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState<string>(LIBRARY_TAB)
-  const [viewMode, setViewMode] = useState<"grid" | "table">("grid")
+  const [viewMode, setViewMode] = useState<"grid" | "table">("table")
 
   const fetchPapers = useCallback(async () => {
     if (IS_PAPERS_MOCKED) {

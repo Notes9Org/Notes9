@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
+import { useRouter } from "next/navigation"
 import { useMediaQuery } from "@/hooks/use-media-query"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -25,6 +26,7 @@ interface Equipment {
   manufacturer: string | null
   location: string | null
   status: string
+  created_at: string
   next_maintenance_date: string | null
 }
 
@@ -37,7 +39,7 @@ interface EquipmentListProps {
 
 export function EquipmentList({ equipment, viewMode: controlledView, setViewMode: setControlledView, hideToolbar }: EquipmentListProps) {
   const isMobile = useMediaQuery("(max-width: 768px)")
-  const [internalView, setInternalView] = useState<"grid" | "table">("grid")
+  const [internalView, setInternalView] = useState<"grid" | "table">("table")
   const viewMode = controlledView ?? internalView
   const setViewMode = setControlledView ?? setInternalView
   const effectiveViewMode = isMobile ? "grid" : viewMode
@@ -152,72 +154,57 @@ export function EquipmentList({ equipment, viewMode: controlledView, setViewMode
             <CardDescription>Complete list of laboratory equipment</CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="relative w-full overflow-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead className="min-w-[200px]">Equipment</TableHead>
-                    <TableHead className="min-w-[120px]">Code</TableHead>
-                    <TableHead className="min-w-[120px]">Category</TableHead>
-                    <TableHead className="min-w-[150px]">Model</TableHead>
-                    <TableHead className="min-w-[120px]">Location</TableHead>
-                    <TableHead className="min-w-[100px]">Status</TableHead>
-                    <TableHead className="min-w-[140px]">Next Maintenance</TableHead>
-                    <TableHead className="text-right min-w-[100px]">Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {equipment.map((item) => (
-                    <TableRow key={item.id}>
-                      <TableCell className="font-medium text-foreground">
-                        <div className="flex items-center gap-2">
-                          <Microscope className="h-4 w-4 text-primary shrink-0" />
-                          <span className="truncate">{item.name}</span>
-                        </div>
-                      </TableCell>
-                      <TableCell className="font-mono text-sm">{item.equipment_code}</TableCell>
-                      <TableCell>{item.category || "—"}</TableCell>
-                      <TableCell className="text-muted-foreground">
-                        {item.model || "—"}
-                      </TableCell>
-                      <TableCell className="text-muted-foreground">
-                        {item.location || "—"}
-                      </TableCell>
-                      <TableCell>
-                        <Badge
-                          variant={
-                            item.status === "available"
-                              ? "default"
-                              : item.status === "in_use"
-                              ? "secondary"
-                              : item.status === "maintenance"
-                              ? "outline"
-                              : "destructive"
-                          }
-                        >
-                          {item.status.replace("_", " ")}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="text-muted-foreground">
-                        {item.next_maintenance_date
-                          ? new Date(item.next_maintenance_date).toLocaleDateString()
-                          : "—"}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <Button variant="ghost" size="sm" asChild>
-                          <Link href={`/equipment/${item.id}`}>
-                            <ArrowUpRight className="h-4 w-4" />
-                          </Link>
-                        </Button>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
+            <EquipmentTableView equipment={equipment} />
           </CardContent>
         </Card>
       )}
     </>
+  )
+}
+
+const formatDate = (dateStr: string): string => {
+  return new Date(dateStr).toISOString().split('T')[0]
+}
+
+function EquipmentTableView({ equipment }: { equipment: Equipment[] }) {
+  const router = useRouter()
+  return (
+    <div className="relative w-full overflow-auto">
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead className="min-w-[300px]">Equipment</TableHead>
+            <TableHead className="min-w-[120px]">Created</TableHead>
+            <TableHead className="text-right min-w-[100px]">Actions</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {equipment.map((item) => (
+            <TableRow
+              key={item.id}
+              className="cursor-pointer"
+              onClick={() => router.push(`/equipment/${item.id}`)}
+            >
+              <TableCell className="font-medium text-foreground">
+                <div className="flex items-center gap-2">
+                  <Microscope className="h-4 w-4 text-primary shrink-0" />
+                  <span className="truncate">{item.name}</span>
+                </div>
+              </TableCell>
+              <TableCell className="text-muted-foreground">
+                {formatDate(item.created_at)}
+              </TableCell>
+              <TableCell className="text-right">
+                <Button variant="ghost" size="sm" asChild onClick={(e: React.MouseEvent) => e.stopPropagation()}>
+                  <Link href={`/equipment/${item.id}`}>
+                    <ArrowUpRight className="h-4 w-4" />
+                  </Link>
+                </Button>
+              </TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+    </div>
   )
 }

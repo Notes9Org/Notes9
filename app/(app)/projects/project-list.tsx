@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect, useMemo } from "react"
+import { useRouter } from "next/navigation"
 import { useMediaQuery } from "@/hooks/use-media-query"
 import Link from "next/link"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -41,7 +42,7 @@ interface Project {
 /** Client wrapper: single-line header (description + Grid/Table toggle + New button) + list */
 export function ProjectsPageContent({ projects }: { projects: Project[] }) {
   const isMobile = useMediaQuery("(max-width: 768px)")
-  const [viewMode, setViewMode] = useState<"grid" | "table">("grid")
+  const [viewMode, setViewMode] = useState<"grid" | "table">("table")
   const [statusFilter, setStatusFilter] = useState(FILTER_ALL)
   const [priorityFilter, setPriorityFilter] = useState(FILTER_ALL)
 
@@ -143,7 +144,7 @@ interface ProjectListProps {
 
 export function ProjectList({ projects, viewMode: controlledView, setViewMode: setControlledView, hideToolbar }: ProjectListProps) {
   const isMobile = useMediaQuery("(max-width: 768px)")
-  const [internalView, setInternalView] = useState<"grid" | "table">("grid")
+  const [internalView, setInternalView] = useState<"grid" | "table">("table")
   const viewMode = controlledView ?? internalView
   const setViewMode = setControlledView ?? setInternalView
   const effectiveViewMode = isMobile ? "grid" : viewMode
@@ -308,106 +309,59 @@ export function ProjectList({ projects, viewMode: controlledView, setViewMode: s
 
       {/* Table View */}
       {effectiveViewMode === "table" && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-foreground">All Projects</CardTitle>
-            <CardDescription>Complete list of research projects</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="relative w-full overflow-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead className="min-w-[250px]">Project Name</TableHead>
-                    <TableHead className="min-w-[100px]">Status</TableHead>
-                    <TableHead className="min-w-[100px]">Priority</TableHead>
-                    <TableHead className="min-w-[100px]">Team</TableHead>
-                    <TableHead className="min-w-[120px]">Experiments</TableHead>
-                    <TableHead className="min-w-[140px]">Start Date</TableHead>
-                    <TableHead className="min-w-[180px]">Lead</TableHead>
-                    <TableHead className="text-right min-w-[100px]">Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {projects.map((project) => (
-                    <TableRow key={project.id}>
-                      <TableCell className="font-medium text-foreground">
-                        <div className="max-w-[300px]">
-                          <div className="font-semibold truncate">{project.name}</div>
-                          {project.description && (
-                            <div className="text-sm text-muted-foreground truncate">
-                              {project.description}
-                            </div>
-                          )}
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <Badge
-                          variant={
-                            project.status === "active"
-                              ? "default"
-                              : project.status === "completed"
-                                ? "secondary"
-                                : "outline"
-                          }
-                          className="whitespace-nowrap"
-                        >
-                          {getStatusDisplay(project.status)}
-                        </Badge>
-                      </TableCell>
-                      <TableCell>
-                        {project.priority ? (
-                          <Badge
-                            variant={
-                              project.priority === "critical" || project.priority === "high"
-                                ? "destructive"
-                                : "outline"
-                            }
-                            className="whitespace-nowrap"
-                          >
-                            {getPriorityDisplay(project.priority)}
-                          </Badge>
-                        ) : (
-                          <span className="text-muted-foreground">—</span>
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex items-center gap-1">
-                          <Users className="h-4 w-4 text-muted-foreground" />
-                          <span>{Math.max(1, project.no_of_members)}</span>
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex items-center gap-1">
-                          <FlaskConical className="h-4 w-4 text-muted-foreground" />
-                          <span>{project.no_of_experiments}</span>
-                        </div>
-                      </TableCell>
-                      <TableCell className="text-muted-foreground">
-                        {project.start_date
-                          ? formatDate(project.start_date)
-                          : "—"}
-                      </TableCell>
-                      <TableCell className="text-muted-foreground">
-                        {project.created_by
-                          ? `${project.created_by.first_name} ${project.created_by.last_name}`
-                          : "—"}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <Button variant="ghost" size="sm" asChild>
-                          <Link href={`/projects/${project.id}`}>
-                            <ArrowUpRight className="h-4 w-4" />
-                          </Link>
-                        </Button>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
-          </CardContent>
-        </Card>
+        <ProjectTableView projects={projects} />
       )}
     </>
+  )
+}
+
+function ProjectTableView({ projects }: { projects: Project[] }) {
+  const router = useRouter()
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-foreground">All Projects</CardTitle>
+        <CardDescription>Complete list of research projects</CardDescription>
+      </CardHeader>
+      <CardContent>
+        <div className="relative w-full overflow-auto">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead className="min-w-[300px]">Project</TableHead>
+                <TableHead className="min-w-[120px]">Created</TableHead>
+                <TableHead className="text-right min-w-[100px]">Actions</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {projects.map((project) => (
+                <TableRow
+                  key={project.id}
+                  className="cursor-pointer"
+                  onClick={() => router.push(`/projects/${project.id}`)}
+                >
+                  <TableCell className="font-medium text-foreground">
+                    <div className="flex items-center gap-2">
+                      <Users className="h-4 w-4 text-primary shrink-0" />
+                      <span className="truncate">{project.name}</span>
+                    </div>
+                  </TableCell>
+                  <TableCell className="text-muted-foreground">
+                    {formatDate(project.created_at)}
+                  </TableCell>
+                  <TableCell className="text-right">
+                    <Button variant="ghost" size="sm" asChild onClick={(e: React.MouseEvent) => e.stopPropagation()}>
+                      <Link href={`/projects/${project.id}`}>
+                        <ArrowUpRight className="h-4 w-4" />
+                      </Link>
+                    </Button>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
+      </CardContent>
+    </Card>
   )
 }

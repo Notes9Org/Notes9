@@ -1,10 +1,7 @@
 import { redirect } from 'next/navigation'
 import { createClient } from "@/lib/supabase/server"
-import { Button } from "@/components/ui/button"
-import { Plus } from 'lucide-react'
 import {
   ReportsPageClient,
-  ReportsAnalyticsSection,
   type ReportRow,
 } from './reports-page-client'
 
@@ -28,6 +25,35 @@ export default async function ReportsPage() {
     `)
     .order("created_at", { ascending: false })
 
+  // Fetch profile to get organization_id (same pattern as literature-reviews page)
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("organization_id")
+    .eq("id", user.id)
+    .single()
+
+  const organizationId = profile?.organization_id
+
+  const { data: projects = [] } = organizationId
+    ? await supabase
+        .from("projects")
+        .select("id, name")
+        .eq("organization_id", organizationId)
+        .order("name")
+    : { data: [] as { id: string; name: string }[] }
+  const safeProjects = projects ?? []
+
+  const projectIds = safeProjects.map((p) => p.id)
+  const { data: experiments = [] } =
+    organizationId && projectIds.length > 0
+      ? await supabase
+          .from("experiments")
+          .select("id, name, project_id")
+          .in("project_id", projectIds)
+          .order("name")
+      : { data: [] as { id: string; name: string; project_id: string }[] }
+  const safeExperiments = experiments ?? []
+
   return (
     <div className="space-y-4 md:space-y-6">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -37,15 +63,14 @@ export default async function ReportsPage() {
             View and generate research reports
           </p>
         </div>
-        <Button className="w-full sm:w-auto">
-          <Plus className="h-4 w-4 mr-2" />
-          Generate Report
-        </Button>
       </div>
 
-      <ReportsPageClient reports={(reports ?? []) as ReportRow[]} />
-
-      <ReportsAnalyticsSection />
+      <ReportsPageClient
+        reports={(reports ?? []) as ReportRow[]}
+        projects={safeProjects}
+        experiments={safeExperiments}
+        userId={user.id}
+      />
     </div>
   )
 }

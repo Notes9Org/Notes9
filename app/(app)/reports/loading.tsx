@@ -1,4 +1,4 @@
-export default function ProjectsLoading() {
+export default function ReportsLoading() {
   return (
     <div className="space-y-6 animate-pulse">
       {/* Header */}

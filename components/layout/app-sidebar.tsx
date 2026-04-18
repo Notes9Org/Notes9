@@ -82,7 +82,7 @@ const navigation = [
   { name: "Literature", href: "/literature-reviews", icon: BookOpen },
   { name: "Research map", href: "/research-map", icon: Network },
   { name: "Writing", href: "/papers", icon: ScrollText },
-  // { name: "Reports", href: "/reports", icon: BarChart3 }, // Hidden for now
+  { name: "Reports", href: "/reports", icon: BarChart3 },
 ]
 
 interface LabNoteSummary {

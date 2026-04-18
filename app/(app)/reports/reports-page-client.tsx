@@ -1,15 +1,27 @@
 "use client"
 
 import { useEffect, useMemo, useState } from "react"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { useRouter } from "next/navigation"
+import Link from "next/link"
+import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
-import { FileText, Plus, Download, Calendar } from "lucide-react"
+import { FileText, Plus, Trash2, ArrowUpRight } from "lucide-react"
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table"
 import {
   FILTER_ALL,
   ResourceFilterRow,
   ResourceListFilter,
 } from "@/components/ui/resource-list-filters"
+import { ReportGeneratorDialog } from "./report-generator-dialog"
+import { createClient } from "@/lib/supabase/client"
+import { toast } from "sonner"
 
 export type ReportRow = {
   id: string
@@ -24,11 +36,27 @@ export type ReportRow = {
   generated_by: { first_name: string; last_name: string } | null
 }
 
-export function ReportsPageClient({ reports }: { reports: ReportRow[] }) {
+interface ReportsPageClientProps {
+  reports: ReportRow[]
+  projects?: { id: string; name: string }[]
+  experiments?: { id: string; name: string; project_id: string }[]
+  userId?: string
+}
+
+function formatDate(dateStr: string): string {
+  return new Date(dateStr).toLocaleDateString(undefined, {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+  })
+}
+
+export function ReportsPageClient({ reports: initialReports, projects, experiments, userId }: ReportsPageClientProps) {
+  const router = useRouter()
+  const [reports, setReports] = useState(initialReports)
+  const [dialogOpen, setDialogOpen] = useState(false)
   const [projectFilter, setProjectFilter] = useState(FILTER_ALL)
   const [experimentFilter, setExperimentFilter] = useState(FILTER_ALL)
-  const [statusFilter, setStatusFilter] = useState(FILTER_ALL)
-  const [typeFilter, setTypeFilter] = useState(FILTER_ALL)
 
   const projectOptions = useMemo(() => {
     const m = new Map<string, string>()
@@ -44,16 +72,11 @@ export function ReportsPageClient({ reports }: { reports: ReportRow[] }) {
     const m = new Map<string, { label: string; project_id: string | null }>()
     for (const r of reports) {
       if (r.experiment?.id && r.experiment?.name) {
-        m.set(r.experiment.id, {
-          label: r.experiment.name,
-          project_id: r.project_id,
-        })
+        m.set(r.experiment.id, { label: r.experiment.name, project_id: r.project_id })
       }
     }
     return Array.from(m.entries()).map(([value, v]) => ({
-      value,
-      label: v.label,
-      project_id: v.project_id,
+      value, label: v.label, project_id: v.project_id,
     }))
   }, [reports])
 
@@ -76,42 +99,48 @@ export function ReportsPageClient({ reports }: { reports: ReportRow[] }) {
       .map(({ value, label }) => ({ value, label }))
   }, [experimentOptions, projectFilter])
 
-  const statusOptions = useMemo(() => {
-    const s = new Set(reports.map((r) => r.status).filter(Boolean))
-    return Array.from(s)
-      .sort()
-      .map((value) => ({ value, label: value.replace(/_/g, " ") }))
-  }, [reports])
-
-  const typeOptions = useMemo(() => {
-    const s = new Set(reports.map((r) => r.report_type).filter(Boolean))
-    return Array.from(s)
-      .sort()
-      .map((value) => ({ value, label: value.replace(/_/g, " ") }))
-  }, [reports])
-
   const filtered = useMemo(() => {
     return reports.filter((r) => {
       if (projectFilter !== FILTER_ALL && r.project_id !== projectFilter) return false
       if (experimentFilter !== FILTER_ALL && r.experiment_id !== experimentFilter) return false
-      if (statusFilter !== FILTER_ALL && r.status !== statusFilter) return false
-      if (typeFilter !== FILTER_ALL && r.report_type !== typeFilter) return false
       return true
     })
-  }, [reports, projectFilter, experimentFilter, statusFilter, typeFilter])
+  }, [reports, projectFilter, experimentFilter])
+
+  const handleDelete = async (e: React.MouseEvent, reportId: string) => {
+    e.stopPropagation()
+    if (!confirm("Delete this report? This cannot be undone.")) return
+    const supabase = createClient()
+    const { error } = await supabase.from("reports").delete().eq("id", reportId)
+    if (error) {
+      toast.error(`Failed to delete: ${error.message}`)
+    } else {
+      setReports((prev) => prev.filter((r) => r.id !== reportId))
+      toast.success("Report deleted")
+    }
+  }
 
   if (reports.length === 0) {
     return (
-      <Card>
-        <CardContent className="flex flex-col items-center justify-center py-12">
-          <FileText className="h-12 w-12 text-muted-foreground mb-4" />
-          <p className="text-muted-foreground mb-4">No reports generated yet</p>
-          <Button>
-            <Plus className="h-4 w-4 mr-2" />
-            Generate First Report
-          </Button>
-        </CardContent>
-      </Card>
+      <>
+        <Card>
+          <CardContent className="flex flex-col items-center justify-center py-12">
+            <FileText className="h-12 w-12 text-muted-foreground mb-4" />
+            <p className="text-muted-foreground mb-4">No reports generated yet</p>
+            <Button onClick={() => setDialogOpen(true)}>
+              <Plus className="h-4 w-4 mr-2" />
+              Generate First Report
+            </Button>
+          </CardContent>
+        </Card>
+        <ReportGeneratorDialog
+          open={dialogOpen}
+          onOpenChange={setDialogOpen}
+          projects={projects ?? []}
+          experiments={experiments ?? []}
+          userId={userId ?? ""}
+        />
+      </>
     )
   }
 
@@ -136,107 +165,74 @@ export function ReportsPageClient({ reports }: { reports: ReportRow[] }) {
             allLabel="All experiments"
           />
         )}
-        <ResourceListFilter
-          label="Status"
-          value={statusFilter}
-          onValueChange={setStatusFilter}
-          options={statusOptions}
-          allLabel="All statuses"
-        />
-        <ResourceListFilter
-          label="Report type"
-          value={typeFilter}
-          onValueChange={setTypeFilter}
-          options={typeOptions}
-          allLabel="All types"
-        />
+        <div className="flex items-end ml-auto">
+          <Button onClick={() => setDialogOpen(true)} size="sm">
+            <Plus className="h-4 w-4 mr-2" />
+            Generate Report
+          </Button>
+        </div>
       </ResourceFilterRow>
 
-      <div className="space-y-4">
-        {filtered.length === 0 ? (
-          <p className="text-sm text-muted-foreground py-6 text-center">No reports match the selected filters.</p>
-        ) : (
-          filtered.map((report) => (
-            <Card key={report.id} className="hover:border-primary transition-colors cursor-pointer">
-              <CardContent className="flex items-center justify-between pt-6">
-                <div className="flex items-start gap-4 flex-1 min-w-0">
-                  <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg bg-muted">
-                    <FileText className="h-6 w-6" />
-                  </div>
-                  <div className="flex-1 min-w-0 space-y-1">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <h3 className="font-semibold">{report.title}</h3>
-                      <Badge
-                        variant={
-                          report.status === "final"
-                            ? "default"
-                            : report.status === "review"
-                              ? "secondary"
-                              : "outline"
-                        }
+      {filtered.length === 0 ? (
+        <p className="text-sm text-muted-foreground py-6 text-center">No reports match the selected filters.</p>
+      ) : (
+        <div className="relative w-full overflow-auto">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead className="min-w-[300px]">Report</TableHead>
+                <TableHead className="min-w-[120px]">Created</TableHead>
+                <TableHead className="text-right min-w-[100px]">Actions</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {filtered.map((report) => (
+                <TableRow
+                  key={report.id}
+                  className="cursor-pointer"
+                  onClick={() => router.push(`/reports/${report.id}`)}
+                >
+                  <TableCell className="font-medium text-foreground">
+                    <div className="flex items-center gap-2">
+                      <FileText className="h-4 w-4 text-primary shrink-0" />
+                      <span className="truncate">{report.title}</span>
+                    </div>
+                  </TableCell>
+                  <TableCell className="text-muted-foreground">
+                    {formatDate(report.created_at)}
+                  </TableCell>
+                  <TableCell className="text-right">
+                    <div className="flex items-center justify-end gap-1">
+                      <Button variant="ghost" size="sm" asChild>
+                        <Link href={`/reports/${report.id}`} onClick={(e) => e.stopPropagation()}>
+                          <ArrowUpRight className="h-4 w-4" />
+                        </Link>
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={(e) => handleDelete(e, report.id)}
+                        title="Delete report"
+                        className="text-muted-foreground hover:text-destructive"
                       >
-                        {report.status}
-                      </Badge>
-                      <Badge variant="outline">{report.report_type}</Badge>
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
                     </div>
-                    <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted-foreground">
-                      {report.project && <span>Project: {report.project.name}</span>}
-                      {report.experiment && <span>Experiment: {report.experiment.name}</span>}
-                      {report.generated_by && (
-                        <span>
-                          By: {report.generated_by.first_name} {report.generated_by.last_name}
-                        </span>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                      <Calendar className="h-3 w-3 shrink-0" />
-                      <span>Created: {new Date(report.created_at).toLocaleDateString()}</span>
-                    </div>
-                  </div>
-                </div>
-                <div className="flex shrink-0 items-center gap-2">
-                  <Button variant="outline" size="sm">
-                    View
-                  </Button>
-                  <Button variant="ghost" size="sm">
-                    <Download className="h-4 w-4" />
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-          ))
-        )}
-      </div>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
+      )}
+
+      <ReportGeneratorDialog
+        open={dialogOpen}
+        onOpenChange={setDialogOpen}
+        projects={projects ?? []}
+        experiments={experiments ?? []}
+        userId={userId ?? ""}
+      />
     </>
-  )
-}
-
-export function ReportsAnalyticsSection() {
-  return (
-    <div className="grid gap-4 md:grid-cols-2">
-      <Card>
-        <CardHeader>
-          <CardTitle>Experiment Completion Rate</CardTitle>
-          <CardDescription>Monthly experiment completion statistics</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="h-[200px] flex items-center justify-center text-muted-foreground">
-            Chart placeholder - Experiment completion trend
-          </div>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Equipment Utilization</CardTitle>
-          <CardDescription>Equipment usage across the organization</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="h-[200px] flex items-center justify-center text-muted-foreground">
-            Chart placeholder - Equipment usage statistics
-          </div>
-        </CardContent>
-      </Card>
-    </div>
   )
 }
