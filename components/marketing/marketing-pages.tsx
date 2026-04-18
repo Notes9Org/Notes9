@@ -86,7 +86,6 @@ function mergeSavedConnectedLayout(savedLayout: unknown): ComparisonFlowNode[] {
     return savedPosition ? { ...node, position: savedPosition } : node
   })
 }
-
 const resourceGuides = [
   {
     id: "projects",
@@ -560,7 +559,7 @@ function ComparisonNode({ data }: NodeProps<ComparisonFlowNode>) {
 
   if (data.hub) {
     return (
-      <div className="nopan relative w-[420px] rounded-[44px] border border-[var(--n9-accent)]/25 bg-[linear-gradient(180deg,rgba(250,244,238,0.98),rgba(255,255,255,0.94))] p-11 text-center shadow-[0_46px_138px_-44px_rgba(155,71,34,0.38)] dark:border-[var(--n9-accent)]/20 dark:bg-[radial-gradient(circle_at_top,rgba(184,121,69,0.16),transparent_44%),linear-gradient(180deg,rgba(33,27,23,0.98),rgba(17,16,19,0.98))] dark:shadow-[0_46px_138px_-44px_rgba(0,0,0,0.72)]">
+      <div className="nopan relative w-[360px] rounded-[38px] border border-[var(--n9-accent)]/25 bg-[linear-gradient(180deg,rgba(250,244,238,0.98),rgba(255,255,255,0.94))] p-9 text-center shadow-[0_42px_120px_-44px_rgba(155,71,34,0.38)] dark:border-[var(--n9-accent)]/20 dark:bg-[radial-gradient(circle_at_top,rgba(184,121,69,0.16),transparent_44%),linear-gradient(180deg,rgba(33,27,23,0.98),rgba(17,16,19,0.98))] dark:shadow-[0_42px_120px_-44px_rgba(0,0,0,0.72)]">
         <Handle id="top-left" type="target" position={Position.Top} style={{ left: "18%" }} className={handleClass} />
         <Handle id="top-center" type="target" position={Position.Top} style={{ left: "50%" }} className={handleClass} />
         <Handle id="top-right" type="target" position={Position.Top} style={{ left: "82%" }} className={handleClass} />
@@ -571,14 +570,14 @@ function ComparisonNode({ data }: NodeProps<ComparisonFlowNode>) {
         <Handle id="left-low" type="target" position={Position.Left} style={{ top: "78%" }} className={handleClass} />
         <Handle id="right-mid" type="target" position={Position.Right} style={{ top: "58%" }} className={handleClass} />
         <Handle id="bottom-center" type="source" position={Position.Bottom} style={{ left: "50%" }} className={handleClass} />
-        <div className="mx-auto flex h-36 w-36 items-center justify-center overflow-hidden rounded-[36px] bg-[var(--n9-accent-light)] dark:bg-[linear-gradient(180deg,rgba(184,121,69,0.22),rgba(184,121,69,0.08))]">
-          <IceMascot className="h-[8.5rem] w-[8.5rem]" options={{ src: "/notes9-mascot-ui.png" }} aria-hidden />
+        <div className="mx-auto flex h-28 w-28 items-center justify-center overflow-hidden rounded-[30px] bg-[var(--n9-accent-light)] dark:bg-[linear-gradient(180deg,rgba(184,121,69,0.22),rgba(184,121,69,0.08))]">
+          <IceMascot className="h-[6.75rem] w-[6.75rem]" options={{ src: "/notes9-mascot-ui.png" }} aria-hidden />
         </div>
-        <p className="mt-7 text-[22px] font-bold uppercase tracking-[0.2em] text-[var(--n9-accent)]">
+        <p className="mt-6 text-[18px] font-bold uppercase tracking-[0.18em] text-[var(--n9-accent)]">
           {data.label}
         </p>
         <div className="mt-4 h-px w-full bg-[linear-gradient(90deg,transparent,rgba(184,121,69,0.26),transparent)] dark:bg-[linear-gradient(90deg,transparent,rgba(184,121,69,0.45),transparent)]" />
-        <p className="mt-5 text-[20px] font-semibold text-muted-foreground dark:text-slate-300">
+        <p className="mt-4 text-[15px] font-semibold text-muted-foreground dark:text-slate-300">
           keeps every phase connected
         </p>
       </div>
@@ -589,7 +588,7 @@ function ComparisonNode({ data }: NodeProps<ComparisonFlowNode>) {
   const tone = toneClasses[data.tone ?? "slate"]
   const role = data.role ?? "default"
   return (
-    <div className={`nopan w-[228px] rounded-[32px] border p-7 shadow-[0_24px_54px_-24px_rgba(44,36,24,0.22)] dark:shadow-[0_24px_54px_-24px_rgba(0,0,0,0.54)] ${tone}`}>
+    <div className={`nopan w-[184px] rounded-[26px] border p-5 shadow-[0_20px_44px_-24px_rgba(44,36,24,0.22)] dark:shadow-[0_20px_44px_-24px_rgba(0,0,0,0.54)] ${tone}`}>
       <Handle id="top" type="target" position={Position.Top} className={handleClass} />
       <Handle id="top-center" type="target" position={Position.Top} style={{ left: "50%" }} className={handleClass} />
       <Handle id="top-right" type="target" position={Position.Top} style={{ left: "76%" }} className={handleClass} />
@@ -614,15 +613,15 @@ function ComparisonNode({ data }: NodeProps<ComparisonFlowNode>) {
         </>
       ) : null}
       <div className="flex items-center justify-between">
-        <Icon className="h-6 w-6" />
-        <Sparkles className="h-5 w-5 opacity-60" />
+        <Icon className="h-5 w-5" />
+        <Sparkles className="h-4 w-4 opacity-60" />
       </div>
-      <div className="mt-6 h-10 rounded-2xl bg-white/55 dark:bg-white/10" />
-      <div className="mt-4 flex gap-2">
-        <div className="h-1.5 w-10 rounded-full bg-white/75 dark:bg-white/25" />
-        <div className="h-1.5 w-8 rounded-full bg-white/55 dark:bg-white/15" />
+      <div className="mt-5 h-8 rounded-xl bg-white/55 dark:bg-white/10" />
+      <div className="mt-3 flex gap-1.5">
+        <div className="h-1.5 w-8 rounded-full bg-white/75 dark:bg-white/25" />
+        <div className="h-1.5 w-6 rounded-full bg-white/55 dark:bg-white/15" />
       </div>
-      <p className="mt-5 text-[18px] font-bold uppercase tracking-[0.18em]">{data.label}</p>
+      <p className="mt-4 text-[14px] font-bold uppercase tracking-[0.16em]">{data.label}</p>
     </div>
   )
 }
@@ -687,7 +686,7 @@ function ComparisonGraph({
 
   return (
     <ReactFlowProvider>
-      <div className="h-[840px] w-full overflow-hidden rounded-[28px]">
+      <div className="h-[760px] w-full overflow-hidden rounded-[28px]">
         <ReactFlow
           nodes={renderNodes}
           edges={graphEdges}
