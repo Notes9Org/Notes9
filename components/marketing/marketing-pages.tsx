@@ -1,6 +1,7 @@
 "use client"
 import { useEffect, useState } from "react"
 import {
+  ArrowDown,
   BookOpen,
   Bot,
   Database,
@@ -724,6 +725,84 @@ function ComparisonGraph({
   )
 }
 
+function MobileWorkflowNode({
+  label,
+  icon: Icon,
+  tone,
+  className = "",
+}: {
+  label: string
+  icon: typeof FileSearch
+  tone: NonNullable<ComparisonNodeData["tone"]>
+  className?: string
+}) {
+  return (
+    <div
+      className={`rounded-[22px] border p-4 shadow-[0_16px_36px_-24px_rgba(44,36,24,0.22)] dark:shadow-[0_16px_36px_-24px_rgba(0,0,0,0.5)] ${toneClasses[tone]} ${className}`}
+    >
+      <div className="flex items-center gap-3">
+        <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-white/60 dark:bg-white/10">
+          <Icon className="h-4.5 w-4.5" />
+        </div>
+        <p className="text-[13px] font-bold uppercase tracking-[0.14em]">{label}</p>
+      </div>
+    </div>
+  )
+}
+
+function MobileWorkflowDiagram() {
+  return (
+    <div className="md:hidden">
+      <div className="rounded-[28px] border border-[var(--n9-accent)]/15 bg-[radial-gradient(circle_at_top,rgba(184,121,69,0.08),transparent_46%),linear-gradient(180deg,rgba(255,255,255,0.94),rgba(247,242,236,0.9))] p-4 dark:border-[var(--n9-accent)]/14 dark:bg-[radial-gradient(circle_at_top,rgba(184,121,69,0.14),transparent_40%),linear-gradient(180deg,rgba(19,18,20,0.98),rgba(12,12,14,0.99))]">
+        <div className="grid gap-3 sm:grid-cols-2">
+          <MobileWorkflowNode label="Projects" icon={FolderKanban} tone="amber" />
+          <MobileWorkflowNode label="Literature" icon={FileSearch} tone="amber" />
+        </div>
+
+        <div className="my-3 flex justify-center text-[var(--n9-accent)]">
+          <ArrowDown className="h-5 w-5" />
+        </div>
+
+        <MobileWorkflowNode label="Experiments" icon={FlaskConical} tone="sky" className="mx-auto max-w-[18rem]" />
+
+        <div className="my-3 flex justify-center text-[var(--n9-accent)]">
+          <ArrowDown className="h-5 w-5" />
+        </div>
+
+        <div className="grid gap-3 sm:grid-cols-2">
+          <MobileWorkflowNode label="Lab Notes" icon={BookOpen} tone="emerald" />
+          <MobileWorkflowNode label="Protocols" icon={FileText} tone="violet" />
+          <MobileWorkflowNode label="Samples" icon={TestTube2} tone="sky" />
+          <MobileWorkflowNode label="Equipment" icon={Microscope} tone="sky" />
+        </div>
+
+        <div className="my-3 flex justify-center text-[var(--n9-accent)]">
+          <ArrowDown className="h-5 w-5" />
+        </div>
+
+        <div className="mx-auto max-w-[19rem] rounded-[28px] border border-[var(--n9-accent)]/20 bg-[linear-gradient(180deg,rgba(250,244,238,0.98),rgba(255,255,255,0.94))] p-6 text-center shadow-[0_26px_70px_-38px_rgba(155,71,34,0.38)] dark:border-[var(--n9-accent)]/20 dark:bg-[radial-gradient(circle_at_top,rgba(184,121,69,0.16),transparent_44%),linear-gradient(180deg,rgba(33,27,23,0.98),rgba(17,16,19,0.98))] dark:shadow-[0_26px_70px_-38px_rgba(0,0,0,0.68)]">
+          <div className="mx-auto flex h-20 w-20 items-center justify-center overflow-hidden rounded-[24px] bg-[var(--n9-accent-light)] dark:bg-[linear-gradient(180deg,rgba(184,121,69,0.22),rgba(184,121,69,0.08))]">
+            <IceMascot className="h-[4.75rem] w-[4.75rem]" options={{ src: "/notes9-mascot-ui.png" }} aria-hidden />
+          </div>
+          <p className="mt-4 text-[16px] font-bold uppercase tracking-[0.16em] text-[var(--n9-accent)]">Catalyst AI</p>
+          <p className="mt-2 text-sm font-semibold text-muted-foreground dark:text-slate-300">
+            connects every research phase
+          </p>
+        </div>
+
+        <div className="my-3 flex justify-center text-[var(--n9-accent)]">
+          <ArrowDown className="h-5 w-5" />
+        </div>
+
+        <div className="grid gap-3 sm:grid-cols-2">
+          <MobileWorkflowNode label="Reports" icon={LineChart} tone="rose" />
+          <MobileWorkflowNode label="Writing" icon={FileText} tone="violet" />
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export function AboutMarketingPage() {
   return (
     <MarketingPageFrame>
@@ -841,7 +920,8 @@ export function PlatformDifferentiationSection({
               <span className="rounded-full border border-border/60 bg-background/75 px-3 py-2 dark:border-white/10 dark:bg-white/[0.04]">reconstruction slows decisions</span>
             </div>
             <div className="mt-8 flex flex-1 items-center justify-center">
-              <div className="w-full rounded-[32px] border border-[var(--n9-accent)]/15 bg-[radial-gradient(circle_at_center,rgba(184,121,69,0.08),transparent_58%)] p-5 dark:border-[var(--n9-accent)]/14 dark:bg-[radial-gradient(circle_at_center,rgba(184,121,69,0.14),transparent_54%),linear-gradient(180deg,rgba(255,255,255,0.02),rgba(255,255,255,0.01))] lg:p-6">
+              <MobileWorkflowDiagram />
+              <div className="hidden w-full rounded-[32px] border border-[var(--n9-accent)]/15 bg-[radial-gradient(circle_at_center,rgba(184,121,69,0.08),transparent_58%)] p-5 dark:border-[var(--n9-accent)]/14 dark:bg-[radial-gradient(circle_at_center,rgba(184,121,69,0.14),transparent_54%),linear-gradient(180deg,rgba(255,255,255,0.02),rgba(255,255,255,0.01))] md:block lg:p-6">
                 <ComparisonGraph
                   nodes={connectedLayout}
                   edges={connectedEdgeLayout}
