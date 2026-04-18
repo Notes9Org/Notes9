@@ -1,6 +1,7 @@
 "use client"
 import { useEffect, useState } from "react"
 import {
+  ArrowDown,
   BookOpen,
   Bot,
   Database,
@@ -86,7 +87,6 @@ function mergeSavedConnectedLayout(savedLayout: unknown): ComparisonFlowNode[] {
     return savedPosition ? { ...node, position: savedPosition } : node
   })
 }
-
 const resourceGuides = [
   {
     id: "projects",
@@ -560,7 +560,7 @@ function ComparisonNode({ data }: NodeProps<ComparisonFlowNode>) {
 
   if (data.hub) {
     return (
-      <div className="nopan relative w-[420px] rounded-[44px] border border-[var(--n9-accent)]/25 bg-[linear-gradient(180deg,rgba(250,244,238,0.98),rgba(255,255,255,0.94))] p-11 text-center shadow-[0_46px_138px_-44px_rgba(155,71,34,0.38)] dark:border-[var(--n9-accent)]/20 dark:bg-[radial-gradient(circle_at_top,rgba(184,121,69,0.16),transparent_44%),linear-gradient(180deg,rgba(33,27,23,0.98),rgba(17,16,19,0.98))] dark:shadow-[0_46px_138px_-44px_rgba(0,0,0,0.72)]">
+      <div className="nopan relative w-[360px] rounded-[38px] border border-[var(--n9-accent)]/25 bg-[linear-gradient(180deg,rgba(250,244,238,0.98),rgba(255,255,255,0.94))] p-9 text-center shadow-[0_42px_120px_-44px_rgba(155,71,34,0.38)] dark:border-[var(--n9-accent)]/20 dark:bg-[radial-gradient(circle_at_top,rgba(184,121,69,0.16),transparent_44%),linear-gradient(180deg,rgba(33,27,23,0.98),rgba(17,16,19,0.98))] dark:shadow-[0_42px_120px_-44px_rgba(0,0,0,0.72)]">
         <Handle id="top-left" type="target" position={Position.Top} style={{ left: "18%" }} className={handleClass} />
         <Handle id="top-center" type="target" position={Position.Top} style={{ left: "50%" }} className={handleClass} />
         <Handle id="top-right" type="target" position={Position.Top} style={{ left: "82%" }} className={handleClass} />
@@ -571,14 +571,14 @@ function ComparisonNode({ data }: NodeProps<ComparisonFlowNode>) {
         <Handle id="left-low" type="target" position={Position.Left} style={{ top: "78%" }} className={handleClass} />
         <Handle id="right-mid" type="target" position={Position.Right} style={{ top: "58%" }} className={handleClass} />
         <Handle id="bottom-center" type="source" position={Position.Bottom} style={{ left: "50%" }} className={handleClass} />
-        <div className="mx-auto flex h-36 w-36 items-center justify-center overflow-hidden rounded-[36px] bg-[var(--n9-accent-light)] dark:bg-[linear-gradient(180deg,rgba(184,121,69,0.22),rgba(184,121,69,0.08))]">
-          <IceMascot className="h-[8.5rem] w-[8.5rem]" options={{ src: "/notes9-mascot-ui.png" }} aria-hidden />
+        <div className="mx-auto flex h-28 w-28 items-center justify-center overflow-hidden rounded-[30px] bg-[var(--n9-accent-light)] dark:bg-[linear-gradient(180deg,rgba(184,121,69,0.22),rgba(184,121,69,0.08))]">
+          <IceMascot className="h-[6.75rem] w-[6.75rem]" options={{ src: "/notes9-mascot-ui.png" }} aria-hidden />
         </div>
-        <p className="mt-7 text-[22px] font-bold uppercase tracking-[0.2em] text-[var(--n9-accent)]">
+        <p className="mt-6 text-[18px] font-bold uppercase tracking-[0.18em] text-[var(--n9-accent)]">
           {data.label}
         </p>
         <div className="mt-4 h-px w-full bg-[linear-gradient(90deg,transparent,rgba(184,121,69,0.26),transparent)] dark:bg-[linear-gradient(90deg,transparent,rgba(184,121,69,0.45),transparent)]" />
-        <p className="mt-5 text-[20px] font-semibold text-muted-foreground dark:text-slate-300">
+        <p className="mt-4 text-[15px] font-semibold text-muted-foreground dark:text-slate-300">
           keeps every phase connected
         </p>
       </div>
@@ -589,7 +589,7 @@ function ComparisonNode({ data }: NodeProps<ComparisonFlowNode>) {
   const tone = toneClasses[data.tone ?? "slate"]
   const role = data.role ?? "default"
   return (
-    <div className={`nopan w-[228px] rounded-[32px] border p-7 shadow-[0_24px_54px_-24px_rgba(44,36,24,0.22)] dark:shadow-[0_24px_54px_-24px_rgba(0,0,0,0.54)] ${tone}`}>
+    <div className={`nopan w-[184px] rounded-[26px] border p-5 shadow-[0_20px_44px_-24px_rgba(44,36,24,0.22)] dark:shadow-[0_20px_44px_-24px_rgba(0,0,0,0.54)] ${tone}`}>
       <Handle id="top" type="target" position={Position.Top} className={handleClass} />
       <Handle id="top-center" type="target" position={Position.Top} style={{ left: "50%" }} className={handleClass} />
       <Handle id="top-right" type="target" position={Position.Top} style={{ left: "76%" }} className={handleClass} />
@@ -614,15 +614,15 @@ function ComparisonNode({ data }: NodeProps<ComparisonFlowNode>) {
         </>
       ) : null}
       <div className="flex items-center justify-between">
-        <Icon className="h-6 w-6" />
-        <Sparkles className="h-5 w-5 opacity-60" />
+        <Icon className="h-5 w-5" />
+        <Sparkles className="h-4 w-4 opacity-60" />
       </div>
-      <div className="mt-6 h-10 rounded-2xl bg-white/55 dark:bg-white/10" />
-      <div className="mt-4 flex gap-2">
-        <div className="h-1.5 w-10 rounded-full bg-white/75 dark:bg-white/25" />
-        <div className="h-1.5 w-8 rounded-full bg-white/55 dark:bg-white/15" />
+      <div className="mt-5 h-8 rounded-xl bg-white/55 dark:bg-white/10" />
+      <div className="mt-3 flex gap-1.5">
+        <div className="h-1.5 w-8 rounded-full bg-white/75 dark:bg-white/25" />
+        <div className="h-1.5 w-6 rounded-full bg-white/55 dark:bg-white/15" />
       </div>
-      <p className="mt-5 text-[18px] font-bold uppercase tracking-[0.18em]">{data.label}</p>
+      <p className="mt-4 text-[14px] font-bold uppercase tracking-[0.16em]">{data.label}</p>
     </div>
   )
 }
@@ -687,7 +687,7 @@ function ComparisonGraph({
 
   return (
     <ReactFlowProvider>
-      <div className="h-[840px] w-full overflow-hidden rounded-[28px]">
+      <div className="h-[760px] w-full overflow-hidden rounded-[28px]">
         <ReactFlow
           nodes={renderNodes}
           edges={graphEdges}
@@ -722,6 +722,84 @@ function ComparisonGraph({
         </ReactFlow>
       </div>
     </ReactFlowProvider>
+  )
+}
+
+function MobileWorkflowNode({
+  label,
+  icon: Icon,
+  tone,
+  className = "",
+}: {
+  label: string
+  icon: typeof FileSearch
+  tone: NonNullable<ComparisonNodeData["tone"]>
+  className?: string
+}) {
+  return (
+    <div
+      className={`rounded-[22px] border p-4 shadow-[0_16px_36px_-24px_rgba(44,36,24,0.22)] dark:shadow-[0_16px_36px_-24px_rgba(0,0,0,0.5)] ${toneClasses[tone]} ${className}`}
+    >
+      <div className="flex items-center gap-3">
+        <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-white/60 dark:bg-white/10">
+          <Icon className="h-4.5 w-4.5" />
+        </div>
+        <p className="text-[13px] font-bold uppercase tracking-[0.14em]">{label}</p>
+      </div>
+    </div>
+  )
+}
+
+function MobileWorkflowDiagram() {
+  return (
+    <div className="md:hidden">
+      <div className="rounded-[28px] border border-[var(--n9-accent)]/15 bg-[radial-gradient(circle_at_top,rgba(184,121,69,0.08),transparent_46%),linear-gradient(180deg,rgba(255,255,255,0.94),rgba(247,242,236,0.9))] p-4 dark:border-[var(--n9-accent)]/14 dark:bg-[radial-gradient(circle_at_top,rgba(184,121,69,0.14),transparent_40%),linear-gradient(180deg,rgba(19,18,20,0.98),rgba(12,12,14,0.99))]">
+        <div className="grid gap-3 sm:grid-cols-2">
+          <MobileWorkflowNode label="Projects" icon={FolderKanban} tone="amber" />
+          <MobileWorkflowNode label="Literature" icon={FileSearch} tone="amber" />
+        </div>
+
+        <div className="my-3 flex justify-center text-[var(--n9-accent)]">
+          <ArrowDown className="h-5 w-5" />
+        </div>
+
+        <MobileWorkflowNode label="Experiments" icon={FlaskConical} tone="sky" className="mx-auto max-w-[18rem]" />
+
+        <div className="my-3 flex justify-center text-[var(--n9-accent)]">
+          <ArrowDown className="h-5 w-5" />
+        </div>
+
+        <div className="grid gap-3 sm:grid-cols-2">
+          <MobileWorkflowNode label="Lab Notes" icon={BookOpen} tone="emerald" />
+          <MobileWorkflowNode label="Protocols" icon={FileText} tone="violet" />
+          <MobileWorkflowNode label="Samples" icon={TestTube2} tone="sky" />
+          <MobileWorkflowNode label="Equipment" icon={Microscope} tone="sky" />
+        </div>
+
+        <div className="my-3 flex justify-center text-[var(--n9-accent)]">
+          <ArrowDown className="h-5 w-5" />
+        </div>
+
+        <div className="mx-auto max-w-[19rem] rounded-[28px] border border-[var(--n9-accent)]/20 bg-[linear-gradient(180deg,rgba(250,244,238,0.98),rgba(255,255,255,0.94))] p-6 text-center shadow-[0_26px_70px_-38px_rgba(155,71,34,0.38)] dark:border-[var(--n9-accent)]/20 dark:bg-[radial-gradient(circle_at_top,rgba(184,121,69,0.16),transparent_44%),linear-gradient(180deg,rgba(33,27,23,0.98),rgba(17,16,19,0.98))] dark:shadow-[0_26px_70px_-38px_rgba(0,0,0,0.68)]">
+          <div className="mx-auto flex h-20 w-20 items-center justify-center overflow-hidden rounded-[24px] bg-[var(--n9-accent-light)] dark:bg-[linear-gradient(180deg,rgba(184,121,69,0.22),rgba(184,121,69,0.08))]">
+            <IceMascot className="h-[4.75rem] w-[4.75rem]" options={{ src: "/notes9-mascot-ui.png" }} aria-hidden />
+          </div>
+          <p className="mt-4 text-[16px] font-bold uppercase tracking-[0.16em] text-[var(--n9-accent)]">Catalyst AI</p>
+          <p className="mt-2 text-sm font-semibold text-muted-foreground dark:text-slate-300">
+            connects every research phase
+          </p>
+        </div>
+
+        <div className="my-3 flex justify-center text-[var(--n9-accent)]">
+          <ArrowDown className="h-5 w-5" />
+        </div>
+
+        <div className="grid gap-3 sm:grid-cols-2">
+          <MobileWorkflowNode label="Reports" icon={LineChart} tone="rose" />
+          <MobileWorkflowNode label="Writing" icon={FileText} tone="violet" />
+        </div>
+      </div>
+    </div>
   )
 }
 
@@ -842,7 +920,8 @@ export function PlatformDifferentiationSection({
               <span className="rounded-full border border-border/60 bg-background/75 px-3 py-2 dark:border-white/10 dark:bg-white/[0.04]">reconstruction slows decisions</span>
             </div>
             <div className="mt-8 flex flex-1 items-center justify-center">
-              <div className="w-full rounded-[32px] border border-[var(--n9-accent)]/15 bg-[radial-gradient(circle_at_center,rgba(184,121,69,0.08),transparent_58%)] p-5 dark:border-[var(--n9-accent)]/14 dark:bg-[radial-gradient(circle_at_center,rgba(184,121,69,0.14),transparent_54%),linear-gradient(180deg,rgba(255,255,255,0.02),rgba(255,255,255,0.01))] lg:p-6">
+              <MobileWorkflowDiagram />
+              <div className="hidden w-full rounded-[32px] border border-[var(--n9-accent)]/15 bg-[radial-gradient(circle_at_center,rgba(184,121,69,0.08),transparent_58%)] p-5 dark:border-[var(--n9-accent)]/14 dark:bg-[radial-gradient(circle_at_center,rgba(184,121,69,0.14),transparent_54%),linear-gradient(180deg,rgba(255,255,255,0.02),rgba(255,255,255,0.01))] md:block lg:p-6">
                 <ComparisonGraph
                   nodes={connectedLayout}
                   edges={connectedEdgeLayout}
