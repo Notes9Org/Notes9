@@ -1,5 +1,5 @@
 "use client"
-
+import { useEffect, useState } from "react"
 import {
   BookOpen,
   Bot,
@@ -19,9 +19,27 @@ import {
   Users,
   Workflow,
 } from "lucide-react"
+import {
+  addEdge,
+  Background,
+  BackgroundVariant,
+  Handle,
+  MarkerType,
+  Position,
+  ReactFlow,
+  ReactFlowProvider,
+  PanOnScrollMode,
+  reconnectEdge,
+  useEdgesState,
+  useNodesState,
+  type Connection,
+  type Edge,
+  type Node,
+  type NodeProps,
+} from "@xyflow/react"
+import "@xyflow/react/dist/style.css"
 
 import {
-  ComparisonRow,
   CTAPanel,
   FeatureCard,
   LinkCard,
@@ -30,10 +48,44 @@ import {
   SectionHeader,
   WorkflowStep,
 } from "@/components/marketing/site-ui"
-import { MinimalCard } from "@/components/marketing/three-d-card"
+import { MinimalCard, ProductFrame } from "@/components/marketing/three-d-card"
+import { ProductShowcase } from "@/components/marketing/video-showcase"
+import { IceMascot } from "@/components/ui/ice-mascot"
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion"
 
 const cta = "/#contact"
+const CONNECTED_LAYOUT_STORAGE_KEY = "notes9-platform-connected-layout"
+
+function mergeSavedConnectedLayout(savedLayout: unknown): ComparisonFlowNode[] {
+  if (!Array.isArray(savedLayout)) return connectedNodes
+
+  const savedPositions = new Map<string, { x: number; y: number }>()
+
+  for (const item of savedLayout) {
+    if (
+      typeof item === "object" &&
+      item !== null &&
+      "id" in item &&
+      "position" in item &&
+      typeof item.id === "string" &&
+      typeof item.position === "object" &&
+      item.position !== null &&
+      "x" in item.position &&
+      "y" in item.position &&
+      typeof item.position.x === "number" &&
+      typeof item.position.y === "number"
+    ) {
+      savedPositions.set(item.id, { x: item.position.x, y: item.position.y })
+    }
+  }
+
+  if (savedPositions.size === 0) return connectedNodes
+
+  return connectedNodes.map((node) => {
+    const savedPosition = savedPositions.get(node.id)
+    return savedPosition ? { ...node, position: savedPosition } : node
+  })
+}
 
 const resourceGuides = [
   {
@@ -144,6 +196,535 @@ const resourceFaqs = [
   },
 ]
 
+const platformVideoClips = [
+  {
+    title: "Find signal faster",
+    description: "Search, stage, and review the papers that matter without breaking the workflow.",
+    video: "/demo/platform-literature-search.mp4",
+    poster: "/demo/light/literature-search.png",
+    icon: FileSearch,
+    eyebrow: "Literature",
+  },
+  {
+    title: "See the work in context",
+    description: "Track linked records and context trails instead of reconstructing what happened later.",
+    video: "/demo/platform-research-map.mp4",
+    poster: "/demo/light/experiment-details.png",
+    icon: FlaskConical,
+    eyebrow: "Experiments",
+  },
+  {
+    title: "Follow the research graph",
+    description: "Move through connected project structure with a visual map of the workflow.",
+    video: "/demo/platform-experiments.mp4",
+    poster: "/demo/light/research-map.png",
+    icon: FolderKanban,
+    eyebrow: "Research Map",
+  },
+  {
+    title: "Turn sources into writing",
+    description: "Read, annotate, and move from evidence to output in one continuous workspace.",
+    video: "/demo/platform-writing.mp4",
+    poster: "/demo/light/writing.png",
+    icon: FileText,
+    eyebrow: "Writing",
+  },
+]
+
+type ComparisonNodeData = {
+  label: string
+  icon?: typeof FileSearch
+  tone?: "amber" | "sky" | "emerald" | "violet" | "rose" | "slate"
+  hub?: boolean
+  role?: "default" | "projects" | "experiments" | "literature" | "writing" | "reports"
+  editable?: boolean
+}
+
+type ComparisonFlowNode = Node<ComparisonNodeData, "comparisonNode">
+
+const toneClasses: Record<NonNullable<ComparisonNodeData["tone"]>, string> = {
+  amber:
+    "border-[#f0d2ab] bg-[#fff1df] text-[#b96d1a] dark:border-[#7a5a35] dark:bg-[linear-gradient(180deg,rgba(69,47,23,0.92),rgba(42,30,17,0.95))] dark:text-[#f8d69c]",
+  sky:
+    "border-[#c6deef] bg-[#e9f4fb] text-[#3176a9] dark:border-[#355e79] dark:bg-[linear-gradient(180deg,rgba(20,44,58,0.94),rgba(15,31,43,0.96))] dark:text-[#9fd8ff]",
+  emerald:
+    "border-[#c9e7d2] bg-[#eaf7ee] text-[#2d875a] dark:border-[#2f6b4c] dark:bg-[linear-gradient(180deg,rgba(21,49,33,0.94),rgba(16,36,25,0.96))] dark:text-[#9de0ba]",
+  violet:
+    "border-[#dcc9f0] bg-[#f3ebfa] text-[#7f58a8] dark:border-[#5a4577] dark:bg-[linear-gradient(180deg,rgba(42,29,61,0.95),rgba(28,20,43,0.97))] dark:text-[#d5bcff]",
+  rose:
+    "border-[#efcdc9] bg-[#fceceb] text-[#b75c52] dark:border-[#7b4743] dark:bg-[linear-gradient(180deg,rgba(63,29,28,0.95),rgba(40,20,20,0.97))] dark:text-[#ffb7aa]",
+  slate:
+    "border-border/60 bg-muted/30 text-muted-foreground dark:border-white/10 dark:bg-[linear-gradient(180deg,rgba(37,37,41,0.94),rgba(26,26,30,0.97))] dark:text-slate-200",
+}
+
+const connectedNodes: ComparisonFlowNode[] = [
+  {
+    id: "c-projects",
+    type: "comparisonNode",
+    position: { x: 0, y: 260 },
+    data: { label: "Projects", icon: FolderKanban, tone: "amber", role: "projects" },
+  },
+  {
+    id: "c-literature",
+    type: "comparisonNode",
+    position: { x: 1200, y: 36 },
+    data: { label: "Literature", icon: FileSearch, tone: "amber", role: "literature" },
+  },
+  {
+    id: "c-experiments",
+    type: "comparisonNode",
+    position: { x: 240, y: 260 },
+    data: { label: "Experiments", icon: FlaskConical, tone: "sky", role: "experiments" },
+  },
+  {
+    id: "c-lab-notes",
+    type: "comparisonNode",
+    position: { x: 850, y: 36 },
+    data: { label: "Lab Notes", icon: BookOpen, tone: "emerald" },
+  },
+  {
+    id: "c-protocols",
+    type: "comparisonNode",
+    position: { x: 850, y: 178 },
+    data: { label: "Protocols", icon: FileText, tone: "violet" },
+  },
+  {
+    id: "c-samples",
+    type: "comparisonNode",
+    position: { x: 850, y: 320 },
+    data: { label: "Samples", icon: TestTube2, tone: "sky" },
+  },
+  {
+    id: "c-equipment",
+    type: "comparisonNode",
+    position: { x: 850, y: 462 },
+    data: { label: "Equipment", icon: Microscope, tone: "sky" },
+  },
+  {
+    id: "c-hub",
+    type: "comparisonNode",
+    position: { x: 480, y: 236 },
+    data: { label: "Catalyst AI", hub: true },
+  },
+  {
+    id: "c-reports",
+    type: "comparisonNode",
+    position: { x: 1200, y: 356 },
+    data: { label: "Reports", icon: LineChart, tone: "rose", role: "reports" },
+  },
+  {
+    id: "c-writing",
+    type: "comparisonNode",
+    position: { x: 1200, y: 520 },
+    data: { label: "Writing", icon: FileText, tone: "violet", role: "writing" },
+  },
+]
+
+const connectedEdges: Edge[] = [
+  {
+    id: "c-structure-1",
+    source: "c-projects",
+    target: "c-experiments",
+    type: "smoothstep",
+    sourceHandle: "right",
+    targetHandle: "left",
+    style: { stroke: "rgba(184,121,69,0.9)", strokeWidth: 3.2 },
+    markerEnd: { type: MarkerType.ArrowClosed, color: "rgba(184,121,69,0.94)", width: 26, height: 26 },
+  },
+  {
+    id: "c-structure-1b",
+    source: "c-projects",
+    target: "c-literature",
+    type: "smoothstep",
+    sourceHandle: "top-right",
+    targetHandle: "left-center",
+    style: {
+      stroke: "rgba(184,121,69,0.62)",
+      strokeWidth: 2.4,
+      strokeDasharray: "7 8",
+    },
+    markerEnd: { type: MarkerType.ArrowClosed, color: "rgba(184,121,69,0.78)", width: 22, height: 22 },
+  },
+  {
+    id: "c-structure-2",
+    source: "c-experiments",
+    target: "c-lab-notes",
+    type: "smoothstep",
+    sourceHandle: "branch-1",
+    targetHandle: "left",
+    style: { stroke: "rgba(184,121,69,0.9)", strokeWidth: 3 },
+    markerEnd: { type: MarkerType.ArrowClosed, color: "rgba(184,121,69,0.94)", width: 25, height: 25 },
+  },
+  {
+    id: "c-structure-3",
+    source: "c-experiments",
+    target: "c-protocols",
+    type: "smoothstep",
+    sourceHandle: "branch-2",
+    targetHandle: "left",
+    style: { stroke: "rgba(184,121,69,0.9)", strokeWidth: 3 },
+    markerEnd: { type: MarkerType.ArrowClosed, color: "rgba(184,121,69,0.94)", width: 25, height: 25 },
+  },
+  {
+    id: "c-structure-4",
+    source: "c-experiments",
+    target: "c-samples",
+    type: "smoothstep",
+    sourceHandle: "branch-3",
+    targetHandle: "left",
+    style: { stroke: "rgba(184,121,69,0.9)", strokeWidth: 3 },
+    markerEnd: { type: MarkerType.ArrowClosed, color: "rgba(184,121,69,0.94)", width: 25, height: 25 },
+  },
+  {
+    id: "c-structure-5",
+    source: "c-experiments",
+    target: "c-equipment",
+    type: "smoothstep",
+    sourceHandle: "branch-4",
+    targetHandle: "left",
+    style: { stroke: "rgba(184,121,69,0.9)", strokeWidth: 3 },
+    markerEnd: { type: MarkerType.ArrowClosed, color: "rgba(184,121,69,0.94)", width: 25, height: 25 },
+  },
+  {
+    id: "c-structure-6",
+    source: "c-literature",
+    target: "c-experiments",
+    type: "smoothstep",
+    sourceHandle: "left",
+    targetHandle: "top-center",
+    style: {
+      stroke: "rgba(184,121,69,0.62)",
+      strokeWidth: 2.4,
+      strokeDasharray: "7 8",
+    },
+    markerEnd: { type: MarkerType.ArrowClosed, color: "rgba(184,121,69,0.78)", width: 22, height: 22 },
+  },
+  {
+    id: "c-ai-1",
+    source: "c-projects",
+    target: "c-hub",
+    type: "smoothstep",
+    sourceHandle: "ai-right",
+    targetHandle: "left-top",
+    style: { stroke: "rgba(184,121,69,0.54)", strokeWidth: 2.2, strokeDasharray: "8 9" },
+    markerEnd: { type: MarkerType.ArrowClosed, color: "rgba(184,121,69,0.88)", width: 22, height: 22 },
+  },
+  {
+    id: "c-ai-2",
+    source: "c-experiments",
+    target: "c-hub",
+    type: "smoothstep",
+    sourceHandle: "ai-right",
+    targetHandle: "left-mid-top",
+    style: { stroke: "rgba(184,121,69,0.54)", strokeWidth: 2.2, strokeDasharray: "8 9" },
+    markerEnd: { type: MarkerType.ArrowClosed, color: "rgba(184,121,69,0.84)", width: 22, height: 22 },
+  },
+  {
+    id: "c-ai-3",
+    source: "c-lab-notes",
+    target: "c-hub",
+    type: "smoothstep",
+    sourceHandle: "right",
+    targetHandle: "left-mid",
+    style: { stroke: "rgba(184,121,69,0.54)", strokeWidth: 2.15, strokeDasharray: "8 9" },
+    markerEnd: { type: MarkerType.ArrowClosed, color: "rgba(184,121,69,0.84)", width: 21, height: 21 },
+  },
+  {
+    id: "c-ai-4",
+    source: "c-protocols",
+    target: "c-hub",
+    type: "smoothstep",
+    sourceHandle: "right",
+    targetHandle: "left-mid-low",
+    style: { stroke: "rgba(184,121,69,0.54)", strokeWidth: 2.15, strokeDasharray: "8 9" },
+    markerEnd: { type: MarkerType.ArrowClosed, color: "rgba(184,121,69,0.84)", width: 21, height: 21 },
+  },
+  {
+    id: "c-ai-5",
+    source: "c-samples",
+    target: "c-hub",
+    type: "smoothstep",
+    sourceHandle: "right",
+    targetHandle: "left-low",
+    style: { stroke: "rgba(184,121,69,0.54)", strokeWidth: 2.15, strokeDasharray: "8 9" },
+    markerEnd: { type: MarkerType.ArrowClosed, color: "rgba(184,121,69,0.84)", width: 21, height: 21 },
+  },
+  {
+    id: "c-ai-6",
+    source: "c-equipment",
+    target: "c-hub",
+    type: "smoothstep",
+    sourceHandle: "right",
+    targetHandle: "right-mid",
+    style: { stroke: "rgba(184,121,69,0.54)", strokeWidth: 2.15, strokeDasharray: "8 9" },
+    markerEnd: { type: MarkerType.ArrowClosed, color: "rgba(184,121,69,0.84)", width: 21, height: 21 },
+  },
+  {
+    id: "c-ai-7",
+    source: "c-literature",
+    target: "c-hub",
+    type: "smoothstep",
+    sourceHandle: "left",
+    targetHandle: "top-right",
+    style: { stroke: "rgba(184,121,69,0.54)", strokeWidth: 2.15, strokeDasharray: "8 9" },
+    markerEnd: { type: MarkerType.ArrowClosed, color: "rgba(184,121,69,0.84)", width: 21, height: 21 },
+  },
+  {
+    id: "c-write-1",
+    source: "c-literature",
+    target: "c-writing",
+    type: "smoothstep",
+    sourceHandle: "bottom",
+    targetHandle: "top-center",
+    style: { stroke: "rgba(184,121,69,0.6)", strokeWidth: 2.35, strokeDasharray: "8 9" },
+    markerEnd: { type: MarkerType.ArrowClosed, color: "rgba(184,121,69,0.88)", width: 22, height: 22 },
+  },
+  {
+    id: "c-write-2",
+    source: "c-lab-notes",
+    target: "c-writing",
+    type: "smoothstep",
+    sourceHandle: "right",
+    targetHandle: "left-top",
+    style: { stroke: "rgba(184,121,69,0.6)", strokeWidth: 2.2, strokeDasharray: "8 9" },
+    markerEnd: { type: MarkerType.ArrowClosed, color: "rgba(184,121,69,0.84)", width: 21, height: 21 },
+  },
+  {
+    id: "c-write-3",
+    source: "c-protocols",
+    target: "c-writing",
+    type: "smoothstep",
+    sourceHandle: "right",
+    targetHandle: "left-mid",
+    style: { stroke: "rgba(184,121,69,0.6)", strokeWidth: 2.2, strokeDasharray: "8 9" },
+    markerEnd: { type: MarkerType.ArrowClosed, color: "rgba(184,121,69,0.84)", width: 21, height: 21 },
+  },
+  {
+    id: "c-write-4",
+    source: "c-hub",
+    target: "c-writing",
+    type: "smoothstep",
+    sourceHandle: "bottom-center",
+    targetHandle: "top-center",
+    style: { stroke: "rgba(184,121,69,0.62)", strokeWidth: 2.35, strokeDasharray: "8 9" },
+    markerEnd: { type: MarkerType.ArrowClosed, color: "rgba(184,121,69,0.88)", width: 21, height: 21 },
+  },
+  {
+    id: "c-write-5",
+    source: "c-projects",
+    target: "c-writing",
+    type: "smoothstep",
+    sourceHandle: "bottom-right",
+    targetHandle: "left-center",
+    style: { stroke: "rgba(184,121,69,0.6)", strokeWidth: 2.2, strokeDasharray: "8 9" },
+    markerEnd: { type: MarkerType.ArrowClosed, color: "rgba(184,121,69,0.84)", width: 21, height: 21 },
+  },
+  {
+    id: "c-feedback-1",
+    source: "c-experiments",
+    target: "c-reports",
+    type: "smoothstep",
+    sourceHandle: "bottom-right",
+    targetHandle: "left-low",
+    style: { stroke: "rgba(184,121,69,0.86)", strokeWidth: 2.8 },
+    markerEnd: { type: MarkerType.ArrowClosed, color: "rgba(184,121,69,0.92)", width: 24, height: 24 },
+  },
+  {
+    id: "c-ai-8",
+    source: "c-reports",
+    target: "c-hub",
+    type: "smoothstep",
+    sourceHandle: "left",
+    targetHandle: "right-mid",
+    style: { stroke: "rgba(184,121,69,0.54)", strokeWidth: 2.15, strokeDasharray: "8 9" },
+    markerEnd: { type: MarkerType.ArrowClosed, color: "rgba(184,121,69,0.84)", width: 21, height: 21 },
+  },
+  {
+    id: "c-output-1",
+    source: "c-reports",
+    target: "c-writing",
+    type: "smoothstep",
+    sourceHandle: "bottom",
+    targetHandle: "top",
+    style: { stroke: "rgba(184,121,69,0.86)", strokeWidth: 2.9 },
+    markerEnd: { type: MarkerType.ArrowClosed, color: "rgba(184,121,69,0.92)", width: 25, height: 25 },
+  },
+]
+
+const comparisonNodeTypes = { comparisonNode: ComparisonNode }
+
+function ComparisonNode({ data }: NodeProps<ComparisonFlowNode>) {
+  const handleClass = data.editable
+    ? "!h-3.5 !w-3.5 !border-2 !border-white !bg-[var(--n9-accent)] !opacity-100 shadow-[0_0_0_4px_rgba(184,121,69,0.16)]"
+    : "!h-0 !w-0 !border-0 !bg-transparent !opacity-0"
+
+  if (data.hub) {
+    return (
+      <div className="nopan relative w-[420px] rounded-[44px] border border-[var(--n9-accent)]/25 bg-[linear-gradient(180deg,rgba(250,244,238,0.98),rgba(255,255,255,0.94))] p-11 text-center shadow-[0_46px_138px_-44px_rgba(155,71,34,0.38)] dark:border-[var(--n9-accent)]/20 dark:bg-[radial-gradient(circle_at_top,rgba(184,121,69,0.16),transparent_44%),linear-gradient(180deg,rgba(33,27,23,0.98),rgba(17,16,19,0.98))] dark:shadow-[0_46px_138px_-44px_rgba(0,0,0,0.72)]">
+        <Handle id="top-left" type="target" position={Position.Top} style={{ left: "18%" }} className={handleClass} />
+        <Handle id="top-center" type="target" position={Position.Top} style={{ left: "50%" }} className={handleClass} />
+        <Handle id="top-right" type="target" position={Position.Top} style={{ left: "82%" }} className={handleClass} />
+        <Handle id="left-top" type="target" position={Position.Left} style={{ top: "26%" }} className={handleClass} />
+        <Handle id="left-mid-top" type="target" position={Position.Left} style={{ top: "38%" }} className={handleClass} />
+        <Handle id="left-mid" type="target" position={Position.Left} style={{ top: "52%" }} className={handleClass} />
+        <Handle id="left-mid-low" type="target" position={Position.Left} style={{ top: "66%" }} className={handleClass} />
+        <Handle id="left-low" type="target" position={Position.Left} style={{ top: "78%" }} className={handleClass} />
+        <Handle id="right-mid" type="target" position={Position.Right} style={{ top: "58%" }} className={handleClass} />
+        <Handle id="bottom-center" type="source" position={Position.Bottom} style={{ left: "50%" }} className={handleClass} />
+        <div className="mx-auto flex h-36 w-36 items-center justify-center overflow-hidden rounded-[36px] bg-[var(--n9-accent-light)] dark:bg-[linear-gradient(180deg,rgba(184,121,69,0.22),rgba(184,121,69,0.08))]">
+          <IceMascot className="h-[8.5rem] w-[8.5rem]" options={{ src: "/notes9-mascot-ui.png" }} aria-hidden />
+        </div>
+        <p className="mt-7 text-[22px] font-bold uppercase tracking-[0.2em] text-[var(--n9-accent)]">
+          {data.label}
+        </p>
+        <div className="mt-4 h-px w-full bg-[linear-gradient(90deg,transparent,rgba(184,121,69,0.26),transparent)] dark:bg-[linear-gradient(90deg,transparent,rgba(184,121,69,0.45),transparent)]" />
+        <p className="mt-5 text-[20px] font-semibold text-muted-foreground dark:text-slate-300">
+          keeps every phase connected
+        </p>
+      </div>
+    )
+  }
+
+  const Icon = data.icon ?? FileSearch
+  const tone = toneClasses[data.tone ?? "slate"]
+  const role = data.role ?? "default"
+  return (
+    <div className={`nopan w-[228px] rounded-[32px] border p-7 shadow-[0_24px_54px_-24px_rgba(44,36,24,0.22)] dark:shadow-[0_24px_54px_-24px_rgba(0,0,0,0.54)] ${tone}`}>
+      <Handle id="top" type="target" position={Position.Top} className={handleClass} />
+      <Handle id="top-center" type="target" position={Position.Top} style={{ left: "50%" }} className={handleClass} />
+      <Handle id="top-right" type="target" position={Position.Top} style={{ left: "76%" }} className={handleClass} />
+      <Handle id="left" type="target" position={Position.Left} className={handleClass} />
+      <Handle id="left-center" type="target" position={Position.Left} style={{ top: "50%" }} className={handleClass} />
+      <Handle id="left-top" type="target" position={Position.Left} style={{ top: "34%" }} className={handleClass} />
+      <Handle id="left-mid" type="target" position={Position.Left} style={{ top: "56%" }} className={handleClass} />
+      <Handle id="left-low" type="target" position={Position.Left} style={{ top: "76%" }} className={handleClass} />
+      <Handle id="right" type="target" position={Position.Right} className={handleClass} />
+      <Handle id="bottom" type="source" position={Position.Bottom} className={handleClass} />
+      <Handle id="top-right" type="source" position={Position.Top} style={{ left: "80%" }} className={handleClass} />
+      <Handle id="left" type="source" position={Position.Left} className={handleClass} />
+      <Handle id="right" type="source" position={Position.Right} className={handleClass} />
+      <Handle id="ai-right" type="source" position={Position.Right} style={{ top: "74%" }} className={handleClass} />
+      <Handle id="bottom-right" type="source" position={Position.Bottom} style={{ left: "76%" }} className={handleClass} />
+      {role === "experiments" ? (
+        <>
+          <Handle id="branch-1" type="source" position={Position.Right} style={{ top: "18%" }} className={handleClass} />
+          <Handle id="branch-2" type="source" position={Position.Right} style={{ top: "38%" }} className={handleClass} />
+          <Handle id="branch-3" type="source" position={Position.Right} style={{ top: "60%" }} className={handleClass} />
+          <Handle id="branch-4" type="source" position={Position.Right} style={{ top: "82%" }} className={handleClass} />
+        </>
+      ) : null}
+      <div className="flex items-center justify-between">
+        <Icon className="h-6 w-6" />
+        <Sparkles className="h-5 w-5 opacity-60" />
+      </div>
+      <div className="mt-6 h-10 rounded-2xl bg-white/55 dark:bg-white/10" />
+      <div className="mt-4 flex gap-2">
+        <div className="h-1.5 w-10 rounded-full bg-white/75 dark:bg-white/25" />
+        <div className="h-1.5 w-8 rounded-full bg-white/55 dark:bg-white/15" />
+      </div>
+      <p className="mt-5 text-[18px] font-bold uppercase tracking-[0.18em]">{data.label}</p>
+    </div>
+  )
+}
+
+function ComparisonGraph({
+  nodes,
+  edges,
+  backgroundColor,
+  editable = false,
+  onGraphChange,
+}: {
+  nodes: ComparisonFlowNode[]
+  edges: Edge[]
+  backgroundColor: string
+  editable?: boolean
+  onGraphChange?: (graph: { nodes: ComparisonFlowNode[]; edges: Edge[] }) => void
+}) {
+  const [graphNodes, setGraphNodes, onNodesChange] = useNodesState(nodes)
+  const [graphEdges, setGraphEdges, onEdgesChange] = useEdgesState(edges)
+  const renderNodes = graphNodes.map((node) => ({
+    ...node,
+    data: {
+      ...node.data,
+      editable,
+    },
+  }))
+
+  useEffect(() => {
+    setGraphNodes(nodes)
+  }, [nodes, setGraphNodes])
+
+  useEffect(() => {
+    setGraphEdges(edges)
+  }, [edges, setGraphEdges])
+
+  useEffect(() => {
+    onGraphChange?.({
+      nodes: graphNodes as ComparisonFlowNode[],
+      edges: graphEdges,
+    })
+  }, [graphNodes, graphEdges, onGraphChange])
+
+  const handleConnect = (connection: Connection) => {
+    if (!editable) return
+    setGraphEdges((currentEdges) =>
+      addEdge(
+        {
+          ...connection,
+          type: "smoothstep",
+          style: { stroke: "rgba(184,121,69,0.54)", strokeWidth: 2.15, strokeDasharray: "8 9" },
+          markerEnd: { type: MarkerType.ArrowClosed, color: "rgba(184,121,69,0.84)", width: 21, height: 21 },
+        },
+        currentEdges,
+      ),
+    )
+  }
+
+  const handleReconnect = (oldEdge: Edge, newConnection: Connection) => {
+    if (!editable) return
+    setGraphEdges((currentEdges) => reconnectEdge(oldEdge, newConnection, currentEdges))
+  }
+
+  return (
+    <ReactFlowProvider>
+      <div className="h-[840px] w-full overflow-hidden rounded-[28px]">
+        <ReactFlow
+          nodes={renderNodes}
+          edges={graphEdges}
+          onNodesChange={editable ? onNodesChange : undefined}
+          onEdgesChange={editable ? onEdgesChange : undefined}
+          onConnect={editable ? handleConnect : undefined}
+          onReconnect={editable ? handleReconnect : undefined}
+          nodeTypes={comparisonNodeTypes}
+          fitView
+          fitViewOptions={{ padding: 0.1 }}
+          proOptions={{ hideAttribution: true }}
+          nodesDraggable={editable}
+          nodesConnectable={editable}
+          edgesReconnectable={editable}
+          elementsSelectable={editable}
+          panOnDrag={editable}
+          panOnScroll={editable}
+          panOnScrollMode={PanOnScrollMode.Free}
+          selectionOnDrag={false}
+          zoomOnDoubleClick={editable}
+          zoomOnPinch={editable}
+          zoomOnScroll={false}
+          preventScrolling={false}
+          className={backgroundColor}
+          defaultEdgeOptions={{
+            markerEnd: {
+              type: MarkerType.ArrowClosed,
+            },
+          }}
+        >
+          <Background variant={BackgroundVariant.Dots} gap={20} size={1} color="rgba(148,163,184,0.16)" />
+        </ReactFlow>
+      </div>
+    </ReactFlowProvider>
+  )
+}
+
 export function AboutMarketingPage() {
   return (
     <MarketingPageFrame>
@@ -214,6 +795,80 @@ export function AboutMarketingPage() {
   )
 }
 
+export function PlatformDifferentiationSection({
+  className = "border-t border-border/40",
+}: {
+  className?: string
+}) {
+  const [connectedLayout, setConnectedLayout] = useState<ComparisonFlowNode[]>(connectedNodes)
+  const [connectedEdgeLayout, setConnectedEdgeLayout] = useState<Edge[]>(connectedEdges)
+
+  useEffect(() => {
+    if (typeof window === "undefined") return
+
+    const savedLayout = window.localStorage.getItem(CONNECTED_LAYOUT_STORAGE_KEY)
+
+    if (savedLayout) {
+      try {
+        const parsed = JSON.parse(savedLayout)
+        const savedNodes = Array.isArray(parsed) ? parsed : parsed?.nodes
+        const savedEdges = Array.isArray(parsed?.edges) ? parsed.edges : connectedEdges
+        const mergedLayout = mergeSavedConnectedLayout(savedNodes)
+        setConnectedLayout(mergedLayout)
+        setConnectedEdgeLayout(savedEdges)
+      } catch {
+        setConnectedLayout(connectedNodes)
+        setConnectedEdgeLayout(connectedEdges)
+      }
+    }
+  }, [])
+
+  return (
+    <section className={className}>
+      <div className="container mx-auto px-4 py-16 sm:px-6 lg:px-8">
+        <div className="mx-auto max-w-[88rem]">
+          <div className="flex flex-col rounded-[36px] border border-[var(--n9-accent)]/15 bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(247,242,236,0.92))] p-6 shadow-[0_28px_90px_-44px_rgba(44,36,24,0.24)] backdrop-blur-sm dark:border-[var(--n9-accent)]/12 dark:bg-[radial-gradient(circle_at_top,rgba(184,121,69,0.09),transparent_30%),linear-gradient(180deg,rgba(19,18,20,0.98),rgba(12,12,14,0.99))] dark:shadow-[0_32px_100px_-44px_rgba(0,0,0,0.72)] sm:p-8 lg:p-10">
+            <SectionHeader
+              badge="Connected Research System"
+              title="Research slows down when context breaks between tools"
+              className="max-w-none text-left"
+            />
+            <p className="mt-4 w-full text-justify text-base leading-7 text-muted-foreground sm:text-lg">
+              Disconnected phases force teams to reconstruct rationale, repeat handoffs, and lose continuity. Notes9 keeps the workflow connected from literature to experiments to writing.
+            </p>
+            <div className="mt-6 flex flex-wrap gap-3 text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground/70 dark:text-slate-400">
+              <span className="rounded-full border border-border/60 bg-background/75 px-3 py-2 dark:border-white/10 dark:bg-white/[0.04]">fragmentation costs time</span>
+              <span className="rounded-full border border-border/60 bg-background/75 px-3 py-2 dark:border-white/10 dark:bg-white/[0.04]">handoffs break provenance</span>
+              <span className="rounded-full border border-border/60 bg-background/75 px-3 py-2 dark:border-white/10 dark:bg-white/[0.04]">reconstruction slows decisions</span>
+            </div>
+            <div className="mt-8 flex flex-1 items-center justify-center">
+              <div className="w-full rounded-[32px] border border-[var(--n9-accent)]/15 bg-[radial-gradient(circle_at_center,rgba(184,121,69,0.08),transparent_58%)] p-5 dark:border-[var(--n9-accent)]/14 dark:bg-[radial-gradient(circle_at_center,rgba(184,121,69,0.14),transparent_54%),linear-gradient(180deg,rgba(255,255,255,0.02),rgba(255,255,255,0.01))] lg:p-6">
+                <ComparisonGraph
+                  nodes={connectedLayout}
+                  edges={connectedEdgeLayout}
+                  backgroundColor="bg-transparent"
+                  editable={false}
+                />
+              </div>
+            </div>
+            <div className="mt-6 grid gap-3 text-[11px] font-semibold uppercase tracking-[0.2em] text-muted-foreground/65 dark:text-slate-400 sm:grid-cols-3">
+              <div className="rounded-[18px] border border-border/50 bg-background/70 px-4 py-3 dark:border-white/10 dark:bg-white/[0.04]">
+                Evidence stays linked
+              </div>
+              <div className="rounded-[18px] border border-border/50 bg-background/70 px-4 py-3 dark:border-white/10 dark:bg-white/[0.04]">
+                Catalyst AI sees full context
+              </div>
+              <div className="rounded-[18px] border border-border/50 bg-background/70 px-4 py-3 dark:border-white/10 dark:bg-white/[0.04]">
+                Writing reflects the work
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  )
+}
+
 export function PlatformMarketingPage() {
   return (
     <MarketingPageFrame>
@@ -232,48 +887,60 @@ export function PlatformMarketingPage() {
         ]}
       />
 
+      <ProductShowcase />
+
       <section className="border-t border-border/40 bg-muted/20">
         <div className="container mx-auto px-4 py-16 sm:px-6 lg:px-8">
-          <SectionHeader badge="Capabilities" title="Designed around the full research workflow" align="center" />
-          <div className="mt-10 grid gap-6 md:grid-cols-2 xl:grid-cols-3">
-            <FeatureCard icon={FileSearch} title="Literature intelligence" description="Find, stage, and synthesize relevant papers without losing the link back to the source material." />
-            <FeatureCard icon={FolderKanban} title="Project structure" description="Organize projects, experiments, supporting materials, and team context inside a single operating model." />
-            <FeatureCard icon={FlaskConical} title="Smart notebook capture" description="Record work in a structured notebook that stays useful for future retrieval and reporting." />
-            <FeatureCard icon={Database} title="Provenance-aware memory" description="Preserve why decisions were made, what evidence was used, and how records connect." />
-            <FeatureCard icon={LineChart} title="Analysis and reporting" description="Turn structured context into summaries, status updates, and decision-ready outputs faster." />
-            <FeatureCard icon={Bot} title="Workflow-aware AI" description="Use assistance grounded in project context rather than detached from the rest of the work." />
-          </div>
-        </div>
-      </section>
-
-      <section className="border-t border-border/40">
-        <div className="container mx-auto px-4 py-16 sm:px-6 lg:px-8">
-          <div className="grid gap-10 lg:grid-cols-2 lg:items-stretch">
-            <div className="flex h-full flex-col">
-              <SectionHeader
-                badge="Differentiation"
-                title="From passive records to an active research system"
-                className="lg:min-h-[7.5rem]"
-              />
-              <div className="mt-8 flex-1 space-y-4">
-                <ComparisonRow label="Knowledge flow" legacy="Notes, files, and references drift apart as projects move." notes9="Context stays connected to the workflow that produced it." />
-                <ComparisonRow label="Retrieval" legacy="Teams rely on memory, manual search, and ad hoc naming." notes9="Structured capture makes retrieval faster and more reliable." />
-                <ComparisonRow label="Reporting" legacy="Updates require reconstructing what happened from multiple systems." notes9="Linked records make summaries easier to assemble." />
-              </div>
-            </div>
-            <div className="flex h-full flex-col">
-              <SectionHeader
-                badge="Workflow"
-                title="A more continuous operating model"
-                className="lg:min-h-[7.5rem]"
-              />
-              <div className="mt-8 flex-1 grid gap-4">
-                <WorkflowStep step="01" title="Frame the evidence" description="Collect literature, identify signals, and connect them to project context." />
-                <WorkflowStep step="02" title="Execute with structure" description="Capture experiment intent, protocol context, and observations in one place." />
-                <WorkflowStep step="03" title="Preserve provenance" description="Keep decisions and linked outputs visible so work remains reusable." />
-                <WorkflowStep step="04" title="Report faster" description="Use structured context for cleaner updates and analysis handoffs." />
-              </div>
-            </div>
+          <SectionHeader
+            badge="See Notes9"
+            title="Watch how research work stays connected"
+            description="Short product moments that show how Notes9 turns scattered lab work into one continuous system."
+            align="center"
+          />
+          <div className="mt-10 grid gap-6 md:grid-cols-2">
+            {platformVideoClips.map((clip) => (
+              <MinimalCard
+                key={clip.title}
+                className="group overflow-hidden rounded-[28px] border-border/60 bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(244,239,233,0.88))] p-0 shadow-[0_28px_80px_-34px_rgba(44,36,24,0.18)] transition-transform duration-300 hover:-translate-y-1 dark:bg-[linear-gradient(180deg,rgba(24,20,16,0.96),rgba(36,28,22,0.9))] dark:shadow-[0_28px_80px_-34px_rgba(0,0,0,0.45)]"
+              >
+                <div className="h-1.5 bg-gradient-to-r from-[var(--n9-accent)] via-amber-500/70 to-transparent" />
+                <div className="px-5 py-5">
+                  <div className="mb-4 inline-flex rounded-full border border-[var(--n9-accent)]/20 bg-[var(--n9-accent-light)] px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.24em] text-[var(--n9-accent)]">
+                    {clip.eyebrow}
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <div className="inline-flex h-11 w-11 items-center justify-center rounded-2xl bg-[var(--n9-accent-light)] text-[var(--n9-accent)] transition-transform duration-300 group-hover:scale-105">
+                      <clip.icon className="h-5 w-5" />
+                    </div>
+                    <div>
+                      <h3 className="text-lg font-semibold tracking-tight text-foreground">{clip.title}</h3>
+                      <p className="mt-1 text-sm leading-6 text-muted-foreground">{clip.description}</p>
+                    </div>
+                  </div>
+                </div>
+                <div className="px-5 pb-5">
+                  <ProductFrame className="overflow-hidden rounded-[24px] border-border/60 bg-[#060606] shadow-[0_24px_60px_-34px_rgba(12,10,8,0.6)] [transform:none] hover:[transform:none]">
+                    <div className="flex h-9 items-center gap-2 border-b border-white/10 bg-[#111111] px-4">
+                      <div className="flex gap-1.5">
+                        <div className="h-2.5 w-2.5 rounded-full bg-[#ff6b5f]" />
+                        <div className="h-2.5 w-2.5 rounded-full bg-[#f8c14d]" />
+                        <div className="h-2.5 w-2.5 rounded-full bg-[#45d483]" />
+                      </div>
+                      <div className="ml-3 h-5 flex-1 rounded-full bg-white/5" />
+                    </div>
+                    <div className="relative aspect-[16/10] bg-[#080808]">
+                      <iframe
+                        src={clip.video}
+                        title={clip.title}
+                        loading="lazy"
+                        allow="autoplay; fullscreen; picture-in-picture"
+                        className="block h-full w-full border-0 bg-black"
+                      />
+                    </div>
+                  </ProductFrame>
+                </div>
+              </MinimalCard>
+            ))}
           </div>
         </div>
       </section>

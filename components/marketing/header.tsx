@@ -19,17 +19,16 @@ export function Header() {
   const [isMenuOpen, setIsMenuOpen] = useState(false)
 
   return (
-    <header className="sticky top-0 z-50 w-full border-b border-border/60 bg-[var(--n9-header-bg)] shadow-[0_10px_30px_-24px_rgba(0,0,0,0.28)] backdrop-blur-xl">
+    <header className="fixed top-0 left-0 right-0 z-50 border-b border-border/60 bg-[var(--n9-header-bg)] shadow-[0_10px_30px_-24px_rgba(0,0,0,0.28)] backdrop-blur-xl">
       <div className="container mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex h-16 items-center">
           <Link
             href="/"
-            className="flex shrink-0 items-center space-x-3 self-start pt-0"
+            className="group flex shrink-0 items-center self-start pt-0"
           >
             <Notes9Brand
-              showIcon
               textClassName="h-8 w-auto"
-              wordmarkClassName="-translate-y-2"
+              wordmarkClassName="-translate-y-1"
             />
           </Link>
 

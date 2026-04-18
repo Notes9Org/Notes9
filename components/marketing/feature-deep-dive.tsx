@@ -3,10 +3,11 @@
 import { useRef } from "react"
 import Image from "next/image"
 import { useTheme } from "next-themes"
-import { motion, useScroll, useTransform } from "framer-motion"
+import { motion, useScroll, useTransform, useMotionValue, useSpring, useMotionTemplate } from "framer-motion"
 import {
+  Bot,
   Database,
-  FileText,
+  FileSearch,
   TestTube2,
   LineChart,
 } from "lucide-react"
@@ -35,14 +36,14 @@ const features: Feature[] = [
     alt: "Notes9 lab memory showing connected records",
   },
   {
-    id: "protocols",
-    icon: FileText,
-    label: "Protocols",
-    title: "Standardize your lab procedures",
+    id: "literature",
+    icon: FileSearch,
+    label: "Literature",
+    title: "Bring papers into the active workflow",
     description:
-      "Maintain, version, and share procedural details and SOPs to ensure your experiments are highly reproducible.",
-    screenshot: "/demo/protocol-details.png",
-    alt: "Notes9 protocol details",
+      "Search, review, and connect source material directly to experiments, notes, and downstream writing.",
+    screenshot: "/demo/literature-list.png",
+    alt: "Notes9 literature reviews",
   },
   {
     id: "samples",
@@ -64,6 +65,16 @@ const features: Feature[] = [
     screenshot: "/demo/project-report.png",
     alt: "Notes9 project reporting",
   },
+  {
+    id: "writing",
+    icon: Bot,
+    label: "Write With AI",
+    title: "Draft from real research context",
+    description:
+      "Move from literature, notes, and linked records into structured writing with AI grounded in the actual workflow.",
+    screenshot: "/demo/writing.png",
+    alt: "Notes9 writing with AI",
+  },
 ]
 
 function FeatureRow({ feature, index }: { feature: Feature; index: number }) {
@@ -77,6 +88,33 @@ function FeatureRow({ feature, index }: { feature: Feature; index: number }) {
   const y = useTransform(scrollYProgress, [0, 1], [40, -40])
   const imgOpacity = useTransform(scrollYProgress, [0, 0.25, 0.75, 1], [0, 1, 1, 0.6])
   const isReversed = index % 2 === 1
+
+  // 3D Tilt & Interactivity State
+  const mouseX = useMotionValue(0)
+  const mouseY = useMotionValue(0)
+  const xPct = useMotionValue(0.5)
+  const yPct = useMotionValue(0.5)
+
+  const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
+    const rect = e.currentTarget.getBoundingClientRect()
+    xPct.set((e.clientX - rect.left) / rect.width)
+    yPct.set((e.clientY - rect.top) / rect.height)
+    mouseX.set(e.clientX - rect.left)
+    mouseY.set(e.clientY - rect.top)
+  }
+
+  const handleMouseLeave = () => {
+    xPct.set(0.5)
+    yPct.set(0.5)
+  }
+
+  const springConfig = { damping: 20, stiffness: 150, mass: 0.5 }
+  const rotateX = useSpring(useTransform(yPct, [0, 1], [6, -6]), springConfig)
+  const rotateY = useSpring(useTransform(xPct, [0, 1], [-6, 6]), springConfig)
+
+  const spotlightX = useSpring(mouseX, springConfig)
+  const spotlightY = useSpring(mouseY, springConfig)
+  const spotlightBackground = useMotionTemplate`radial-gradient(circle 400px at ${spotlightX}px ${spotlightY}px, var(--n9-accent-glow), transparent 40%)`
 
   return (
     <div ref={ref} className="relative grid items-center gap-8 lg:grid-cols-2 lg:gap-16">
@@ -104,7 +142,6 @@ function FeatureRow({ feature, index }: { feature: Feature; index: number }) {
         <p className="text-lg leading-8 text-muted-foreground">
           {feature.description}
         </p>
-        {/* Animated accent line */}
         <motion.div
           initial={{ width: 0 }}
           whileInView={{ width: 80 }}
@@ -114,36 +151,41 @@ function FeatureRow({ feature, index }: { feature: Feature; index: number }) {
         />
       </motion.div>
 
-      {/* Screenshot with parallax + fade */}
+      {/* Screenshot Container with Parallax + Tilt + Spotlight */}
       <motion.div
-        style={{ y, opacity: imgOpacity }}
-        className={`relative ${isReversed ? "lg:order-1" : ""}`}
+        style={{ y, opacity: imgOpacity, perspective: 1200 }}
+        className={`relative z-10 w-full ${isReversed ? "lg:order-1" : ""}`}
       >
-        {/* Glow behind on hover */}
-        <div className="absolute -inset-3 rounded-2xl bg-[var(--n9-accent)]/[0.03] opacity-0 blur-xl transition-opacity duration-500 group-hover:opacity-100" />
-
         <motion.div
-          initial={{ opacity: 0, scale: 0.95 }}
-          whileInView={{ opacity: 1, scale: 1 }}
-          transition={{ duration: 0.6, delay: 0.1, ease: "easeOut" }}
-          viewport={{ once: true }}
-          className="group relative overflow-hidden rounded-xl border border-border/60 bg-background shadow-[0_32px_80px_-30px_rgba(44,36,24,0.15)] transition-shadow duration-500 hover:shadow-[0_32px_80px_-20px_rgba(155,71,34,0.12)] dark:shadow-[0_32px_80px_-30px_rgba(0,0,0,0.5)]"
+          onMouseMove={handleMouseMove}
+          onMouseLeave={handleMouseLeave}
+          style={{ rotateX, rotateY }}
+          className="group relative overflow-hidden rounded-2xl border border-border/60 bg-background shadow-[0_32px_80px_-30px_rgba(44,36,24,0.15)] transition-shadow duration-500 hover:shadow-[0_32px_80px_-20px_rgba(155,71,34,0.18)] dark:shadow-[0_32px_80px_-30px_rgba(0,0,0,0.5)] transform-gpu"
         >
+          {/* Spotlight Glow Effect inside the card border boundaries */}
+          <motion.div
+            className="pointer-events-none absolute inset-0 z-[1] mix-blend-plus-lighter opacity-0 transition-opacity duration-300 group-hover:opacity-[0.15] dark:group-hover:opacity-[0.25]"
+            style={{ background: spotlightBackground }}
+          />
+
           {/* Browser bar */}
-          <div className="flex h-8 items-center gap-2 border-b border-border/40 bg-muted/50 px-3">
+          <div className="relative z-10 flex h-8 items-center gap-2 border-b border-border/40 bg-muted/50 px-3">
             <div className="flex gap-1.5">
               <div className="h-2.5 w-2.5 rounded-full bg-red-400/80" />
               <div className="h-2.5 w-2.5 rounded-full bg-yellow-400/80" />
               <div className="h-2.5 w-2.5 rounded-full bg-green-400/80" />
             </div>
           </div>
-          <Image
-            src={resolveDemoScreenshot(feature.screenshot, resolvedTheme)}
-            alt={feature.alt}
-            width={1200}
-            height={800}
-            className="block w-full transition-transform duration-700 group-hover:scale-[1.02]"
-          />
+          
+          <div className="relative z-10">
+            <Image
+              src={resolveDemoScreenshot(feature.screenshot, resolvedTheme)}
+              alt={feature.alt}
+              width={1200}
+              height={800}
+              className="block w-full"
+            />
+          </div>
         </motion.div>
       </motion.div>
     </div>
