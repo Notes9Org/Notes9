@@ -243,73 +243,79 @@ type ComparisonNodeData = {
 type ComparisonFlowNode = Node<ComparisonNodeData, "comparisonNode">
 
 const toneClasses: Record<NonNullable<ComparisonNodeData["tone"]>, string> = {
-  amber: "border-[#f0d2ab] bg-[#fff1df] text-[#b96d1a]",
-  sky: "border-[#c6deef] bg-[#e9f4fb] text-[#3176a9]",
-  emerald: "border-[#c9e7d2] bg-[#eaf7ee] text-[#2d875a]",
-  violet: "border-[#dcc9f0] bg-[#f3ebfa] text-[#7f58a8]",
-  rose: "border-[#efcdc9] bg-[#fceceb] text-[#b75c52]",
-  slate: "border-border/60 bg-muted/30 text-muted-foreground",
+  amber:
+    "border-[#f0d2ab] bg-[#fff1df] text-[#b96d1a] dark:border-[#7a5a35] dark:bg-[linear-gradient(180deg,rgba(69,47,23,0.92),rgba(42,30,17,0.95))] dark:text-[#f8d69c]",
+  sky:
+    "border-[#c6deef] bg-[#e9f4fb] text-[#3176a9] dark:border-[#355e79] dark:bg-[linear-gradient(180deg,rgba(20,44,58,0.94),rgba(15,31,43,0.96))] dark:text-[#9fd8ff]",
+  emerald:
+    "border-[#c9e7d2] bg-[#eaf7ee] text-[#2d875a] dark:border-[#2f6b4c] dark:bg-[linear-gradient(180deg,rgba(21,49,33,0.94),rgba(16,36,25,0.96))] dark:text-[#9de0ba]",
+  violet:
+    "border-[#dcc9f0] bg-[#f3ebfa] text-[#7f58a8] dark:border-[#5a4577] dark:bg-[linear-gradient(180deg,rgba(42,29,61,0.95),rgba(28,20,43,0.97))] dark:text-[#d5bcff]",
+  rose:
+    "border-[#efcdc9] bg-[#fceceb] text-[#b75c52] dark:border-[#7b4743] dark:bg-[linear-gradient(180deg,rgba(63,29,28,0.95),rgba(40,20,20,0.97))] dark:text-[#ffb7aa]",
+  slate:
+    "border-border/60 bg-muted/30 text-muted-foreground dark:border-white/10 dark:bg-[linear-gradient(180deg,rgba(37,37,41,0.94),rgba(26,26,30,0.97))] dark:text-slate-200",
 }
 
 const connectedNodes: ComparisonFlowNode[] = [
   {
     id: "c-projects",
     type: "comparisonNode",
-    position: { x: 20, y: 248 },
+    position: { x: 0, y: 260 },
     data: { label: "Projects", icon: FolderKanban, tone: "amber", role: "projects" },
   },
   {
     id: "c-literature",
     type: "comparisonNode",
-    position: { x: 860, y: 34 },
+    position: { x: 1200, y: 36 },
     data: { label: "Literature", icon: FileSearch, tone: "amber", role: "literature" },
   },
   {
     id: "c-experiments",
     type: "comparisonNode",
-    position: { x: 210, y: 248 },
+    position: { x: 240, y: 260 },
     data: { label: "Experiments", icon: FlaskConical, tone: "sky", role: "experiments" },
   },
   {
     id: "c-lab-notes",
     type: "comparisonNode",
-    position: { x: 620, y: 34 },
+    position: { x: 850, y: 36 },
     data: { label: "Lab Notes", icon: BookOpen, tone: "emerald" },
   },
   {
     id: "c-protocols",
     type: "comparisonNode",
-    position: { x: 620, y: 156 },
+    position: { x: 850, y: 178 },
     data: { label: "Protocols", icon: FileText, tone: "violet" },
   },
   {
     id: "c-samples",
     type: "comparisonNode",
-    position: { x: 620, y: 278 },
+    position: { x: 850, y: 320 },
     data: { label: "Samples", icon: TestTube2, tone: "sky" },
   },
   {
     id: "c-equipment",
     type: "comparisonNode",
-    position: { x: 620, y: 400 },
+    position: { x: 850, y: 462 },
     data: { label: "Equipment", icon: Microscope, tone: "sky" },
   },
   {
     id: "c-hub",
     type: "comparisonNode",
-    position: { x: 430, y: 248 },
+    position: { x: 480, y: 236 },
     data: { label: "Catalyst AI", hub: true },
   },
   {
     id: "c-reports",
     type: "comparisonNode",
-    position: { x: 860, y: 350 },
+    position: { x: 1200, y: 356 },
     data: { label: "Reports", icon: LineChart, tone: "rose", role: "reports" },
   },
   {
     id: "c-writing",
     type: "comparisonNode",
-    position: { x: 860, y: 470 },
+    position: { x: 1200, y: 520 },
     data: { label: "Writing", icon: FileText, tone: "violet", role: "writing" },
   },
 ]
@@ -554,7 +560,7 @@ function ComparisonNode({ data }: NodeProps<ComparisonFlowNode>) {
 
   if (data.hub) {
     return (
-      <div className="nopan relative w-[420px] rounded-[44px] border border-[var(--n9-accent)]/25 bg-[linear-gradient(180deg,rgba(250,244,238,0.98),rgba(255,255,255,0.94))] p-11 text-center shadow-[0_46px_138px_-44px_rgba(155,71,34,0.38)]">
+      <div className="nopan relative w-[420px] rounded-[44px] border border-[var(--n9-accent)]/25 bg-[linear-gradient(180deg,rgba(250,244,238,0.98),rgba(255,255,255,0.94))] p-11 text-center shadow-[0_46px_138px_-44px_rgba(155,71,34,0.38)] dark:border-[var(--n9-accent)]/20 dark:bg-[radial-gradient(circle_at_top,rgba(184,121,69,0.16),transparent_44%),linear-gradient(180deg,rgba(33,27,23,0.98),rgba(17,16,19,0.98))] dark:shadow-[0_46px_138px_-44px_rgba(0,0,0,0.72)]">
         <Handle id="top-left" type="target" position={Position.Top} style={{ left: "18%" }} className={handleClass} />
         <Handle id="top-center" type="target" position={Position.Top} style={{ left: "50%" }} className={handleClass} />
         <Handle id="top-right" type="target" position={Position.Top} style={{ left: "82%" }} className={handleClass} />
@@ -565,14 +571,14 @@ function ComparisonNode({ data }: NodeProps<ComparisonFlowNode>) {
         <Handle id="left-low" type="target" position={Position.Left} style={{ top: "78%" }} className={handleClass} />
         <Handle id="right-mid" type="target" position={Position.Right} style={{ top: "58%" }} className={handleClass} />
         <Handle id="bottom-center" type="source" position={Position.Bottom} style={{ left: "50%" }} className={handleClass} />
-        <div className="mx-auto flex h-36 w-36 items-center justify-center overflow-hidden rounded-[36px] bg-[var(--n9-accent-light)]">
+        <div className="mx-auto flex h-36 w-36 items-center justify-center overflow-hidden rounded-[36px] bg-[var(--n9-accent-light)] dark:bg-[linear-gradient(180deg,rgba(184,121,69,0.22),rgba(184,121,69,0.08))]">
           <IceMascot className="h-[8.5rem] w-[8.5rem]" options={{ src: "/notes9-mascot-ui.png" }} aria-hidden />
         </div>
         <p className="mt-7 text-[22px] font-bold uppercase tracking-[0.2em] text-[var(--n9-accent)]">
           {data.label}
         </p>
-        <div className="mt-4 h-px w-full bg-[linear-gradient(90deg,transparent,rgba(184,121,69,0.26),transparent)]" />
-        <p className="mt-5 text-[20px] font-semibold text-muted-foreground">
+        <div className="mt-4 h-px w-full bg-[linear-gradient(90deg,transparent,rgba(184,121,69,0.26),transparent)] dark:bg-[linear-gradient(90deg,transparent,rgba(184,121,69,0.45),transparent)]" />
+        <p className="mt-5 text-[20px] font-semibold text-muted-foreground dark:text-slate-300">
           keeps every phase connected
         </p>
       </div>
@@ -583,7 +589,7 @@ function ComparisonNode({ data }: NodeProps<ComparisonFlowNode>) {
   const tone = toneClasses[data.tone ?? "slate"]
   const role = data.role ?? "default"
   return (
-    <div className={`nopan w-[228px] rounded-[32px] border p-7 shadow-[0_24px_54px_-24px_rgba(44,36,24,0.22)] ${tone}`}>
+    <div className={`nopan w-[228px] rounded-[32px] border p-7 shadow-[0_24px_54px_-24px_rgba(44,36,24,0.22)] dark:shadow-[0_24px_54px_-24px_rgba(0,0,0,0.54)] ${tone}`}>
       <Handle id="top" type="target" position={Position.Top} className={handleClass} />
       <Handle id="top-center" type="target" position={Position.Top} style={{ left: "50%" }} className={handleClass} />
       <Handle id="top-right" type="target" position={Position.Top} style={{ left: "76%" }} className={handleClass} />
@@ -611,10 +617,10 @@ function ComparisonNode({ data }: NodeProps<ComparisonFlowNode>) {
         <Icon className="h-6 w-6" />
         <Sparkles className="h-5 w-5 opacity-60" />
       </div>
-      <div className="mt-6 h-10 rounded-2xl bg-white/55" />
+      <div className="mt-6 h-10 rounded-2xl bg-white/55 dark:bg-white/10" />
       <div className="mt-4 flex gap-2">
-        <div className="h-1.5 w-10 rounded-full bg-white/75" />
-        <div className="h-1.5 w-8 rounded-full bg-white/55" />
+        <div className="h-1.5 w-10 rounded-full bg-white/75 dark:bg-white/25" />
+        <div className="h-1.5 w-8 rounded-full bg-white/55 dark:bg-white/15" />
       </div>
       <p className="mt-5 text-[18px] font-bold uppercase tracking-[0.18em]">{data.label}</p>
     </div>
@@ -821,7 +827,7 @@ export function PlatformDifferentiationSection({
     <section className={className}>
       <div className="container mx-auto px-4 py-16 sm:px-6 lg:px-8">
         <div className="mx-auto max-w-[88rem]">
-          <div className="flex flex-col rounded-[36px] border border-[var(--n9-accent)]/15 bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(247,242,236,0.92))] p-6 shadow-[0_28px_90px_-44px_rgba(44,36,24,0.24)] backdrop-blur-sm sm:p-8 lg:p-10">
+          <div className="flex flex-col rounded-[36px] border border-[var(--n9-accent)]/15 bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(247,242,236,0.92))] p-6 shadow-[0_28px_90px_-44px_rgba(44,36,24,0.24)] backdrop-blur-sm dark:border-[var(--n9-accent)]/12 dark:bg-[radial-gradient(circle_at_top,rgba(184,121,69,0.09),transparent_30%),linear-gradient(180deg,rgba(19,18,20,0.98),rgba(12,12,14,0.99))] dark:shadow-[0_32px_100px_-44px_rgba(0,0,0,0.72)] sm:p-8 lg:p-10">
             <SectionHeader
               badge="Connected Research System"
               title="Research slows down when context breaks between tools"
@@ -830,13 +836,13 @@ export function PlatformDifferentiationSection({
             <p className="mt-4 w-full text-justify text-base leading-7 text-muted-foreground sm:text-lg">
               Disconnected phases force teams to reconstruct rationale, repeat handoffs, and lose continuity. Notes9 keeps the workflow connected from literature to experiments to writing.
             </p>
-            <div className="mt-6 flex flex-wrap gap-3 text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground/70">
-              <span className="rounded-full border border-border/60 bg-background/75 px-3 py-2">fragmentation costs time</span>
-              <span className="rounded-full border border-border/60 bg-background/75 px-3 py-2">handoffs break provenance</span>
-              <span className="rounded-full border border-border/60 bg-background/75 px-3 py-2">reconstruction slows decisions</span>
+            <div className="mt-6 flex flex-wrap gap-3 text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground/70 dark:text-slate-400">
+              <span className="rounded-full border border-border/60 bg-background/75 px-3 py-2 dark:border-white/10 dark:bg-white/[0.04]">fragmentation costs time</span>
+              <span className="rounded-full border border-border/60 bg-background/75 px-3 py-2 dark:border-white/10 dark:bg-white/[0.04]">handoffs break provenance</span>
+              <span className="rounded-full border border-border/60 bg-background/75 px-3 py-2 dark:border-white/10 dark:bg-white/[0.04]">reconstruction slows decisions</span>
             </div>
             <div className="mt-8 flex flex-1 items-center justify-center">
-              <div className="w-full rounded-[32px] border border-[var(--n9-accent)]/15 bg-[radial-gradient(circle_at_center,rgba(184,121,69,0.08),transparent_58%)] p-5 lg:p-6">
+              <div className="w-full rounded-[32px] border border-[var(--n9-accent)]/15 bg-[radial-gradient(circle_at_center,rgba(184,121,69,0.08),transparent_58%)] p-5 dark:border-[var(--n9-accent)]/14 dark:bg-[radial-gradient(circle_at_center,rgba(184,121,69,0.14),transparent_54%),linear-gradient(180deg,rgba(255,255,255,0.02),rgba(255,255,255,0.01))] lg:p-6">
                 <ComparisonGraph
                   nodes={connectedLayout}
                   edges={connectedEdgeLayout}
@@ -845,14 +851,14 @@ export function PlatformDifferentiationSection({
                 />
               </div>
             </div>
-            <div className="mt-6 grid gap-3 text-[11px] font-semibold uppercase tracking-[0.2em] text-muted-foreground/65 sm:grid-cols-3">
-              <div className="rounded-[18px] border border-border/50 bg-background/70 px-4 py-3">
+            <div className="mt-6 grid gap-3 text-[11px] font-semibold uppercase tracking-[0.2em] text-muted-foreground/65 dark:text-slate-400 sm:grid-cols-3">
+              <div className="rounded-[18px] border border-border/50 bg-background/70 px-4 py-3 dark:border-white/10 dark:bg-white/[0.04]">
                 Evidence stays linked
               </div>
-              <div className="rounded-[18px] border border-border/50 bg-background/70 px-4 py-3">
+              <div className="rounded-[18px] border border-border/50 bg-background/70 px-4 py-3 dark:border-white/10 dark:bg-white/[0.04]">
                 Catalyst AI sees full context
               </div>
-              <div className="rounded-[18px] border border-border/50 bg-background/70 px-4 py-3">
+              <div className="rounded-[18px] border border-border/50 bg-background/70 px-4 py-3 dark:border-white/10 dark:bg-white/[0.04]">
                 Writing reflects the work
               </div>
             </div>
