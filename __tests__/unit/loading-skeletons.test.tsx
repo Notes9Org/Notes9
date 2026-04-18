@@ -16,65 +16,61 @@ describe("Skeleton loading components", () => {
     const { container } = render(<DashboardLoading />)
     const pulseEl = container.querySelector(".animate-pulse")
     expect(pulseEl).toBeInTheDocument()
-    // Should contain bg-muted skeleton blocks
     const mutedBlocks = container.querySelectorAll(".bg-muted")
     expect(mutedBlocks.length).toBeGreaterThan(0)
-    // Should contain rounded-md blocks
     const roundedBlocks = container.querySelectorAll(".rounded-md")
     expect(roundedBlocks.length).toBeGreaterThan(0)
   })
 
-  it("ProjectsLoading renders animate-pulse skeleton with card grid", () => {
+  it("ProjectsLoading renders animate-pulse table skeleton", () => {
     const { container } = render(<ProjectsLoading />)
     const pulseEl = container.querySelector(".animate-pulse")
     expect(pulseEl).toBeInTheDocument()
     const mutedBlocks = container.querySelectorAll(".bg-muted")
     expect(mutedBlocks.length).toBeGreaterThan(0)
-    // Should have card placeholders (border + bg-card)
-    const cards = container.querySelectorAll(".bg-card")
-    expect(cards.length).toBeGreaterThanOrEqual(3)
+    // Table skeleton has border rows
+    const borderRows = container.querySelectorAll(".border-b")
+    expect(borderRows.length).toBeGreaterThanOrEqual(3)
   })
 
-  it("ExperimentsLoading renders animate-pulse skeleton with card grid", () => {
+  it("ExperimentsLoading renders animate-pulse table skeleton", () => {
     const { container } = render(<ExperimentsLoading />)
     const pulseEl = container.querySelector(".animate-pulse")
     expect(pulseEl).toBeInTheDocument()
-    const cards = container.querySelectorAll(".bg-card")
-    expect(cards.length).toBeGreaterThanOrEqual(3)
+    const borderRows = container.querySelectorAll(".border-b")
+    expect(borderRows.length).toBeGreaterThanOrEqual(3)
   })
 
-  it("SamplesLoading renders animate-pulse skeleton with 4 status cards and card grid", () => {
+  it("SamplesLoading renders animate-pulse table skeleton", () => {
     const { container } = render(<SamplesLoading />)
     const pulseEl = container.querySelector(".animate-pulse")
     expect(pulseEl).toBeInTheDocument()
-    // 4 status cards + 3 content cards = at least 7
-    const cards = container.querySelectorAll(".bg-card")
-    expect(cards.length).toBeGreaterThanOrEqual(7)
+    const borderRows = container.querySelectorAll(".border-b")
+    expect(borderRows.length).toBeGreaterThanOrEqual(3)
   })
 
-  it("EquipmentLoading renders animate-pulse skeleton with 4 status cards and card grid", () => {
+  it("EquipmentLoading renders animate-pulse table skeleton", () => {
     const { container } = render(<EquipmentLoading />)
     const pulseEl = container.querySelector(".animate-pulse")
     expect(pulseEl).toBeInTheDocument()
-    // 4 status cards + 3 content cards = at least 7
-    const cards = container.querySelectorAll(".bg-card")
-    expect(cards.length).toBeGreaterThanOrEqual(7)
+    const borderRows = container.querySelectorAll(".border-b")
+    expect(borderRows.length).toBeGreaterThanOrEqual(3)
   })
 
-  it("ProtocolsLoading renders animate-pulse skeleton with card grid", () => {
+  it("ProtocolsLoading renders animate-pulse table skeleton", () => {
     const { container } = render(<ProtocolsLoading />)
     const pulseEl = container.querySelector(".animate-pulse")
     expect(pulseEl).toBeInTheDocument()
-    const cards = container.querySelectorAll(".bg-card")
-    expect(cards.length).toBeGreaterThanOrEqual(3)
+    const borderRows = container.querySelectorAll(".border-b")
+    expect(borderRows.length).toBeGreaterThanOrEqual(3)
   })
 
-  it("LabNotesLoading renders animate-pulse skeleton with filter row and card grid", () => {
+  it("LabNotesLoading renders animate-pulse table skeleton", () => {
     const { container } = render(<LabNotesLoading />)
     const pulseEl = container.querySelector(".animate-pulse")
     expect(pulseEl).toBeInTheDocument()
-    const cards = container.querySelectorAll(".bg-card")
-    expect(cards.length).toBeGreaterThanOrEqual(3)
+    const borderRows = container.querySelectorAll(".border-b")
+    expect(borderRows.length).toBeGreaterThanOrEqual(3)
   })
 
   it("LiteratureReviewsLoading renders animate-pulse skeleton with header and tabs", () => {
@@ -85,7 +81,7 @@ describe("Skeleton loading components", () => {
     expect(mutedBlocks.length).toBeGreaterThan(0)
   })
 
-  it("PapersLoading renders animate-pulse skeleton with description, button, and tabs", () => {
+  it("PapersLoading renders animate-pulse table skeleton", () => {
     const { container } = render(<PapersLoading />)
     const pulseEl = container.querySelector(".animate-pulse")
     expect(pulseEl).toBeInTheDocument()

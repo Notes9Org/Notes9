@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
+import { useRouter } from "next/navigation"
 import { useMediaQuery } from "@/hooks/use-media-query"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -25,6 +26,7 @@ interface Sample {
   quantity_unit: string | null
   storage_location: string | null
   storage_condition: string | null
+  created_at: string
   experiment_id: string | null
   experiment?: {
     id: string
@@ -43,7 +45,7 @@ interface SampleListProps {
 
 export function SampleList({ samples, viewMode: controlledView, setViewMode: setControlledView, hideToolbar }: SampleListProps) {
   const isMobile = useMediaQuery("(max-width: 768px)")
-  const [internalView, setInternalView] = useState<"grid" | "table">("grid")
+  const [internalView, setInternalView] = useState<"grid" | "table">("table")
   const viewMode = controlledView ?? internalView
   const setViewMode = setControlledView ?? setInternalView
   const effectiveViewMode = isMobile ? "grid" : viewMode
@@ -161,73 +163,57 @@ export function SampleList({ samples, viewMode: controlledView, setViewMode: set
             <CardDescription>Complete list of laboratory samples</CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="relative w-full overflow-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead className="min-w-[140px]">Sample</TableHead>
-                    <TableHead className="min-w-[100px]">Type</TableHead>
-                    <TableHead className="min-w-[180px]">Experiment</TableHead>
-                    <TableHead className="min-w-[100px]">Quantity</TableHead>
-                    <TableHead className="min-w-[120px]">Location</TableHead>
-                    <TableHead className="min-w-[100px]">Condition</TableHead>
-                    <TableHead className="min-w-[100px]">Status</TableHead>
-                    <TableHead className="text-right min-w-[80px]">Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {samples.map((item) => (
-                    <TableRow key={item.id}>
-                      <TableCell className="font-medium text-foreground">
-                        <div className="flex items-center gap-2">
-                          <TestTube className="h-4 w-4 text-primary shrink-0" />
-                          <span className="truncate">{item.sample_code}</span>
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant="outline">{item.sample_type}</Badge>
-                      </TableCell>
-                      <TableCell className="text-muted-foreground">
-                        {item.experiment ? (
-                          <Link
-                            href={`/experiments/${item.experiment_id!}`}
-                            className="hover:text-primary hover:underline truncate block"
-                          >
-                            {item.experiment.name}
-                          </Link>
-                        ) : (
-                          "—"
-                        )}
-                      </TableCell>
-                      <TableCell className="text-foreground">
-                        {item.quantity != null
-                          ? `${item.quantity} ${item.quantity_unit || ""}`
-                          : "—"}
-                      </TableCell>
-                      <TableCell className="text-muted-foreground">
-                        {item.storage_location || "—"}
-                      </TableCell>
-                      <TableCell className="text-muted-foreground text-xs">
-                        {item.storage_condition || "—"}
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant={getStatusVariant(item.status)}>{item.status}</Badge>
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <Button variant="ghost" size="sm" asChild>
-                          <Link href={`/samples/${item.id}`}>
-                            <ArrowUpRight className="h-4 w-4" />
-                          </Link>
-                        </Button>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
+            <SampleTableView samples={samples} />
           </CardContent>
         </Card>
       )}
     </>
+  )
+}
+
+const formatDate = (dateStr: string): string => {
+  return new Date(dateStr).toISOString().split('T')[0]
+}
+
+function SampleTableView({ samples }: { samples: Sample[] }) {
+  const router = useRouter()
+  return (
+    <div className="relative w-full overflow-auto">
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead className="min-w-[300px]">Sample</TableHead>
+            <TableHead className="min-w-[120px]">Created</TableHead>
+            <TableHead className="text-right min-w-[100px]">Actions</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {samples.map((item) => (
+            <TableRow
+              key={item.id}
+              className="cursor-pointer"
+              onClick={() => router.push(`/samples/${item.id}`)}
+            >
+              <TableCell className="font-medium text-foreground">
+                <div className="flex items-center gap-2">
+                  <TestTube className="h-4 w-4 text-primary shrink-0" />
+                  <span className="truncate">{item.sample_code}</span>
+                </div>
+              </TableCell>
+              <TableCell className="text-muted-foreground">
+                {formatDate(item.created_at)}
+              </TableCell>
+              <TableCell className="text-right">
+                <Button variant="ghost" size="sm" asChild onClick={(e: React.MouseEvent) => e.stopPropagation()}>
+                  <Link href={`/samples/${item.id}`}>
+                    <ArrowUpRight className="h-4 w-4" />
+                  </Link>
+                </Button>
+              </TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+    </div>
   )
 }

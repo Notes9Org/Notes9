@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
+import { useRouter } from "next/navigation"
 import { useMediaQuery } from "@/hooks/use-media-query"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -44,7 +45,7 @@ export function ProtocolList({
   linkProjectId = null,
 }: ProtocolListProps) {
   const isMobile = useMediaQuery("(max-width: 768px)")
-  const [internalView, setInternalView] = useState<"grid" | "table">("grid")
+  const [internalView, setInternalView] = useState<"grid" | "table">("table")
   const viewMode = controlledView ?? internalView
   const setViewMode = setControlledView ?? setInternalView
   const effectiveViewMode = isMobile ? "grid" : viewMode
@@ -180,94 +181,57 @@ export function ProtocolList({
             <CardDescription>Complete list of Standard Operating Procedures</CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="relative w-full overflow-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead className="min-w-[200px]">Protocol</TableHead>
-                    <TableHead className="min-w-[120px]">Project / Experiment</TableHead>
-                    <TableHead className="min-w-[120px]">Category</TableHead>
-                    <TableHead className="min-w-[80px]">Version</TableHead>
-                    <TableHead className="min-w-[100px]">Used In</TableHead>
-                    <TableHead className="min-w-[120px]">Last Updated</TableHead>
-                    <TableHead className="text-right min-w-[100px]">Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {protocols.map((item) => (
-                    <TableRow key={item.id}>
-                      <TableCell className="font-medium text-foreground">
-                        <div className="flex items-center gap-2">
-                          <FileText className="h-4 w-4 text-primary shrink-0" />
-                          <div className="min-w-0">
-                            <p className="truncate">{item.name}</p>
-                            {item.description && (
-                              <p className="text-xs text-muted-foreground line-clamp-1">
-                                {item.description}
-                              </p>
-                            )}
-                          </div>
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex flex-col gap-0.5">
-                          {item.project && (
-                            <span className="flex items-center gap-1 text-xs text-muted-foreground">
-                              <FolderOpen className="h-3 w-3 shrink-0" />
-                              <span className="truncate max-w-[140px]">{item.project.name}</span>
-                            </span>
-                          )}
-                          {item.experiment && (
-                            <span className="flex items-center gap-1 text-xs text-muted-foreground">
-                              <FlaskConical className="h-3 w-3 shrink-0" />
-                              <span className="truncate max-w-[140px]">{item.experiment.name}</span>
-                            </span>
-                          )}
-                          {!item.project && !item.experiment && (
-                            <span className="text-xs text-muted-foreground">—</span>
-                          )}
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        {item.category ? (
-                          <Badge variant="secondary" className="text-xs">
-                            {item.category}
-                          </Badge>
-                        ) : (
-                          "—"
-                        )}
-                      </TableCell>
-                      <TableCell className="font-mono text-sm">{item.version}</TableCell>
-                      <TableCell>
-                        <Badge variant="outline" className="text-xs">
-                          {getUsageCount(item)} experiments
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="text-muted-foreground text-sm">
-                        {new Date(item.updated_at).toLocaleDateString()}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <div className="flex items-center justify-end gap-1">
-                          <Button variant="ghost" size="sm" asChild>
-                            <Link href={protocolDetailHref(item.id, linkProjectId)}>
-                              <ArrowUpRight className="h-4 w-4" />
-                            </Link>
-                          </Button>
-                          <Button variant="ghost" size="sm" asChild>
-                            <Link href={protocolDesignHref(item.id, linkProjectId)}>
-                              <Pencil className="h-4 w-4" />
-                            </Link>
-                          </Button>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
+            <ProtocolTableView protocols={protocols} linkProjectId={linkProjectId} />
           </CardContent>
         </Card>
       )}
     </>
+  )
+}
+
+const formatDate = (dateStr: string): string => {
+  return new Date(dateStr).toISOString().split('T')[0]
+}
+
+function ProtocolTableView({ protocols, linkProjectId }: { protocols: Protocol[]; linkProjectId?: string | null }) {
+  const router = useRouter()
+  return (
+    <div className="relative w-full overflow-auto">
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead className="min-w-[300px]">Protocol</TableHead>
+            <TableHead className="min-w-[120px]">Created</TableHead>
+            <TableHead className="text-right min-w-[100px]">Actions</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {protocols.map((item) => (
+            <TableRow
+              key={item.id}
+              className="cursor-pointer"
+              onClick={() => router.push(protocolDetailHref(item.id, linkProjectId))}
+            >
+              <TableCell className="font-medium text-foreground">
+                <div className="flex items-center gap-2">
+                  <FileText className="h-4 w-4 text-primary shrink-0" />
+                  <span className="truncate">{item.name}</span>
+                </div>
+              </TableCell>
+              <TableCell className="text-muted-foreground">
+                {formatDate(item.created_at)}
+              </TableCell>
+              <TableCell className="text-right">
+                <Button variant="ghost" size="sm" asChild onClick={(e: React.MouseEvent) => e.stopPropagation()}>
+                  <Link href={protocolDetailHref(item.id, linkProjectId)}>
+                    <ArrowUpRight className="h-4 w-4" />
+                  </Link>
+                </Button>
+              </TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+    </div>
   )
 }

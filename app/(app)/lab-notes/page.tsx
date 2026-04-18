@@ -49,7 +49,7 @@ export default function LabNotesPage() {
     { value: string; label: string; project_id: string }[]
   >([])
   const isMobile = useMediaQuery("(max-width: 768px)")
-  const [viewMode, setViewMode] = useState<"grid" | "table">("grid")
+  const [viewMode, setViewMode] = useState<"grid" | "table">("table")
 
   useEffect(() => {
     if (isMobile) setViewMode("grid")

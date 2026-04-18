@@ -32,7 +32,7 @@ interface EquipmentPageContentProps {
 
 export function EquipmentPageContent({ equipment, statusCount }: EquipmentPageContentProps) {
   const isMobile = useMediaQuery("(max-width: 768px)")
-  const [viewMode, setViewMode] = useState<"grid" | "table">("grid")
+  const [viewMode, setViewMode] = useState<"grid" | "table">("table")
   const [statusFilter, setStatusFilter] = useState(FILTER_ALL)
   const [categoryFilter, setCategoryFilter] = useState(FILTER_ALL)
   const [locationFilter, setLocationFilter] = useState(FILTER_ALL)
