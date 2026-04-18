@@ -131,23 +131,25 @@ export function ContactForm() {
                         )}
                     />
                     <div className="flex justify-end">
-                        <Button
-                            type="submit"
-                            disabled={isSubmitting}
-                            className="w-full rounded-full bg-[var(--n9-accent)] text-white hover:bg-[var(--n9-accent-hover)] md:w-auto"
-                        >
-                            {isSubmitting ? (
-                                <>
-                                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                                    Sending...
-                                </>
-                            ) : (
-                                <>
-                                    Send Message
-                                    <Send className="ml-2 h-4 w-4" />
-                                </>
-                            )}
-                        </Button>
+                        <div className="w-full md:w-auto">
+                            <Button
+                                type="submit"
+                                disabled={isSubmitting}
+                                className="w-full rounded-full bg-[var(--n9-accent)] text-white transition-all ease-in-out hover:scale-[1.02] hover:bg-[var(--n9-accent-hover)] active:scale-95"
+                            >
+                                {isSubmitting ? (
+                                    <>
+                                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                        Sending...
+                                    </>
+                                ) : (
+                                    <>
+                                        Send Message
+                                        <Send className="ml-2 h-4 w-4" />
+                                    </>
+                                )}
+                            </Button>
+                        </div>
                     </div>
                 </form>
             </Form>

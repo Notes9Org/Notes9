@@ -7,95 +7,78 @@ import { motion, AnimatePresence } from "framer-motion"
 import {
   BookOpen,
   Database,
-  FlaskConical,
-  LineChart,
+  FolderKanban,
+  LayoutDashboard,
   Network,
-  Sparkles,
   TestTube2,
-  FileText,
 } from "lucide-react"
 import { resolveDemoScreenshot } from "@/components/marketing/demo-asset"
+import { PretextReveal } from "@/components/ui/fluid-text"
 
+/**
+ * Feature screenshots intentionally avoid overlap with the hero carousel
+ * (literature / experiment / lab memory / protocol detail / writing / project report).
+ */
 const slides = [
   {
-    id: "literature",
-    label: "Literature",
-    icon: BookOpen,
-    title: "Find, rank, and save the right papers",
-    description:
-      "Semantic search across sources with ranked relevance. Every result stays tied to the project context it informs.",
-    screenshot: "/demo/literature-search.png",
-    alt: "Notes9 literature search",
-  },
-  {
     id: "research-map",
-    label: "Research Map",
+    label: "Research map",
     icon: Network,
-    title: "Visualize your entire knowledge graph",
+    title: "See how ideas connect",
     description:
-      "Explore connections between projects, papers, experiments, and notes dynamically.",
+      "Navigate projects, papers, and notes as a graph so context stays visible instead of buried in folders.",
     screenshot: "/demo/research-map-literature.png",
     alt: "Notes9 research map",
   },
   {
-    id: "experiments",
-    label: "Experiments",
-    icon: FlaskConical,
-    title: "Capture experiments in structured, reusable formats",
+    id: "dashboard",
+    label: "Lab overview",
+    icon: LayoutDashboard,
+    title: "One dashboard for lab signal",
     description:
-      "Record protocols, observations, and results in a notebook that still makes sense when your team revisits the work later.",
-    screenshot: "/demo/experiment-details.png",
-    alt: "Notes9 experiment capture",
+      "Surface what needs attention across projects and experiments without jumping between tools.",
+    screenshot: "/demo/dashboard.png",
+    alt: "Notes9 dashboard",
   },
   {
-    id: "memory",
-    label: "Lab Memory",
-    icon: Database,
-    title: "Connected records with provenance",
+    id: "projects",
+    label: "Projects",
+    icon: FolderKanban,
+    title: "Structure work without rigidity",
     description:
-      "Decisions, sources, and outputs stay linked. Recover important context without relying on personal memory or guesswork.",
-    screenshot: "/demo/lab-memory.png",
-    alt: "Notes9 lab memory",
-  },
-  {
-    id: "samples",
-    label: "Samples",
-    icon: TestTube2,
-    title: "Track physical materials securely",
-    description:
-      "Manage your lab inventory seamlessly, linking samples directly to their corresponding origin and experiment.",
-    screenshot: "/demo/samples.png",
-    alt: "Notes9 sample inventory",
+      "Keep initiatives, milestones, and ownership clear so handoffs do not erase nuance.",
+    screenshot: "/demo/projects.png",
+    alt: "Notes9 projects",
   },
   {
     id: "protocols",
-    label: "Protocols",
-    icon: FileText,
-    title: "Standardize your lab procedures",
+    label: "Protocol library",
+    icon: TestTube2,
+    title: "Reusable protocols, living SOPs",
     description:
-      "Maintain, version, and share procedural details and SOPs to ensure your experiments are highly reproducible.",
-    screenshot: "/demo/protocol-details.png",
-    alt: "Notes9 protocol details",
+      "Centralize SOPs where they are actually used — tied to experiments instead of a static PDF shelf.",
+    screenshot: "/demo/protocols.png",
+    alt: "Notes9 protocol library",
   },
   {
-    id: "reporting",
-    label: "Reporting",
-    icon: LineChart,
-    title: "Move faster into summaries and updates",
+    id: "samples",
+    label: "Samples & inventory",
+    icon: Database,
+    title: "Traceability by default",
     description:
-      "Use structured workflow context to accelerate reports, reviews, and downstream analysis.",
-    screenshot: "/demo/project-report.png",
-    alt: "Notes9 project reporting",
+      "Link samples to experiments and reports so provenance holds up under audit or replication.",
+    screenshot: "/demo/samples.png",
+    alt: "Notes9 samples",
   },
   {
-    id: "writing",
-    label: "AI Writing",
-    icon: Sparkles,
-    title: "Draft publications with AI assistance",
+    id: "literature-pipeline",
+    label: "Literature pipeline",
+    icon: BookOpen,
+    title: "From PDFs to project memory",
     description:
-      "Write manuscripts equipped with full context and a dedicated AI assistant directly inside the editor.",
-    screenshot: "/demo/writing-editor.png",
-    alt: "Notes9 writing editor with AI",
+      "Track reviews and citations in one pipeline so literature work feeds the lab, not a separate silo.",
+    screenshot: "/demo/literature-list.png",
+    alt: "Notes9 literature reviews list",
   },
 ]
 
@@ -105,100 +88,155 @@ export function ProductShowcase() {
   const current = slides[active]
 
   return (
-    <section id="explore" className="border-t border-border/40 bg-[var(--n9-accent-light)]/30 dark:bg-muted/10">
-      <div className="container mx-auto px-4 py-20 sm:px-6 lg:px-8">
+    <section id="explore" className="relative py-24 sm:py-32 bg-transparent">
+      {/* Subtle document grid — doc-parsing / “precision” cue without extra screenshots */}
+      <div
+        className="pointer-events-none absolute inset-0 opacity-[0.35] dark:opacity-[0.2]"
+        style={{
+          backgroundImage: `linear-gradient(to right, var(--border) 1px, transparent 1px),
+            linear-gradient(to bottom, var(--border) 1px, transparent 1px)`,
+          backgroundSize: "48px 48px",
+        }}
+      />
+
+      <div className="container relative mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
         <motion.div
           initial={{ opacity: 0, y: 16 }}
           whileInView={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5 }}
           viewport={{ once: true }}
-          className="mx-auto max-w-3xl text-center"
+          className="mb-12 max-w-3xl"
         >
-          <h2 className="font-serif text-3xl tracking-tight text-foreground sm:text-4xl">
-            Explore Notes9
+          <h2 className="font-serif text-4xl tracking-tight text-foreground sm:text-5xl lg:text-6xl text-balance">
+            <PretextReveal text="Free your data from static notebooks." />
           </h2>
-          <p className="mt-4 text-lg leading-7 text-muted-foreground">
-            Click any feature to see it in action.
+          <p className="mt-6 text-xl leading-8 text-muted-foreground italic">
+            <PretextReveal
+              text="Flexible modules for literature, execution, and reporting — in one connected workspace."
+              delay={0.15}
+            />
           </p>
         </motion.div>
 
-        <div className="mx-auto mt-10 max-w-6xl">
-          {/* Feature tabs */}
-          <div className="mb-8 overflow-x-auto scrollbar-none">
-            <div className="flex justify-center gap-1.5 min-w-max px-4">
-              {slides.map((slide, i) => {
-                const Icon = slide.icon
-                const isActive = i === active
-                return (
-                  <button
-                    key={slide.id}
-                    onClick={() => setActive(i)}
-                    className={`relative inline-flex items-center gap-2 rounded-full px-4 py-2.5 text-sm font-medium transition-all duration-200 cursor-pointer ${
-                      isActive
-                        ? "bg-[var(--n9-accent)] text-white shadow-[0_8px_24px_-8px_var(--n9-accent-glow)]"
-                        : "text-muted-foreground hover:bg-muted/80 hover:text-foreground"
-                    }`}
-                  >
-                    <Icon className="h-4 w-4" />
-                    <span className="hidden sm:inline">{slide.label}</span>
-                  </button>
-                )
-              })}
-            </div>
+        {/* Reducto-style horizontal capability pills */}
+        <motion.div
+          initial={{ opacity: 0, y: 8 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true }}
+          className="mb-10 flex flex-wrap gap-2"
+        >
+          {slides.map((slide, i) => {
+            const on = i === active
+            return (
+              <button
+                key={slide.id}
+                type="button"
+                onClick={() => setActive(i)}
+                className={`rounded-full border px-4 py-2 text-sm font-medium transition-all duration-200 cursor-pointer ${
+                  on
+                    ? "border-[var(--n9-accent)]/50 bg-[var(--n9-accent-light)] text-[var(--n9-accent)] shadow-sm"
+                    : "border-border/60 bg-background/60 text-muted-foreground hover:border-[var(--n9-accent)]/30 hover:text-foreground"
+                }`}
+              >
+                {slide.label}
+              </button>
+            )
+          })}
+        </motion.div>
+
+        <div className="grid grid-cols-1 items-start gap-12 lg:grid-cols-12 lg:gap-8">
+          {/* Left: Vertical tabs */}
+          <div className="relative flex flex-col space-y-2 lg:col-span-5">
+            <div className="absolute bottom-4 left-[20px] top-4 -z-10 hidden w-px bg-border/40 sm:block" />
+
+            {slides.map((slide, i) => {
+              const Icon = slide.icon
+              const isActive = i === active
+              return (
+                <button
+                  key={slide.id}
+                  type="button"
+                  onClick={() => setActive(i)}
+                  className={`group relative flex flex-col overflow-hidden rounded-2xl border text-left transition-all duration-300 cursor-pointer ${
+                    isActive
+                      ? "border-border/50 bg-muted/50 shadow-sm"
+                      : "border-transparent hover:bg-muted/30"
+                  }`}
+                >
+                  <div className="flex items-center gap-4 px-6 py-5">
+                    <div
+                      className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full transition-colors duration-300 ${
+                        isActive
+                          ? "bg-[var(--n9-accent)] text-white shadow-md shadow-[var(--n9-accent-glow)]/50"
+                          : "bg-muted text-muted-foreground group-hover:border group-hover:bg-background group-hover:text-foreground"
+                      }`}
+                    >
+                      <Icon className="h-5 w-5" />
+                    </div>
+                    <span
+                      className={`text-xl font-semibold tracking-tight transition-colors ${
+                        isActive
+                          ? "text-foreground"
+                          : "text-muted-foreground group-hover:text-foreground"
+                      }`}
+                    >
+                      {slide.label}
+                    </span>
+                  </div>
+
+                  <AnimatePresence initial={false}>
+                    {isActive && (
+                      <motion.div
+                        initial={{ height: 0, opacity: 0 }}
+                        animate={{ height: "auto", opacity: 1 }}
+                        exit={{ height: 0, opacity: 0 }}
+                        transition={{ duration: 0.3, ease: "easeInOut" }}
+                        className="px-6 pb-6 pt-0"
+                      >
+                        <div className="pl-14">
+                          <div className="text-base leading-relaxed text-muted-foreground">
+                            <strong className="mb-1 block font-medium text-foreground">
+                              <PretextReveal text={slide.title} stagger={0.01} />
+                            </strong>
+                            <p>{slide.description}</p>
+                          </div>
+                        </div>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                </button>
+              )
+            })}
           </div>
 
-          {/* Screenshot — full width, prominent */}
-          <AnimatePresence mode="wait">
-            <motion.div
-              key={current.id}
-              initial={{ opacity: 0, y: 12 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -12 }}
-              transition={{ duration: 0.3 }}
-            >
-              <div className="relative">
-                {/* Subtle glow */}
-                <div className="absolute -inset-3 rounded-2xl bg-[var(--n9-accent)]/[0.04] blur-xl" />
+          {/* Right: Single preview — unique assets vs hero */}
+          <div className="relative lg:sticky lg:top-32 lg:col-span-7">
+            <div className="absolute -inset-4 rounded-3xl bg-[var(--n9-accent)]/[0.04] blur-2xl" />
 
-                <div className="relative overflow-hidden rounded-xl border border-border/60 bg-background shadow-[0_40px_100px_-30px_rgba(44,36,24,0.18)] dark:shadow-[0_40px_100px_-30px_rgba(0,0,0,0.5)]">
-                  {/* Browser bar */}
-                  <div className="flex h-9 items-center gap-2 border-b border-border/40 bg-muted/50 px-4">
-                    <div className="flex gap-1.5">
-                      <div className="h-2.5 w-2.5 rounded-full bg-red-400/80" />
-                      <div className="h-2.5 w-2.5 rounded-full bg-yellow-400/80" />
-                      <div className="h-2.5 w-2.5 rounded-full bg-green-400/80" />
-                    </div>
-                    <div className="ml-3 flex-1 max-w-[220px]">
-                      <div className="h-5 rounded-md bg-muted/80 px-3 flex items-center text-[10px] text-muted-foreground/50 font-medium">
-                        notes9.com/{current.id}
-                      </div>
-                    </div>
-                  </div>
+            <div className="group relative flex aspect-[4/3] items-center justify-center overflow-hidden rounded-2xl border border-border/40 bg-background/50 p-2 shadow-2xl shadow-black/5 ring-1 ring-black/5 backdrop-blur-sm dark:ring-white/10 sm:p-6">
+              <AnimatePresence mode="popLayout">
+                <motion.div
+                  key={current.id}
+                  initial={{ opacity: 0, scale: 0.97, filter: "blur(6px)" }}
+                  animate={{ opacity: 1, scale: 1, filter: "blur(0px)" }}
+                  exit={{ opacity: 0, scale: 1.02, filter: "blur(6px)" }}
+                  transition={{ duration: 0.45, ease: [0.22, 1, 0.36, 1] }}
+                  className="relative h-full w-full overflow-hidden rounded-xl border border-border/50 shadow-inner"
+                >
                   <Image
                     src={resolveDemoScreenshot(current.screenshot, resolvedTheme)}
                     alt={current.alt}
-                    width={1920}
-                    height={1080}
-                    className="block w-full"
+                    fill
+                    className="object-cover object-left-top"
+                    sizes="(max-width: 1024px) 100vw, 58vw"
+                    priority={active === 0}
                   />
-                </div>
-              </div>
 
-              {/* Title + description below screenshot */}
-              <div className="mt-8 text-center">
-                <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-[var(--n9-accent)]/30 bg-[var(--n9-accent-light)] px-3 py-1 text-xs font-semibold uppercase tracking-[0.15em] text-[var(--n9-accent)]">
-                  <current.icon className="h-3 w-3" />
-                  {current.label}
-                </div>
-                <h3 className="text-2xl font-semibold tracking-tight text-foreground">
-                  {current.title}
-                </h3>
-                <p className="mx-auto mt-3 max-w-xl text-lg leading-7 text-muted-foreground">
-                  {current.description}
-                </p>
-              </div>
-            </motion.div>
-          </AnimatePresence>
+                  <div className="pointer-events-none absolute inset-0 z-10 bg-gradient-to-b from-transparent via-[var(--n9-accent)]/[0.04] to-transparent opacity-0 transition-opacity duration-700 group-hover:opacity-100" />
+                </motion.div>
+              </AnimatePresence>
+            </div>
+          </div>
         </div>
       </div>
     </section>

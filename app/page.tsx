@@ -5,10 +5,12 @@ import { Footer } from "@/components/marketing/footer"
 import { AcademicHero } from "@/components/marketing/academic-hero"
 import { StatusSection } from "@/components/marketing/status-section"
 import { FeatureDeepDive } from "@/components/marketing/feature-deep-dive"
-import { ProductShowcase } from "@/components/marketing/video-showcase"
-import { DifferentiationSection } from "@/components/marketing/differentiation-section"
+import {
+  PlatformDifferentiationSection,
+} from "@/components/marketing/marketing-pages"
 import { ContactForm } from "@/components/marketing/contact-form"
 import { FloatingPageMenu } from "@/components/marketing/floating-page-menu"
+import { MarketingScrollProgress } from "@/components/marketing/marketing-scroll-progress"
 
 import { InteractiveParticles } from "@/components/ui/interactive-particles"
 
@@ -73,6 +75,7 @@ export default async function HomePage({
         dangerouslySetInnerHTML={{ __html: JSON.stringify(websiteJsonLd) }}
       />
       <InteractiveParticles variant="marketing" />
+      <MarketingScrollProgress />
       <div className="marketing-mesh pointer-events-none absolute inset-0 opacity-[0.15] dark:opacity-[0.08]" />
       <div className="relative z-10 flex flex-col min-h-screen">
         <Header />
@@ -80,9 +83,8 @@ export default async function HomePage({
         <main className="flex-1">
           <AcademicHero />
           <StatusSection />
-          <ProductShowcase />
+          <PlatformDifferentiationSection className="border-t border-border/40 bg-muted/20" />
           <FeatureDeepDive />
-          <DifferentiationSection />
           <section id="contact">
             <div className="container mx-auto px-4 py-24 sm:px-6 lg:px-8">
               <div className="mx-auto max-w-2xl text-center">
