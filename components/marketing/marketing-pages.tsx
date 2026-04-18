@@ -1,5 +1,5 @@
 "use client"
-import { useEffect, useState } from "react"
+import { useEffect } from "react"
 import {
   ArrowDown,
   BookOpen,
@@ -55,38 +55,6 @@ import { IceMascot } from "@/components/ui/ice-mascot"
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion"
 
 const cta = "/#contact"
-const CONNECTED_LAYOUT_STORAGE_KEY = "notes9-platform-connected-layout"
-
-function mergeSavedConnectedLayout(savedLayout: unknown): ComparisonFlowNode[] {
-  if (!Array.isArray(savedLayout)) return connectedNodes
-
-  const savedPositions = new Map<string, { x: number; y: number }>()
-
-  for (const item of savedLayout) {
-    if (
-      typeof item === "object" &&
-      item !== null &&
-      "id" in item &&
-      "position" in item &&
-      typeof item.id === "string" &&
-      typeof item.position === "object" &&
-      item.position !== null &&
-      "x" in item.position &&
-      "y" in item.position &&
-      typeof item.position.x === "number" &&
-      typeof item.position.y === "number"
-    ) {
-      savedPositions.set(item.id, { x: item.position.x, y: item.position.y })
-    }
-  }
-
-  if (savedPositions.size === 0) return connectedNodes
-
-  return connectedNodes.map((node) => {
-    const savedPosition = savedPositions.get(node.id)
-    return savedPosition ? { ...node, position: savedPosition } : node
-  })
-}
 const resourceGuides = [
   {
     id: "projects",
@@ -261,61 +229,61 @@ const connectedNodes: ComparisonFlowNode[] = [
   {
     id: "c-projects",
     type: "comparisonNode",
-    position: { x: 0, y: 260 },
+    position: { x: -411.1303172057801, y: 709.0838367914041 },
     data: { label: "Projects", icon: FolderKanban, tone: "amber", role: "projects" },
   },
   {
     id: "c-literature",
     type: "comparisonNode",
-    position: { x: 1200, y: 36 },
+    position: { x: 985.3808308751327, y: 181.8372807679475 },
     data: { label: "Literature", icon: FileSearch, tone: "amber", role: "literature" },
   },
   {
     id: "c-experiments",
     type: "comparisonNode",
-    position: { x: 240, y: 260 },
+    position: { x: -96.31689624200642, y: 709.0838367914041 },
     data: { label: "Experiments", icon: FlaskConical, tone: "sky", role: "experiments" },
   },
   {
     id: "c-lab-notes",
     type: "comparisonNode",
-    position: { x: 850, y: 36 },
+    position: { x: 430.6125063397412, y: 49.69810778188128 },
     data: { label: "Lab Notes", icon: BookOpen, tone: "emerald" },
   },
   {
     id: "c-protocols",
     type: "comparisonNode",
-    position: { x: 850, y: 178 },
+    position: { x: 430.61250633974123, y: 315.1527519327145 },
     data: { label: "Protocols", icon: FileText, tone: "violet" },
   },
   {
     id: "c-samples",
     type: "comparisonNode",
-    position: { x: 850, y: 320 },
+    position: { x: 426.86220145157847, y: 1059.00844200276 },
     data: { label: "Samples", icon: TestTube2, tone: "sky" },
   },
   {
     id: "c-equipment",
     type: "comparisonNode",
-    position: { x: 850, y: 462 },
+    position: { x: 428.2850246554625, y: 1317.5322553267054 },
     data: { label: "Equipment", icon: Microscope, tone: "sky" },
   },
   {
     id: "c-hub",
     type: "comparisonNode",
-    position: { x: 480, y: 236 },
+    position: { x: 330.87394767588245, y: 630.5093897731597 },
     data: { label: "Catalyst AI", hub: true },
   },
   {
     id: "c-reports",
     type: "comparisonNode",
-    position: { x: 1200, y: 356 },
+    position: { x: 984.4299915703655, y: 739.2141648628867 },
     data: { label: "Reports", icon: LineChart, tone: "rose", role: "reports" },
   },
   {
     id: "c-writing",
     type: "comparisonNode",
-    position: { x: 1200, y: 520 },
+    position: { x: 984.0113407088998, y: 1191.725434310478 },
     data: { label: "Writing", icon: FileText, tone: "violet", role: "writing" },
   },
 ]
@@ -328,22 +296,8 @@ const connectedEdges: Edge[] = [
     type: "smoothstep",
     sourceHandle: "right",
     targetHandle: "left",
-    style: { stroke: "rgba(184,121,69,0.9)", strokeWidth: 3.2 },
-    markerEnd: { type: MarkerType.ArrowClosed, color: "rgba(184,121,69,0.94)", width: 26, height: 26 },
-  },
-  {
-    id: "c-structure-1b",
-    source: "c-projects",
-    target: "c-literature",
-    type: "smoothstep",
-    sourceHandle: "top-right",
-    targetHandle: "left-center",
-    style: {
-      stroke: "rgba(184,121,69,0.62)",
-      strokeWidth: 2.4,
-      strokeDasharray: "7 8",
-    },
-    markerEnd: { type: MarkerType.ArrowClosed, color: "rgba(184,121,69,0.78)", width: 22, height: 22 },
+    style: { stroke: "rgba(184,121,69,0.88)", strokeWidth: 2.8 },
+    markerEnd: { type: MarkerType.ArrowClosed, color: "rgba(184,121,69,0.92)", width: 22, height: 22 },
   },
   {
     id: "c-structure-2",
@@ -352,8 +306,8 @@ const connectedEdges: Edge[] = [
     type: "smoothstep",
     sourceHandle: "branch-1",
     targetHandle: "left",
-    style: { stroke: "rgba(184,121,69,0.9)", strokeWidth: 3 },
-    markerEnd: { type: MarkerType.ArrowClosed, color: "rgba(184,121,69,0.94)", width: 25, height: 25 },
+    style: { stroke: "rgba(184,121,69,0.88)", strokeWidth: 2.6 },
+    markerEnd: { type: MarkerType.ArrowClosed, color: "rgba(184,121,69,0.92)", width: 22, height: 22 },
   },
   {
     id: "c-structure-3",
@@ -362,8 +316,8 @@ const connectedEdges: Edge[] = [
     type: "smoothstep",
     sourceHandle: "branch-2",
     targetHandle: "left",
-    style: { stroke: "rgba(184,121,69,0.9)", strokeWidth: 3 },
-    markerEnd: { type: MarkerType.ArrowClosed, color: "rgba(184,121,69,0.94)", width: 25, height: 25 },
+    style: { stroke: "rgba(184,121,69,0.88)", strokeWidth: 2.6 },
+    markerEnd: { type: MarkerType.ArrowClosed, color: "rgba(184,121,69,0.92)", width: 22, height: 22 },
   },
   {
     id: "c-structure-4",
@@ -372,8 +326,8 @@ const connectedEdges: Edge[] = [
     type: "smoothstep",
     sourceHandle: "branch-3",
     targetHandle: "left",
-    style: { stroke: "rgba(184,121,69,0.9)", strokeWidth: 3 },
-    markerEnd: { type: MarkerType.ArrowClosed, color: "rgba(184,121,69,0.94)", width: 25, height: 25 },
+    style: { stroke: "rgba(184,121,69,0.88)", strokeWidth: 2.6 },
+    markerEnd: { type: MarkerType.ArrowClosed, color: "rgba(184,121,69,0.92)", width: 22, height: 22 },
   },
   {
     id: "c-structure-5",
@@ -382,8 +336,8 @@ const connectedEdges: Edge[] = [
     type: "smoothstep",
     sourceHandle: "branch-4",
     targetHandle: "left",
-    style: { stroke: "rgba(184,121,69,0.9)", strokeWidth: 3 },
-    markerEnd: { type: MarkerType.ArrowClosed, color: "rgba(184,121,69,0.94)", width: 25, height: 25 },
+    style: { stroke: "rgba(184,121,69,0.88)", strokeWidth: 2.6 },
+    markerEnd: { type: MarkerType.ArrowClosed, color: "rgba(184,121,69,0.92)", width: 22, height: 22 },
   },
   {
     id: "c-structure-6",
@@ -394,10 +348,10 @@ const connectedEdges: Edge[] = [
     targetHandle: "top-center",
     style: {
       stroke: "rgba(184,121,69,0.62)",
-      strokeWidth: 2.4,
-      strokeDasharray: "7 8",
+      strokeWidth: 2.1,
+      strokeDasharray: "6 7",
     },
-    markerEnd: { type: MarkerType.ArrowClosed, color: "rgba(184,121,69,0.78)", width: 22, height: 22 },
+    markerEnd: { type: MarkerType.ArrowClosed, color: "rgba(184,121,69,0.76)", width: 19, height: 19 },
   },
   {
     id: "c-ai-1",
@@ -406,8 +360,8 @@ const connectedEdges: Edge[] = [
     type: "smoothstep",
     sourceHandle: "ai-right",
     targetHandle: "left-top",
-    style: { stroke: "rgba(184,121,69,0.54)", strokeWidth: 2.2, strokeDasharray: "8 9" },
-    markerEnd: { type: MarkerType.ArrowClosed, color: "rgba(184,121,69,0.88)", width: 22, height: 22 },
+    style: { stroke: "rgba(184,121,69,0.5)", strokeWidth: 1.95, strokeDasharray: "6 8" },
+    markerEnd: { type: MarkerType.ArrowClosed, color: "rgba(184,121,69,0.88)", width: 20, height: 20 },
   },
   {
     id: "c-ai-2",
@@ -416,8 +370,8 @@ const connectedEdges: Edge[] = [
     type: "smoothstep",
     sourceHandle: "ai-right",
     targetHandle: "left-mid-top",
-    style: { stroke: "rgba(184,121,69,0.54)", strokeWidth: 2.2, strokeDasharray: "8 9" },
-    markerEnd: { type: MarkerType.ArrowClosed, color: "rgba(184,121,69,0.84)", width: 22, height: 22 },
+    style: { stroke: "rgba(184,121,69,0.5)", strokeWidth: 1.95, strokeDasharray: "6 8" },
+    markerEnd: { type: MarkerType.ArrowClosed, color: "rgba(184,121,69,0.84)", width: 20, height: 20 },
   },
   {
     id: "c-ai-3",
@@ -426,8 +380,8 @@ const connectedEdges: Edge[] = [
     type: "smoothstep",
     sourceHandle: "right",
     targetHandle: "left-mid",
-    style: { stroke: "rgba(184,121,69,0.54)", strokeWidth: 2.15, strokeDasharray: "8 9" },
-    markerEnd: { type: MarkerType.ArrowClosed, color: "rgba(184,121,69,0.84)", width: 21, height: 21 },
+    style: { stroke: "rgba(184,121,69,0.5)", strokeWidth: 1.9, strokeDasharray: "6 8" },
+    markerEnd: { type: MarkerType.ArrowClosed, color: "rgba(184,121,69,0.82)", width: 19, height: 19 },
   },
   {
     id: "c-ai-4",
@@ -436,18 +390,8 @@ const connectedEdges: Edge[] = [
     type: "smoothstep",
     sourceHandle: "right",
     targetHandle: "left-mid-low",
-    style: { stroke: "rgba(184,121,69,0.54)", strokeWidth: 2.15, strokeDasharray: "8 9" },
-    markerEnd: { type: MarkerType.ArrowClosed, color: "rgba(184,121,69,0.84)", width: 21, height: 21 },
-  },
-  {
-    id: "c-ai-5",
-    source: "c-samples",
-    target: "c-hub",
-    type: "smoothstep",
-    sourceHandle: "right",
-    targetHandle: "left-low",
-    style: { stroke: "rgba(184,121,69,0.54)", strokeWidth: 2.15, strokeDasharray: "8 9" },
-    markerEnd: { type: MarkerType.ArrowClosed, color: "rgba(184,121,69,0.84)", width: 21, height: 21 },
+    style: { stroke: "rgba(184,121,69,0.5)", strokeWidth: 1.9, strokeDasharray: "6 8" },
+    markerEnd: { type: MarkerType.ArrowClosed, color: "rgba(184,121,69,0.82)", width: 19, height: 19 },
   },
   {
     id: "c-ai-6",
@@ -456,18 +400,8 @@ const connectedEdges: Edge[] = [
     type: "smoothstep",
     sourceHandle: "right",
     targetHandle: "right-mid",
-    style: { stroke: "rgba(184,121,69,0.54)", strokeWidth: 2.15, strokeDasharray: "8 9" },
-    markerEnd: { type: MarkerType.ArrowClosed, color: "rgba(184,121,69,0.84)", width: 21, height: 21 },
-  },
-  {
-    id: "c-ai-7",
-    source: "c-literature",
-    target: "c-hub",
-    type: "smoothstep",
-    sourceHandle: "left",
-    targetHandle: "top-right",
-    style: { stroke: "rgba(184,121,69,0.54)", strokeWidth: 2.15, strokeDasharray: "8 9" },
-    markerEnd: { type: MarkerType.ArrowClosed, color: "rgba(184,121,69,0.84)", width: 21, height: 21 },
+    style: { stroke: "rgba(184,121,69,0.5)", strokeWidth: 1.9, strokeDasharray: "6 8" },
+    markerEnd: { type: MarkerType.ArrowClosed, color: "rgba(184,121,69,0.82)", width: 19, height: 19 },
   },
   {
     id: "c-write-1",
@@ -476,18 +410,8 @@ const connectedEdges: Edge[] = [
     type: "smoothstep",
     sourceHandle: "bottom",
     targetHandle: "top-center",
-    style: { stroke: "rgba(184,121,69,0.6)", strokeWidth: 2.35, strokeDasharray: "8 9" },
-    markerEnd: { type: MarkerType.ArrowClosed, color: "rgba(184,121,69,0.88)", width: 22, height: 22 },
-  },
-  {
-    id: "c-write-2",
-    source: "c-lab-notes",
-    target: "c-writing",
-    type: "smoothstep",
-    sourceHandle: "right",
-    targetHandle: "left-top",
-    style: { stroke: "rgba(184,121,69,0.6)", strokeWidth: 2.2, strokeDasharray: "8 9" },
-    markerEnd: { type: MarkerType.ArrowClosed, color: "rgba(184,121,69,0.84)", width: 21, height: 21 },
+    style: { stroke: "rgba(184,121,69,0.56)", strokeWidth: 2.05, strokeDasharray: "6 8" },
+    markerEnd: { type: MarkerType.ArrowClosed, color: "rgba(184,121,69,0.88)", width: 20, height: 20 },
   },
   {
     id: "c-write-3",
@@ -496,8 +420,8 @@ const connectedEdges: Edge[] = [
     type: "smoothstep",
     sourceHandle: "right",
     targetHandle: "left-mid",
-    style: { stroke: "rgba(184,121,69,0.6)", strokeWidth: 2.2, strokeDasharray: "8 9" },
-    markerEnd: { type: MarkerType.ArrowClosed, color: "rgba(184,121,69,0.84)", width: 21, height: 21 },
+    style: { stroke: "rgba(184,121,69,0.56)", strokeWidth: 1.95, strokeDasharray: "6 8" },
+    markerEnd: { type: MarkerType.ArrowClosed, color: "rgba(184,121,69,0.82)", width: 19, height: 19 },
   },
   {
     id: "c-write-4",
@@ -506,38 +430,8 @@ const connectedEdges: Edge[] = [
     type: "smoothstep",
     sourceHandle: "bottom-center",
     targetHandle: "top-center",
-    style: { stroke: "rgba(184,121,69,0.62)", strokeWidth: 2.35, strokeDasharray: "8 9" },
-    markerEnd: { type: MarkerType.ArrowClosed, color: "rgba(184,121,69,0.88)", width: 21, height: 21 },
-  },
-  {
-    id: "c-write-5",
-    source: "c-projects",
-    target: "c-writing",
-    type: "smoothstep",
-    sourceHandle: "bottom-right",
-    targetHandle: "left-center",
-    style: { stroke: "rgba(184,121,69,0.6)", strokeWidth: 2.2, strokeDasharray: "8 9" },
-    markerEnd: { type: MarkerType.ArrowClosed, color: "rgba(184,121,69,0.84)", width: 21, height: 21 },
-  },
-  {
-    id: "c-feedback-1",
-    source: "c-experiments",
-    target: "c-reports",
-    type: "smoothstep",
-    sourceHandle: "bottom-right",
-    targetHandle: "left-low",
-    style: { stroke: "rgba(184,121,69,0.86)", strokeWidth: 2.8 },
-    markerEnd: { type: MarkerType.ArrowClosed, color: "rgba(184,121,69,0.92)", width: 24, height: 24 },
-  },
-  {
-    id: "c-ai-8",
-    source: "c-reports",
-    target: "c-hub",
-    type: "smoothstep",
-    sourceHandle: "left",
-    targetHandle: "right-mid",
-    style: { stroke: "rgba(184,121,69,0.54)", strokeWidth: 2.15, strokeDasharray: "8 9" },
-    markerEnd: { type: MarkerType.ArrowClosed, color: "rgba(184,121,69,0.84)", width: 21, height: 21 },
+    style: { stroke: "rgba(184,121,69,0.58)", strokeWidth: 2.05, strokeDasharray: "6 8" },
+    markerEnd: { type: MarkerType.ArrowClosed, color: "rgba(184,121,69,0.86)", width: 19, height: 19 },
   },
   {
     id: "c-output-1",
@@ -546,8 +440,88 @@ const connectedEdges: Edge[] = [
     type: "smoothstep",
     sourceHandle: "bottom",
     targetHandle: "top",
-    style: { stroke: "rgba(184,121,69,0.86)", strokeWidth: 2.9 },
-    markerEnd: { type: MarkerType.ArrowClosed, color: "rgba(184,121,69,0.92)", width: 25, height: 25 },
+    style: { stroke: "rgba(184,121,69,0.82)", strokeWidth: 2.45 },
+    markerEnd: { type: MarkerType.ArrowClosed, color: "rgba(184,121,69,0.9)", width: 22, height: 22 },
+  },
+  {
+    id: "xy-edge__c-projectsbottom-c-writingleft-center",
+    source: "c-projects",
+    target: "c-writing",
+    type: "smoothstep",
+    sourceHandle: "bottom",
+    targetHandle: "left-center",
+    style: { stroke: "rgba(184,121,69,0.56)", strokeWidth: 1.95, strokeDasharray: "6 8" },
+    markerEnd: { type: MarkerType.ArrowClosed, color: "rgba(184,121,69,0.82)", width: 19, height: 19 },
+  },
+  {
+    id: "xy-edge__c-projectsright-c-literatureleft-center",
+    source: "c-projects",
+    target: "c-literature",
+    type: "smoothstep",
+    sourceHandle: "right",
+    targetHandle: "left-center",
+    style: { stroke: "rgba(184,121,69,0.62)", strokeWidth: 2.1, strokeDasharray: "6 7" },
+    markerEnd: { type: MarkerType.ArrowClosed, color: "rgba(184,121,69,0.76)", width: 19, height: 19 },
+  },
+  {
+    id: "xy-edge__c-literatureleft-c-projectstop-center",
+    source: "c-literature",
+    target: "c-projects",
+    type: "smoothstep",
+    sourceHandle: "left",
+    targetHandle: "top-center",
+    style: { stroke: "rgba(184,121,69,0.5)", strokeWidth: 1.9, strokeDasharray: "6 8" },
+    markerEnd: { type: MarkerType.ArrowClosed, color: "rgba(184,121,69,0.82)", width: 19, height: 19 },
+  },
+  {
+    id: "xy-edge__c-samplesleft-c-hubleft-low",
+    source: "c-samples",
+    target: "c-hub",
+    type: "smoothstep",
+    sourceHandle: "left",
+    targetHandle: "left-low",
+    style: { stroke: "rgba(184,121,69,0.5)", strokeWidth: 1.9, strokeDasharray: "6 8" },
+    markerEnd: { type: MarkerType.ArrowClosed, color: "rgba(184,121,69,0.82)", width: 19, height: 19 },
+  },
+  {
+    id: "xy-edge__c-reportsbottom-c-hubright-mid",
+    source: "c-reports",
+    target: "c-hub",
+    type: "smoothstep",
+    sourceHandle: "bottom",
+    targetHandle: "right-mid",
+    style: { stroke: "rgba(184,121,69,0.5)", strokeWidth: 1.9, strokeDasharray: "6 8" },
+    markerEnd: { type: MarkerType.ArrowClosed, color: "rgba(184,121,69,0.82)", width: 19, height: 19 },
+  },
+  {
+    id: "xy-edge__c-literatureleft-c-hubtop-right",
+    source: "c-literature",
+    target: "c-hub",
+    type: "smoothstep",
+    sourceHandle: "left",
+    targetHandle: "top-right",
+    style: { stroke: "rgba(184,121,69,0.5)", strokeWidth: 1.9, strokeDasharray: "6 8" },
+    markerEnd: { type: MarkerType.ArrowClosed, color: "rgba(184,121,69,0.82)", width: 19, height: 19 },
+  },
+  {
+    id: "xy-edge__c-lab-notesright-c-writingleft-top",
+    source: "c-lab-notes",
+    target: "c-writing",
+    type: "smoothstep",
+    sourceHandle: "right",
+    targetHandle: "left-top",
+    style: { stroke: "rgba(184,121,69,0.56)", strokeWidth: 1.95, strokeDasharray: "6 8" },
+    markerEnd: { type: MarkerType.ArrowClosed, color: "rgba(184,121,69,0.82)", width: 19, height: 19 },
+  },
+  {
+    id: "xy-edge__c-experimentsright-c-reportsleft-top",
+    source: "c-experiments",
+    target: "c-reports",
+    type: "smoothstep",
+    sourceHandle: "right",
+    targetHandle: "left-top",
+    style: { stroke: "rgba(184,121,69,0.82)", strokeWidth: 2.35 },
+    markerEnd: { type: MarkerType.ArrowClosed, color: "rgba(184,121,69,0.9)", width: 21, height: 21 },
   },
 ]
 
@@ -697,7 +671,7 @@ function ComparisonGraph({
           onReconnect={editable ? handleReconnect : undefined}
           nodeTypes={comparisonNodeTypes}
           fitView
-          fitViewOptions={{ padding: 0.1 }}
+          fitViewOptions={{ padding: 0.14 }}
           proOptions={{ hideAttribution: true }}
           nodesDraggable={editable}
           nodesConnectable={editable}
@@ -878,29 +852,6 @@ export function PlatformDifferentiationSection({
 }: {
   className?: string
 }) {
-  const [connectedLayout, setConnectedLayout] = useState<ComparisonFlowNode[]>(connectedNodes)
-  const [connectedEdgeLayout, setConnectedEdgeLayout] = useState<Edge[]>(connectedEdges)
-
-  useEffect(() => {
-    if (typeof window === "undefined") return
-
-    const savedLayout = window.localStorage.getItem(CONNECTED_LAYOUT_STORAGE_KEY)
-
-    if (savedLayout) {
-      try {
-        const parsed = JSON.parse(savedLayout)
-        const savedNodes = Array.isArray(parsed) ? parsed : parsed?.nodes
-        const savedEdges = Array.isArray(parsed?.edges) ? parsed.edges : connectedEdges
-        const mergedLayout = mergeSavedConnectedLayout(savedNodes)
-        setConnectedLayout(mergedLayout)
-        setConnectedEdgeLayout(savedEdges)
-      } catch {
-        setConnectedLayout(connectedNodes)
-        setConnectedEdgeLayout(connectedEdges)
-      }
-    }
-  }, [])
-
   return (
     <section className={className}>
       <div className="container mx-auto px-4 py-16 sm:px-6 lg:px-8">
@@ -923,8 +874,8 @@ export function PlatformDifferentiationSection({
               <MobileWorkflowDiagram />
               <div className="hidden w-full rounded-[32px] border border-[var(--n9-accent)]/15 bg-[radial-gradient(circle_at_center,rgba(184,121,69,0.08),transparent_58%)] p-5 dark:border-[var(--n9-accent)]/14 dark:bg-[radial-gradient(circle_at_center,rgba(184,121,69,0.14),transparent_54%),linear-gradient(180deg,rgba(255,255,255,0.02),rgba(255,255,255,0.01))] md:block lg:p-6">
                 <ComparisonGraph
-                  nodes={connectedLayout}
-                  edges={connectedEdgeLayout}
+                  nodes={connectedNodes}
+                  edges={connectedEdges}
                   backgroundColor="bg-transparent"
                   editable={false}
                 />
