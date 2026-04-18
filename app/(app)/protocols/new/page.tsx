@@ -64,6 +64,7 @@ import {
 } from "@/components/ui/resizable"
 import { insertProtocolWithOptionalContext } from "@/lib/protocol-context-supabase"
 import { useToast } from "@/hooks/use-toast"
+import { recordRumEvent } from "@/lib/rum"
 
 const PROTOCOL_CATEGORIES = [
   "Sample Preparation",
@@ -371,6 +372,7 @@ function NewProtocolForm() {
         })
       }
 
+      recordRumEvent('protocol_created', {})
       router.push(protocolsListHref)
     } catch (err: any) {
       setError(err.message)

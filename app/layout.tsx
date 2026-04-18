@@ -5,6 +5,7 @@ import { ThemeProvider } from "@/components/theme-provider"
 import { Toaster } from "@/components/ui/toaster"
 import { Toaster as Sonner } from "@/components/ui/sonner"
 import { NavigationLoader } from "@/components/navigation-loader"
+import { RumProvider } from "@/components/rum-provider"
 
 const workSans = Work_Sans({
   subsets: ['latin'],
@@ -78,10 +79,12 @@ export default function RootLayout({
           enableSystem
           disableTransitionOnChange
         >
-          <NavigationLoader />
-          {children}
-          <Toaster />
-          <Sonner />
+          <RumProvider>
+            <NavigationLoader />
+            {children}
+            <Toaster />
+            <Sonner />
+          </RumProvider>
           {/*
             Univer UI portals toolbar/menu popups here (default id `univer-popup-portal`).
             If this node is missing, createPortal returns null — font/color dropdowns never appear.

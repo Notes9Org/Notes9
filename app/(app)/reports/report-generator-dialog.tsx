@@ -23,6 +23,7 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Checkbox } from "@/components/ui/checkbox"
 import { createClient } from "@/lib/supabase/client"
+import { recordRumEvent } from "@/lib/rum"
 import type { ReportGenerationRequest } from "@/lib/report-agent-types"
 
 // ---------------------------------------------------------------------------
@@ -225,6 +226,7 @@ export function ReportGeneratorDialog({
     const result = await generate(request, token)
 
     if (result.content) {
+      recordRumEvent('report_generated', { projectId: selectedProjectId, reportType: 'data_analysis' })
       await saveReport(result.content)
     }
   }
