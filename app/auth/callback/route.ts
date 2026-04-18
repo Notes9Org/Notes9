@@ -140,9 +140,10 @@ export async function GET(request: NextRequest) {
         }
       }
 
-
-
+      // Build redirect URL with auth_event param for client-side RUM tracking
+      const isSignup = !profile
       const nextUrl = new URL(next, request.url)
+      nextUrl.searchParams.set('auth_event', isSignup ? 'signup' : 'login')
       return NextResponse.redirect(nextUrl)
     }
   }

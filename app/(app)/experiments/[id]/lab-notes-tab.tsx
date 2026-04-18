@@ -68,6 +68,7 @@ import {
   createPublishedLabNoteStoragePath,
 } from "@/lib/user-storage-bucket"
 import { ScientificCalculatorSheet } from "@/components/lab-notes/scientific-calculator"
+import { recordRumEvent } from "@/lib/rum"
 import {
   DOCUMENT_HIGHLIGHT_EVENT,
   HIGHLIGHT_PARAM,
@@ -276,6 +277,8 @@ export function LabNotesTab({
           .single();
 
         if (error) throw error;
+
+        recordRumEvent('lab_note_created', { experimentId })
 
         // Switch to editing mode
         setIsCreating(false);
@@ -684,6 +687,8 @@ export function LabNotesTab({
         setSavedContent(formData.content);
         lastSavedContentRef.current = formData.content;
 
+        recordRumEvent('lab_note_created', { experimentId })
+
         toast({
           title: "Note created",
           description: "Your lab note has been created successfully.",
@@ -743,6 +748,8 @@ export function LabNotesTab({
         .single();
 
       if (error) throw error;
+
+      recordRumEvent('lab_note_created', { experimentId })
 
       toast({
         title: "Note created",
