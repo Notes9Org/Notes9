@@ -20,6 +20,7 @@ import {
   Workflow,
 } from "lucide-react"
 import {
+  addEdge,
   Background,
   BackgroundVariant,
   Handle,
@@ -27,7 +28,11 @@ import {
   Position,
   ReactFlow,
   ReactFlowProvider,
+  PanOnScrollMode,
+  reconnectEdge,
+  useEdgesState,
   useNodesState,
+  type Connection,
   type Edge,
   type Node,
   type NodeProps,
@@ -232,6 +237,7 @@ type ComparisonNodeData = {
   tone?: "amber" | "sky" | "emerald" | "violet" | "rose" | "slate"
   hub?: boolean
   role?: "default" | "projects" | "experiments" | "literature" | "writing" | "reports"
+  editable?: boolean
 }
 
 type ComparisonFlowNode = Node<ComparisonNodeData, "comparisonNode">
@@ -244,59 +250,6 @@ const toneClasses: Record<NonNullable<ComparisonNodeData["tone"]>, string> = {
   rose: "border-[#efcdc9] bg-[#fceceb] text-[#b75c52]",
   slate: "border-border/60 bg-muted/30 text-muted-foreground",
 }
-
-const disconnectedNodes: ComparisonFlowNode[] = [
-  {
-    id: "d-projects",
-    type: "comparisonNode",
-    position: { x: 30, y: 28 },
-    data: { label: "Projects", icon: FolderKanban, tone: "slate" },
-  },
-  {
-    id: "d-literature",
-    type: "comparisonNode",
-    position: { x: 205, y: 28 },
-    data: { label: "Literature", icon: FileSearch, tone: "slate" },
-  },
-  {
-    id: "d-experiments",
-    type: "comparisonNode",
-    position: { x: 380, y: 28 },
-    data: { label: "Experiments", icon: FlaskConical, tone: "slate" },
-  },
-  {
-    id: "d-samples",
-    type: "comparisonNode",
-    position: { x: 30, y: 198 },
-    data: { label: "Samples", icon: TestTube2, tone: "slate" },
-  },
-  {
-    id: "d-equipment",
-    type: "comparisonNode",
-    position: { x: 205, y: 198 },
-    data: { label: "Equipment", icon: Microscope, tone: "slate" },
-  },
-  {
-    id: "d-lab-notes",
-    type: "comparisonNode",
-    position: { x: 380, y: 198 },
-    data: { label: "Lab Notes", icon: BookOpen, tone: "slate" },
-  },
-  {
-    id: "d-writing",
-    type: "comparisonNode",
-    position: { x: 118, y: 368 },
-    data: { label: "Writing", icon: FileText, tone: "slate" },
-  },
-  {
-    id: "d-reports",
-    type: "comparisonNode",
-    position: { x: 292, y: 368 },
-    data: { label: "Reports", icon: LineChart, tone: "slate" },
-  },
-]
-
-const disconnectedEdges: Edge[] = []
 
 const connectedNodes: ComparisonFlowNode[] = [
   {
@@ -369,8 +322,8 @@ const connectedEdges: Edge[] = [
     type: "smoothstep",
     sourceHandle: "right",
     targetHandle: "left",
-    style: { stroke: "rgba(184,121,69,0.88)", strokeWidth: 2.2 },
-    markerEnd: { type: MarkerType.ArrowClosed, color: "rgba(184,121,69,0.92)", width: 18, height: 18 },
+    style: { stroke: "rgba(184,121,69,0.9)", strokeWidth: 3.2 },
+    markerEnd: { type: MarkerType.ArrowClosed, color: "rgba(184,121,69,0.94)", width: 26, height: 26 },
   },
   {
     id: "c-structure-1b",
@@ -381,10 +334,10 @@ const connectedEdges: Edge[] = [
     targetHandle: "left-center",
     style: {
       stroke: "rgba(184,121,69,0.62)",
-      strokeWidth: 1.7,
-      strokeDasharray: "6 7",
+      strokeWidth: 2.4,
+      strokeDasharray: "7 8",
     },
-    markerEnd: { type: MarkerType.ArrowClosed, color: "rgba(184,121,69,0.76)", width: 16, height: 16 },
+    markerEnd: { type: MarkerType.ArrowClosed, color: "rgba(184,121,69,0.78)", width: 22, height: 22 },
   },
   {
     id: "c-structure-2",
@@ -393,8 +346,8 @@ const connectedEdges: Edge[] = [
     type: "smoothstep",
     sourceHandle: "branch-1",
     targetHandle: "left",
-    style: { stroke: "rgba(184,121,69,0.88)", strokeWidth: 2.05 },
-    markerEnd: { type: MarkerType.ArrowClosed, color: "rgba(184,121,69,0.92)", width: 18, height: 18 },
+    style: { stroke: "rgba(184,121,69,0.9)", strokeWidth: 3 },
+    markerEnd: { type: MarkerType.ArrowClosed, color: "rgba(184,121,69,0.94)", width: 25, height: 25 },
   },
   {
     id: "c-structure-3",
@@ -403,8 +356,8 @@ const connectedEdges: Edge[] = [
     type: "smoothstep",
     sourceHandle: "branch-2",
     targetHandle: "left",
-    style: { stroke: "rgba(184,121,69,0.88)", strokeWidth: 2.05 },
-    markerEnd: { type: MarkerType.ArrowClosed, color: "rgba(184,121,69,0.92)", width: 18, height: 18 },
+    style: { stroke: "rgba(184,121,69,0.9)", strokeWidth: 3 },
+    markerEnd: { type: MarkerType.ArrowClosed, color: "rgba(184,121,69,0.94)", width: 25, height: 25 },
   },
   {
     id: "c-structure-4",
@@ -413,8 +366,8 @@ const connectedEdges: Edge[] = [
     type: "smoothstep",
     sourceHandle: "branch-3",
     targetHandle: "left",
-    style: { stroke: "rgba(184,121,69,0.88)", strokeWidth: 2.05 },
-    markerEnd: { type: MarkerType.ArrowClosed, color: "rgba(184,121,69,0.92)", width: 18, height: 18 },
+    style: { stroke: "rgba(184,121,69,0.9)", strokeWidth: 3 },
+    markerEnd: { type: MarkerType.ArrowClosed, color: "rgba(184,121,69,0.94)", width: 25, height: 25 },
   },
   {
     id: "c-structure-5",
@@ -423,8 +376,8 @@ const connectedEdges: Edge[] = [
     type: "smoothstep",
     sourceHandle: "branch-4",
     targetHandle: "left",
-    style: { stroke: "rgba(184,121,69,0.88)", strokeWidth: 2.05 },
-    markerEnd: { type: MarkerType.ArrowClosed, color: "rgba(184,121,69,0.92)", width: 18, height: 18 },
+    style: { stroke: "rgba(184,121,69,0.9)", strokeWidth: 3 },
+    markerEnd: { type: MarkerType.ArrowClosed, color: "rgba(184,121,69,0.94)", width: 25, height: 25 },
   },
   {
     id: "c-structure-6",
@@ -435,10 +388,10 @@ const connectedEdges: Edge[] = [
     targetHandle: "top-center",
     style: {
       stroke: "rgba(184,121,69,0.62)",
-      strokeWidth: 1.7,
-      strokeDasharray: "6 7",
+      strokeWidth: 2.4,
+      strokeDasharray: "7 8",
     },
-    markerEnd: { type: MarkerType.ArrowClosed, color: "rgba(184,121,69,0.76)", width: 16, height: 16 },
+    markerEnd: { type: MarkerType.ArrowClosed, color: "rgba(184,121,69,0.78)", width: 22, height: 22 },
   },
   {
     id: "c-ai-1",
@@ -447,8 +400,8 @@ const connectedEdges: Edge[] = [
     type: "smoothstep",
     sourceHandle: "ai-right",
     targetHandle: "left-top",
-    style: { stroke: "rgba(184,121,69,0.5)", strokeWidth: 1.55, strokeDasharray: "5 7" },
-    markerEnd: { type: MarkerType.ArrowClosed, color: "rgba(184,121,69,0.88)", width: 18, height: 18 },
+    style: { stroke: "rgba(184,121,69,0.54)", strokeWidth: 2.2, strokeDasharray: "8 9" },
+    markerEnd: { type: MarkerType.ArrowClosed, color: "rgba(184,121,69,0.88)", width: 22, height: 22 },
   },
   {
     id: "c-ai-2",
@@ -457,8 +410,8 @@ const connectedEdges: Edge[] = [
     type: "smoothstep",
     sourceHandle: "ai-right",
     targetHandle: "left-mid-top",
-    style: { stroke: "rgba(184,121,69,0.5)", strokeWidth: 1.55, strokeDasharray: "5 7" },
-    markerEnd: { type: MarkerType.ArrowClosed, color: "rgba(184,121,69,0.84)", width: 18, height: 18 },
+    style: { stroke: "rgba(184,121,69,0.54)", strokeWidth: 2.2, strokeDasharray: "8 9" },
+    markerEnd: { type: MarkerType.ArrowClosed, color: "rgba(184,121,69,0.84)", width: 22, height: 22 },
   },
   {
     id: "c-ai-3",
@@ -467,8 +420,8 @@ const connectedEdges: Edge[] = [
     type: "smoothstep",
     sourceHandle: "right",
     targetHandle: "left-mid",
-    style: { stroke: "rgba(184,121,69,0.5)", strokeWidth: 1.5, strokeDasharray: "5 7" },
-    markerEnd: { type: MarkerType.ArrowClosed, color: "rgba(184,121,69,0.82)", width: 16, height: 16 },
+    style: { stroke: "rgba(184,121,69,0.54)", strokeWidth: 2.15, strokeDasharray: "8 9" },
+    markerEnd: { type: MarkerType.ArrowClosed, color: "rgba(184,121,69,0.84)", width: 21, height: 21 },
   },
   {
     id: "c-ai-4",
@@ -477,8 +430,8 @@ const connectedEdges: Edge[] = [
     type: "smoothstep",
     sourceHandle: "right",
     targetHandle: "left-mid-low",
-    style: { stroke: "rgba(184,121,69,0.5)", strokeWidth: 1.5, strokeDasharray: "5 7" },
-    markerEnd: { type: MarkerType.ArrowClosed, color: "rgba(184,121,69,0.82)", width: 16, height: 16 },
+    style: { stroke: "rgba(184,121,69,0.54)", strokeWidth: 2.15, strokeDasharray: "8 9" },
+    markerEnd: { type: MarkerType.ArrowClosed, color: "rgba(184,121,69,0.84)", width: 21, height: 21 },
   },
   {
     id: "c-ai-5",
@@ -487,8 +440,8 @@ const connectedEdges: Edge[] = [
     type: "smoothstep",
     sourceHandle: "right",
     targetHandle: "left-low",
-    style: { stroke: "rgba(184,121,69,0.5)", strokeWidth: 1.5, strokeDasharray: "5 7" },
-    markerEnd: { type: MarkerType.ArrowClosed, color: "rgba(184,121,69,0.82)", width: 16, height: 16 },
+    style: { stroke: "rgba(184,121,69,0.54)", strokeWidth: 2.15, strokeDasharray: "8 9" },
+    markerEnd: { type: MarkerType.ArrowClosed, color: "rgba(184,121,69,0.84)", width: 21, height: 21 },
   },
   {
     id: "c-ai-6",
@@ -497,8 +450,8 @@ const connectedEdges: Edge[] = [
     type: "smoothstep",
     sourceHandle: "right",
     targetHandle: "right-mid",
-    style: { stroke: "rgba(184,121,69,0.5)", strokeWidth: 1.5, strokeDasharray: "5 7" },
-    markerEnd: { type: MarkerType.ArrowClosed, color: "rgba(184,121,69,0.82)", width: 16, height: 16 },
+    style: { stroke: "rgba(184,121,69,0.54)", strokeWidth: 2.15, strokeDasharray: "8 9" },
+    markerEnd: { type: MarkerType.ArrowClosed, color: "rgba(184,121,69,0.84)", width: 21, height: 21 },
   },
   {
     id: "c-ai-7",
@@ -507,8 +460,8 @@ const connectedEdges: Edge[] = [
     type: "smoothstep",
     sourceHandle: "left",
     targetHandle: "top-right",
-    style: { stroke: "rgba(184,121,69,0.5)", strokeWidth: 1.5, strokeDasharray: "5 7" },
-    markerEnd: { type: MarkerType.ArrowClosed, color: "rgba(184,121,69,0.82)", width: 16, height: 16 },
+    style: { stroke: "rgba(184,121,69,0.54)", strokeWidth: 2.15, strokeDasharray: "8 9" },
+    markerEnd: { type: MarkerType.ArrowClosed, color: "rgba(184,121,69,0.84)", width: 21, height: 21 },
   },
   {
     id: "c-write-1",
@@ -517,8 +470,8 @@ const connectedEdges: Edge[] = [
     type: "smoothstep",
     sourceHandle: "bottom",
     targetHandle: "top-center",
-    style: { stroke: "rgba(184,121,69,0.56)", strokeWidth: 1.65, strokeDasharray: "5 7" },
-    markerEnd: { type: MarkerType.ArrowClosed, color: "rgba(184,121,69,0.88)", width: 18, height: 18 },
+    style: { stroke: "rgba(184,121,69,0.6)", strokeWidth: 2.35, strokeDasharray: "8 9" },
+    markerEnd: { type: MarkerType.ArrowClosed, color: "rgba(184,121,69,0.88)", width: 22, height: 22 },
   },
   {
     id: "c-write-2",
@@ -527,8 +480,8 @@ const connectedEdges: Edge[] = [
     type: "smoothstep",
     sourceHandle: "right",
     targetHandle: "left-top",
-    style: { stroke: "rgba(184,121,69,0.56)", strokeWidth: 1.55, strokeDasharray: "5 7" },
-    markerEnd: { type: MarkerType.ArrowClosed, color: "rgba(184,121,69,0.82)", width: 16, height: 16 },
+    style: { stroke: "rgba(184,121,69,0.6)", strokeWidth: 2.2, strokeDasharray: "8 9" },
+    markerEnd: { type: MarkerType.ArrowClosed, color: "rgba(184,121,69,0.84)", width: 21, height: 21 },
   },
   {
     id: "c-write-3",
@@ -537,8 +490,8 @@ const connectedEdges: Edge[] = [
     type: "smoothstep",
     sourceHandle: "right",
     targetHandle: "left-mid",
-    style: { stroke: "rgba(184,121,69,0.56)", strokeWidth: 1.55, strokeDasharray: "5 7" },
-    markerEnd: { type: MarkerType.ArrowClosed, color: "rgba(184,121,69,0.82)", width: 16, height: 16 },
+    style: { stroke: "rgba(184,121,69,0.6)", strokeWidth: 2.2, strokeDasharray: "8 9" },
+    markerEnd: { type: MarkerType.ArrowClosed, color: "rgba(184,121,69,0.84)", width: 21, height: 21 },
   },
   {
     id: "c-write-4",
@@ -547,8 +500,8 @@ const connectedEdges: Edge[] = [
     type: "smoothstep",
     sourceHandle: "bottom-center",
     targetHandle: "top-center",
-    style: { stroke: "rgba(184,121,69,0.58)", strokeWidth: 1.65, strokeDasharray: "5 7" },
-    markerEnd: { type: MarkerType.ArrowClosed, color: "rgba(184,121,69,0.86)", width: 16, height: 16 },
+    style: { stroke: "rgba(184,121,69,0.62)", strokeWidth: 2.35, strokeDasharray: "8 9" },
+    markerEnd: { type: MarkerType.ArrowClosed, color: "rgba(184,121,69,0.88)", width: 21, height: 21 },
   },
   {
     id: "c-write-5",
@@ -557,18 +510,28 @@ const connectedEdges: Edge[] = [
     type: "smoothstep",
     sourceHandle: "bottom-right",
     targetHandle: "left-center",
-    style: { stroke: "rgba(184,121,69,0.56)", strokeWidth: 1.55, strokeDasharray: "5 7" },
-    markerEnd: { type: MarkerType.ArrowClosed, color: "rgba(184,121,69,0.82)", width: 16, height: 16 },
+    style: { stroke: "rgba(184,121,69,0.6)", strokeWidth: 2.2, strokeDasharray: "8 9" },
+    markerEnd: { type: MarkerType.ArrowClosed, color: "rgba(184,121,69,0.84)", width: 21, height: 21 },
   },
   {
     id: "c-feedback-1",
+    source: "c-experiments",
+    target: "c-reports",
+    type: "smoothstep",
+    sourceHandle: "bottom-right",
+    targetHandle: "left-low",
+    style: { stroke: "rgba(184,121,69,0.86)", strokeWidth: 2.8 },
+    markerEnd: { type: MarkerType.ArrowClosed, color: "rgba(184,121,69,0.92)", width: 24, height: 24 },
+  },
+  {
+    id: "c-ai-8",
     source: "c-reports",
-    target: "c-experiments",
+    target: "c-hub",
     type: "smoothstep",
     sourceHandle: "left",
-    targetHandle: "top-right",
-    style: { stroke: "rgba(184,121,69,0.58)", strokeWidth: 1.55, strokeDasharray: "5 7" },
-    markerEnd: { type: MarkerType.ArrowClosed, color: "rgba(184,121,69,0.82)", width: 16, height: 16 },
+    targetHandle: "right-mid",
+    style: { stroke: "rgba(184,121,69,0.54)", strokeWidth: 2.15, strokeDasharray: "8 9" },
+    markerEnd: { type: MarkerType.ArrowClosed, color: "rgba(184,121,69,0.84)", width: 21, height: 21 },
   },
   {
     id: "c-output-1",
@@ -577,35 +540,39 @@ const connectedEdges: Edge[] = [
     type: "smoothstep",
     sourceHandle: "bottom",
     targetHandle: "top",
-    style: { stroke: "rgba(184,121,69,0.82)", strokeWidth: 1.95 },
-    markerEnd: { type: MarkerType.ArrowClosed, color: "rgba(184,121,69,0.9)", width: 18, height: 18 },
+    style: { stroke: "rgba(184,121,69,0.86)", strokeWidth: 2.9 },
+    markerEnd: { type: MarkerType.ArrowClosed, color: "rgba(184,121,69,0.92)", width: 25, height: 25 },
   },
 ]
 
 const comparisonNodeTypes = { comparisonNode: ComparisonNode }
 
 function ComparisonNode({ data }: NodeProps<ComparisonFlowNode>) {
+  const handleClass = data.editable
+    ? "!h-3.5 !w-3.5 !border-2 !border-white !bg-[var(--n9-accent)] !opacity-100 shadow-[0_0_0_4px_rgba(184,121,69,0.16)]"
+    : "!h-0 !w-0 !border-0 !bg-transparent !opacity-0"
+
   if (data.hub) {
     return (
-      <div className="nopan relative w-[220px] rounded-[30px] border border-[var(--n9-accent)]/25 bg-[linear-gradient(180deg,rgba(250,244,238,0.98),rgba(255,255,255,0.94))] p-6 text-center shadow-[0_32px_110px_-44px_rgba(155,71,34,0.38)]">
-        <Handle id="top-left" type="target" position={Position.Top} style={{ left: "18%" }} className="!h-0 !w-0 !border-0 !bg-transparent !opacity-0" />
-        <Handle id="top-center" type="target" position={Position.Top} style={{ left: "50%" }} className="!h-0 !w-0 !border-0 !bg-transparent !opacity-0" />
-        <Handle id="top-right" type="target" position={Position.Top} style={{ left: "82%" }} className="!h-0 !w-0 !border-0 !bg-transparent !opacity-0" />
-        <Handle id="left-top" type="target" position={Position.Left} style={{ top: "26%" }} className="!h-0 !w-0 !border-0 !bg-transparent !opacity-0" />
-        <Handle id="left-mid-top" type="target" position={Position.Left} style={{ top: "38%" }} className="!h-0 !w-0 !border-0 !bg-transparent !opacity-0" />
-        <Handle id="left-mid" type="target" position={Position.Left} style={{ top: "52%" }} className="!h-0 !w-0 !border-0 !bg-transparent !opacity-0" />
-        <Handle id="left-mid-low" type="target" position={Position.Left} style={{ top: "66%" }} className="!h-0 !w-0 !border-0 !bg-transparent !opacity-0" />
-        <Handle id="left-low" type="target" position={Position.Left} style={{ top: "78%" }} className="!h-0 !w-0 !border-0 !bg-transparent !opacity-0" />
-        <Handle id="right-mid" type="target" position={Position.Right} style={{ top: "58%" }} className="!h-0 !w-0 !border-0 !bg-transparent !opacity-0" />
-        <Handle id="bottom-center" type="source" position={Position.Bottom} style={{ left: "50%" }} className="!h-0 !w-0 !border-0 !bg-transparent !opacity-0" />
-        <div className="mx-auto flex h-20 w-20 items-center justify-center overflow-hidden rounded-[24px] bg-[var(--n9-accent-light)]">
-          <IceMascot className="h-[4.5rem] w-[4.5rem]" options={{ src: "/notes9-mascot-ui.png" }} aria-hidden />
+      <div className="nopan relative w-[420px] rounded-[44px] border border-[var(--n9-accent)]/25 bg-[linear-gradient(180deg,rgba(250,244,238,0.98),rgba(255,255,255,0.94))] p-11 text-center shadow-[0_46px_138px_-44px_rgba(155,71,34,0.38)]">
+        <Handle id="top-left" type="target" position={Position.Top} style={{ left: "18%" }} className={handleClass} />
+        <Handle id="top-center" type="target" position={Position.Top} style={{ left: "50%" }} className={handleClass} />
+        <Handle id="top-right" type="target" position={Position.Top} style={{ left: "82%" }} className={handleClass} />
+        <Handle id="left-top" type="target" position={Position.Left} style={{ top: "26%" }} className={handleClass} />
+        <Handle id="left-mid-top" type="target" position={Position.Left} style={{ top: "38%" }} className={handleClass} />
+        <Handle id="left-mid" type="target" position={Position.Left} style={{ top: "52%" }} className={handleClass} />
+        <Handle id="left-mid-low" type="target" position={Position.Left} style={{ top: "66%" }} className={handleClass} />
+        <Handle id="left-low" type="target" position={Position.Left} style={{ top: "78%" }} className={handleClass} />
+        <Handle id="right-mid" type="target" position={Position.Right} style={{ top: "58%" }} className={handleClass} />
+        <Handle id="bottom-center" type="source" position={Position.Bottom} style={{ left: "50%" }} className={handleClass} />
+        <div className="mx-auto flex h-36 w-36 items-center justify-center overflow-hidden rounded-[36px] bg-[var(--n9-accent-light)]">
+          <IceMascot className="h-[8.5rem] w-[8.5rem]" options={{ src: "/notes9-mascot-ui.png" }} aria-hidden />
         </div>
-        <p className="mt-5 text-[13px] font-semibold uppercase tracking-[0.24em] text-[var(--n9-accent)]">
+        <p className="mt-7 text-[22px] font-bold uppercase tracking-[0.2em] text-[var(--n9-accent)]">
           {data.label}
         </p>
         <div className="mt-4 h-px w-full bg-[linear-gradient(90deg,transparent,rgba(184,121,69,0.26),transparent)]" />
-        <p className="mt-3 text-[12px] font-medium text-muted-foreground">
+        <p className="mt-5 text-[20px] font-semibold text-muted-foreground">
           keeps every phase connected
         </p>
       </div>
@@ -616,40 +583,40 @@ function ComparisonNode({ data }: NodeProps<ComparisonFlowNode>) {
   const tone = toneClasses[data.tone ?? "slate"]
   const role = data.role ?? "default"
   return (
-    <div className={`nopan w-[120px] rounded-[18px] border p-3 shadow-[0_12px_30px_-22px_rgba(44,36,24,0.22)] ${tone}`}>
-      <Handle id="top" type="target" position={Position.Top} className="!h-0 !w-0 !border-0 !bg-transparent !opacity-0" />
-      <Handle id="top-center" type="target" position={Position.Top} style={{ left: "50%" }} className="!h-0 !w-0 !border-0 !bg-transparent !opacity-0" />
-      <Handle id="top-right" type="target" position={Position.Top} style={{ left: "76%" }} className="!h-0 !w-0 !border-0 !bg-transparent !opacity-0" />
-      <Handle id="left" type="target" position={Position.Left} className="!h-0 !w-0 !border-0 !bg-transparent !opacity-0" />
-      <Handle id="left-center" type="target" position={Position.Left} style={{ top: "50%" }} className="!h-0 !w-0 !border-0 !bg-transparent !opacity-0" />
-      <Handle id="left-top" type="target" position={Position.Left} style={{ top: "34%" }} className="!h-0 !w-0 !border-0 !bg-transparent !opacity-0" />
-      <Handle id="left-mid" type="target" position={Position.Left} style={{ top: "56%" }} className="!h-0 !w-0 !border-0 !bg-transparent !opacity-0" />
-      <Handle id="left-low" type="target" position={Position.Left} style={{ top: "76%" }} className="!h-0 !w-0 !border-0 !bg-transparent !opacity-0" />
-      <Handle id="right" type="target" position={Position.Right} className="!h-0 !w-0 !border-0 !bg-transparent !opacity-0" />
-      <Handle id="bottom" type="source" position={Position.Bottom} className="!h-0 !w-0 !border-0 !bg-transparent !opacity-0" />
-      <Handle id="top-right" type="source" position={Position.Top} style={{ left: "80%" }} className="!h-0 !w-0 !border-0 !bg-transparent !opacity-0" />
-      <Handle id="left" type="source" position={Position.Left} className="!h-0 !w-0 !border-0 !bg-transparent !opacity-0" />
-      <Handle id="right" type="source" position={Position.Right} className="!h-0 !w-0 !border-0 !bg-transparent !opacity-0" />
-      <Handle id="ai-right" type="source" position={Position.Right} style={{ top: "74%" }} className="!h-0 !w-0 !border-0 !bg-transparent !opacity-0" />
-      <Handle id="bottom-right" type="source" position={Position.Bottom} style={{ left: "76%" }} className="!h-0 !w-0 !border-0 !bg-transparent !opacity-0" />
+    <div className={`nopan w-[228px] rounded-[32px] border p-7 shadow-[0_24px_54px_-24px_rgba(44,36,24,0.22)] ${tone}`}>
+      <Handle id="top" type="target" position={Position.Top} className={handleClass} />
+      <Handle id="top-center" type="target" position={Position.Top} style={{ left: "50%" }} className={handleClass} />
+      <Handle id="top-right" type="target" position={Position.Top} style={{ left: "76%" }} className={handleClass} />
+      <Handle id="left" type="target" position={Position.Left} className={handleClass} />
+      <Handle id="left-center" type="target" position={Position.Left} style={{ top: "50%" }} className={handleClass} />
+      <Handle id="left-top" type="target" position={Position.Left} style={{ top: "34%" }} className={handleClass} />
+      <Handle id="left-mid" type="target" position={Position.Left} style={{ top: "56%" }} className={handleClass} />
+      <Handle id="left-low" type="target" position={Position.Left} style={{ top: "76%" }} className={handleClass} />
+      <Handle id="right" type="target" position={Position.Right} className={handleClass} />
+      <Handle id="bottom" type="source" position={Position.Bottom} className={handleClass} />
+      <Handle id="top-right" type="source" position={Position.Top} style={{ left: "80%" }} className={handleClass} />
+      <Handle id="left" type="source" position={Position.Left} className={handleClass} />
+      <Handle id="right" type="source" position={Position.Right} className={handleClass} />
+      <Handle id="ai-right" type="source" position={Position.Right} style={{ top: "74%" }} className={handleClass} />
+      <Handle id="bottom-right" type="source" position={Position.Bottom} style={{ left: "76%" }} className={handleClass} />
       {role === "experiments" ? (
         <>
-          <Handle id="branch-1" type="source" position={Position.Right} style={{ top: "18%" }} className="!h-0 !w-0 !border-0 !bg-transparent !opacity-0" />
-          <Handle id="branch-2" type="source" position={Position.Right} style={{ top: "38%" }} className="!h-0 !w-0 !border-0 !bg-transparent !opacity-0" />
-          <Handle id="branch-3" type="source" position={Position.Right} style={{ top: "60%" }} className="!h-0 !w-0 !border-0 !bg-transparent !opacity-0" />
-          <Handle id="branch-4" type="source" position={Position.Right} style={{ top: "82%" }} className="!h-0 !w-0 !border-0 !bg-transparent !opacity-0" />
+          <Handle id="branch-1" type="source" position={Position.Right} style={{ top: "18%" }} className={handleClass} />
+          <Handle id="branch-2" type="source" position={Position.Right} style={{ top: "38%" }} className={handleClass} />
+          <Handle id="branch-3" type="source" position={Position.Right} style={{ top: "60%" }} className={handleClass} />
+          <Handle id="branch-4" type="source" position={Position.Right} style={{ top: "82%" }} className={handleClass} />
         </>
       ) : null}
       <div className="flex items-center justify-between">
-        <Icon className="h-4 w-4" />
-        <Sparkles className="h-3.5 w-3.5 opacity-60" />
+        <Icon className="h-6 w-6" />
+        <Sparkles className="h-5 w-5 opacity-60" />
       </div>
-      <div className="mt-4 h-6 rounded-xl bg-white/55" />
-      <div className="mt-2 flex gap-1.5">
-        <div className="h-1.5 w-7 rounded-full bg-white/75" />
-        <div className="h-1.5 w-5 rounded-full bg-white/55" />
+      <div className="mt-6 h-10 rounded-2xl bg-white/55" />
+      <div className="mt-4 flex gap-2">
+        <div className="h-1.5 w-10 rounded-full bg-white/75" />
+        <div className="h-1.5 w-8 rounded-full bg-white/55" />
       </div>
-      <p className="mt-3 text-[10px] font-semibold uppercase tracking-[0.2em]">{data.label}</p>
+      <p className="mt-5 text-[18px] font-bold uppercase tracking-[0.18em]">{data.label}</p>
     </div>
   )
 }
@@ -658,34 +625,84 @@ function ComparisonGraph({
   nodes,
   edges,
   backgroundColor,
+  editable = false,
+  onGraphChange,
 }: {
   nodes: ComparisonFlowNode[]
   edges: Edge[]
   backgroundColor: string
+  editable?: boolean
+  onGraphChange?: (graph: { nodes: ComparisonFlowNode[]; edges: Edge[] }) => void
 }) {
-  const [graphNodes, setGraphNodes] = useNodesState(nodes)
+  const [graphNodes, setGraphNodes, onNodesChange] = useNodesState(nodes)
+  const [graphEdges, setGraphEdges, onEdgesChange] = useEdgesState(edges)
+  const renderNodes = graphNodes.map((node) => ({
+    ...node,
+    data: {
+      ...node.data,
+      editable,
+    },
+  }))
 
   useEffect(() => {
     setGraphNodes(nodes)
   }, [nodes, setGraphNodes])
 
+  useEffect(() => {
+    setGraphEdges(edges)
+  }, [edges, setGraphEdges])
+
+  useEffect(() => {
+    onGraphChange?.({
+      nodes: graphNodes as ComparisonFlowNode[],
+      edges: graphEdges,
+    })
+  }, [graphNodes, graphEdges, onGraphChange])
+
+  const handleConnect = (connection: Connection) => {
+    if (!editable) return
+    setGraphEdges((currentEdges) =>
+      addEdge(
+        {
+          ...connection,
+          type: "smoothstep",
+          style: { stroke: "rgba(184,121,69,0.54)", strokeWidth: 2.15, strokeDasharray: "8 9" },
+          markerEnd: { type: MarkerType.ArrowClosed, color: "rgba(184,121,69,0.84)", width: 21, height: 21 },
+        },
+        currentEdges,
+      ),
+    )
+  }
+
+  const handleReconnect = (oldEdge: Edge, newConnection: Connection) => {
+    if (!editable) return
+    setGraphEdges((currentEdges) => reconnectEdge(oldEdge, newConnection, currentEdges))
+  }
+
   return (
     <ReactFlowProvider>
-      <div className="h-[620px] w-full overflow-hidden rounded-[24px]">
+      <div className="h-[840px] w-full overflow-hidden rounded-[28px]">
         <ReactFlow
-          nodes={graphNodes}
-          edges={edges}
+          nodes={renderNodes}
+          edges={graphEdges}
+          onNodesChange={editable ? onNodesChange : undefined}
+          onEdgesChange={editable ? onEdgesChange : undefined}
+          onConnect={editable ? handleConnect : undefined}
+          onReconnect={editable ? handleReconnect : undefined}
           nodeTypes={comparisonNodeTypes}
           fitView
-          fitViewOptions={{ padding: 0.3 }}
+          fitViewOptions={{ padding: 0.1 }}
           proOptions={{ hideAttribution: true }}
-          nodesDraggable={false}
-          nodesConnectable={false}
-          elementsSelectable={false}
-          panOnDrag={false}
+          nodesDraggable={editable}
+          nodesConnectable={editable}
+          edgesReconnectable={editable}
+          elementsSelectable={editable}
+          panOnDrag={editable}
+          panOnScroll={editable}
+          panOnScrollMode={PanOnScrollMode.Free}
           selectionOnDrag={false}
-          zoomOnDoubleClick={false}
-          zoomOnPinch={false}
+          zoomOnDoubleClick={editable}
+          zoomOnPinch={editable}
           zoomOnScroll={false}
           preventScrolling={false}
           className={backgroundColor}
@@ -778,6 +795,7 @@ export function PlatformDifferentiationSection({
   className?: string
 }) {
   const [connectedLayout, setConnectedLayout] = useState<ComparisonFlowNode[]>(connectedNodes)
+  const [connectedEdgeLayout, setConnectedEdgeLayout] = useState<Edge[]>(connectedEdges)
 
   useEffect(() => {
     if (typeof window === "undefined") return
@@ -787,9 +805,14 @@ export function PlatformDifferentiationSection({
     if (savedLayout) {
       try {
         const parsed = JSON.parse(savedLayout)
-        setConnectedLayout(mergeSavedConnectedLayout(parsed))
+        const savedNodes = Array.isArray(parsed) ? parsed : parsed?.nodes
+        const savedEdges = Array.isArray(parsed?.edges) ? parsed.edges : connectedEdges
+        const mergedLayout = mergeSavedConnectedLayout(savedNodes)
+        setConnectedLayout(mergedLayout)
+        setConnectedEdgeLayout(savedEdges)
       } catch {
         setConnectedLayout(connectedNodes)
+        setConnectedEdgeLayout(connectedEdges)
       }
     }
   }, [])
@@ -797,35 +820,40 @@ export function PlatformDifferentiationSection({
   return (
     <section className={className}>
       <div className="container mx-auto px-4 py-16 sm:px-6 lg:px-8">
-        <div className="mx-auto grid max-w-6xl gap-8 lg:grid-cols-2 lg:items-stretch">
-          <div className="flex h-full flex-col rounded-[28px] border border-border/50 bg-background/85 p-6 shadow-[0_20px_60px_-40px_rgba(44,36,24,0.2)] backdrop-blur-sm">
-            <SectionHeader badge="Differentiation" title="Disconnected phases" className="text-left lg:min-h-[5rem]" />
-            <div className="mt-6 flex flex-1 flex-col justify-center">
-              <div className="rounded-[24px] border border-border/40 bg-muted/15 p-3">
-                <ComparisonGraph
-                  nodes={disconnectedNodes}
-                  edges={disconnectedEdges}
-                  backgroundColor="bg-transparent"
-                />
-              </div>
-              <div className="mt-5 flex items-center justify-center gap-3 text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground/55">
-                <span>Manual handoff</span>
-                <span className="h-1.5 w-1.5 rounded-full bg-border" />
-                <span>Lost context</span>
-                <span className="h-1.5 w-1.5 rounded-full bg-border" />
-                <span>Rework</span>
-              </div>
+        <div className="mx-auto max-w-[88rem]">
+          <div className="flex flex-col rounded-[36px] border border-[var(--n9-accent)]/15 bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(247,242,236,0.92))] p-6 shadow-[0_28px_90px_-44px_rgba(44,36,24,0.24)] backdrop-blur-sm sm:p-8 lg:p-10">
+            <SectionHeader
+              badge="Connected Research System"
+              title="Research slows down when context breaks between tools"
+              className="max-w-none text-left"
+            />
+            <p className="mt-4 w-full text-justify text-base leading-7 text-muted-foreground sm:text-lg">
+              Disconnected phases force teams to reconstruct rationale, repeat handoffs, and lose continuity. Notes9 keeps the workflow connected from literature to experiments to writing.
+            </p>
+            <div className="mt-6 flex flex-wrap gap-3 text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground/70">
+              <span className="rounded-full border border-border/60 bg-background/75 px-3 py-2">fragmentation costs time</span>
+              <span className="rounded-full border border-border/60 bg-background/75 px-3 py-2">handoffs break provenance</span>
+              <span className="rounded-full border border-border/60 bg-background/75 px-3 py-2">reconstruction slows decisions</span>
             </div>
-          </div>
-          <div className="flex h-full flex-col rounded-[28px] border border-border/50 bg-background/85 p-6 shadow-[0_20px_60px_-40px_rgba(44,36,24,0.2)] backdrop-blur-sm">
-            <SectionHeader badge="Notes9" title="Connected system" className="text-left lg:min-h-[5rem]" />
-            <div className="mt-6 flex flex-1 items-center justify-center">
-              <div className="w-full rounded-[24px] border border-[var(--n9-accent)]/15 bg-[radial-gradient(circle_at_center,rgba(184,121,69,0.08),transparent_55%)] p-3">
+            <div className="mt-8 flex flex-1 items-center justify-center">
+              <div className="w-full rounded-[32px] border border-[var(--n9-accent)]/15 bg-[radial-gradient(circle_at_center,rgba(184,121,69,0.08),transparent_58%)] p-5 lg:p-6">
                 <ComparisonGraph
                   nodes={connectedLayout}
-                  edges={connectedEdges}
+                  edges={connectedEdgeLayout}
                   backgroundColor="bg-transparent"
+                  editable={false}
                 />
+              </div>
+            </div>
+            <div className="mt-6 grid gap-3 text-[11px] font-semibold uppercase tracking-[0.2em] text-muted-foreground/65 sm:grid-cols-3">
+              <div className="rounded-[18px] border border-border/50 bg-background/70 px-4 py-3">
+                Evidence stays linked
+              </div>
+              <div className="rounded-[18px] border border-border/50 bg-background/70 px-4 py-3">
+                Catalyst AI sees full context
+              </div>
+              <div className="rounded-[18px] border border-border/50 bg-background/70 px-4 py-3">
+                Writing reflects the work
               </div>
             </div>
           </div>

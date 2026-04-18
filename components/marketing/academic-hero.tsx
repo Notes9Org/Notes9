@@ -55,6 +55,7 @@ export function AcademicHero() {
   const sectionRef = useRef<HTMLElement>(null)
   const [index, setIndex] = useState(0)
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const slideCount = heroSlides.length
 
   const { scrollYProgress } = useScroll({
     target: sectionRef,
@@ -64,18 +65,28 @@ export function AcademicHero() {
   const heroScale = useTransform(scrollYProgress, [0, 0.5], [1, 0.97])
 
   const advanceSlide = () => {
-    setIndex((currentIndex) => (currentIndex + 1) % heroSlides.length)
+    setIndex((currentIndex) => {
+      if (slideCount === 0) return 0
+      return (currentIndex + 1) % slideCount
+    })
   }
 
   useEffect(() => {
+    if (slideCount === 0) return
     if (timerRef.current) clearTimeout(timerRef.current)
     timerRef.current = setTimeout(advanceSlide, INTERVAL)
     return () => {
       if (timerRef.current) clearTimeout(timerRef.current)
     }
-  }, [index])
+  }, [index, slideCount])
 
-  const slide = heroSlides[index]
+  const normalizedIndex = slideCount === 0 ? 0 : index % slideCount
+  const slide = heroSlides[normalizedIndex] ?? heroSlides[0] ?? {
+    word: "research",
+    eyebrow: "Connect",
+    src: PRIMARY_HERO_POSTER,
+    alt: "Notes9 research workspace",
+  }
 
   return (
     <section ref={sectionRef} className="relative overflow-hidden">
@@ -195,7 +206,7 @@ export function AcademicHero() {
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.9, delay: 0.5, ease: "easeOut" }}
           style={{ y: heroY, scale: heroScale }}
-          className="relative mx-auto mt-14 max-w-5xl"
+          className="relative mx-auto mt-14 max-w-[88rem]"
         >
           <div className="relative">
             <div className="absolute -inset-6 rounded-3xl bg-gradient-to-b from-[var(--n9-accent)]/[0.08] via-[var(--n9-accent)]/[0.04] to-transparent blur-2xl" />
@@ -277,13 +288,17 @@ function ScreenshotCard({
       </div>
       <div className="relative aspect-[16/9] bg-[#080808]">
         {isActive && video ? (
-          <iframe
+          <video
             key={video}
             src={video}
-            title={alt}
-            loading="eager"
-            allow="autoplay; fullscreen; picture-in-picture"
-            className="block h-full w-full border-0 bg-black"
+            aria-label={alt}
+            className="block h-full w-full bg-black object-contain"
+            autoPlay
+            muted
+            loop
+            playsInline
+            controls
+            preload="auto"
           />
         ) : (
           <Image
@@ -295,20 +310,6 @@ function ScreenshotCard({
           />
         )}
       </div>
-      {video ? (
-        <div className="flex items-center justify-between gap-4 border-t border-border/40 bg-muted/20 px-4 py-3">
-          <span className="text-[11px] font-semibold uppercase tracking-[0.22em] text-muted-foreground">37s-97s clip</span>
-          <a
-            href={video}
-            target="_blank"
-            rel="noreferrer"
-            className="inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.18em] text-[var(--n9-accent)]"
-          >
-            <Play className="h-3.5 w-3.5" />
-            Open demo
-          </a>
-        </div>
-      ) : null}
     </div>
   )
 }
