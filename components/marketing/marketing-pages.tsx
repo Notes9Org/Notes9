@@ -269,8 +269,8 @@ export function PlatformDifferentiationSection({
               <span className="rounded-full border border-border/60 bg-background/75 px-3 py-2 dark:border-white/10 dark:bg-white/[0.04]">handoffs break provenance</span>
               <span className="rounded-full border border-border/60 bg-background/75 px-3 py-2 dark:border-white/10 dark:bg-white/[0.04]">reconstruction slows decisions</span>
             </div>
-            <div className="mt-8 w-full">
-              <ConnectedResearchSystemDiagram />
+            <div className="mt-8 w-full max-w-none">
+              <ConnectedResearchSystemDiagram className="w-full" />
             </div>
             <div className="mt-6 grid gap-3 text-[11px] font-semibold uppercase tracking-[0.2em] text-muted-foreground/65 dark:text-slate-400 sm:grid-cols-3">
               <div className="rounded-[18px] border border-border/50 bg-background/70 px-4 py-3 dark:border-white/10 dark:bg-white/[0.04]">
@@ -557,7 +557,7 @@ export function ResourcesMarketingPage() {
                     </div>
                   </AccordionTrigger>
                   <AccordionContent>
-                    <div className="pb-4 pl-14">
+                    <div className="pb-4 pl-0 sm:pl-14">
                       <ul className="space-y-3 text-sm leading-6 text-muted-foreground">
                         {guide.bullets.map((bullet) => (
                           <li key={bullet} className="flex items-start gap-3">

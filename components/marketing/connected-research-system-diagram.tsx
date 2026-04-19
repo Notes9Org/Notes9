@@ -1,6 +1,14 @@
 "use client"
 
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react"
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type RefObject,
+} from "react"
+import { motion, useInView } from "framer-motion"
 import { IceMascot } from "@/components/ui/ice-mascot"
 
 const PCOLS = ["#1a7a5e", "#2e5fa3", "#7a4fb8", "#b87333", "#5a3d99", "#c04a3a", "#c8882a"]
@@ -121,6 +129,33 @@ function rectExitTowardCat(left: number, top: number, w: number, h: number, tx: 
   if (!Number.isFinite(tMin)) return { x: cx, y: cy }
   return { x: cx + tMin * vx, y: cy + tMin * vy }
 }
+
+/**
+ * Hub center → chip anchor distance (px). Chord between neighbors ≈ R (60° steps).
+ * Keep R high enough vs chip width (~140px) so cards do not overlap.
+ */
+const HUB_ORBIT_RADIUS_PX = 218
+
+/**
+ * Cards enter from the LEFT edge of the strip at a Y set by clock angle,
+ * travel rightward ALL THE WAY to the violet rail, fade after crossing it.
+ * While a card is 40% through its trip the next one spawns.
+ * Directions cycle: 10:30 -> 7:30 -> 9:00 -> 11:00 -> 7:00 -> 8:30
+ */
+const DECK_FLIGHT_MS = 5800
+const DECK_SPAWN_AT_FRAC = 0.40
+
+/** Where on the lane height (0=top 1=bottom) each clock-direction enters from the left */
+const DECK_CLOCK_DIRS = [
+  { spawnFracY: 0.22, initRotate:  7  }, // 10:30
+  { spawnFracY: 0.78, initRotate: -7  }, // 7:30
+  { spawnFracY: 0.50, initRotate:  0  }, // 9:00
+  { spawnFracY: 0.09, initRotate:  12 }, // 11:00
+  { spawnFracY: 0.88, initRotate: -12 }, // 7:00
+  { spawnFracY: 0.62, initRotate: -4  }, // 8:30
+] as const
+
+type DeckGeo = { laneW: number; laneH: number }
 
 /**
  * Overlapping deck (reference: fanned stack → rail). Order:
@@ -312,6 +347,179 @@ function CardSkeleton({ cardKey }: { cardKey: FlowCardKey }) {
           ))}
         </div>
       ))}
+    </div>
+  )
+}
+
+const DECK_CARD_W = 196
+const DECK_CARD_H = 230
+
+const defaultDeckGeo: DeckGeo = { laneW: 360, laneH: 620 }
+
+
+// ─── Flight card ──────────────────────────────────────────────────────────────
+
+type DeckFlight = { id: number; dirIndex: number; cardIndex: number; geo: DeckGeo }
+
+function DeckFlightInstance({
+  flight,
+  row,
+  onDone,
+}: {
+  flight: DeckFlight
+  row: (typeof FLOW_CARDS)[number]
+  onDone: () => void
+}) {
+  const dir = DECK_CLOCK_DIRS[flight.dirIndex % DECK_CLOCK_DIRS.length]!
+  const { laneW, laneH } = flight.geo
+  const d = DECK_FLIGHT_MS / 1000
+  const hh = DECK_CARD_H / 2
+
+  const spawnLeft = -DECK_CARD_W - 12
+  const spawnTop  = dir.spawnFracY * laneH - hh
+  const endLeft   = laneW + 32           // goes past the rail; parent overflow-hidden clips it
+  const endTop    = laneH * 0.5 - hh    // all arrivals converge to vertical center
+
+  return (
+    <motion.div
+      className="pointer-events-none absolute z-[5] flex w-[196px] min-h-[230px] flex-col overflow-hidden rounded-2xl border border-black/[0.08] bg-white shadow-[0_10px_36px_-12px_rgba(20,18,16,0.2)] will-change-[left,top,opacity] dark:border-white/[0.11] dark:bg-[#222024] dark:shadow-[0_12px_40px_-12px_rgba(0,0,0,0.65)]"
+      initial={{ left: spawnLeft, top: spawnTop, opacity: 0, scale: 0.92, rotate: dir.initRotate }}
+      animate={{
+        left: endLeft,
+        top: endTop,
+        scale: 1,
+        rotate: 0,
+        opacity: [0, 1, 1, 0.55, 0],
+      }}
+      transition={{
+        left:    { duration: d, ease: [0.28, 0.06, 0.15, 1] },
+        top:     { duration: d, ease: [0.28, 0.06, 0.15, 1] },
+        scale:   { duration: d * 0.35, ease: "easeOut" },
+        rotate:  { duration: d * 0.40, ease: "easeOut" },
+        // fade in 0→10%, hold 10→72%, fade out 72→88%
+        opacity: { duration: d, times: [0, 0.10, 0.72, 0.88, 1], ease: "linear" },
+      }}
+      onAnimationComplete={onDone}
+    >
+      <div className="h-[4px] w-full shrink-0" style={{ backgroundColor: row.accent }} />
+      <div className="flex flex-1 flex-col px-4 pb-5 pt-3.5">
+        <p
+          className="mb-3 text-[10px] font-bold uppercase leading-snug tracking-[0.18em]"
+          style={{ color: row.accent }}
+        >
+          {row.label}
+        </p>
+        <CardSkeleton cardKey={row.key} />
+      </div>
+    </motion.div>
+  )
+}
+
+// ─── Pipeline ─────────────────────────────────────────────────────────────────
+
+function MarketingDeckPipeline({
+  reduceMotion,
+  stripInView,
+  flowDeckCardRef,
+  laneRef,
+
+}: {
+  reduceMotion: boolean
+  stripInView: boolean
+  flowDeckCardRef: RefObject<HTMLDivElement | null>
+  laneRef: RefObject<HTMLDivElement | null>
+}) {
+  const [geo, setGeo] = useState<DeckGeo>(defaultDeckGeo)
+  const geoRef = useRef(geo)
+  geoRef.current = geo
+
+  const [flights, setFlights] = useState<DeckFlight[]>([])
+
+  const dirIdxRef    = useRef(0)
+  const cardIdxRef   = useRef(0)
+  const nextIdRef    = useRef(1)
+
+  useLayoutEffect(() => {
+    const el = laneRef.current
+    if (!el) return
+    const apply = () => {
+      const r = el.getBoundingClientRect()
+      setGeo({ laneW: Math.max(200, r.width), laneH: Math.max(300, r.height) })
+    }
+    apply()
+    const ro = new ResizeObserver(apply)
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [laneRef])
+
+  useEffect(() => {
+    if (!stripInView) {
+      dirIdxRef.current  = 0
+      cardIdxRef.current = 0
+    }
+  }, [stripInView])
+
+  useEffect(() => {
+    if (reduceMotion || !stripInView) {
+      setFlights([])
+      return
+    }
+    // ⅓ stagger → 3 cards always in flight simultaneously
+    const interval = DECK_FLIGHT_MS * (1 / 3)
+
+    const spawn = () => {
+      const id        = nextIdRef.current++
+      const dirIndex  = dirIdxRef.current  % DECK_CLOCK_DIRS.length
+      const cardIndex = cardIdxRef.current % FLOW_CARDS.length
+      const geo       = geoRef.current
+      dirIdxRef.current++
+      cardIdxRef.current++
+
+      setFlights((prev) => [...prev.slice(-8), { id, dirIndex, cardIndex, geo: { ...geo } }])
+    }
+
+    spawn()
+    const iv = window.setInterval(spawn, interval)
+    return () => window.clearInterval(iv)
+  }, [reduceMotion, stripInView])
+
+  const removeFlight = useCallback((id: number) => {
+    setFlights((prev) => prev.filter((f) => f.id !== id))
+  }, [])
+
+  const row0 = FLOW_CARDS[0]!
+
+  return (
+    <div ref={laneRef} className="absolute inset-0 overflow-hidden">
+      {/* Hidden sizer so violetRailPx ResizeObserver has a real element */}
+      <div
+        ref={flowDeckCardRef}
+        className="pointer-events-none invisible absolute left-1/2 top-1/2 w-[196px] min-h-[230px] -translate-x-1/2 -translate-y-1/2"
+        aria-hidden
+      />
+
+      {reduceMotion ? (
+        <div className="pointer-events-none absolute left-1/2 top-1/2 z-[1] flex w-[196px] min-h-[230px] -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-2xl border border-black/[0.08] bg-white shadow-[0_10px_36px_-12px_rgba(20,18,16,0.2)] dark:border-white/[0.11] dark:bg-[#222024] dark:shadow-[0_12px_40px_-12px_rgba(0,0,0,0.65)]">
+          <div className="h-[4px] w-full shrink-0" style={{ backgroundColor: row0.accent }} />
+          <div className="flex flex-1 flex-col px-4 pb-5 pt-3.5">
+            <p className="mb-3 text-[10px] font-bold uppercase leading-snug tracking-[0.18em]" style={{ color: row0.accent }}>
+              {row0.label}
+            </p>
+            <CardSkeleton cardKey={row0.key} />
+          </div>
+        </div>
+      ) : (
+        <>
+          {flights.map((f) => (
+            <DeckFlightInstance
+              key={f.id}
+              flight={f}
+              row={FLOW_CARDS[f.cardIndex]!}
+              onDone={() => removeFlight(f.id)}
+            />
+          ))}
+        </>
+      )}
     </div>
   )
 }
@@ -519,6 +727,13 @@ export function ConnectedResearchSystemDiagram({ className = "" }: { className?:
   const [n9Status, setN9Status] = useState("ingesting")
   const [statusFade, setStatusFade] = useState(true)
   const [reduceMotion, setReduceMotion] = useState(false)
+  const [wrapWidth, setWrapWidth] = useState(720)
+
+  const flowStripRef = useRef<HTMLDivElement>(null)
+  const deckLaneRef = useRef<HTMLDivElement>(null)
+  const stripInView = useInView(flowStripRef, { amount: 0.12, once: false })
+
+
   /** Violet rail height = 140% of a left flow deck card (marquee cards) */
   const [violetRailPx, setVioletRailPx] = useState(Math.round(230 * 1.4))
   const [connInfo, setConnInfo] = useState<{
@@ -526,11 +741,16 @@ export function ConnectedResearchSystemDiagram({ className = "" }: { className?:
     svgH: number
     catX: number
     catY: number
+    catR: number
     chips: { sx: number; sy: number; cx: number; cy: number }[]
-  }>({ svgW: 0, svgH: 0, catX: 0, catY: 0, chips: [] })
+  }>({ svgW: 0, svgH: 0, catX: 0, catY: 0, catR: 50, chips: [] })
 
   useEffect(() => {
-    setReduceMotion(window.matchMedia("(prefers-reduced-motion: reduce)").matches)
+    const mq = window.matchMedia("(prefers-reduced-motion: reduce)")
+    const apply = () => setReduceMotion(mq.matches)
+    apply()
+    mq.addEventListener("change", apply)
+    return () => mq.removeEventListener("change", apply)
   }, [])
 
   useLayoutEffect(() => {
@@ -559,11 +779,14 @@ export function ConnectedResearchSystemDiagram({ className = "" }: { className?:
     const cr = cat.getBoundingClientRect()
     const catX = cr.left - pr.left + cr.width / 2
     const catY = cr.top - pr.top + cr.height / 2
+    /* Slightly generous: used for line stop distance so arrows clear logo + label */
+    const catR = Math.max(40, Math.min(cr.width, cr.height) * 0.5)
     setConnInfo({
       svgW: pr.width,
       svgH: pr.height,
       catX,
       catY,
+      catR,
       chips: chipRefs.map((ref) => {
         const el = ref.current
         if (!el) return { sx: 0, sy: 0, cx: 0, cy: 0 }
@@ -692,20 +915,11 @@ export function ConnectedResearchSystemDiagram({ className = "" }: { className?:
         orbit(cc.x, cc.y)
         lastOrbitRef.current = now
       }
-      if (raw < 0.4 && now - lastDriftRef.current > 88 && partsLen < AMBIENT_PARTICLE_CAP) {
-        drift(65 + Math.random() * 60, nc.y + (Math.random() - 0.5) * 120)
-        lastDriftRef.current = now
-      }
-
-      // After the scripted timeline, keep the grain / orbit field running indefinitely
+      // After the scripted timeline, keep orbit particles around Catalyst running indefinitely
       if (raw >= 1 && partsLen < AMBIENT_PARTICLE_CAP) {
         if (now - lastOrbitRef.current > 72) {
           orbit(cc.x, cc.y)
           lastOrbitRef.current = now
-        }
-        if (now - lastDriftRef.current > 96) {
-          drift(65 + Math.random() * 60, nc.y + (Math.random() - 0.5) * 120)
-          lastDriftRef.current = now
         }
       }
 
@@ -743,8 +957,12 @@ export function ConnectedResearchSystemDiagram({ className = "" }: { className?:
       if (!w || !c) return
       c.width = w.offsetWidth
       c.height = w.offsetHeight
+      setWrapWidth(w.offsetWidth)
     })
-    if (wrapRef.current) ro.observe(wrapRef.current)
+    if (wrapRef.current) {
+      ro.observe(wrapRef.current)
+      setWrapWidth(wrapRef.current.offsetWidth)
+    }
     return () => ro.disconnect()
   }, [])
 
@@ -813,7 +1031,7 @@ export function ConnectedResearchSystemDiagram({ className = "" }: { className?:
     { label: "Lab notes", tone: "o0", skeletonKey: "lab-notes" },
     { label: "Experiments", tone: "o1", skeletonKey: "experiments" },
     { label: "Data analysis", tone: "o2", skeletonKey: "analysis" },
-    { label: "Literature search", tone: "o3", skeletonKey: "literature" },
+    { label: "Literature", tone: "o3", skeletonKey: "literature" },
     { label: "Writing", tone: "o4", skeletonKey: "writing" },
     { label: "Protocols", tone: "o5", skeletonKey: "protocols" },
   ]
@@ -831,15 +1049,29 @@ export function ConnectedResearchSystemDiagram({ className = "" }: { className?:
               ? "border-amber-600/25 bg-amber-50/90 text-amber-900 dark:border-amber-500/30 dark:bg-amber-950/40 dark:text-amber-200"
               : "border-rose-500/25 bg-rose-50/90 text-rose-900 dark:border-rose-400/30 dark:bg-rose-950/40 dark:text-rose-200"
 
-  const chipEl = (c: (typeof chipMeta)[number], i: number) => (
+  const isMobile = wrapWidth > 0 && wrapWidth < 580
+
+  const hubChipCard = (c: (typeof chipMeta)[number], compact = false) => (
     <div
-      key={c.label}
-      ref={chipRefs[i]}
-      className={`flex min-h-[118px] min-w-0 flex-col rounded-lg border px-2.5 pb-2.5 pt-2 shadow-sm transition-all duration-300 ease-out ${phase.chips[i] ? "translate-y-0 opacity-100" : "translate-y-2 opacity-0"} ${chipTone(c.tone)}`}
+      className={`flex w-full min-w-0 flex-col rounded-xl border px-2 pb-2 pt-1.5 shadow-[0_8px_28px_-14px_rgba(20,18,16,0.12)] backdrop-blur-[2px] dark:shadow-[0_12px_36px_-16px_rgba(0,0,0,0.45)] ${chipTone(c.tone)} ${compact ? "min-h-[82px]" : "max-w-[140px] min-h-[102px]"}`}
     >
-      <p className="shrink-0 text-center text-[10px] font-semibold leading-snug">{c.label}</p>
-      <div className="mt-2 flex min-h-[5.25rem] flex-1 flex-col px-0.5">
+      <p className={`shrink-0 text-center font-semibold leading-snug ${compact ? "text-[9px]" : "text-[11px] sm:text-[13px]"}`}>{c.label}</p>
+      <div className={`mt-1.5 flex flex-1 flex-col px-0.5 ${compact ? "min-h-[3.5rem]" : "min-h-[4.25rem]"}`}>
         <OrbitalChipSkeleton cardKey={c.skeletonKey} />
+      </div>
+    </div>
+  )
+
+  const n9StatusNode = (id?: string) => (
+    <div
+      id={id}
+      ref={n9Ref}
+      className="pointer-events-auto rounded-xl border border-black/[0.09] bg-white/95 px-3.5 py-3 text-center shadow-[0_12px_40px_-12px_rgba(20,16,12,0.25)] backdrop-blur-sm dark:border-white/[0.12] dark:bg-[#1e1d20]/95 dark:shadow-[0_16px_44px_-12px_rgba(0,0,0,0.7)]"
+    >
+      <p className="text-[13px] font-semibold tracking-tight text-[#12100e] dark:text-white/95">Notes9</p>
+      <div className={`mt-2 flex items-center justify-center gap-1.5 transition-opacity duration-[280ms] ${phase.n9 ? (statusFade ? "opacity-100" : "opacity-0") : "opacity-0"}`}>
+        <span className={`h-[6px] w-[6px] shrink-0 rounded-full ${n9Status === "connected" ? "bg-emerald-500" : n9Status === "processing" ? "bg-violet-500" : "bg-amber-400"}`} />
+        <span className={`text-[8px] font-semibold uppercase tracking-[0.18em] ${n9Status === "connected" ? "text-emerald-600 dark:text-emerald-400" : n9Status === "processing" ? "text-violet-500 dark:text-violet-400" : "text-amber-600 dark:text-amber-400"}`}>{n9Status}</span>
       </div>
     </div>
   )
@@ -847,49 +1079,54 @@ export function ConnectedResearchSystemDiagram({ className = "" }: { className?:
   return (
     <div
       ref={wrapRef}
-      className={`relative mx-auto h-[620px] min-h-[500px] w-full min-w-[680px] max-w-[1200px] overflow-x-auto rounded-[28px] border border-[var(--n9-accent)]/15 bg-[radial-gradient(circle,rgba(0,0,0,0.06)_1px,transparent_1px)] [background-size:22px_22px] dark:border-[var(--n9-accent)]/14 dark:bg-[radial-gradient(circle,rgba(255,255,255,0.06)_1px,transparent_1px),linear-gradient(180deg,rgba(24,22,20,0.96),rgba(14,14,16,0.99))] dark:[background-size:22px_22px,auto] ${className}`}
+      className={`relative mx-auto w-full max-w-[min(100%,88rem)] rounded-[28px] border border-[var(--n9-accent)]/18 bg-[radial-gradient(circle,rgba(0,0,0,0.055)_1px,transparent_1px)] [background-size:20px_20px] shadow-[0_28px_90px_-52px_rgba(44,36,24,0.2),inset_0_1px_0_0_rgba(255,255,255,0.55)] ring-1 ring-black/[0.04] dark:border-[var(--n9-accent)]/16 dark:bg-[radial-gradient(circle,rgba(255,255,255,0.055)_1px,transparent_1px),linear-gradient(180deg,rgba(26,24,22,0.98),rgba(12,12,14,0.995))] dark:[background-size:20px_20px,auto] dark:shadow-[0_32px_100px_-52px_rgba(0,0,0,0.65),inset_0_1px_0_0_rgba(255,255,255,0.04)] dark:ring-white/[0.06] ${isMobile ? "min-h-[520px]" : "h-[620px] min-h-[520px] min-w-[580px] sm:h-[640px] lg:h-[min(680px,74vh)]"} ${className}`}
     >
       <canvas ref={canvasRef} className="pointer-events-none absolute inset-0 z-[2] h-full w-full" aria-hidden />
 
-      <div className="relative z-[5] h-full" aria-labelledby="n9-marketing-diagram-title">
-        {/* Card deck marquee — seamless loop; right edge fade only */}
-        <div
-          className="n9-marketing-flow-strip pointer-events-none absolute inset-y-0 left-0 z-[3] flex w-[36%] items-center justify-start overflow-hidden"
-          aria-hidden
-        >
-          <div className="pointer-events-none absolute inset-y-0 right-0 z-10 w-16 bg-gradient-to-l from-white to-transparent dark:from-[#131214] dark:to-transparent" />
-
-          <div className="n9-marketing-flow-deck-marquee flex items-center">
-              {[0, 1].map((dup) => (
-                <div
-                  key={dup}
-                  className="flex shrink-0 items-stretch gap-5 pr-5"
-                >
-                  {FLOW_CARDS.map((row) => (
-                    <div
-                      key={`${dup}-${row.key}`}
-                      ref={dup === 0 && row.key === FLOW_CARDS[0]!.key ? flowDeckCardRef : undefined}
-                      className="relative flex w-[196px] min-h-[230px] shrink-0 flex-col overflow-hidden rounded-2xl border border-black/[0.07] bg-white shadow-[0_6px_24px_-8px_rgba(20,18,16,0.18)] dark:border-white/[0.1] dark:bg-[#222024] dark:shadow-[0_6px_28px_-8px_rgba(0,0,0,0.6)]"
-                    >
-                      <div className="h-[4px] w-full shrink-0" style={{ backgroundColor: row.accent }} />
-                      <div className="flex flex-1 flex-col px-4 pb-5 pt-3.5">
-                        <p
-                          className="mb-3 text-[10px] font-bold uppercase leading-snug tracking-[0.18em]"
-                          style={{ color: row.accent }}
-                        >
-                          {row.label}
-                        </p>
-                        <CardSkeleton cardKey={row.key} />
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              ))}
+      {isMobile ? (
+        /* ── Mobile: stacked layout, no flying deck, chips in 3×2 grid ── */
+        <div className="relative z-[5] flex h-full flex-col px-3 pb-5 pt-5" aria-labelledby="n9-diagram-mobile-title">
+          <div className="flex shrink-0 items-center justify-center gap-2 pb-4">
+            {n9StatusNode("n9-diagram-mobile-title")}
+            <div className="h-px flex-1 max-w-[44px] bg-violet-400/35" aria-hidden />
+            <div ref={catRef} className={`flex flex-col items-center gap-1.5 transition-opacity duration-300 ${phase.cat ? "opacity-100" : "opacity-0"}`}>
+              <IceMascot className="hero-pendulum h-14 w-14" options={{ src: "/notes9-mascot-ui.png" }} aria-hidden />
+              <p className="text-center text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--n9-accent)]">Catalyst AI</p>
+            </div>
+            <div className="h-px flex-1 max-w-[44px] bg-violet-400/35" aria-hidden />
+            <div className="rounded-xl border border-black/[0.08] bg-white/90 px-3 py-2.5 text-center backdrop-blur-sm dark:border-white/[0.1] dark:bg-[#1e1d20]/90">
+              <p className="text-[12px] font-semibold tracking-tight text-[#12100e] dark:text-white/95">Research</p>
+              <p className="mt-0.5 text-[9px] font-medium uppercase tracking-[0.14em] text-muted-foreground">Workflow</p>
+            </div>
+          </div>
+          <div className="grid flex-1 grid-cols-3 gap-2">
+            {chipMeta.map((c, i) => (
+              <div key={c.label} ref={chipRefs[i]} className={`transition-opacity duration-300 ${phase.chips[i] ? "opacity-100" : "opacity-0"}`}>
+                {hubChipCard(c, true)}
+              </div>
+            ))}
           </div>
         </div>
+      ) : (
+        /* ── Desktop: flying deck + orbital hub ── */
+        <div className="relative z-[5] h-full" aria-labelledby="n9-marketing-diagram-title">
+          {/* Left deck: cards enter one-by-one from staggered clock directions */}
+          <div
+            ref={flowStripRef}
+            className="n9-marketing-flow-strip pointer-events-none absolute inset-y-0 left-0 z-[3] w-[45%] overflow-hidden"
+            aria-hidden
+          >
+            <div className="pointer-events-none absolute inset-y-0 right-0 z-10 w-20 bg-gradient-to-l from-white to-transparent dark:from-[#131214] dark:to-transparent" />
+            <MarketingDeckPipeline
+              reduceMotion={reduceMotion}
+              stripInView={stripInView}
+              flowDeckCardRef={flowDeckCardRef}
+              laneRef={deckLaneRef}
+            />
+          </div>
 
         {/* Rail: height = 140% of left marquee card; centered on Notes9, not full diagram height */}
-        <div className="pointer-events-none absolute bottom-0 left-[36%] top-0 z-[4] w-0 -translate-x-1/2">
+        <div className="pointer-events-none absolute bottom-0 left-[45%] top-0 z-[4] w-0 -translate-x-1/2">
           <div
             className="absolute left-1/2 top-1/2 w-0 -translate-x-1/2 -translate-y-1/2"
             style={{ height: violetRailPx }}
@@ -900,7 +1137,7 @@ export function ConnectedResearchSystemDiagram({ className = "" }: { className?:
           <div
               id="n9-marketing-diagram-title"
               ref={n9Ref}
-              className="pointer-events-auto absolute left-1/2 top-1/2 z-[12] min-w-[7.5rem] -translate-x-1/2 -translate-y-1/2 rounded-xl border border-black/[0.08] bg-white px-3.5 py-3 text-center shadow-[0_4px_28px_-8px_rgba(20,16,12,0.22)] dark:border-white/[0.12] dark:bg-[#1e1d20] dark:shadow-[0_8px_32px_-10px_rgba(0,0,0,0.65)]"
+              className="pointer-events-auto absolute left-1/2 top-1/2 z-[12] min-w-[7.5rem] -translate-x-1/2 -translate-y-1/2 rounded-xl border border-black/[0.09] bg-white/95 px-3.5 py-3 text-center shadow-[0_12px_40px_-12px_rgba(20,16,12,0.25)] backdrop-blur-sm dark:border-white/[0.12] dark:bg-[#1e1d20]/95 dark:shadow-[0_16px_44px_-12px_rgba(0,0,0,0.7)]"
             >
               <p className="text-[13px] font-semibold tracking-tight text-[#12100e] dark:text-white/95">
                 Notes9
@@ -935,13 +1172,13 @@ export function ConnectedResearchSystemDiagram({ className = "" }: { className?:
             </div>
           </div>
 
-          <div ref={rightPanelRef} className="absolute left-[36%] right-0 top-0 bottom-0 z-[5] grid min-h-0 grid-rows-[auto_1fr_auto] gap-y-4 overflow-hidden px-[2.5%] pb-6 pt-4">
+          <div ref={rightPanelRef} className="absolute left-[45%] right-0 top-0 bottom-0 z-[5] flex min-h-0 flex-col overflow-hidden px-[3%] pb-6 pt-4 sm:px-[4%] lg:px-[5%]">
 
             {/* Animated connection lines: chip → Catalyst AI */}
             {connInfo.svgW > 0 && (
               <svg
                 className="pointer-events-none absolute inset-0 z-[7]"
-                style={{ overflow: "hidden" }}
+                style={{ overflow: "visible" }}
                 width={connInfo.svgW}
                 height={connInfo.svgH}
                 viewBox={`0 0 ${connInfo.svgW} ${connInfo.svgH}`}
@@ -952,64 +1189,87 @@ export function ConnectedResearchSystemDiagram({ className = "" }: { className?:
                     <marker
                       key={mi}
                       id={`n9-flow-arrow-${mi}`}
-                      markerWidth="7"
-                      markerHeight="7"
-                      refX="6"
-                      refY="3.5"
+                      markerWidth="11"
+                      markerHeight="11"
+                      refX="9.5"
+                      refY="5.5"
                       orient="auto"
                       markerUnits="userSpaceOnUse"
                     >
-                      <path d="M0,0.5 L6.5,3.5 L0,6.5 Z" fill={col} fillOpacity={0.9} />
+                      <path d="M0.5,1 L9.5,5.5 L0.5,10 Z" fill={col} fillOpacity={1} stroke={col} strokeOpacity={0.35} strokeWidth={0.5} />
                     </marker>
                   ))}
                 </defs>
                 {connInfo.chips.map((chip, i) => {
                   if (!phase.chips[i] || (!chip.cx && !chip.cy)) return null
-                  const dx = connInfo.catX - chip.cx
-                  const dy = connInfo.catY - chip.cy
-                  const dist = Math.sqrt(dx * dx + dy * dy)
-                  if (dist < 2) return null
-                  const ratio = (dist - 72) / dist
-                  const ex = chip.cx + dx * ratio
-                  const ey = chip.cy + dy * ratio
-                  const cpx = (chip.cx + connInfo.catX) / 2
-                  const cpy = (chip.cy + connInfo.catY) / 2 + (i < 3 ? 28 : -28)
+                  const tcx = connInfo.catX
+                  const tcy = connInfo.catY
+                  const vx = tcx - chip.sx
+                  const vy = tcy - chip.sy
+                  const len = Math.sqrt(vx * vx + vy * vy)
+                  if (len < 2) return null
+                  const ux = vx / len
+                  const uy = vy / len
+                  /* Stop short of hub: bbox radius + gap for arrowhead + “Catalyst AI” band */
+                  const hubClear = Math.max(connInfo.catR, 44) + 26
+                  const ex = tcx - ux * hubClear
+                  const ey = tcy - uy * hubClear
                   const col = CHIP_COLS[i] ?? "#8b6fd6"
                   return (
                     <path
                       key={i}
-                      d={`M ${chip.sx} ${chip.sy} Q ${cpx} ${cpy} ${ex} ${ey}`}
+                      d={`M ${chip.sx} ${chip.sy} L ${ex} ${ey}`}
                       stroke={col}
-                      strokeWidth="1.5"
-                      strokeOpacity={0.5}
+                      strokeWidth={2}
+                      strokeOpacity={0.85}
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
                       fill="none"
-                      strokeDasharray="5 8"
+                      strokeDasharray="5 7"
+                      strokeDashoffset={0}
                       markerEnd={`url(#n9-flow-arrow-${i})`}
-                      className={reduceMotion ? "" : "n9-conn-flow"}
-                      style={{ animationDelay: `${i * 0.28}s` }}
+                      className={reduceMotion ? "" : "n9-hub-dash-flow"}
+                      style={{ animationDelay: `${i * 0.12}s` }}
                     />
                   )
                 })}
               </svg>
             )}
 
-            <div className="grid grid-cols-3 gap-x-2 sm:gap-x-3">{chipMeta.slice(0, 3).map((c, i) => chipEl(c, i))}</div>
-            <div className="relative flex min-h-[6.5rem] items-center justify-center">
-              <div
-                ref={catRef}
-                className={`relative z-[8] flex shrink-0 flex-col items-center justify-center gap-1 py-1 transition-opacity duration-300 ${phase.cat ? "opacity-100" : "opacity-0"}`}
-              >
-                <IceMascot
-                  className="hero-pendulum mx-auto h-11 w-11 sm:h-12 sm:w-12"
-                  options={{ src: "/notes9-mascot-ui.png" }}
-                  aria-hidden
-                />
-                <p className="text-center text-[8px] font-semibold uppercase tracking-[0.12em] text-[var(--n9-accent)]">Catalyst AI</p>
+            <div className="relative z-[6] mx-auto flex min-h-0 w-full flex-1 items-center justify-center py-2 sm:py-4">
+              <div className="relative aspect-square w-full max-w-[min(100%,min(640px,58vw))] min-w-[300px] shrink-0 sm:min-w-[320px] lg:max-w-[min(100%,min(720px,62vw))]">
+                <div
+                  ref={catRef}
+                  className={`absolute left-1/2 top-1/2 z-[9] flex -translate-x-1/2 -translate-y-1/2 flex-col items-center justify-center gap-2 py-1 transition-opacity duration-300 ${phase.cat ? "opacity-100" : "opacity-0"}`}
+                >
+                  <IceMascot
+                    className="hero-pendulum mx-auto h-16 w-16 sm:h-[4.5rem] sm:w-[4.5rem]"
+                    options={{ src: "/notes9-mascot-ui.png" }}
+                    aria-hidden
+                  />
+                  <p className="text-center text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--n9-accent)] sm:text-xs">
+                    Catalyst AI
+                  </p>
+                </div>
+                {chipMeta.map((c, i) => (
+                  <div
+                    key={c.label}
+                    ref={chipRefs[i]}
+                    className={`absolute left-1/2 top-1/2 z-[10] w-[140px] max-w-[140px] min-w-[120px] transition-opacity duration-300 ease-out sm:w-[144px] sm:max-w-[144px] ${
+                      phase.chips[i] ? "opacity-100" : "pointer-events-none opacity-0"
+                    }`}
+                    style={{
+                      transform: `translate(-50%, -50%) rotate(${-90 + i * 60}deg) translateY(-${HUB_ORBIT_RADIUS_PX}px) rotate(${90 - i * 60}deg)`,
+                    }}
+                  >
+                    {hubChipCard(c)}
+                  </div>
+                ))}
               </div>
             </div>
-            <div className="grid grid-cols-3 gap-x-2 sm:gap-x-3">{chipMeta.slice(3, 6).map((c, i) => chipEl(c, i + 3))}</div>
           </div>
-      </div>
+        </div>
+      )}
     </div>
   )
 }

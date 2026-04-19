@@ -931,23 +931,6 @@ body > [data-radix-popper-content-wrapper] {
   }
 }
 
-/* Card deck marquee — seamless left-to-right loop (two identical chunks) */
-.n9-marketing-flow-deck-marquee {
-  display: flex;
-  width: max-content;
-  animation: n9-marketing-flow-deck-slide 28s linear infinite;
-  will-change: transform;
-}
-
-@keyframes n9-marketing-flow-deck-slide {
-  from {
-    transform: translateX(-50%);
-  }
-  to {
-    transform: translateX(0%);
-  }
-}
-
 /* Animated dashes flowing chip → Catalyst AI */
 .n9-conn-flow {
   animation: n9-conn-flow 1.8s linear infinite;
@@ -956,6 +939,18 @@ body > [data-radix-popper-content-wrapper] {
 @keyframes n9-conn-flow {
   to {
     stroke-dashoffset: -26;
+  }
+}
+
+/* Hub links: dash pattern marches along path (chip → hub); period = sum(stroke-dasharray) */
+.n9-hub-dash-flow {
+  animation: n9-hub-dash-flow 1.15s linear infinite;
+}
+
+@keyframes n9-hub-dash-flow {
+  to {
+    /* Positive offset shifts pattern along path direction → toward Catalyst */
+    stroke-dashoffset: 12;
   }
 }
 
@@ -970,10 +965,8 @@ body > [data-radix-popper-content-wrapper] {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .n9-conn-flow {
+  .n9-conn-flow,
+  .n9-hub-dash-flow {
     animation: none;
-  }
-  .n9-marketing-flow-strip {
-    display: none;
   }
 }

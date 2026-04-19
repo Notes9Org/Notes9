@@ -242,7 +242,7 @@ export function FeatureDeepDive() {
             ))}
           </div>
 
-          <div className="space-y-24">
+          <div className="space-y-16 lg:space-y-24">
             {features.map((feature, i) => (
               <FeatureRow key={feature.id} feature={feature} index={i} />
             ))}
