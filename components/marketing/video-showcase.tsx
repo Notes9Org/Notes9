@@ -193,7 +193,7 @@ export function ProductShowcase() {
                         transition={{ duration: 0.3, ease: "easeInOut" }}
                         className="px-6 pb-6 pt-0"
                       >
-                        <div className="pl-14">
+                        <div className="pl-0 sm:pl-14">
                           <div className="text-base leading-relaxed text-muted-foreground">
                             <strong className="mb-1 block font-medium text-foreground">
                               <PretextReveal text={slide.title} stagger={0.01} />

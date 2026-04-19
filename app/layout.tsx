@@ -74,7 +74,7 @@ export default function RootLayout({
       <body className={`font-sans ${workSans.variable} ${spaceGrotesk.variable} ${jetbrainsMono.variable} antialiased`}>
         <ThemeProvider
           attribute="class"
-          defaultTheme="light"
+          defaultTheme="system"
           enableSystem
           disableTransitionOnChange
         >

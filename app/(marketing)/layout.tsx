@@ -29,7 +29,7 @@ export default function MarketingLayout({
       <div className="relative z-10 flex flex-col min-h-screen">
         <Header />
         <FloatingPageMenu />
-        <main className="flex-1">
+        <main className="flex-1 pt-16">
           {children}
         </main>
         <Footer />

@@ -35,7 +35,7 @@ export function PageHero({
   aside?: React.ReactNode
 }) {
   return (
-    <section className="container mx-auto px-4 py-20 sm:px-6 sm:py-24 lg:px-8 lg:py-28">
+    <section className="container mx-auto px-4 py-12 sm:px-6 sm:py-16 lg:px-8 lg:py-20">
       <div className={cn("grid gap-12", aside && "lg:grid-cols-[1fr_1fr] lg:items-start")}>
         <div className="max-w-2xl">
           <Badge
