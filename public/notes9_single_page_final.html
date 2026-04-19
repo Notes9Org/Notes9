@@ -1,0 +1,254 @@
+
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+.w{position:relative;width:100%;height:620px;background:#f0eeea;border-radius:14px;overflow:hidden;font-family:system-ui,-apple-system,sans-serif;}
+.w::before{content:'';position:absolute;inset:0;background-image:radial-gradient(circle,rgba(0,0,0,0.07) 1px,transparent 1px);background-size:22px 22px;pointer-events:none;z-index:0;}
+canvas{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:2;}
+.wbd{position:absolute;inset:0;z-index:5;}
+.rail{position:absolute;left:36%;top:0;bottom:0;transform:translateX(-50%);z-index:3;width:0;pointer-events:none;}
+.rail-line{position:absolute;top:0;bottom:0;left:50%;transform:translateX(-50%);width:1px;background:linear-gradient(180deg,rgba(124,58,237,.55),rgba(184,115,51,.42),rgba(217,70,239,.5));}
+.rail-n9{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);pointer-events:auto;z-index:11;min-width:5.5rem;padding:8px 10px;text-align:center;background:rgba(255,255,255,.92);border:1px solid rgba(0,0,0,0.1);border-radius:6px;box-shadow:0 2px 12px rgba(0,0,0,.06);}
+.rail-n9 .rn{font-family:system-ui,-apple-system,sans-serif;font-size:13px;font-weight:600;color:#18100a;letter-spacing:-.02em;}
+.rail-n9 .rs{margin-top:4px;font-size:8px;letter-spacing:.18em;text-transform:uppercase;color:#8a7a68;opacity:0;transition:opacity .5s ease;}
+.rail-n9 .rs.on{opacity:1;}
+.icard{position:absolute;background:#fff;border:1px solid rgba(0,0,0,0.14);border-radius:4px;width:min(112px,14vw);overflow:hidden;z-index:4;opacity:0;transform:translateX(-14px);transition:opacity .55s ease,transform .55s ease;}
+.icard.show{opacity:1;transform:translateX(0);}
+.icard.show.dock{transform:translateX(min(6.25rem,17vw));transition:transform 1.35s cubic-bezier(.22,1,.36,1),opacity .55s ease;}
+#ic0.show.dock{transition-delay:0ms,0ms;}
+#ic1.show.dock{transition-delay:75ms,0ms;}
+#ic2.show.dock{transition-delay:150ms,0ms;}
+.itop{height:3px;width:100%;}
+.ibody{padding:10px 11px 10px;}
+.ilbl{font-size:9px;letter-spacing:.14em;text-transform:uppercase;font-weight:600;margin-bottom:7px;}
+.il{height:1.5px;border-radius:1px;margin-bottom:5px;background:rgba(0,0,0,0.08);}
+.il.dk{background:rgba(0,0,0,0.13);}
+.igr{display:flex;gap:2px;margin-bottom:3px;}
+.igc{height:10px;flex:1;border-radius:1px;background:rgba(0,0,0,0.06);}
+
+.cat-hub{display:flex;align-items:center;justify-content:center;min-height:104px;padding:8px 0;}
+.cat{position:relative;margin:0 auto;background:#fff;border:1px solid rgba(184,115,51,.28);border-radius:50%;box-shadow:0 4px 32px rgba(184,115,51,.12);width:128px;height:128px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;z-index:8;opacity:0;transition:opacity .35s ease;}
+.cat.show{opacity:1;}
+.catglow{position:absolute;inset:0;transform:scale(1.65);border-radius:50%;background:rgba(184,115,51,0.07);filter:blur(18px);pointer-events:none;}
+.catm{width:44px;height:44px;object-fit:contain;position:relative;z-index:1;animation:hb 2s ease-in-out infinite;filter:drop-shadow(0 4px 8px rgba(0,0,0,0.12));}
+@keyframes hb{0%,100%{transform:translateY(0);}50%{transform:translateY(-6px);}}
+.cdot{display:none;}
+@keyframes cdp{0%,100%{opacity:.35;transform:scale(.85);}50%{opacity:1;transform:scale(1.15);}}
+.cnm{font-size:8px;letter-spacing:.13em;text-transform:uppercase;color:#7a5020;font-weight:600;margin-top:4px;position:relative;z-index:2;}
+.csb{font-size:7px;color:#a08c78;position:relative;z-index:2;}
+.ring{position:absolute;inset:-1px;border-radius:50%;border:1px solid rgba(184,115,51,.38);opacity:0;pointer-events:none;}
+.cat.pulse .ring{animation:ro 2.2s ease-out infinite;}
+.cat.pulse .ring:nth-child(2){animation-delay:.73s;}
+.cat.pulse .ring:nth-child(3){animation-delay:1.46s;}
+@keyframes ro{0%{transform:scale(1);opacity:.42;}100%{transform:scale(1.85);opacity:0;}}
+
+.chip-lane{position:absolute;left:36%;right:0;top:0;bottom:0;z-index:5;display:grid;grid-template-rows:auto 1fr auto;gap:16px;padding:16px 2.5% 28px;box-sizing:border-box;min-height:0;}
+.chip-row{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px 12px;}
+.chip{background:#fff;border:1px solid rgba(0,0,0,0.12);border-radius:4px;padding:8px 10px;opacity:0;transform:translateY(8px);transition:opacity .35s ease,transform .35s ease;min-width:0;text-align:center;}
+.chip.show{opacity:1;transform:translateY(0);}
+.chip em{font-size:10px;font-weight:500;font-style:normal;}
+.chip .bar{height:2px;border-radius:1px;background:rgba(0,0,0,0.08);margin-top:6px;}
+.chip.c0{border-color:rgba(26,122,94,.25);} .chip.c1{border-color:rgba(46,95,163,.25);} .chip.c2{border-color:rgba(184,115,51,.35);}
+.chip.c3{border-color:rgba(90,61,153,.25);} .chip.c4{border-color:rgba(200,136,42,.28);} .chip.c5{border-color:rgba(192,74,58,.25);}
+
+</style>
+
+<div class="w" id="W">
+<canvas id="C"></canvas>
+
+<div class="wbd" id="WB">
+<div class="rail" aria-hidden="false">
+  <div class="rail-line" aria-hidden="true"></div>
+  <div class="rail-n9" id="N9">
+    <div class="rn">Notes9</div>
+    <div class="rs" id="n9s">ingesting</div>
+  </div>
+</div>
+<div class="icard" id="ic0" style="left:2.5%;top:14%;">
+  <div class="itop" style="background:#1a7a5e"></div>
+  <div class="ibody">
+    <div class="ilbl" style="color:#1a6b46">Research</div>
+    <div class="il dk"></div><div class="il" style="width:80%"></div>
+    <div style="display:flex;gap:5px;margin-top:7px;"><div style="flex:1;height:36px;background:rgba(26,122,94,.1);border-radius:2px"></div><div style="flex:1;height:36px;background:rgba(0,0,0,.05);border-radius:2px"></div></div>
+  </div>
+</div>
+
+<div class="icard" id="ic1" style="left:2.5%;top:38%;">
+  <div class="itop" style="background:#2e5fa3"></div>
+  <div class="ibody">
+    <div class="ilbl" style="color:#1f4f8c">Data</div>
+    <div class="igr"><div class="igc" style="background:rgba(46,95,163,.18)"></div><div class="igc"></div><div class="igc"></div></div>
+    <div class="igr"><div class="igc"></div><div class="igc" style="background:rgba(26,122,94,.16)"></div><div class="igc"></div></div>
+    <div class="igr"><div class="igc"></div><div class="igc"></div><div class="igc" style="background:rgba(184,115,51,.2)"></div></div>
+  </div>
+</div>
+
+<div class="icard" id="ic2" style="left:2.5%;top:62%;">
+  <div class="itop" style="background:#7a4fb8"></div>
+  <div class="ibody">
+    <div class="ilbl" style="color:#5a3098">Analysis</div>
+    <div class="il dk"></div><div class="il" style="width:85%"></div><div class="il" style="width:70%"></div>
+  </div>
+</div>
+
+<div class="chip-lane">
+<div class="chip-row">
+<div class="chip c0" id="o0"><em>Lab notes</em><div class="bar" style="width:78%;margin-left:auto;margin-right:auto"></div></div>
+<div class="chip c1" id="o1"><em>Experiments</em><div class="bar" style="width:65%;margin-left:auto;margin-right:auto"></div></div>
+<div class="chip c2" id="o2"><em>Data analysis</em><div class="bar" style="width:72%;margin-left:auto;margin-right:auto"></div></div>
+</div>
+<div class="cat-hub">
+<div class="cat" id="CAT">
+  <div class="catglow"></div>
+  <div class="ring"></div><div class="ring"></div><div class="ring"></div>
+  <img class="catm" src="/notes9-mascot-ui.png" alt="">
+  <div class="cnm">Catalyst AI</div>
+  <div class="csb">connected</div>
+</div>
+</div>
+<div class="chip-row">
+<div class="chip c3" id="o3"><em>Literature search</em><div class="bar" style="width:70%;margin-left:auto;margin-right:auto"></div></div>
+<div class="chip c4" id="o4"><em>Writing</em><div class="bar" style="width:55%;margin-left:auto;margin-right:auto"></div></div>
+<div class="chip c5" id="o5"><em>Protocols</em><div class="bar" style="width:68%;margin-left:auto;margin-right:auto"></div></div>
+</div>
+</div>
+
+</div>
+</div>
+
+<script>
+const W   = document.getElementById('W')
+const C   = document.getElementById('C')
+const ctx = C.getContext('2d')
+const CAT = document.getElementById('CAT')
+const N9  = document.getElementById('N9')
+const n9s = document.getElementById('n9s')
+
+function resize(){ C.width=W.offsetWidth; C.height=W.offsetHeight }
+resize(); window.addEventListener('resize',resize)
+
+const PCOLS=['#1a7a5e','#2e5fa3','#7a4fb8','#b87333','#5a3d99','#c04a3a','#c8882a']
+const parts=[]
+
+class Px{
+  constructor(x,y,col,mode){
+    this.x=x;this.y=y;this.col=col;this.mode=mode
+    this.sz=mode==='quad'?3.2:2.5
+    this.life=0;this.maxLife=mode==='shoot'?50:175+Math.random()*130
+    this.vx=(Math.random()-.5)*.85;this.vy=(Math.random()-.5)*.85
+    this.angle=Math.random()*Math.PI*2
+    this.orbit=38+Math.random()*42
+    this.spin=(Math.random()-.5)*.021
+    this.sx=x;this.sy=y;this.tx=0;this.ty=0
+  }
+  tick(cx,cy){
+    this.life++
+    const t=this.life/this.maxLife
+    this.a=(t<.15?t/.15:t>.8?(1-t)/.2:1)*.68
+    this.a=Math.max(0,Math.min(1,this.a))
+    if(this.mode==='orbit'){
+      this.angle+=this.spin
+      this.x=cx+Math.cos(this.angle)*this.orbit
+      this.y=cy+Math.sin(this.angle)*this.orbit*.5
+    } else if(this.mode==='shoot'){
+      const e=t<.5?2*t*t:1-Math.pow(-2*t+2,2)/2
+      this.x=this.sx+(this.tx-this.sx)*e
+      this.y=this.sy+(this.ty-this.sy)*e
+    } else {
+      this.x+=this.vx;this.y+=this.vy
+    }
+    return this.life<this.maxLife
+  }
+  draw(){
+    ctx.globalAlpha=this.a
+    ctx.fillStyle=this.col
+    if(this.mode==='quad'){
+      const s=this.sz
+      ctx.fillRect(this.x-s,this.y-s,s*.9,s*.9)
+      ctx.fillRect(this.x+s*.1,this.y-s,s*.9,s*.9)
+      ctx.fillRect(this.x-s,this.y+s*.1,s*.9,s*.9)
+      ctx.fillRect(this.x+s*.1,this.y+s*.1,s*.9,s*.9)
+    } else {
+      ctx.fillRect(this.x-this.sz/2,this.y-this.sz/2,this.sz,this.sz)
+    }
+  }
+}
+
+function orbit(cx,cy){ const p=new Px(cx,cy,PCOLS[Math.floor(Math.random()*PCOLS.length)],'orbit'); p.orbit=36+Math.random()*40; p.angle=Math.random()*Math.PI*2; parts.push(p) }
+function shoot(cx,cy,col){ for(let k=0;k<8;k++){ const p=new Px(cx,cy,col,'shoot'); const a=Math.random()*Math.PI*2,d=70+Math.random()*75; p.tx=cx+Math.cos(a)*d; p.ty=cy+Math.sin(a)*d; p.maxLife=46+k*5; parts.push(p) } }
+function drift(x,y){ const m=Math.random()>.45?'quad':'drift'; const p=new Px(x,y,PCOLS[Math.floor(Math.random()*PCOLS.length)],m); p.vx=(Math.random()-.5)*1.1; p.vy=(Math.random()-.5)*1.1; parts.push(p) }
+
+function gc(el){ const r=el.getBoundingClientRect(),wr=W.getBoundingClientRect(); return{x:r.left-wr.left+r.width/2,y:r.top-wr.top+r.height/2} }
+
+const TOTAL=10000
+let t0=0,raf2=0,playing=false
+let chipShown=[false,false,false,false,false,false]
+const CHIP_T=[.50,.54,.58,.63,.68,.73]
+const CHIP_COLS=['#1a7a5e','#2e5fa3','#b87333','#5a3d99','#c8882a','#c04a3a']
+let lastOrbit=0,lastDrift=0
+
+function reset(){
+  parts.length=0
+  chipShown=[false,false,false,false,false,false]
+  for(let i=0;i<6;i++) document.getElementById('o'+i).classList.remove('show')
+  ;['ic0','ic1','ic2','CAT'].forEach(id=>{ const e=document.getElementById(id); e.classList.remove('show') })
+  ;['ic0','ic1','ic2'].forEach(id=>document.getElementById(id).classList.remove('dock'))
+  CAT.classList.remove('pulse')
+  n9s.textContent='ingesting'
+  n9s.classList.remove('on')
+  cancelAnimationFrame(raf2)
+  playing=false
+}
+
+function start(){
+  if(playing) return
+  reset()
+  playing=true; t0=performance.now()
+
+  setTimeout(()=>document.getElementById('ic0').classList.add('show'),100)
+  setTimeout(()=>document.getElementById('ic1').classList.add('show'),225)
+  setTimeout(()=>document.getElementById('ic2').classList.add('show'),350)
+  setTimeout(()=>n9s.classList.add('on'),550)
+  setTimeout(()=>{ document.getElementById('ic0').classList.add('dock'); document.getElementById('ic1').classList.add('dock'); document.getElementById('ic2').classList.add('dock') },900)
+  setTimeout(()=>document.getElementById('CAT').classList.add('show'),1100)
+
+  function tick(now){
+    const raw=Math.min(1,(now-t0)/TOTAL)
+
+    if(raw>.32 && raw<.48) n9s.textContent='processing'
+    else if(raw>.48) n9s.textContent='connected'
+
+    if(raw>.46) CAT.classList.add('pulse')
+
+    const cc=gc(CAT), nc=gc(N9)
+
+    if(raw>.46 && raw<.92 && now-lastOrbit>44){ orbit(cc.x,cc.y); lastOrbit=now }
+
+    if(raw<.40 && now-lastDrift>88){
+      drift(65+Math.random()*60, nc.y+(Math.random()-.5)*120)
+      lastDrift=now
+    }
+
+    CHIP_T.forEach((t,i)=>{
+      if(!chipShown[i]&&raw>t){
+        chipShown[i]=true
+        document.getElementById('o'+i).classList.add('show')
+        shoot(cc.x,cc.y,CHIP_COLS[i])
+      }
+    })
+
+    ctx.clearRect(0,0,C.width,C.height)
+
+    for(let i=parts.length-1;i>=0;i--){
+      if(!parts[i].tick(cc.x,cc.y)) parts.splice(i,1)
+      else parts[i].draw()
+    }
+    ctx.globalAlpha=1
+
+    if(raw<1) raf2=requestAnimationFrame(tick)
+    else { playing=false }
+  }
+  raf2=requestAnimationFrame(tick)
+}
+
+setTimeout(start,150)
+</script>
