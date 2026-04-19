@@ -919,3 +919,61 @@ body > [data-radix-popper-content-wrapper] {
   animation: rag-highlight-fade 1.2s ease forwards;
   outline: none;
 }
+
+@keyframes n9-marketing-diagram-ring {
+  0% {
+    transform: scale(1);
+    opacity: 0.42;
+  }
+  100% {
+    transform: scale(1.85);
+    opacity: 0;
+  }
+}
+
+/* Card deck marquee — seamless left-to-right loop (two identical chunks) */
+.n9-marketing-flow-deck-marquee {
+  display: flex;
+  width: max-content;
+  animation: n9-marketing-flow-deck-slide 28s linear infinite;
+  will-change: transform;
+}
+
+@keyframes n9-marketing-flow-deck-slide {
+  from {
+    transform: translateX(-50%);
+  }
+  to {
+    transform: translateX(0%);
+  }
+}
+
+/* Animated dashes flowing chip → Catalyst AI */
+.n9-conn-flow {
+  animation: n9-conn-flow 1.8s linear infinite;
+}
+
+@keyframes n9-conn-flow {
+  to {
+    stroke-dashoffset: -26;
+  }
+}
+
+/* Notes9 rail scanning indicator (full-height rail; legacy) */
+@keyframes n9-rail-scan {
+  0% {
+    transform: translateX(-50%) translateY(-110%);
+  }
+  100% {
+    transform: translateX(-50%) translateY(460%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .n9-conn-flow {
+    animation: none;
+  }
+  .n9-marketing-flow-strip {
+    display: none;
+  }
+}

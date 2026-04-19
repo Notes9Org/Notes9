@@ -289,15 +289,13 @@ function ScreenshotCard({
       <div className="relative aspect-[16/9] bg-[#080808]">
         {isActive && video ? (
           <video
-            key={video}
             src={video}
             aria-label={alt}
-            className="block h-full w-full bg-black object-contain"
+            className="block h-full w-full bg-black object-cover object-center"
             autoPlay
             muted
             loop
             playsInline
-            controls
             preload="auto"
           />
         ) : (
