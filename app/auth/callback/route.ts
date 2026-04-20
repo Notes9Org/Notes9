@@ -13,7 +13,7 @@ async function provisionOauthProfileAndOrg(
   supabase: SupabaseClient,
   db: SupabaseClient,
   user: User
-): Promise<void> {
+): Promise<"signup" | "login"> {
   const { data: profileRow } = await supabase
     .from("profiles")
     .select("id, email, first_name, last_name")
@@ -27,6 +27,10 @@ async function provisionOauthProfileAndOrg(
       profileEmail: existingProfile.email,
       userEmail: user.email,
     })
+  }
+
+  if (existingProfile) {
+    return "login"
   }
 
   let firstName =
@@ -49,10 +53,6 @@ async function provisionOauthProfileAndOrg(
 
   if (!firstName) {
     firstName = user.email?.split("@")[0] || "User"
-  }
-
-  if (existingProfile) {
-    return
   }
 
   let orgId: string | null = null
@@ -91,13 +91,18 @@ async function provisionOauthProfileAndOrg(
     organization_id: orgId || null,
   })
 
-  if (
-    insertProfileError &&
-    !insertProfileError.message.includes("duplicate") &&
-    !insertProfileError.message.includes("violates unique constraint")
-  ) {
+  if (insertProfileError) {
+    if (
+      insertProfileError.message.includes("duplicate") ||
+      insertProfileError.message.includes("violates unique constraint")
+    ) {
+      return "login"
+    }
     console.error("Error creating profile:", insertProfileError)
+    return "login"
   }
+
+  return "signup"
 }
 
 export async function GET(request: NextRequest) {
@@ -141,6 +146,8 @@ async function handleAuthCallback(request: NextRequest): Promise<NextResponse> {
         data: { user },
       } = await supabase.auth.getUser()
 
+      let authEvent: "signup" | "login" = "login"
+
       if (user?.email) {
         const supabaseAdmin = process.env.SUPABASE_SERVICE_ROLE_KEY
           ? createSupabaseAdmin(
@@ -156,13 +163,11 @@ async function handleAuthCallback(request: NextRequest): Promise<NextResponse> {
           : null
 
         const db = supabaseAdmin || supabase
-        await provisionOauthProfileAndOrg(supabase, db, user)
+        authEvent = await provisionOauthProfileAndOrg(supabase, db, user)
       }
 
-      // Build redirect URL with auth_event param for client-side RUM tracking
-      const isSignup = !profile
-      const nextUrl = new URL(next, request.url)
-      nextUrl.searchParams.set('auth_event', isSignup ? 'signup' : 'login')
+      const nextUrl = new URL(nextPath, request.url)
+      nextUrl.searchParams.set("auth_event", authEvent)
       return NextResponse.redirect(nextUrl)
     }
   }
