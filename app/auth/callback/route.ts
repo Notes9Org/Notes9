@@ -159,7 +159,10 @@ async function handleAuthCallback(request: NextRequest): Promise<NextResponse> {
         await provisionOauthProfileAndOrg(supabase, db, user)
       }
 
-      const nextUrl = new URL(nextPath, request.url)
+      // Build redirect URL with auth_event param for client-side RUM tracking
+      const isSignup = !profile
+      const nextUrl = new URL(next, request.url)
+      nextUrl.searchParams.set('auth_event', isSignup ? 'signup' : 'login')
       return NextResponse.redirect(nextUrl)
     }
   }

@@ -22,6 +22,7 @@ import { cn } from "@/lib/utils"
 import { ArrowLeft } from 'lucide-react'
 import { getUniqueNameErrorMessage } from "@/lib/unique-name-error"
 import { DATE_ORDER_ERROR, isEndDateBeforeStartDate } from "@/lib/date-order"
+import { recordRumEvent } from "@/lib/rum"
 
 function NewExperimentForm() {
   const router = useRouter()
@@ -132,6 +133,8 @@ function NewExperimentForm() {
         
         if (protocolError) console.error("Error linking protocol:", protocolError)
       }
+
+      recordRumEvent('experiment_created', { projectId: formData.project_id })
 
       const after =
         formData.project_id

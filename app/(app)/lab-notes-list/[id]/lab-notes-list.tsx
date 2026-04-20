@@ -47,7 +47,7 @@ export default function LabNotesList({
   hideToolbar,
 }: LabNotesListProps) {
   const isMobile = useMediaQuery("(max-width: 768px)")
-  const [internalView, setInternalView] = useState<"grid" | "table">("grid")
+  const [internalView, setInternalView] = useState<"grid" | "table">("table")
   const viewMode = controlledView ?? internalView
   const setViewMode = setControlledView ?? setInternalView
   const effectiveViewMode = isMobile ? "grid" : viewMode
@@ -180,39 +180,23 @@ export default function LabNotesList({
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead className="min-w-[250px]">Note Title</TableHead>
-                    <TableHead className="min-w-[120px]">Type</TableHead>
-                    <TableHead className="min-w-[180px]">Project</TableHead>
-                    <TableHead className="min-w-[180px]">Experiment</TableHead>
+                    <TableHead className="min-w-[300px]">Note Title</TableHead>
                     <TableHead className="min-w-[120px]">Created</TableHead>
                     <TableHead className="text-right min-w-[100px]">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {notes.map((note) => (
-                    <TableRow key={note.id}>
+                    <TableRow
+                      key={note.id}
+                      className="cursor-pointer"
+                      onClick={() => handleSelectNote(note)}
+                    >
                       <TableCell className="font-medium text-foreground">
                         <div className="flex items-center gap-2">
                           <NotebookPen className="h-4 w-4 text-primary shrink-0" />
-                          <div className="max-w-[280px]">
-                            <div className="font-semibold truncate">{note.title}</div>
-                          </div>
+                          <span className="truncate">{note.title}</span>
                         </div>
-                      </TableCell>
-                      <TableCell className="text-muted-foreground">
-                        {note.note_type ? (
-                          <Badge variant="outline" className="whitespace-nowrap">
-                            {note.note_type}
-                          </Badge>
-                        ) : (
-                          "—"
-                        )}
-                      </TableCell>
-                      <TableCell className="text-muted-foreground">
-                        {note.project_name || "—"}
-                      </TableCell>
-                      <TableCell className="text-muted-foreground">
-                        {note.experiment_name || "—"}
                       </TableCell>
                       <TableCell className="text-muted-foreground">
                         {formatDate(note.created_at)}
@@ -221,7 +205,10 @@ export default function LabNotesList({
                         <Button 
                           variant="ghost" 
                           size="sm"
-                          onClick={() => handleSelectNote(note)}
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            handleSelectNote(note)
+                          }}
                         >
                           <ArrowUpRight className="h-4 w-4" />
                         </Button>

@@ -42,6 +42,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { cn } from "@/lib/utils"
+import { recordRumEvent } from "@/lib/rum"
 import { Loader2 } from "lucide-react"
 import { toast } from "sonner"
 
@@ -309,6 +310,10 @@ function ResearchMapCanvas() {
   const mapRefreshDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(
     null,
   )
+
+  useEffect(() => {
+    recordRumEvent('research_map_viewed', {})
+  }, [])
 
   useEffect(() => {
     const t = setTimeout(() => setDebouncedQuery(labelQuery), 200)

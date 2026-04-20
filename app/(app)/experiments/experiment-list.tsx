@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect, useMemo } from "react"
+import { useRouter } from "next/navigation"
 import { useMediaQuery } from "@/hooks/use-media-query"
 import Link from "next/link"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -59,7 +60,7 @@ export function ExperimentsPageContent({
   linkProjectId?: string | null
 }) {
   const isMobile = useMediaQuery("(max-width: 768px)")
-  const [viewMode, setViewMode] = useState<"grid" | "table">("grid")
+  const [viewMode, setViewMode] = useState<"grid" | "table">("table")
   const [projectFilter, setProjectFilter] = useState(FILTER_ALL)
   const [statusFilter, setStatusFilter] = useState(FILTER_ALL)
 
@@ -228,7 +229,7 @@ export function ExperimentList({
   linkProjectId = null,
 }: ExperimentListProps) {
   const isMobile = useMediaQuery("(max-width: 768px)")
-  const [internalView, setInternalView] = useState<"grid" | "table">("grid")
+  const [internalView, setInternalView] = useState<"grid" | "table">("table")
   const viewMode = controlledView ?? internalView
   const setViewMode = setControlledView ?? setInternalView
   const effectiveViewMode = isMobile ? "grid" : viewMode
@@ -370,93 +371,59 @@ export function ExperimentList({
 
       {/* Table View */}
       {effectiveViewMode === "table" && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-foreground">All Experiments</CardTitle>
-            <CardDescription>Complete list of experimental procedures</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="relative w-full overflow-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead className="min-w-[250px]">Experiment</TableHead>
-                    <TableHead className="min-w-[180px]">Project</TableHead>
-                    <TableHead className="min-w-[100px]">Status</TableHead>
-                    <TableHead className="min-w-[150px]">Assigned To</TableHead>
-                    <TableHead className="min-w-[120px]">Start Date</TableHead>
-                    <TableHead className="min-w-[120px]">Completion</TableHead>
-                    <TableHead className="text-right min-w-[100px]">Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {experiments.map((experiment) => (
-                    <TableRow key={experiment.id}>
-                      <TableCell className="font-medium text-foreground">
-                        <div className="flex items-center gap-2">
-                          <FlaskConical className="h-4 w-4 text-primary shrink-0" />
-                          <div
-                            className="max-w-[280px]"
-                            style={{
-                              overflow: "hidden",
-                              textOverflow: "ellipsis"
-                            } as React.CSSProperties}
-                          >
-                            <div className="font-semibold truncate">{experiment.name}</div>
-                            <HtmlContentTruncated
-                              content={experiment.description}
-                              className="text-sm text-muted-foreground truncate"
-                            />
-                          </div>
-                        </div>
-                      </TableCell>
-                      <TableCell className="text-muted-foreground">
-                        {experiment.project ? experiment.project.name : "—"}
-                      </TableCell>
-                      <TableCell>
-                        <Badge
-                          variant={
-                            experiment.status === "in_progress"
-                              ? "default"
-                              : experiment.status === "completed"
-                                ? "secondary"
-                                : "outline"
-                          }
-                          className="whitespace-nowrap"
-                        >
-                          {getStatusDisplay(experiment.status)}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="text-muted-foreground">
-                        {experiment.assigned_to
-                          ? `${experiment.assigned_to.first_name} ${experiment.assigned_to.last_name}`
-                          : "Unassigned"}
-                      </TableCell>
-                      <TableCell className="text-muted-foreground">
-                        {experiment.start_date
-                          ? formatDate(experiment.start_date)
-                          : "—"}
-                      </TableCell>
-                      <TableCell className="text-muted-foreground">
-                        {experiment.completion_date
-                          ? formatDate(experiment.completion_date)
-                          : "—"}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <Button variant="ghost" size="sm" asChild>
-                          <Link href={experimentDetailHref(experiment.id, linkProjectId)}>
-                            <ArrowUpRight className="h-4 w-4" />
-                          </Link>
-                        </Button>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
-          </CardContent>
-        </Card>
+        <ExperimentTableView experiments={experiments} linkProjectId={linkProjectId} />
       )}
     </>
+  )
+}
+
+function ExperimentTableView({ experiments, linkProjectId }: { experiments: Experiment[]; linkProjectId?: string | null }) {
+  const router = useRouter()
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-foreground">All Experiments</CardTitle>
+        <CardDescription>Complete list of experimental procedures</CardDescription>
+      </CardHeader>
+      <CardContent>
+        <div className="relative w-full overflow-auto">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead className="min-w-[300px]">Experiment</TableHead>
+                <TableHead className="min-w-[120px]">Created</TableHead>
+                <TableHead className="text-right min-w-[100px]">Actions</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {experiments.map((experiment) => (
+                <TableRow
+                  key={experiment.id}
+                  className="cursor-pointer"
+                  onClick={() => router.push(experimentDetailHref(experiment.id, linkProjectId))}
+                >
+                  <TableCell className="font-medium text-foreground">
+                    <div className="flex items-center gap-2">
+                      <FlaskConical className="h-4 w-4 text-primary shrink-0" />
+                      <span className="truncate">{experiment.name}</span>
+                    </div>
+                  </TableCell>
+                  <TableCell className="text-muted-foreground">
+                    {formatDate(experiment.created_at)}
+                  </TableCell>
+                  <TableCell className="text-right">
+                    <Button variant="ghost" size="sm" asChild onClick={(e: React.MouseEvent) => e.stopPropagation()}>
+                      <Link href={experimentDetailHref(experiment.id, linkProjectId)}>
+                        <ArrowUpRight className="h-4 w-4" />
+                      </Link>
+                    </Button>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
+      </CardContent>
+    </Card>
   )
 }

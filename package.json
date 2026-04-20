@@ -82,6 +82,7 @@
     "@xyflow/react": "^12.10.1",
     "ai": "^5.0.115",
     "autoprefixer": "^10.4.20",
+    "aws-rum-web": "^2.1.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "cmdk": "1.0.4",

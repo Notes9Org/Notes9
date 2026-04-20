@@ -18,6 +18,7 @@ import {
 } from "@/components/ui/select"
 import { ArrowLeft } from 'lucide-react'
 import { getUniqueNameErrorMessage } from "@/lib/unique-name-error"
+import { recordRumEvent } from "@/lib/rum"
 import { DATE_ORDER_ERROR, isEndDateBeforeStartDate } from "@/lib/date-order"
 
 export default function NewProjectPage() {
@@ -80,6 +81,8 @@ export default function NewProjectPage() {
         user_id: user.id,
         role: "lead",
       })
+
+      recordRumEvent('project_created', {})
 
       router.push(`/projects/${data.id}`)
     } catch (err: any) {

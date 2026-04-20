@@ -38,7 +38,7 @@ interface SamplesPageContentProps {
 
 export function SamplesPageContent({ samples, statusCount }: SamplesPageContentProps) {
   const isMobile = useMediaQuery("(max-width: 768px)")
-  const [viewMode, setViewMode] = useState<"grid" | "table">("grid")
+  const [viewMode, setViewMode] = useState<"grid" | "table">("table")
   const [projectFilter, setProjectFilter] = useState(FILTER_ALL)
   const [experimentFilter, setExperimentFilter] = useState(FILTER_ALL)
   const [statusFilter, setStatusFilter] = useState(FILTER_ALL)

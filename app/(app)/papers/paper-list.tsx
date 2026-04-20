@@ -2,12 +2,13 @@
 
 import { useState, useEffect } from "react"
 import Link from "next/link"
+import { useRouter } from "next/navigation"
 import { useMediaQuery } from "@/hooks/use-media-query"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { FileText, Calendar, Grid3x3, List, ArrowUpRight } from "lucide-react"
+import { FileText, Grid3x3, List, ArrowUpRight } from "lucide-react"
 
 export interface PaperListItem {
   id: string
@@ -49,7 +50,7 @@ export function PaperList({
   hideToolbar,
 }: PaperListProps) {
   const isMobile = useMediaQuery("(max-width: 768px)")
-  const [internalView, setInternalView] = useState<"grid" | "table">("grid")
+  const [internalView, setInternalView] = useState<"grid" | "table">("table")
   const viewMode = controlledView ?? internalView
   const setViewMode = setControlledView ?? setInternalView
   const effectiveViewMode = isMobile ? "grid" : viewMode
@@ -187,66 +188,71 @@ export function PaperList({
             <CardDescription>Your writing documents</CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="relative w-full overflow-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead className="min-w-[200px]">Title</TableHead>
-                    <TableHead className="min-w-[100px]">Status</TableHead>
-                    <TableHead className="min-w-[140px]">Project</TableHead>
-                    <TableHead className="min-w-[120px]">Updated</TableHead>
-                    <TableHead className="text-right min-w-[100px]">Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {papers.map((paper) => (
-                    <TableRow
-                      key={paper.id}
-                      className={onSelectPaper ? "cursor-pointer" : undefined}
-                      onClick={() => onSelectPaper && openPaper(paper)}
-                    >
-                      <TableCell className="font-medium text-foreground">
-                        <div className="flex max-w-[320px] items-center gap-2">
-                          <FileText className="h-4 w-4 shrink-0 text-primary" />
-                          <span className="truncate">{paper.title}</span>
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant={statusColor(paper.status)}>{paper.status?.replace("_", " ")}</Badge>
-                      </TableCell>
-                      <TableCell className="text-muted-foreground">
-                        {paper.project?.name ?? "—"}
-                      </TableCell>
-                      <TableCell className="text-muted-foreground text-sm">
-                        {new Date(paper.updated_at).toLocaleDateString()}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        {onSelectPaper ? (
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              openPaper(paper)
-                            }}
-                          >
-                            Open
-                          </Button>
-                        ) : (
-                          <Button size="sm" variant="outline" asChild>
-                            <Link href={`/papers/${paper.id}`}>Open</Link>
-                          </Button>
-                        )}
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
+            <PaperTableView papers={papers} onSelectPaper={onSelectPaper} />
           </CardContent>
         </Card>
       )}
     </>
+  )
+}
+
+const formatDate = (dateStr: string): string => {
+  return new Date(dateStr).toISOString().split('T')[0]
+}
+
+function PaperTableView({ papers, onSelectPaper }: { papers: PaperListItem[]; onSelectPaper?: (paper: PaperListItem) => void }) {
+  const router = useRouter()
+  return (
+    <div className="relative w-full overflow-auto">
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead className="min-w-[300px]">Title</TableHead>
+            <TableHead className="min-w-[120px]">Created</TableHead>
+            <TableHead className="text-right min-w-[100px]">Actions</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {papers.map((paper) => (
+            <TableRow
+              key={paper.id}
+              className="cursor-pointer"
+              onClick={() => onSelectPaper ? onSelectPaper(paper) : router.push(`/papers/${paper.id}`)}
+            >
+              <TableCell className="font-medium text-foreground">
+                <div className="flex items-center gap-2">
+                  <FileText className="h-4 w-4 shrink-0 text-primary" />
+                  <span className="truncate">{paper.title}</span>
+                </div>
+              </TableCell>
+              <TableCell className="text-muted-foreground">
+                {formatDate(paper.created_at)}
+              </TableCell>
+              <TableCell className="text-right">
+                {onSelectPaper ? (
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      onSelectPaper(paper)
+                    }}
+                  >
+                    <ArrowUpRight className="h-4 w-4" />
+                  </Button>
+                ) : (
+                  <Button variant="ghost" size="sm" asChild onClick={(e: React.MouseEvent) => e.stopPropagation()}>
+                    <Link href={`/papers/${paper.id}`}>
+                      <ArrowUpRight className="h-4 w-4" />
+                    </Link>
+                  </Button>
+                )}
+              </TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+    </div>
   )
 }

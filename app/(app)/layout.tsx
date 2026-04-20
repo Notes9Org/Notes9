@@ -1,8 +1,10 @@
+import { Suspense } from 'react'
 import { redirect } from 'next/navigation'
 import { createClient } from "@/lib/supabase/server"
 import { AppLayout } from "@/components/layout/app-layout"
 import { TermsAcceptanceModal } from "@/components/marketing/terms-acceptance-modal"
 import { CURRENT_TERMS_VERSION } from "@/lib/constants"
+import { AuthEventTracker } from "@/components/auth-event-tracker"
 
 export default async function AppGroupLayout({
   children,
@@ -24,6 +26,9 @@ export default async function AppGroupLayout({
   return (
     <>
       {mustAcceptTerms && <TermsAcceptanceModal />}
+      <Suspense>
+        <AuthEventTracker />
+      </Suspense>
       <AppLayout>{children}</AppLayout>
     </>
   )

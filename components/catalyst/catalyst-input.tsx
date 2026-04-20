@@ -17,6 +17,7 @@ import { cn } from '@/lib/utils';
 import { PreviewAttachment, type Attachment } from './preview-attachment';
 import { toast } from 'sonner';
 import { FileDropzone } from '../ui/file-dropzone';
+import { recordRumEvent } from '@/lib/rum';
 
 export type AgentMode = 'general' | 'notes9';
 
@@ -234,6 +235,7 @@ export function CatalystInput({
     e.preventDefault();
     if ((!input.trim() && attachments.length === 0) || isLoading) return;
 
+    recordRumEvent('catalyst_message_sent', {});
     onSubmit(input, attachments.length > 0 ? attachments : undefined);
     setInput('');
     setAttachments([]);
