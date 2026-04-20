@@ -4,6 +4,21 @@ import { type NextRequest } from "next/server"
 import { createClient as createSupabaseAdmin } from "@supabase/supabase-js"
 
 export async function GET(request: NextRequest) {
+  try {
+    return await handleAuthCallback(request)
+  } catch (err) {
+    console.error("[auth/callback] unhandled error:", err)
+    const message = err instanceof Error ? err.message : "Unexpected error"
+    return NextResponse.redirect(
+      new URL(
+        `/auth/error?error=server_error&description=${encodeURIComponent(message)}`,
+        request.url
+      )
+    )
+  }
+}
+
+async function handleAuthCallback(request: NextRequest): Promise<NextResponse> {
   const requestUrl = new URL(request.url)
   // OAuth authorization code - safe to be in URL (single-use, short-lived, exchanged server-side)
   // This is standard OAuth 2.0 Authorization Code flow with PKCE
@@ -160,4 +175,3 @@ export async function GET(request: NextRequest) {
   // Return the user to an error page with instructions
   return NextResponse.redirect(new URL("/auth/error?error=oauth_error", request.url))
 }
-
