@@ -30,7 +30,15 @@ export async function GET(request: NextRequest) {
       // Get the user after session exchange
       const { data: { user } } = await supabase.auth.getUser()
 
-      if (user && user.email) {
+      // Declared here so it is always in scope for the OAuth setup block (avoids ReferenceError if logic is extended)
+      let existingProfile: {
+        id: string
+        email: string
+        first_name: string | null
+        last_name: string | null
+      } | null = null
+
+      if (user?.email) {
 
         // Use Admin client for privileged operations (Profile/Org creation) to bypass RLS
         const supabaseAdmin = process.env.SUPABASE_SERVICE_ROLE_KEY
@@ -50,15 +58,17 @@ export async function GET(request: NextRequest) {
         const db = supabaseAdmin || supabase
 
         // Check if profile exists for this user
-        const { data: profile } = await supabase
+        const { data: profileRow } = await supabase
           .from("profiles")
           .select("id, email, first_name, last_name")
           .eq("id", user.id)
           .single()
 
+        existingProfile = profileRow
+
         // If profile exists with different email, this shouldn't happen but log it
-        if (profile && profile.email !== user.email) {
-          console.warn("Profile email mismatch:", { profileEmail: profile.email, userEmail: user.email })
+        if (existingProfile && existingProfile.email !== user.email) {
+          console.warn("Profile email mismatch:", { profileEmail: existingProfile.email, userEmail: user.email })
         }
 
         // Extract name from OAuth metadata
@@ -85,7 +95,7 @@ export async function GET(request: NextRequest) {
         }
 
         // If profile doesn't exist, create it from OAuth metadata
-        if (!profile) {
+        if (!existingProfile) {
           // Check if organization already exists for this email
           let orgId: string | null = null
           // Use 'db' (potentially admin) to check/create organization
