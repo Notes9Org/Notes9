@@ -171,7 +171,13 @@ export function AcademicHero() {
 
       </div>
 
-      <div className="h-20" />
+      <div className="h-20">
+        <div className="container mx-auto flex h-full items-center px-4 sm:px-6 lg:px-8">
+          <p className="max-w-4xl text-sm text-muted-foreground/95 sm:text-base">
+            For researchers tired of scattered papers, notes, protocols, spreadsheets, and disconnected AI tools.
+          </p>
+        </div>
+      </div>
     </section>
   )
 }

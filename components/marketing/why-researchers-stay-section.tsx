@@ -16,8 +16,7 @@ import {
   PenLine,
   Play,
   Quote,
-  Share2,
-  ShieldCheck,
+  Shield,
   Sparkles,
   TestTube2,
   UsersRound,
@@ -57,20 +56,20 @@ type CardDef = {
 const cards: CardDef[] = [
   {
     id: "workflow",
-    title: "Connected workflow",
-    body: "Across literature, experiments, and writing",
+    title: "Connected researchworkflow",
+    body: "Links literature review, experiment work, and research writing in one workspace",
     tone: "green",
   },
   {
     id: "ai",
     title: "Biotech-aware AI",
-    body: "Grounded in papers, protocols, notes, and results",
+    body: "Designed to work from connected biotech context from your papers, protocols, notes, and results",
     tone: "purple",
   },
   {
     id: "labs",
-    title: "Researcher-first design",
-    body: "Built for real lab work, day to day",
+    title: "Practical, Researcher-first design",
+    body: "A practical research workspace built for real lab work, day to day",
     tone: "orange",
   },
 ]
@@ -248,59 +247,41 @@ function CardWorkflowIllustration({ markerId }: { markerId: string }) {
   return (
     <div className="mb-3.5 flex h-[100px] w-[120px] shrink-0 items-center justify-center">
       <svg width={120} height={100} viewBox="0 0 120 100" fill="none" aria-hidden>
-        <g transform="translate(10,18)">
+        <g transform="translate(8,8)">
+          {/* Circular arrows centered in the gaps between the 3 nodes */}
+          <path d="M34 19 C44 13 58 13 68 19" stroke="#4a8864" strokeWidth={1.6} fill="none" markerEnd={`url(#${markerId})`} />
+          <path d="M84 42 C86 51 83 61 77 67" stroke="#4a8864" strokeWidth={1.6} fill="none" markerEnd={`url(#${markerId})`} />
+          <path d="M62 70 C49 74 34 72 25 66" stroke="#4a8864" strokeWidth={1.6} fill="none" markerEnd={`url(#${markerId})`} />
+
+          {/* Document */}
+          <rect x="40" y="0" width="24" height="30" rx="3" fill="#f3faf5" stroke="#3f7f5b" strokeWidth={1.8} />
+          <path d="M56 0 L64 8 L56 8 Z" fill="#d9efdf" stroke="#3f7f5b" strokeWidth={1.4} />
+          <line x1="45" y1="12" x2="57" y2="12" stroke="#6b9e82" strokeWidth={1.3} />
+          <line x1="45" y1="17" x2="58" y2="17" stroke="#6b9e82" strokeWidth={1.3} />
+          <line x1="45" y1="22" x2="56" y2="22" stroke="#6b9e82" strokeWidth={1.3} />
+
+          {/* Flask */}
           <path
-            d="M18 0 L18 22 L4 44 Q0 50 6 54 L30 54 Q36 50 32 44 L18 22"
-            stroke="#5a9070"
+            d="M6 62 C6 54 12 49 16 45 L16 29 L28 29 L28 45 C32 49 38 54 38 62 C38 70 31 76 22 76 C13 76 6 70 6 62 Z"
+            fill="#edf8f0"
+            stroke="#3f7f5b"
             strokeWidth={1.8}
-            fill="none"
           />
-          <path
-            d="M4 44 Q0 50 6 54 L30 54 Q36 50 32 44 L22 28 L14 28 Z"
-            fill="#c8e8d8"
-            opacity={0.7}
-          />
-          <line x1="13" y1="4" x2="23" y2="4" stroke="#5a9070" strokeWidth={1.5} />
+          <path d="M12 63 C12 58 16 55 20 53 C24 51 28 50 32 52 C34 53 35 56 35 59 C35 66 30 70 22 70 C16 70 12 67 12 63 Z" fill="#9fd0a8" />
+          <circle cx="16.5" cy="59" r="1.7" fill="#d8efdd" />
+          <circle cx="23" cy="56.5" r="1.55" fill="#d8efdd" />
+          <circle cx="29.5" cy="61" r="1.45" fill="#d8efdd" />
+
+          {/* Chart card */}
+          <rect x="72" y="44" width="28" height="26" rx="4" fill="#f3faf5" stroke="#3f7f5b" strokeWidth={1.8} />
+          <rect x="78" y="58" width="4" height="7" rx="1" fill="#5d9a74" />
+          <rect x="85" y="54" width="4" height="11" rx="1" fill="#5d9a74" />
+          <rect x="92" y="49" width="4" height="16" rx="1" fill="#5d9a74" />
+
         </g>
-        <g transform="translate(62,10)">
-          <rect x="0" y="0" width="32" height="38" rx="3" stroke="#8aaa95" strokeWidth={1.5} fill="#f0f8f4" />
-          <line x1="6" y1="10" x2="26" y2="10" stroke="#8aaa95" strokeWidth={1.2} />
-          <line x1="6" y1="16" x2="26" y2="16" stroke="#8aaa95" strokeWidth={1.2} />
-          <line x1="6" y1="22" x2="18" y2="22" stroke="#8aaa95" strokeWidth={1.2} />
-        </g>
-        <g transform="translate(58,58)">
-          <rect x="0" y="0" width="38" height="30" rx="3" stroke="#8aaa95" strokeWidth={1.5} fill="#f0f8f4" />
-          <rect x="6" y="18" width="6" height="8" fill="#5a9070" opacity={0.7} />
-          <rect x="16" y="12" width="6" height="14" fill="#5a9070" opacity={0.7} />
-          <rect x="26" y="8" width="6" height="18" fill="#5a9070" opacity={0.7} />
-        </g>
-        <path
-          d="M38 40 Q54 30 64 24"
-          stroke="#5a9070"
-          strokeWidth={1.3}
-          strokeDasharray="3,2"
-          fill="none"
-          markerEnd={`url(#${markerId})`}
-        />
-        <path
-          d="M78 50 Q72 60 76 60"
-          stroke="#5a9070"
-          strokeWidth={1.3}
-          strokeDasharray="3,2"
-          fill="none"
-          markerEnd={`url(#${markerId})`}
-        />
-        <path
-          d="M62 78 Q44 78 36 62"
-          stroke="#5a9070"
-          strokeWidth={1.3}
-          strokeDasharray="3,2"
-          fill="none"
-          markerEnd={`url(#${markerId})`}
-        />
         <defs>
           <marker id={markerId} markerWidth="6" markerHeight="6" refX="3" refY="3" orient="auto">
-            <path d="M0,0 L6,3 L0,6 Z" fill="#5a9070" />
+            <path d="M0,0 L6,3 L0,6 Z" fill="#4a8864" />
           </marker>
         </defs>
       </svg>
@@ -312,44 +293,53 @@ function CardAiIllustration() {
   return (
     <div className="mb-3.5 flex h-[100px] w-[120px] shrink-0 items-center justify-center">
       <svg width={120} height={100} viewBox="0 0 120 100" fill="none" aria-hidden>
-        <g transform="translate(18,6)">
-          <ellipse cx="42" cy="44" rx="36" ry="32" fill="#e8d8f5" opacity={0.6} />
-          <path
-            d="M42 14 C28 14 16 24 14 36 C12 46 16 56 24 60 C28 62 32 62 36 60 C38 66 40 70 42 72 C44 70 46 66 48 60 C52 62 56 62 60 60 C68 56 72 46 70 36 C68 24 56 14 42 14 Z"
-            stroke="#9b72cf"
-            strokeWidth={1.8}
-            fill="none"
-          />
-          <path d="M28 32 C30 28 36 26 40 30" stroke="#9b72cf" strokeWidth={1.2} fill="none" />
-          <path d="M46 30 C50 26 56 28 58 32" stroke="#9b72cf" strokeWidth={1.2} fill="none" />
-          <path d="M20 44 C22 40 28 40 30 44" stroke="#9b72cf" strokeWidth={1.2} fill="none" />
-          <path d="M54 44 C56 40 62 40 64 44" stroke="#9b72cf" strokeWidth={1.2} fill="none" />
-          <path d="M32 56 C36 52 48 52 52 56" stroke="#9b72cf" strokeWidth={1.2} fill="none" />
-          <line x1="42" y1="16" x2="42" y2="72" stroke="#9b72cf" strokeWidth={1} strokeDasharray="2,3" />
+        {/* Center brain */}
+        <ellipse cx="60" cy="46" rx="30" ry="25" fill="#dcc8f2" />
+        <line x1="60" y1="23" x2="60" y2="69" stroke="#a07dcc" strokeWidth={1.4} />
+        <path d="M60 24 C49 24 41 31 41 39 C36 42 35 51 41 56 C41 64 48 69 56 69" stroke="#8f6cc0" strokeWidth={1.5} fill="none" />
+        <path d="M60 24 C71 24 79 31 79 39 C84 42 85 51 79 56 C79 64 72 69 64 69" stroke="#8f6cc0" strokeWidth={1.5} fill="none" />
+        <circle cx="52" cy="35" r="2.2" fill="#8f6cc0" />
+        <circle cx="68" cy="35" r="2.2" fill="#8f6cc0" />
+        <circle cx="47" cy="48" r="2.2" fill="#8f6cc0" />
+        <circle cx="73" cy="48" r="2.2" fill="#8f6cc0" />
+        <circle cx="56" cy="58" r="2.2" fill="#8f6cc0" />
+        <circle cx="64" cy="58" r="2.2" fill="#8f6cc0" />
+
+        {/* Corner cards */}
+        <g transform="translate(6,14)">
+          <rect x="0" y="0" width="22" height="22" rx="4" fill="#f8f3fe" stroke="#a78bce" strokeWidth={1.3} />
+          <line x1="6" y1="7" x2="16" y2="7" stroke="#8f6cc0" strokeWidth={1.1} />
+          <line x1="6" y1="11.5" x2="16" y2="11.5" stroke="#8f6cc0" strokeWidth={1.1} />
+          <line x1="6" y1="16" x2="13" y2="16" stroke="#8f6cc0" strokeWidth={1.1} />
         </g>
-        <g transform="translate(4,6)">
-          <rect x="0" y="0" width="22" height="26" rx="2" stroke="#b090d8" strokeWidth={1.3} fill="#f5f0fc" />
-          <line x1="4" y1="7" x2="18" y2="7" stroke="#b090d8" strokeWidth={1} />
-          <line x1="4" y1="12" x2="18" y2="12" stroke="#b090d8" strokeWidth={1} />
-          <line x1="4" y1="17" x2="12" y2="17" stroke="#b090d8" strokeWidth={1} />
+        <g transform="translate(92,12)">
+          <rect x="0" y="0" width="22" height="24" rx="4" fill="#f8f3fe" stroke="#a78bce" strokeWidth={1.3} />
+          <rect x="7" y="-4" width="8" height="5" rx="1.5" fill="#ede3fa" stroke="#8f6cc0" strokeWidth={1} />
+          <polyline points="5,10 8,13 12,8" stroke="#8f6cc0" strokeWidth={1.2} fill="none" />
+          <line x1="13" y1="9" x2="17" y2="9" stroke="#8f6cc0" strokeWidth={1.2} />
+          <polyline points="5,16 8,19 12,14" stroke="#8f6cc0" strokeWidth={1.2} fill="none" />
+          <line x1="13" y1="15" x2="17" y2="15" stroke="#8f6cc0" strokeWidth={1.2} />
         </g>
-        <g transform="translate(92,4)">
-          <rect x="0" y="4" width="22" height="26" rx="2" stroke="#b090d8" strokeWidth={1.3} fill="#f5f0fc" />
-          <rect x="6" y="0" width="10" height="8" rx="2" stroke="#b090d8" strokeWidth={1.2} fill="#f5f0fc" />
-          <line x1="4" y1="14" x2="18" y2="14" stroke="#b090d8" strokeWidth={1} />
-          <line x1="4" y1="19" x2="18" y2="19" stroke="#b090d8" strokeWidth={1} />
+        <g transform="translate(8,68)">
+          <rect x="0" y="0" width="22" height="22" rx="4" fill="#f8f3fe" stroke="#a78bce" strokeWidth={1.3} />
+          <line x1="6" y1="8" x2="16" y2="8" stroke="#8f6cc0" strokeWidth={1.1} />
+          <line x1="6" y1="12.5" x2="16" y2="12.5" stroke="#8f6cc0" strokeWidth={1.1} />
+          <line x1="6" y1="17" x2="13" y2="17" stroke="#8f6cc0" strokeWidth={1.1} />
         </g>
-        <g transform="translate(44,78)">
-          <rect x="0" y="10" width="6" height="10" fill="#9b72cf" opacity={0.6} />
-          <rect x="10" y="5" width="6" height="15" fill="#9b72cf" opacity={0.6} />
-          <rect x="20" y="0" width="6" height="20" fill="#9b72cf" opacity={0.6} />
-          <line x1="-2" y1="20" x2="32" y2="20" stroke="#9b72cf" strokeWidth={1} />
+        <g transform="translate(91,69)">
+          <rect x="0" y="0" width="23" height="21" rx="4" fill="#f8f3fe" stroke="#a78bce" strokeWidth={1.3} />
+          <rect x="5" y="12" width="3.5" height="5" rx="0.8" fill="#7f5eb0" />
+          <rect x="10.5" y="9" width="3.5" height="8" rx="0.8" fill="#7f5eb0" />
+          <rect x="16" y="6" width="3.5" height="11" rx="0.8" fill="#7f5eb0" />
         </g>
-        <g transform="translate(6,68)">
-          <rect x="0" y="0" width="22" height="24" rx="2" stroke="#b090d8" strokeWidth={1.3} fill="#f5f0fc" />
-          <line x1="4" y1="7" x2="18" y2="7" stroke="#b090d8" strokeWidth={1} />
-          <line x1="4" y1="12" x2="16" y2="12" stroke="#b090d8" strokeWidth={1} />
-        </g>
+
+        {/* Dashed connectors */}
+        <path d="M28 25 C38 24 44 30 49 34" stroke="#a48ac9" strokeWidth={1.4} strokeDasharray="3 3" fill="none" />
+        <path d="M92 25 C82 24 76 30 71 34" stroke="#a48ac9" strokeWidth={1.4} strokeDasharray="3 3" fill="none" />
+        <path d="M30 79 C40 77 45 69 50 62" stroke="#a48ac9" strokeWidth={1.4} strokeDasharray="3 3" fill="none" />
+        <path d="M91 79 C81 77 76 69 70 62" stroke="#a48ac9" strokeWidth={1.4} strokeDasharray="3 3" fill="none" />
+
+        <circle cx="60" cy="46" r="5" fill="#ffffff" opacity={0.72} />
       </svg>
     </div>
   )
@@ -413,10 +403,10 @@ function ToolPanel({
   return (
     <div
       className={cn(
-        "flex h-full min-h-[428px] w-[164px] shrink-0 flex-col self-stretch rounded-[18px] border px-4 pb-6 pt-5 sm:min-h-[440px] sm:w-[172px] sm:px-4 sm:pb-7 sm:pt-5",
+        "flex h-full min-h-[428px] w-[164px] shrink-0 flex-col self-stretch rounded-[18px] border bg-white px-4 pb-6 pt-5 transition-colors duration-300 sm:min-h-[440px] sm:w-[172px] sm:px-4 sm:pb-7 sm:pt-5 dark:bg-card/95",
         isEln
-          ? "border-red-200/90 bg-[#fff5f5] dark:border-red-900/45 dark:bg-red-950/25"
-          : "border-blue-200/90 bg-[#f0f7ff] dark:border-blue-900/45 dark:bg-blue-950/25",
+          ? "border-[#e8e2d8] hover:border-[#d87474]/45 hover:shadow-[0_20px_50px_-28px_rgba(216,116,116,0.3)] dark:border-border/60 dark:hover:border-rose-500/35"
+          : "border-[#e8e2d8] hover:border-[#6ea4df]/45 hover:shadow-[0_20px_50px_-28px_rgba(110,164,223,0.3)] dark:border-border/60 dark:hover:border-blue-500/35",
       )}
     >
       <div className="shrink-0">
@@ -498,23 +488,23 @@ const itemVariants = {
 const trustPillars: { id: string; Icon: LucideIcon; body: string }[] = [
   {
     id: "data",
-    Icon: ShieldCheck,
-    body: "Designed for research data responsibility",
+    Icon: Shield,
+    body: "Designed for responsible research data handling",
   },
   {
     id: "teams",
     Icon: UsersRound,
-    body: "Built to reduce knowledge loss",
+    body: "Built to reduce knowledge loss across teams and projects",
   },
   {
     id: "lab",
     Icon: FlaskConical,
-    body: "Practical for real lab workflows",
+    body: "Practical for real lab and research workflows",
   },
   {
     id: "compliance",
     Icon: FileCheck,
-    body: "Structured around a credible long-term compliance path",
+    body: "Structured for a credible long-term compliance path",
   },
 ]
 
@@ -536,10 +526,6 @@ function PracticeCtaDiagram() {
 
   return (
     <div className="relative mx-auto w-full max-w-[min(100%,280px)] aspect-square">
-      <div
-        className="pointer-events-none absolute inset-[12%] rounded-full bg-[var(--n9-accent)]/12 blur-2xl dark:bg-amber-400/10"
-        aria-hidden
-      />
       <svg
         className="absolute inset-0 h-full w-full text-[var(--n9-accent)]/28 dark:text-amber-400/30"
         viewBox="0 0 100 100"
@@ -564,14 +550,12 @@ function PracticeCtaDiagram() {
           )
         })}
       </svg>
-      <div
-        className={cn(
-          "absolute left-1/2 top-1/2 z-[2] flex h-14 w-14 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border shadow-md",
-          "border-[var(--n9-accent)]/35 bg-[var(--n9-accent-light)]/80 text-[#5c4024] dark:border-amber-400/35 dark:bg-amber-500/15 dark:text-amber-100",
-          "dark:shadow-[0_0_28px_-4px_rgba(251,191,36,0.45)]",
-        )}
-      >
-        <Share2 className="h-6 w-6" strokeWidth={1.5} aria-hidden />
+      <div className="absolute left-1/2 top-1/2 z-[2] -translate-x-1/2 -translate-y-1/2">
+        <IceMascot
+          className="h-14 w-14"
+          options={{ src: "/notes9-mascot-ui.png" }}
+          aria-label="Notes9 mascot"
+        />
       </div>
       {satellites.map(({ Icon, deg }) => {
         const rad = (deg * Math.PI) / 180
@@ -606,9 +590,6 @@ function AdoptionIntroBlock() {
       <p className="text-[13px] font-semibold leading-snug text-[#2a5740] dark:text-[var(--n9-accent)] sm:text-sm">
         Practical to adopt. Serious about research data.
       </p>
-      <h2 className="mt-4 font-serif text-2xl font-bold leading-snug tracking-tight text-[#1a1a1a] dark:text-foreground sm:text-3xl lg:text-[2rem] lg:leading-tight">
-        Start where Notes9 is strongest, and expand from there.
-      </h2>
     </motion.div>
   )
 }
@@ -624,37 +605,37 @@ function PostTrustCtaBlock() {
         "mx-auto mt-10 max-w-6xl overflow-hidden rounded-[24px] border px-6 py-9 font-sans sm:mt-12 sm:rounded-3xl sm:px-8 sm:py-10",
         /* Light: Notes9 cream / white card on section */
         "border-[#e8e2d8] bg-white text-[#1a1a1a] shadow-[0_22px_55px_-38px_rgba(44,36,24,0.12)] ring-1 ring-black/[0.03]",
-        /* Dark: ink + bronze */
-        "dark:border-[#c59d7c]/30 dark:bg-[#1a1614] dark:text-[#f5f0e8] dark:shadow-[0_32px_90px_-36px_rgba(0,0,0,0.65)] dark:ring-0",
+        /* Dark: Notes9 base dark theme */
+        "dark:border-[#c59d7c]/25 dark:bg-[#1a1614] dark:text-[#f5f0e8] dark:shadow-[0_24px_70px_-40px_rgba(0,0,0,0.45)] dark:ring-0",
       )}
     >
-      <div className="grid items-center gap-10 lg:grid-cols-[minmax(0,1fr)_minmax(220px,300px)] lg:gap-12">
+      <div className="grid items-center gap-10 lg:grid-cols-[minmax(0,1fr)_minmax(220px,300px)] lg:gap-12 lg:divide-x lg:divide-[#e8e2d8] dark:lg:divide-[#c59d7c]/22">
         <div className="text-left">
           <span
             className={cn(
               "inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-[11px] font-semibold tracking-wide",
-              "border-[var(--n9-accent)]/35 bg-[var(--n9-accent-light)]/55 text-[#2a5740]",
-              "dark:border-[#ea8c55]/70 dark:bg-transparent dark:text-[#fde68a]/95",
+              "border-emerald-600/35 bg-emerald-50/80 text-[#1f6b49]",
+              "dark:border-emerald-400/45 dark:bg-emerald-500/10 dark:text-emerald-300",
             )}
           >
-            <span className="text-[var(--n9-accent)] dark:text-[#fb923c]" aria-hidden>
+            <span className="text-emerald-500 dark:text-emerald-300" aria-hidden>
               ●
             </span>
             Free to get started
           </span>
           <h3 className="mt-5 text-2xl font-bold leading-tight tracking-tight text-[#1a1a1a] dark:text-[#f5f0e8] sm:text-3xl lg:text-[1.75rem] lg:leading-snug">
-            See how connected research can feel in practice
+            See how <span className="text-[var(--n9-accent)]">connected</span> research can feel in practice
           </h3>
-          <p className="mt-3 max-w-xl text-pretty text-[0.9375rem] leading-relaxed text-[#555] sm:text-base dark:text-[#c59d7c]/95">
-            Bring papers, protocols, notes, data, and reporting into a more connected workflow.
+          <p className="mt-3 max-w-xl text-pretty text-[0.9375rem] leading-relaxed text-[#555] sm:text-base dark:text-[#f5f0e8]/92">
+            If your team is juggling with papers, protocols, notes, data, and reporting across too many tools, <span className="text-[var(--n9-accent)]">Notes9</span> can help bringing that workflow together. Start free, request a demo or see how it works.
           </p>
           <div className="mt-8 flex flex-col gap-3 sm:mt-9 sm:flex-row sm:flex-wrap sm:items-center">
             <Button
               asChild
               className={cn(
-                "w-full border-0 text-white sm:w-auto",
-                "bg-[var(--n9-accent)] hover:bg-[var(--n9-accent)]/90",
-                "dark:bg-[#a56d54] dark:hover:bg-[#955b46]",
+                "h-11 w-full rounded-full border-0 px-6 text-white sm:w-auto",
+                "bg-[var(--n9-accent)] shadow-[0_12px_30px_-14px_var(--n9-accent-glow)] hover:bg-[var(--n9-accent-hover)] hover:shadow-[0_18px_38px_-14px_var(--n9-accent-glow)]",
+                "dark:bg-[var(--n9-accent)] dark:hover:bg-[var(--n9-accent-hover)]",
               )}
             >
               <Link href={CONTACT_HASH} className="inline-flex items-center justify-center gap-2">
@@ -718,35 +699,33 @@ function TrustApproachStrip() {
       transition={{ duration: 0.5, delay: 0.05 }}
       viewport={{ once: true, margin: "-40px" }}
       className={cn(
-        "mx-auto mt-10 max-w-5xl rounded-[22px] border px-5 py-7 font-sans sm:mt-12 sm:rounded-3xl sm:px-8 sm:py-8",
-        /* Light: warm card on cream section */
+        "mx-auto mt-8 max-w-6xl overflow-hidden rounded-[22px] border px-5 py-7 font-sans sm:mt-9 sm:rounded-3xl sm:px-8 sm:py-8",
         "border-[#e8e2d8] bg-white text-[#3d342e] shadow-[0_22px_55px_-38px_rgba(44,36,24,0.12)] ring-1 ring-black/[0.03]",
-        /* Dark: ink + bronze (original) */
-        "dark:border-[#c59d7c]/25 dark:bg-[#1a1614] dark:text-[#c59d7c] dark:shadow-[0_24px_70px_-40px_rgba(0,0,0,0.35)] dark:ring-0",
+        "dark:border-[#c59d7c]/25 dark:bg-[#1a1614] dark:text-[#f5f0e8] dark:shadow-[0_24px_70px_-40px_rgba(0,0,0,0.45)] dark:ring-0",
       )}
     >
       <div
         className={cn(
           "flex items-center gap-3 border-b pb-4 sm:gap-3.5 sm:pb-5",
-          "border-[#e8e2d8] dark:border-[#c59d7c]/25",
+          "border-[#e8e2d8]/90 dark:border-[#c59d7c]/25",
         )}
       >
-        <ShieldCheck
-          className="h-5 w-5 shrink-0 text-[#7c4b32] sm:h-[1.35rem] sm:w-[1.35rem] dark:text-[#c59d7c]"
+        <Shield
+          className="h-5 w-5 shrink-0 text-[#7c4b32] sm:h-[1.35rem] sm:w-[1.35rem] dark:text-[#f5f0e8]"
           strokeWidth={1.75}
           aria-hidden
         />
         <h3
           id="n9-trust-approach-heading"
-          className="text-left text-[0.8125rem] font-semibold leading-snug tracking-tight text-[#2a2420] dark:text-[#c59d7c] sm:text-[0.9375rem]"
+          className="text-left text-[0.8125rem] font-semibold leading-snug tracking-tight text-[#2a2420] dark:text-[#f5f0e8] sm:text-[0.9375rem]"
         >
-          Why teams can trust the approach
+          Why teams can trust <span className="text-[var(--n9-accent)]">Notes9</span>
         </h3>
       </div>
 
       <div
         className={cn(
-          "mt-7 flex flex-col gap-10 sm:mt-8 md:gap-11 lg:mt-9 lg:flex-row lg:gap-0 lg:divide-x",
+          "mt-7 flex flex-col gap-9 sm:mt-8 md:gap-10 lg:mt-9 lg:flex-row lg:gap-0 lg:divide-x",
           "lg:divide-[#e8e2d8] dark:lg:divide-[#c59d7c]/30",
         )}
       >
@@ -758,12 +737,12 @@ function TrustApproachStrip() {
             <div
               className={cn(
                 "flex h-14 w-14 shrink-0 items-center justify-center rounded-full border sm:h-[3.75rem] sm:w-[3.75rem]",
-                "border-[#c59d7c]/45 text-[#6b4420] dark:border-[#c59d7c]/55 dark:text-[#c59d7c]",
+                "border-[#d7cbb9] bg-white/60 text-[#6b4420] dark:border-[#c59d7c]/45 dark:bg-[#1e1a22] dark:text-[#df7a97]",
               )}
             >
               <item.Icon className="h-6 w-6 sm:h-7 sm:w-7" strokeWidth={1.5} aria-hidden />
             </div>
-            <p className="mt-3 max-w-[15rem] text-[0.8125rem] leading-relaxed text-[#555] sm:mt-3.5 sm:max-w-none sm:text-sm sm:leading-relaxed dark:text-[#c59d7c]/95">
+            <p className="mt-3 max-w-[15rem] text-[0.8125rem] leading-relaxed text-[#555] sm:mt-3.5 sm:max-w-none sm:text-sm sm:leading-relaxed dark:text-[#f5f0e8]/92">
               {item.body}
             </p>
           </div>
@@ -789,12 +768,10 @@ export function WhyResearchersStaySection() {
           viewport={{ once: true }}
           className="mx-auto max-w-4xl text-center"
         >
-          <div className="mb-[18px] flex items-center justify-center gap-3">
-            <div className="h-[1.5px] w-[60px] bg-[#3a6b50]/80 dark:bg-[var(--n9-accent)]/50" aria-hidden />
-            <p className="text-[13.5px] font-semibold tracking-[0.01em] text-[#2a5740] dark:text-[var(--n9-accent)]">
+          <div className="mb-[18px] flex items-center justify-center gap-3 leading-none">
+            <p className="text-[15px] font-semibold tracking-[0.012em] text-[#2f6a4d] dark:text-[var(--n9-accent)]">
               The Notes9 difference
             </p>
-            <div className="h-[1.5px] w-[60px] bg-[#3a6b50]/80 dark:bg-[var(--n9-accent)]/50" aria-hidden />
           </div>
           <h2 className="font-serif text-[clamp(1.75rem,4.2vw,3.25rem)] font-bold leading-[1.15] tracking-tight text-[#1a1a1a] dark:text-foreground">
             Not just another ELN.
@@ -802,7 +779,8 @@ export function WhyResearchersStaySection() {
             Not just another AI tool.
           </h2>
           <p className="mt-3.5 text-base font-normal text-[#555] dark:text-muted-foreground sm:text-[16px]">
-            A connected research workspace for the full workflow.
+          Traditional ELNs are good at recordkeeping. Current Al tools are good at general tasks, literature search, and writing assistance. Notes bridges that gap by connecting
+          literature review, experiment work, and research writing in one Al-native workspace.
           </p>
         </motion.div>
 

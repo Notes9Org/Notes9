@@ -411,7 +411,6 @@ const DECK_MIN_TRAVEL_X = 120
 const DECK_FADE_BEFORE_RAIL_PX = 48
 /** Fade completes when the right edge is this far past the rail. */
 const DECK_FADE_AFTER_RAIL_PX = 32
-
 const defaultDeckGeo: DeckGeo = { laneW: DESKTOP_FLOW_STRIP_W_PX, laneH: DESKTOP_DIAGRAM_H }
 
 
@@ -428,11 +427,11 @@ type DeckFlight = {
 function deckOpacityTimes(spawnLeft: number, endLeft: number, railX: number): number[] {
   const dist = endLeft - spawnLeft
   if (dist < DECK_MIN_TRAVEL_X) return [0, 0.06, 0.55, 0.72, 1]
-  /* right edge at u: spawnLeft + u*dist + DECK_CARD_W — hold full opacity until uFadeStart */
-  let uFadeStart = (railX - DECK_FADE_BEFORE_RAIL_PX - DECK_CARD_W - spawnLeft) / dist
-  let uFadeEnd = (railX + DECK_FADE_AFTER_RAIL_PX - DECK_CARD_W - spawnLeft) / dist
-  uFadeStart = Math.min(0.88, Math.max(0.08, uFadeStart))
-  uFadeEnd = Math.min(0.995, Math.max(uFadeStart + 0.09, uFadeEnd))
+  /* Fade at the rail boundary so anything after the line is not visible. */
+  let uFadeStart = (railX - DECK_FADE_BEFORE_RAIL_PX - spawnLeft) / dist
+  let uFadeEnd = (railX + DECK_FADE_AFTER_RAIL_PX - spawnLeft) / dist
+  uFadeStart = Math.min(0.9, Math.max(0.08, uFadeStart))
+  uFadeEnd = Math.min(0.995, Math.max(uFadeStart + 0.08, uFadeEnd))
   return [0, 0.04, uFadeStart, uFadeEnd, 1]
 }
 
@@ -446,30 +445,35 @@ function DeckFlightInstance({
   onDone: () => void
 }) {
   const { geo, spawnLeft, spawnTop } = flight
-  const { laneW } = geo
+  const { laneW, laneH } = geo
   const d = DECK_FLIGHT_MS / 1000
 
   /** Strip right / violet rail / Notes9 centerline in lane-local X (matches `left-3` + `right-2` lane). */
   const railX = laneW + LANE_R_INSET_PX
-  /** Land with card centered on the rail so motion reads into Notes9 (no overshoot past hub). */
-  const endLeft = railX - DECK_CARD_W / 2
-  const endTop = spawnTop
+  /** Continue travel, but flow strip clips at rail so post-rail content is not visible. */
+  const endLeft = railX + DECK_CARD_W + 32
+  /** Strong bend into the center of the Notes9 rail. */
+  const centerTop = Math.min(Math.max(8, laneH / 2 - DECK_CARD_H / 2), Math.max(8, laneH - DECK_CARD_H - 8))
+  const earlyBendTop = spawnTop + (centerTop - spawnTop) * 0.46
+  const bendStartLeft = railX - Math.round(DECK_CARD_W * 1.2)
+  const nearRailLeft = railX - Math.round(DECK_CARD_W * 0.44)
   const opacityTimes = deckOpacityTimes(spawnLeft, endLeft, railX)
+  const moveTimes = [0, 0.34, 0.8, 1]
 
   return (
     <motion.div
       className="pointer-events-none absolute z-[10] flex w-[196px] min-h-[230px] flex-col overflow-hidden rounded-2xl border border-black/[0.08] bg-white shadow-[0_10px_36px_-12px_rgba(20,18,16,0.2)] will-change-[left,top,opacity] dark:border-white/[0.11] dark:bg-[#222024] dark:shadow-[0_12px_40px_-12px_rgba(0,0,0,0.65)]"
       initial={{ left: spawnLeft, top: spawnTop, opacity: 0, scale: 0.97, rotate: 0 }}
       animate={{
-        left: endLeft,
-        top: endTop,
+        left: [spawnLeft, bendStartLeft, nearRailLeft, endLeft],
+        top: [spawnTop, earlyBendTop, centerTop, centerTop],
         scale: 1,
         rotate: 0,
-        opacity: [0, 1, 1, 0, 0],
+        opacity: [0, 1, 1, 1, 1],
       }}
       transition={{
-        left:    { duration: d, ease: [0.2, 0.08, 0.2, 1] },
-        top:     { duration: d, ease: [0.2, 0.08, 0.2, 1] },
+        left:    { duration: d, times: moveTimes, ease: [0.2, 0.08, 0.2, 1] },
+        top:     { duration: d, times: moveTimes, ease: [0.18, 0.04, 0.16, 1] },
         scale:   { duration: d * 0.28, ease: "easeOut" },
         opacity: { duration: d, times: opacityTimes, ease: "easeInOut" },
       }}
@@ -478,7 +482,7 @@ function DeckFlightInstance({
       <div className="h-[4px] w-full shrink-0" style={{ backgroundColor: row.accent }} />
       <div className="flex flex-1 flex-col px-4 pb-5 pt-3.5">
         <p
-          className="mb-3 text-[10px] font-bold uppercase leading-snug tracking-[0.18em]"
+          className="mb-3 text-[15px] font-bold uppercase leading-snug tracking-[0.18em]"
           style={{ color: row.accent }}
         >
           {row.label}
@@ -599,7 +603,7 @@ function MarketingDeckPipeline({
         >
           <div className="h-[4px] w-full shrink-0" style={{ backgroundColor: row0.accent }} />
           <div className="flex flex-1 flex-col px-4 pb-5 pt-3.5">
-            <p className="mb-3 text-[10px] font-bold uppercase leading-snug tracking-[0.18em]" style={{ color: row0.accent }}>
+            <p className="mb-3 text-[15px] font-bold uppercase leading-snug tracking-[0.18em]" style={{ color: row0.accent }}>
               {row0.label}
             </p>
             <CardSkeleton cardKey={row0.key} />
@@ -830,8 +834,8 @@ export function ConnectedResearchSystemDiagram({ className = "" }: { className?:
   const stripInView = useInView(wrapRef, { once: false, margin: "100px" })
 
 
-  /** Violet rail height = 2× (140% of deck card height) for a taller rail behind Notes9 */
-  const [violetRailPx, setVioletRailPx] = useState(Math.round(230 * 1.4 * 2))
+  /** Violet rail height increased by 50% for stronger vertical emphasis. */
+  const [violetRailPx, setVioletRailPx] = useState(Math.round(230 * 1.4 * 2 * 1.5))
   const [connInfo, setConnInfo] = useState<{
     svgW: number
     svgH: number
@@ -854,7 +858,7 @@ export function ConnectedResearchSystemDiagram({ className = "" }: { className?:
     if (!el) return
     const measure = () => {
       const h = el.getBoundingClientRect().height
-      if (h > 0) setVioletRailPx(Math.max(128, Math.round(h * 1.4 * 2)))
+      if (h > 0) setVioletRailPx(Math.max(128, Math.round(h * 1.4 * 2 * 1.5)))
     }
     measure()
     const ro = new ResizeObserver(measure)
@@ -1086,7 +1090,7 @@ export function ConnectedResearchSystemDiagram({ className = "" }: { className?:
   }> = [
     { label: "Lab notes", tone: "o0", skeletonKey: "lab-notes" },
     { label: "Experiments", tone: "o1", skeletonKey: "experiments" },
-    { label: "Data analysis", tone: "o2", skeletonKey: "analysis" },
+    { label: "Analysis", tone: "o2", skeletonKey: "analysis" },
     { label: "Literature", tone: "o3", skeletonKey: "literature" },
     { label: "Writing", tone: "o4", skeletonKey: "writing" },
     { label: "Protocols", tone: "o5", skeletonKey: "protocols" },
@@ -1137,7 +1141,7 @@ export function ConnectedResearchSystemDiagram({ className = "" }: { className?:
     <div
       className={`flex w-full min-w-0 flex-col rounded-xl border px-2 pb-2 pt-1.5 shadow-[0_8px_28px_-14px_rgba(20,18,16,0.12)] backdrop-blur-[2px] dark:shadow-[0_12px_36px_-16px_rgba(0,0,0,0.45)] ${chipTone(c.tone)} ${compact ? "min-h-[82px]" : "min-h-[96px]"}`}
     >
-      <p className={`shrink-0 text-center font-semibold leading-snug ${compact ? "text-[9px]" : dynChipW < 120 ? "text-[10px]" : "text-[11px] sm:text-[13px]"}`}>{c.label}</p>
+      <p className={`shrink-0 text-center font-semibold leading-snug ${compact ? "text-[14px]" : dynChipW < 120 ? "text-[15px]" : "text-[16px] sm:text-[20px]"}`}>{c.label}</p>
       <div className={`mt-1.5 flex flex-1 flex-col px-0.5 ${compact ? "min-h-[3.5rem]" : "min-h-[4rem]"}`}>
         <OrbitalChipSkeleton cardKey={c.skeletonKey} />
       </div>
@@ -1150,10 +1154,10 @@ export function ConnectedResearchSystemDiagram({ className = "" }: { className?:
       ref={n9Ref}
       className="pointer-events-auto rounded-xl border border-black/[0.09] bg-white/95 px-3.5 py-3 text-center shadow-[0_12px_40px_-12px_rgba(20,16,12,0.25)] backdrop-blur-sm dark:border-white/[0.12] dark:bg-[#1e1d20]/95 dark:shadow-[0_16px_44px_-12px_rgba(0,0,0,0.7)]"
     >
-      <p className="text-[13px] font-semibold tracking-tight text-[#12100e] dark:text-white/95">Notes9</p>
+      <p className="text-[20px] font-semibold tracking-tight text-[#12100e] dark:text-white/95">Notes9</p>
       <div className={`mt-2 flex items-center justify-center gap-1.5 transition-opacity duration-[280ms] ${phase.n9 ? (statusFade ? "opacity-100" : "opacity-0") : "opacity-0"}`}>
         <span className={`h-[6px] w-[6px] shrink-0 rounded-full ${n9Status === "connected" ? "bg-emerald-500" : n9Status === "processing" ? "bg-violet-500" : "bg-amber-400"}`} />
-        <span className={`text-[8px] font-semibold uppercase tracking-[0.18em] ${n9Status === "connected" ? "text-emerald-600 dark:text-emerald-400" : n9Status === "processing" ? "text-violet-500 dark:text-violet-400" : "text-amber-600 dark:text-amber-400"}`}>{n9Status}</span>
+        <span className={`text-[12px] font-semibold uppercase tracking-[0.18em] ${n9Status === "connected" ? "text-emerald-600 dark:text-emerald-400" : n9Status === "processing" ? "text-violet-500 dark:text-violet-400" : "text-amber-600 dark:text-amber-400"}`}>{n9Status}</span>
       </div>
     </div>
   )
@@ -1174,12 +1178,12 @@ export function ConnectedResearchSystemDiagram({ className = "" }: { className?:
               <CatalystGrainBackdrop active={phase.cat} reduceMotion={reduceMotion} className="h-14 w-14">
                 <IceMascot className="hero-pendulum h-full w-full" options={{ src: "/notes9-mascot-ui.png" }} aria-hidden />
               </CatalystGrainBackdrop>
-              <p className="text-center text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--n9-accent)]">Catalyst AI</p>
+              <p className="text-center text-[15px] font-semibold uppercase tracking-[0.14em] text-[var(--n9-accent)]">Catalyst AI</p>
             </div>
             <div className="h-px flex-1 max-w-[44px] bg-violet-400/35" aria-hidden />
             <div className="rounded-xl border border-black/[0.08] bg-white/90 px-3 py-2.5 text-center backdrop-blur-sm dark:border-white/[0.1] dark:bg-[#1e1d20]/90">
-              <p className="text-[12px] font-semibold tracking-tight text-[#12100e] dark:text-white/95">Research</p>
-              <p className="mt-0.5 text-[9px] font-medium uppercase tracking-[0.14em] text-muted-foreground">Workflow</p>
+              <p className="text-[18px] font-semibold tracking-tight text-[#12100e] dark:text-white/95">Research</p>
+              <p className="mt-0.5 text-[14px] font-medium uppercase tracking-[0.14em] text-muted-foreground">Workflow</p>
             </div>
           </div>
           <div className="grid flex-1 grid-cols-3 gap-2">
@@ -1312,7 +1316,7 @@ export function ConnectedResearchSystemDiagram({ className = "" }: { className?:
                       aria-hidden
                     />
                   </CatalystGrainBackdrop>
-                  <p className="text-center text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--n9-accent)] sm:text-xs">
+                  <p className="text-center text-[16px] font-semibold uppercase tracking-[0.14em] text-[var(--n9-accent)] sm:text-[14px]">
                     Catalyst AI
                   </p>
                 </div>
@@ -1360,6 +1364,14 @@ export function ConnectedResearchSystemDiagram({ className = "" }: { className?:
               className="absolute left-1/2 top-1/2 w-0 -translate-x-1/2 -translate-y-1/2"
               style={{ height: violetRailPx }}
             >
+              {/* Feather uses same height as rail for exact length match. */}
+              <div
+                className="pointer-events-none absolute inset-y-0 left-1/2 w-[26px] -translate-x-full"
+                style={{
+                  background:
+                    "linear-gradient(90deg, rgba(139,92,246,0) 0%, rgba(139,92,246,0.08) 62%, rgba(139,92,246,0.2) 100%)",
+                }}
+              />
               <div className="pointer-events-none absolute inset-y-0 left-1/2 w-[1.5px] -translate-x-1/2 rounded-full bg-violet-500/45 shadow-[0_0_12px_rgba(139,92,246,0.35)] dark:bg-violet-400/50 dark:shadow-[0_0_14px_rgba(167,139,250,0.25)]" />
             </div>
           </div>
@@ -1371,7 +1383,7 @@ export function ConnectedResearchSystemDiagram({ className = "" }: { className?:
               ref={n9Ref}
               className="pointer-events-auto absolute left-1/2 top-1/2 z-[1] min-w-[7.5rem] -translate-x-1/2 -translate-y-1/2 rounded-xl border border-black/[0.09] bg-white/95 px-3.5 py-3 text-center shadow-[0_12px_40px_-12px_rgba(20,16,12,0.25)] backdrop-blur-sm dark:border-white/[0.12] dark:bg-[#1e1d20]/95 dark:shadow-[0_16px_44px_-12px_rgba(0,0,0,0.7)]"
             >
-              <p className="text-[13px] font-semibold tracking-tight text-[#12100e] dark:text-white/95">
+              <p className="text-[20px] font-semibold tracking-tight text-[#12100e] dark:text-white/95">
                 Notes9
               </p>
               <div
@@ -1389,7 +1401,7 @@ export function ConnectedResearchSystemDiagram({ className = "" }: { className?:
                   }`}
                 />
                 <span
-                  className={`text-[8px] font-semibold uppercase tracking-[0.18em] ${
+                  className={`text-[12px] font-semibold uppercase tracking-[0.18em] ${
                     n9Status === "connected"
                       ? "text-emerald-600 dark:text-emerald-400"
                       : n9Status === "processing"

@@ -11,7 +11,8 @@ import { resolveDemoScreenshot } from "@/components/marketing/demo-asset"
 interface Feature {
   id: string
   icon: LucideIcon
-  label: string
+  phase: string
+  title: string
   description: string
   screenshot: string
   alt: string
@@ -21,25 +22,28 @@ const features: Feature[] = [
   {
     id: "literature-planning",
     icon: BookOpen,
-    label: "Literature and planning",
+    phase: "Before bench",
+    title: "Literature & planning",
     description:
-      "Review papers, organize project context, and draft protocols without losing why decisions were made.",
+      "Before the bench, search literature, read and organize knowledge, draft protocols, and plan experiments without losing context.",
     screenshot: "/demo/literature-list.png",
     alt: "Notes9 literature and planning workspace",
   },
   {
     id: "experiment-notes",
     icon: ClipboardList,
-    label: "Experiment work and notes",
+    phase: "During bench",
+    title: "Experiment work & notes",
     description:
-      "Capture lab work, observations, tasks, and experiment context in a workspace built for how research is actually done.",
+      "During execution, track lab work, observations, tasks, and lab notes while preserving experiment context.",
     screenshot: "/demo/new-lab-note.png",
     alt: "Notes9 lab notes and experiment workspace",
   },
   {
     id: "results-writing",
     icon: PenLine,
-    label: "Results and writing",
+    phase: "After bench",
+    title: "Results & writing",
     description:
       "Turn connected project knowledge into summaries, reports, and scientific writing without starting from a blank page.",
     screenshot: "/demo/writing.png",
@@ -101,11 +105,14 @@ function FeatureRow({ feature, index }: { feature: Feature; index: number }) {
           whileInView={{ scale: 1, opacity: 1 }}
           transition={{ duration: 0.4, ease: "easeOut" }}
           viewport={{ once: true }}
-          className="inline-flex max-w-full flex-wrap items-center gap-[0.8rem] rounded-full border border-[var(--n9-accent)]/30 bg-[var(--n9-accent-light)] px-[1.2rem] py-[0.4rem] text-[1.2rem] font-semibold uppercase leading-snug tracking-[0.12em] text-[var(--n9-accent)]"
+          className="inline-flex max-w-full flex-wrap items-center gap-[0.5rem] rounded-full border border-[var(--n9-accent)]/30 bg-[var(--n9-accent-light)] px-[0.9rem] py-[0.3rem] text-[0.76rem] font-semibold uppercase leading-snug tracking-[0.12em] text-[var(--n9-accent)]"
         >
-          <feature.icon className="size-[1.2rem] shrink-0" />
-          {feature.label}
+          <feature.icon className="size-[0.82rem] shrink-0" />
+          {feature.phase}
         </motion.div>
+        <h3 className="font-serif text-[2.1rem] leading-tight tracking-tight text-foreground sm:text-[2.4rem]">
+          {feature.title}
+        </h3>
         <p className="text-[1.35rem] leading-[2.4rem] text-muted-foreground">
           {feature.description}
         </p>
@@ -171,10 +178,10 @@ export function FeatureDeepDive() {
           className="mx-auto max-w-3xl text-center mb-16"
         >
           <h2 className="font-serif text-3xl tracking-tight text-foreground sm:text-4xl">
-          Every step connected - Every insight preserved.
+            From literature review to lab work to reporting, <span className="text-[var(--n9-accent)]">Notes9</span> keeps every step connected - and every insight preserved.
           </h2>
           <p className="mt-4 text-lg leading-7 text-muted-foreground">
-            Built to reduce friction and keep context flowing.
+            A connected workflow for the full research journey.
           </p>
         </motion.div>
 
