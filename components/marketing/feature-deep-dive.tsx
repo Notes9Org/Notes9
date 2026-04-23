@@ -4,20 +4,14 @@ import { useRef } from "react"
 import Image from "next/image"
 import { useTheme } from "next-themes"
 import { motion, useScroll, useTransform, useMotionValue, useSpring, useMotionTemplate } from "framer-motion"
-import {
-  Bot,
-  Database,
-  FileSearch,
-  TestTube2,
-  LineChart,
-} from "lucide-react"
+import { BookOpen, ClipboardList, PenLine } from "lucide-react"
 import type { LucideIcon } from "lucide-react"
 import { resolveDemoScreenshot } from "@/components/marketing/demo-asset"
 
 interface Feature {
   id: string
   icon: LucideIcon
-  label: string
+  phase: string
   title: string
   description: string
   screenshot: string
@@ -26,54 +20,34 @@ interface Feature {
 
 const features: Feature[] = [
   {
-    id: "memory",
-    icon: Database,
-    label: "Lab Memory",
-    title: "Connected records with provenance",
+    id: "literature-planning",
+    icon: BookOpen,
+    phase: "Before bench",
+    title: "Literature & planning",
     description:
-      "Decisions, sources, and outputs stay linked. Recover important context without relying on personal memory or guesswork.",
-    screenshot: "/demo/lab-memory.png",
-    alt: "Notes9 lab memory showing connected records",
-  },
-  {
-    id: "literature",
-    icon: FileSearch,
-    label: "Literature",
-    title: "Bring papers into the active workflow",
-    description:
-      "Search, review, and connect source material directly to experiments, notes, and downstream writing.",
+      "Before the bench, search literature, read and organize knowledge, draft protocols, and plan experiments without losing context.",
     screenshot: "/demo/literature-list.png",
-    alt: "Notes9 literature reviews",
+    alt: "Notes9 literature and planning workspace",
   },
   {
-    id: "samples",
-    icon: TestTube2,
-    label: "Sample Inventory",
-    title: "Track physical materials securely",
+    id: "experiment-notes",
+    icon: ClipboardList,
+    phase: "During bench",
+    title: "Experiment work & notes",
     description:
-      "Manage your lab inventory seamlessly, linking samples directly to their corresponding origin and experiment.",
-    screenshot: "/demo/samples.png",
-    alt: "Notes9 sample inventory",
+      "During execution, track lab work, observations, tasks, and lab notes while preserving experiment context.",
+    screenshot: "/demo/new-lab-note.png",
+    alt: "Notes9 lab notes and experiment workspace",
   },
   {
-    id: "reporting",
-    icon: LineChart,
-    label: "Reporting",
-    title: "Move faster into summaries and updates",
+    id: "results-writing",
+    icon: PenLine,
+    phase: "After bench",
+    title: "Results & writing",
     description:
-      "Use structured workflow context to accelerate reports, reviews, and downstream analysis.",
-    screenshot: "/demo/project-report.png",
-    alt: "Notes9 project reporting",
-  },
-  {
-    id: "writing",
-    icon: Bot,
-    label: "Write With AI",
-    title: "Draft from real research context",
-    description:
-      "Move from literature, notes, and linked records into structured writing with AI grounded in the actual workflow.",
+      "Turn connected project knowledge into summaries, reports, and scientific writing without starting from a blank page.",
     screenshot: "/demo/writing.png",
-    alt: "Notes9 writing with AI",
+    alt: "Notes9 writing and reporting from project context",
   },
 ]
 
@@ -131,24 +105,17 @@ function FeatureRow({ feature, index }: { feature: Feature; index: number }) {
           whileInView={{ scale: 1, opacity: 1 }}
           transition={{ duration: 0.4, ease: "easeOut" }}
           viewport={{ once: true }}
-          className="inline-flex items-center gap-2 rounded-full border border-[var(--n9-accent)]/30 bg-[var(--n9-accent-light)] px-3 py-1 text-xs font-semibold uppercase tracking-[0.15em] text-[var(--n9-accent)]"
+          className="inline-flex max-w-full flex-wrap items-center gap-[0.5rem] rounded-full border border-[var(--n9-accent)]/30 bg-[var(--n9-accent-light)] px-[0.9rem] py-[0.3rem] text-[0.76rem] font-semibold uppercase leading-snug tracking-[0.12em] text-[var(--n9-accent)]"
         >
-          <feature.icon className="h-3 w-3" />
-          {feature.label}
+          <feature.icon className="size-[0.82rem] shrink-0" />
+          {feature.phase}
         </motion.div>
-        <h3 className="text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">
+        <h3 className="font-serif text-[2.1rem] leading-tight tracking-tight text-foreground sm:text-[2.4rem]">
           {feature.title}
         </h3>
-        <p className="text-lg leading-8 text-muted-foreground">
+        <p className="text-[1.35rem] leading-[2.4rem] text-muted-foreground">
           {feature.description}
         </p>
-        <motion.div
-          initial={{ width: 0 }}
-          whileInView={{ width: 80 }}
-          transition={{ duration: 0.5, delay: 0.3, ease: "easeOut" }}
-          viewport={{ once: true }}
-          className="h-[2px] rounded-full bg-gradient-to-r from-[var(--n9-accent)]/60 to-transparent"
-        />
       </motion.div>
 
       {/* Screenshot Container with Parallax + Tilt + Spotlight */}
@@ -201,7 +168,7 @@ export function FeatureDeepDive() {
   const lineHeight = useTransform(scrollYProgress, [0, 1], ["0%", "100%"])
 
   return (
-    <section ref={sectionRef} className="relative bg-[var(--n9-accent-light)]/50 dark:bg-muted/10">
+    <section id="features" ref={sectionRef} className="relative bg-[var(--n9-accent-light)]/50 dark:bg-muted/10">
       <div className="container mx-auto px-4 py-20 sm:px-6 lg:px-8">
         <motion.div
           initial={{ opacity: 0, y: 16 }}
@@ -211,10 +178,10 @@ export function FeatureDeepDive() {
           className="mx-auto max-w-3xl text-center mb-16"
         >
           <h2 className="font-serif text-3xl tracking-tight text-foreground sm:text-4xl">
-            Built for how labs actually work
+            From literature review to lab work to reporting, <span className="text-[var(--n9-accent)]">Notes9</span> keeps every step connected - and every insight preserved.
           </h2>
           <p className="mt-4 text-lg leading-7 text-muted-foreground">
-            Every feature is designed to reduce friction and keep context flowing.
+            A connected workflow for the full research journey.
           </p>
         </motion.div>
 
@@ -223,23 +190,27 @@ export function FeatureDeepDive() {
           <div className="absolute left-1/2 top-0 bottom-0 hidden w-[2px] -translate-x-1/2 bg-border/30 lg:block" aria-hidden="true">
             <motion.div
               style={{ height: lineHeight }}
-              className="w-full bg-gradient-to-b from-[var(--n9-accent)]/60 to-[var(--n9-accent)]/20 rounded-full"
+              className="w-full rounded-full bg-[var(--n9-accent)]/45"
             />
           </div>
 
           {/* Feature node dots on the timeline */}
           <div className="absolute left-1/2 top-0 bottom-0 hidden -translate-x-1/2 lg:block" aria-hidden="true">
-            {features.map((_, i) => (
-              <motion.div
-                key={i}
-                initial={{ scale: 0 }}
-                whileInView={{ scale: 1 }}
-                transition={{ duration: 0.3, delay: 0.1 }}
-                viewport={{ once: true }}
-                className="absolute left-1/2 -translate-x-1/2 h-3 w-3 rounded-full border-2 border-[var(--n9-accent)]/60 bg-background"
-                style={{ top: `${(i / (features.length - 1)) * 100}%` }}
-              />
-            ))}
+            {features.map((_, i) => {
+              const n = features.length
+              const topPct = n <= 1 ? 0 : (i / (n - 1)) * 100
+              return (
+                <motion.div
+                  key={i}
+                  initial={{ scale: 0 }}
+                  whileInView={{ scale: 1 }}
+                  transition={{ duration: 0.3, delay: 0.1 }}
+                  viewport={{ once: true }}
+                  className="absolute left-1/2 -translate-x-1/2 h-3 w-3 rounded-full border-2 border-[var(--n9-accent)]/60 bg-background"
+                  style={{ top: `${topPct}%` }}
+                />
+              )
+            })}
           </div>
 
           <div className="space-y-16 lg:space-y-24">

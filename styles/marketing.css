@@ -66,15 +66,28 @@
   75% { transform: translate(15px, 25px) scale(1.03); }
 }
 
-/* Bounce for hero mascot */
-@keyframes hero-bounce {
+/* Gentle float for header mascot */
+@keyframes header-float {
   0%, 100% { transform: translateY(0); }
-  50% { transform: translateY(-10px); }
+  50%       { transform: translateY(-4px); }
 }
 
 .hero-pendulum {
-  animation: hero-bounce 2s ease-in-out infinite;
-  filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.12));
+  animation: header-float 3s ease-in-out infinite;
+  filter: drop-shadow(0 2px 6px rgba(0, 0, 0, 0.18));
+}
+
+/* Pillar cards: dashed “signal” line (marketing home) */
+@keyframes n9-pillar-dash-flow {
+  to {
+    stroke-dashoffset: -56;
+  }
+}
+
+.marketing-theme .n9-pillar-dash-line {
+  stroke-dasharray: 6 10;
+  stroke-dashoffset: 0;
+  animation: n9-pillar-dash-flow 2.4s linear infinite;
 }
 
 /* Hide scrollbar on product reel */
