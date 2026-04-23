@@ -942,15 +942,14 @@ body > [data-radix-popper-content-wrapper] {
   }
 }
 
-/* Hub links: dash pattern marches along path (chip → hub); period = sum(stroke-dasharray) */
+/* Hub: each card → Catalyst (matches notes9-diagram.html dashFlow; period 5+7=12, 48 = 4×12). */
 .n9-hub-dash-flow {
-  animation: n9-hub-dash-flow 1.15s linear infinite;
+  animation: n9-hub-dash-flow 1.1s linear infinite;
 }
 
 @keyframes n9-hub-dash-flow {
   to {
-    /* Positive offset shifts pattern along path direction → toward Catalyst */
-    stroke-dashoffset: 12;
+    stroke-dashoffset: -48;
   }
 }
 

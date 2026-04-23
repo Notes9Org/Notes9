@@ -68,14 +68,6 @@ export function StatusSection() {
               variants={itemVariants}
               className="group relative overflow-hidden rounded-2xl border border-border/50 bg-card/80 p-6 text-center backdrop-blur-sm transition-colors duration-300 hover:border-[var(--n9-accent)]/30 dark:bg-card/60"
             >
-              {/* Accent line at top */}
-              <motion.div
-                initial={{ scaleX: 0 }}
-                whileInView={{ scaleX: 1 }}
-                transition={{ duration: 0.6, delay: 0.3, ease: "easeOut" }}
-                viewport={{ once: true }}
-                className="absolute left-0 right-0 top-0 h-[2px] origin-left bg-gradient-to-r from-[var(--n9-accent)]/60 via-[var(--n9-accent)]/30 to-transparent"
-              />
               <div className="text-4xl font-bold tracking-tight text-[var(--n9-accent)]">
                 <AnimatedCounter value={m.value} />
               </div>

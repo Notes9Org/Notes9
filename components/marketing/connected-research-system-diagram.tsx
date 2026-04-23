@@ -3,95 +3,146 @@
 import {
   useCallback,
   useEffect,
+  useId,
   useLayoutEffect,
+  useMemo,
   useRef,
   useState,
+  type ReactNode,
   type RefObject,
 } from "react"
 import { motion, useInView } from "framer-motion"
 import { IceMascot } from "@/components/ui/ice-mascot"
 
-const PCOLS = ["#1a7a5e", "#2e5fa3", "#7a4fb8", "#b87333", "#5a3d99", "#c04a3a", "#c8882a"]
-
-type PxMode = "orbit" | "shoot" | "quad" | "drift"
-
-class Px {
-  x: number
-  y: number
-  col: string
-  mode: PxMode
-  sz: number
-  life = 0
-  maxLife: number
-  vx: number
-  vy: number
-  angle: number
-  orbit: number
-  spin: number
-  sx: number
-  sy: number
-  tx = 0
-  ty = 0
-  a = 0
-
-  constructor(x: number, y: number, col: string, mode: PxMode) {
-    this.x = x
-    this.y = y
-    this.col = col
-    this.mode = mode
-    this.sz = mode === "quad" ? 3.2 : 2.5
-    this.maxLife = mode === "shoot" ? 50 + Math.floor(Math.random() * 30) : 175 + Math.random() * 130
-    this.vx = (Math.random() - 0.5) * 0.85
-    this.vy = (Math.random() - 0.5) * 0.85
-    this.angle = Math.random() * Math.PI * 2
-    this.orbit = 38 + Math.random() * 42
-    this.spin = (Math.random() - 0.5) * 0.021
-    this.sx = x
-    this.sy = y
-  }
-
-  tick(cx: number, cy: number) {
-    this.life++
-    const t = this.life / this.maxLife
-    let alpha = (t < 0.15 ? t / 0.15 : t > 0.8 ? (1 - t) / 0.2 : 1) * 0.68
-    alpha = Math.max(0, Math.min(1, alpha))
-    this.a = alpha
-    if (this.mode === "orbit") {
-      this.angle += this.spin
-      this.x = cx + Math.cos(this.angle) * this.orbit
-      this.y = cy + Math.sin(this.angle) * this.orbit * 0.5
-    } else if (this.mode === "shoot") {
-      const e = t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2
-      this.x = this.sx + (this.tx - this.sx) * e
-      this.y = this.sy + (this.ty - this.sy) * e
-    } else {
-      this.x += this.vx
-      this.y += this.vy
-    }
-    return this.life < this.maxLife
-  }
-
-  draw(ctx: CanvasRenderingContext2D) {
-    ctx.globalAlpha = this.a
-    ctx.fillStyle = this.col
-    if (this.mode === "quad") {
-      const s = this.sz
-      ctx.fillRect(this.x - s, this.y - s, s * 0.9, s * 0.9)
-      ctx.fillRect(this.x + s * 0.1, this.y - s, s * 0.9, s * 0.9)
-      ctx.fillRect(this.x - s, this.y + s * 0.1, s * 0.9, s * 0.9)
-      ctx.fillRect(this.x + s * 0.1, this.y + s * 0.1, s * 0.9, s * 0.9)
-    } else {
-      ctx.fillRect(this.x - this.sz / 2, this.y - this.sz / 2, this.sz, this.sz)
-    }
-  }
-}
+/** Desktop deck + hub layout is authored at this size; narrower containers scale down uniformly. */
+const DESKTOP_DIAGRAM_W = 1200
+const DESKTOP_DIAGRAM_H = 768
+/** Flow strip (left) vs hub (right): 40% / 60% at authored width. */
+const DESKTOP_RAIL_LEFT_PCT = 40
+const DESKTOP_FLOW_STRIP_W_PX = Math.round((DESKTOP_DIAGRAM_W * DESKTOP_RAIL_LEFT_PCT) / 100)
 
 const TOTAL_MS = 10000
-/** Cap ambient grains so the loop can run forever without stacking unbounded work */
-const AMBIENT_PARTICLE_CAP = 140
 const CHIP_T = [0.5, 0.54, 0.58, 0.63, 0.68, 0.73] as const
-/** Matches chip row tints: Lab notes, Experiments, Data analysis, Literature, Writing, Protocols */
+/** Stroke + marker fill per chip order: Lab notes, Experiments, Data analysis, Literature, Writing, Protocols */
 const CHIP_COLS = ["#059669", "#0284c7", "#b87333", "#7c3aed", "#d97706", "#e11d48"] as const
+
+/** Extra hues for Catalyst mascot grain backdrop (chip tones + accents). */
+const CATALYST_GRAIN_COLORS = [...CHIP_COLS, "#8b5cf6", "#34d399", "#fbbf24"] as const
+
+/** Soft multi-color grains behind the hub IceMascot (canvas, hub-local only). */
+function CatalystGrainBackdrop({
+  active,
+  reduceMotion,
+  className,
+  children,
+}: {
+  active: boolean
+  reduceMotion: boolean
+  className?: string
+  children: ReactNode
+}) {
+  const wrapRef = useRef<HTMLDivElement>(null)
+  const canvasRef = useRef<HTMLCanvasElement>(null)
+  const rafRef = useRef(0)
+
+  useEffect(() => {
+    if (reduceMotion || !active) return
+    const canvas = canvasRef.current
+    const wrap = wrapRef.current
+    if (!canvas || !wrap) return
+    const ctx = canvas.getContext("2d")
+    if (!ctx) return
+
+    type Grain = {
+      ang: number
+      rBase: number
+      rPulse: number
+      speed: number
+      phase: number
+      sz: number
+      col: string
+      wobble: number
+    }
+    const grains: Grain[] = []
+    const n = 36
+    for (let i = 0; i < n; i++) {
+      grains.push({
+        ang: Math.random() * Math.PI * 2,
+        rBase: 0.14 + Math.random() * 0.34,
+        rPulse: 0.03 + Math.random() * 0.07,
+        speed: 0.0011 + Math.random() * 0.0024,
+        phase: Math.random() * Math.PI * 2,
+        sz: 1 + Math.random() * 2.2,
+        col: CATALYST_GRAIN_COLORS[i % CATALYST_GRAIN_COLORS.length]!,
+        wobble: 0.6 + Math.random() * 1.1,
+      })
+    }
+
+    const resize = () => {
+      const w = Math.max(1, wrap.clientWidth)
+      const h = Math.max(1, wrap.clientHeight)
+      const dpr = Math.min(2, typeof window !== "undefined" ? window.devicePixelRatio || 1 : 1)
+      canvas.width = Math.round(w * dpr)
+      canvas.height = Math.round(h * dpr)
+      canvas.style.width = `${w}px`
+      canvas.style.height = `${h}px`
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
+    }
+    resize()
+    const ro = new ResizeObserver(resize)
+    ro.observe(wrap)
+
+    let frame = 0
+    const tick = () => {
+      frame++
+      const W = wrap.clientWidth
+      const H = wrap.clientHeight
+      if (W < 2 || H < 2) {
+        rafRef.current = requestAnimationFrame(tick)
+        return
+      }
+      const cx = W / 2
+      const cy = H / 2
+      const R = Math.min(W, H) * 0.46
+      ctx.clearRect(0, 0, W, H)
+      for (const g of grains) {
+        g.ang += g.speed
+        const pulse = Math.sin(g.ang * 1.4 + g.phase) * g.rPulse * R
+        const r = g.rBase * R + pulse + Math.sin(frame * 0.035 * g.wobble + g.phase) * (0.04 * R)
+        const px = cx + Math.cos(g.ang) * r
+        const py = cy + Math.sin(g.ang) * r
+        const alpha = 0.2 + 0.42 * (0.5 + 0.5 * Math.sin(g.ang * 2.1 + g.phase))
+        ctx.save()
+        ctx.translate(px, py)
+        ctx.rotate(g.ang * 1.15 + g.phase)
+        ctx.globalAlpha = alpha
+        ctx.fillStyle = g.col
+        ctx.fillRect(-g.sz * 1.1, -g.sz * 0.5, g.sz * 2.2, g.sz)
+        ctx.restore()
+      }
+      rafRef.current = requestAnimationFrame(tick)
+    }
+    rafRef.current = requestAnimationFrame(tick)
+
+    return () => {
+      ro.disconnect()
+      cancelAnimationFrame(rafRef.current)
+    }
+  }, [active, reduceMotion])
+
+  return (
+    <div ref={wrapRef} className={`relative inline-flex shrink-0 items-center justify-center ${className ?? ""}`}>
+      {!reduceMotion && active ? (
+        <canvas
+          ref={canvasRef}
+          className="pointer-events-none absolute left-1/2 top-1/2 z-0 h-[148%] w-[148%] max-w-none -translate-x-1/2 -translate-y-1/2 rounded-full opacity-[0.88] [mask-image:radial-gradient(circle_at_50%_50%,black_32%,transparent_74%)] dark:opacity-[0.72]"
+          aria-hidden
+        />
+      ) : null}
+      <div className="relative z-[1]">{children}</div>
+    </div>
+  )
+}
 
 /** Ray from rect center toward (tx, ty); return first intersection with the rectangle border (panel coords). */
 function rectExitTowardCat(left: number, top: number, w: number, h: number, tx: number, ty: number) {
@@ -130,30 +181,22 @@ function rectExitTowardCat(left: number, top: number, w: number, h: number, tx: 
   return { x: cx + tMin * vx, y: cy + tMin * vy }
 }
 
+/** Scales authored orbit radius, chord margin, and in-hub clearance (1.5× then another 1.4×). */
+const HUB_ORBIT_SCALE = 1.5 * 1.2
+
 /**
  * Hub center → chip anchor distance (px). Chord between neighbors ≈ R (60° steps).
- * Keep R high enough vs chip width (~140px) so cards do not overlap.
+ * Large radius so orbit chips clear the mascot.
  */
-const HUB_ORBIT_RADIUS_PX = 218
+const HUB_ORBIT_RADIUS_PX = Math.round(352 * HUB_ORBIT_SCALE)
+const HUB_ORBIT_R_FLOOR = Math.round(120 * HUB_ORBIT_SCALE)
+const HUB_CHORD_EXTRA = Math.round(50 * HUB_ORBIT_SCALE)
 
 /**
- * Cards enter from the LEFT edge of the strip at a Y set by clock angle,
- * travel rightward ALL THE WAY to the violet rail, fade after crossing it.
- * While a card is 40% through its trip the next one spawns.
- * Directions cycle: 10:30 -> 7:30 -> 9:00 -> 11:00 -> 7:00 -> 8:30
+ * Deck: fixed left gate, four vertical slots (conveyor), horizontal run to the
+ * violet rail, opacity fades only while crossing the rail. Stagger = ⅓ flight.
  */
 const DECK_FLIGHT_MS = 5800
-const DECK_SPAWN_AT_FRAC = 0.40
-
-/** Where on the lane height (0=top 1=bottom) each clock-direction enters from the left */
-const DECK_CLOCK_DIRS = [
-  { spawnFracY: 0.22, initRotate:  7  }, // 10:30
-  { spawnFracY: 0.78, initRotate: -7  }, // 7:30
-  { spawnFracY: 0.50, initRotate:  0  }, // 9:00
-  { spawnFracY: 0.09, initRotate:  12 }, // 11:00
-  { spawnFracY: 0.88, initRotate: -12 }, // 7:00
-  { spawnFracY: 0.62, initRotate: -4  }, // 8:30
-] as const
 
 type DeckGeo = { laneW: number; laneH: number }
 
@@ -353,13 +396,45 @@ function CardSkeleton({ cardKey }: { cardKey: FlowCardKey }) {
 
 const DECK_CARD_W = 196
 const DECK_CARD_H = 230
+/** Fixed left gate (layout px) — same for every card. */
+const DECK_SPAWN_LEFT_PX = -DECK_CARD_W - 20
+/** Fixed row heights (fraction of lane) — cycles for a conveyor, not random Y. */
+const DECK_LANE_SLOT_FRACS = [0.17, 0.34, 0.51, 0.68] as const
 
-const defaultDeckGeo: DeckGeo = { laneW: 360, laneH: 620 }
+/** Lane's own right inset from the strip edge (Tailwind right-2 = 0.5 rem = 8 px).
+ *  The strip right edge == the violet rail at `DESKTOP_RAIL_LEFT_PCT`% of 1200 px. */
+/** Strip padding: lane `right-2` (Tailwind) — distance from lane inner edge to strip / rail edge. */
+const LANE_R_INSET_PX = 8
+/** Horizontal travel must be at least this wide so opacity keyframes stay sane. */
+const DECK_MIN_TRAVEL_X = 120
+/** Fade starts when the card's right edge is this far before the rail (smooth portal). */
+const DECK_FADE_BEFORE_RAIL_PX = 48
+/** Fade completes when the right edge is this far past the rail. */
+const DECK_FADE_AFTER_RAIL_PX = 32
+
+const defaultDeckGeo: DeckGeo = { laneW: DESKTOP_FLOW_STRIP_W_PX, laneH: DESKTOP_DIAGRAM_H }
 
 
 // ─── Flight card ──────────────────────────────────────────────────────────────
 
-type DeckFlight = { id: number; dirIndex: number; cardIndex: number; geo: DeckGeo }
+type DeckFlight = {
+  id: number
+  cardIndex: number
+  geo: DeckGeo
+  spawnLeft: number
+  spawnTop: number
+}
+
+function deckOpacityTimes(spawnLeft: number, endLeft: number, railX: number): number[] {
+  const dist = endLeft - spawnLeft
+  if (dist < DECK_MIN_TRAVEL_X) return [0, 0.06, 0.55, 0.72, 1]
+  /* right edge at u: spawnLeft + u*dist + DECK_CARD_W — hold full opacity until uFadeStart */
+  let uFadeStart = (railX - DECK_FADE_BEFORE_RAIL_PX - DECK_CARD_W - spawnLeft) / dist
+  let uFadeEnd = (railX + DECK_FADE_AFTER_RAIL_PX - DECK_CARD_W - spawnLeft) / dist
+  uFadeStart = Math.min(0.88, Math.max(0.08, uFadeStart))
+  uFadeEnd = Math.min(0.995, Math.max(uFadeStart + 0.09, uFadeEnd))
+  return [0, 0.04, uFadeStart, uFadeEnd, 1]
+}
 
 function DeckFlightInstance({
   flight,
@@ -370,34 +445,33 @@ function DeckFlightInstance({
   row: (typeof FLOW_CARDS)[number]
   onDone: () => void
 }) {
-  const dir = DECK_CLOCK_DIRS[flight.dirIndex % DECK_CLOCK_DIRS.length]!
-  const { laneW, laneH } = flight.geo
+  const { geo, spawnLeft, spawnTop } = flight
+  const { laneW } = geo
   const d = DECK_FLIGHT_MS / 1000
-  const hh = DECK_CARD_H / 2
 
-  const spawnLeft = -DECK_CARD_W - 12
-  const spawnTop  = dir.spawnFracY * laneH - hh
-  const endLeft   = laneW + 32           // goes past the rail; parent overflow-hidden clips it
-  const endTop    = laneH * 0.5 - hh    // all arrivals converge to vertical center
+  /** Strip right / violet rail / Notes9 centerline in lane-local X (matches `left-3` + `right-2` lane). */
+  const railX = laneW + LANE_R_INSET_PX
+  /** Land with card centered on the rail so motion reads into Notes9 (no overshoot past hub). */
+  const endLeft = railX - DECK_CARD_W / 2
+  const endTop = spawnTop
+  const opacityTimes = deckOpacityTimes(spawnLeft, endLeft, railX)
 
   return (
     <motion.div
-      className="pointer-events-none absolute z-[5] flex w-[196px] min-h-[230px] flex-col overflow-hidden rounded-2xl border border-black/[0.08] bg-white shadow-[0_10px_36px_-12px_rgba(20,18,16,0.2)] will-change-[left,top,opacity] dark:border-white/[0.11] dark:bg-[#222024] dark:shadow-[0_12px_40px_-12px_rgba(0,0,0,0.65)]"
-      initial={{ left: spawnLeft, top: spawnTop, opacity: 0, scale: 0.92, rotate: dir.initRotate }}
+      className="pointer-events-none absolute z-[10] flex w-[196px] min-h-[230px] flex-col overflow-hidden rounded-2xl border border-black/[0.08] bg-white shadow-[0_10px_36px_-12px_rgba(20,18,16,0.2)] will-change-[left,top,opacity] dark:border-white/[0.11] dark:bg-[#222024] dark:shadow-[0_12px_40px_-12px_rgba(0,0,0,0.65)]"
+      initial={{ left: spawnLeft, top: spawnTop, opacity: 0, scale: 0.97, rotate: 0 }}
       animate={{
         left: endLeft,
         top: endTop,
         scale: 1,
         rotate: 0,
-        opacity: [0, 1, 1, 0.55, 0],
+        opacity: [0, 1, 1, 0, 0],
       }}
       transition={{
-        left:    { duration: d, ease: [0.28, 0.06, 0.15, 1] },
-        top:     { duration: d, ease: [0.28, 0.06, 0.15, 1] },
-        scale:   { duration: d * 0.35, ease: "easeOut" },
-        rotate:  { duration: d * 0.40, ease: "easeOut" },
-        // fade in 0→10%, hold 10→72%, fade out 72→88%
-        opacity: { duration: d, times: [0, 0.10, 0.72, 0.88, 1], ease: "linear" },
+        left:    { duration: d, ease: [0.2, 0.08, 0.2, 1] },
+        top:     { duration: d, ease: [0.2, 0.08, 0.2, 1] },
+        scale:   { duration: d * 0.28, ease: "easeOut" },
+        opacity: { duration: d, times: opacityTimes, ease: "easeInOut" },
       }}
       onAnimationComplete={onDone}
     >
@@ -435,16 +509,17 @@ function MarketingDeckPipeline({
 
   const [flights, setFlights] = useState<DeckFlight[]>([])
 
-  const dirIdxRef    = useRef(0)
-  const cardIdxRef   = useRef(0)
-  const nextIdRef    = useRef(1)
+  const cardIdxRef = useRef(0)
+  const nextIdRef = useRef(1)
 
   useLayoutEffect(() => {
     const el = laneRef.current
     if (!el) return
+    // Use offsetWidth/offsetHeight (layout dimensions, unaffected by CSS
+    // transform) so that endLeft/endTop values are in the same unscaled
+    // coordinate space as the CSS `left`/`top` props on animated children.
     const apply = () => {
-      const r = el.getBoundingClientRect()
-      setGeo({ laneW: Math.max(200, r.width), laneH: Math.max(300, r.height) })
+      setGeo({ laneW: Math.max(200, el.offsetWidth), laneH: Math.max(300, el.offsetHeight) })
     }
     apply()
     const ro = new ResizeObserver(apply)
@@ -454,7 +529,6 @@ function MarketingDeckPipeline({
 
   useEffect(() => {
     if (!stripInView) {
-      dirIdxRef.current  = 0
       cardIdxRef.current = 0
     }
   }, [stripInView])
@@ -468,14 +542,28 @@ function MarketingDeckPipeline({
     const interval = DECK_FLIGHT_MS * (1 / 3)
 
     const spawn = () => {
-      const id        = nextIdRef.current++
-      const dirIndex  = dirIdxRef.current  % DECK_CLOCK_DIRS.length
-      const cardIndex = cardIdxRef.current % FLOW_CARDS.length
-      const geo       = geoRef.current
-      dirIdxRef.current++
+      const id = nextIdRef.current++
+      const deckIdx = cardIdxRef.current
+      const cardIndex = deckIdx % FLOW_CARDS.length
+      const slot = deckIdx % DECK_LANE_SLOT_FRACS.length
       cardIdxRef.current++
+      const geo = geoRef.current
 
-      setFlights((prev) => [...prev.slice(-8), { id, dirIndex, cardIndex, geo: { ...geo } }])
+      const { laneW, laneH } = geo
+      const railX = laneW + LANE_R_INSET_PX
+      const endLeft = railX - DECK_CARD_W / 2
+      const spawnLeft = DECK_SPAWN_LEFT_PX
+      const frac = DECK_LANE_SLOT_FRACS[slot]!
+      const hh = DECK_CARD_H / 2
+      let spawnTop = laneH * frac - hh
+      spawnTop = Math.min(Math.max(8, spawnTop), Math.max(8, laneH - DECK_CARD_H - 8))
+
+      if (endLeft - spawnLeft < DECK_MIN_TRAVEL_X) return
+
+      setFlights((prev) => [
+        ...prev.slice(-8),
+        { id, cardIndex, geo: { ...geo }, spawnLeft, spawnTop },
+      ])
     }
 
     spawn()
@@ -490,7 +578,7 @@ function MarketingDeckPipeline({
   const row0 = FLOW_CARDS[0]!
 
   return (
-    <div ref={laneRef} className="absolute inset-0 overflow-hidden">
+    <div ref={laneRef} className="absolute inset-y-2 left-3 right-2 overflow-visible">
       {/* Hidden sizer so violetRailPx ResizeObserver has a real element */}
       <div
         ref={flowDeckCardRef}
@@ -499,7 +587,16 @@ function MarketingDeckPipeline({
       />
 
       {reduceMotion ? (
-        <div className="pointer-events-none absolute left-1/2 top-1/2 z-[1] flex w-[196px] min-h-[230px] -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-2xl border border-black/[0.08] bg-white shadow-[0_10px_36px_-12px_rgba(20,18,16,0.2)] dark:border-white/[0.11] dark:bg-[#222024] dark:shadow-[0_12px_40px_-12px_rgba(0,0,0,0.65)]">
+        <div
+          className="pointer-events-none absolute z-[1] flex w-[196px] min-h-[230px] flex-col overflow-hidden rounded-2xl border border-black/[0.08] bg-white shadow-[0_10px_36px_-12px_rgba(20,16,12,0.2)] dark:border-white/[0.11] dark:bg-[#222024] dark:shadow-[0_12px_40px_-12px_rgba(0,0,0,0.65)]"
+          style={{
+            left: Math.max(
+              12,
+              Math.min(geo.laneW + LANE_R_INSET_PX - DECK_CARD_W / 2, geo.laneW - DECK_CARD_W - 8),
+            ),
+            top: Math.max(8, geo.laneH * DECK_LANE_SLOT_FRACS[0]! - DECK_CARD_H / 2),
+          }}
+        >
           <div className="h-[4px] w-full shrink-0" style={{ backgroundColor: row0.accent }} />
           <div className="flex flex-1 flex-col px-4 pb-5 pt-3.5">
             <p className="mb-3 text-[10px] font-bold uppercase leading-snug tracking-[0.18em]" style={{ color: row0.accent }}>
@@ -698,8 +795,8 @@ function OrbitalChipSkeleton({ cardKey }: { cardKey: FlowCardKey }) {
 }
 
 export function ConnectedResearchSystemDiagram({ className = "" }: { className?: string }) {
+  const flowMarkerId = useId().replace(/:/g, "")
   const wrapRef = useRef<HTMLDivElement>(null)
-  const canvasRef = useRef<HTMLCanvasElement>(null)
   const catRef = useRef<HTMLDivElement>(null)
   const n9Ref = useRef<HTMLDivElement>(null)
   /** First marquee card (left strip) — rail height = 140% of this */
@@ -707,12 +804,9 @@ export function ConnectedResearchSystemDiagram({ className = "" }: { className?:
   const rightPanelRef = useRef<HTMLDivElement>(null)
   const chipRefs = [useRef<HTMLDivElement>(null), useRef<HTMLDivElement>(null), useRef<HTMLDivElement>(null), useRef<HTMLDivElement>(null), useRef<HTMLDivElement>(null), useRef<HTMLDivElement>(null)]
   const rafRef = useRef(0)
-  const partsRef = useRef<Px[]>([])
   const playingRef = useRef(false)
   const t0Ref = useRef(0)
   const chipShownRef = useRef([false, false, false, false, false, false])
-  const lastOrbitRef = useRef(0)
-  const lastDriftRef = useRef(0)
   const playGenRef = useRef(0)
   const timeoutIdsRef = useRef<number[]>([])
   const n9StatusRef = useRef("ingesting")
@@ -728,14 +822,16 @@ export function ConnectedResearchSystemDiagram({ className = "" }: { className?:
   const [statusFade, setStatusFade] = useState(true)
   const [reduceMotion, setReduceMotion] = useState(false)
   const [wrapWidth, setWrapWidth] = useState(720)
+  const hubContainerRef = useRef<HTMLDivElement>(null)
+  const [hubSize, setHubSize] = useState(640)
 
-  const flowStripRef = useRef<HTMLDivElement>(null)
   const deckLaneRef = useRef<HTMLDivElement>(null)
-  const stripInView = useInView(flowStripRef, { amount: 0.12, once: false })
+  /** Whole diagram wrapper — avoids false negatives when the flow strip alone barely intersects the viewport. */
+  const stripInView = useInView(wrapRef, { once: false, margin: "100px" })
 
 
-  /** Violet rail height = 140% of a left flow deck card (marquee cards) */
-  const [violetRailPx, setVioletRailPx] = useState(Math.round(230 * 1.4))
+  /** Violet rail height = 2× (140% of deck card height) for a taller rail behind Notes9 */
+  const [violetRailPx, setVioletRailPx] = useState(Math.round(230 * 1.4 * 2))
   const [connInfo, setConnInfo] = useState<{
     svgW: number
     svgH: number
@@ -758,7 +854,7 @@ export function ConnectedResearchSystemDiagram({ className = "" }: { className?:
     if (!el) return
     const measure = () => {
       const h = el.getBoundingClientRect().height
-      if (h > 0) setVioletRailPx(Math.max(64, Math.round(h * 1.4)))
+      if (h > 0) setVioletRailPx(Math.max(128, Math.round(h * 1.4 * 2)))
     }
     measure()
     const ro = new ResizeObserver(measure)
@@ -775,15 +871,24 @@ export function ConnectedResearchSystemDiagram({ className = "" }: { className?:
     const panel = rightPanelRef.current
     const cat = catRef.current
     if (!panel || !cat) return
+    /**
+     * Hub lives under `transform: scale(desktopFitScale)`. getBoundingClientRect is in
+     * viewport pixels; the SVG uses layout width/height (inset-0) = pre-transform CSS px.
+     * Without dividing by scale, viewBox coords don't match the painted box — strokes clip
+     * oddly and markerEnd triangles look "random" vs the cards.
+     */
+    const svgW = Math.max(1, panel.offsetWidth)
+    const svgH = Math.max(1, panel.offsetHeight)
     const pr = panel.getBoundingClientRect()
+    const sx = pr.width / svgW
+    const sy = pr.height / svgH
     const cr = cat.getBoundingClientRect()
-    const catX = cr.left - pr.left + cr.width / 2
-    const catY = cr.top - pr.top + cr.height / 2
-    /* Slightly generous: used for line stop distance so arrows clear logo + label */
-    const catR = Math.max(40, Math.min(cr.width, cr.height) * 0.5)
+    const catX = (cr.left - pr.left + cr.width / 2) / sx
+    const catY = (cr.top - pr.top + cr.height / 2) / sy
+    const catR = Math.max(40, Math.min(cr.width / sx, cr.height / sy) * 0.5)
     setConnInfo({
-      svgW: pr.width,
-      svgH: pr.height,
+      svgW,
+      svgH,
       catX,
       catY,
       catR,
@@ -791,24 +896,16 @@ export function ConnectedResearchSystemDiagram({ className = "" }: { className?:
         const el = ref.current
         if (!el) return { sx: 0, sy: 0, cx: 0, cy: 0 }
         const r = el.getBoundingClientRect()
-        const L = r.left - pr.left
-        const T = r.top - pr.top
-        const W = r.width
-        const H = r.height
+        const L = (r.left - pr.left) / sx
+        const T = (r.top - pr.top) / sy
+        const W = r.width / sx
+        const H = r.height / sy
         const cx = L + W / 2
         const cy = T + H / 2
         const edge = rectExitTowardCat(L, T, W, H, catX, catY)
         return { sx: edge.x, sy: edge.y, cx, cy }
       }),
     })
-  }, [])
-
-  const gc = useCallback((el: HTMLElement) => {
-    const w = wrapRef.current
-    if (!w) return { x: 0, y: 0 }
-    const r = el.getBoundingClientRect()
-    const wr = w.getBoundingClientRect()
-    return { x: r.left - wr.left + r.width / 2, y: r.top - wr.top + r.height / 2 }
   }, [])
 
   const schedule = useCallback((fn: () => void, ms: number, gen: number) => {
@@ -821,7 +918,6 @@ export function ConnectedResearchSystemDiagram({ className = "" }: { className?:
 
   const reset = useCallback(() => {
     clearScheduledTimeouts()
-    partsRef.current = []
     chipShownRef.current = [false, false, false, false, false, false]
     cancelAnimationFrame(rafRef.current)
     playingRef.current = false
@@ -853,41 +949,14 @@ export function ConnectedResearchSystemDiagram({ className = "" }: { className?:
     const gen = playGenRef.current
     playingRef.current = true
     t0Ref.current = performance.now()
-    lastOrbitRef.current = 0
-    lastDriftRef.current = 0
 
     schedule(() => setPhase((p) => ({ ...p, n9: true })), 550, gen)
     schedule(() => setPhase((p) => ({ ...p, cat: true })), 1100, gen)
 
-    function orbit(cx: number, cy: number) {
-      partsRef.current.push(new Px(cx, cy, PCOLS[Math.floor(Math.random() * PCOLS.length)], "orbit"))
-    }
-    function shoot(cx: number, cy: number, col: string) {
-      for (let k = 0; k < 8; k++) {
-        const p = new Px(cx, cy, col, "shoot")
-        const a = Math.random() * Math.PI * 2
-        const d = 70 + Math.random() * 75
-        p.tx = cx + Math.cos(a) * d
-        p.ty = cy + Math.sin(a) * d
-        p.maxLife = 46 + k * 5
-        partsRef.current.push(p)
-      }
-    }
-    function drift(x: number, y: number) {
-      const m = Math.random() > 0.45 ? "quad" : "drift"
-      const p = new Px(x, y, PCOLS[Math.floor(Math.random() * PCOLS.length)], m as PxMode)
-      p.vx = (Math.random() - 0.5) * 1.1
-      p.vy = (Math.random() - 0.5) * 1.1
-      partsRef.current.push(p)
-    }
-
     function tick(now: number) {
       if (playGenRef.current !== gen) return
-      const canvas = canvasRef.current
-      const ctx = canvas?.getContext("2d")
       const w = wrapRef.current
-      const catEl = catRef.current
-      if (!ctx || !canvas || !w || !catEl) {
+      if (!w) {
         playingRef.current = false
         return
       }
@@ -907,22 +976,6 @@ export function ConnectedResearchSystemDiagram({ className = "" }: { className?:
         setPhase((p) => ({ ...p, catPulse: true }))
       }
 
-      const cc = gc(catEl)
-      const nc = n9Ref.current ? gc(n9Ref.current) : cc
-      const partsLen = partsRef.current.length
-
-      if (raw > 0.46 && raw < 0.92 && now - lastOrbitRef.current > 44 && partsLen < AMBIENT_PARTICLE_CAP) {
-        orbit(cc.x, cc.y)
-        lastOrbitRef.current = now
-      }
-      // After the scripted timeline, keep orbit particles around Catalyst running indefinitely
-      if (raw >= 1 && partsLen < AMBIENT_PARTICLE_CAP) {
-        if (now - lastOrbitRef.current > 72) {
-          orbit(cc.x, cc.y)
-          lastOrbitRef.current = now
-        }
-      }
-
       CHIP_T.forEach((t, i) => {
         if (!chipShownRef.current[i] && raw > t) {
           chipShownRef.current[i] = true
@@ -931,38 +984,43 @@ export function ConnectedResearchSystemDiagram({ className = "" }: { className?:
             chips[i] = true
             return { ...p, chips }
           })
-          shoot(cc.x, cc.y, CHIP_COLS[i])
         }
       })
 
-      ctx.clearRect(0, 0, canvas.width, canvas.height)
-
-      const parts = partsRef.current
-      for (let i = parts.length - 1; i >= 0; i--) {
-        if (!parts[i]!.tick(cc.x, cc.y)) parts.splice(i, 1)
-        else parts[i]!.draw(ctx)
+      if (raw >= 1) {
+        playingRef.current = false
+        return
       }
-      ctx.globalAlpha = 1
 
       rafRef.current = requestAnimationFrame(tick)
     }
 
     rafRef.current = requestAnimationFrame(tick)
-  }, [gc, reduceMotion, reset, schedule])
+  }, [reduceMotion, reset, schedule])
 
   useEffect(() => {
     const ro = new ResizeObserver(() => {
       const w = wrapRef.current
-      const c = canvasRef.current
-      if (!w || !c) return
-      c.width = w.offsetWidth
-      c.height = w.offsetHeight
+      if (!w) return
       setWrapWidth(w.offsetWidth)
     })
     if (wrapRef.current) {
       ro.observe(wrapRef.current)
       setWrapWidth(wrapRef.current.offsetWidth)
     }
+    return () => ro.disconnect()
+  }, [])
+
+  useEffect(() => {
+    const el = hubContainerRef.current
+    if (!el) return
+    const update = () => {
+      const s = el.getBoundingClientRect().width
+      if (s > 0) setHubSize(s)
+    }
+    update()
+    const ro = new ResizeObserver(update)
+    ro.observe(el)
     return () => ro.disconnect()
   }, [])
 
@@ -975,14 +1033,12 @@ export function ConnectedResearchSystemDiagram({ className = "" }: { className?:
     }
   }, [start, clearScheduledTimeouts])
 
-  // Recompute SVG connection positions when chips/cat phase in
   useEffect(() => {
     if (!phase.chips.some(Boolean) && !phase.cat) return
     const t = window.setTimeout(updateConnections, 120)
     return () => window.clearTimeout(t)
-  }, [phase.chips, phase.cat, updateConnections])
+  }, [phase.chips, phase.cat, updateConnections, wrapWidth, hubSize])
 
-  // Keep connection positions in sync on resize
   useEffect(() => {
     const panel = rightPanelRef.current
     if (!panel) return
@@ -1051,12 +1107,38 @@ export function ConnectedResearchSystemDiagram({ className = "" }: { className?:
 
   const isMobile = wrapWidth > 0 && wrapWidth < 580
 
+  const desktopFitScale = useMemo(() => {
+    if (wrapWidth <= 0 || wrapWidth < 580) return 1
+    return Math.min(1.35, wrapWidth / DESKTOP_DIAGRAM_W)
+  }, [wrapWidth])
+
+  const desktopLayoutW = Math.round(DESKTOP_DIAGRAM_W * desktopFitScale)
+  const desktopLayoutH = Math.round(DESKTOP_DIAGRAM_H * desktopFitScale)
+
+  /**
+   * Orbital radius: six chips at 60° need chord ≥ chip width (chord ≈ R at 60°).
+   */
+  const maxRInsideHub = Math.max(
+    Math.round(100 * HUB_ORBIT_SCALE),
+    Math.round(hubSize / 2 - Math.round(56 / HUB_ORBIT_SCALE)),
+  )
+  let dynChipW = Math.max(90, Math.min(116, Math.round(hubSize * 0.29)))
+  let minNeed = Math.ceil(dynChipW + HUB_CHORD_EXTRA)
+  while (minNeed > maxRInsideHub && dynChipW > 84) {
+    dynChipW -= 2
+    minNeed = Math.ceil(dynChipW + HUB_CHORD_EXTRA)
+  }
+  const dynOrbitR = Math.max(
+    HUB_ORBIT_R_FLOOR,
+    Math.min(HUB_ORBIT_RADIUS_PX, maxRInsideHub, Math.max(minNeed, HUB_ORBIT_R_FLOOR)),
+  )
+
   const hubChipCard = (c: (typeof chipMeta)[number], compact = false) => (
     <div
-      className={`flex w-full min-w-0 flex-col rounded-xl border px-2 pb-2 pt-1.5 shadow-[0_8px_28px_-14px_rgba(20,18,16,0.12)] backdrop-blur-[2px] dark:shadow-[0_12px_36px_-16px_rgba(0,0,0,0.45)] ${chipTone(c.tone)} ${compact ? "min-h-[82px]" : "max-w-[140px] min-h-[102px]"}`}
+      className={`flex w-full min-w-0 flex-col rounded-xl border px-2 pb-2 pt-1.5 shadow-[0_8px_28px_-14px_rgba(20,18,16,0.12)] backdrop-blur-[2px] dark:shadow-[0_12px_36px_-16px_rgba(0,0,0,0.45)] ${chipTone(c.tone)} ${compact ? "min-h-[82px]" : "min-h-[96px]"}`}
     >
-      <p className={`shrink-0 text-center font-semibold leading-snug ${compact ? "text-[9px]" : "text-[11px] sm:text-[13px]"}`}>{c.label}</p>
-      <div className={`mt-1.5 flex flex-1 flex-col px-0.5 ${compact ? "min-h-[3.5rem]" : "min-h-[4.25rem]"}`}>
+      <p className={`shrink-0 text-center font-semibold leading-snug ${compact ? "text-[9px]" : dynChipW < 120 ? "text-[10px]" : "text-[11px] sm:text-[13px]"}`}>{c.label}</p>
+      <div className={`mt-1.5 flex flex-1 flex-col px-0.5 ${compact ? "min-h-[3.5rem]" : "min-h-[4rem]"}`}>
         <OrbitalChipSkeleton cardKey={c.skeletonKey} />
       </div>
     </div>
@@ -1079,10 +1161,9 @@ export function ConnectedResearchSystemDiagram({ className = "" }: { className?:
   return (
     <div
       ref={wrapRef}
-      className={`relative mx-auto w-full max-w-[min(100%,88rem)] rounded-[28px] border border-[var(--n9-accent)]/18 bg-[radial-gradient(circle,rgba(0,0,0,0.055)_1px,transparent_1px)] [background-size:20px_20px] shadow-[0_28px_90px_-52px_rgba(44,36,24,0.2),inset_0_1px_0_0_rgba(255,255,255,0.55)] ring-1 ring-black/[0.04] dark:border-[var(--n9-accent)]/16 dark:bg-[radial-gradient(circle,rgba(255,255,255,0.055)_1px,transparent_1px),linear-gradient(180deg,rgba(26,24,22,0.98),rgba(12,12,14,0.995))] dark:[background-size:20px_20px,auto] dark:shadow-[0_32px_100px_-52px_rgba(0,0,0,0.65),inset_0_1px_0_0_rgba(255,255,255,0.04)] dark:ring-white/[0.06] ${isMobile ? "min-h-[520px]" : "h-[620px] min-h-[520px] min-w-[580px] sm:h-[640px] lg:h-[min(680px,74vh)]"} ${className}`}
+      className={`relative mx-auto w-full min-w-0 max-w-[min(100%,88rem)] rounded-[28px] border border-[var(--n9-accent)]/18 bg-[radial-gradient(circle,rgba(0,0,0,0.055)_1px,transparent_1px)] [background-size:20px_20px] shadow-[0_28px_90px_-52px_rgba(44,36,24,0.2),inset_0_1px_0_0_rgba(255,255,255,0.55)] ring-1 ring-black/[0.04] dark:border-[var(--n9-accent)]/16 dark:bg-[radial-gradient(circle,rgba(255,255,255,0.055)_1px,transparent_1px),linear-gradient(180deg,rgba(26,24,22,0.98),rgba(12,12,14,0.995))] dark:[background-size:20px_20px,auto] dark:shadow-[0_32px_100px_-52px_rgba(0,0,0,0.65),inset_0_1px_0_0_rgba(255,255,255,0.04)] dark:ring-white/[0.06] ${isMobile ? "min-h-[520px]" : "min-h-0"} ${className}`}
+      style={!isMobile ? { height: `${desktopLayoutH}px` } : undefined}
     >
-      <canvas ref={canvasRef} className="pointer-events-none absolute inset-0 z-[2] h-full w-full" aria-hidden />
-
       {isMobile ? (
         /* ── Mobile: stacked layout, no flying deck, chips in 3×2 grid ── */
         <div className="relative z-[5] flex h-full flex-col px-3 pb-5 pt-5" aria-labelledby="n9-diagram-mobile-title">
@@ -1090,7 +1171,9 @@ export function ConnectedResearchSystemDiagram({ className = "" }: { className?:
             {n9StatusNode("n9-diagram-mobile-title")}
             <div className="h-px flex-1 max-w-[44px] bg-violet-400/35" aria-hidden />
             <div ref={catRef} className={`flex flex-col items-center gap-1.5 transition-opacity duration-300 ${phase.cat ? "opacity-100" : "opacity-0"}`}>
-              <IceMascot className="hero-pendulum h-14 w-14" options={{ src: "/notes9-mascot-ui.png" }} aria-hidden />
+              <CatalystGrainBackdrop active={phase.cat} reduceMotion={reduceMotion} className="h-14 w-14">
+                <IceMascot className="hero-pendulum h-full w-full" options={{ src: "/notes9-mascot-ui.png" }} aria-hidden />
+              </CatalystGrainBackdrop>
               <p className="text-center text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--n9-accent)]">Catalyst AI</p>
             </div>
             <div className="h-px flex-1 max-w-[44px] bg-violet-400/35" aria-hidden />
@@ -1108,15 +1191,157 @@ export function ConnectedResearchSystemDiagram({ className = "" }: { className?:
           </div>
         </div>
       ) : (
-        /* ── Desktop: flying deck + orbital hub ── */
-        <div className="relative z-[5] h-full" aria-labelledby="n9-marketing-diagram-title">
-          {/* Left deck: cards enter one-by-one from staggered clock directions */}
+        /* ── Desktop: flying deck + orbital hub (fixed design size, scaled to parent width) ── */
+        <div
+          className="relative z-[5] flex w-full items-center justify-center overflow-hidden"
+          style={{ height: `${desktopLayoutH}px` }}
+          aria-labelledby="n9-marketing-diagram-title"
+        >
           <div
-            ref={flowStripRef}
-            className="n9-marketing-flow-strip pointer-events-none absolute inset-y-0 left-0 z-[3] w-[45%] overflow-hidden"
+            className="relative shrink-0 overflow-hidden"
+            style={{
+              width: desktopLayoutW,
+              height: desktopLayoutH,
+            }}
+          >
+            <div
+              className="absolute left-0 top-0"
+              style={{
+                width: DESKTOP_DIAGRAM_W,
+                height: DESKTOP_DIAGRAM_H,
+                transform: `scale(${desktopFitScale})`,
+                transformOrigin: "top left",
+              }}
+            >
+            <div className="relative h-full w-full">
+          <div
+            ref={rightPanelRef}
+            className="n9-marketing-hub-panel absolute bottom-0 right-0 top-0 z-[5] flex min-h-0 flex-col overflow-hidden px-[3%] pb-6 pt-4 sm:px-[4%] lg:px-[5%]"
+            style={{ left: `${DESKTOP_RAIL_LEFT_PCT}%` }}
+          >
+
+            {/* Each workflow card → Catalyst (stroke + arrow match chip accent) */}
+            {connInfo.svgW > 0 && (
+              <svg
+                id="n9-conn-svg"
+                className="pointer-events-none absolute inset-0 z-[7]"
+                style={{ overflow: "visible" }}
+                width={connInfo.svgW}
+                height={connInfo.svgH}
+                viewBox={`0 0 ${connInfo.svgW} ${connInfo.svgH}`}
+                aria-hidden
+              >
+                <defs>
+                  {CHIP_COLS.map((col, mi) => (
+                    <marker
+                      key={mi}
+                      id={`${flowMarkerId}-n9-chip-to-cat-${mi}`}
+                      markerWidth="11"
+                      markerHeight="11"
+                      refX="9.5"
+                      refY="5.5"
+                      orient="auto"
+                      markerUnits="userSpaceOnUse"
+                    >
+                      <path
+                        d="M0.5,1 L9.5,5.5 L0.5,10 Z"
+                        fill={col}
+                        fillOpacity={1}
+                        stroke={col}
+                        strokeOpacity={0.35}
+                        strokeWidth={0.5}
+                      />
+                    </marker>
+                  ))}
+                </defs>
+                {connInfo.chips.map((chip, i) => {
+                  if (!phase.chips[i] || (!chip.cx && !chip.cy)) return null
+                  const sx = chip.sx
+                  const sy = chip.sy
+                  const tcx = connInfo.catX
+                  const tcy = connInfo.catY
+                  const dx = tcx - sx
+                  const dy = tcy - sy
+                  const len = Math.hypot(dx, dy)
+                  if (len < 2) return null
+                  const ux = dx / len
+                  const uy = dy / len
+                  /* Same clearance as notes9-diagram.html: max(catR, 44) + 26 toward Catalyst */
+                  const hubClear = Math.max(connInfo.catR, 44) + 26
+                  const ex = tcx - ux * hubClear
+                  const ey = tcy - uy * hubClear
+                  const col = CHIP_COLS[i] ?? "#8b6fd6"
+                  return (
+                    <path
+                      key={i}
+                      d={`M ${sx} ${sy} L ${ex} ${ey}`}
+                      stroke={col}
+                      strokeWidth={2}
+                      strokeOpacity={0.85}
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      fill="none"
+                      strokeDasharray="5 7"
+                      strokeDashoffset={0}
+                      markerEnd={`url(#${flowMarkerId}-n9-chip-to-cat-${i})`}
+                      className={reduceMotion ? "" : "n9-hub-dash-flow"}
+                      style={{ animationDelay: `${i * 0.12}s` }}
+                    />
+                  )
+                })}
+              </svg>
+            )}
+
+            <div className="relative z-[6] mx-auto flex min-h-0 w-full flex-1 items-center justify-center py-3 sm:py-5">
+              <div
+                ref={hubContainerRef}
+                className="n9-marketing-hub-geometry relative aspect-square w-full max-w-[min(100%,1344px)] min-w-0 shrink-0 sm:max-w-[min(100%,1512px)]"
+              >
+                <div
+                  ref={catRef}
+                  className={`absolute left-1/2 top-1/2 z-[9] flex -translate-x-1/2 -translate-y-1/2 flex-col items-center justify-center gap-2 py-1 transition-opacity duration-300 ${phase.cat ? "opacity-100" : "opacity-0"}`}
+                >
+                  <CatalystGrainBackdrop
+                    active={phase.cat}
+                    reduceMotion={reduceMotion}
+                    className="mx-auto h-16 w-16 sm:h-[4.5rem] sm:w-[4.5rem]"
+                  >
+                    <IceMascot
+                      className="hero-pendulum h-full w-full"
+                      options={{ src: "/notes9-mascot-ui.png" }}
+                      aria-hidden
+                    />
+                  </CatalystGrainBackdrop>
+                  <p className="text-center text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--n9-accent)] sm:text-xs">
+                    Catalyst AI
+                  </p>
+                </div>
+                {chipMeta.map((c, i) => (
+                  <div
+                    key={c.label}
+                    ref={chipRefs[i]}
+                    className={`absolute left-1/2 top-1/2 z-[10] min-w-[108px] transition-opacity duration-300 ease-out ${
+                      phase.chips[i] ? "opacity-100" : "pointer-events-none opacity-0"
+                    }`}
+                    style={{
+                      width: `${dynChipW}px`,
+                      maxWidth: `${dynChipW}px`,
+                      transform: `translate(-50%, -50%) rotate(${-90 + i * 60}deg) translateY(-${dynOrbitR}px) rotate(${90 - i * 60}deg)`,
+                    }}
+                  >
+                    {hubChipCard(c)}
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {/* Deck: fixed left gate → rail (z-9); cards use z-10 inside lane */}
+          <div
+            className="n9-marketing-flow-strip pointer-events-none absolute inset-y-0 left-0 z-[9] overflow-hidden"
+            style={{ width: `${DESKTOP_RAIL_LEFT_PCT}%` }}
             aria-hidden
           >
-            <div className="pointer-events-none absolute inset-y-0 right-0 z-10 w-20 bg-gradient-to-l from-white to-transparent dark:from-[#131214] dark:to-transparent" />
             <MarketingDeckPipeline
               reduceMotion={reduceMotion}
               stripInView={stripInView}
@@ -1125,27 +1350,33 @@ export function ConnectedResearchSystemDiagram({ className = "" }: { className?:
             />
           </div>
 
-        {/* Rail: height = 140% of left marquee card; centered on Notes9, not full diagram height */}
-        <div className="pointer-events-none absolute bottom-0 left-[45%] top-0 z-[4] w-0 -translate-x-1/2">
+          {/* Violet rail — above deck, below Notes9 */}
           <div
-            className="absolute left-1/2 top-1/2 w-0 -translate-x-1/2 -translate-y-1/2"
-            style={{ height: violetRailPx }}
+            className="pointer-events-none absolute bottom-0 top-0 z-[13] w-0 -translate-x-1/2"
+            style={{ left: `${DESKTOP_RAIL_LEFT_PCT}%` }}
             aria-hidden
           >
-            <div className="pointer-events-none absolute inset-y-0 left-1/2 w-[1.5px] -translate-x-1/2 rounded-full bg-violet-600/30 dark:bg-violet-400/25" />
+            <div
+              className="absolute left-1/2 top-1/2 w-0 -translate-x-1/2 -translate-y-1/2"
+              style={{ height: violetRailPx }}
+            >
+              <div className="pointer-events-none absolute inset-y-0 left-1/2 w-[1.5px] -translate-x-1/2 rounded-full bg-violet-500/45 shadow-[0_0_12px_rgba(139,92,246,0.35)] dark:bg-violet-400/50 dark:shadow-[0_0_14px_rgba(167,139,250,0.25)]" />
+            </div>
           </div>
-          <div
+
+          {/* Notes9 above flying cards and the rail line */}
+          <div className="pointer-events-none absolute bottom-0 top-0 z-[15] w-0 -translate-x-1/2" style={{ left: `${DESKTOP_RAIL_LEFT_PCT}%` }}>
+            <div
               id="n9-marketing-diagram-title"
               ref={n9Ref}
-              className="pointer-events-auto absolute left-1/2 top-1/2 z-[12] min-w-[7.5rem] -translate-x-1/2 -translate-y-1/2 rounded-xl border border-black/[0.09] bg-white/95 px-3.5 py-3 text-center shadow-[0_12px_40px_-12px_rgba(20,16,12,0.25)] backdrop-blur-sm dark:border-white/[0.12] dark:bg-[#1e1d20]/95 dark:shadow-[0_16px_44px_-12px_rgba(0,0,0,0.7)]"
+              className="pointer-events-auto absolute left-1/2 top-1/2 z-[1] min-w-[7.5rem] -translate-x-1/2 -translate-y-1/2 rounded-xl border border-black/[0.09] bg-white/95 px-3.5 py-3 text-center shadow-[0_12px_40px_-12px_rgba(20,16,12,0.25)] backdrop-blur-sm dark:border-white/[0.12] dark:bg-[#1e1d20]/95 dark:shadow-[0_16px_44px_-12px_rgba(0,0,0,0.7)]"
             >
               <p className="text-[13px] font-semibold tracking-tight text-[#12100e] dark:text-white/95">
                 Notes9
               </p>
-              {/* Status row — always visible once phase.n9, fades between cycles */}
               <div
                 className={`mt-2 flex items-center justify-center gap-1.5 transition-opacity duration-[280ms] ${
-                  phase.n9 ? (statusFade ? "opacity-100" : "opacity-0") : "opacity-0"
+                  phase.n9 && statusFade ? "opacity-100" : "opacity-0"
                 }`}
               >
                 <span
@@ -1171,103 +1402,9 @@ export function ConnectedResearchSystemDiagram({ className = "" }: { className?:
               </div>
             </div>
           </div>
-
-          <div ref={rightPanelRef} className="absolute left-[45%] right-0 top-0 bottom-0 z-[5] flex min-h-0 flex-col overflow-hidden px-[3%] pb-6 pt-4 sm:px-[4%] lg:px-[5%]">
-
-            {/* Animated connection lines: chip → Catalyst AI */}
-            {connInfo.svgW > 0 && (
-              <svg
-                className="pointer-events-none absolute inset-0 z-[7]"
-                style={{ overflow: "visible" }}
-                width={connInfo.svgW}
-                height={connInfo.svgH}
-                viewBox={`0 0 ${connInfo.svgW} ${connInfo.svgH}`}
-                aria-hidden
-              >
-                <defs>
-                  {CHIP_COLS.map((col, mi) => (
-                    <marker
-                      key={mi}
-                      id={`n9-flow-arrow-${mi}`}
-                      markerWidth="11"
-                      markerHeight="11"
-                      refX="9.5"
-                      refY="5.5"
-                      orient="auto"
-                      markerUnits="userSpaceOnUse"
-                    >
-                      <path d="M0.5,1 L9.5,5.5 L0.5,10 Z" fill={col} fillOpacity={1} stroke={col} strokeOpacity={0.35} strokeWidth={0.5} />
-                    </marker>
-                  ))}
-                </defs>
-                {connInfo.chips.map((chip, i) => {
-                  if (!phase.chips[i] || (!chip.cx && !chip.cy)) return null
-                  const tcx = connInfo.catX
-                  const tcy = connInfo.catY
-                  const vx = tcx - chip.sx
-                  const vy = tcy - chip.sy
-                  const len = Math.sqrt(vx * vx + vy * vy)
-                  if (len < 2) return null
-                  const ux = vx / len
-                  const uy = vy / len
-                  /* Stop short of hub: bbox radius + gap for arrowhead + “Catalyst AI” band */
-                  const hubClear = Math.max(connInfo.catR, 44) + 26
-                  const ex = tcx - ux * hubClear
-                  const ey = tcy - uy * hubClear
-                  const col = CHIP_COLS[i] ?? "#8b6fd6"
-                  return (
-                    <path
-                      key={i}
-                      d={`M ${chip.sx} ${chip.sy} L ${ex} ${ey}`}
-                      stroke={col}
-                      strokeWidth={2}
-                      strokeOpacity={0.85}
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      fill="none"
-                      strokeDasharray="5 7"
-                      strokeDashoffset={0}
-                      markerEnd={`url(#n9-flow-arrow-${i})`}
-                      className={reduceMotion ? "" : "n9-hub-dash-flow"}
-                      style={{ animationDelay: `${i * 0.12}s` }}
-                    />
-                  )
-                })}
-              </svg>
-            )}
-
-            <div className="relative z-[6] mx-auto flex min-h-0 w-full flex-1 items-center justify-center py-2 sm:py-4">
-              <div className="relative aspect-square w-full max-w-[min(100%,min(640px,58vw))] min-w-[300px] shrink-0 sm:min-w-[320px] lg:max-w-[min(100%,min(720px,62vw))]">
-                <div
-                  ref={catRef}
-                  className={`absolute left-1/2 top-1/2 z-[9] flex -translate-x-1/2 -translate-y-1/2 flex-col items-center justify-center gap-2 py-1 transition-opacity duration-300 ${phase.cat ? "opacity-100" : "opacity-0"}`}
-                >
-                  <IceMascot
-                    className="hero-pendulum mx-auto h-16 w-16 sm:h-[4.5rem] sm:w-[4.5rem]"
-                    options={{ src: "/notes9-mascot-ui.png" }}
-                    aria-hidden
-                  />
-                  <p className="text-center text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--n9-accent)] sm:text-xs">
-                    Catalyst AI
-                  </p>
-                </div>
-                {chipMeta.map((c, i) => (
-                  <div
-                    key={c.label}
-                    ref={chipRefs[i]}
-                    className={`absolute left-1/2 top-1/2 z-[10] w-[140px] max-w-[140px] min-w-[120px] transition-opacity duration-300 ease-out sm:w-[144px] sm:max-w-[144px] ${
-                      phase.chips[i] ? "opacity-100" : "pointer-events-none opacity-0"
-                    }`}
-                    style={{
-                      transform: `translate(-50%, -50%) rotate(${-90 + i * 60}deg) translateY(-${HUB_ORBIT_RADIUS_PX}px) rotate(${90 - i * 60}deg)`,
-                    }}
-                  >
-                    {hubChipCard(c)}
-                  </div>
-                ))}
-              </div>
             </div>
           </div>
+        </div>
         </div>
       )}
     </div>

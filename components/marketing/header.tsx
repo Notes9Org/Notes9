@@ -19,34 +19,22 @@ export function Header() {
   const [isMenuOpen, setIsMenuOpen] = useState(false)
 
   return (
-    <header className="fixed top-0 left-0 right-0 z-50 border-b border-border/60 bg-[var(--n9-header-bg)] shadow-[0_10px_30px_-24px_rgba(0,0,0,0.28)] backdrop-blur-xl">
+    <header className="fixed top-0 left-0 right-0 z-50 overflow-visible bg-[var(--n9-header-bg)] shadow-[0_10px_30px_-24px_rgba(0,0,0,0.28)] backdrop-blur-xl">
       <div className="container mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex h-16 items-center">
-          <Link
-            href="/"
-            className="group flex shrink-0 items-center self-start pt-0"
-          >
+        <div className="relative flex h-16 items-center overflow-visible">
+
+          {/* Logo — left */}
+          <Link href="/" className="group flex shrink-0 items-center">
             <Notes9Brand
               textClassName="h-8 w-auto"
               wordmarkClassName="-translate-y-1"
             />
           </Link>
 
-          <nav className="hidden lg:flex flex-1 items-center justify-center space-x-8 px-8 xl:hidden">
-            {pageLinks.map((link) => (
-              <Link
-                key={link.href}
-                href={link.href}
-                className="text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
-              >
-                {link.label}
-              </Link>
-            ))}
-          </nav>
-          
-          <div className="hidden flex-1 lg:block xl:hidden" />
-          <div className="hidden flex-1 xl:block" />
+          {/* Spacer — pushes controls to the right */}
+          <div className="flex-1" />
 
+          {/* Controls — right (desktop) */}
           <div className="hidden lg:flex items-center space-x-3 shrink-0">
             <Button variant="ghost" size="sm" asChild>
               <Link href="/auth/login">Sign In</Link>
@@ -61,11 +49,17 @@ export function Header() {
             <ModeToggle />
           </div>
 
-          <button className="lg:hidden ml-auto text-foreground" onClick={() => setIsMenuOpen(!isMenuOpen)}>
+          {/* Hamburger — mobile */}
+          <button
+            aria-label="Toggle navigation"
+            className="lg:hidden text-foreground"
+            onClick={() => setIsMenuOpen(!isMenuOpen)}
+          >
             {isMenuOpen ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
           </button>
         </div>
 
+        {/* Mobile menu */}
         {isMenuOpen && (
           <div className="lg:hidden py-4 border-t border-border/60">
             <nav className="flex flex-col space-y-1">
