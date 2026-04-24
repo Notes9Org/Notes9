@@ -38,7 +38,7 @@ const itemVariants = {
 
 export function StatusSection() {
   return (
-    <section id="after-interactive-preview" className="border-t border-border/40">
+    <section id="problem" className="border-t border-border/40">
       <div className="container mx-auto px-4 py-20 sm:px-6 lg:px-8">
         <motion.div
           initial={{ opacity: 0, y: 16 }}
