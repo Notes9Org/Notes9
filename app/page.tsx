@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server"
 import { Header } from "@/components/marketing/header"
 import { Footer } from "@/components/marketing/footer"
 import { AcademicHero } from "@/components/marketing/academic-hero"
+import { MarketingInteractivePreviewDynamic } from "@/components/marketing/marketing-interactive-preview-dynamic"
 import { StatusSection } from "@/components/marketing/status-section"
 import { FeatureDeepDive } from "@/components/marketing/feature-deep-dive"
 import { WhyResearchersStaySection } from "@/components/marketing/why-researchers-stay-section"
@@ -78,6 +79,7 @@ export default async function HomePage({
         <FloatingPageMenu />
         <main className="flex-1 pt-16">
           <AcademicHero />
+          <MarketingInteractivePreviewDynamic />
           <StatusSection />
           <FeatureDeepDive />
           <WhyResearchersStaySection />

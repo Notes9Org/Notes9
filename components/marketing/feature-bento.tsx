@@ -1,7 +1,6 @@
 "use client"
 
 import Image from "next/image"
-import { useTheme } from "next-themes"
 import { motion } from "framer-motion"
 import {
   BookOpen,
@@ -13,7 +12,7 @@ import {
   TestTube2,
   LineChart,
 } from "lucide-react"
-import { resolveDemoScreenshot } from "@/components/marketing/demo-asset"
+import { resolveDemoScreenshot, useStableDemoTheme } from "@/components/marketing/demo-asset"
 
 const features = [
   {
@@ -71,7 +70,7 @@ const itemVariants = {
 }
 
 export function FeatureBento() {
-  const { resolvedTheme } = useTheme()
+  const resolvedTheme = useStableDemoTheme()
 
   return (
     <section className="border-t border-border/40">

@@ -1,8 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { useTheme } from "next-themes"
-import { resolveDemoScreenshot } from "@/components/marketing/demo-asset"
+import { resolveDemoScreenshot, useStableDemoTheme } from "@/components/marketing/demo-asset"
 
 export interface WorkflowStep {
   image: string
@@ -27,7 +26,7 @@ export function WorkflowDemoStrip({
   className = "",
   fullBleed = false,
 }: WorkflowDemoStripProps) {
-  const { resolvedTheme } = useTheme()
+  const resolvedTheme = useStableDemoTheme()
   const [current, setCurrent] = useState(0)
   const [prev, setPrev] = useState(0)
   const [prevOpacity, setPrevOpacity] = useState(0)
