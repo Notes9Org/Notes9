@@ -5,14 +5,12 @@ import Link from "next/link"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import Image from "next/image"
 import {
-  Home,
   Folder,
   FolderOpen,
   FlaskConical,
   TestTube,
   Microscope,
   NotebookPen,
-  BarChart3,
   Settings,
   Search,
   Plus,
@@ -22,10 +20,7 @@ import {
   MoreHorizontal,
   Package,
   Users,
-  BookOpen,
-  Network,
   Sparkles,
-  ScrollText,
   ChevronLeft,
   PanelLeftClose,
   PanelLeftOpen,
@@ -68,22 +63,11 @@ import { createClient } from "@/lib/supabase/client"
 import { cn } from "@/lib/utils"
 import { Notes9Brand } from "@/components/brand/notes9-brand"
 import { ClipboardInfoIcon } from "@/components/ui/clipboard-info-icon"
+import { APP_PRIMARY_NAV } from "@/lib/app-primary-nav"
 import { toast } from "sonner"
 import { Button } from "../ui/button"
 
-const navigation = [
-  { name: "Dashboard", href: "/dashboard", icon: Home },
-  { name: "Projects", href: "/projects", icon: Folder },
-  { name: "Experiments", href: "/experiments", icon: FlaskConical },
-  { name: "Lab Notes", href: "/lab-notes", icon: NotebookPen },
-  { name: "Samples", href: "/samples", icon: TestTube },
-  { name: "Equipment", href: "/equipment", icon: Microscope },
-  { name: "Protocols", href: "/protocols", icon: ClipboardInfoIcon },
-  { name: "Literature", href: "/literature-reviews", icon: BookOpen },
-  { name: "Research map", href: "/research-map", icon: Network },
-  { name: "Writing", href: "/papers", icon: ScrollText },
-  { name: "Reports", href: "/reports", icon: BarChart3 },
-]
+const navigation = APP_PRIMARY_NAV
 
 interface LabNoteSummary {
   id: string

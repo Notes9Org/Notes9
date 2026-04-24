@@ -2,7 +2,6 @@
 
 import { useState } from "react"
 import Image from "next/image"
-import { useTheme } from "next-themes"
 import { motion, AnimatePresence } from "framer-motion"
 import {
   BookOpen,
@@ -12,7 +11,7 @@ import {
   Network,
   TestTube2,
 } from "lucide-react"
-import { resolveDemoScreenshot } from "@/components/marketing/demo-asset"
+import { resolveDemoScreenshot, useStableDemoTheme } from "@/components/marketing/demo-asset"
 import { PretextReveal } from "@/components/ui/fluid-text"
 
 /**
@@ -83,7 +82,7 @@ const slides = [
 ]
 
 export function ProductShowcase() {
-  const { resolvedTheme } = useTheme()
+  const resolvedTheme = useStableDemoTheme()
   const [active, setActive] = useState(0)
   const current = slides[active]
 
