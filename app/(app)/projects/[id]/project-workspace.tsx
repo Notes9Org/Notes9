@@ -1,6 +1,6 @@
 import type { ReactNode } from "react"
 import Link from "next/link"
-import { BookOpen, ClipboardList, FlaskConical, ArrowRight, ArrowUpRight } from "lucide-react"
+import { BookOpen, ClipboardList, FlaskConical, TestTube, ArrowRight, ArrowUpRight } from "lucide-react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -9,6 +9,7 @@ import { cn } from "@/lib/utils"
 export type ProjectWorkspaceLiterature = { id: string; title: string; status: string | null }
 export type ProjectWorkspaceProtocol = { id: string; name: string; version: string | null }
 export type ProjectWorkspaceExperiment = { id: string; name: string }
+export type ProjectWorkspaceSample = { id: string; sample_code: string; sample_type: string | null }
 
 type ProjectWorkspaceProps = {
   projectId: string
@@ -18,6 +19,8 @@ type ProjectWorkspaceProps = {
   protocolCount: number
   experiments: ProjectWorkspaceExperiment[]
   experimentsCount: number
+  samples: ProjectWorkspaceSample[]
+  samplesCount: number
 }
 
 function SectionCard({
@@ -101,6 +104,8 @@ export function ProjectWorkspace({
   protocolCount,
   experiments,
   experimentsCount,
+  samples,
+  samplesCount,
 }: ProjectWorkspaceProps) {
   return (
     <div className="space-y-2">
@@ -110,7 +115,7 @@ export function ProjectWorkspace({
           Jump into literature, protocols, or experiments. Lab notes live under each experiment.
         </p>
       </div>
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <SectionCard
           title="Literature & search"
           description="References and discovery linked to this project"
@@ -213,6 +218,42 @@ export function ProjectWorkspace({
                   <span className="block truncate text-foreground group-hover:text-primary">
                     {row.name || "Untitled"}
                   </span>
+                </span>
+                <ArrowUpRight className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground group-hover:text-primary" />
+              </Link>
+            </li>
+          ))}
+        </SectionCard>
+
+        <SectionCard
+          title="Samples"
+          description="Inventory linked directly or through experiments"
+          icon={TestTube}
+          count={samplesCount}
+          emptyTitle="No samples linked yet"
+          emptyBody="Create or link samples to track material provenance in this project."
+          primaryCta={{
+            label: "New sample",
+            href: "/samples/new",
+          }}
+          secondaryCta={{
+            label: "View samples",
+            href: "/samples",
+          }}
+        >
+          {samples.slice(0, 5).map((row) => (
+            <li key={row.id}>
+              <Link
+                href={`/samples/${row.id}`}
+                className="group flex items-start gap-3 rounded-md px-1 py-1.5 text-sm transition-colors hover:bg-muted/40"
+              >
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate font-mono text-foreground group-hover:text-primary">
+                    {row.sample_code || "Sample"}
+                  </span>
+                  {row.sample_type ? (
+                    <span className="block truncate text-xs text-muted-foreground">{row.sample_type}</span>
+                  ) : null}
                 </span>
                 <ArrowUpRight className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground group-hover:text-primary" />
               </Link>

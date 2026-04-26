@@ -22,7 +22,21 @@ interface Sample {
   quantity_unit: string | null
   storage_location: string | null
   storage_condition: string | null
+  concentration?: number | null
+  concentration_unit?: string | null
+  created_at: string
+  updated_at?: string | null
   experiment_id: string | null
+  sample_files?: { id: string; file_kind: string }[]
+  sample_projects?: { project: { id: string; name: string } | null }[]
+  sample_experiments?: {
+    experiment: {
+      id: string
+      name: string
+      project_id: string
+      project?: { id: string; name: string } | null
+    } | null
+  }[]
   experiment?: {
     id: string
     name: string
@@ -51,9 +65,16 @@ export function SamplesPageContent({ samples, statusCount }: SamplesPageContentP
   const projectOptions = useMemo(() => {
     const m = new Map<string, string>()
     for (const s of samples) {
-      const id = s.experiment?.project?.id
-      const name = s.experiment?.project?.name
-      if (id && name) m.set(id, name)
+      for (const link of s.sample_projects ?? []) {
+        if (link.project?.id && link.project.name) m.set(link.project.id, link.project.name)
+      }
+      for (const link of s.sample_experiments ?? []) {
+        const project = link.experiment?.project
+        if (project?.id && project.name) m.set(project.id, project.name)
+      }
+      if (s.experiment?.project?.id && s.experiment.project.name) {
+        m.set(s.experiment.project.id, s.experiment.project.name)
+      }
     }
     return Array.from(m.entries())
       .map(([value, label]) => ({ value, label }))
@@ -63,9 +84,14 @@ export function SamplesPageContent({ samples, statusCount }: SamplesPageContentP
   const experimentOptions = useMemo(() => {
     const m = new Map<string, { label: string; project_id: string }>()
     for (const s of samples) {
-      const ex = s.experiment
-      if (ex?.id && ex.name) {
-        m.set(ex.id, { label: ex.name, project_id: ex.project_id })
+      for (const link of s.sample_experiments ?? []) {
+        const ex = link.experiment
+        if (ex?.id && ex.name) {
+          m.set(ex.id, { label: ex.name, project_id: ex.project_id })
+        }
+      }
+      if (s.experiment?.id && s.experiment.name) {
+        m.set(s.experiment.id, { label: s.experiment.name, project_id: s.experiment.project_id })
       }
     }
     return Array.from(m.entries()).map(([value, v]) => ({
@@ -111,10 +137,21 @@ export function SamplesPageContent({ samples, statusCount }: SamplesPageContentP
   const filteredSamples = useMemo(() => {
     return samples.filter((s) => {
       if (projectFilter !== FILTER_ALL) {
-        const pid = s.experiment?.project?.id
-        if (pid !== projectFilter) return false
+        const projectIds = new Set<string>()
+        for (const link of s.sample_projects ?? []) {
+          if (link.project?.id) projectIds.add(link.project.id)
+        }
+        for (const link of s.sample_experiments ?? []) {
+          if (link.experiment?.project?.id) projectIds.add(link.experiment.project.id)
+        }
+        if (s.experiment?.project?.id) projectIds.add(s.experiment.project.id)
+        if (!projectIds.has(projectFilter)) return false
       }
-      if (experimentFilter !== FILTER_ALL && s.experiment_id !== experimentFilter) {
+      if (
+        experimentFilter !== FILTER_ALL &&
+        s.experiment_id !== experimentFilter &&
+        !(s.sample_experiments ?? []).some((link) => link.experiment?.id === experimentFilter)
+      ) {
         return false
       }
       if (statusFilter !== FILTER_ALL && s.status !== statusFilter) return false

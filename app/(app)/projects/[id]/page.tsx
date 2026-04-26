@@ -63,14 +63,49 @@ export default async function ProjectDetailPage({
     .limit(8)
 
   const protocolsPromise = loadProjectWorkspaceProtocols(supabase, id, experimentIds)
+  const directSamplesPromise = supabase
+    .from("sample_projects")
+    .select("sample:samples(id, sample_code, sample_type)")
+    .eq("project_id", id)
+  const experimentSamplesPromise = experimentIds.length
+    ? supabase
+        .from("sample_experiments")
+        .select("sample:samples(id, sample_code, sample_type)")
+        .in("experiment_id", experimentIds)
+    : Promise.resolve({ data: [] as any[] })
+  const legacySamplesPromise = experimentIds.length
+    ? supabase
+        .from("samples")
+        .select("id, sample_code, sample_type")
+        .in("experiment_id", experimentIds)
+    : Promise.resolve({ data: [] as any[] })
 
-  const [literatureRes, protocolList] = await Promise.all([literatureQuery, protocolsPromise])
+  const [literatureRes, protocolList, directSamplesRes, experimentSamplesRes, legacySamplesRes] = await Promise.all([
+    literatureQuery,
+    protocolsPromise,
+    directSamplesPromise,
+    experimentSamplesPromise,
+    legacySamplesPromise,
+  ])
 
   const literatureRows = literatureRes.data ?? []
   const literatureCount = literatureRes.count ?? literatureRows.length
 
   const protocolCount = protocolList.length
   const protocolsPreview = protocolList.slice(0, 8)
+  const sampleMap = new Map<string, { id: string; sample_code: string; sample_type: string | null }>()
+  for (const row of directSamplesRes.data ?? []) {
+    const sample = Array.isArray(row.sample) ? row.sample[0] : row.sample
+    if (sample?.id) sampleMap.set(sample.id, sample)
+  }
+  for (const row of experimentSamplesRes.data ?? []) {
+    const sample = Array.isArray(row.sample) ? row.sample[0] : row.sample
+    if (sample?.id) sampleMap.set(sample.id, sample)
+  }
+  for (const sample of legacySamplesRes.data ?? []) {
+    if (sample?.id) sampleMap.set(sample.id, sample)
+  }
+  const samplesPreview = Array.from(sampleMap.values()).slice(0, 8)
 
   return (
       <div className="space-y-4 md:space-y-6">
@@ -212,6 +247,8 @@ export default async function ProjectDetailPage({
               protocolCount={protocolCount}
               experiments={experimentsList}
               experimentsCount={experimentsList.length}
+              samples={samplesPreview}
+              samplesCount={sampleMap.size}
             />
 
             <div className="grid gap-4 grid-cols-1 md:grid-cols-2">

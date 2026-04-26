@@ -12,6 +12,7 @@
  * 2. Org-scoped (RLS: first segment = profiles.organization_id, second = domain)
  *    - `{orgId}/protocol/{templateId}/...` — protocol document templates
  *    - `{orgId}/experiment/{experimentId}/{experimentDataId}/{fileName}` — experiment data files
+ *    - `{orgId}/sample/{sampleId}/{sampleFileId}/{fileName}` — sample molecular files
  *
  * @see scripts/036_literature_catalog_placement.sql
  * @see scripts/041_protocol_templates_user_bucket.sql
@@ -45,6 +46,16 @@ export function createExperimentDataStoragePath(
 ): string {
   const safe = sanitizeExperimentStorageFileName(fileName)
   return `${organizationId}/experiment/${experimentId}/${experimentDataId}/${safe}`
+}
+
+export function createSampleFileStoragePath(
+  organizationId: string,
+  sampleId: string,
+  sampleFileId: string,
+  fileName: string
+): string {
+  const safe = sanitizeExperimentStorageFileName(fileName)
+  return `${organizationId}/sample/${sampleId}/${sampleFileId}/${safe}`
 }
 
 export function createProfileAvatarStoragePath(userId: string, ext: string): string {
