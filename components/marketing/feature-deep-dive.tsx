@@ -91,7 +91,7 @@ function FeatureRow({ feature, index }: { feature: Feature; index: number }) {
   const spotlightBackground = useMotionTemplate`radial-gradient(circle 400px at ${spotlightX}px ${spotlightY}px, var(--n9-accent-glow), transparent 40%)`
 
   return (
-    <div ref={ref} className="relative grid items-center gap-8 lg:grid-cols-2 lg:gap-16">
+    <div ref={ref} className="relative grid items-center gap-6 sm:gap-8 lg:grid-cols-2 lg:gap-16">
       {/* Text */}
       <motion.div
         initial={{ opacity: 0, x: isReversed ? 30 : -30 }}
@@ -110,10 +110,10 @@ function FeatureRow({ feature, index }: { feature: Feature; index: number }) {
           <feature.icon className="size-[0.82rem] shrink-0" />
           {feature.phase}
         </motion.div>
-        <h3 className="font-serif text-[2.1rem] leading-tight tracking-tight text-foreground sm:text-[2.4rem]">
+        <h3 className="font-serif text-[1.7rem] leading-tight tracking-tight text-foreground sm:text-[2.4rem]">
           {feature.title}
         </h3>
-        <p className="text-[1.35rem] leading-[2.4rem] text-muted-foreground">
+        <p className="text-[1.02rem] leading-8 text-muted-foreground sm:text-[1.35rem] sm:leading-[2.4rem]">
           {feature.description}
         </p>
       </motion.div>
@@ -127,7 +127,7 @@ function FeatureRow({ feature, index }: { feature: Feature; index: number }) {
           onMouseMove={handleMouseMove}
           onMouseLeave={handleMouseLeave}
           style={{ rotateX, rotateY }}
-          className="group relative overflow-hidden rounded-2xl border border-border/60 bg-background shadow-[0_32px_80px_-30px_rgba(44,36,24,0.15)] transition-shadow duration-500 hover:shadow-[0_32px_80px_-20px_rgba(155,71,34,0.18)] dark:shadow-[0_32px_80px_-30px_rgba(0,0,0,0.5)] transform-gpu"
+          className="group relative overflow-hidden rounded-2xl border border-border/60 bg-background shadow-[0_24px_60px_-28px_rgba(44,36,24,0.15)] transition-shadow duration-500 hover:shadow-[0_32px_80px_-20px_rgba(155,71,34,0.18)] dark:shadow-[0_32px_80px_-30px_rgba(0,0,0,0.5)] transform-gpu"
         >
           {/* Spotlight Glow Effect inside the card border boundaries */}
           <motion.div
@@ -136,7 +136,7 @@ function FeatureRow({ feature, index }: { feature: Feature; index: number }) {
           />
 
           {/* Browser bar */}
-          <div className="relative z-10 flex h-8 items-center gap-2 border-b border-border/40 bg-muted/50 px-3">
+          <div className="relative z-10 flex h-7 items-center gap-2 border-b border-border/40 bg-muted/50 px-3 sm:h-8">
             <div className="flex gap-1.5">
               <div className="h-2.5 w-2.5 rounded-full bg-red-400/80" />
               <div className="h-2.5 w-2.5 rounded-full bg-yellow-400/80" />
@@ -169,13 +169,13 @@ export function FeatureDeepDive() {
 
   return (
     <section id="features" ref={sectionRef} className="relative bg-[var(--n9-accent-light)]/50 dark:bg-muted/10">
-      <div className="container mx-auto px-4 py-20 sm:px-6 lg:px-8">
+      <div className="container mx-auto px-4 py-16 sm:px-6 sm:py-20 lg:px-8">
         <motion.div
           initial={{ opacity: 0, y: 16 }}
           whileInView={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5 }}
           viewport={{ once: true }}
-          className="mx-auto max-w-3xl text-center mb-16"
+          className="mx-auto mb-12 max-w-3xl text-center sm:mb-16"
         >
           <h2 className="font-serif text-3xl tracking-tight text-foreground sm:text-4xl">
             From literature review to lab work to reporting, <span className="text-[var(--n9-accent)]">Notes9</span> keeps every step connected - and every insight preserved.
@@ -213,7 +213,7 @@ export function FeatureDeepDive() {
             })}
           </div>
 
-          <div className="space-y-16 lg:space-y-24">
+          <div className="space-y-12 sm:space-y-16 lg:space-y-24">
             {features.map((feature, i) => (
               <FeatureRow key={feature.id} feature={feature} index={i} />
             ))}

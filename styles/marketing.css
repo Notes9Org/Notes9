@@ -93,3 +93,15 @@
 /* Hide scrollbar on product reel */
 .marketing-theme .scrollbar-none::-webkit-scrollbar { display: none; }
 .marketing-theme .scrollbar-none { -ms-overflow-style: none; scrollbar-width: none; }
+
+/* Video/media resilience on the marketing homepage */
+.marketing-theme video,
+.marketing-theme img {
+  max-width: 100%;
+}
+
+@media (max-width: 767px) {
+  .marketing-theme {
+    overflow-x: hidden;
+  }
+}

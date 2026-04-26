@@ -20,7 +20,6 @@ const SUB_HERO_WORDS = [
 
 const SUB_HERO_INTERVAL_MS = 4200
 
-/** Longest rotating line — reserves width/height so swaps stay stable. */
 const SUB_HERO_LAYOUT_ANCHOR = SUB_HERO_WORDS.reduce((a, b) =>
   a.length >= b.length ? a : b,
 )
@@ -54,23 +53,23 @@ export function AcademicHero() {
   const heroY = useTransform(scrollYProgress, [0, 1], [0, 40])
 
   return (
-    <section ref={sectionRef} className="relative overflow-x-clip overflow-y-hidden">
+    <section ref={sectionRef} className="relative overflow-x-clip overflow-y-hidden pb-8 sm:pb-0">
       <div className="pointer-events-none absolute inset-0">
-        <div className="absolute left-1/2 top-[-10%] h-[600px] w-[800px] -translate-x-1/2 rounded-full bg-[var(--n9-accent)]/[0.07] blur-[120px] animate-[drift_20s_ease-in-out_infinite]" />
-        <div className="absolute right-[-10%] top-[20%] h-[400px] w-[500px] rounded-full bg-amber-600/[0.04] blur-[100px] animate-[drift_25s_ease-in-out_infinite_reverse]" />
-        <div className="absolute left-[-5%] bottom-[10%] h-[350px] w-[450px] rounded-full bg-[var(--n9-accent)]/[0.05] blur-[100px] animate-[drift_22s_ease-in-out_infinite_2s]" />
+        <div className="absolute left-1/2 top-[-10%] h-[420px] w-[540px] -translate-x-1/2 rounded-full bg-[var(--n9-accent)]/[0.07] blur-[90px] sm:h-[600px] sm:w-[800px] sm:blur-[120px] animate-[drift_20s_ease-in-out_infinite]" />
+        <div className="absolute right-[-18%] top-[20%] h-[260px] w-[320px] rounded-full bg-amber-600/[0.04] blur-[72px] sm:right-[-10%] sm:h-[400px] sm:w-[500px] sm:blur-[100px] animate-[drift_25s_ease-in-out_infinite_reverse]" />
+        <div className="absolute left-[-12%] bottom-[10%] h-[220px] w-[280px] rounded-full bg-[var(--n9-accent)]/[0.05] blur-[72px] sm:left-[-5%] sm:h-[350px] sm:w-[450px] sm:blur-[100px] animate-[drift_22s_ease-in-out_infinite_2s]" />
       </div>
       <HeroMolecules />
 
-      <div className="container relative z-10 mx-auto px-4 pt-8 sm:px-6 sm:pt-14 lg:px-8">
+      <div className="container relative z-10 mx-auto px-4 pt-6 sm:px-6 sm:pt-14 lg:px-8">
         <motion.div
           initial={{ opacity: 0, y: 28 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.75, delay: 0.15, ease: "easeOut" }}
           style={{ y: heroY }}
-          className="mt-4 grid w-full min-w-0 items-start gap-8 lg:mt-10 lg:grid-cols-2 lg:gap-10 xl:grid-cols-[5fr_7fr] xl:gap-12"
+          className="mt-2 grid w-full min-w-0 items-start gap-6 sm:mt-4 sm:gap-8 lg:mt-10 lg:grid-cols-2 lg:gap-10 xl:grid-cols-[5fr_7fr] xl:gap-12"
         >
-          <div className="order-2 min-w-0 space-y-7 lg:order-1 lg:pt-2 xl:pt-4">
+          <div className="order-2 min-w-0 space-y-5 sm:space-y-7 lg:order-1 lg:pt-2 xl:pt-4">
             <motion.div
               initial={{ opacity: 0, y: 12 }}
               animate={{ opacity: 1, y: 0 }}
@@ -86,7 +85,7 @@ export function AcademicHero() {
               </span>
             </motion.div>
 
-            <div className="max-w-3xl text-left font-serif text-4xl tracking-tight text-foreground sm:text-5xl lg:text-[3.45rem] lg:leading-[1.07]">
+            <div className="max-w-3xl text-left font-serif text-[2.35rem] tracking-tight text-foreground sm:text-5xl lg:text-[3.45rem] lg:leading-[1.07] leading-[1.06]">
               <PretextReveal text="Where research stays connected, and AI catalyzes it." />
             </div>
 
@@ -94,7 +93,7 @@ export function AcademicHero() {
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.6, delay: 0.2 }}
-              className="max-w-2xl text-left text-[1.6875rem] leading-relaxed text-muted-foreground sm:text-[1.875rem] sm:leading-relaxed"
+              className="max-w-2xl text-left text-[1.08rem] leading-relaxed text-muted-foreground sm:text-[1.875rem] sm:leading-relaxed"
             >
               {reduceMotion ? (
                 <p className="text-pretty">
@@ -137,15 +136,15 @@ export function AcademicHero() {
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.6, delay: 0.3 }}
-              className="flex flex-col items-start gap-4 sm:flex-row"
+              className="flex flex-col items-stretch gap-3 sm:flex-row sm:items-start sm:gap-4"
             >
               <Button
                 asChild
                 size="lg"
-                className="group h-12 rounded-full bg-[var(--n9-accent)] px-8 text-white shadow-[0_12px_40px_-12px_var(--n9-accent-glow)] transition-all duration-300 hover:bg-[var(--n9-accent-hover)] hover:shadow-[0_20px_50px_-12px_var(--n9-accent-glow)]"
+                className="group h-12 w-full rounded-full bg-[var(--n9-accent)] px-8 text-white shadow-[0_12px_40px_-12px_var(--n9-accent-glow)] transition-all duration-300 hover:bg-[var(--n9-accent-hover)] hover:shadow-[0_20px_50px_-12px_var(--n9-accent-glow)] sm:w-auto"
               >
-                <Link href="/#contact">
-                  Request a demo
+                <Link href="/auth/sign-up">
+                  Start free
                   <ArrowRight className="ml-2 h-4 w-4 transition-transform duration-200 group-hover:translate-x-1" />
                 </Link>
               </Button>
@@ -153,25 +152,26 @@ export function AcademicHero() {
                 asChild
                 variant="outline"
                 size="lg"
-                className="h-12 rounded-full border-border/60 px-8 transition-colors duration-200 hover:border-[var(--n9-accent)]/40"
+                className="h-12 w-full rounded-full border-border/60 px-8 transition-colors duration-200 hover:border-[var(--n9-accent)]/40 sm:w-auto"
               >
-                <Link href="/platform">
+                <Link href="/#contact">
                   <Play className="mr-2 h-4 w-4" />
-                  See how it works
+                  Request a demo
                 </Link>
               </Button>
             </motion.div>
           </div>
 
           <div className="order-1 min-w-0 lg:order-2">
-            {/* Same diagram chrome + layout as PlatformDifferentiationSection (flow lane + rail + hub). */}
-            <ConnectedResearchSystemDiagram className="w-full min-w-0" />
+            <div className="mx-auto w-full max-w-[92vw] sm:max-w-none">
+              <ConnectedResearchSystemDiagram className="w-full min-w-0" />
+            </div>
           </div>
         </motion.div>
 
       </div>
 
-      <div className="h-20">
+      <div className="h-auto min-h-16 py-4 sm:h-20 sm:min-h-0 sm:py-0">
         <div className="container mx-auto flex h-full items-center px-4 sm:px-6 lg:px-8">
           <p className="max-w-4xl text-sm text-muted-foreground/95 sm:text-base">
             For researchers tired of scattered papers, notes, protocols, spreadsheets, and disconnected AI tools.
@@ -181,4 +181,3 @@ export function AcademicHero() {
     </section>
   )
 }
-
