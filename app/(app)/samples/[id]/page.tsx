@@ -1,4 +1,5 @@
 import { redirect, notFound } from 'next/navigation'
+import type { ReactNode } from 'react'
 import { createClient } from "@/lib/supabase/server"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -13,9 +14,63 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
-import { ArrowLeft, TestTube, Calendar, MapPin, Thermometer, Package } from 'lucide-react'
+import { ArrowLeft, Calendar, Dna, FlaskConical, Link2, MapPin, Package, ShieldAlert, Thermometer } from 'lucide-react'
 import Link from 'next/link'
 import { SampleActions } from './sample-actions'
+import { SampleMolecularFilesTab, type SampleMolecularFile } from './sample-molecular-files-tab'
+
+function Info({ label, value, icon }: { label: string; value: string; icon?: ReactNode }) {
+  return (
+    <div className="min-w-0 rounded-md border bg-muted/20 p-3">
+      <h3 className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{label}</h3>
+      <div className="mt-1 flex min-w-0 items-center gap-2">
+        {icon}
+        <p className="min-w-0 break-words text-sm text-foreground">{value || "Not specified"}</p>
+      </div>
+    </div>
+  )
+}
+
+function LinkGroup({
+  title,
+  icon,
+  rows,
+  empty,
+}: {
+  title: string
+  icon: ReactNode
+  rows: { id: string; label: string; detail?: string | null; href: string }[]
+  empty: string
+}) {
+  return (
+    <Card className="min-w-0">
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2 text-base">
+          {icon}
+          {title}
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-2">
+        {rows.length > 0 ? (
+          rows.map((row) => (
+            <Link
+              key={row.id}
+              href={row.href}
+              className="block min-w-0 rounded-md border px-3 py-2 transition-colors hover:border-primary hover:bg-muted/40"
+            >
+              <span className="block truncate text-sm font-medium text-foreground">{row.label}</span>
+              {row.detail ? <span className="block truncate text-xs text-muted-foreground">{row.detail}</span> : null}
+            </Link>
+          ))
+        ) : (
+          <p className="rounded-md border border-dashed px-3 py-6 text-center text-sm text-muted-foreground">
+            {empty}
+          </p>
+        )}
+      </CardContent>
+    </Card>
+  )
+}
 
 export default async function SampleDetailPage({
   params,
@@ -33,10 +88,25 @@ export default async function SampleDetailPage({
   }
 
   // Fetch sample details with relations
-  const { data: sample, error } = await supabase
+  let { data: sample, error } = await supabase
     .from("samples")
     .select(`
       *,
+      sample_files(*),
+      sample_projects(
+        project:projects(id, name)
+      ),
+      sample_experiments(
+        experiment:experiments(
+          id,
+          name,
+          project_id,
+          project:projects(id, name)
+        )
+      ),
+      sample_lab_notes(
+        lab_note:lab_notes(id, title, experiment_id)
+      ),
       experiment:experiments(
         id,
         name,
@@ -50,6 +120,28 @@ export default async function SampleDetailPage({
     `)
     .eq("id", id)
     .single()
+
+  if (error) {
+    const fallback = await supabase
+      .from("samples")
+      .select(`
+        *,
+        experiment:experiments(
+          id,
+          name,
+          project:projects(id, name)
+        ),
+        created_by_profile:profiles!samples_created_by_fkey(
+          first_name,
+          last_name,
+          email
+        )
+      `)
+      .eq("id", id)
+      .single()
+    sample = fallback.data
+    error = fallback.error
+  }
 
   if (error || !sample) {
     notFound()
@@ -74,6 +166,20 @@ export default async function SampleDetailPage({
     if (!date) return "—"
     return new Date(date).toLocaleDateString()
   }
+
+  const linkedExperiments = sample.sample_experiments?.map((link: any) => link.experiment).filter(Boolean) ?? []
+  const linkedProjects = sample.sample_projects?.map((link: any) => link.project).filter(Boolean) ?? []
+  const linkedNotes = sample.sample_lab_notes?.map((link: any) => link.lab_note).filter(Boolean) ?? []
+  const projectNames = Array.from(
+    new Set([
+      ...linkedProjects.map((project: any) => project.name),
+      ...linkedExperiments.map((experiment: any) => experiment.project?.name).filter(Boolean),
+      sample.experiment?.project?.name,
+    ].filter(Boolean))
+  )
+  const sampleFiles = ((sample.sample_files ?? []) as SampleMolecularFile[]).sort((a, b) =>
+    new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+  )
 
   return (
       <div className="space-y-4 md:space-y-6">
@@ -182,10 +288,12 @@ export default async function SampleDetailPage({
 
         {/* Main Content Tabs */}
         <Tabs defaultValue="overview" className="space-y-4">
-          <TabsList>
+          <TabsList className="flex h-auto flex-wrap justify-start">
             <TabsTrigger value="overview">Overview</TabsTrigger>
-            <TabsTrigger value="history">History</TabsTrigger>
-            <TabsTrigger value="qc">Quality Control</TabsTrigger>
+            <TabsTrigger value="molecular">Molecular Files</TabsTrigger>
+            <TabsTrigger value="links">Links</TabsTrigger>
+            <TabsTrigger value="storage">Storage</TabsTrigger>
+            <TabsTrigger value="history">History/QC</TabsTrigger>
           </TabsList>
 
           <TabsContent value="overview" className="space-y-4">
@@ -204,7 +312,7 @@ export default async function SampleDetailPage({
 
                 <Separator />
 
-                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
                   <div>
                     <h3 className="text-sm font-medium text-muted-foreground mb-1">Sample Code</h3>
                     <p className="text-sm text-foreground font-mono">{sample.sample_code}</p>
@@ -226,6 +334,17 @@ export default async function SampleDetailPage({
                     <h3 className="text-sm font-medium text-muted-foreground mb-1">Status</h3>
                     <Badge variant={getStatusColor(sample.status)}>{sample.status}</Badge>
                   </div>
+                  {sample.barcode && <Info label="Barcode" value={sample.barcode} />}
+                  {sample.external_id && <Info label="External ID" value={sample.external_id} />}
+                  {sample.organism && <Info label="Organism" value={sample.organism} />}
+                  {sample.strain && <Info label="Strain" value={sample.strain} />}
+                  {sample.genotype && <Info label="Genotype" value={sample.genotype} />}
+                  {sample.supplier && <Info label="Supplier" value={sample.supplier} />}
+                  {sample.catalog_number && <Info label="Catalog Number" value={sample.catalog_number} />}
+                  {sample.lot_number && <Info label="Lot Number" value={sample.lot_number} />}
+                  {sample.purity && <Info label="Purity" value={sample.purity} />}
+                  {sample.hazard_class && <Info label="Hazard Class" value={sample.hazard_class} />}
+                  {sample.biosafety_level && <Info label="Biosafety Level" value={sample.biosafety_level} />}
                 </div>
 
                 <Separator />
@@ -249,28 +368,88 @@ export default async function SampleDetailPage({
                   </div>
                 </div>
 
-                {sample.experiment && (
+                {(linkedExperiments.length > 0 || sample.experiment) && (
                   <>
                     <Separator />
                     <div>
                       <h3 className="text-sm font-medium text-muted-foreground mb-2">
-                        Associated Experiment
+                        Associated Experiments
                       </h3>
-                      <Link href={`/experiments/${sample.experiment.id}`}>
-                        <Card className="hover:border-primary transition-colors cursor-pointer">
-                          <CardContent className="pt-4">
-                            <p className="font-medium text-foreground">{sample.experiment.name}</p>
-                            {sample.experiment.project && (
-                              <p className="text-xs text-muted-foreground">
-                                Project: {sample.experiment.project.name}
-                              </p>
-                            )}
-                          </CardContent>
-                        </Card>
-                      </Link>
+                      <div className="grid gap-3 md:grid-cols-2">
+                        {(linkedExperiments.length > 0 ? linkedExperiments : [sample.experiment]).map((experiment: any) => (
+                          <Link key={experiment.id} href={`/experiments/${experiment.id}`}>
+                            <Card className="hover:border-primary transition-colors cursor-pointer">
+                              <CardContent className="pt-4">
+                                <p className="font-medium text-foreground">{experiment.name}</p>
+                                {experiment.project && (
+                                  <p className="text-xs text-muted-foreground">
+                                    Project: {experiment.project.name}
+                                  </p>
+                                )}
+                              </CardContent>
+                            </Card>
+                          </Link>
+                        ))}
+                      </div>
                     </div>
                   </>
                 )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="molecular" className="space-y-4">
+            <SampleMolecularFilesTab sampleId={sample.id} initialFiles={sampleFiles} />
+          </TabsContent>
+
+          <TabsContent value="links" className="space-y-4">
+            <div className="grid gap-4 lg:grid-cols-3">
+              <LinkGroup
+                title="Projects"
+                icon={<Link2 className="h-4 w-4" />}
+                rows={projectNames.map((name) => ({ id: name, label: name, href: "/projects" }))}
+                empty="No linked projects"
+              />
+              <LinkGroup
+                title="Experiments"
+                icon={<FlaskConical className="h-4 w-4" />}
+                rows={(linkedExperiments.length > 0 ? linkedExperiments : sample.experiment ? [sample.experiment] : []).map((experiment: any) => ({
+                  id: experiment.id,
+                  label: experiment.name,
+                  detail: experiment.project?.name,
+                  href: `/experiments/${experiment.id}`,
+                }))}
+                empty="No linked experiments"
+              />
+              <LinkGroup
+                title="Lab Notes"
+                icon={<Dna className="h-4 w-4" />}
+                rows={linkedNotes.map((note: any) => ({
+                  id: note.id,
+                  label: note.title,
+                  href: note.experiment_id ? `/experiments/${note.experiment_id}?tab=notes&noteId=${note.id}` : `/lab-notes/${note.id}`,
+                }))}
+                empty="No linked lab notes"
+              />
+            </div>
+          </TabsContent>
+
+          <TabsContent value="storage" className="space-y-4">
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-foreground">Storage & Inventory</CardTitle>
+                <CardDescription>Physical location, quantity, concentration, and safety context</CardDescription>
+              </CardHeader>
+              <CardContent className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                <Info label="Storage Location" value={sample.storage_location || "Not specified"} />
+                <Info label="Storage Condition" value={sample.storage_condition || "Not specified"} />
+                <Info label="Container Type" value={sample.container_type || "Not specified"} />
+                <Info label="Box Position" value={sample.box_position || "Not specified"} />
+                <Info label="Quantity" value={sample.quantity ? `${sample.quantity} ${sample.quantity_unit || ""}` : "Not specified"} />
+                <Info label="Concentration" value={sample.concentration ? `${sample.concentration} ${sample.concentration_unit || ""}` : "Not specified"} />
+                <Info label="Collection Date" value={formatDate(sample.collection_date)} />
+                <Info label="Expiry Date" value={formatDate(sample.expiry_date)} />
+                <Info label="Safety" value={[sample.hazard_class, sample.biosafety_level].filter(Boolean).join(" · ") || "Not specified"} icon={<ShieldAlert className="h-4 w-4 text-muted-foreground" />} />
               </CardContent>
             </Card>
           </TabsContent>
@@ -302,9 +481,6 @@ export default async function SampleDetailPage({
                 </Table>
               </CardContent>
             </Card>
-          </TabsContent>
-
-          <TabsContent value="qc" className="space-y-4">
             <Card>
               <CardHeader>
                 <CardTitle className="text-foreground">Quality Control Records</CardTitle>
@@ -337,4 +513,3 @@ export default async function SampleDetailPage({
       </div>
     )
 }
-

@@ -24,10 +24,23 @@ interface Sample {
   status: string
   quantity: number | null
   quantity_unit: string | null
+  concentration?: number | null
+  concentration_unit?: string | null
   storage_location: string | null
   storage_condition: string | null
   created_at: string
+  updated_at?: string | null
   experiment_id: string | null
+  sample_files?: { id: string; file_kind: string }[]
+  sample_projects?: { project: { id: string; name: string } | null }[]
+  sample_experiments?: {
+    experiment: {
+      id: string
+      name: string
+      project_id: string
+      project?: { id: string; name: string } | null
+    } | null
+  }[]
   experiment?: {
     id: string
     name: string
@@ -43,6 +56,21 @@ interface SampleListProps {
   hideToolbar?: boolean
 }
 
+const getStatusVariant = (status: string) => {
+  switch (status) {
+    case "available":
+      return "default"
+    case "in_use":
+      return "secondary"
+    case "depleted":
+      return "outline"
+    case "disposed":
+      return "outline"
+    default:
+      return "outline"
+  }
+}
+
 export function SampleList({ samples, viewMode: controlledView, setViewMode: setControlledView, hideToolbar }: SampleListProps) {
   const isMobile = useMediaQuery("(max-width: 768px)")
   const [internalView, setInternalView] = useState<"grid" | "table">("table")
@@ -56,21 +84,6 @@ export function SampleList({ samples, viewMode: controlledView, setViewMode: set
 
   if (!samples || samples.length === 0) {
     return null
-  }
-
-  const getStatusVariant = (status: string) => {
-    switch (status) {
-      case "available":
-        return "default"
-      case "in_use":
-        return "secondary"
-      case "depleted":
-        return "outline"
-      case "disposed":
-        return "outline"
-      default:
-        return "outline"
-    }
   }
 
   return (
@@ -142,6 +155,11 @@ export function SampleList({ samples, viewMode: controlledView, setViewMode: set
                       <span className="truncate">{item.storage_condition}</span>
                     </div>
                   )}
+                  {item.sample_files && item.sample_files.length > 0 && (
+                    <p className="text-xs text-muted-foreground truncate">
+                      {item.sample_files.length} molecular file{item.sample_files.length === 1 ? "" : "s"}
+                    </p>
+                  )}
                 </div>
                 <Button variant="outline" size="sm" className="w-full mt-auto shrink-0" asChild>
                   <Link href={`/samples/${item.id}`}>
@@ -175,6 +193,27 @@ const formatDate = (dateStr: string): string => {
   return new Date(dateStr).toISOString().split('T')[0]
 }
 
+function contextSummary(item: Sample): string {
+  const names = new Set<string>()
+  for (const link of item.sample_experiments ?? []) {
+    if (link.experiment?.name) names.add(link.experiment.name)
+  }
+  if (item.experiment?.name) names.add(item.experiment.name)
+  return names.size > 0 ? Array.from(names).join(", ") : "No experiments"
+}
+
+function projectSummary(item: Sample): string {
+  const names = new Set<string>()
+  for (const link of item.sample_projects ?? []) {
+    if (link.project?.name) names.add(link.project.name)
+  }
+  for (const link of item.sample_experiments ?? []) {
+    if (link.experiment?.project?.name) names.add(link.experiment.project.name)
+  }
+  if (item.experiment?.project?.name) names.add(item.experiment.project.name)
+  return names.size > 0 ? Array.from(names).join(", ") : "No projects"
+}
+
 function SampleTableView({ samples }: { samples: Sample[] }) {
   const router = useRouter()
   return (
@@ -183,7 +222,12 @@ function SampleTableView({ samples }: { samples: Sample[] }) {
         <TableHeader>
           <TableRow>
             <TableHead className="min-w-[300px]">Sample</TableHead>
-            <TableHead className="min-w-[120px]">Created</TableHead>
+            <TableHead className="min-w-[140px]">Type / Status</TableHead>
+            <TableHead className="min-w-[180px]">Amount</TableHead>
+            <TableHead className="min-w-[220px]">Context</TableHead>
+            <TableHead className="min-w-[150px]">Storage</TableHead>
+            <TableHead className="min-w-[120px]">Files</TableHead>
+            <TableHead className="min-w-[120px]">Updated</TableHead>
             <TableHead className="text-right min-w-[100px]">Actions</TableHead>
           </TableRow>
         </TableHeader>
@@ -195,13 +239,48 @@ function SampleTableView({ samples }: { samples: Sample[] }) {
               onClick={() => router.push(`/samples/${item.id}`)}
             >
               <TableCell className="font-medium text-foreground">
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 min-w-0">
                   <TestTube className="h-4 w-4 text-primary shrink-0" />
-                  <span className="truncate">{item.sample_code}</span>
+                  <span className="truncate font-mono text-sm">{item.sample_code}</span>
+                </div>
+              </TableCell>
+              <TableCell>
+                <div className="space-y-1">
+                  <p className="truncate text-sm">{item.sample_type}</p>
+                  <Badge variant={getStatusVariant(item.status)} className="w-fit text-xs">
+                    {item.status.replace(/_/g, " ")}
+                  </Badge>
                 </div>
               </TableCell>
               <TableCell className="text-muted-foreground">
-                {formatDate(item.created_at)}
+                <div className="space-y-1 text-sm">
+                  <p className="truncate">
+                    {item.quantity != null ? `${item.quantity} ${item.quantity_unit || ""}` : "No quantity"}
+                  </p>
+                  {item.concentration != null ? (
+                    <p className="truncate text-xs">
+                      {item.concentration} {item.concentration_unit || ""}
+                    </p>
+                  ) : null}
+                </div>
+              </TableCell>
+              <TableCell className="text-muted-foreground">
+                <div className="max-w-[240px] space-y-1 text-sm">
+                  <p className="truncate">{contextSummary(item)}</p>
+                  <p className="truncate text-xs">{projectSummary(item)}</p>
+                </div>
+              </TableCell>
+              <TableCell className="text-muted-foreground">
+                <div className="max-w-[180px] space-y-1 text-sm">
+                  <p className="truncate">{item.storage_location || "Not specified"}</p>
+                  {item.storage_condition ? <p className="truncate text-xs">{item.storage_condition}</p> : null}
+                </div>
+              </TableCell>
+              <TableCell className="text-muted-foreground">
+                <span className="text-sm tabular-nums">{item.sample_files?.length ?? 0}</span>
+              </TableCell>
+              <TableCell className="text-muted-foreground">
+                {formatDate(item.updated_at || item.created_at)}
               </TableCell>
               <TableCell className="text-right">
                 <Button variant="ghost" size="sm" asChild onClick={(e: React.MouseEvent) => e.stopPropagation()}>

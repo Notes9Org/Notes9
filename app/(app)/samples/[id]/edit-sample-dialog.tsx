@@ -15,6 +15,7 @@ import {
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { TextareaWithWordCount } from "@/components/ui/textarea-with-word-count"
+import { Textarea } from "@/components/ui/textarea"
 import {
   Select,
   SelectContent,
@@ -24,6 +25,7 @@ import {
 } from "@/components/ui/select"
 import { Pencil } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
+import { formatSampleTags, parseTagInput } from "@/lib/sample-molecular"
 
 const SAMPLE_TYPES = [
   "Chemical",
@@ -72,7 +74,29 @@ export function EditSampleDialog({ sample }: { sample: any }) {
     quantity: sample.quantity || "",
     quantity_unit: sample.quantity_unit || "",
     status: sample.status,
+    barcode: sample.barcode || "",
+    external_id: sample.external_id || "",
+    organism: sample.organism || "",
+    strain: sample.strain || "",
+    genotype: sample.genotype || "",
+    supplier: sample.supplier || "",
+    catalog_number: sample.catalog_number || "",
+    lot_number: sample.lot_number || "",
+    concentration: sample.concentration || "",
+    concentration_unit: sample.concentration_unit || "",
+    purity: sample.purity || "",
+    container_type: sample.container_type || "",
+    box_position: sample.box_position || "",
+    expiry_date: sample.expiry_date || "",
+    hazard_class: sample.hazard_class || "",
+    biosafety_level: sample.biosafety_level || "",
   })
+  const [tagText, setTagText] = useState(formatSampleTags(sample.tags))
+  const [customMetadataText, setCustomMetadataText] = useState(
+    sample.custom_metadata && Object.keys(sample.custom_metadata).length > 0
+      ? JSON.stringify(sample.custom_metadata, null, 2)
+      : ""
+  )
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -80,6 +104,7 @@ export function EditSampleDialog({ sample }: { sample: any }) {
 
     try {
       const supabase = createClient()
+      const custom_metadata = customMetadataText.trim() ? JSON.parse(customMetadataText) : {}
 
       const { error } = await supabase
         .from("samples")
@@ -93,6 +118,24 @@ export function EditSampleDialog({ sample }: { sample: any }) {
           quantity: formData.quantity ? parseFloat(formData.quantity) : null,
           quantity_unit: formData.quantity_unit || null,
           status: formData.status,
+          barcode: formData.barcode || null,
+          external_id: formData.external_id || null,
+          organism: formData.organism || null,
+          strain: formData.strain || null,
+          genotype: formData.genotype || null,
+          supplier: formData.supplier || null,
+          catalog_number: formData.catalog_number || null,
+          lot_number: formData.lot_number || null,
+          concentration: formData.concentration ? parseFloat(formData.concentration) : null,
+          concentration_unit: formData.concentration_unit || null,
+          purity: formData.purity || null,
+          container_type: formData.container_type || null,
+          box_position: formData.box_position || null,
+          expiry_date: formData.expiry_date || null,
+          hazard_class: formData.hazard_class || null,
+          biosafety_level: formData.biosafety_level || null,
+          tags: parseTagInput(tagText),
+          custom_metadata,
         })
         .eq("id", sample.id)
 
@@ -137,7 +180,7 @@ export function EditSampleDialog({ sample }: { sample: any }) {
             Update sample information (Sample Code cannot be changed)
           </DialogDescription>
         </DialogHeader>
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form onSubmit={handleSubmit} className="space-y-5">
           {/* Sample Type */}
           <div className="space-y-2">
             <Label htmlFor="sample_type">Sample Type</Label>
@@ -200,6 +243,21 @@ export function EditSampleDialog({ sample }: { sample: any }) {
             </div>
           </div>
 
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+            <EditField id="barcode" label="Barcode" value={formData.barcode} onChange={(value) => setFormData({ ...formData, barcode: value })} />
+            <EditField id="external_id" label="External ID" value={formData.external_id} onChange={(value) => setFormData({ ...formData, external_id: value })} />
+            <EditField id="organism" label="Organism" value={formData.organism} onChange={(value) => setFormData({ ...formData, organism: value })} />
+            <EditField id="strain" label="Strain" value={formData.strain} onChange={(value) => setFormData({ ...formData, strain: value })} />
+            <EditField id="genotype" label="Genotype" value={formData.genotype} onChange={(value) => setFormData({ ...formData, genotype: value })} />
+            <EditField id="supplier" label="Supplier" value={formData.supplier} onChange={(value) => setFormData({ ...formData, supplier: value })} />
+            <EditField id="catalog_number" label="Catalog Number" value={formData.catalog_number} onChange={(value) => setFormData({ ...formData, catalog_number: value })} />
+            <EditField id="lot_number" label="Lot Number" value={formData.lot_number} onChange={(value) => setFormData({ ...formData, lot_number: value })} />
+            <EditField id="purity" label="Purity" value={formData.purity} onChange={(value) => setFormData({ ...formData, purity: value })} />
+            <EditField id="hazard_class" label="Hazard Class" value={formData.hazard_class} onChange={(value) => setFormData({ ...formData, hazard_class: value })} />
+            <EditField id="biosafety_level" label="Biosafety Level" value={formData.biosafety_level} onChange={(value) => setFormData({ ...formData, biosafety_level: value })} />
+            <EditField id="expiry_date" label="Expiry Date" type="date" value={formData.expiry_date} onChange={(value) => setFormData({ ...formData, expiry_date: value })} />
+          </div>
+
           {/* Storage Location & Condition */}
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
@@ -233,6 +291,13 @@ export function EditSampleDialog({ sample }: { sample: any }) {
                 </SelectContent>
               </Select>
             </div>
+          </div>
+
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+            <EditField id="concentration" label="Concentration" type="number" step="0.01" value={formData.concentration} onChange={(value) => setFormData({ ...formData, concentration: value })} />
+            <EditField id="concentration_unit" label="Concentration Unit" value={formData.concentration_unit} onChange={(value) => setFormData({ ...formData, concentration_unit: value })} />
+            <EditField id="container_type" label="Container Type" value={formData.container_type} onChange={(value) => setFormData({ ...formData, container_type: value })} />
+            <EditField id="box_position" label="Box Position" value={formData.box_position} onChange={(value) => setFormData({ ...formData, box_position: value })} />
           </div>
 
           {/* Quantity & Unit */}
@@ -294,6 +359,22 @@ export function EditSampleDialog({ sample }: { sample: any }) {
             </Select>
           </div>
 
+          <div className="space-y-2">
+            <Label htmlFor="tags">Tags</Label>
+            <Input id="tags" value={tagText} onChange={(event) => setTagText(event.target.value)} />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="custom_metadata">Custom Metadata JSON</Label>
+            <Textarea
+              id="custom_metadata"
+              value={customMetadataText}
+              onChange={(event) => setCustomMetadataText(event.target.value)}
+              className="min-h-28 font-mono text-xs"
+              spellCheck={false}
+            />
+          </div>
+
           {/* Actions */}
           <div className="flex justify-end gap-2 pt-4">
             <Button
@@ -314,3 +395,25 @@ export function EditSampleDialog({ sample }: { sample: any }) {
   )
 }
 
+function EditField({
+  id,
+  label,
+  value,
+  onChange,
+  type = "text",
+  step,
+}: {
+  id: string
+  label: string
+  value: string
+  onChange: (value: string) => void
+  type?: string
+  step?: string
+}) {
+  return (
+    <div className="space-y-2 min-w-0">
+      <Label htmlFor={id}>{label}</Label>
+      <Input id={id} type={type} step={step} value={value} onChange={(event) => onChange(event.target.value)} />
+    </div>
+  )
+}
