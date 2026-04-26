@@ -602,14 +602,14 @@ function PostTrustCtaBlock() {
       transition={{ duration: 0.48 }}
       viewport={{ once: true, margin: "-40px" }}
       className={cn(
-        "mx-auto mt-10 max-w-6xl overflow-hidden rounded-[24px] border px-6 py-9 font-sans sm:mt-12 sm:rounded-3xl sm:px-8 sm:py-10",
+        "mx-auto mt-10 max-w-6xl overflow-hidden rounded-[24px] border px-5 py-7 font-sans sm:mt-12 sm:rounded-3xl sm:px-8 sm:py-10",
         /* Light: Notes9 cream / white card on section */
         "border-[#e8e2d8] bg-white text-[#1a1a1a] shadow-[0_22px_55px_-38px_rgba(44,36,24,0.12)] ring-1 ring-black/[0.03]",
         /* Dark: Notes9 base dark theme */
         "dark:border-[#c59d7c]/25 dark:bg-[#1a1614] dark:text-[#f5f0e8] dark:shadow-[0_24px_70px_-40px_rgba(0,0,0,0.45)] dark:ring-0",
       )}
     >
-      <div className="grid items-center gap-10 lg:grid-cols-[minmax(0,1fr)_minmax(220px,300px)] lg:gap-12 lg:divide-x lg:divide-[#e8e2d8] dark:lg:divide-[#c59d7c]/22">
+      <div className="grid items-center gap-8 lg:grid-cols-[minmax(0,1fr)_minmax(220px,300px)] lg:gap-12 lg:divide-x lg:divide-[#e8e2d8] dark:lg:divide-[#c59d7c]/22">
         <div className="text-left">
           <span
             className={cn(
@@ -623,13 +623,13 @@ function PostTrustCtaBlock() {
             </span>
             Free to get started
           </span>
-          <h3 className="mt-5 text-2xl font-bold leading-tight tracking-tight text-[#1a1a1a] dark:text-[#f5f0e8] sm:text-3xl lg:text-[1.75rem] lg:leading-snug">
+          <h3 className="mt-5 text-[1.65rem] font-bold leading-tight tracking-tight text-[#1a1a1a] dark:text-[#f5f0e8] sm:text-3xl lg:text-[1.75rem] lg:leading-snug">
             See how <span className="text-[var(--n9-accent)]">connected</span> research can feel in practice
           </h3>
           <p className="mt-3 max-w-xl text-pretty text-[0.9375rem] leading-relaxed text-[#555] sm:text-base dark:text-[#f5f0e8]/92">
             If your team is juggling with papers, protocols, notes, data, and reporting across too many tools, <span className="text-[var(--n9-accent)]">Notes9</span> can help bringing that workflow together. Start free, request a demo or see how it works.
           </p>
-          <div className="mt-8 flex flex-col gap-3 sm:mt-9 sm:flex-row sm:flex-wrap sm:items-center">
+          <div className="mt-7 flex flex-col gap-3 sm:mt-9 sm:flex-row sm:flex-wrap sm:items-center">
             <Button
               asChild
               className={cn(
@@ -638,8 +638,8 @@ function PostTrustCtaBlock() {
                 "dark:bg-[var(--n9-accent)] dark:hover:bg-[var(--n9-accent-hover)]",
               )}
             >
-              <Link href={CONTACT_HASH} className="inline-flex items-center justify-center gap-2">
-                Request a demo
+              <Link href="/auth/sign-up" className="inline-flex items-center justify-center gap-2">
+                Start free
                 <ArrowRight className="h-4 w-4 shrink-0" aria-hidden />
               </Link>
             </Button>
@@ -652,7 +652,7 @@ function PostTrustCtaBlock() {
                 "dark:border-[#c59d7c]/55 dark:text-[#f5f0e8] dark:hover:bg-white/5",
               )}
             >
-              <Link href={FEATURES_HASH} className="inline-flex items-center justify-center gap-2">
+              <Link href={CONTACT_HASH} className="inline-flex items-center justify-center gap-2">
                 <span
                   className={cn(
                     "flex h-7 w-7 items-center justify-center rounded-full border",
@@ -661,7 +661,7 @@ function PostTrustCtaBlock() {
                 >
                   <Play className="h-3.5 w-3.5 fill-current" aria-hidden />
                 </span>
-                See how it works
+                Request a demo
               </Link>
             </Button>
             <Button

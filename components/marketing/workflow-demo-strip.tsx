@@ -75,19 +75,24 @@ export function WorkflowDemoStrip({
           fullBleed ? "absolute inset-0" : "rounded-xl border border-border/60 shadow-lg"
         } ${className}`}
       >
-        <div className={`relative w-full ${fullBleed ? "h-full" : "aspect-video"}`}>
+        <div
+          className={`relative w-full ${
+            fullBleed ? "h-full" : "aspect-[4/5] sm:aspect-[16/10] lg:aspect-video"
+          }`}
+        >
           <video
             src={videoSrc}
             autoPlay
             muted
             loop
             playsInline
-            className="h-full w-full object-cover object-top"
+            preload="metadata"
+            className="h-full w-full object-cover object-center sm:object-top"
             onError={() => setVideoFailed(true)}
           />
-          <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent" />
-          <div className="absolute bottom-0 left-0 right-0 p-4">
-            <span className="inline-flex rounded-full border border-[var(--n9-accent)]/40 bg-[var(--n9-accent-light)] px-4 py-1.5 text-sm font-semibold text-[var(--n9-accent)]">
+          <div className="absolute inset-0 bg-gradient-to-t from-black/72 via-black/10 to-transparent sm:from-black/60 sm:via-transparent" />
+          <div className="absolute bottom-0 left-0 right-0 p-3 sm:p-4">
+            <span className="inline-flex rounded-full border border-[var(--n9-accent)]/40 bg-[var(--n9-accent-light)] px-3 py-1.5 text-xs font-semibold text-[var(--n9-accent)] sm:px-4 sm:text-sm">
               Research workflow in action
             </span>
           </div>
@@ -104,13 +109,17 @@ export function WorkflowDemoStrip({
         fullBleed ? "absolute inset-0" : "rounded-xl border border-border/60 shadow-lg"
       } ${className}`}
     >
-      <div className={`relative w-full ${fullBleed ? "h-full" : "aspect-video"}`}>
+      <div
+        className={`relative w-full ${
+          fullBleed ? "h-full" : "aspect-[4/5] sm:aspect-[16/10] lg:aspect-video"
+        }`}
+      >
         {/* Use native img for reliable local path loading */}
         <img
           key={step.image}
           src={step.image}
           alt={step.label}
-          className="absolute inset-0 h-full w-full object-cover object-top"
+          className="absolute inset-0 h-full w-full object-cover object-center sm:object-top"
           onError={() => handleError(step.image)}
         />
         {effectiveSteps.length > 1 && prevStep && prevStep.image !== step.image && (
@@ -118,18 +127,18 @@ export function WorkflowDemoStrip({
             key={`prev-${prevStep.image}`}
             src={prevStep.image}
             alt=""
-            className="absolute inset-0 h-full w-full object-cover object-top transition-opacity duration-700"
+            className="absolute inset-0 h-full w-full object-cover object-center transition-opacity duration-700 sm:object-top"
             style={{ opacity: prevOpacity }}
             aria-hidden
           />
         )}
         {/* Gradient overlay for text readability */}
-        <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent" />
+        <div className="absolute inset-0 bg-gradient-to-t from-black/72 via-black/10 to-transparent sm:from-black/60 sm:via-transparent" />
         {/* Narrative label badge */}
-        <div className="absolute bottom-0 left-0 right-0 p-4">
+        <div className="absolute bottom-0 left-0 right-0 p-3 sm:p-4">
           <span
             key={step.label}
-            className="inline-flex rounded-full border border-[var(--n9-accent)]/40 bg-[var(--n9-accent-light)] px-4 py-1.5 text-sm font-semibold text-[var(--n9-accent)] transition-opacity duration-300"
+            className="inline-flex rounded-full border border-[var(--n9-accent)]/40 bg-[var(--n9-accent-light)] px-3 py-1.5 text-xs font-semibold text-[var(--n9-accent)] transition-opacity duration-300 sm:px-4 sm:text-sm"
           >
             {step.label}
           </span>
@@ -137,7 +146,7 @@ export function WorkflowDemoStrip({
       </div>
       {/* Step indicators */}
       {effectiveSteps.length > 1 && (
-        <div className="absolute right-3 top-3 flex gap-1.5">
+        <div className="absolute right-2.5 top-2.5 flex gap-1.5 sm:right-3 sm:top-3">
           {effectiveSteps.map((_, i) => (
             <div
               key={i}
