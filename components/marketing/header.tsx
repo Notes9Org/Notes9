@@ -39,12 +39,15 @@ export function Header() {
             <Button variant="ghost" size="sm" asChild>
               <Link href="/auth/login">Sign In</Link>
             </Button>
+            <Button variant="outline" size="sm" asChild className="rounded-full">
+              <Link href="/#contact">Request a demo</Link>
+            </Button>
             <Button
               size="sm"
               asChild
               className="rounded-full bg-[var(--n9-accent)] px-5 text-white shadow-[0_12px_40px_-12px_var(--n9-accent-glow)] hover:bg-[var(--n9-accent-hover)]"
             >
-              <Link href="/#contact">Request a demo</Link>
+              <Link href="/auth/sign-up">Start free</Link>
             </Button>
             <ModeToggle />
           </div>
@@ -80,6 +83,14 @@ export function Header() {
                 <Button
                   size="sm"
                   className="w-full justify-center rounded-full bg-[var(--n9-accent)] text-white hover:bg-[var(--n9-accent-hover)]"
+                  asChild
+                >
+                  <Link href="/auth/sign-up">Start free</Link>
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="w-full justify-center rounded-full"
                   asChild
                 >
                   <Link href="/#contact">Request a demo</Link>

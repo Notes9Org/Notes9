@@ -217,6 +217,7 @@ const FLOW_CARDS = [
 ] as const
 
 type FlowCardKey = (typeof FLOW_CARDS)[number]["key"]
+const MOBILE_SOURCE_KEYS = ["literature", "protocols", "experiments", "lab-notes"] as const
 
 function CardSkeleton({ cardKey }: { cardKey: FlowCardKey }) {
   const line = (w: string, h = "h-[2px]") => (
@@ -1110,6 +1111,9 @@ export function ConnectedResearchSystemDiagram({ className = "" }: { className?:
               : "border-rose-500/25 bg-rose-50/90 text-rose-900 dark:border-rose-400/30 dark:bg-rose-950/40 dark:text-rose-200"
 
   const isMobile = wrapWidth > 0 && wrapWidth < 580
+  const mobileSourceCards = FLOW_CARDS.filter((card) =>
+    MOBILE_SOURCE_KEYS.includes(card.key as (typeof MOBILE_SOURCE_KEYS)[number]),
+  )
 
   const desktopFitScale = useMemo(() => {
     if (wrapWidth <= 0 || wrapWidth < 580) return 1
@@ -1169,26 +1173,87 @@ export function ConnectedResearchSystemDiagram({ className = "" }: { className?:
       style={!isMobile ? { height: `${desktopLayoutH}px` } : undefined}
     >
       {isMobile ? (
-        /* ── Mobile: stacked layout, no flying deck, chips in 3×2 grid ── */
-        <div className="relative z-[5] flex h-full flex-col px-3 pb-5 pt-5" aria-labelledby="n9-diagram-mobile-title">
-          <div className="flex shrink-0 items-center justify-center gap-2 pb-4">
+        /* ── Mobile: preserve the connection story as a vertical flow ── */
+        <div className="relative z-[5] flex h-full flex-col px-3 pb-5 pt-4" aria-labelledby="n9-diagram-mobile-title">
+          <div className="pb-4 text-center">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-[var(--n9-accent)]">
+              Research context flowing together
+            </p>
+            <p className="mt-1 text-sm leading-6 text-muted-foreground">
+              Literature, protocols, experiments, and notes converge before Catalyst helps move the work forward.
+            </p>
+          </div>
+
+          <div className="grid grid-cols-2 gap-2.5">
+            {mobileSourceCards.map((card, index) => (
+              <div
+                key={card.key}
+                className={`rounded-2xl border border-black/[0.08] bg-white/92 px-3 py-2.5 shadow-[0_12px_32px_-18px_rgba(20,16,12,0.2)] backdrop-blur-sm transition-all duration-300 dark:border-white/[0.1] dark:bg-[#1e1d20]/92 dark:shadow-[0_14px_32px_-18px_rgba(0,0,0,0.45)] ${
+                  phase.cat || phase.n9 ? "translate-y-0 opacity-100" : "translate-y-1 opacity-75"
+                }`}
+                style={{ transitionDelay: `${index * 90}ms` }}
+              >
+                <div className="flex items-center gap-2">
+                  <span
+                    className="h-2.5 w-2.5 shrink-0 rounded-full"
+                    style={{ backgroundColor: card.accent }}
+                    aria-hidden
+                  />
+                  <p className="text-[13px] font-semibold tracking-tight text-[#12100e] dark:text-white/95">
+                    {card.label}
+                  </p>
+                </div>
+                <div className="mt-2 space-y-1.5 opacity-80">
+                  <CardSkeleton cardKey={card.key} />
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <div className="flex flex-col items-center py-3" aria-hidden>
+            <div className="h-6 w-px bg-[linear-gradient(180deg,rgba(139,92,246,0.14),rgba(139,92,246,0.45))]" />
+            <div className="h-2 w-2 rounded-full bg-violet-400/55 shadow-[0_0_16px_rgba(139,92,246,0.35)]" />
+          </div>
+
+          <div className="flex flex-col items-center gap-3">
             {n9StatusNode("n9-diagram-mobile-title")}
-            <div className="h-px flex-1 max-w-[44px] bg-violet-400/35" aria-hidden />
-            <div ref={catRef} className={`flex flex-col items-center gap-1.5 transition-opacity duration-300 ${phase.cat ? "opacity-100" : "opacity-0"}`}>
-              <CatalystGrainBackdrop active={phase.cat} reduceMotion={reduceMotion} className="h-14 w-14">
+
+            <div className="flex flex-col items-center" aria-hidden>
+              <div className="h-8 w-px bg-[linear-gradient(180deg,rgba(139,92,246,0.58),rgba(139,92,246,0.16))]" />
+              <div className="h-2.5 w-2.5 rounded-full bg-violet-500/60 shadow-[0_0_18px_rgba(139,92,246,0.35)]" />
+            </div>
+
+            <div ref={catRef} className={`flex flex-col items-center gap-1.5 transition-all duration-300 ${phase.cat ? "translate-y-0 opacity-100" : "translate-y-2 opacity-0"}`}>
+              <CatalystGrainBackdrop active={phase.cat} reduceMotion={reduceMotion} className="h-16 w-16">
                 <IceMascot className="hero-pendulum h-full w-full" options={{ src: "/notes9-mascot-ui.png" }} aria-hidden />
               </CatalystGrainBackdrop>
               <p className="text-center text-[15px] font-semibold uppercase tracking-[0.14em] text-[var(--n9-accent)]">Catalyst AI</p>
+              <p className="max-w-[16rem] text-center text-[12px] leading-5 text-muted-foreground">
+                Grounds answers in connected research context instead of isolated files.
+              </p>
             </div>
-            <div className="h-px flex-1 max-w-[44px] bg-violet-400/35" aria-hidden />
+
+            <div className="flex flex-col items-center" aria-hidden>
+              <div className="h-7 w-px bg-[linear-gradient(180deg,rgba(139,92,246,0.58),rgba(139,92,246,0.16))]" />
+              <div className="h-2.5 w-2.5 rounded-full bg-violet-500/60 shadow-[0_0_18px_rgba(139,92,246,0.35)]" />
+            </div>
+
             <div className="rounded-xl border border-black/[0.08] bg-white/90 px-3 py-2.5 text-center backdrop-blur-sm dark:border-white/[0.1] dark:bg-[#1e1d20]/90">
-              <p className="text-[18px] font-semibold tracking-tight text-[#12100e] dark:text-white/95">Research</p>
-              <p className="mt-0.5 text-[14px] font-medium uppercase tracking-[0.14em] text-muted-foreground">Workflow</p>
+              <p className="text-[18px] font-semibold tracking-tight text-[#12100e] dark:text-white/95">Research workflow</p>
+              <p className="mt-0.5 text-[13px] font-medium text-muted-foreground">
+                Connected outputs across the workspace
+              </p>
             </div>
           </div>
-          <div className="grid flex-1 grid-cols-3 gap-2">
+
+          <div className="mt-4 grid flex-1 grid-cols-2 gap-2.5">
             {chipMeta.map((c, i) => (
-              <div key={c.label} ref={chipRefs[i]} className={`transition-opacity duration-300 ${phase.chips[i] ? "opacity-100" : "opacity-0"}`}>
+              <div
+                key={c.label}
+                ref={chipRefs[i]}
+                className={`transition-all duration-300 ${phase.chips[i] ? "translate-y-0 opacity-100" : "translate-y-2 opacity-0"}`}
+                style={{ transitionDelay: `${i * 90}ms` }}
+              >
                 {hubChipCard(c, true)}
               </div>
             ))}
