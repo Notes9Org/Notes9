@@ -13,7 +13,7 @@ import {
   Sparkles,
   TestTube2,
 } from "lucide-react"
-import { Notes9LoaderGif } from "@/components/brand/notes9-loader-gif"
+import { IceMascot } from "@/components/ui/ice-mascot"
 import { cn } from "@/lib/utils"
 
 export type Notes9LoaderVariant =
@@ -86,7 +86,13 @@ function Mascot({
       : "w-[68px] sm:w-[72px]"
     : "w-[84px] sm:w-[92px]"
 
-  return <Notes9LoaderGif alt="Notes9 loader" widthClassName={cn(widthCls)} className="shrink-0" />
+  return (
+    <IceMascot
+      className={cn(widthCls, "shrink-0")}
+      options={{ src: "/notes9-mascot-ui.png" }}
+      aria-label="Notes9 loader mascot"
+    />
+  )
 }
 
 function OrbitSparkle({ compact, inline }: { compact: boolean; inline?: boolean }) {
