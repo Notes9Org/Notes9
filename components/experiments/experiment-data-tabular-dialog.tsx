@@ -197,13 +197,18 @@ export function ExperimentDataTabularDialog({
     if (s) void flushSave(s, true)
   }
 
-  const gridHeightClass = fullPage ? "min-h-0 flex-1 h-[min(72vh,calc(100vh-11rem))]" : "min-h-[420px] h-[560px]"
+  const gridHeightClass = fullPage ? "min-h-0 flex-1 h-full" : "min-h-[420px] h-[560px]"
 
   if (!open) return null
 
   const overlay = (
     // z-[130] places this above the sidebar (z-[120]) so the backdrop properly covers it.
-    <div className="fixed inset-0 z-[130] flex items-start justify-center overflow-y-auto p-4 sm:p-6">
+    <div
+      className={cn(
+        "fixed inset-0 z-[130] flex overflow-y-auto",
+        fullPage ? "items-stretch justify-stretch p-0" : "items-start justify-center p-4 sm:p-6"
+      )}
+    >
       <button
         type="button"
         className="absolute inset-0 bg-black/60 dark:bg-black/70"
@@ -217,7 +222,7 @@ export function ExperimentDataTabularDialog({
         className={cn(
           "relative z-10 flex w-full flex-col overflow-visible rounded-lg border bg-background shadow-xl",
           fullPage
-            ? "mt-2 max-h-[calc(100vh-2rem)] min-h-0 h-[calc(100vh-2rem)] max-w-[calc(100vw-2rem)]"
+            ? "m-0 h-screen max-h-screen min-h-0 max-w-none rounded-none border-0"
             : "mt-[5vh] max-h-[90vh] max-w-5xl"
         )}
         onClick={(e) => e.stopPropagation()}
@@ -272,7 +277,12 @@ export function ExperimentDataTabularDialog({
           </div>
         </div>
 
-        <div className={cn("flex min-h-0 flex-1 flex-col px-1 pb-2 sm:px-2 sm:pb-3", fullPage && "min-h-0")}>
+        <div
+          className={cn(
+            "flex min-h-0 flex-1 flex-col",
+            fullPage ? "px-0 pb-0" : "px-1 pb-2 sm:px-2 sm:pb-3"
+          )}
+        >
           {loading && (
             <div className="flex h-[420px] flex-1 items-center justify-center text-muted-foreground">
               <Loader2 className="h-8 w-8 animate-spin" />

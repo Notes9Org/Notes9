@@ -19,8 +19,6 @@ const navigation = [
   { name: "Projects", href: "/projects", icon: Folder },
   { name: "Experiments", href: "/experiments", icon: FlaskConical },
   { name: "Lab Notes", href: "/lab-notes", icon: FileText },
-  { name: "Samples", href: "/samples", icon: TestTube },
-  { name: "Equipment", href: "/equipment", icon: Microscope },
   { name: "Protocols", href: "/protocols", icon: ClipboardInfoIcon },
   { name: "Reports", href: "/reports", icon: BarChart3 },
   { name: "Settings", href: "/settings", icon: Settings },

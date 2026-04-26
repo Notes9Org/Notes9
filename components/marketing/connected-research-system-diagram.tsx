@@ -1365,14 +1365,8 @@ export function ConnectedResearchSystemDiagram({ className = "" }: { className?:
               style={{ height: violetRailPx }}
             >
               {/* Feather uses same height as rail for exact length match. */}
-              <div
-                className="pointer-events-none absolute inset-y-0 left-1/2 w-[26px] -translate-x-full"
-                style={{
-                  background:
-                    "linear-gradient(90deg, rgba(139,92,246,0) 0%, rgba(139,92,246,0.08) 62%, rgba(139,92,246,0.2) 100%)",
-                }}
-              />
-              <div className="pointer-events-none absolute inset-y-0 left-1/2 w-[1.5px] -translate-x-1/2 rounded-full bg-violet-500/45 shadow-[0_0_12px_rgba(139,92,246,0.35)] dark:bg-violet-400/50 dark:shadow-[0_0_14px_rgba(167,139,250,0.25)]" />
+              <div className="pointer-events-none absolute inset-y-0 left-1/2 w-[26px] -translate-x-full bg-[linear-gradient(90deg,rgba(0,0,0,0)_0%,rgba(0,0,0,0.08)_62%,rgba(0,0,0,0.2)_100%)] dark:bg-[linear-gradient(90deg,rgba(255,255,255,0)_0%,rgba(255,255,255,0.1)_62%,rgba(255,255,255,0.24)_100%)]" />
+              <div className="pointer-events-none absolute inset-y-0 left-1/2 w-[1.5px] -translate-x-1/2 rounded-full bg-black/45 shadow-[0_0_12px_rgba(0,0,0,0.35)] dark:bg-white/55 dark:shadow-[0_0_14px_rgba(255,255,255,0.3)]" />
             </div>
           </div>
 
