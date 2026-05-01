@@ -19,7 +19,11 @@ export type Notes9AgentRequestInput = {
   session_id: string;
   history?: Notes9AgentHistoryItem[];
   scope?: object | null;
-  options?: { debug?: boolean; max_retries?: number };
+  options?: {
+    debug?: boolean;
+    max_retries?: number;
+    tags?: Array<{ kind: string; id: string; title: string }>;
+  };
 };
 
 export function notes9AgentIncludesBodyHistory(): boolean {

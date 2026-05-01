@@ -61,9 +61,6 @@ function stripLegacyMarkdownReferencesSection(md: string): string {
 
 function formatNotes9Footer(donePayload: DonePayload): string {
   const parts: string[] = [];
-  if (donePayload.confidence != null && donePayload.confidence >= 0 && donePayload.confidence <= 1) {
-    parts.push(`Confidence ${Math.round(donePayload.confidence * 100)}%`);
-  }
   const tool = donePayload.tool_used;
   if (tool && tool !== 'none') {
     const t = TOOL_USED_LABEL[tool] ?? tool;

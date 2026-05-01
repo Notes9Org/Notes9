@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { NotebookPen, Grid3x3, List, ArrowUpRight } from "lucide-react"
+import { CATALYST_MENTION_DRAG_MIME } from "@/lib/catalyst-mention-types"
 
 type LabNote = {
   id: string
@@ -107,7 +108,19 @@ export default function LabNotesList({
           {notes.map((note) => (
             <Card 
               key={note.id} 
+              draggable
               className="bg-card hover:border-primary transition-colors flex flex-col min-w-0 overflow-hidden cursor-pointer"
+              onDragStart={(e) => {
+                e.dataTransfer.setData(
+                  CATALYST_MENTION_DRAG_MIME,
+                  JSON.stringify({
+                    kind: "lab_note",
+                    id: note.id,
+                    title: note.title,
+                  })
+                )
+                e.dataTransfer.effectAllowed = "copy"
+              }}
               onClick={() => handleSelectNote(note)}
             >
               <CardHeader className="pb-3 min-w-0">
@@ -189,7 +202,19 @@ export default function LabNotesList({
                   {notes.map((note) => (
                     <TableRow
                       key={note.id}
+                      draggable
                       className="cursor-pointer"
+                      onDragStart={(e) => {
+                        e.dataTransfer.setData(
+                          CATALYST_MENTION_DRAG_MIME,
+                          JSON.stringify({
+                            kind: "lab_note",
+                            id: note.id,
+                            title: note.title,
+                          })
+                        )
+                        e.dataTransfer.effectAllowed = "copy"
+                      }}
                       onClick={() => handleSelectNote(note)}
                     >
                       <TableCell className="font-medium text-foreground">

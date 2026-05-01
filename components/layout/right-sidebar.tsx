@@ -10,6 +10,7 @@ import {
   type ChangeEvent,
   type DragEvent,
 } from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useChat } from '@ai-sdk/react';
 import { DefaultChatTransport } from 'ai';
@@ -43,7 +44,11 @@ import {
   X,
   Mic,
   BookOpen,
+  FlaskConical,
+  FolderOpen,
+  FileText,
   Loader2,
+  AtSign,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import {
@@ -94,6 +99,12 @@ import {
   LITERATURE_DRAG_MIME,
   isLiteratureRoutePath,
 } from '@/lib/catalyst-agent-types';
+import {
+  CATALYST_MENTION_DRAG_MIME,
+  type CatalystMentionDragPayload,
+  type CatalystMentionKind,
+  catalystMentionPath,
+} from '@/lib/catalyst-mention-types';
 import { useLiteratureMentionCandidates } from '@/contexts/literature-mention-context';
 import { useLiteratureAgentStream } from '@/hooks/use-literature-agent-stream';
 import type { LiteratureAgentDonePayload } from '@/lib/literature-agent-types';
@@ -178,7 +189,74 @@ function notes9HistoryTurnContent(msg: {
   parts?: Array<{ type?: string; text?: string }>;
 }): string {
   const raw = getPlainTextFromMessage(msg);
-  return notes9PlainTextForApiHistory(raw, msg.role);
+  const plain = notes9PlainTextForApiHistory(raw, msg.role);
+  if (msg.role !== 'user') return plain;
+  return plain.replace(
+    /\[((?:\\.|[^\]])+)\]\(\/(?:literature-reviews|lab-notes|experiments|projects|protocols)\/[0-9a-z-]+\)/gi,
+    '$1'
+  );
+}
+
+function serializeComposerToUserMarkdown(el: HTMLDivElement | null): string {
+  if (!el) return '';
+  const parts: string[] = [];
+  for (const node of Array.from(el.childNodes)) {
+    if (node.nodeType === Node.TEXT_NODE) {
+      parts.push(node.textContent ?? '');
+      continue;
+    }
+    if (node.nodeType === Node.ELEMENT_NODE) {
+      const e = node as HTMLElement;
+      const id = e.getAttribute('data-caty-tag-id');
+      const kind = e.getAttribute('data-caty-tag-kind') as CatalystMentionKind | null;
+      const title = e.getAttribute('data-caty-tag-title');
+      if (id && kind && title) {
+        parts.push(`[${title}](${catalystMentionPath(kind, id)})`);
+      } else {
+        parts.push(e.textContent ?? '');
+      }
+    }
+  }
+  return parts.join('').replace(/\s+/g, ' ').trim();
+}
+
+function extractTagItemsFromMarkdown(markdown: string): Array<{
+  kind: CatalystMentionKind;
+  id: string;
+  title: string;
+}> {
+  const out: Array<{ kind: CatalystMentionKind; id: string; title: string }> = [];
+  const pattern =
+    /\[((?:\\.|[^\]])+)\]\(\/(literature-reviews|lab-notes|experiments|projects|protocols)\/([0-9a-z-]+)\)/gi;
+  let m: RegExpExecArray | null;
+  while ((m = pattern.exec(markdown)) !== null) {
+    const title = m[1]?.replace(/\\([\[\]\\])/g, '$1') ?? '';
+    const route = m[2];
+    const id = m[3];
+    const kind: CatalystMentionKind =
+      route === 'literature-reviews'
+        ? 'literature_review'
+        : route === 'lab-notes'
+          ? 'lab_note'
+          : route === 'experiments'
+            ? 'experiment'
+            : route === 'projects'
+              ? 'project'
+              : 'protocol';
+    out.push({ kind, id, title });
+  }
+  return out;
+}
+
+function mergeUniqueTags(
+  a: Array<{ kind: CatalystMentionKind; id: string; title: string }>,
+  b: Array<{ kind: CatalystMentionKind; id: string; title: string }>
+): Array<{ kind: CatalystMentionKind; id: string; title: string }> {
+  const map = new Map<string, { kind: CatalystMentionKind; id: string; title: string }>();
+  for (const t of [...a, ...b]) {
+    map.set(`${t.kind}:${t.id}`, t);
+  }
+  return Array.from(map.values());
 }
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024;
@@ -214,7 +292,7 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
   const searchParams = useSearchParams();
   const paperAI = usePaperAI();
   const [input, setInput] = useState('');
-  const [agentMode, setAgentMode] = useState<CatalystAgentMode>('general');
+  const [agentMode] = useState<CatalystAgentMode>('notes9');
   const [taggedLiterature, setTaggedLiterature] = useState<Array<{ id: string; title: string }>>([]);
   const [mentionOpen, setMentionOpen] = useState(false);
   const [mentionFilter, setMentionFilter] = useState('');
@@ -224,11 +302,20 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
   const [literaturePlainLen, setLiteraturePlainLen] = useState(0);
   const [fallbackMentionCandidates, setFallbackMentionCandidates] = useState<LiteratureMentionCandidate[]>([]);
   const [webSearchEnabled, setWebSearchEnabled] = useState(true);
+  const [mentionQuery, setMentionQuery] = useState('');
+  const [mentionOpenForInput, setMentionOpenForInput] = useState(false);
+  const [mentionSelectIndex, setMentionSelectIndex] = useState(0);
+  const [allMentionItems, setAllMentionItems] = useState<
+    Array<{ kind: CatalystMentionKind; id: string; title: string }>
+  >([]);
+  const [selectedMentions, setSelectedMentions] = useState<
+    Array<{ kind: CatalystMentionKind; id: string; title: string }>
+  >([]);
   const [savedMessageIds, setSavedMessageIds] = useState<Set<string>>(() => new Set());
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
   const [userId, setUserId] = useState<string>('');
   const [notes9Loading, setNotes9Loading] = useState(false);
-  const inputRef = useRef<HTMLTextAreaElement>(null);
+  const inputRef = useRef<HTMLDivElement>(null);
   const literatureEditableRef = useRef<HTMLDivElement>(null);
   const literatureMentionListRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -258,14 +345,15 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
   });
 
   const resizeInput = useCallback((reset = false) => {
-    const textarea = inputRef.current;
-    if (!textarea) return;
-    textarea.style.height = 'auto';
-    if (reset || !textarea.value.trim()) {
-      textarea.style.height = '52px';
+    const composer = inputRef.current;
+    if (!composer) return;
+    composer.style.height = 'auto';
+    const plain = composer.innerText ?? '';
+    if (reset || !plain.trim()) {
+      composer.style.height = '52px';
       return;
     }
-    textarea.style.height = `${Math.min(textarea.scrollHeight, 300)}px`;
+    composer.style.height = `${Math.min(composer.scrollHeight, 300)}px`;
   }, []);
 
   // Cursor-like UI States
@@ -291,6 +379,54 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
       if (user) setUserId(user.id);
     };
     loadUserId();
+  }, [supabase]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const loadMentionItems = async () => {
+      const { data: lit } = await supabase
+        .from('literature_reviews')
+        .select('id,title')
+        .order('updated_at', { ascending: false })
+        .limit(120);
+      const { data: notes } = await supabase
+        .from('lab_notes')
+        .select('id,title')
+        .order('created_at', { ascending: false })
+        .limit(120);
+      const { data: experiments } = await supabase
+        .from('experiments')
+        .select('id,name')
+        .order('created_at', { ascending: false })
+        .limit(120);
+      const { data: projects } = await supabase
+        .from('projects')
+        .select('id,name')
+        .order('created_at', { ascending: false })
+        .limit(120);
+      const { data: protocols } = await supabase
+        .from('protocols')
+        .select('id,name')
+        .order('created_at', { ascending: false })
+        .limit(120);
+
+      if (cancelled) return;
+
+      const merged: Array<{ kind: CatalystMentionKind; id: string; title: string }> = [
+        ...(lit ?? []).map((r) => ({ kind: 'literature_review' as const, id: r.id, title: r.title ?? 'Untitled literature' })),
+        ...(notes ?? []).map((r) => ({ kind: 'lab_note' as const, id: r.id, title: r.title ?? 'Untitled note' })),
+        ...(experiments ?? []).map((r) => ({ kind: 'experiment' as const, id: r.id, title: r.name ?? 'Untitled experiment' })),
+        ...(projects ?? []).map((r) => ({ kind: 'project' as const, id: r.id, title: r.name ?? 'Untitled project' })),
+        ...(protocols ?? []).map((r) => ({ kind: 'protocol' as const, id: r.id, title: r.name ?? 'Untitled protocol' })),
+      ];
+
+      setAllMentionItems(merged);
+    };
+
+    loadMentionItems();
+    return () => {
+      cancelled = true;
+    };
   }, [supabase]);
 
   useEffect(() => {
@@ -386,6 +522,102 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
         a.title.localeCompare(b.title, undefined, { sensitivity: 'base' })
       ),
     [taggedLiterature]
+  );
+
+  const filteredGlobalMentions = useMemo(() => {
+    const q = mentionQuery.trim().toLowerCase();
+    if (!q) return allMentionItems.slice(0, 20);
+    return allMentionItems
+      .filter((m) => m.title.toLowerCase().includes(q))
+      .slice(0, 20);
+  }, [allMentionItems, mentionQuery]);
+
+  const mentionIconMarkup = useCallback((kind: CatalystMentionKind): string => {
+    const common = 'h-3.5 w-3.5 shrink-0 text-muted-foreground';
+    if (kind === 'literature_review') {
+      return renderToStaticMarkup(<BookOpen className={common} />);
+    }
+    if (kind === 'lab_note') {
+      return renderToStaticMarkup(<NotebookPen className={common} />);
+    }
+    if (kind === 'experiment') {
+      return renderToStaticMarkup(<FlaskConical className={common} />);
+    }
+    if (kind === 'project') {
+      return renderToStaticMarkup(<FolderOpen className={common} />);
+    }
+    return renderToStaticMarkup(<ClipboardInfoIcon className={common} />);
+  }, []);
+
+  const appendMentionToInput = useCallback(
+    (item: { kind: CatalystMentionKind; id: string; title: string }) => {
+      const composer = inputRef.current;
+      const sel = window.getSelection();
+      if (composer && sel && sel.rangeCount > 0) {
+        const range = sel.getRangeAt(0);
+        const node = range.startContainer;
+
+        const chip = document.createElement('span');
+        chip.contentEditable = 'false';
+        chip.className =
+          'mx-0.5 inline-flex max-w-[24rem] items-center gap-1 rounded-md bg-secondary px-2 py-0.5 text-xs text-secondary-foreground align-middle';
+        chip.setAttribute('data-caty-tag-id', item.id);
+        chip.setAttribute('data-caty-tag-kind', item.kind);
+        chip.setAttribute('data-caty-tag-title', item.title);
+
+        const icon = document.createElement('span');
+        icon.className = 'inline-flex h-3.5 w-3.5 shrink-0 items-center justify-center';
+        icon.innerHTML = mentionIconMarkup(item.kind);
+        chip.appendChild(icon);
+
+        const label = document.createElement('span');
+        label.className = 'truncate';
+        label.textContent = item.title;
+        chip.appendChild(label);
+
+        if (node.nodeType === Node.TEXT_NODE) {
+          const text = node.textContent ?? '';
+          const caretOffset = range.startOffset;
+          const beforeCaret = text.slice(0, caretOffset);
+          const atIndex = beforeCaret.lastIndexOf('@');
+          if (atIndex >= 0) {
+            const replaceRange = document.createRange();
+            replaceRange.setStart(node, atIndex);
+            replaceRange.setEnd(node, caretOffset);
+            replaceRange.deleteContents();
+            replaceRange.insertNode(chip);
+          } else {
+            range.deleteContents();
+            range.insertNode(chip);
+          }
+        } else {
+          range.deleteContents();
+          range.insertNode(chip);
+        }
+
+        const spacer = document.createTextNode(' ');
+        chip.parentNode?.insertBefore(spacer, chip.nextSibling);
+        const caret = document.createRange();
+        caret.setStartAfter(spacer);
+        caret.collapse(true);
+        sel.removeAllRanges();
+        sel.addRange(caret);
+      }
+      setSelectedMentions((prev) => {
+        if (prev.some((m) => m.kind === item.kind && m.id === item.id)) return prev;
+        return [...prev, item];
+      });
+      setMentionOpenForInput(false);
+      setMentionQuery('');
+      setMentionSelectIndex(0);
+      requestAnimationFrame(() => {
+        const plain = inputRef.current?.innerText ?? '';
+        setInput(plain);
+        inputRef.current?.focus();
+        resizeInput();
+      });
+    },
+    [mentionIconMarkup, resizeInput]
   );
 
   const finalizeLiteratureAssistant = useCallback(
@@ -579,15 +811,9 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
     const onProtocolDesign =
       Boolean((pathname ?? '').startsWith('/protocols/')) &&
       searchParams.get('design') === '1';
-    if (onLit) {
-      if (!suppressLiteratureAutoModeRef.current) {
-        setAgentMode('literature');
-      }
-      wasOnLiteratureRouteRef.current = true;
-      return;
-    }
-    if (onProtocolDesign) {
-      setAgentMode('protocol');
+    if (onLit || onProtocolDesign) {
+      wasOnLiteratureRouteRef.current = onLit;
+      suppressLiteratureAutoModeRef.current = true;
       return;
     }
     wasOnLiteratureRouteRef.current = false;
@@ -596,9 +822,6 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
     setMentionOpen(false);
     literatureEditableRef.current?.replaceChildren();
     setLiteraturePlainLen(0);
-    setAgentMode((m) =>
-      m === 'literature' || m === 'protocol' ? savedModeOutsideLiteratureRef.current : m
-    );
   }, [pathname, searchParams]);
 
   const applyLiteratureMentionFromMenu = useCallback(
@@ -650,13 +873,29 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
 
   const handleNonFileDrop = useCallback(
     (e: DragEvent) => {
-      if (agentMode !== 'literature' || !isLiteratureRoute) return false;
+      const unifiedRaw = e.dataTransfer.getData(CATALYST_MENTION_DRAG_MIME);
+      if (unifiedRaw) {
+        try {
+          const p = JSON.parse(unifiedRaw) as CatalystMentionDragPayload;
+          if (p?.id && p?.title && p.kind) {
+            appendMentionToInput({ kind: p.kind, id: p.id, title: p.title });
+            return true;
+          }
+        } catch {
+          /* ignore */
+        }
+      }
+
       const raw = e.dataTransfer.getData(LITERATURE_DRAG_MIME);
       if (!raw) return false;
       try {
         const p = JSON.parse(raw) as LiteratureDragPayload;
         if (p?.id && p?.title) {
-          addTaggedLiterature(p.id, p.title);
+          appendMentionToInput({
+            kind: 'literature_review',
+            id: p.id,
+            title: p.title,
+          });
           return true;
         }
       } catch {
@@ -664,7 +903,7 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
       }
       return false;
     },
-    [agentMode, isLiteratureRoute, addTaggedLiterature]
+    [appendMentionToInput]
   );
 
   const handleEscapeToNonLiteratureMode = useCallback(
@@ -695,7 +934,6 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
         return;
       }
       suppressLiteratureAutoModeRef.current = true;
-      setAgentMode(mode);
       agentStream.reset();
       literatureAgentStream.reset();
     },
@@ -711,7 +949,6 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
 
   const goToLiteratureAgent = useCallback(() => {
     suppressLiteratureAutoModeRef.current = false;
-    setAgentMode('literature');
     if (!isLiteratureRoutePath(pathname ?? null)) {
       window.dispatchEvent(new Event("notes9:tour-open-ai-sidebar"));
       router.push('/literature-reviews');
@@ -721,7 +958,6 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
   const goToProtocolAgent = useCallback(() => {
     suppressLiteratureAutoModeRef.current = true;
     if (isProtocolDesignRoute) {
-      setAgentMode('protocol');
       return;
     }
     toast.message('Select a protocol, then click Design to open Protocol.');
@@ -735,8 +971,6 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
         goToLiteratureAgent();
       } else if (mode === 'protocol') {
         goToProtocolAgent();
-      } else {
-        setAgentMode(mode);
       }
     },
     [goToLiteratureAgent, goToProtocolAgent]
@@ -903,9 +1137,22 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
     setAttachments((prev) => prev.filter((_, i) => i !== index));
   };
 
-  const handleTextareaChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    const v = e.target.value;
+  const handleTextareaChange = (e: React.FormEvent<HTMLDivElement>) => {
+    const v = e.currentTarget.innerText ?? '';
     setInput(v);
+    const marker = v.lastIndexOf('@');
+    if (marker >= 0) {
+      const suffix = v.slice(marker + 1);
+      if (!/\s/.test(suffix)) {
+        setMentionQuery(suffix);
+        setMentionOpenForInput(true);
+        setMentionSelectIndex(0);
+      } else {
+        setMentionOpenForInput(false);
+      }
+    } else {
+      setMentionOpenForInput(false);
+    }
     resizeInput();
   };
 
@@ -936,8 +1183,13 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
       return;
     }
 
+    const composerStoredMarkdown = serializeComposerToUserMarkdown(inputRef.current);
+    const parsedComposerTags = extractTagItemsFromMarkdown(composerStoredMarkdown);
+    const requestTags = mergeUniqueTags(selectedMentions, parsedComposerTags);
     const text =
-      agentMode === 'literature' && isLiteratureRoute ? literaturePlain : input;
+      agentMode === 'literature' && isLiteratureRoute
+        ? literaturePlain
+        : (inputRef.current?.innerText ?? input).trim();
     const mentionsBefore =
       agentMode === 'literature' && isLiteratureRoute && litEl
         ? getMentionsFromLiteratureEditable(litEl)
@@ -976,7 +1228,9 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
 
     const currentAttachments = [...attachments];
     setInput('');
+      setSelectedMentions([]);
     setAttachments([]);
+    if (inputRef.current) inputRef.current.innerHTML = '';
     requestAnimationFrame(() => resizeInput(true));
     if (agentMode === 'literature' && isLiteratureRoute && litEl) {
       clearLiteratureEditablePlainText(litEl);
@@ -1078,17 +1332,18 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
       }
 
       const userMessageId = `user-${Date.now()}`;
+      const userStoredContent = composerStoredMarkdown || text;
       const userMessage = {
         id: userMessageId,
         role: 'user' as const,
-        content: text,
-        parts: [{ type: 'text' as const, text }],
+        content: userStoredContent,
+        parts: [{ type: 'text' as const, text: userStoredContent }],
         createdAt: new Date(),
       };
       setMessages((prev) => [...prev, userMessage]);
 
       const sessionId = currentSessionRef.current!;
-      const savedUser = await saveMessage(sessionId, 'user', text);
+      const savedUser = await saveMessage(sessionId, 'user', userStoredContent);
       if (savedUser) {
         setSavedMessageIds((prev) => new Set(prev).add(savedUser.id));
         setMessages((prev) => {
@@ -1112,7 +1367,10 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
           query: text,
           session_id: sessionId,
           history,
-        },
+          options: {
+            tags: requestTags,
+          },
+        } as any,
         token
       );
       setNotes9Loading(false);
@@ -1273,8 +1531,17 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
         }
 
         setNotes9Loading(true);
+        const parsedEditTags = extractTagItemsFromMarkdown(newContent);
+        const requestTags = mergeUniqueTags(selectedMentions, parsedEditTags);
         const { donePayload, error } = await agentStream.runStream(
-          { query: newContent, session_id: sid, history },
+        {
+          query: newContent,
+          session_id: sid,
+          history,
+          options: {
+              tags: requestTags,
+          },
+          } as any,
           token
         );
         setNotes9Loading(false);
@@ -1405,6 +1672,8 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
       setMessages((curr) => curr.slice(0, lastAssistantIndex));
 
       const query = getPlainTextFromMessage(lastUserMessage);
+      const parsedRegenTags = extractTagItemsFromMarkdown(query);
+      const requestTags = mergeUniqueTags(selectedMentions, parsedRegenTags);
       const history = messages.slice(0, lastAssistantIndex - 1).map((m) => ({
         role: m.role,
         content: notes9HistoryTurnContent(m),
@@ -1419,7 +1688,14 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
 
       setNotes9Loading(true);
       const { donePayload, error } = await agentStream.runStream(
-        { query, session_id: sid, history },
+        {
+          query,
+          session_id: sid,
+          history,
+          options: {
+            tags: requestTags,
+          },
+        } as any,
         token
       );
       setNotes9Loading(false);
@@ -1586,7 +1862,29 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
     }
   };
 
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    if (mentionOpenForInput && filteredGlobalMentions.length > 0) {
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        setMentionSelectIndex((i) => Math.min(i + 1, filteredGlobalMentions.length - 1));
+        return;
+      }
+      if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        setMentionSelectIndex((i) => Math.max(i - 1, 0));
+        return;
+      }
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        appendMentionToInput(filteredGlobalMentions[mentionSelectIndex] ?? filteredGlobalMentions[0]);
+        return;
+      }
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        setMentionOpenForInput(false);
+        return;
+      }
+    }
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       void handleSubmit(e);
@@ -1784,168 +2082,75 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
     return (
     <>
     <div className="group/input relative flex flex-col w-full">
-      {/* Attachments Preview */}
-      {(attachments.length > 0 || uploadQueue.length > 0) && (
-        <div className="flex flex-wrap gap-2 mb-2 px-1">
-          {attachments.map((attachment, index) => (
-            <PreviewAttachment key={attachment.url} attachment={attachment} onRemove={() => handleRemoveAttachment(index)} compact />
-          ))}
-          {uploadQueue.map((name) => (
-            <PreviewAttachment key={name} attachment={{ url: '', name, contentType: '' }} isUploading compact />
-          ))}
-        </div>
-      )}
-
       <div className={cn(
         "rounded-xl border bg-card/50 shadow-sm focus-within:ring-1 focus-within:ring-ring/50 focus-within:border-ring transition-all overflow-hidden",
         isDraggingContext && "ring-2 ring-primary border-primary bg-primary/5"
       )} id="tour-ai-chat">
         <FileDropzone
-          onFilesDrop={handleFilesDrop}
+          onFilesDrop={() => {}}
           onNonFileDrop={handleNonFileDrop}
           accept={ALLOWED_TYPES}
-          description="Drop files or literature papers to attach"
+          description="Drop tagged items to attach context"
           activeClassName="ring-2 ring-primary border-primary bg-primary/5 min-h-[132px]"
         >
-          {literatureComposer ?? (
-            <textarea
-              ref={inputRef}
-              value={input}
-              onChange={handleTextareaChange}
-              onKeyDown={handleKeyDown}
-              placeholder="Plan, @ for context, / for commands"
-              className="w-full min-h-[68px] resize-none bg-transparent px-4 py-2.5 text-sm placeholder:text-muted-foreground/60 focus:outline-none scrollbar-hide"
-              disabled={isLoading || contextLoading}
-              autoFocus
-              maxLength={MAX_CHAT_CHARS}
-            />
-          )}
+          <div
+            ref={inputRef}
+            contentEditable={!isLoading && !contextLoading}
+            suppressContentEditableWarning
+            onInput={handleTextareaChange}
+            onKeyDown={handleKeyDown}
+            data-placeholder="Ask Caty anything. Use @ to tag notes, experiments, projects, protocols, and literature."
+            className="w-full min-h-[68px] resize-none bg-transparent px-4 py-2.5 text-sm focus:outline-none scrollbar-hide empty:before:pointer-events-none empty:before:text-muted-foreground/60 empty:before:content-[attr(data-placeholder)]"
+          />
         </FileDropzone>
+        {mentionOpenForInput && filteredGlobalMentions.length > 0 && (
+          <div className="mx-2 mb-1 max-h-52 overflow-y-auto rounded-md border border-border bg-popover p-1">
+            {filteredGlobalMentions.map((item, idx) => (
+              <button
+                key={`${item.kind}:${item.id}`}
+                type="button"
+                className={cn(
+                  'flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-xs',
+                  idx === mentionSelectIndex ? 'bg-accent text-accent-foreground' : 'hover:bg-accent/50'
+                )}
+                onMouseDown={(e) => {
+                  e.preventDefault();
+                  appendMentionToInput(item);
+                }}
+              >
+                <AtSign className="size-3.5 shrink-0" />
+                <span className="truncate">{item.title}</span>
+                <span className="ml-auto shrink-0 text-[10px] uppercase text-muted-foreground">
+                  {item.kind.replace('_', ' ')}
+                </span>
+              </button>
+            ))}
+          </div>
+        )}
 
         <div className="mt-1 flex min-h-9 items-center justify-between gap-2 px-2 pb-2">
           <div className="flex min-w-0 flex-1 flex-nowrap items-center gap-1.5 overflow-x-auto">
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button id="tour-ai-mode" variant="ghost" size="sm" className="h-7 gap-1.5 rounded-md bg-muted/50 hover:bg-muted text-muted-foreground px-2 text-xs font-medium shrink-0">
-                  {agentMode === 'literature' ? (
-                    <>
-                      <BookOpen className="size-3.5" />
-                      Literature
-                    </>
-                  ) : agentMode === 'protocol' ? (
-                    <>
-                      <ClipboardInfoIcon className="size-3.5" />
-                      Protocol
-                    </>
-                  ) : agentMode === 'notes9' ? (
-                    <>
-                      <NotebookPen className="size-3.5" /> Notes9
-                    </>
-                  ) : (
-                    <>
-                      <MessageSquare className="size-3.5" /> General
-                    </>
-                  )}
-                  <ChevronDown className="size-3 opacity-50" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="start" className="w-[200px]">
-                {paperAI?.isActive && paperUiSuppressed ? (
-                  <>
-                    <DropdownMenuItem
-                      onClick={() => setPaperUiSuppressed(false)}
-                      className="gap-2 text-xs"
-                    >
-                      <Sparkles className="size-3.5" /> Writing
-                    </DropdownMenuItem>
-                    <DropdownMenuSeparator />
-                  </>
-                ) : null}
-                <DropdownMenuItem
-                  onClick={() => {
-                    goToProtocolAgent();
-                  }}
-                  className="gap-2 text-xs"
-                >
-                  <ClipboardInfoIcon className="size-3.5" /> Protocol
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                  onClick={() => {
-                    goToLiteratureAgent();
-                  }}
-                  className="gap-2 text-xs"
-                >
-                  <BookOpen className="size-3.5" /> Literature
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                  onClick={() =>
-                    isLiteratureRoute
-                      ? void handleEscapeToNonLiteratureMode('general')
-                      : (savedModeOutsideLiteratureRef.current = 'general', setAgentMode('general'))
-                  }
-                  className={cn(
-                    'gap-2 text-xs',
-                    isLiteratureRoute && 'opacity-60 text-muted-foreground'
-                  )}
-                >
-                  <MessageSquare className="size-3.5" /> General
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                  onClick={() =>
-                    isLiteratureRoute
-                      ? void handleEscapeToNonLiteratureMode('notes9')
-                      : (savedModeOutsideLiteratureRef.current = 'notes9', setAgentMode('notes9'))
-                  }
-                  className={cn(
-                    'gap-2 text-xs',
-                    isLiteratureRoute && 'opacity-60 text-muted-foreground'
-                  )}
-                >
-                  <NotebookPen className="size-3.5" /> Notes9
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-
-            {agentMode === 'general' && (
-              <div className="ml-1 flex shrink-0 items-center gap-1.5 whitespace-nowrap border-l border-border/50 pl-2">
-                <TooltipProvider delayDuration={150}>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <Globe className="size-3.5 shrink-0 text-muted-foreground" aria-hidden />
-                    </TooltipTrigger>
-                    <TooltipContent>
-                      <p>Web Search</p>
-                    </TooltipContent>
-                  </Tooltip>
-                </TooltipProvider>
-                <Switch
-                  checked={webSearchEnabled}
-                  onCheckedChange={setWebSearchEnabled}
-                  disabled={isLoading}
-                  className="shrink-0 scale-90"
-                  aria-label="Web search"
-                />
-              </div>
-            )}
+            <Button
+              id="tour-ai-mode"
+              variant="ghost"
+              size="sm"
+              className="h-7 gap-1.5 rounded-md bg-muted/50 hover:bg-muted text-muted-foreground px-2 text-xs font-medium shrink-0"
+              type="button"
+              onClick={() => {
+                setMentionOpenForInput(true);
+                inputRef.current?.focus();
+              }}
+            >
+              <Sparkles className="size-3.5" />
+              Caty
+            </Button>
           </div>
 
           <div className="flex h-9 shrink-0 items-center justify-end gap-1">
             <span className="mr-1 hidden text-[11px] text-muted-foreground sm:inline">
-              {agentMode === 'literature' && isLiteratureRoute
-                ? literaturePlainLen
-                : input.length}
+              {input.length}
               /{MAX_CHAT_CHARS}
             </span>
-            <Button
-              type="button"
-              size="icon"
-              variant="ghost"
-              className="size-7 text-muted-foreground hover:text-foreground"
-              onClick={() => fileInputRef.current?.click()}
-              disabled={isLoading || agentMode === 'literature'}
-            >
-              <Paperclip className="size-4" />
-            </Button>
 
             {isLoading ? (
               <Button
@@ -2418,7 +2623,7 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
                         const userLiteratureMarkdown =
                           message.role === 'user' &&
                           ((agentMode === 'literature' && isLiteratureRoute) ||
-                            /\]\(\/literature-reviews\//.test(content));
+                            /\]\(\/(?:literature-reviews|lab-notes|experiments|projects|protocols)\//.test(content));
                         const isLastAssistant = message.role === 'assistant' && index === messages.length - 1;
                         const isLastUserAwaitingReply =
                           isLoading &&

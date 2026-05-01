@@ -15,6 +15,7 @@ import {
   ResourceFilterRow,
   ResourceListFilter,
 } from "@/components/ui/resource-list-filters"
+import { CATALYST_MENTION_DRAG_MIME } from "@/lib/catalyst-mention-types"
 
 export type ExperimentsProjectContext = { id: string; name: string }
 
@@ -288,7 +289,22 @@ export function ExperimentList({
       {effectiveViewMode === "grid" && (
         <div className="grid gap-4 grid-cols-[repeat(auto-fit,minmax(280px,1fr))]">
           {experiments.map((experiment) => (
-            <Card key={experiment.id} className="hover:border-primary transition-colors flex flex-col min-w-0 overflow-hidden">
+            <Card
+              key={experiment.id}
+              draggable
+              onDragStart={(e) => {
+                e.dataTransfer.setData(
+                  CATALYST_MENTION_DRAG_MIME,
+                  JSON.stringify({
+                    kind: "experiment",
+                    id: experiment.id,
+                    title: experiment.name,
+                  })
+                )
+                e.dataTransfer.effectAllowed = "copy"
+              }}
+              className="hover:border-primary transition-colors flex flex-col min-w-0 overflow-hidden"
+            >
               <CardHeader className="pb-3 min-w-0">
                 <div className="flex items-start gap-3 min-w-0">
                   <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10">
@@ -399,7 +415,19 @@ function ExperimentTableView({ experiments, linkProjectId }: { experiments: Expe
               {experiments.map((experiment) => (
                 <TableRow
                   key={experiment.id}
+                  draggable
                   className="cursor-pointer"
+                  onDragStart={(e) => {
+                    e.dataTransfer.setData(
+                      CATALYST_MENTION_DRAG_MIME,
+                      JSON.stringify({
+                        kind: "experiment",
+                        id: experiment.id,
+                        title: experiment.name,
+                      })
+                    )
+                    e.dataTransfer.effectAllowed = "copy"
+                  }}
                   onClick={() => router.push(experimentDetailHref(experiment.id, linkProjectId))}
                 >
                   <TableCell className="font-medium text-foreground">

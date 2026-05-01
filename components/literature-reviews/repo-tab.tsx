@@ -38,6 +38,7 @@ import { toast } from "sonner";
 import { LiteratureDetailView } from "./literature-detail-view";
 import { createClient } from "@/lib/supabase/client";
 import { LITERATURE_DRAG_MIME } from "@/lib/catalyst-agent-types";
+import { CATALYST_MENTION_DRAG_MIME } from "@/lib/catalyst-mention-types";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 
 interface LiteratureReview {
@@ -692,6 +693,14 @@ export function RepoTab({
                       e.dataTransfer.setData(
                         LITERATURE_DRAG_MIME,
                         JSON.stringify({ id: lit.id, title: lit.title })
+                      )
+                      e.dataTransfer.setData(
+                        CATALYST_MENTION_DRAG_MIME,
+                        JSON.stringify({
+                          kind: "literature_review",
+                          id: lit.id,
+                          title: lit.title,
+                        })
                       )
                       e.dataTransfer.effectAllowed = "copy"
                     }}

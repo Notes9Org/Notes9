@@ -26,6 +26,7 @@ import {
 } from "@/components/ui/table"
 import { removeStagingLiterature } from "@/app/(app)/literature-reviews/actions"
 import { LITERATURE_DRAG_MIME } from "@/lib/catalyst-agent-types"
+import { CATALYST_MENTION_DRAG_MIME } from "@/lib/catalyst-mention-types"
 import { SearchPaper } from "@/types/paper-search"
 import { BookOpen, Database, ExternalLink, FileText, Layers, Loader2, Star, Trash2, X, ChevronLeft, ChevronRight } from "lucide-react"
 import { toast } from "sonner"
@@ -564,6 +565,14 @@ export function StagingTab({
                             e.dataTransfer.setData(
                               LITERATURE_DRAG_MIME,
                               JSON.stringify({ id: lit.id, title: lit.title })
+                            )
+                            e.dataTransfer.setData(
+                              CATALYST_MENTION_DRAG_MIME,
+                              JSON.stringify({
+                                kind: "literature_review",
+                                id: lit.id,
+                                title: lit.title,
+                              })
                             )
                             e.dataTransfer.effectAllowed = "copy"
                           }}
