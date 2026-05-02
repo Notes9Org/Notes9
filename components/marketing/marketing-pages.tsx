@@ -1,13 +1,14 @@
 "use client"
+
+import Link from "next/link"
 import {
+  ArrowRight,
   BookOpen,
   Bot,
   Database,
   FileSearch,
   FileText,
   FlaskConical,
-  FolderKanban,
-  GraduationCap,
   LayoutDashboard,
   Microscope,
   Settings,
@@ -17,19 +18,20 @@ import {
   Workflow,
 } from "lucide-react"
 
+import { CatalystAISection } from "@/components/marketing/catalyst-ai-section"
+import { InsideNotes9Workflow } from "@/components/marketing/inside-notes9-workflow"
+import { PricingExperienceLead, pricingStoryFaqs } from "@/components/marketing/pricing-experience"
 import {
   CTAPanel,
   FeatureCard,
-  LinkCard,
   MarketingPageFrame,
   PageHero,
   SectionHeader,
   WorkflowStep,
 } from "@/components/marketing/site-ui"
-import { ConnectedResearchSystemDiagram } from "@/components/marketing/connected-research-system-diagram"
-import { MinimalCard, ProductFrame } from "@/components/marketing/three-d-card"
-import { ProductShowcase } from "@/components/marketing/video-showcase"
+import { MinimalCard } from "@/components/marketing/three-d-card"
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion"
+import { Button } from "@/components/ui/button"
 
 const cta = "/#contact"
 const resourceGuides = [
@@ -141,39 +143,30 @@ const resourceFaqs = [
   },
 ]
 
-const platformVideoClips = [
+/** Outcome-led lines only — file formats are implementation detail, not the sell. */
+const integrationItems: { name: string; benefit: string }[] = [
   {
-    title: "Find signal faster",
-    description: "Search, stage, and review the papers that matter without breaking the workflow.",
-    video: "/demo/platform-literature-search.mp4",
-    poster: "/demo/light/literature-search.png",
-    icon: FileSearch,
-    eyebrow: "Literature",
+    name: "PubMed + Crossref",
+    benefit: "Search 35M+ papers without leaving your workspace.",
   },
   {
-    title: "See the work in context",
-    description: "Track linked records and context trails instead of reconstructing what happened later.",
-    video: "/demo/platform-research-map.mp4",
-    poster: "/demo/light/experiment-details.png",
-    icon: FlaskConical,
-    eyebrow: "Experiments",
+    name: "DOI-backed references",
+    benefit: "Go from discovery to drafting without retyping citations or breaking links.",
   },
   {
-    title: "Follow the research graph",
-    description: "Move through connected project structure with a visual map of the workflow.",
-    video: "/demo/platform-experiments.mp4",
-    poster: "/demo/light/research-map.png",
-    icon: FolderKanban,
-    eyebrow: "Research Map",
+    name: "Evidence attached to experiments",
+    benefit: "Keep papers, protocols, and lab reports on the experiment — not scattered in inboxes and drives.",
   },
   {
-    title: "Turn sources into writing",
-    description: "Read, annotate, and move from evidence to output in one continuous workspace.",
-    video: "/demo/platform-writing.mp4",
-    poster: "/demo/light/writing.png",
-    icon: FileText,
-    eyebrow: "Writing",
+    name: "Handoffs to collaborators",
+    benefit: "When someone needs files outside Notes9, export writing and structured project snapshots in one flow.",
   },
+]
+
+const aboutTeam = [
+  { name: "Research Product", role: "Translates lab friction into product workflows." },
+  { name: "Scientific Ops", role: "Shapes continuity models across experiments and reporting." },
+  { name: "AI + Engineering", role: "Builds reliable systems that keep context attached." },
 ]
 
 export function AboutMarketingPage() {
@@ -181,6 +174,7 @@ export function AboutMarketingPage() {
     <MarketingPageFrame>
       <PageHero
         badge="About Notes9"
+        layout="centered"
         title={
           <>
             Built for research teams that need{" "}
@@ -189,56 +183,68 @@ export function AboutMarketingPage() {
         }
         description="Notes9 exists because critical research context still gets lost between papers, notebooks, files, and reporting tools."
         actions={[
-          { href: "/platform", label: "Explore the platform" },
-          { href: cta, label: "Request a demo", variant: "outline" },
+          { href: "/platform", label: "Explore product" },
+          { href: "/about#contact", label: "Say hello", variant: "outline" },
         ]}
       />
 
       <section className="border-t border-border/40">
+        <div className="container mx-auto flex min-h-[calc(100dvh-4rem)] flex-col justify-center px-4 py-16 sm:px-6 lg:px-8">
+          <SectionHeader
+            badge="Why We Built This"
+            title="Research teams should not lose days to documentation overhead."
+            description="We kept seeing scientists spend expensive attention on fragmented admin work. Notes9 was built to reduce that burden without compromising rigor."
+            align="center"
+            className="mx-auto max-w-3xl"
+          />
+        </div>
+      </section>
+
+      <section className="border-t border-border/40 marketing-section-alt">
         <div className="container mx-auto px-4 py-16 sm:px-6 lg:px-8">
-          <SectionHeader badge="Why we exist" title="Modern research teams do not need more fragmented software." />
+          <SectionHeader badge="Mission" title="We take care of the grunt work. You do science." />
           <div className="mt-10 grid gap-6 md:grid-cols-3">
-            <FeatureCard icon={Workflow} title="Fragmented context" description="Important decisions disappear between PDFs, spreadsheets, instruments, and disconnected notes." />
-            <FeatureCard icon={Workflow} title="Structured continuity" description="Notes9 links evidence, experiment work, and reporting so teams move without losing the trail." />
-            <FeatureCard icon={ShieldCheck} title="Trustworthy assistance" description="AI support is most useful when researchers can inspect provenance, preserve oversight, and reuse context safely." />
+            <FeatureCard icon={Workflow} title="Operational continuity" description="Keep workflow context connected from literature to reporting." />
+            <FeatureCard icon={Database} title="Evidence-linked outputs" description="Preserve provenance so teams can trust and reuse prior work." />
+            <FeatureCard icon={ShieldCheck} title="Reliable support layer" description="Use AI and workflow tools that stay inspectable and practical." />
           </div>
         </div>
       </section>
 
-      <section className="border-t border-border/40 bg-muted/20">
+      <section id="team" className="border-t border-border/40">
         <div className="container mx-auto px-4 py-16 sm:px-6 lg:px-8">
-          <SectionHeader badge="Principles" title="What guides the product" />
-          <div className="mt-10 grid gap-6 md:grid-cols-2 xl:grid-cols-4">
-            <FeatureCard icon={Database} title="Provenance by default" description="Outputs stay tied to the papers, records, and workflow events that produced them." />
-            <FeatureCard icon={BookOpen} title="Scientific memory" description="Institutional knowledge becomes easier to retrieve as projects evolve, not harder." />
-            <FeatureCard icon={Microscope} title="Workflow-aware design" description="Built around actual lab operations rather than generic AI chat abstractions." />
-            <FeatureCard icon={Users} title="Adoption-friendly UX" description="Clarity and disciplined interfaces matter when teams are documenting serious work." />
+          <SectionHeader badge="Team" title="People behind Notes9" />
+          <div className="mt-10 grid gap-6 md:grid-cols-3">
+            {aboutTeam.map((member) => (
+              <MinimalCard key={member.name} className="h-full">
+                <h3 className="text-lg font-semibold text-foreground">{member.name}</h3>
+                <p className="mt-2 text-sm font-medium text-[var(--n9-accent)]">{member.role}</p>
+                <p className="mt-3 text-sm leading-6 text-muted-foreground">
+                  Building with researchers who need less operational drag and clearer scientific memory.
+                </p>
+              </MinimalCard>
+            ))}
           </div>
         </div>
       </section>
 
-      <section className="border-t border-border/40">
+      <section id="careers" className="border-t border-border/40 marketing-section-alt">
         <div className="container mx-auto px-4 py-16 sm:px-6 lg:px-8">
-          <div className="grid gap-6 lg:grid-cols-2 lg:items-stretch">
-            <MinimalCard className="h-full">
-              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[var(--n9-accent)]">Mission</p>
-              <p className="mt-4 text-lg leading-8 text-foreground">Make rigorous scientific work easier to run, trace, and reuse across the full research cycle.</p>
-            </MinimalCard>
-            <MinimalCard className="h-full">
-              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[var(--n9-accent)]">Vision</p>
-              <p className="mt-4 text-lg leading-8 text-foreground">Give every research team a trusted operating layer for decisions, documentation, and discovery.</p>
-            </MinimalCard>
+          <SectionHeader badge="Where We’re Headed" title="We are building for deeper workflow continuity." />
+          <div className="mt-10 grid gap-6 md:grid-cols-3">
+            <FeatureCard icon={BookOpen} title="Better scientific memory" description="Make prior work easier to retrieve and reuse across projects." />
+            <FeatureCard icon={Microscope} title="Stronger execution context" description="Reduce handoff friction in experiment-heavy teams." />
+            <FeatureCard icon={Users} title="Closer researcher collaboration" description="Treat users as collaborators in product direction." />
           </div>
         </div>
       </section>
 
-      <section className="border-t border-border/40 bg-muted/20">
+      <section id="contact" className="border-t border-border/40">
         <div className="container mx-auto px-4 py-16 sm:px-6 lg:px-8">
           <CTAPanel
-            title="See how Notes9 fits your workflow."
-            description="We can walk through the points where your current process loses context, adds manual effort, or makes retrieval harder."
-            primary={{ href: cta, label: "Request a demo" }}
-            secondary={{ href: "/pricing", label: "Review engagement options" }}
+            title="Say hello"
+            description="Whether you have a question, feedback, or just want to talk through your lab's needs, we'd love to hear from you."
+            primary={{ href: "mailto:admin@notes9.com", label: "Get in touch" }}
           />
         </div>
       </section>
@@ -246,137 +252,92 @@ export function AboutMarketingPage() {
   )
 }
 
-export function PlatformDifferentiationSection({
-  className = "border-t border-border/40",
-}: {
-  className?: string
-}) {
-  return (
-    <section className={className}>
-      <div className="container mx-auto px-4 py-16 sm:px-6 lg:px-8">
-        <div className="mx-auto max-w-[88rem]">
-          <div className="flex flex-col rounded-[36px] border border-[var(--n9-accent)]/15 bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(247,242,236,0.92))] p-6 shadow-[0_28px_90px_-44px_rgba(44,36,24,0.24)] backdrop-blur-sm dark:border-[var(--n9-accent)]/12 dark:bg-[radial-gradient(circle_at_top,rgba(184,121,69,0.09),transparent_30%),linear-gradient(180deg,rgba(19,18,20,0.98),rgba(12,12,14,0.99))] dark:shadow-[0_32px_100px_-44px_rgba(0,0,0,0.72)] sm:p-8 lg:p-10">
-            <SectionHeader
-              badge="Connected Research System"
-              title="Research slows down when context breaks between tools"
-              className="max-w-none text-left"
-            />
-            <p className="mt-4 w-full text-justify text-base leading-7 text-muted-foreground sm:text-lg">
-              Disconnected phases force teams to reconstruct rationale, repeat handoffs, and lose continuity. Notes9 keeps the workflow connected from literature to experiments to writing.
-            </p>
-            <div className="mt-6 flex flex-wrap gap-3 text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground/70 dark:text-slate-400">
-              <span className="rounded-full border border-border/60 bg-background/75 px-3 py-2 dark:border-white/10 dark:bg-white/[0.04]">fragmentation costs time</span>
-              <span className="rounded-full border border-border/60 bg-background/75 px-3 py-2 dark:border-white/10 dark:bg-white/[0.04]">handoffs break provenance</span>
-              <span className="rounded-full border border-border/60 bg-background/75 px-3 py-2 dark:border-white/10 dark:bg-white/[0.04]">reconstruction slows decisions</span>
-            </div>
-            <div className="mt-8 w-full max-w-none">
-              <ConnectedResearchSystemDiagram className="w-full" />
-            </div>
-            <div className="mt-6 grid gap-3 text-[11px] font-semibold uppercase tracking-[0.2em] text-muted-foreground/65 dark:text-slate-400 sm:grid-cols-3">
-              <div className="rounded-[18px] border border-border/50 bg-background/70 px-4 py-3 dark:border-white/10 dark:bg-white/[0.04]">
-                Evidence stays linked
-              </div>
-              <div className="rounded-[18px] border border-border/50 bg-background/70 px-4 py-3 dark:border-white/10 dark:bg-white/[0.04]">
-                Catalyst AI sees full context
-              </div>
-              <div className="rounded-[18px] border border-border/50 bg-background/70 px-4 py-3 dark:border-white/10 dark:bg-white/[0.04]">
-                Writing reflects the work
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </section>
-  )
-}
-
 export function PlatformMarketingPage() {
   return (
     <MarketingPageFrame>
       <PageHero
-        badge="Platform"
-        title={
-          <>
-            One workflow layer for{" "}
-            <span className="text-[var(--n9-accent)]">literature, lab work, memory, and reporting</span>.
-          </>
-        }
-        description="Notes9 helps research teams capture work in a structured way, retrieve context quickly, and move from fragmented notes to decision-ready outputs."
+        badge="What's inside Notes9"
+        layout="centered"
+        heroFillViewport
+        centeredContentScale={2.4}
+        titleClassName="flex min-w-0 w-full justify-center overflow-x-auto whitespace-nowrap [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+        title={<>The smart platform for full research workflow.</>}
+        description="Notes9 is an end-to-end research workspace with a personal AI lab assistant that helps teams move from hypothesis to execution to decisions faster."
         actions={[
-          { href: cta, label: "Request a demo" },
-          { href: "/resources", label: "Review resources", variant: "outline" },
+          { href: "/auth/login", label: "Try for free" },
+          { href: "/#contact", label: "Request a demo", variant: "outline" },
         ]}
       />
 
-      <ProductShowcase />
+      <section className="border-t border-border/40">
+        <div className="container mx-auto px-4 py-16 sm:px-6 lg:px-8">
+          <InsideNotes9Workflow />
+        </div>
+      </section>
 
-      <section className="border-t border-border/40 bg-muted/20">
+      <section className="border-t border-border/40 marketing-section-alt">
+        <div className="container mx-auto px-4 py-12 sm:px-6 sm:py-14 lg:px-8">
+          <div className="marketing-glass-surface mx-auto max-w-[84rem] rounded-2xl border border-border/60 bg-background/60 px-6 py-6 shadow-sm sm:px-10 sm:py-8 dark:bg-background/40">
+            <p className="border-l-2 border-[var(--n9-accent)] pl-4 text-xl font-medium leading-snug text-foreground sm:text-2xl sm:leading-snug lg:text-3xl lg:leading-tight">
+              Most AI tools know nothing about your project.
+            </p>
+            <p className="mt-4 pl-4 text-sm leading-relaxed text-muted-foreground sm:mt-5 sm:text-base sm:leading-relaxed">
+            Every paper you read, every protocol you write, every result you capture - Our Inhouse AI lab assistant is
+            connected to all of it. 
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <CatalystAISection />
+
+      <section id="integrations" className="border-t border-border/40 marketing-section-alt">
         <div className="container mx-auto px-4 py-16 sm:px-6 lg:px-8">
           <SectionHeader
-            badge="See Notes9"
-            title="Watch how research work stays connected"
-            description="Short product moments that show how Notes9 turns scattered lab work into one continuous system."
+            badge="Integrations"
+            title="Notes9 works around your existing stack, not instead of it"
+            description="Meet your lab where the evidence already lives — literature, citations, attachments, and reviewer handoffs — without ripping out tools that already work."
             align="center"
           />
-          <div className="mt-10 grid gap-6 md:grid-cols-2">
-            {platformVideoClips.map((clip) => (
-              <MinimalCard
-                key={clip.title}
-                className="group overflow-hidden rounded-[28px] border-border/60 bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(244,239,233,0.88))] p-0 shadow-[0_28px_80px_-34px_rgba(44,36,24,0.18)] transition-transform duration-300 hover:-translate-y-1 dark:bg-[linear-gradient(180deg,rgba(24,20,16,0.96),rgba(36,28,22,0.9))] dark:shadow-[0_28px_80px_-34px_rgba(0,0,0,0.45)]"
+          <div className="mx-auto mt-8 grid max-w-5xl gap-3 sm:grid-cols-2">
+            {integrationItems.map((item) => (
+              <div
+                key={item.name}
+                className="marketing-glass-surface rounded-xl border border-border/60 bg-background/55 px-4 py-3 text-left shadow-sm sm:px-5 sm:py-4"
               >
-                <div className="px-5 py-5">
-                  <div className="mb-4 inline-flex rounded-full border border-[var(--n9-accent)]/20 bg-[var(--n9-accent-light)] px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.24em] text-[var(--n9-accent)]">
-                    {clip.eyebrow}
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <div className="inline-flex h-11 w-11 items-center justify-center rounded-2xl bg-[var(--n9-accent-light)] text-[var(--n9-accent)] transition-transform duration-300 group-hover:scale-105">
-                      <clip.icon className="h-5 w-5" />
-                    </div>
-                    <div>
-                      <h3 className="text-lg font-semibold tracking-tight text-foreground">{clip.title}</h3>
-                      <p className="mt-1 text-sm leading-6 text-muted-foreground">{clip.description}</p>
-                    </div>
-                  </div>
-                </div>
-                <div className="px-5 pb-5">
-                  <ProductFrame className="overflow-hidden rounded-[24px] border-border/60 bg-[#060606] shadow-[0_24px_60px_-34px_rgba(12,10,8,0.6)] [transform:none] hover:[transform:none]">
-                    <div className="flex h-9 items-center gap-2 border-b border-white/10 bg-[#111111] px-4">
-                      <div className="flex gap-1.5">
-                        <div className="h-2.5 w-2.5 rounded-full bg-[#ff6b5f]" />
-                        <div className="h-2.5 w-2.5 rounded-full bg-[#f8c14d]" />
-                        <div className="h-2.5 w-2.5 rounded-full bg-[#45d483]" />
-                      </div>
-                      <div className="ml-3 h-5 flex-1 rounded-full bg-white/5" />
-                    </div>
-                    <div className="relative aspect-[16/10] bg-[#080808]">
-                      <video
-                        src={clip.video}
-                        title={clip.title}
-                        className="block h-full w-full bg-black object-cover object-center"
-                        autoPlay
-                        muted
-                        loop
-                        playsInline
-                        preload="metadata"
-                        poster={clip.poster}
-                      />
-                    </div>
-                  </ProductFrame>
-                </div>
-              </MinimalCard>
+                <p className="text-sm font-semibold text-foreground">{item.name}</p>
+                <p className="mt-2 text-sm leading-snug text-muted-foreground">{item.benefit}</p>
+              </div>
             ))}
           </div>
         </div>
       </section>
 
-      <section className="border-t border-border/40 bg-muted/20">
-        <div className="container mx-auto px-4 py-16 sm:px-6 lg:px-8">
-          <CTAPanel
-            title="See the platform through your own workflow."
-            description="We can map Notes9 against your current process to show where value is most immediate."
-            primary={{ href: cta, label: "Request a demo" }}
-            secondary={{ href: "/pricing", label: "See engagement options" }}
-          />
+      <section className="relative border-t border-border/40 marketing-section-accent">
+        <div className="relative z-10 container mx-auto px-4 py-16 sm:px-6 lg:px-8">
+          <div className="marketing-glass-surface mx-auto max-w-[96rem] rounded-2xl border border-border/60 bg-background/70 px-8 py-10 text-center shadow-sm backdrop-blur-sm sm:px-12 sm:py-12 dark:border-white/10 dark:bg-background/45">
+            <p className="mb-3 text-xs font-semibold uppercase tracking-[0.22em] text-[var(--n9-accent)]">
+              Ready to start for free?
+            </p>
+            <h2 className="font-serif text-2xl font-medium leading-snug tracking-tight text-foreground sm:text-[1.65rem] md:text-3xl">
+              One conversation is all it takes.
+            </h2>
+            <p className="mx-auto mt-4 max-w-4xl text-sm leading-relaxed text-muted-foreground sm:mt-5 sm:text-base">
+              Tell us how your team works today. We&apos;ll show you exactly how Notes9 fits in.
+            </p>
+            <div className="mt-8 flex justify-center">
+              <Button
+                asChild
+                size="lg"
+                className="h-12 rounded-full bg-[var(--n9-accent)] px-8 text-base font-medium text-primary-foreground shadow-[0_12px_40px_-12px_var(--n9-accent-glow)] hover:bg-[var(--n9-accent-hover)]"
+              >
+                <Link href="/#contact">
+                  Request a demo
+                  <ArrowRight className="ml-2 inline h-4 w-4" aria-hidden />
+                </Link>
+              </Button>
+            </div>
+          </div>
         </div>
       </section>
     </MarketingPageFrame>
@@ -386,68 +347,23 @@ export function PlatformMarketingPage() {
 export function PricingMarketingPage() {
   return (
     <MarketingPageFrame>
-      <PageHero
-        badge="Pricing"
-        title={
-          <>
-            Engagements structured around{" "}
-            <span className="text-[var(--n9-accent)]">lab scope and workflow depth</span>.
-          </>
-        }
-        description="Notes9 pricing is scoped around workflow complexity, team size, and enablement needs."
-        actions={[
-          { href: cta, label: "Discuss fit and pricing" },
-          { href: "/platform", label: "Review platform", variant: "outline" },
-        ]}
-      />
-
-      <section className="border-t border-border/40 bg-muted/20">
-        <div className="container mx-auto px-4 py-16 sm:px-6 lg:px-8">
-          <SectionHeader badge="Engagement models" title="A clearer path from evaluation to team rollout" align="center" />
-          <div className="mt-10 grid gap-6 lg:grid-cols-3">
-            {[
-              { title: "Pilot engagement", icon: FlaskConical, points: ["Focused evaluation for a single team", "Hands-on workflow mapping", "Best for labs validating fit"] },
-              { title: "Team deployment", icon: Users, points: ["Shared operating model across collaborators", "Repeatable documentation and retrieval", "Best for labs needing operational consistency"] },
-              { title: "Research operations", icon: ShieldCheck, points: ["Broader workflow design and governance", "Suitable for complex research operations", "Best for multi-project environments"] },
-            ].map((item) => (
-              <MinimalCard key={item.title}>
-                <div className="mb-4 inline-flex h-10 w-10 items-center justify-center rounded-xl bg-[var(--n9-accent-light)] text-[var(--n9-accent)]">
-                  <item.icon className="h-5 w-5" />
-                </div>
-                <h3 className="text-lg font-semibold text-foreground">{item.title}</h3>
-                <ul className="mt-4 space-y-2 text-sm leading-6 text-muted-foreground">
-                  {item.points.map((p) => (
-                    <li key={p} className="flex items-start gap-2">
-                      <span className="mt-1.5 block h-1.5 w-1.5 shrink-0 rounded-full bg-[var(--n9-accent)]" />
-                      {p}
-                    </li>
-                  ))}
-                </ul>
-              </MinimalCard>
-            ))}
-          </div>
-        </div>
-      </section>
+      <PricingExperienceLead />
 
       <section className="border-t border-border/40">
         <div className="container mx-auto px-4 py-16 sm:px-6 lg:px-8">
-          <SectionHeader badge="Buyer clarity" title="What buyers can expect" align="center" />
-          <div className="mt-10 grid gap-6 md:grid-cols-3">
-            <FeatureCard icon={Workflow} title="Workflow-led scoping" description="Pricing conversations begin with the workflows you want to improve." />
-            <FeatureCard icon={GraduationCap} title="Enablement included" description="Implementation and education are part of the discussion." />
-            <FeatureCard icon={ShieldCheck} title="Clear expectations" description="We align on support and rollout approach early." />
-          </div>
-        </div>
-      </section>
-
-      <section className="border-t border-border/40 bg-muted/20">
-        <div className="container mx-auto px-4 py-16 sm:px-6 lg:px-8">
-          <CTAPanel
-            title="Get a pricing conversation grounded in your workflow."
-            description="Share your team shape and workflow goals, and we will scope a practical engagement path."
-            primary={{ href: cta, label: "Discuss fit and pricing" }}
-            secondary={{ href: "/resources", label: "Review enablement surfaces" }}
-          />
+          <SectionHeader badge="Common questions" title="Before you reach out" align="center" />
+          <Accordion type="single" collapsible className="marketing-glass-surface mx-auto mt-10 max-w-3xl rounded-xl border border-border/60 bg-background/50 px-3 sm:px-5">
+            {pricingStoryFaqs.map((faq, index) => (
+              <AccordionItem key={faq.question} value={`pricing-faq-${index}`} className="border-border/55 px-1">
+                <AccordionTrigger iconVariant="plus" className="py-4 hover:no-underline">
+                  <span className="min-w-0 flex-1 text-base font-semibold leading-snug text-foreground">{faq.question}</span>
+                </AccordionTrigger>
+                <AccordionContent className="pb-5 pt-0 text-sm leading-relaxed text-muted-foreground">
+                  {faq.answer}
+                </AccordionContent>
+              </AccordionItem>
+            ))}
+          </Accordion>
         </div>
       </section>
     </MarketingPageFrame>
@@ -476,7 +392,7 @@ export function ResourcesMarketingPage() {
         ]}
       />
 
-      <section className="border-t border-border/40 bg-muted/20">
+      <section className="border-t border-border/40 marketing-section-alt">
         <div className="container mx-auto px-4 py-16 sm:px-6 lg:px-8">
           <SectionHeader
             badge="Guide Map"
@@ -533,14 +449,14 @@ export function ResourcesMarketingPage() {
         </div>
       </section>
 
-      <section className="border-t border-border/40 bg-muted/20">
+      <section className="border-t border-border/40 marketing-section-alt">
         <div className="container mx-auto px-4 py-16 sm:px-6 lg:px-8">
           <SectionHeader
             badge="Feature Guides"
             title="Module-by-module guidance"
             description="Each section below distills the older resources content into practical guidance for how that part of the workflow should be used."
           />
-          <div className="mt-10 rounded-2xl border border-border/50 bg-background/80 px-6 py-2 shadow-sm backdrop-blur-sm sm:px-8">
+          <div className="marketing-glass-surface mt-10 rounded-2xl border border-border/50 bg-background/55 px-6 py-2 shadow-sm sm:px-8">
             <Accordion type="single" collapsible className="w-full">
               {resourceGuides.map((guide) => (
                 <AccordionItem key={guide.id} value={guide.id}>
@@ -574,7 +490,7 @@ export function ResourcesMarketingPage() {
         </div>
       </section>
 
-      <section className="border-t border-border/40 bg-muted/20">
+      <section className="border-t border-border/40 marketing-section-alt">
         <div className="container mx-auto px-4 py-16 sm:px-6 lg:px-8">
           <CTAPanel
             title="Need help mapping these guides to your own workflow?"

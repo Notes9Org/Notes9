@@ -1,0 +1,263 @@
+
+<style>
+.s { padding: 1rem 0 0; }
+.ey { font-size: 11px; font-weight: 500; letter-spacing: .09em; text-transform: uppercase; color: #0d9488; margin-bottom: 10px; }
+.h2 { font-size: 22px; font-weight: 500; color: var(--color-text-primary); line-height: 1.2; margin-bottom: 10px; letter-spacing: -.01em; }
+.sub { font-size: 14px; color: var(--color-text-secondary); line-height: 1.65; max-width: 560px; margin-bottom: 28px; }
+.shell { border: 0.5px solid var(--color-border-tertiary); border-radius: var(--border-radius-lg); overflow: hidden; }
+.two { display: grid; grid-template-columns: 252px 1fr; }
+.tcol { border-right: 0.5px solid var(--color-border-tertiary); background: var(--color-background-secondary); }
+.th { padding: 12px 14px; border-bottom: 0.5px solid var(--color-border-tertiary); font-size: 11px; font-weight: 500; text-transform: uppercase; letter-spacing: .07em; color: var(--color-text-secondary); }
+.ti { padding: 11px 14px; cursor: pointer; border-bottom: 0.5px solid var(--color-border-tertiary); display: flex; align-items: center; gap: 9px; border-left: 2px solid transparent; }
+.ti:last-child { border-bottom: none; }
+.ti:hover { background: var(--color-background-primary); }
+.ti.on { background: var(--color-background-primary); border-left-color: #0d9488; }
+.ti-ico { width: 26px; height: 26px; border-radius: 6px; display: flex; align-items: center; justify-content: center; font-size: 14px; flex-shrink: 0; }
+.ti-name { font-size: 12px; font-weight: 500; color: var(--color-text-primary); }
+.ti-hint { font-size: 11px; color: var(--color-text-secondary); }
+.rcol { padding: 22px 24px; display: flex; flex-direction: column; gap: 0; min-height: 420px; }
+.ctag { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; font-weight: 500; padding: 3px 9px; border-radius: 100px; margin-bottom: 12px; }
+.ch { font-size: 17px; font-weight: 500; color: var(--color-text-primary); line-height: 1.25; margin-bottom: 8px; }
+.vid { background: var(--color-background-secondary); border: 0.5px solid var(--color-border-tertiary); border-radius: var(--border-radius-md); height: 148px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 7px; margin-bottom: 14px; }
+.play { width: 34px; height: 34px; border-radius: 50%; background: #0d9488; display: flex; align-items: center; justify-content: center; }
+.tri { width: 0; height: 0; border: 6px solid transparent; border-left: 11px solid white; margin-left: 3px; }
+.vlbl { font-size: 11px; color: var(--color-text-secondary); }
+.cb { font-size: 12px; color: var(--color-text-secondary); line-height: 1.65; margin-bottom: 12px; flex: 1; }
+.chips { display: flex; flex-wrap: wrap; gap: 5px; margin-bottom: 12px; }
+.chip { font-size: 11px; background: var(--color-background-secondary); border: 0.5px solid var(--color-border-tertiary); border-radius: 100px; padding: 3px 9px; color: var(--color-text-secondary); }
+.sm { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; font-weight: 500; color: #0d9488; border: 0.5px solid #0d9488; padding: 6px 12px; border-radius: 6px; cursor: pointer; }
+.bridge { margin: 2rem 0; background: var(--color-background-secondary); border-radius: var(--border-radius-lg); padding: 20px 24px; border: 0.5px solid var(--color-border-tertiary); }
+.bq { font-size: 15px; font-weight: 500; color: var(--color-text-primary); line-height: 1.5; margin-bottom: 8px; border-left: 2px solid #0d9488; padding-left: 14px; }
+.bsub { font-size: 12px; color: var(--color-text-secondary); padding-left: 14px; line-height: 1.55; }
+.ai-call { background: var(--color-background-secondary); border: 0.5px solid var(--color-border-tertiary); border-radius: var(--border-radius-md); padding: 10px 12px; display: flex; gap: 8px; margin-bottom: 12px; }
+.ai-dot-s { width: 6px; height: 6px; border-radius: 50%; background: #0d9488; flex-shrink: 0; margin-top: 4px; }
+.ai-t { font-size: 12px; color: var(--color-text-secondary); line-height: 1.55; }
+.ai-t strong { color: #0d9488; font-weight: 500; }
+.dark-s { background: #0f1117; border-radius: var(--border-radius-lg); padding: 24px; margin-bottom: 1.5rem; }
+.dark-ey { font-size: 11px; font-weight: 500; letter-spacing: .09em; text-transform: uppercase; color: #14b8a6; margin-bottom: 10px; }
+.dark-h { font-size: 22px; font-weight: 500; color: white; line-height: 1.2; margin-bottom: 10px; letter-spacing: -.01em; }
+.dark-sub { font-size: 14px; color: #9ca3af; line-height: 1.65; max-width: 560px; margin-bottom: 0; }
+.dark-shell { border: 0.5px solid rgba(255,255,255,.1); border-radius: var(--border-radius-lg); overflow: hidden; }
+.dark-two { display: grid; grid-template-columns: 252px 1fr; }
+.dark-tcol { border-right: 0.5px solid rgba(255,255,255,.08); background: rgba(255,255,255,.03); }
+.dark-th { padding: 12px 14px; border-bottom: 0.5px solid rgba(255,255,255,.08); font-size: 11px; font-weight: 500; text-transform: uppercase; letter-spacing: .07em; color: #6b7280; }
+.dark-ti { padding: 11px 14px; cursor: pointer; border-bottom: 0.5px solid rgba(255,255,255,.06); display: flex; align-items: center; gap: 9px; border-left: 2px solid transparent; }
+.dark-ti:last-child { border-bottom: none; }
+.dark-ti:hover { background: rgba(255,255,255,.04); }
+.dark-ti.on { background: rgba(20,184,166,.08); border-left-color: #14b8a6; }
+.dark-ti-name { font-size: 12px; font-weight: 500; color: #e5e7eb; }
+.dark-ti-hint { font-size: 11px; color: #6b7280; }
+.dark-rcol { padding: 22px 24px; min-height: 420px; display: flex; flex-direction: column; }
+.dark-ctag { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; font-weight: 500; padding: 3px 9px; border-radius: 100px; background: rgba(20,184,166,.15); color: #14b8a6; margin-bottom: 12px; width: fit-content; }
+.dark-ch { font-size: 17px; font-weight: 500; color: white; line-height: 1.25; margin-bottom: 8px; }
+.dark-vid { background: rgba(255,255,255,.04); border: 0.5px solid rgba(255,255,255,.1); border-radius: var(--border-radius-md); height: 148px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 7px; margin-bottom: 14px; }
+.dark-vlbl { font-size: 11px; color: #6b7280; }
+.dark-cb { font-size: 12px; color: #9ca3af; line-height: 1.65; margin-bottom: 12px; flex: 1; }
+.dark-chips { display: flex; flex-wrap: wrap; gap: 5px; margin-bottom: 12px; }
+.dark-chip { font-size: 11px; background: rgba(255,255,255,.05); border: 0.5px solid rgba(255,255,255,.1); border-radius: 100px; padding: 3px 9px; color: #9ca3af; }
+.dark-sm { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; font-weight: 500; color: #14b8a6; border: 0.5px solid #14b8a6; padding: 6px 12px; border-radius: 6px; cursor: pointer; }
+.dark-ai { background: rgba(20,184,166,.08); border: 0.5px solid rgba(20,184,166,.25); border-radius: var(--border-radius-md); padding: 10px 12px; display: flex; gap: 8px; margin-bottom: 12px; }
+.dark-ai-t { font-size: 12px; color: #9ca3af; line-height: 1.55; }
+.dark-ai-t strong { color: #14b8a6; font-weight: 500; }
+</style>
+
+<div class="s">
+<h2 class="sr-only">Notes9 product page — section 1: workflow tabs and section 2: Catalyst AI tabs</h2>
+
+<div class="ey">The research journey</div>
+<div class="h2">Every step of the research workflow.<br>One place that holds it all together.</div>
+<div class="sub">From the first idea to the final paper — Notes9 covers everything researchers actually do. Click through each part to see what it handles for you.</div>
+
+<div class="shell">
+  <div class="two">
+    <div class="tcol">
+      <div class="th">Inside Notes9</div>
+      <div class="ti on" onclick="wt('dashboard',this)"><div class="ti-ico" style="background:#e0f2fe">🏠</div><div><div class="ti-name">Dashboard</div><div class="ti-hint">Your research home base</div></div></div>
+      <div class="ti" onclick="wt('projects',this)"><div class="ti-ico" style="background:#f0fdf4">📁</div><div><div class="ti-name">Projects</div><div class="ti-hint">The top layer of everything</div></div></div>
+      <div class="ti" onclick="wt('literature',this)"><div class="ti-ico" style="background:#fef3c7">📚</div><div><div class="ti-name">Literature</div><div class="ti-hint">Find, read, and save papers</div></div></div>
+      <div class="ti" onclick="wt('protocols',this)"><div class="ti-ico" style="background:#f5f3ff">📋</div><div><div class="ti-name">Protocols</div><div class="ti-hint">Design and version protocols</div></div></div>
+      <div class="ti" onclick="wt('samples',this)"><div class="ti-ico" style="background:#fdf4ff">🧫</div><div><div class="ti-name">Samples & Inventory</div><div class="ti-hint">Track everything in the lab</div></div></div>
+      <div class="ti" onclick="wt('eln',this)"><div class="ti-ico" style="background:#fff1f2">🧪</div><div><div class="ti-name">Lab Notebook</div><div class="ti-hint">Capture every experiment</div></div></div>
+      <div class="ti" onclick="wt('data',this)"><div class="ti-ico" style="background:#f0fdfa">📊</div><div><div class="ti-name">Data & Analysis</div><div class="ti-hint">Store, analyse, visualise</div></div></div>
+      <div class="ti" onclick="wt('writing',this)"><div class="ti-ico" style="background:#fefce8">✍️</div><div><div class="ti-name">Reports & Writing</div><div class="ti-hint">From results to publication</div></div></div>
+      <div class="ti" onclick="wt('map',this)"><div class="ti-ico" style="background:#e0f2fe">🗺️</div><div><div class="ti-name">Research Map</div><div class="ti-hint">See the full picture</div></div></div>
+    </div>
+    <div class="rcol" id="w-content"></div>
+  </div>
+</div>
+
+<div class="bridge">
+  <div class="bq">Every paper you read, every protocol you write, every result you capture — your AI lab assistant is connected to all of it.</div>
+  <div class="bsub">Most AI tools know nothing about your project. Because Notes9 connects the full workflow, your AI lab assistant has the full picture — and can actually use it. Here is what that unlocks.</div>
+</div>
+
+<div class="dark-s">
+  <div class="dark-ey">Catalyst AI — your AI lab assistant</div>
+  <div class="dark-h">One AI that works across<br>your entire research project.</div>
+  <div class="dark-sub">Not a chatbot. Not a search tool. An AI lab assistant that has read your papers, knows your protocols, understands your data, and can act across every step of your research — because everything lives in one connected place.</div>
+</div>
+
+<div class="dark-shell">
+  <div class="dark-two">
+    <div class="dark-tcol">
+      <div class="dark-th">What Catalyst AI can do</div>
+      <div class="dark-ti on" onclick="at('lit',this)"><div class="ti-ico" style="background:rgba(20,184,166,.15)">📚</div><div><div class="dark-ti-name">Literature AI</div><div class="dark-ti-hint">Read, compare, extract</div></div></div>
+      <div class="dark-ti" onclick="at('protocol',this)"><div class="ti-ico" style="background:rgba(20,184,166,.15)">📋</div><div><div class="dark-ti-name">Protocol AI</div><div class="dark-ti-hint">Design, draft, update</div></div></div>
+      <div class="dark-ti" onclick="at('lab',this)"><div class="ti-ico" style="background:rgba(20,184,166,.15)">🧪</div><div><div class="dark-ti-name">Lab Notebook AI</div><div class="dark-ti-hint">Capture, digitise, organise</div></div></div>
+      <div class="dark-ti" onclick="at('data',this)"><div class="ti-ico" style="background:rgba(20,184,166,.15)">📊</div><div><div class="dark-ti-name">Data & Analysis AI</div><div class="dark-ti-hint">Analyse, visualise, interpret</div></div></div>
+      <div class="dark-ti" onclick="at('write',this)"><div class="ti-ico" style="background:rgba(20,184,166,.15)">✍️</div><div><div class="dark-ti-name">Writing AI</div><div class="dark-ti-hint">Draft from project context</div></div></div>
+      <div class="dark-ti" onclick="at('trouble',this)"><div class="ti-ico" style="background:rgba(239,68,68,.15)">🔍</div><div><div class="dark-ti-name">Troubleshooting AI</div><div class="dark-ti-hint">The most powerful feature</div></div></div>
+    </div>
+    <div class="dark-rcol" id="a-content"></div>
+  </div>
+</div>
+
+</div>
+
+<script>
+const wdata = {
+  dashboard: {
+    tag:'Start here', bg:'#e0f2fe', tc:'#0369a1', icon:'🏠',
+    h:'Your research home base — before the day begins.',
+    body:'See your to-do list, open your whiteboard for quick ideas, and pick up from your most recently used projects and experiments. Everything is where you left it — so the day starts in motion, not in search.',
+    chips:['To-do list','Whiteboard','Recent projects','Recent experiments','AI day planner'],
+    vid:'Dashboard walkthrough'
+  },
+  projects: {
+    tag:'The top layer', bg:'#f0fdf4', tc:'#15803d', icon:'📁',
+    h:'Create a project. Everything else connects automatically.',
+    body:'Every project in Notes9 automatically creates a Literature tab, Protocols, Lab Notebook, Data & Analysis, and Writing — all linked. Everything you do lives under the project. Nothing gets scattered.',
+    chips:['Auto-linked modules','Project overview','Team access','Full context history','Project timeline'],
+    vid:'Projects walkthrough'
+  },
+  literature: {
+    tag:'Before the bench', bg:'#fef3c7', tc:'#b45309', icon:'📚',
+    h:'Find, read, and save papers — without leaving your project.',
+    body:'Search PubMed, OpenAlex, and Europe PMC directly inside Notes9. Open PDFs, annotate, highlight, make notes, and save papers straight into the project they belong to. Everything stays linked.',
+    chips:['Multi-database search','PDF reader','Highlights & notes','Save to project','Annotations'],
+    vid:'Literature walkthrough'
+  },
+  protocols: {
+    tag:'Before the bench', bg:'#f5f3ff', tc:'#6d28d9', icon:'📋',
+    h:'Design, version, and reuse protocols — all in one place.',
+    body:'Write protocols from scratch, use templates from previous work, or build on older versions. Every protocol is versioned so you can track changes and reuse methods across projects without starting over.',
+    chips:['Protocol editor','Templates library','Version history','Linked to experiments','Reusable methods'],
+    vid:'Protocols walkthrough'
+  },
+  samples: {
+    tag:'On the bench', bg:'#fdf4ff', tc:'#7e22ce', icon:'🧫',
+    h:'Know exactly what you have, where it is, and when it expires.',
+    body:'Keep records of every sample and reagent — storage location, quantity, expiry dates, and which experiments they belong to. No more searching the freezer or discovering expired reagents mid-experiment.',
+    chips:['Sample records','Storage locations','Expiry tracking','Inventory levels','Linked to experiments'],
+    vid:'Samples walkthrough'
+  },
+  eln: {
+    tag:'On the bench', bg:'#fff1f2', tc:'#be123c', icon:'🧪',
+    h:'Capture everything you do — the way you actually work.',
+    body:'Type, voice record, or photograph handwritten notes and have them converted into structured digital entries. Add equations, chemical formulas, and images. Everything gets saved and linked to the right experiment automatically.',
+    chips:['Rich text editor','Voice-to-text','Photo-to-notes','Chemical formulas','Equations','Auto-linked'],
+    vid:'Lab notebook walkthrough'
+  },
+  data: {
+    tag:'After the bench', bg:'#f0fdfa', tc:'#0f766e', icon:'📊',
+    h:'Store every format. Analyse without switching tools.',
+    body:'Upload data in any format — Excel, CSV, PDF, Word, images, and more. Open Excel files directly inside Notes9 to run calculations and generate graphs. Drag those graphs straight into your reports without leaving the platform.',
+    chips:['Multi-format storage','In-tool Excel analysis','Graph generation','Drag to reports','Linked to experiments'],
+    vid:'Data & analysis walkthrough'
+  },
+  writing: {
+    tag:'After the bench', bg:'#fefce8', tc:'#b45309', icon:'✍️',
+    h:'From results to report, paper, or grant — without starting from scratch.',
+    body:'Create reports using built-in templates, generate PowerPoint presentations, write grant applications, abstracts, and research papers — all inside the project. The context is already there because the workflow is connected.',
+    chips:['Report templates','PowerPoint export','Grant writing','Abstract writing','Paper writing'],
+    vid:'Reports & writing walkthrough'
+  },
+  map: {
+    tag:'The full picture', bg:'#e0f2fe', tc:'#0369a1', icon:'🗺️',
+    h:'See everything connected — at a glance.',
+    body:'The Research Map shows a visual overview of everything linked inside a project — papers, experiments, lab notes, data, status. Double-click any node to jump directly into that part of the project.',
+    chips:['Visual project map','Linked literature','Experiment overview','Click-through nav','Status at a glance'],
+    vid:'Research map walkthrough'
+  }
+};
+
+const adata = {
+  lit: {
+    tag:'Literature AI', icon:'📚',
+    h:'Read smarter. Find more. Extract faster.',
+    body:'Drop a paper in and get an instant summary with citations you can click through to the exact passage in the PDF. Find related papers based on what you\'ve already saved. Extract data tables and key findings without reading every line.',
+    chips:['Summarise with citations','Click-through to source','Find related papers','Extract data from papers','Smart reading mode'],
+    extra:'The AI has already read every paper saved to your project — ask it to compare findings, spot contradictions, or identify gaps in the literature without opening a single PDF.'
+  },
+  protocol: {
+    tag:'Protocol AI', icon:'📋',
+    h:'Draft protocols from what the AI already knows about your project.',
+    body:'Your AI lab assistant can draft a protocol using methods from your saved papers and previous protocols — grounded in your actual project literature, not a blank template. Update protocols by describing the change. The AI handles the edit.',
+    chips:['Draft from literature','Update by description','Suggest controls','Flag missing steps','Reuse prior methods'],
+    extra:'Because the AI knows your previous protocols and their results, it can suggest improvements based on what worked — and flag steps that caused issues in past experiments.'
+  },
+  lab: {
+    tag:'Lab notebook AI', icon:'🧪',
+    h:'Capture notes the way you work. The AI organises the rest.',
+    body:'Take a photo of handwritten notes — the AI digitises and structures them into a clean lab entry. Voice record observations mid-experiment. The AI transcribes, formats, and links the entry to the right experiment automatically.',
+    chips:['Photo to structured notes','Voice-to-text','Auto-format entries','Auto-link to experiment','Equation recognition'],
+    extra:'Never lose a handwritten note again. Point your camera at a lab notebook page — the AI reads it, organises it, and saves it to the right project.'
+  },
+  data: {
+    tag:'Data & Analysis AI', icon:'📊',
+    h:'Ask questions about your data in plain language.',
+    body:'Upload a dataset and ask your AI lab assistant to run calculations, spot patterns, flag outliers, or summarise key findings — without writing a formula or script. Generated graphs can be dragged directly into your report.',
+    chips:['Plain-language analysis','Pattern spotting','Outlier detection','Auto-generated graphs','Drag to report'],
+    extra:'The AI connects your data results to your original hypothesis and protocol — so it can tell you not just what the numbers say, but whether they answer the question you were testing.'
+  },
+  write: {
+    tag:'Writing AI', icon:'✍️',
+    h:'First drafts written from what actually happened in your project.',
+    body:'Ask your AI lab assistant to draft a report, abstract, grant section, or methods chapter — and it writes from your actual project data, notes, and results. Not a generic template. A draft grounded in your work.',
+    chips:['Report drafts','Abstract writing','Grant sections','Methods chapters','Paper writing'],
+    extra:'Because the AI has full project context — papers, protocols, results, decisions — the draft it produces already knows the background, the methods, and the outcomes. You edit, not rewrite.'
+  },
+  trouble: {
+    tag:'Troubleshooting AI — the most powerful feature', icon:'🔍',
+    h:'When an experiment fails, the AI knows why to look.',
+    body:'Troubleshooting AI draws on everything across your project — every paper, every protocol version, every lab note, every result — to diagnose what went wrong and suggest exactly where to look. It traces the failure across the full research history, not just the last experiment.',
+    chips:['Cross-project diagnosis','Protocol step analysis','Lab note review','Literature cross-check','Suggested next steps'],
+    extra:'No other tool can do this. Because Notes9 connects the full workflow, the AI can tell you: this protocol step has been flagged in two papers, your lab notes show it was skipped on day 3, and a similar experiment had the same result when the temperature varied. That\'s not a chatbot. That\'s a lab partner.'
+  }
+};
+
+function wt(id, el) {
+  document.querySelectorAll('.ti').forEach(t => t.classList.remove('on'));
+  el.classList.add('on');
+  const d = wdata[id];
+  const chips = d.chips.map(c => `<span class="chip">${c}</span>`).join('');
+  document.getElementById('w-content').innerHTML = `
+    <div class="ctag" style="background:${d.bg};color:${d.tc}">${d.icon} ${d.tag}</div>
+    <div class="ch">${d.h}</div>
+    <div class="vid"><div class="play"><div class="tri"></div></div><div class="vlbl">Watch: ${d.vid}</div></div>
+    <div class="cb">${d.body}</div>
+    <div class="chips">${chips}</div>
+    <div class="sm">Explore ${el.querySelector('.ti-name').textContent} →</div>
+  `;
+}
+
+function at(id, el) {
+  document.querySelectorAll('.dark-ti').forEach(t => t.classList.remove('on'));
+  el.classList.add('on');
+  const d = adata[id];
+  const chips = d.chips.map(c => `<span class="dark-chip">${c}</span>`).join('');
+  const isTrouble = id === 'trouble';
+  document.getElementById('a-content').innerHTML = `
+    <div class="dark-ctag">${d.icon} ${d.tag}</div>
+    <div class="dark-ch">${d.h}</div>
+    <div class="dark-vid"><div class="play"><div class="tri"></div></div><div class="dark-vlbl">Watch: ${d.tag} in action</div></div>
+    <div class="dark-cb">${d.body}</div>
+    <div class="dark-chips">${chips}</div>
+    <div class="dark-ai"><div class="ai-dot-s"></div><div class="dark-ai-t">${d.extra}</div></div>
+    <div class="dark-sm">See ${isTrouble ? 'troubleshooting' : d.tag} in action →</div>
+  `;
+}
+
+wt('dashboard', document.querySelector('.ti.on'));
+at('lit', document.querySelector('.dark-ti.on'));
+</script>

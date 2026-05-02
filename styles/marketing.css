@@ -1,45 +1,72 @@
 /*
- * Marketing-only theme: cream background + terracotta accent.
+ * Marketing-only theme: cream background + forest green accent (#58a65c).
  * Applied via .marketing-theme class. Main app uses default theme.
  */
 .marketing-theme {
-  --background: #FAF7F2;
-  --foreground: #2C2418;
-  --card: #FFFFFF;
-  --card-foreground: #2C2418;
-  --muted: #F3EDE4;
-  --muted-foreground: #7A6F60;
-  --border: #E5DDD0;
-  --n9-accent: #9B4722;
-  --n9-accent-hover: #7E3A1B;
-  --n9-accent-light: #FBF0EA;
-  --n9-accent-glow: rgba(155, 71, 34, 0.4);
-  --n9-header-bg: rgba(247, 240, 231, 0.9);
+  --background: #f8f4ea;
+  --foreground: #2b2318;
+  --card: rgb(255 252 244 / 0.9);
+  --card-foreground: #2b2318;
+  --muted: rgb(242 235 220 / 0.88);
+  --muted-foreground: #786858;
+  --border: rgb(232 224 210 / 0.85);
+  --n9-accent: #58a65c;
+  --n9-accent-hover: #4a904e;
+  --n9-accent-light: rgba(88, 166, 92, 0.14);
+  --n9-accent-glow: rgba(88, 166, 92, 0.38);
+  --n9-header-bg: rgb(237 246 238 / 0.85);
+  /* Tailwind `font-serif` + heading tags use DM Serif Display (next/font `--font-dm-serif` on this tree). */
+  --font-serif: var(--font-dm-serif), ui-serif, Georgia, "Times New Roman", serif;
+  /* Tileable fractal noise for frosted / glass surfaces */
+  --marketing-glass-noise: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='192' height='192'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.72' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.55'/%3E%3C/svg%3E");
 }
 
-/* Dark mode: when html has .dark */
+/* Marketing headings use serif (DM Serif Display). */
+.marketing-theme :where(h1, h2, h3, h4, h5, h6) {
+  font-family: var(--font-serif);
+}
+
+/* Notes9 wordmark stays sans (DM Sans); avoids inheriting serif from nearby headings/layout. */
+.marketing-theme .notes9-wordmark,
+.marketing-theme .notes9-tagline {
+  font-family: var(--font-dm-sans), ui-sans, system-ui, sans-serif;
+}
+
+/* Home hero headline (PretextReveal): force DM Serif — Tailwind `font-serif` can still point at global theme. */
+.marketing-theme .academic-hero-serif-headline {
+  font-family: var(--font-dm-serif), ui-serif, Georgia, "Times New Roman", serif;
+}
+
+/* Dark mode: forest charcoal + mint (matches product .dark) */
 .dark .marketing-theme {
-  --background: #1A1714;
-  --foreground: #F5F0E8;
-  --card: #252018;
-  --card-foreground: #F5F0E8;
-  --muted: #2E2820;
-  --muted-foreground: #A89E8E;
-  --border: rgba(245, 240, 232, 0.1);
-  --n9-accent: #D4845A;
-  --n9-accent-hover: #C07650;
-  --n9-accent-light: rgba(212, 132, 90, 0.1);
-  --n9-accent-glow: rgba(212, 132, 90, 0.35);
-  --n9-header-bg: rgba(34, 29, 24, 0.86);
+  --background: #141a16;
+  --foreground: #f4f7f4;
+  --card: rgb(26 32 28 / 0.94);
+  --card-foreground: #f4f7f4;
+  --muted: rgba(165, 214, 167, 0.08);
+  --muted-foreground: #9baa9d;
+  --border: rgba(165, 214, 167, 0.12);
+  --n9-accent: #a5d6a7;
+  --n9-accent-hover: #8bc48e;
+  --n9-accent-light: rgba(165, 214, 167, 0.15);
+  --n9-accent-glow: rgba(165, 214, 167, 0.35);
+  --n9-header-bg: rgb(20 26 22 / 0.92);
 }
 
-/* Subtle grid mesh - cream tint */
-.marketing-theme .marketing-mesh {
-  background-image: url("data:image/svg+xml,%3Csvg width='40' height='40' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M0 20h40M20 0v40' stroke='%23C4B8A5' stroke-width='0.3' fill='none'/%3E%3C/svg%3E");
-}
-
-.dark .marketing-theme .marketing-mesh {
-  background-image: url("data:image/svg+xml,%3Csvg width='40' height='40' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M0 20h40M20 0v40' stroke='%234a4540' stroke-width='0.25' fill='none'/%3E%3C/svg%3E");
+/* OLED marketing shell — same accent, true-black canvas */
+.black .marketing-theme {
+  --background: #000000;
+  --foreground: #f4f7f4;
+  --card: rgb(8 10 9 / 0.94);
+  --card-foreground: #f4f7f4;
+  --muted: rgba(165, 214, 167, 0.06);
+  --muted-foreground: #909d90;
+  --border: rgba(165, 214, 167, 0.12);
+  --n9-accent: #a5d6a7;
+  --n9-accent-hover: #8bc48e;
+  --n9-accent-light: rgba(165, 214, 167, 0.12);
+  --n9-accent-glow: rgba(165, 214, 167, 0.32);
+  --n9-header-bg: rgb(0 0 0 / 0.92);
 }
 
 /* Respect reduced motion preferences */
@@ -77,19 +104,263 @@
   filter: drop-shadow(0 2px 6px rgba(0, 0, 0, 0.18));
 }
 
-/* Pillar cards: dashed “signal” line (marketing home) */
-@keyframes n9-pillar-dash-flow {
-  to {
-    stroke-dashoffset: -56;
-  }
-}
-
-.marketing-theme .n9-pillar-dash-line {
-  stroke-dasharray: 6 10;
-  stroke-dashoffset: 0;
-  animation: n9-pillar-dash-flow 2.4s linear infinite;
-}
-
 /* Hide scrollbar on product reel */
 .marketing-theme .scrollbar-none::-webkit-scrollbar { display: none; }
 .marketing-theme .scrollbar-none { -ms-overflow-style: none; scrollbar-width: none; }
+
+/* -------------------------------------------------------------------------- */
+/* Textured translucent “glass” — marketing shell, sections, and surfaces      */
+/* -------------------------------------------------------------------------- */
+
+.marketing-glass-app {
+  position: relative;
+  background: linear-gradient(
+    165deg,
+    color-mix(in srgb, var(--background) 93%, rgb(255 255 255) 7%) 0%,
+    color-mix(in srgb, var(--muted) 38%, transparent) 48%,
+    color-mix(in srgb, var(--background) 86%, transparent) 100%
+  );
+}
+
+.marketing-glass-app::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  opacity: 0.4;
+  background-image: var(--marketing-glass-noise);
+  background-size: 192px 192px;
+  mix-blend-mode: soft-light;
+}
+
+:is(.dark, .black) .marketing-glass-app::before {
+  opacity: 0.26;
+  mix-blend-mode: overlay;
+}
+
+/** Page content wrapper: lets the shell gradient show through; optional extra frost */
+.marketing-glass-page {
+  background: transparent;
+}
+
+/** Alternating section bands (replaces flat bg-muted/20) */
+.marketing-section-alt {
+  position: relative;
+  isolation: isolate;
+  background: color-mix(in srgb, var(--muted) 44%, transparent);
+  backdrop-filter: blur(20px) saturate(1.12);
+  -webkit-backdrop-filter: blur(20px) saturate(1.12);
+  box-shadow: inset 0 1px 0 0 rgb(255 255 255 / 0.28);
+}
+
+.marketing-section-alt::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  opacity: 0.42;
+  background-image: var(--marketing-glass-noise);
+  background-size: 180px 180px;
+  mix-blend-mode: soft-light;
+}
+
+:is(.dark, .black) .marketing-section-alt {
+  box-shadow: inset 0 1px 0 0 rgb(255 255 255 / 0.06);
+}
+
+:is(.dark, .black) .marketing-section-alt::before {
+  opacity: 0.3;
+  mix-blend-mode: overlay;
+}
+
+/** Accent-tinted sections (soft green wash) */
+.marketing-section-accent {
+  position: relative;
+  isolation: isolate;
+  background: color-mix(in srgb, var(--n9-accent-light) 72%, transparent);
+  backdrop-filter: blur(18px) saturate(1.14);
+  -webkit-backdrop-filter: blur(18px) saturate(1.14);
+}
+
+.marketing-section-accent::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  opacity: 0.35;
+  background-image: var(--marketing-glass-noise);
+  background-size: 176px 176px;
+  mix-blend-mode: overlay;
+}
+
+/** Generic frosted panel + grain (cards, pills, chrome bars) */
+.marketing-glass-surface {
+  position: relative;
+  isolation: isolate;
+  backdrop-filter: blur(14px) saturate(1.12);
+  -webkit-backdrop-filter: blur(14px) saturate(1.12);
+  box-shadow: inset 0 1px 0 0 rgb(255 255 255 / 0.22);
+}
+
+.marketing-glass-surface::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  z-index: 0;
+  pointer-events: none;
+  opacity: 0.38;
+  background-image: var(--marketing-glass-noise);
+  background-size: 160px 160px;
+  mix-blend-mode: soft-light;
+}
+
+:is(.dark, .black) .marketing-glass-surface {
+  box-shadow: inset 0 1px 0 0 rgb(255 255 255 / 0.05);
+}
+
+:is(.dark, .black) .marketing-glass-surface::before {
+  opacity: 0.28;
+  mix-blend-mode: overlay;
+}
+
+.marketing-header-glass {
+  isolation: isolate;
+  /* Stronger frost + higher opacity so page copy behind the bar doesn’t compete when reading */
+  background: color-mix(in srgb, var(--n9-header-bg) 90%, transparent) !important;
+  backdrop-filter: blur(32px) saturate(1.12);
+  -webkit-backdrop-filter: blur(32px) saturate(1.12);
+  box-shadow:
+    0 12px 40px -28px rgba(0, 0, 0, 0.32),
+    inset 0 1px 0 0 rgb(255 255 255 / 0.4);
+}
+
+.marketing-header-glass::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  /* Slightly lighter grain so the extra blur reads as clean frosted glass */
+  opacity: 0.2;
+  background-image: var(--marketing-glass-noise);
+  background-size: 144px 144px;
+  mix-blend-mode: soft-light;
+}
+
+:is(.dark, .black) .marketing-header-glass {
+  background: color-mix(in srgb, var(--n9-header-bg) 92%, transparent) !important;
+  backdrop-filter: blur(36px) saturate(1.08);
+  -webkit-backdrop-filter: blur(36px) saturate(1.08);
+  box-shadow:
+    0 12px 40px -28px rgba(0, 0, 0, 0.45),
+    inset 0 1px 0 0 rgb(255 255 255 / 0.06);
+}
+
+:is(.dark, .black) .marketing-header-glass::after {
+  opacity: 0.16;
+  mix-blend-mode: overlay;
+}
+
+.marketing-footer-glass {
+  position: relative;
+  isolation: isolate;
+  background: color-mix(in srgb, var(--muted) 36%, transparent) !important;
+  backdrop-filter: blur(22px) saturate(1.15);
+  -webkit-backdrop-filter: blur(22px) saturate(1.15);
+  box-shadow: inset 0 1px 0 0 rgb(255 255 255 / 0.2);
+}
+
+.marketing-footer-glass::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  opacity: 0.4;
+  background-image: var(--marketing-glass-noise);
+  background-size: 192px 192px;
+  mix-blend-mode: soft-light;
+}
+
+:is(.dark, .black) .marketing-footer-glass::before {
+  opacity: 0.26;
+  mix-blend-mode: overlay;
+}
+
+/*
+ * Neutral frosted band — same blur + grain + inset treatment as accent, minus strong green wash.
+ * Use for sections that should match the glass system without competing with `marketing-section-accent`.
+ */
+.marketing-section-frost {
+  position: relative;
+  isolation: isolate;
+  background: color-mix(in srgb, var(--background) 56%, transparent);
+  backdrop-filter: blur(18px) saturate(1.12);
+  -webkit-backdrop-filter: blur(18px) saturate(1.12);
+  box-shadow: inset 0 1px 0 0 rgb(255 255 255 / 0.22);
+}
+
+.marketing-section-frost::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  opacity: 0.38;
+  background-image: var(--marketing-glass-noise);
+  background-size: 176px 176px;
+  mix-blend-mode: soft-light;
+}
+
+:is(.dark, .black) .marketing-section-frost {
+  box-shadow: inset 0 1px 0 0 rgb(255 255 255 / 0.06);
+}
+
+:is(.dark, .black) .marketing-section-frost::before {
+  opacity: 0.28;
+  mix-blend-mode: overlay;
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  .marketing-glass-app {
+    background: var(--background);
+  }
+
+  .marketing-glass-app::before {
+    opacity: 0.14;
+  }
+
+  .marketing-section-alt,
+  .marketing-section-accent,
+  .marketing-section-frost,
+  .marketing-glass-surface,
+  .marketing-header-glass,
+  .marketing-footer-glass {
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+
+  .marketing-section-alt {
+    background: color-mix(in srgb, var(--muted) 65%, var(--background));
+  }
+
+  .marketing-section-accent {
+    background: color-mix(in srgb, var(--n9-accent-light) 88%, var(--background));
+  }
+
+  .marketing-section-frost {
+    background: color-mix(in srgb, var(--background) 92%, var(--muted));
+  }
+
+  .marketing-header-glass {
+    background: var(--n9-header-bg) !important;
+  }
+
+  .marketing-footer-glass {
+    background: color-mix(in srgb, var(--muted) 55%, var(--background)) !important;
+  }
+}

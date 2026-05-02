@@ -7,13 +7,26 @@ interface Notes9BrandProps {
   textClassName?: string
   /** Applied to the inline “N · mark · tes9” row */
   wordmarkClassName?: string
+  /** Align wordmark vertically with adjacent UI chrome (e.g. header `text-sm` links). */
+  navRow?: boolean
   stacked?: boolean
   showIcon?: boolean
   withTagline?: boolean
   hrefLabel?: string
 }
 
-function getWordmarkMetrics(textClassName?: string) {
+type WordmarkMetrics = {
+  text: string
+  mascot: string
+  baseline: string
+  extra: string
+  textNudgeY: string
+  mascotWrapperClassName: string
+}
+
+function getWordmarkMetrics(textClassName?: string, navRow?: boolean): WordmarkMetrics {
+  const mascotDefault =
+    "relative mx-[0.02em] inline-flex shrink-0 items-center justify-center self-end translate-y-[calc(-0.03em-2px)]"
   if (!textClassName) {
     return {
       text: "text-[2.34rem]",
@@ -21,6 +34,7 @@ function getWordmarkMetrics(textClassName?: string) {
       baseline: "items-end",
       extra: "tracking-[-0.01em]",
       textNudgeY: "translate-y-[0.28em]",
+      mascotWrapperClassName: mascotDefault,
     }
   }
 
@@ -31,6 +45,7 @@ function getWordmarkMetrics(textClassName?: string) {
       baseline: "items-end",
       extra: "tracking-[-0.01em]",
       textNudgeY: "translate-y-[0.28em]",
+      mascotWrapperClassName: mascotDefault,
     }
   }
 
@@ -41,6 +56,7 @@ function getWordmarkMetrics(textClassName?: string) {
       baseline: "items-end",
       extra: "tracking-[-0.01em]",
       textNudgeY: "translate-y-[0.28em]",
+      mascotWrapperClassName: mascotDefault,
     }
   }
 
@@ -52,16 +68,29 @@ function getWordmarkMetrics(textClassName?: string) {
       extra: "tracking-[0em]",
       // Sidebar compact wordmark: sit "N" / "tes9" lower vs. the mark for optical balance
       textNudgeY: "translate-y-[0.32em]",
+      mascotWrapperClassName: mascotDefault,
     }
   }
 
   if (/(?:^|\s)h-8(?:\s|$)/.test(textClassName)) {
+    if (navRow) {
+      return {
+        text: "text-[2.34rem]",
+        mascot: "h-[1.3rem] w-[1.3rem]",
+        baseline: "items-center",
+        extra: "tracking-[-0.01em]",
+        textNudgeY: "translate-y-0",
+        mascotWrapperClassName:
+          "relative mx-[0.02em] inline-flex shrink-0 items-center justify-center self-center translate-y-[1px]",
+      }
+    }
     return {
       text: "text-[2.34rem]",
       mascot: "h-[1.3rem] w-[1.3rem]",
       baseline: "items-end",
       extra: "tracking-[-0.01em]",
-      textNudgeY: "translate-y-[0.30em]",
+      textNudgeY: "translate-y-[0.22em]",
+      mascotWrapperClassName: mascotDefault,
     }
   }
 
@@ -71,6 +100,7 @@ function getWordmarkMetrics(textClassName?: string) {
     baseline: "items-end",
     extra: "tracking-[-0.01em]",
     textNudgeY: "translate-y-[0.28em]",
+    mascotWrapperClassName: mascotDefault,
   }
 }
 
@@ -79,12 +109,13 @@ export function Notes9Brand({
   iconClassName,
   textClassName,
   wordmarkClassName,
+  navRow = false,
   stacked = false,
   showIcon = false,
   withTagline = false,
   hrefLabel = "Notes9",
 }: Notes9BrandProps) {
-  const metrics = getWordmarkMetrics(textClassName)
+  const metrics = getWordmarkMetrics(textClassName, navRow)
 
   return (
     <div
@@ -98,7 +129,7 @@ export function Notes9Brand({
       <div className={cn("min-w-0", stacked && "flex flex-col items-center")}>
         <div
           className={cn(
-            "inline-flex min-w-0 font-sans font-semibold leading-none text-foreground",
+            "notes9-wordmark inline-flex min-w-0 font-semibold leading-none text-foreground",
             metrics.baseline,
             metrics.text,
             metrics.extra,
@@ -109,10 +140,7 @@ export function Notes9Brand({
           <span className="sr-only">o</span>
           <span
             aria-hidden="true"
-            className={cn(
-              "relative mx-[0.02em] inline-flex shrink-0 items-center justify-center self-end translate-y-[calc(-0.03em-2px)]",
-              metrics.mascot,
-            )}
+            className={cn(metrics.mascotWrapperClassName, metrics.mascot)}
           >
             <Image
               src="/notes9-logo-mark-transparent.png"
@@ -125,7 +153,7 @@ export function Notes9Brand({
           <span aria-hidden="true" className={metrics.textNudgeY}>tes9</span>
         </div>
         {withTagline ? (
-          <span className="mt-0.5 block truncate text-[11px] font-medium uppercase leading-normal tracking-[0.18em] text-muted-foreground">
+          <span className="notes9-tagline mt-0.5 block truncate text-[11px] font-medium uppercase leading-normal tracking-[0.18em] text-muted-foreground">
             Research Lab
           </span>
         ) : null}

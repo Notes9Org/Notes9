@@ -13,6 +13,7 @@ import {
 } from "react"
 import { motion, useInView } from "framer-motion"
 import { IceMascot } from "@/components/ui/ice-mascot"
+import { cn } from "@/lib/utils"
 
 /** Desktop deck + hub layout is authored at this size; narrower containers scale down uniformly. */
 const DESKTOP_DIAGRAM_W = 1200
@@ -1165,7 +1166,11 @@ export function ConnectedResearchSystemDiagram({ className = "" }: { className?:
   return (
     <div
       ref={wrapRef}
-      className={`relative mx-auto w-full min-w-0 max-w-[min(100%,88rem)] rounded-[28px] border border-[var(--n9-accent)]/18 bg-[radial-gradient(circle,rgba(0,0,0,0.055)_1px,transparent_1px)] [background-size:20px_20px] shadow-[0_28px_90px_-52px_rgba(44,36,24,0.2),inset_0_1px_0_0_rgba(255,255,255,0.55)] ring-1 ring-black/[0.04] dark:border-[var(--n9-accent)]/16 dark:bg-[radial-gradient(circle,rgba(255,255,255,0.055)_1px,transparent_1px),linear-gradient(180deg,rgba(26,24,22,0.98),rgba(12,12,14,0.995))] dark:[background-size:20px_20px,auto] dark:shadow-[0_32px_100px_-52px_rgba(0,0,0,0.65),inset_0_1px_0_0_rgba(255,255,255,0.04)] dark:ring-white/[0.06] ${isMobile ? "min-h-[520px]" : "min-h-0"} ${className}`}
+      className={cn(
+        "relative mx-auto w-full min-w-0 max-w-[min(100%,88rem)] rounded-[28px] border border-[var(--n9-accent)]/18 bg-[radial-gradient(circle,rgba(0,0,0,0.055)_1px,transparent_1px)] [background-size:20px_20px] shadow-[0_28px_90px_-52px_rgba(44,36,24,0.2),inset_0_1px_0_0_rgba(255,255,255,0.55)] ring-1 ring-black/[0.04] dark:border-[var(--n9-accent)]/16 dark:bg-[radial-gradient(circle,rgba(255,255,255,0.055)_1px,transparent_1px),linear-gradient(180deg,rgba(22,28,24,0.98),rgba(10,14,12,0.995))] dark:[background-size:20px_20px,auto] dark:shadow-[0_32px_100px_-52px_rgba(0,0,0,0.65),inset_0_1px_0_0_rgba(255,255,255,0.04)] dark:ring-white/[0.06]",
+        isMobile ? "min-h-[520px]" : "min-h-0",
+        className,
+      )}
       style={!isMobile ? { height: `${desktopLayoutH}px` } : undefined}
     >
       {isMobile ? (
@@ -1364,9 +1369,9 @@ export function ConnectedResearchSystemDiagram({ className = "" }: { className?:
               className="absolute left-1/2 top-1/2 w-0 -translate-x-1/2 -translate-y-1/2"
               style={{ height: violetRailPx }}
             >
-              {/* Feather uses same height as rail for exact length match. */}
-              <div className="pointer-events-none absolute inset-y-0 left-1/2 w-[26px] -translate-x-full bg-[linear-gradient(90deg,rgba(0,0,0,0)_0%,rgba(0,0,0,0.08)_62%,rgba(0,0,0,0.2)_100%)] dark:bg-[linear-gradient(90deg,rgba(255,255,255,0)_0%,rgba(255,255,255,0.1)_62%,rgba(255,255,255,0.24)_100%)]" />
-              <div className="pointer-events-none absolute inset-y-0 left-1/2 w-[1.5px] -translate-x-1/2 rounded-full bg-black/45 shadow-[0_0_12px_rgba(0,0,0,0.35)] dark:bg-white/55 dark:shadow-[0_0_14px_rgba(255,255,255,0.3)]" />
+              {/* Feather — lavender wash keyed to the rail hue */}
+              <div className="pointer-events-none absolute inset-y-0 left-1/2 w-[26px] -translate-x-full bg-[linear-gradient(90deg,rgba(139,92,246,0)_0%,rgba(139,92,246,0.11)_55%,rgba(124,58,237,0.26)_100%)] dark:bg-[linear-gradient(90deg,rgba(167,139,250,0)_0%,rgba(167,139,250,0.14)_55%,rgba(192,132,252,0.32)_100%)]" />
+              <div className="pointer-events-none absolute inset-y-0 left-1/2 w-[1.5px] -translate-x-1/2 rounded-full bg-violet-600/80 shadow-[0_0_14px_rgba(124,58,237,0.42)] dark:bg-violet-300/85 dark:shadow-[0_0_18px_rgba(167,139,250,0.48)]" />
             </div>
           </div>
 

@@ -37,7 +37,7 @@ function InteractiveGlowCard({ point, index }: { point: typeof points[0]; index:
       transition={{ duration: 0.5, delay: 0.2 + index * 0.1 }}
       viewport={{ once: true }}
       onMouseMove={handleMouseMove}
-      className="group relative flex flex-col gap-3 overflow-hidden rounded-2xl border border-border/50 bg-background/50 p-6 shadow-sm transition-colors hover:border-[var(--n9-accent)]/40 hover:bg-background"
+      className="marketing-glass-surface group relative flex flex-col gap-3 overflow-hidden rounded-2xl border border-border/50 bg-background/48 p-6 shadow-sm transition-colors hover:border-[var(--n9-accent)]/40 hover:bg-background/72"
     >
       <motion.div
         className="pointer-events-none absolute -inset-px opacity-0 transition duration-500 group-hover:opacity-100"
@@ -64,7 +64,7 @@ function InteractiveGlowCard({ point, index }: { point: typeof points[0]; index:
 
 export function DifferentiationSection() {
   return (
-    <section className="bg-[var(--n9-accent-light)] dark:bg-muted/10">
+    <section className="marketing-section-accent">
       <div className="container mx-auto px-4 py-32 sm:px-6 lg:px-8">
         <div className="mx-auto max-w-4xl text-center">
           <motion.h2
@@ -102,7 +102,7 @@ export function DifferentiationSection() {
             <Button
               asChild
               size="lg"
-              className="h-14 rounded-full bg-[var(--n9-accent)] px-10 text-white text-base shadow-[0_12px_40px_-12px_var(--n9-accent-glow)] hover:bg-[var(--n9-accent-hover)] transition-all hover:scale-105 hover:shadow-[0_20px_50px_-12px_var(--n9-accent-glow)] cursor-pointer"
+              className="h-14 rounded-full bg-[var(--n9-accent)] px-10 text-primary-foreground text-base shadow-[0_12px_40px_-12px_var(--n9-accent-glow)] hover:bg-[var(--n9-accent-hover)] transition-all hover:scale-105 hover:shadow-[0_20px_50px_-12px_var(--n9-accent-glow)] cursor-pointer"
             >
               <Link href="/#contact">
                 Request a personalized demo

@@ -50,6 +50,10 @@ describe("Settings theme toggle applies immediately (Req 11.2)", () => {
     expect(settingsSource).toContain('onClick={() => setTheme("system")}')
   })
 
+  it("calls setTheme('black') on Black button click", () => {
+    expect(settingsSource).toContain('onClick={() => setTheme("black")}')
+  })
+
   it("uses useTheme hook from next-themes for immediate theme application", () => {
     expect(settingsSource).toContain("const { theme, setTheme } = useTheme()")
   })
@@ -66,5 +70,9 @@ describe("Settings theme toggle button variants reflect current theme (Req 11.3)
 
   it("System button uses default variant when theme is system", () => {
     expect(settingsSource).toContain('variant={theme === "system" ? "default" : "outline"}')
+  })
+
+  it("Black button uses default variant when theme is black", () => {
+    expect(settingsSource).toContain('variant={theme === "black" ? "default" : "outline"}')
   })
 })

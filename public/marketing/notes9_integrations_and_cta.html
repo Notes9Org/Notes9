@@ -1,0 +1,148 @@
+
+<style>
+.wrap { padding: 1.5rem 0; }
+.sl { font-size: 12px; font-weight: 500; color: var(--color-text-secondary); text-transform: uppercase; letter-spacing: .07em; margin: 0 0 10px; }
+.ey { font-size: 11px; font-weight: 500; letter-spacing: .09em; text-transform: uppercase; color: #0d9488; margin-bottom: 8px; }
+.h2 { font-size: 22px; font-weight: 500; color: var(--color-text-primary); line-height: 1.2; margin-bottom: 8px; letter-spacing: -.01em; }
+.sub { font-size: 14px; color: var(--color-text-secondary); line-height: 1.65; max-width: 520px; margin-bottom: 28px; }
+
+.tools-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; margin-bottom: 28px; }
+.tool-card { background: var(--color-background-primary); border: 0.5px solid var(--color-border-tertiary); border-radius: var(--border-radius-lg); padding: 16px 14px; display: flex; flex-direction: column; align-items: center; gap: 8px; text-align: center; }
+.tool-icon { width: 36px; height: 36px; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 16px; }
+.tool-name { font-size: 13px; font-weight: 500; color: var(--color-text-primary); }
+.tool-replace { font-size: 11px; color: var(--color-text-secondary); line-height: 1.4; }
+.tool-tag { font-size: 10px; font-weight: 500; padding: 2px 7px; border-radius: 100px; }
+.t-red { background: #FCEBEB; color: #791F1F; }
+.t-teal { background: #E1F5EE; color: #085041; }
+
+.replace-banner { background: var(--color-background-secondary); border: 0.5px solid var(--color-border-tertiary); border-radius: var(--border-radius-lg); padding: 16px 20px; margin-bottom: 28px; display: flex; align-items: center; gap: 16px; }
+.rb-label { font-size: 13px; font-weight: 500; color: var(--color-text-primary); }
+.rb-sub { font-size: 12px; color: var(--color-text-secondary); margin-top: 3px; }
+.rb-count { font-size: 28px; font-weight: 500; color: #0d9488; flex-shrink: 0; }
+
+.divider { border: none; border-top: 0.5px solid var(--color-border-tertiary); margin: 2rem 0; }
+
+.cta-section { background: #0f1117; border-radius: var(--border-radius-lg); padding: 40px 36px; text-align: center; }
+.cta-ey { font-size: 11px; font-weight: 500; letter-spacing: .09em; text-transform: uppercase; color: #14b8a6; margin-bottom: 10px; }
+.cta-h { font-size: 24px; font-weight: 500; color: white; line-height: 1.2; margin-bottom: 10px; letter-spacing: -.01em; }
+.cta-sub { font-size: 14px; color: #9ca3af; line-height: 1.65; max-width: 420px; margin: 0 auto 28px; }
+.cta-btn { display: inline-block; background: #0d9488; color: white; font-size: 14px; font-weight: 500; padding: 12px 28px; border-radius: 9px; margin-bottom: 12px; cursor: pointer; }
+.cta-support { font-size: 12px; color: #6b7280; }
+.cta-support span { color: #9ca3af; }
+
+.cat-label { font-size: 11px; font-weight: 500; text-transform: uppercase; letter-spacing: .07em; color: var(--color-text-secondary); margin: 20px 0 10px; }
+</style>
+
+<div class="wrap">
+<h2 class="sr-only">Notes9 product page — integrations section and final CTA</h2>
+
+<div class="sl">Section 3 — integrations</div>
+<div class="ey">Works with your existing tools</div>
+<div class="h2">Notes9 fits into your workflow.<br>And replaces the ones that were slowing it down.</div>
+<div class="sub">Notes9 connects to the tools you already use — and brings the ones you've been stitching together under one roof. Most teams replace four to six tools when they move to Notes9.</div>
+
+<div class="replace-banner">
+  <div class="rb-count">6</div>
+  <div>
+    <div class="rb-label">Tools the average research team replaces with Notes9</div>
+    <div class="rb-sub">Reference manager · Protocol tool · Lab notebook · Spreadsheet · Writing tool · Separate AI chatbot</div>
+  </div>
+</div>
+
+<div class="cat-label">Literature & reference</div>
+<div class="tools-grid">
+  <div class="tool-card">
+    <div class="tool-icon" style="background:#fef3c7">📄</div>
+    <div class="tool-name">Zotero</div>
+    <div class="tool-replace">Reference management</div>
+    <div class="tool-tag t-red">Replaced</div>
+  </div>
+  <div class="tool-card">
+    <div class="tool-icon" style="background:#e0f2fe">📚</div>
+    <div class="tool-name">Mendeley</div>
+    <div class="tool-replace">Paper library</div>
+    <div class="tool-tag t-red">Replaced</div>
+  </div>
+  <div class="tool-card">
+    <div class="tool-icon" style="background:#f0fdf4">🔬</div>
+    <div class="tool-name">PubMed</div>
+    <div class="tool-replace">Literature search</div>
+    <div class="tool-tag t-teal">Connected</div>
+  </div>
+  <div class="tool-card">
+    <div class="tool-icon" style="background:#f5f3ff">🌐</div>
+    <div class="tool-name">OpenAlex</div>
+    <div class="tool-replace">Open research index</div>
+    <div class="tool-tag t-teal">Connected</div>
+  </div>
+</div>
+
+<div class="cat-label">Lab & protocols</div>
+<div class="tools-grid">
+  <div class="tool-card">
+    <div class="tool-icon" style="background:#fdf4ff">🧪</div>
+    <div class="tool-name">Benchling</div>
+    <div class="tool-replace">ELN & protocols</div>
+    <div class="tool-tag t-red">Replaced</div>
+  </div>
+  <div class="tool-card">
+    <div class="tool-icon" style="background:#fef3c7">📋</div>
+    <div class="tool-name">SciNote</div>
+    <div class="tool-replace">Lab notebook</div>
+    <div class="tool-tag t-red">Replaced</div>
+  </div>
+  <div class="tool-card">
+    <div class="tool-icon" style="background:#fff1f2">🧫</div>
+    <div class="tool-name">eLabNext</div>
+    <div class="tool-replace">ELN & LIMS</div>
+    <div class="tool-tag t-red">Replaced</div>
+  </div>
+  <div class="tool-card">
+    <div class="tool-icon" style="background:#f0fdf4">📝</div>
+    <div class="tool-name">Notion</div>
+    <div class="tool-replace">Notes & docs</div>
+    <div class="tool-tag t-red">Replaced</div>
+  </div>
+</div>
+
+<div class="cat-label">Data & writing</div>
+<div class="tools-grid">
+  <div class="tool-card">
+    <div class="tool-icon" style="background:#f0fdf4">📊</div>
+    <div class="tool-name">Excel / Sheets</div>
+    <div class="tool-replace">Data & analysis</div>
+    <div class="tool-tag t-red">Replaced</div>
+  </div>
+  <div class="tool-card">
+    <div class="tool-icon" style="background:#e0f2fe">✍️</div>
+    <div class="tool-name">Word / Docs</div>
+    <div class="tool-replace">Report writing</div>
+    <div class="tool-tag t-red">Replaced</div>
+  </div>
+  <div class="tool-card">
+    <div class="tool-icon" style="background:#fdf4ff">🤖</div>
+    <div class="tool-name">ChatGPT</div>
+    <div class="tool-replace">Generic AI assistant</div>
+    <div class="tool-tag t-red">Replaced</div>
+  </div>
+  <div class="tool-card">
+    <div class="tool-icon" style="background:#f5f3ff">📁</div>
+    <div class="tool-name">Google Drive</div>
+    <div class="tool-replace">File storage</div>
+    <div class="tool-tag t-teal">Connected</div>
+  </div>
+</div>
+
+<div class="divider"></div>
+
+<div class="sl">Section 4 — final CTA</div>
+
+<div class="cta-section">
+  <div class="cta-ey">Ready to see it in your workflow?</div>
+  <div class="cta-h">One conversation is all it takes<br>to get your lab set up.</div>
+  <div class="cta-sub">Tell us how your team works today. We'll show you exactly how Notes9 fits in — and what you can stop managing separately.</div>
+  <div><div class="cta-btn">Request a demo</div></div>
+  <div class="cta-support">No commitment. <span>We'll get you set up in one conversation.</span></div>
+</div>
+
+</div>

@@ -2104,7 +2104,7 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
 
   return (
     <div className={cn(
-      "flex flex-col bg-background border-l border-border/45 min-h-0 overflow-hidden shadow-[-2px_0_18px_-16px_rgba(44,36,24,0.22)] dark:shadow-[-2px_0_18px_-16px_rgba(0,0,0,0.45)]",
+      "flex flex-col bg-background border-l border-border/45 min-h-0 overflow-hidden shadow-[-2px_0_22px_-18px_rgba(88,166,92,0.12)] dark:shadow-[-2px_0_22px_-18px_rgba(0,0,0,0.45)]",
       isExpanded
         ? "fixed top-0 right-0 bottom-0 left-[var(--sidebar-width,0px)] z-[120] w-auto h-full transition-none"
         : "h-full w-full min-w-0 transition-none"

@@ -32,7 +32,10 @@ export function PlatformFeature({
     const isImageRight = align === "left"
 
     return (
-        <section className={cn("py-24 overflow-hidden", index % 2 === 1 ? "bg-muted/30 border-y border-border/40" : "bg-background")}>
+        <section className={cn(
+          "py-24 overflow-hidden",
+          index % 2 === 1 ? "marketing-section-alt border-y border-border/40" : "",
+        )}>
             <div className="container mx-auto px-4 sm:px-6 lg:px-8">
                 <div className={cn("grid grid-cols-1 gap-12 lg:grid-cols-2 lg:items-stretch lg:gap-24")}>
                     {/* Text Content */}
@@ -105,9 +108,9 @@ export function PlatformFeature({
                         )}
 
                         {/* Foreground Image */}
-                        <div className="relative z-10 w-full aspect-[16/10] rounded-xl border border-border/60 bg-background shadow-2xl overflow-hidden group">
+                        <div className="marketing-glass-surface relative z-10 w-full aspect-[16/10] rounded-xl border border-border/60 bg-background/82 shadow-2xl overflow-hidden group">
                             {/* Browser Chrome / Header Mockup */}
-                            <div className="h-8 bg-muted/80 backdrop-blur border-b border-border/40 flex items-center px-4 gap-2">
+                            <div className="marketing-glass-surface h-8 bg-muted/65 border-b border-border/40 flex items-center px-4 gap-2">
                                 <div className="w-2.5 h-2.5 rounded-full bg-red-400/80" />
                                 <div className="w-2.5 h-2.5 rounded-full bg-amber-400/80" />
                                 <div className="w-2.5 h-2.5 rounded-full bg-green-400/80" />

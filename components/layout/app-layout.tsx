@@ -16,7 +16,7 @@ import { SidebarProvider, SidebarInset, useSidebar } from "@/components/ui/sideb
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet"
 import { useResizable } from "@/hooks/use-resizable"
 import { cn } from "@/lib/utils"
-import { Menu, X, Sparkles, ChevronRight, Sun, Moon, CircleHelp } from 'lucide-react'
+import { Menu, X, Sparkles, ChevronRight, Sun, Moon, Contrast, CircleHelp } from 'lucide-react'
 import { useTheme } from "next-themes"
 import { useMediaQuery } from "@/hooks/use-media-query"
 
@@ -222,14 +222,24 @@ export function AppLayout({ children }: AppLayoutProps) {
 function AppLayoutBody({ children }: AppLayoutProps) {
   const pathname = usePathname()
   const { registration: headerAi } = useHeaderAi()
-  const { setTheme, resolvedTheme } = useTheme()
+  const { setTheme, resolvedTheme, theme } = useTheme()
   const [rightSidebarOpen, setRightSidebarOpen] = useState(false)
   const [themeMounted, setThemeMounted] = useState(false)
   const isMobile = useMediaQuery("(max-width: 768px)")
   const isTablet = useMediaQuery("(max-width: 1024px)")
 
   const toggleTheme = () => {
-    setTheme(resolvedTheme === "dark" ? "light" : "dark")
+    const order = ["light", "dark", "black"] as const
+    const explicit =
+      theme === "light" || theme === "dark" || theme === "black"
+        ? theme
+        : resolvedTheme === "black"
+          ? "black"
+          : resolvedTheme === "dark"
+            ? "dark"
+            : "light"
+    const idx = order.indexOf(explicit as (typeof order)[number])
+    setTheme(order[(idx + 1) % order.length])
   }
 
   useEffect(() => {
@@ -362,12 +372,18 @@ function AppLayoutBody({ children }: AppLayoutProps) {
                 size="icon"
                 className="size-8 sm:size-9"
                 onClick={toggleTheme}
-                aria-label={themeMounted && resolvedTheme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
+                aria-label={
+                  themeMounted
+                    ? `Cycle theme (${resolvedTheme ?? "light"}): light, dark, or black`
+                    : "Theme"
+                }
               >
                 {!themeMounted ? (
                   <Moon className="size-4" />
-                ) : resolvedTheme === "dark" ? (
+                ) : resolvedTheme === "light" ? (
                   <Sun className="size-4" />
+                ) : resolvedTheme === "black" ? (
+                  <Contrast className="size-4" />
                 ) : (
                   <Moon className="size-4" />
                 )}

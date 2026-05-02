@@ -17,7 +17,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-import { LogOut, Sun, Moon, Monitor, Loader2 } from 'lucide-react'
+import { LogOut, Sun, Moon, Monitor, Contrast, Loader2 } from 'lucide-react'
 import { ChangePasswordDialog } from "@/components/change-password-dialog"
 import { useToast } from "@/hooks/use-toast"
 import { USER_STORAGE_BUCKET, createProfileAvatarStoragePath } from "@/lib/user-storage-bucket"
@@ -391,7 +391,7 @@ export default function SettingsPage() {
                   </p>
                 </div>
                 {mounted && (
-                  <div className="flex gap-2">
+                  <div className="flex flex-wrap justify-end gap-2">
                     <Button
                       variant={theme === "light" ? "default" : "outline"}
                       size="sm"
@@ -407,6 +407,15 @@ export default function SettingsPage() {
                     >
                       <Moon className="h-4 w-4 mr-2" />
                       Dark
+                    </Button>
+                    <Button
+                      variant={theme === "black" ? "default" : "outline"}
+                      size="sm"
+                      onClick={() => setTheme("black")}
+                      title="True black (OLED-friendly)"
+                    >
+                      <Contrast className="h-4 w-4 mr-2" />
+                      Black
                     </Button>
                     <Button
                       variant={theme === "system" ? "default" : "outline"}

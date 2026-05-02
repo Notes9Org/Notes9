@@ -7,8 +7,8 @@ export default function manifest(): MetadataRoute.Manifest {
     description: "Professional laboratory research and experiment management platform",
     start_url: "/",
     display: "standalone",
-    background_color: "#faf7f2",
-    theme_color: "#faf7f2",
+    background_color: "#f8f4ea",
+    theme_color: "#f8f4ea",
     icons: [
       {
         src: "/notes9-logo-favicon.png",

@@ -1,0 +1,296 @@
+/* Hero embed: uses marketing-theme CSS variables for light + dark (styles/marketing.css). */
+
+.mockFrame {
+  width: 100%;
+  max-width: min(1580px, 100%);
+  height: 100%;
+  min-height: min(580px, 76vh);
+  margin-inline: auto;
+  background: var(--card);
+  color: var(--foreground);
+  border-radius: 16px;
+  box-shadow:
+    0 1px 3px rgba(0, 0, 0, 0.06),
+    0 12px 40px rgba(44, 36, 24, 0.08);
+  border: 1px solid var(--border);
+  overflow: hidden;
+  display: flex;
+  font-family:
+    ui-sans-serif,
+    system-ui,
+    -apple-system,
+    "Segoe UI",
+    sans-serif;
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+.sidebar {
+  width: min(320px, 34%);
+  flex-shrink: 0;
+  border-right: 1px solid var(--border);
+  padding: 24px 18px 24px 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.brand {
+  padding-left: 2px;
+  min-width: 0;
+}
+
+.nav {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.navItem {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 10px;
+  border-radius: 10px;
+  border: 0;
+  background: transparent;
+  width: 100%;
+  text-align: left;
+  cursor: default;
+  color: var(--foreground);
+  font-weight: 500;
+  font-size: 13px;
+  font-family: inherit;
+  transition: background 0.15s ease;
+}
+
+.navItem:hover {
+  background: var(--muted);
+}
+
+/* Match marketing / app accent (see styles/marketing.css --n9-accent) */
+.navItemActive {
+  background: var(--n9-accent-light);
+  color: var(--n9-accent);
+}
+
+.navItemActive .navIco {
+  color: var(--n9-accent);
+}
+
+.navIco {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+  color: var(--muted-foreground);
+}
+
+.navIcoProtocols {
+  display: inline-flex !important;
+  width: 18px !important;
+  height: 18px !important;
+  flex-shrink: 0;
+  color: var(--muted-foreground);
+}
+
+.navIcoProtocols :global(svg:first-child) {
+  width: 18px !important;
+  height: 18px !important;
+}
+
+.navItemActive .navIcoProtocols {
+  color: var(--n9-accent);
+}
+
+.mainPanel {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  padding: 24px 32px 28px;
+}
+
+.chatHeader {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding-bottom: 18px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 22px;
+}
+
+.chatTitle {
+  font-weight: 700;
+  font-size: 1rem;
+  letter-spacing: -0.02em;
+  color: var(--foreground);
+}
+
+.thread {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  min-height: 0;
+}
+
+.bubble {
+  max-width: min(640px, 94%);
+  padding: 12px 14px;
+  border-radius: 14px;
+  position: relative;
+}
+
+.bubbleUser {
+  align-self: flex-end;
+  background: var(--n9-accent-light);
+  margin-left: auto;
+}
+
+.bubbleUser .bubbleText {
+  padding-right: 52px;
+}
+
+.bubbleAi {
+  align-self: flex-start;
+  background: var(--muted);
+  border: 1px solid var(--border);
+}
+
+.bubbleText {
+  margin: 0;
+  font-size: 13.5px;
+  line-height: 1.5;
+  color: var(--foreground);
+}
+
+.bubbleMeta {
+  position: absolute;
+  bottom: 10px;
+  right: 12px;
+  font-size: 11px;
+  color: var(--muted-foreground);
+}
+
+.sources {
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+}
+
+.sourcesLabel {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--muted-foreground);
+  margin-bottom: 8px;
+}
+
+.sourcesRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+
+.srcChip {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--border);
+}
+
+.srcChipMore {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--muted-foreground);
+  background: var(--muted);
+  width: auto;
+  padding: 0 8px;
+}
+
+.composer {
+  margin-top: auto;
+  padding-top: 22px;
+  display: flex;
+  gap: 12px;
+  align-items: stretch;
+}
+
+.composerInputWrap {
+  flex: 1;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 10px 14px;
+  background: color-mix(in srgb, var(--muted) 65%, var(--card));
+}
+
+.composerInputWrap input {
+  width: 100%;
+  border: 0;
+  background: transparent;
+  font: inherit;
+  outline: none;
+  color: var(--foreground);
+}
+
+.composerInputWrap input::placeholder {
+  color: var(--muted-foreground);
+}
+
+.send {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  border: 0;
+  background: var(--n9-accent);
+  color: #fff;
+  cursor: default;
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  align-self: center;
+  transition: background 0.15s ease;
+  box-shadow: 0 10px 28px -14px var(--n9-accent-glow);
+}
+
+.send:hover {
+  background: var(--n9-accent-hover);
+}
+
+.visuallyHidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+@media (max-width: 720px) {
+  .mockFrame {
+    flex-direction: column;
+  }
+
+  .sidebar {
+    width: 100%;
+    border-right: 0;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .nav {
+    flex-direction: row;
+    flex-wrap: wrap;
+  }
+}
+
+/* Dark: deeper elevation; variables already switch card/muted/border */
+:global(.dark) .mockFrame {
+  box-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.35),
+    0 18px 50px -28px rgba(0, 0, 0, 0.65);
+}

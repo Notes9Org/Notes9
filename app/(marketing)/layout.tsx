@@ -1,7 +1,6 @@
 import "@/styles/marketing.css"
 import { Header } from "@/components/marketing/header"
 import { Footer } from "@/components/marketing/footer"
-import { FloatingPageMenu } from "@/components/marketing/floating-page-menu"
 import { DM_Sans, DM_Serif_Display } from "next/font/google"
 
 const dmSans = DM_Sans({
@@ -23,13 +22,13 @@ export default function MarketingLayout({
   children: React.ReactNode
 }) {
   return (
-    <div className={`marketing-theme ${dmSans.variable} ${dmSerif.variable} font-sans antialiased min-h-screen flex flex-col bg-background text-foreground relative overflow-hidden`}>
+    <div
+      className={`marketing-theme marketing-glass-app ${dmSans.variable} ${dmSerif.variable} font-sans antialiased min-h-screen w-full min-w-0 max-w-full flex flex-col text-foreground relative overflow-visible`}
+    >
       <MarketingParticles />
-      <div className="marketing-mesh pointer-events-none absolute inset-0 opacity-[0.15] dark:opacity-[0.08]" />
-      <div className="relative z-10 flex flex-col min-h-screen">
-        <Header />
-        <FloatingPageMenu />
-        <main className="flex-1 pt-16">
+      <Header />
+      <div className="relative z-10 flex min-h-screen w-full min-w-0 max-w-full flex-col marketing-glass-page">
+        <main className="min-h-0 min-w-0 flex-1">
           {children}
         </main>
         <Footer />

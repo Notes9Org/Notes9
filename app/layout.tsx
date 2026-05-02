@@ -78,6 +78,7 @@ export default function RootLayout({
           defaultTheme="system"
           enableSystem
           disableTransitionOnChange
+          themes={["light", "dark", "black"]}
         >
           <RumProvider>
             <NavigationLoader />

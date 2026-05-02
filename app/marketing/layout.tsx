@@ -1,18 +1,18 @@
-import { JetBrains_Mono, Work_Sans } from "next/font/google"
+import "@/styles/marketing.css"
 import { Header } from "@/components/marketing/header"
 import { Footer } from "@/components/marketing/footer"
-import { FloatingPageMenu } from "@/components/marketing/floating-page-menu"
 import { DM_Sans, DM_Serif_Display } from "next/font/google"
 import { MarketingParticles } from "@/components/marketing/marketing-particles"
 
-const workSans = Work_Sans({
+const dmSans = DM_Sans({
   subsets: ["latin"],
-  variable: "--font-work-sans",
+  variable: "--font-dm-sans",
 })
 
-const jetbrainsMono = JetBrains_Mono({
+const dmSerif = DM_Serif_Display({
+  weight: "400",
   subsets: ["latin"],
-  variable: "--font-jetbrains-mono",
+  variable: "--font-dm-serif",
 })
 
 export default function MarketingLayout({
@@ -21,15 +21,13 @@ export default function MarketingLayout({
   children: React.ReactNode
 }) {
   return (
-    <div className={`${workSans.variable} ${jetbrainsMono.variable} font-sans antialiased min-h-screen flex flex-col bg-background text-foreground relative overflow-hidden`}>
+    <div
+      className={`marketing-theme marketing-glass-app ${dmSans.variable} ${dmSerif.variable} font-sans antialiased min-h-screen w-full min-w-0 max-w-full flex flex-col text-foreground relative overflow-visible`}
+    >
       <MarketingParticles />
-      <div className="marketing-mesh pointer-events-none absolute inset-0 opacity-[0.15] dark:opacity-[0.08]" />
-      <div className="relative z-10 flex flex-col min-h-screen">
-        <Header />
-        <FloatingPageMenu />
-        <main className="flex-1">
-          {children}
-        </main>
+      <Header />
+      <div className="relative z-10 flex min-h-screen w-full min-w-0 max-w-full flex-col marketing-glass-page">
+        <main className="min-h-0 min-w-0 flex-1">{children}</main>
         <Footer />
       </div>
     </div>

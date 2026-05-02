@@ -16,8 +16,8 @@ describe("Skeleton loading components", () => {
     const { container } = render(<DashboardLoading />)
     const pulseEl = container.querySelector(".animate-pulse")
     expect(pulseEl).toBeInTheDocument()
-    const mutedBlocks = container.querySelectorAll(".bg-muted")
-    expect(mutedBlocks.length).toBeGreaterThan(0)
+    expect(container.querySelectorAll('[data-slot="skeleton"]').length).toBeGreaterThan(0)
+    expect(container.querySelectorAll('[data-slot="card"]').length).toBeGreaterThan(0)
     const roundedBlocks = container.querySelectorAll(".rounded-md")
     expect(roundedBlocks.length).toBeGreaterThan(0)
   })
@@ -77,15 +77,17 @@ describe("Skeleton loading components", () => {
     const { container } = render(<LiteratureReviewsLoading />)
     const pulseEl = container.querySelector(".animate-pulse")
     expect(pulseEl).toBeInTheDocument()
-    const mutedBlocks = container.querySelectorAll(".bg-muted")
-    expect(mutedBlocks.length).toBeGreaterThan(0)
+    expect(
+      container.querySelectorAll('[data-slot="skeleton"], [class*="bg-muted"]').length,
+    ).toBeGreaterThan(0)
   })
 
   it("PapersLoading renders animate-pulse table skeleton", () => {
     const { container } = render(<PapersLoading />)
     const pulseEl = container.querySelector(".animate-pulse")
     expect(pulseEl).toBeInTheDocument()
-    const mutedBlocks = container.querySelectorAll(".bg-muted")
-    expect(mutedBlocks.length).toBeGreaterThan(0)
+    expect(
+      container.querySelectorAll('[data-slot="skeleton"], [class*="bg-muted"]').length,
+    ).toBeGreaterThan(0)
   })
 })

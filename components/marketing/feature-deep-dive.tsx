@@ -127,7 +127,7 @@ function FeatureRow({ feature, index }: { feature: Feature; index: number }) {
           onMouseMove={handleMouseMove}
           onMouseLeave={handleMouseLeave}
           style={{ rotateX, rotateY }}
-          className="group relative overflow-hidden rounded-2xl border border-border/60 bg-background shadow-[0_32px_80px_-30px_rgba(44,36,24,0.15)] transition-shadow duration-500 hover:shadow-[0_32px_80px_-20px_rgba(155,71,34,0.18)] dark:shadow-[0_32px_80px_-30px_rgba(0,0,0,0.5)] transform-gpu"
+          className="marketing-glass-surface group relative overflow-hidden rounded-2xl border border-border/60 bg-background/80 shadow-[0_32px_80px_-30px_rgba(44,36,24,0.15)] transition-shadow duration-500 hover:shadow-[0_32px_80px_-20px_rgba(155,71,34,0.18)] dark:shadow-[0_32px_80px_-30px_rgba(0,0,0,0.5)] transform-gpu"
         >
           {/* Spotlight Glow Effect inside the card border boundaries */}
           <motion.div
@@ -136,7 +136,7 @@ function FeatureRow({ feature, index }: { feature: Feature; index: number }) {
           />
 
           {/* Browser bar */}
-          <div className="relative z-10 flex h-8 items-center gap-2 border-b border-border/40 bg-muted/50 px-3">
+          <div className="marketing-glass-surface relative z-10 flex h-8 items-center gap-2 border-b border-border/40 bg-muted/45 px-3">
             <div className="flex gap-1.5">
               <div className="h-2.5 w-2.5 rounded-full bg-red-400/80" />
               <div className="h-2.5 w-2.5 rounded-full bg-yellow-400/80" />
@@ -168,21 +168,29 @@ export function FeatureDeepDive() {
   const lineHeight = useTransform(scrollYProgress, [0, 1], ["0%", "100%"])
 
   return (
-    <section id="features" ref={sectionRef} className="relative bg-[var(--n9-accent-light)]/50 dark:bg-muted/10">
-      <div className="container mx-auto px-4 py-20 sm:px-6 lg:px-8">
+    <section id="features" ref={sectionRef} className="marketing-section-accent relative">
+      <div className="container relative z-[1] mx-auto px-4 py-20 sm:px-6 lg:px-8">
         <motion.div
           initial={{ opacity: 0, y: 16 }}
           whileInView={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5 }}
           viewport={{ once: true }}
-          className="mx-auto max-w-3xl text-center mb-16"
+          className="mx-auto mb-16 max-w-[min(100%,62.4rem)] text-center"
         >
+          <motion.div
+            initial={{ opacity: 0, y: 12 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.4, ease: "easeOut" }}
+            viewport={{ once: true }}
+            className="mx-auto mb-6 inline-flex max-w-full flex-wrap items-center justify-center gap-[0.5rem] rounded-full border border-[var(--n9-accent)]/30 bg-[var(--n9-accent-light)] px-[0.9rem] py-[0.3rem] text-[0.76rem] font-semibold uppercase leading-snug tracking-[0.12em] text-[var(--n9-accent)]"
+          >
+            One connected workflow for the full research journey
+          </motion.div>
           <h2 className="font-serif text-3xl tracking-tight text-foreground sm:text-4xl">
-            From literature review to lab work to reporting, <span className="text-[var(--n9-accent)]">Notes9</span> keeps every step connected - and every insight preserved.
+            From literature review to lab work to reporting,
+            <br aria-hidden />
+            <span className="text-[var(--n9-accent)]">Notes9</span> keeps every step connected - and every insight preserved.
           </h2>
-          <p className="mt-4 text-lg leading-7 text-muted-foreground">
-            A connected workflow for the full research journey.
-          </p>
         </motion.div>
 
         <div className="relative mx-auto max-w-6xl">

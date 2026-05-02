@@ -535,7 +535,7 @@ export function AppSidebar() {
     <Sidebar
       variant="sidebar"
       collapsible="icon"
-      className="shadow-[2px_0_18px_-16px_rgba(44,36,24,0.22)] transition-all duration-200 ease-in-out dark:shadow-[2px_0_18px_-16px_rgba(0,0,0,0.45)]"
+      className="shadow-[2px_0_22px_-18px_rgba(88,166,92,0.14)] transition-all duration-200 ease-in-out dark:shadow-[2px_0_22px_-18px_rgba(0,0,0,0.45)]"
     >
       {/* Header with Workspace Dropdown */}
       <SidebarHeader
@@ -712,7 +712,7 @@ export function AppSidebar() {
                     <SidebarMenuButton
                       asChild
                       isActive={isActive}
-                      className="group transition-all duration-150 hover:bg-[color:color-mix(in_oklab,var(--background)_78%,var(--primary)_22%)] hover:text-sidebar-foreground active:scale-[0.985] active:bg-[color:color-mix(in_oklab,var(--background)_70%,var(--primary)_30%)] dark:hover:bg-sidebar-accent dark:hover:text-sidebar-accent-foreground dark:active:scale-[0.985] dark:active:bg-sidebar-accent/90 data-[active=true]:bg-transparent data-[active=true]:text-sidebar-foreground"
+                      className="group transition-all duration-150 hover:bg-[color:color-mix(in_oklab,var(--background)_78%,var(--primary)_22%)] hover:text-sidebar-foreground active:scale-[0.985] active:bg-[color:color-mix(in_oklab,var(--background)_70%,var(--primary)_30%)] dark:hover:bg-sidebar-accent dark:hover:text-sidebar-accent-foreground dark:active:scale-[0.985] dark:active:bg-sidebar-accent/90 data-[active=true]:bg-primary/15 data-[active=true]:text-primary dark:data-[active=true]:bg-primary/22 dark:data-[active=true]:text-primary dark:hover:data-[active=true]:bg-primary/26"
                     >
                       <Link href={item.href} title={isIconMode ? item.name : undefined}>
                         <Icon />
@@ -805,7 +805,7 @@ export function AppSidebar() {
                                   <SidebarMenuButton
                                     asChild
                                     isActive={mounted && pathname === `/projects/${project.id}`}
-                                    className="group min-w-0 flex-1 gap-2 pl-0 transition-all duration-150 hover:bg-[color:color-mix(in_oklab,var(--background)_78%,var(--primary)_22%)] hover:text-sidebar-foreground active:scale-[0.985] active:bg-[color:color-mix(in_oklab,var(--background)_70%,var(--primary)_30%)] dark:hover:bg-sidebar-accent dark:hover:text-sidebar-accent-foreground dark:active:scale-[0.985] dark:active:bg-sidebar-accent/90 data-[active=true]:bg-transparent data-[active=true]:text-sidebar-foreground"
+                                    className="group min-w-0 flex-1 gap-2 pl-0 transition-all duration-150 hover:bg-[color:color-mix(in_oklab,var(--background)_78%,var(--primary)_22%)] hover:text-sidebar-foreground active:scale-[0.985] active:bg-[color:color-mix(in_oklab,var(--background)_70%,var(--primary)_30%)] dark:hover:bg-sidebar-accent dark:hover:text-sidebar-accent-foreground dark:active:scale-[0.985] dark:active:bg-sidebar-accent/90 data-[active=true]:bg-primary/15 data-[active=true]:text-primary dark:data-[active=true]:bg-primary/22 dark:data-[active=true]:text-primary dark:hover:data-[active=true]:bg-primary/26"
                                   >
                                     <Link
                                       href={`/projects/${project.id}`}
@@ -893,7 +893,7 @@ export function AppSidebar() {
                                               className={cn(
                                                 "group min-w-0 flex-1 rounded-md px-2 py-1.5 text-left text-sm truncate cursor-grab active:cursor-grabbing transition-all duration-150",
                                                 pathname === `/experiments/${exp.id}`
-                                                  ? "text-sidebar-foreground"
+                                                  ? "bg-primary/15 text-primary dark:bg-primary/22"
                                                   : "text-sidebar-foreground/70 hover:bg-[color:color-mix(in_oklab,var(--background)_78%,var(--primary)_22%)] hover:text-sidebar-foreground active:scale-[0.985] active:bg-[color:color-mix(in_oklab,var(--background)_70%,var(--primary)_30%)] dark:hover:bg-sidebar-accent dark:hover:text-sidebar-accent-foreground dark:active:scale-[0.985] dark:active:bg-sidebar-accent/90"
                                               )}
                                             >
@@ -905,7 +905,17 @@ export function AppSidebar() {
 
                                           {isExpOpen && exp.lab_notes && exp.lab_notes.length > 0 && (
                                             <div className="ml-6 mt-1 space-y-0.5">
-                                              {exp.lab_notes.map((note) => (
+                                              {exp.lab_notes.map((note) => {
+                                                const noteIdParam = (searchParams.get("noteId") ?? "").trim()
+                                                const onExperimentPage = pathname.startsWith(
+                                                  `/experiments/${exp.id}`
+                                                )
+                                                const isCurrentNote =
+                                                  mounted &&
+                                                  onExperimentPage &&
+                                                  noteIdParam === note.id
+
+                                                return (
                                                 <button
                                                   key={note.id}
                                                   onClick={() => {
@@ -925,17 +935,20 @@ export function AppSidebar() {
                                                   }}
                                                   className={cn(
                                                     "group flex w-full min-w-0 items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs truncate cursor-grab active:cursor-grabbing transition-all duration-150 [&>svg]:size-4 [&>svg]:shrink-0",
-                                                    pathname.startsWith(`/experiments/${exp.id}`)
-                                                      ? "text-sidebar-foreground"
-                                                      : "text-sidebar-foreground/70 hover:bg-[color:color-mix(in_oklab,var(--background)_78%,var(--primary)_22%)] hover:text-sidebar-foreground active:scale-[0.985] active:bg-[color:color-mix(in_oklab,var(--background)_70%,var(--primary)_30%)] dark:hover:bg-sidebar-accent dark:hover:text-sidebar-accent-foreground dark:active:scale-[0.985] dark:active:bg-sidebar-accent/90"
+                                                    isCurrentNote
+                                                      ? "bg-primary/15 text-primary dark:bg-primary/22 [&>svg]:text-primary"
+                                                      : onExperimentPage
+                                                        ? "text-sidebar-foreground"
+                                                        : "text-sidebar-foreground/70 hover:bg-[color:color-mix(in_oklab,var(--background)_78%,var(--primary)_22%)] hover:text-sidebar-foreground active:scale-[0.985] active:bg-[color:color-mix(in_oklab,var(--background)_70%,var(--primary)_30%)] dark:hover:bg-sidebar-accent dark:hover:text-sidebar-accent-foreground dark:active:scale-[0.985] dark:active:bg-sidebar-accent/90"
                                                   )}
                                                 >
                                                   <NotebookPen className="size-4 shrink-0" />
-                                                  <span className={cn("min-w-0 truncate", pathname.startsWith(`/experiments/${exp.id}`) && "font-semibold")}>
+                                                  <span className={cn("min-w-0 truncate", onExperimentPage && "font-semibold")}>
                                                     {note.title || "Untitled note"}
                                                   </span>
                                                 </button>
-                                              ))}
+                                                )
+                                              })}
                                             </div>
                                           )}
                                         </div>

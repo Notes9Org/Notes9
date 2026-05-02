@@ -167,7 +167,7 @@ export function ProductShowcase() {
                     <div
                       className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full transition-colors duration-300 ${
                         isActive
-                          ? "bg-[var(--n9-accent)] text-white shadow-md shadow-[var(--n9-accent-glow)]/50"
+                          ? "bg-[var(--n9-accent)] text-primary-foreground shadow-md shadow-[var(--n9-accent-glow)]/50"
                           : "bg-muted text-muted-foreground group-hover:border group-hover:bg-background group-hover:text-foreground"
                       }`}
                     >
@@ -213,7 +213,7 @@ export function ProductShowcase() {
           <div className="relative lg:sticky lg:top-32 lg:col-span-7">
             <div className="absolute -inset-4 rounded-3xl bg-[var(--n9-accent)]/[0.04] blur-2xl" />
 
-            <div className="group relative flex aspect-[4/3] items-center justify-center overflow-hidden rounded-2xl border border-border/40 bg-background/50 p-2 shadow-2xl shadow-black/5 ring-1 ring-black/5 backdrop-blur-sm dark:ring-white/10 sm:p-6">
+            <div className="marketing-glass-surface group relative flex aspect-[4/3] items-center justify-center overflow-hidden rounded-2xl border border-border/40 bg-background/45 p-2 shadow-2xl shadow-black/5 ring-1 ring-black/5 dark:ring-white/10 sm:p-6">
               <AnimatePresence mode="popLayout">
                 <motion.div
                   key={current.id}

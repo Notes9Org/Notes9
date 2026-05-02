@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Notes9 — Pricing</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,300&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:'DM Sans',system-ui,sans-serif;background:#f8f7f4;color:#0f1117;padding:2rem;}
+.page{max-width:900px;margin:0 auto;}
+.sl{font-size:11px;font-weight:600;letter-spacing:.09em;text-transform:uppercase;color:#0d9488;margin-bottom:10px;}
+.h2{font-size:26px;font-weight:500;color:#0f1117;line-height:1.2;letter-spacing:-.01em;margin-bottom:10px;}
+.sub{font-size:14px;color:#6b7280;line-height:1.65;}
+.divider{border:none;border-top:1px solid #e5e2dc;margin:2.5rem 0;}
+
+/* HERO */
+.hero{text-align:center;padding:3rem 0 2rem;}
+.hero .h2{font-size:34px;max-width:520px;margin:0 auto 12px;}
+.hero .sub{max-width:460px;margin:0 auto 0;}
+
+/* FREE BANNER */
+.free-banner{background:linear-gradient(135deg,#f0fdf9,#ecfdf5);border:2px solid #5eead4;border-radius:20px;padding:36px;text-align:center;margin-bottom:2rem;}
+.free-badge{display:inline-flex;align-items:center;gap:6px;background:#0d9488;color:white;font-size:12px;font-weight:600;padding:5px 16px;border-radius:100px;margin-bottom:16px;letter-spacing:.05em;text-transform:uppercase;}
+.free-h{font-size:28px;font-weight:500;color:#0f1117;line-height:1.2;margin-bottom:10px;letter-spacing:-.01em;}
+.free-sub{font-size:14px;color:#374151;line-height:1.7;max-width:500px;margin:0 auto 20px;}
+.free-chips{display:flex;flex-wrap:wrap;gap:8px;justify-content:center;margin-bottom:24px;}
+.free-chip{font-size:12px;background:white;border:1px solid #99f6e4;border-radius:100px;padding:5px 14px;color:#0f766e;font-weight:500;}
+.free-cta{display:inline-flex;align-items:center;gap:8px;background:#0f1117;color:white;font-size:14px;font-weight:500;padding:12px 28px;border-radius:10px;cursor:pointer;margin-bottom:10px;}
+.free-note{font-size:12px;color:#6b7280;}
+
+/* WHAT FREE INCLUDES */
+.free-detail{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-bottom:2rem;}
+.fd-card{background:white;border:1px solid #e5e2dc;border-radius:14px;padding:20px;}
+.fd-icon{font-size:22px;margin-bottom:12px;}
+.fd-title{font-size:14px;font-weight:500;color:#0f1117;margin-bottom:6px;}
+.fd-body{font-size:13px;color:#6b7280;line-height:1.6;}
+
+/* UPGRADE ROW */
+.upgrade-row{background:white;border:1px solid #e5e2dc;border-radius:14px;padding:22px 26px;margin-bottom:2rem;display:flex;align-items:center;gap:20px;}
+.upgrade-icon{font-size:28px;flex-shrink:0;}
+.upgrade-text h4{font-size:15px;font-weight:500;color:#0f1117;margin-bottom:5px;}
+.upgrade-text p{font-size:13px;color:#6b7280;line-height:1.6;}
+.upgrade-cta{flex-shrink:0;font-size:13px;font-weight:500;color:#0d9488;border:1px solid #0d9488;padding:9px 18px;border-radius:8px;cursor:pointer;white-space:nowrap;}
+
+/* DEMO SECTION */
+.demo-section{background:#0f1117;border-radius:20px;padding:36px;margin-bottom:2rem;}
+.demo-inner{display:grid;grid-template-columns:1fr 1fr;gap:48px;align-items:start;}
+.demo-sl{font-size:11px;font-weight:600;letter-spacing:.09em;text-transform:uppercase;color:#14b8a6;margin-bottom:10px;}
+.demo-h{font-size:22px;font-weight:500;color:white;line-height:1.25;margin-bottom:10px;}
+.demo-sub{font-size:13px;color:#9ca3af;line-height:1.7;margin-bottom:20px;}
+.demo-points{display:flex;flex-direction:column;gap:12px;margin-bottom:24px;}
+.dp{display:flex;align-items:flex-start;gap:10px;}
+.dp-dot{width:6px;height:6px;border-radius:50%;background:#14b8a6;flex-shrink:0;margin-top:5px;}
+.dp-text{font-size:13px;color:#d1d5db;line-height:1.55;}
+.dp-text strong{color:white;font-weight:500;}
+.demo-ctas{display:flex;gap:10px;}
+.demo-cta-p{font-size:13px;font-weight:500;background:#0d9488;color:white;padding:10px 20px;border-radius:8px;cursor:pointer;}
+.demo-cta-s{font-size:13px;color:#9ca3af;border:1px solid #374151;padding:10px 20px;border-radius:8px;cursor:pointer;}
+
+/* FORM */
+.form-card{background:white;border-radius:14px;padding:26px;}
+.form-title{font-size:16px;font-weight:500;color:#0f1117;margin-bottom:4px;}
+.form-sub{font-size:12px;color:#6b7280;margin-bottom:18px;}
+.field{margin-bottom:12px;}
+.field label{font-size:11px;font-weight:600;color:#374151;text-transform:uppercase;letter-spacing:.06em;display:block;margin-bottom:5px;}
+.field input,.field select,.field textarea{width:100%;font-size:13px;padding:9px 12px;border:1px solid #d1d5db;border-radius:7px;color:#0f1117;font-family:inherit;background:white;outline:none;}
+.field input:focus,.field select:focus,.field textarea:focus{border-color:#0d9488;}
+.field textarea{resize:none;height:80px;}
+.field-row{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+.form-submit{width:100%;background:#0f1117;color:white;font-size:13px;font-weight:500;padding:12px;border-radius:8px;border:none;cursor:pointer;margin-top:4px;}
+.form-privacy{font-size:11px;color:#9ca3af;text-align:center;margin-top:8px;}
+
+/* FAQ */
+.faq-grid{display:flex;flex-direction:column;gap:8px;margin-top:1.5rem;}
+.faq-item{background:white;border:1px solid #e5e2dc;border-radius:12px;overflow:hidden;}
+.faq-q{padding:16px 20px;font-size:14px;font-weight:500;color:#0f1117;cursor:pointer;display:flex;align-items:center;justify-content:space-between;user-select:none;}
+.faq-q:hover{background:#f8f7f4;}
+.faq-chevron{font-size:11px;color:#9ca3af;transition:transform .2s;flex-shrink:0;margin-left:12px;}
+.faq-a{display:none;padding:0 20px 16px;font-size:13px;color:#6b7280;line-height:1.75;border-top:1px solid #e5e2dc;}
+.faq-a.open{display:block;}
+.faq-a p{padding-top:14px;}
+.faq-a ul{padding:12px 0 0 18px;display:flex;flex-direction:column;gap:5px;}
+.faq-a li{font-size:13px;color:#6b7280;line-height:1.6;}
+
+/* BOTTOM CTA */
+.bottom{text-align:center;background:white;border:1px solid #e5e2dc;border-radius:20px;padding:48px 32px;margin-top:0;}
+.bottom .h2{font-size:28px;max-width:400px;margin:0 auto 10px;}
+.bottom .sub{max-width:400px;margin:0 auto 24px;}
+.bottom-ctas{display:flex;gap:12px;justify-content:center;}
+.btn-dark{font-size:14px;font-weight:500;background:#0f1117;color:white;padding:12px 26px;border-radius:10px;cursor:pointer;}
+.btn-outline{font-size:14px;color:#0f1117;border:1px solid #d1d5db;padding:12px 26px;border-radius:10px;cursor:pointer;}
+</style>
+</head>
+<body>
+<div class="page">
+
+<!-- HERO -->
+<div class="hero">
+  <div class="sl">Pricing</div>
+  <div class="h2">Start free.<br>No credit card. No countdown.</div>
+  <div class="sub">Notes9 is free to start — so you can see how connected research feels before committing to anything. When your lab needs more, we'll build a plan around your workflow.</div>
+</div>
+
+<!-- FREE BANNER -->
+<div class="free-banner">
+  <div class="free-badge">✦ Free to start</div>
+  <div class="free-h">Get the full Notes9 experience —<br>at no cost.</div>
+  <div class="free-sub">No pricing tiers to navigate. No feature limits to bump into. Notes9 is free while we work with early research teams to build the product around real workflows. Sign up and start today.</div>
+  <div class="free-chips">
+    <span class="free-chip">Literature search</span>
+    <span class="free-chip">Electronic lab notebook</span>
+    <span class="free-chip">Protocol drafting</span>
+    <span class="free-chip">Sample & inventory management</span>
+    <span class="free-chip">Data & analysis</span>
+    <span class="free-chip">Reports & writing</span>
+    <span class="free-chip">Catalyst AI lab assistant</span>
+    <span class="free-chip">Research Map</span>
+  </div>
+  <div class="free-cta">Start for free →</div>
+  <div class="free-note">No credit card required · Takes 2 minutes to set up</div>
+</div>
+
+<!-- WHAT FREE INCLUDES -->
+<div class="sl">What you get from day one</div>
+<div class="free-detail">
+  <div class="fd-card">
+    <div class="fd-icon">🔗</div>
+    <div class="fd-title">The full connected workflow</div>
+    <div class="fd-body">Literature, experiments, lab notes, data, and writing — all linked under your project from day one. No stripped-down trial version.</div>
+  </div>
+  <div class="fd-card">
+    <div class="fd-icon">🤖</div>
+    <div class="fd-title">Catalyst AI — your lab assistant</div>
+    <div class="fd-body">Works across your entire project — summarising papers, drafting protocols, analysing data, and writing reports from connected context.</div>
+  </div>
+  <div class="fd-card">
+    <div class="fd-icon">🗺️</div>
+    <div class="fd-title">Research Map</div>
+    <div class="fd-body">A visual overview of everything linked inside your project — papers, experiments, notes, results — accessible with a double-click.</div>
+  </div>
+</div>
+
+<!-- ENTERPRISE ROW -->
+<div class="upgrade-row">
+  <div class="upgrade-icon">🏢</div>
+  <div class="upgrade-text">
+    <h4>Running a larger lab or need enterprise features?</h4>
+    <p>For teams needing multiple seats, shared knowledge graphs, advanced PK/PD modelling, SSO, VPC deployment, or a dedicated onboarding — we scope a plan around your lab's actual needs. No catalogue. Just a conversation.</p>
+  </div>
+  <div class="upgrade-cta">Get a proposal →</div>
+</div>
+
+<div class="divider"></div>
+
+<!-- DEMO + CONTACT FORM -->
+<div class="demo-section">
+  <div class="demo-inner">
+    <div>
+      <div class="demo-sl">Book a demo</div>
+      <div class="demo-h">See Notes9 through<br>your own workflow.</div>
+      <div class="demo-sub">Not a generic product walkthrough. We show you the parts of Notes9 most relevant to how your lab actually works — and get you set up the same day if it's a fit.</div>
+      <div class="demo-points">
+        <div class="dp"><div class="dp-dot"></div><div class="dp-text"><strong>30 minutes.</strong> We understand your workflow and show exactly where Notes9 fits.</div></div>
+        <div class="dp"><div class="dp-dot"></div><div class="dp-text"><strong>No sales script.</strong> Just a conversation about your research and where the friction is.</div></div>
+        <div class="dp"><div class="dp-dot"></div><div class="dp-text"><strong>Same-day setup.</strong> Most labs are running a live workflow within the first week.</div></div>
+        <div class="dp"><div class="dp-dot"></div><div class="dp-text"><strong>Tailored proposal in 48 hours</strong> if your lab needs a custom plan.</div></div>
+      </div>
+      <div class="demo-ctas">
+        <div class="demo-cta-p">Book a 30-min demo</div>
+        <div class="demo-cta-s">Email us instead</div>
+      </div>
+    </div>
+    <div class="form-card">
+      <div class="form-title">Get in touch</div>
+      <div class="form-sub">Tell us about your lab. We'll get back within 24 hours.</div>
+      <div class="field-row">
+        <div class="field"><label>First name</label><input type="text" placeholder="Sarah"></div>
+        <div class="field"><label>Last name</label><input type="text" placeholder="Chen"></div>
+      </div>
+      <div class="field"><label>Work email</label><input type="email" placeholder="sarah@labname.com"></div>
+      <div class="field"><label>Institution or company</label><input type="text" placeholder="University / Biotech name"></div>
+      <div class="field"><label>Role</label>
+        <select>
+          <option value="">Select your role</option>
+          <option>Postdoc / PhD researcher</option>
+          <option>Principal Investigator</option>
+          <option>Research Scientist</option>
+          <option>Biotech founder / CSO</option>
+          <option>Lab manager</option>
+          <option>Other</option>
+        </select>
+      </div>
+      <div class="field"><label>What are you working on?</label><textarea placeholder="Tell us about your current research and tools you use today..."></textarea></div>
+      <button class="form-submit">Send message →</button>
+      <div class="form-privacy">We never share your information.</div>
+    </div>
+  </div>
+</div>
+
+<div class="divider"></div>
+
+<!-- FAQ -->
+<div class="sl">Common questions</div>
+<div class="h2">Before you reach out</div>
+<div class="faq-grid">
+
+  <div class="faq-item">
+    <div class="faq-q" onclick="tog(this)">Is Notes9 really free? What is the catch? <span class="faq-chevron">▼</span></div>
+    <div class="faq-a"><p>No catch. Notes9 is free during our early access phase while we work closely with research teams to build the product around real workflows. You get the full connected workspace — literature, experiments, lab notes, data, writing, and Catalyst AI — at no cost. When we introduce paid plans, early users will get preferential pricing and we will give you plenty of notice before anything changes.</p></div>
+  </div>
+
+  <div class="faq-item">
+    <div class="faq-q" onclick="tog(this)">What does a demo call actually involve? <span class="faq-chevron">▼</span></div>
+    <div class="faq-a"><p>A 30-minute conversation — no slides, no sales deck. We start by understanding your current workflow: what you are working on, which tools you use, and where the friction is. Then we show you the parts of Notes9 most relevant to your work. If it is a fit, we get you set up the same day. If your lab needs a custom plan, we send a tailored proposal within 48 hours.</p></div>
+  </div>
+
+  <div class="faq-item">
+    <div class="faq-q" onclick="tog(this)">How long does it take to get started? <span class="faq-chevron">▼</span></div>
+    <div class="faq-a"><p>Two minutes to create an account. Most researchers are running an active workflow — with at least one project, some saved papers, and their first AI interaction — within the first session. If you book a demo, we will walk you through setup live and make sure your first project is connected before the call ends.</p></div>
+  </div>
+
+  <div class="faq-item">
+    <div class="faq-q" onclick="tog(this)">Can I bring my existing notes, papers, and protocols into Notes9? <span class="faq-chevron">▼</span></div>
+    <div class="faq-a"><p>Yes. You can upload PDFs, Word docs, Excel files, images, and most common formats directly into Notes9. For teams migrating from another ELN or a large paper archive, we will help you set up the import during onboarding. The goal is to have your existing research context inside Notes9 so Catalyst AI can start working from it immediately.</p></div>
+  </div>
+
+  <div class="faq-item">
+    <div class="faq-q" onclick="tog(this)">How is my research data stored and kept secure? <span class="faq-chevron">▼</span></div>
+    <div class="faq-a"><p>All data is encrypted at rest and in transit. Your research data is yours — we never use it to train models or share it with third parties. Notes9 is built with a clear compliance roadmap including 21 CFR Part 11 readiness for teams moving toward regulated workflows. If your lab has specific data security requirements, raise them on the demo call and we will walk through our architecture in detail.</p></div>
+  </div>
+
+  <div class="faq-item">
+    <div class="faq-q" onclick="tog(this)">Does Notes9 work for a solo researcher or only for teams? <span class="faq-chevron">▼</span></div>
+    <div class="faq-a"><p>Both. Many early users are solo postdocs and independent researchers who want one place where their literature, lab notes, and writing stay connected. Team features — shared projects, collaborative protocols, multi-seat access — are there when you need them, but Notes9 works equally well for one person running their own projects.</p></div>
+  </div>
+
+  <div class="faq-item">
+    <div class="faq-q" onclick="tog(this)">What tools can I stop using once I am on Notes9? <span class="faq-chevron">▼</span></div>
+    <div class="faq-a">
+      <p>Most research teams on Notes9 find they no longer need separate tools for:</p>
+      <ul>
+        <li>Paper management — Zotero, Mendeley, or browser bookmarks for PDFs</li>
+        <li>Lab notebooks — physical notebooks or scattered Word documents</li>
+        <li>Protocol storage — Google Docs, Notion, or shared drives</li>
+        <li>Data files — Dropbox or Drive folders of unlinked Excel files</li>
+        <li>Report drafting — starting from a blank page in Word or Google Docs</li>
+        <li>Generic AI tools — ChatGPT for research questions with no project context</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="faq-item">
+    <div class="faq-q" onclick="tog(this)">Is Catalyst AI a separate product or part of Notes9? <span class="faq-chevron">▼</span></div>
+    <div class="faq-a"><p>Catalyst AI is built into Notes9 — it is not a separate subscription or add-on. It works across every part of the platform because it has access to everything in your project: the papers you have saved, the protocols you have written, the lab notes you have captured, and the data you have uploaded. That connected context is what makes it genuinely useful rather than a generic chatbot bolted on top.</p></div>
+  </div>
+
+  <div class="faq-item">
+    <div class="faq-q" onclick="tog(this)">What happens if our lab's needs grow or change? <span class="faq-chevron">▼</span></div>
+    <div class="faq-a"><p>Notes9 scales with the lab. Starting as one researcher and growing to a five-person team does not require migrating data or rebuilding projects — everything is already connected. For labs that need enterprise features like SSO, custom integrations, advanced PK/PD modelling, or a dedicated success manager, we will have a conversation and scope what makes sense.</p></div>
+  </div>
+
+</div>
+
+<div class="divider"></div>
+
+<!-- BOTTOM CTA -->
+<div class="bottom">
+  <div class="sl">Get started today</div>
+  <div class="h2">Free to start.<br>Built around your science.</div>
+  <div class="sub">No credit card. No trial countdown. Just a connected workspace where your AI lab assistant knows your whole project.</div>
+  <div class="bottom-ctas">
+    <div class="btn-dark">Start for free →</div>
+    <div class="btn-outline">Book a demo</div>
+  </div>
+</div>
+
+</div>
+<script>
+function tog(el) {
+  const a = el.nextElementSibling;
+  const c = el.querySelector('.faq-chevron');
+  const isOpen = a.classList.contains('open');
+  document.querySelectorAll('.faq-a').forEach(x => x.classList.remove('open'));
+  document.querySelectorAll('.faq-chevron').forEach(x => x.style.transform = '');
+  if (!isOpen) { a.classList.add('open'); c.style.transform = 'rotate(180deg)'; }
+}
+</script>
+</body>
+</html>

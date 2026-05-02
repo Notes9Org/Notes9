@@ -109,10 +109,16 @@ function LoginForm() {
   }
   return (
     <div className="flex min-h-screen w-full items-center justify-center p-6 bg-background relative overflow-hidden">
-      <InteractiveParticles />
-      {/* Dark overlay for better text visibility */}
-      <div className="absolute inset-0 z-0 bg-background/30 backdrop-blur-[1px]" />
-      <div className="absolute inset-0 z-0 bg-[radial-gradient(circle_800px_at_center,theme(colors.background)_30%,transparent_100%)]" />
+      <InteractiveParticles variant="marketing" />
+      {/* Marketing-style ambient: soft primary halo + clean center (no brown vignette) */}
+      <div
+        className="pointer-events-none absolute inset-0 z-0 bg-[radial-gradient(ellipse_110%_72%_at_50%_-22%,color-mix(in_srgb,var(--primary)_14%,transparent)_0%,transparent_56%)] dark:bg-[radial-gradient(ellipse_110%_58%_at_50%_-12%,color-mix(in_srgb,var(--primary)_26%,transparent)_0%,transparent_52%)]"
+        aria-hidden
+      />
+      <div
+        className="pointer-events-none absolute inset-0 z-0 bg-[radial-gradient(circle_940px_at_50%_50%,color-mix(in_srgb,var(--background)_88%,white)_0%,transparent_70%)] dark:bg-[radial-gradient(circle_920px_at_50%_52%,color-mix(in_srgb,var(--background)_72%,transparent)_0%,transparent_72%)]"
+        aria-hidden
+      />
 
       <div className="w-full max-w-md relative z-10">
         <div className="flex flex-col gap-6">
@@ -130,7 +136,7 @@ function LoginForm() {
             </div>
           </div>
 
-          <Card className="border-border/70 bg-card/92 shadow-[0_24px_60px_-32px_rgba(44,36,24,0.28)] backdrop-blur-sm">
+          <Card className="border-border/70 bg-card/92 backdrop-blur-sm">
             <CardHeader>
               <CardTitle className="text-xl">Sign In</CardTitle>
               <CardDescription>

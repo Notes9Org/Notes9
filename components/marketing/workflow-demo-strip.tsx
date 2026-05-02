@@ -72,7 +72,7 @@ export function WorkflowDemoStrip({
   if (showVideo) {
     return (
       <div
-        className={`relative overflow-hidden bg-background ${
+        className={`marketing-glass-surface relative overflow-hidden bg-background/78 ${
           fullBleed ? "absolute inset-0" : "rounded-xl border border-border/60 shadow-lg"
         } ${className}`}
       >
@@ -101,7 +101,7 @@ export function WorkflowDemoStrip({
 
   return (
     <div
-      className={`relative overflow-hidden bg-background ${
+      className={`marketing-glass-surface relative overflow-hidden bg-background/78 ${
         fullBleed ? "absolute inset-0" : "rounded-xl border border-border/60 shadow-lg"
       } ${className}`}
     >

@@ -135,7 +135,7 @@ export function ContactForm() {
                             <Button
                                 type="submit"
                                 disabled={isSubmitting}
-                                className="w-full rounded-full bg-[var(--n9-accent)] text-white transition-all ease-in-out hover:scale-[1.02] hover:bg-[var(--n9-accent-hover)] active:scale-95"
+                                className="w-full rounded-full bg-[var(--n9-accent)] text-primary-foreground transition-all ease-in-out hover:scale-[1.02] hover:bg-[var(--n9-accent-hover)] active:scale-95"
                             >
                                 {isSubmitting ? (
                                     <>

@@ -29,7 +29,7 @@ export function ScrollFeature({ title, description, icon: Icon, image, align = "
     const isLeft = align === "left"
 
     return (
-        <section ref={ref} className="min-h-[90vh] flex items-center justify-center py-20 overflow-hidden bg-background">
+        <section ref={ref} className="min-h-[90vh] flex items-center justify-center py-20 overflow-hidden">
             <div className="container mx-auto px-4 md:px-6">
                 <div className={`flex flex-col lg:flex-row items-center gap-12 lg:gap-24 ${!isLeft ? 'lg:flex-row-reverse' : ''}`}>
 
@@ -64,13 +64,13 @@ export function ScrollFeature({ title, description, icon: Icon, image, align = "
                     <div className="flex-1 w-full perspective-1000">
                         <motion.div
                             style={{ y, opacity, scale, rotateX }}
-                            className="relative w-full aspect-[16/10] rounded-2xl overflow-hidden border border-border/40 shadow-2xl bg-muted/50 backdrop-blur-sm group"
+                            className="marketing-glass-surface relative w-full aspect-[16/10] rounded-2xl overflow-hidden border border-border/40 shadow-2xl bg-muted/42 group"
                         >
                             {/* Glossy Reflection Overlay */}
                             <div className="absolute inset-0 bg-gradient-to-tr from-white/5 to-white/0 pointer-events-none z-20" />
 
                             {/* Browser Header */}
-                            <div className="absolute top-0 left-0 w-full h-10 bg-background/95 backdrop-blur-md border-b border-border/50 flex items-center px-4 gap-2 z-20">
+                            <div className="marketing-glass-surface absolute top-0 left-0 w-full h-10 bg-background/75 border-b border-border/50 flex items-center px-4 gap-2 z-20">
                                 <div className="flex gap-2 opacity-80">
                                     <div className="w-3 h-3 rounded-full bg-[#FF5F57] border border-[#E0443E]" />
                                     <div className="w-3 h-3 rounded-full bg-[#FEBC2E] border border-[#D89E24]" />

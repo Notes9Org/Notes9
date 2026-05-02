@@ -6,8 +6,6 @@ import { AcademicHero } from "@/components/marketing/academic-hero"
 import { StatusSection } from "@/components/marketing/status-section"
 import { FeatureDeepDive } from "@/components/marketing/feature-deep-dive"
 import { WhyResearchersStaySection } from "@/components/marketing/why-researchers-stay-section"
-import { ContactForm } from "@/components/marketing/contact-form"
-import { FloatingPageMenu } from "@/components/marketing/floating-page-menu"
 
 import { InteractiveParticles } from "@/components/ui/interactive-particles"
 
@@ -62,7 +60,9 @@ export default async function HomePage({
   }
 
   return (
-    <div className={`marketing-theme ${dmSans.variable} ${dmSerif.variable} font-sans min-h-screen flex flex-col bg-background text-foreground relative overflow-hidden`}>
+    <div
+      className={`marketing-theme marketing-glass-app ${dmSans.variable} ${dmSerif.variable} font-sans min-h-screen w-full min-w-0 max-w-full flex flex-col text-foreground relative overflow-visible`}
+    >
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(organizationJsonLd) }}
@@ -72,30 +72,20 @@ export default async function HomePage({
         dangerouslySetInnerHTML={{ __html: JSON.stringify(websiteJsonLd) }}
       />
       <InteractiveParticles variant="marketing" />
-      <div className="marketing-mesh pointer-events-none absolute inset-0 opacity-[0.15] dark:opacity-[0.08]" />
-      <div className="relative z-10 flex flex-col min-h-screen">
-        <Header />
-        <FloatingPageMenu />
-        <main className="flex-1 pt-16">
+      <Header />
+      <div className="relative z-10 flex min-h-screen w-full min-w-0 max-w-full flex-col marketing-glass-page">
+        <main className="min-h-0 min-w-0 flex-1">
+          {/* 01.1 Hero */}
           <AcademicHero />
+
+          {/* 01.2 The Pain */}
           <StatusSection />
+
+          {/* 01.3 Feature deep dive */}
           <FeatureDeepDive />
+
+          {/* 01.4 Why choose Notes9 + CTA */}
           <WhyResearchersStaySection />
-          <section id="contact">
-            <div className="container mx-auto px-4 py-24 sm:px-6 lg:px-8">
-              <div className="mx-auto max-w-2xl text-center">
-                <h2 className="font-serif text-3xl tracking-tight text-foreground sm:text-4xl">
-                  Get in touch
-                </h2>
-                <p className="mt-4 text-lg leading-7 text-muted-foreground">
-                  Tell us about your lab and where friction shows up today.
-                </p>
-              </div>
-              <div className="mx-auto mt-10 max-w-2xl">
-                <ContactForm />
-              </div>
-            </div>
-          </section>
         </main>
         <Footer />
       </div>
