@@ -137,7 +137,7 @@ export function AgentStreamReply({
             {displayAnswer ? (
               <MarkdownRenderer
                 content={displayAnswer}
-                className="[&_pre]:max-w-full [&_pre]:max-h-[40vh] [&_pre]:overflow-auto [&_table]:max-h-[40vh] [&_table]:overflow-auto"
+                className="[&_pre]:max-w-full [&_pre]:max-h-[40vh] [&_pre]:overflow-auto [&_.notes9-md-table-scroll]:max-h-[40vh]"
               />
             ) : (
               <span className="text-muted-foreground italic">Generating answer...</span>

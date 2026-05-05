@@ -217,7 +217,94 @@ function serializeComposerToUserMarkdown(el: HTMLDivElement | null): string {
       }
     }
   }
-  return parts.join('').replace(/\s+/g, ' ').trim();
+  return parts
+    .join('')
+    .replace(/\u00a0/g, ' ')
+    .replace(/[ \t]+\n/g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
+type UserComposerSegment =
+  | { type: 'text'; text: string }
+  | { type: 'mention'; kind: CatalystMentionKind; id: string; title: string };
+
+const USER_COMPOSER_MENTION_PATTERN =
+  /\[((?:\\.|[^\]])+)\]\(\/(literature-reviews|lab-notes|experiments|projects|protocols)\/([0-9a-z-]+)\)/gi;
+
+function parseUserComposerSegments(markdown: string): UserComposerSegment[] {
+  const out: UserComposerSegment[] = [];
+  let lastIndex = 0;
+  let match: RegExpExecArray | null;
+  USER_COMPOSER_MENTION_PATTERN.lastIndex = 0;
+  while ((match = USER_COMPOSER_MENTION_PATTERN.exec(markdown)) !== null) {
+    if (match.index > lastIndex) {
+      out.push({
+        type: 'text',
+        text: markdown.slice(lastIndex, match.index),
+      });
+    }
+    const title = match[1]?.replace(/\\([\[\]\\])/g, '$1') ?? '';
+    const route = match[2];
+    const id = match[3] ?? '';
+    const kind: CatalystMentionKind =
+      route === 'literature-reviews'
+        ? 'literature_review'
+        : route === 'lab-notes'
+          ? 'lab_note'
+          : route === 'experiments'
+            ? 'experiment'
+            : route === 'projects'
+              ? 'project'
+              : 'protocol';
+    out.push({ type: 'mention', kind, id, title });
+    lastIndex = USER_COMPOSER_MENTION_PATTERN.lastIndex;
+  }
+  if (lastIndex < markdown.length) {
+    out.push({
+      type: 'text',
+      text: markdown.slice(lastIndex),
+    });
+  }
+  return out;
+}
+
+function hasUserComposerMentions(markdown: string): boolean {
+  USER_COMPOSER_MENTION_PATTERN.lastIndex = 0;
+  return USER_COMPOSER_MENTION_PATTERN.test(markdown);
+}
+
+function UserMessageComposerPreview({ content }: { content: string }) {
+  const segments = useMemo(() => parseUserComposerSegments(content), [content]);
+  return (
+    <div className="whitespace-pre-wrap [overflow-wrap:anywhere]">
+      {segments.map((segment, idx) => {
+        if (segment.type === 'text') {
+          return <span key={`text-${idx}`}>{segment.text}</span>;
+        }
+        const iconClass = 'h-3.5 w-3.5 shrink-0 text-muted-foreground';
+        return (
+          <span
+            key={`mention-${segment.kind}-${segment.id}-${idx}`}
+            className="mx-0.5 inline-flex max-w-[24rem] items-center gap-1 rounded-md bg-secondary px-2 py-0.5 text-xs text-secondary-foreground align-middle"
+          >
+            {segment.kind === 'literature_review' ? (
+              <BookOpen className={iconClass} />
+            ) : segment.kind === 'lab_note' ? (
+              <NotebookPen className={iconClass} />
+            ) : segment.kind === 'experiment' ? (
+              <FlaskConical className={iconClass} />
+            ) : segment.kind === 'project' ? (
+              <FolderOpen className={iconClass} />
+            ) : (
+              <ClipboardInfoIcon className={iconClass} />
+            )}
+            <span className="truncate">{segment.title}</span>
+          </span>
+        );
+      })}
+    </div>
+  );
 }
 
 function extractTagItemsFromMarkdown(markdown: string): Array<{
@@ -2667,7 +2754,9 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
                                     )}
                                   >
                                     {message.role === 'user' ? (
-                                      userLiteratureMarkdown ? (
+                                      hasUserComposerMentions(content) ? (
+                                        <UserMessageComposerPreview content={content} />
+                                      ) : userLiteratureMarkdown ? (
                                         <MarkdownRenderer
                                           content={content}
                                           className="text-sm text-foreground break-words [overflow-wrap:anywhere] [&_pre]:max-w-full [&_pre]:overflow-auto [&_pre]:whitespace-pre [&_code]:break-all"

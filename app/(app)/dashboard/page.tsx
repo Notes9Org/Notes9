@@ -11,6 +11,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
+import { UserTrendGraph } from "@/components/dashboard/user-trend-graph";
 import {
   FlaskConical,
   TestTube,
@@ -98,6 +99,12 @@ export default async function DashboardPage() {
     .order("completed", { ascending: true })
     .order("due_at", { ascending: true, nullsFirst: false })
     .order("created_at", { ascending: false });
+
+  const { data: chatResearcherProfile } = await supabase
+    .from("chat_researcher_profiles")
+    .select("graph_data, updated_at")
+    .eq("user_id", user.id)
+    .maybeSingle();
 
   // Calculate statistics
   const activeProjectsCount = projects?.length || 0;
@@ -187,11 +194,13 @@ export default async function DashboardPage() {
         </Card>
       </div> */}
 
-      {/* Quick Actions */}
       <Card className="min-w-0 overflow-hidden">
         <CardHeader>
           <CardTitle>Quick Actions</CardTitle>
-          <CardDescription>Common tasks to get you started</CardDescription>
+          <CardDescription>
+            Common tasks to get you started—including your relationship graph from
+            chat themes (entity-colored map).
+          </CardDescription>
         </CardHeader>
         <CardContent className="flex flex-wrap gap-2">
           <Link href="/projects/new">
@@ -203,6 +212,10 @@ export default async function DashboardPage() {
           <Link href="/samples/new">
             <Button variant="outline">Record Sample</Button>
           </Link>
+          <UserTrendGraph
+            graphData={chatResearcherProfile?.graph_data ?? {}}
+            updatedAt={chatResearcherProfile?.updated_at ?? null}
+          />
         </CardContent>
       </Card>
 

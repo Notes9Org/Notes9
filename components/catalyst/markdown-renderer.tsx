@@ -308,24 +308,30 @@ export function MarkdownRenderer({ content, className }: MarkdownRendererProps) 
             </blockquote>
           );
         },
-        table({ children, ...props }) {
+        table({ children, style: tableStyle, ...tableRest }) {
           return (
             <div
-              className="not-prose my-3 w-full rounded-lg border border-border/60 bg-card shadow-sm"
+              className="notes9-md-table-scroll not-prose my-3 w-full min-w-0 rounded-lg border border-border/60 bg-card shadow-sm"
               style={{
+                maxWidth: '100%',
                 overflowX: 'auto',
                 overflowY: 'auto',
                 maxHeight: '42vh',
+                display: 'block',
                 WebkitOverflowScrolling: 'touch' as React.CSSProperties['WebkitOverflowScrolling'],
               }}
             >
               <table
+                {...tableRest}
                 style={{
-                  minWidth: 'max-content',
+                  ...(typeof tableStyle === 'object' && tableStyle !== null && !Array.isArray(tableStyle)
+                    ? tableStyle
+                    : {}),
+                  width: '100%',
+                  minWidth: '100%',
                   tableLayout: 'auto',
                   borderCollapse: 'collapse',
                 }}
-                {...props}
               >
                 {children}
               </table>
@@ -341,46 +347,41 @@ export function MarkdownRenderer({ content, className }: MarkdownRendererProps) 
         },
         tbody({ children, ...props }) {
           return (
-            <tbody className="divide-y divide-border/40" {...props}>
+            <tbody {...props}>
               {children}
             </tbody>
           );
         },
         tr({ children, ...props }) {
           return (
-            <tr className="transition-colors hover:bg-muted/30 even:bg-muted/10" {...props}>
+            <tr className="transition-colors hover:bg-muted/25 even:bg-muted/5" {...props}>
               {children}
             </tr>
           );
         },
-        th({ children, ...props }) {
+        th({ children, style: thStyle, ...thRest }) {
           return (
             <th
+              {...thRest}
               style={{
-                whiteSpace: 'nowrap',
+                ...(typeof thStyle === 'object' && thStyle !== null && !Array.isArray(thStyle) ? thStyle : {}),
                 verticalAlign: 'bottom',
-                minWidth: '72px',
               }}
-              className="border-b border-border/60 px-3 py-2 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground"
-              {...props}
+              className="whitespace-normal break-words border border-border/50 bg-muted/40 px-3 py-2 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground"
             >
               {children}
             </th>
           );
         },
-        td({ children, ...props }) {
+        td({ children, style: tdStyle, ...tdRest }) {
           return (
             <td
+              {...tdRest}
               style={{
-                whiteSpace: 'normal',
-                wordBreak: 'normal',
-                overflowWrap: 'break-word',
+                ...(typeof tdStyle === 'object' && tdStyle !== null && !Array.isArray(tdStyle) ? tdStyle : {}),
                 verticalAlign: 'top',
-                minWidth: '72px',
-                maxWidth: '160px',
               }}
-              className="px-3 py-2 text-xs text-foreground/90 [&:not(:last-child)]:border-r [&:not(:last-child)]:border-border/30"
-              {...props}
+              className="border border-border/50 px-3 py-2 text-xs leading-snug text-foreground/90 [overflow-wrap:anywhere]"
             >
               {children}
             </td>
