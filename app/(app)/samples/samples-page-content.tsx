@@ -4,7 +4,7 @@ import { useState, useMemo, useEffect } from "react"
 import { useMediaQuery } from "@/hooks/use-media-query"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { Plus, Package, Grid3x3, List } from "lucide-react"
+import { Plus, Package, Grid3x3, List, Dna, Atom } from "lucide-react"
 import Link from "next/link"
 import { SampleList } from "./sample-list"
 import {
@@ -304,7 +304,7 @@ export function SamplesPageContent({ samples, statusCount }: SamplesPageContentP
 export function SamplesEmptyState() {
   return (
     <>
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <p className="text-muted-foreground">
           Track and manage laboratory samples
         </p>
@@ -312,7 +312,7 @@ export function SamplesEmptyState() {
           asChild
           size="icon"
           variant="ghost"
-          className="shrink-0 size-8 rounded-md text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+          className="size-8 shrink-0 rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
           aria-label="New sample"
         >
           <Link href="/samples/new">
@@ -321,13 +321,54 @@ export function SamplesEmptyState() {
         </Button>
       </div>
       <Card>
-        <CardContent className="flex flex-col items-center justify-center py-12">
-          <Package className="h-12 w-12 text-muted-foreground mb-4" />
-          <p className="text-muted-foreground mb-4">No samples recorded</p>
-          <Button asChild>
+        <CardContent className="flex flex-col items-stretch px-6 py-10 sm:px-10">
+          <div className="mx-auto mb-8 max-w-lg text-center">
+            <Package
+              className="mx-auto mb-4 h-12 w-12 text-muted-foreground"
+              aria-hidden
+            />
+            <h2 className="mb-2 text-lg font-semibold text-foreground">
+              No samples yet
+            </h2>
+            <p className="text-sm leading-relaxed text-muted-foreground">
+              Add a sample for any type you track in the lab (cells, reagents, DNA constructs, proteins,
+              and more). Open the sample and upload files to visualize maps and structures.
+            </p>
+          </div>
+
+          <div className="mx-auto mb-8 grid w-full max-w-2xl gap-3 sm:grid-cols-2">
+            <div className="rounded-lg border border-border/80 bg-muted/30 p-4 text-left">
+              <div className="mb-2 flex h-9 w-9 items-center justify-center rounded-md border bg-background">
+                <Dna className="h-4 w-4 text-primary" aria-hidden />
+              </div>
+              <p className="text-sm font-medium text-foreground">
+                Plasmids and DNA sequences
+              </p>
+              <p className="mt-1.5 text-xs leading-relaxed text-muted-foreground">
+                Circular and linear maps, plus simple workflow tools: custom annotations, selection
+                details, sequence alignment, and CRISPR guide exploration — right from the molecular
+                files tab.
+              </p>
+            </div>
+            <div className="rounded-lg border border-border/80 bg-muted/30 p-4 text-left">
+              <div className="mb-2 flex h-9 w-9 items-center justify-center rounded-md border bg-background">
+                <Atom className="h-4 w-4 text-primary" aria-hidden />
+              </div>
+              <p className="text-sm font-medium text-foreground">
+                Protein structures
+              </p>
+              <p className="mt-1.5 text-xs leading-relaxed text-muted-foreground">
+                Load PDB or mmCIF structures to view in 3D with sequence-linked highlighting,
+                representation and color presets, spin and camera controls, and optional
+                superposition with RMSD readout when you have two structures on the same sample.
+              </p>
+            </div>
+          </div>
+
+          <Button asChild className="mx-auto w-full sm:w-auto">
             <Link href="/samples/new">
-              <Plus className="h-4 w-4 mr-2" />
-              Create First Sample
+              <Plus className="mr-2 h-4 w-4" />
+              Create first sample
             </Link>
           </Button>
         </CardContent>
