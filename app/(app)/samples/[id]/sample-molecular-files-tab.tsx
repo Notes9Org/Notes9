@@ -30,8 +30,8 @@ import {
   shouldParseSequenceTextOnUpload,
   type SampleFileKind,
 } from "@/lib/sample-molecular"
-import { SamplePlasmidViewer } from "./sample-plasmid-viewer"
-import { SampleProteinViewer } from "./sample-protein-viewer"
+import { SamplePlasmidViewer, type PlasmidAlignmentSource } from "./sample-plasmid-viewer"
+import { SampleProteinViewer, type ProteinSuperpositionSource } from "./sample-protein-viewer"
 import {
   Atom,
   Copy,
@@ -39,6 +39,8 @@ import {
   Eye,
   FileCode2,
   Loader2,
+  PanelLeftClose,
+  PanelLeftOpen,
   RefreshCw,
   Trash2,
   Upload,
@@ -103,6 +105,7 @@ export function SampleMolecularFilesTab({ sampleId, initialFiles }: SampleMolecu
   const [signedUrlLoading, setSignedUrlLoading] = useState(false)
   const [pendingDelete, setPendingDelete] = useState<SampleMolecularFile | null>(null)
   const [deleting, setDeleting] = useState(false)
+  const [listOpen, setListOpen] = useState(true)
 
   const selectedFile = useMemo(
     () => files.find((file) => file.id === selectedId) ?? files[0] ?? null,
@@ -301,6 +304,87 @@ export function SampleMolecularFilesTab({ sampleId, initialFiles }: SampleMolecu
     }
   }, [pendingDelete, toast])
 
+  const proteinSources: ProteinSuperpositionSource[] = useMemo(() => {
+    if (!selectedFile) return []
+    return files
+      .filter((file) => file.id !== selectedFile.id && file.file_kind === "protein_structure")
+      .map((file) => ({ id: file.id, fileName: file.file_name }))
+  }, [files, selectedFile])
+
+  const resolveProteinSourceUrl = useCallback(
+    async (sourceId: string): Promise<{ url: string; fileName: string } | null> => {
+      const file = files.find((f) => f.id === sourceId)
+      if (!file) return null
+      const supabase = createClient()
+      const url = await createSampleFileSignedUrl(supabase, file.storage_path, 3600)
+      if (!url) return null
+      return { url, fileName: file.file_name }
+    },
+    [files]
+  )
+
+  const alignmentSources: PlasmidAlignmentSource[] = useMemo(() => {
+    if (!selectedFile) return []
+    return files
+      .filter(
+        (file) =>
+          file.id !== selectedFile.id &&
+          (file.file_kind === "plasmid" || file.file_kind === "sequence")
+      )
+      .map((file) => ({
+        id: file.id,
+        fileName: file.file_name,
+        sequence: file.parsed_metadata?.sequenceData?.sequence,
+      }))
+  }, [files, selectedFile])
+
+  const resolveSourceSequence = useCallback(
+    async (sourceId: string): Promise<string> => {
+      const file = files.find((f) => f.id === sourceId)
+      if (!file) return ""
+      const cached = file.parsed_metadata?.sequenceData?.sequence
+      if (typeof cached === "string" && cached.length > 0) return cached
+      const supabase = createClient()
+      const url = await createSampleFileSignedUrl(supabase, file.storage_path, 600)
+      if (!url) return ""
+      const response = await fetch(url)
+      if (!response.ok) return ""
+      const ext = file.file_name.split(".").pop()?.toLowerCase() ?? ""
+      try {
+        if (ext === "dna") {
+          const blob = await response.blob()
+          const fileObj = new File([blob], file.file_name, {
+            type: blob.type || "application/octet-stream",
+          })
+          const { anyToJson } = await import("@teselagen/bio-parsers")
+          const parsed = await anyToJson(fileObj, {
+            fileName: file.file_name,
+            isProtein: false,
+          } as any)
+          const first = Array.isArray(parsed) ? parsed[0] : parsed
+          return first?.parsedSequence?.sequence ?? ""
+        }
+        const text = await response.text()
+        if (shouldParseSequenceTextOnUpload(file.file_name)) {
+          try {
+            const { anyToJson } = await import("@teselagen/bio-parsers")
+            const parsed = await anyToJson(text, { fileName: file.file_name } as any)
+            const first = Array.isArray(parsed) ? parsed[0] : parsed
+            const seq = first?.parsedSequence?.sequence
+            if (typeof seq === "string" && seq.length) return seq
+          } catch {
+            const fallback = parseSequenceText(file.file_name, text)
+            return (fallback?.sequence as string) ?? ""
+          }
+        }
+        return text
+      } catch {
+        return ""
+      }
+    },
+    [files]
+  )
+
   const copyShareLink = useCallback(async () => {
     if (!signedUrl) return
     try {
@@ -381,8 +465,26 @@ export function SampleMolecularFilesTab({ sampleId, initialFiles }: SampleMolecu
       ) : null}
 
       {files.length > 0 ? (
-        <div className="grid gap-4 lg:grid-cols-[300px_minmax(0,1fr)]">
+        <div
+          className={`grid gap-4 ${
+            listOpen ? "lg:grid-cols-[300px_minmax(0,1fr)]" : "lg:grid-cols-[minmax(0,1fr)]"
+          }`}
+        >
+          {listOpen ? (
           <Card className="min-w-0 p-0">
+            <div className="flex items-center justify-between gap-2 border-b bg-muted/30 px-3 py-2">
+              <p className="text-xs font-medium text-muted-foreground">Files ({files.length})</p>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-7 px-2"
+                onClick={() => setListOpen(false)}
+                aria-label="Hide file list"
+              >
+                <PanelLeftClose className="h-4 w-4" />
+              </Button>
+            </div>
             <ScrollArea className="h-[640px] max-h-[640px]">
               <div className="space-y-1 p-2">
                 {files.map((file) => {
@@ -428,15 +530,30 @@ export function SampleMolecularFilesTab({ sampleId, initialFiles }: SampleMolecu
               </div>
             </ScrollArea>
           </Card>
+          ) : null}
 
           <Card className="min-w-0 overflow-hidden">
             <CardHeader className="bg-muted/30 border-b">
               <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0">
-                  <CardTitle className="text-base text-foreground">Viewer</CardTitle>
-                  <CardDescription className="truncate">
-                    {selectedFile?.file_name ?? "Select a molecular file"}
-                  </CardDescription>
+                <div className="flex min-w-0 items-center gap-2">
+                  {!listOpen ? (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 w-7 p-0"
+                      onClick={() => setListOpen(true)}
+                      aria-label="Show file list"
+                    >
+                      <PanelLeftOpen className="h-4 w-4" />
+                    </Button>
+                  ) : null}
+                  <div className="min-w-0">
+                    <CardTitle className="text-base text-foreground">Viewer</CardTitle>
+                    <CardDescription className="truncate">
+                      {selectedFile?.file_name ?? "Select a molecular file"}
+                    </CardDescription>
+                  </div>
                 </div>
                 {signedUrl ? (
                   <Button
@@ -463,7 +580,12 @@ export function SampleMolecularFilesTab({ sampleId, initialFiles }: SampleMolecu
                   Preparing secure viewer...
                 </div>
               ) : selectedFile.file_kind === "protein_structure" ? (
-                <SampleProteinViewer fileName={selectedFile.file_name} fileUrl={signedUrl} />
+                <SampleProteinViewer
+                  fileName={selectedFile.file_name}
+                  fileUrl={signedUrl}
+                  superpositionSources={proteinSources}
+                  onResolveSourceUrl={resolveProteinSourceUrl}
+                />
               ) : selectedFile.file_kind === "plasmid" || selectedFile.file_kind === "sequence" ? (
                 <SamplePlasmidViewer
                   fileName={selectedFile.file_name}
@@ -471,6 +593,8 @@ export function SampleMolecularFilesTab({ sampleId, initialFiles }: SampleMolecu
                   parsedMetadata={selectedFile.parsed_metadata ?? {}}
                   viewerState={selectedFile.viewer_state ?? {}}
                   onSave={(payload) => saveViewerState(selectedFile.id, payload)}
+                  alignmentSources={alignmentSources}
+                  onResolveSourceSequence={resolveSourceSequence}
                 />
               ) : (
                 <div className="flex flex-col items-center gap-2 rounded-md border border-dashed p-8 text-center text-sm text-muted-foreground">

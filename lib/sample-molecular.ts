@@ -122,51 +122,120 @@ export function reverseComplement(sequence: string): string {
     .join("")
 }
 
-export function alignDnaSequences(queryInput: string, subjectInput: string): AlignmentResult {
-  const query = cleanDnaSequence(queryInput)
-  const subject = cleanDnaSequence(subjectInput)
+export type AlignmentMode = "global" | "local" | "semiglobal"
+
+export type ExtendedAlignmentResult = AlignmentResult & {
+  mode: AlignmentMode
+  strand: "+" | "-"
+  queryStart: number
+  queryEnd: number
+  subjectStart: number
+  subjectEnd: number
+  insertions: number
+  deletions: number
+  mismatches: number
+  netFrameShift: number
+}
+
+const ALIGN_MATCH = 2
+const ALIGN_MISMATCH = -1
+const ALIGN_GAP = -2
+
+function alignWithMode(
+  query: string,
+  subject: string,
+  mode: AlignmentMode
+): ExtendedAlignmentResult {
   const rows = query.length + 1
   const cols = subject.length + 1
-  const match = 2
-  const mismatch = -1
-  const gap = -2
-  const scores = Array.from({ length: rows }, () => Array(cols).fill(0) as number[])
-  const trace = Array.from({ length: rows }, () => Array(cols).fill("") as string[])
+  const scores = Array.from({ length: rows }, () => new Array<number>(cols).fill(0))
+  const trace = Array.from({ length: rows }, () => new Array<string>(cols).fill(""))
 
-  for (let i = 1; i < rows; i++) {
-    scores[i][0] = i * gap
-    trace[i][0] = "up"
+  if (mode === "global") {
+    for (let i = 1; i < rows; i++) {
+      scores[i][0] = i * ALIGN_GAP
+      trace[i][0] = "up"
+    }
+    for (let j = 1; j < cols; j++) {
+      scores[0][j] = j * ALIGN_GAP
+      trace[0][j] = "left"
+    }
   }
-  for (let j = 1; j < cols; j++) {
-    scores[0][j] = j * gap
-    trace[0][j] = "left"
+  // semiglobal: free end gaps on subject (rows side gets gap penalty, first row free)
+  // We accomplish that by:
+  //   - leaving scores[0][*] = 0  (no penalty for leading gaps in query)
+  //   - leaving scores[*][0] = i*gap for query (the shorter strand pays internally)
+  if (mode === "semiglobal") {
+    for (let i = 1; i < rows; i++) {
+      scores[i][0] = i * ALIGN_GAP
+      trace[i][0] = "up"
+    }
+    // top row stays 0 (free leading gaps).
+    for (let j = 1; j < cols; j++) trace[0][j] = "left"
   }
+  // local: all edges 0, traceback only from highest cell
+
+  let bestScore = mode === "local" ? 0 : Number.NEGATIVE_INFINITY
+  let bestI = 0
+  let bestJ = 0
 
   for (let i = 1; i < rows; i++) {
     for (let j = 1; j < cols; j++) {
-      const diagonal = scores[i - 1][j - 1] + (query[i - 1] === subject[j - 1] ? match : mismatch)
-      const up = scores[i - 1][j] + gap
-      const left = scores[i][j - 1] + gap
-      const best = Math.max(diagonal, up, left)
+      const diag =
+        scores[i - 1][j - 1] + (query[i - 1] === subject[j - 1] ? ALIGN_MATCH : ALIGN_MISMATCH)
+      const up = scores[i - 1][j] + ALIGN_GAP
+      const left = scores[i][j - 1] + ALIGN_GAP
+      let best = Math.max(diag, up, left)
+      if (mode === "local") best = Math.max(best, 0)
       scores[i][j] = best
-      trace[i][j] = best === diagonal ? "diag" : best === up ? "up" : "left"
+      trace[i][j] = best === 0 && mode === "local" ? "stop" : best === diag ? "diag" : best === up ? "up" : "left"
+      if (mode === "local" && best > bestScore) {
+        bestScore = best
+        bestI = i
+        bestJ = j
+      }
     }
   }
 
+  // Determine traceback start
   let i = query.length
   let j = subject.length
+  if (mode === "local") {
+    i = bestI
+    j = bestJ
+  } else if (mode === "semiglobal") {
+    // Best score in the last row (free trailing gaps in query against full subject end)
+    let maxScore = Number.NEGATIVE_INFINITY
+    for (let jj = 0; jj < cols; jj++) {
+      if (scores[query.length][jj] > maxScore) {
+        maxScore = scores[query.length][jj]
+        j = jj
+      }
+    }
+  }
+
+  const traceStartI = i
+  const traceStartJ = j
   const alignedQuery: string[] = []
   const alignedSubject: string[] = []
   const matchLine: string[] = []
+  let insertions = 0
+  let deletions = 0
+  let mismatches = 0
 
   while (i > 0 || j > 0) {
+    if (mode === "local" && (scores[i][j] === 0 || trace[i][j] === "stop")) break
     const direction = trace[i]?.[j]
-    if (direction === "diag") {
+    if (direction === "diag" && i > 0 && j > 0) {
       const q = query[i - 1]
       const s = subject[j - 1]
       alignedQuery.unshift(q)
       alignedSubject.unshift(s)
-      matchLine.unshift(q === s ? "|" : ".")
+      if (q === s) matchLine.unshift("|")
+      else {
+        matchLine.unshift(".")
+        mismatches++
+      }
       i--
       j--
     } else if (direction === "up" || j === 0) {
@@ -174,26 +243,75 @@ export function alignDnaSequences(queryInput: string, subjectInput: string): Ali
       alignedQuery.unshift(q)
       alignedSubject.unshift("-")
       matchLine.unshift(" ")
+      deletions++
       i--
-    } else {
+    } else if (direction === "left" || i === 0) {
       const s = subject[j - 1]
       alignedQuery.unshift("-")
       alignedSubject.unshift(s)
       matchLine.unshift(" ")
+      insertions++
       j--
+    } else {
+      break
     }
   }
 
   const matches = matchLine.filter((char) => char === "|").length
   const alignedLength = matchLine.length
+  const score = mode === "local" ? bestScore : scores[query.length][subject.length]
+
   return {
     query: alignedQuery.join(""),
     subject: alignedSubject.join(""),
     matchLine: matchLine.join(""),
-    score: scores[query.length][subject.length],
+    score,
     identity: alignedLength > 0 ? Math.round((matches / alignedLength) * 1000) / 10 : 0,
     matches,
     alignedLength,
+    mode,
+    strand: "+",
+    queryStart: i,
+    queryEnd: traceStartI,
+    subjectStart: j,
+    subjectEnd: traceStartJ,
+    insertions,
+    deletions,
+    mismatches,
+    netFrameShift: ((insertions - deletions) % 3 + 3) % 3,
+  }
+}
+
+export function alignDnaSequencesAdvanced(
+  queryInput: string,
+  subjectInput: string,
+  options: { mode?: AlignmentMode; tryReverseComplement?: boolean } = {}
+): ExtendedAlignmentResult {
+  const mode = options.mode ?? "global"
+  const query = cleanDnaSequence(queryInput)
+  const subject = cleanDnaSequence(subjectInput)
+  const forward = alignWithMode(query, subject, mode)
+  if (!options.tryReverseComplement) return forward
+  const rcQuery = reverseComplement(query)
+  const reverse = alignWithMode(rcQuery, subject, mode)
+  if (reverse.score > forward.score) {
+    reverse.strand = "-"
+    return reverse
+  }
+  return forward
+}
+
+/** Backwards-compatible global alignment used by older call sites. */
+export function alignDnaSequences(queryInput: string, subjectInput: string): AlignmentResult {
+  const result = alignDnaSequencesAdvanced(queryInput, subjectInput, { mode: "global" })
+  return {
+    query: result.query,
+    subject: result.subject,
+    matchLine: result.matchLine,
+    score: result.score,
+    identity: result.identity,
+    matches: result.matches,
+    alignedLength: result.alignedLength,
   }
 }
 
