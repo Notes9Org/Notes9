@@ -316,25 +316,27 @@ export function NavigationLoader() {
         <div className="absolute inset-0 bg-background" />
       </div>
       <div className="fixed inset-0 z-[9999] flex items-center justify-center pointer-events-none animate-in fade-in duration-300">
-        {loaderVariant === "auth" ? (
-          <Notes9VideoLoader
-            compact
-            size="sm"
-            variant="default"
-            title={loaderTitle}
-            captions={[]}
-            label={loaderTitle}
-          />
-        ) : (
-          <Notes9VideoLoader
-            compact
-            size="sm"
-            variant={loaderVariant}
-            title={loaderTitle}
-            captions={loaderCaptions}
-            label={loaderTitle}
-          />
-        )}
+        <div className="-translate-y-8 sm:-translate-y-10">
+          {loaderVariant === "auth" ? (
+            <Notes9VideoLoader
+              compact
+              size="sm"
+              variant="default"
+              title={loaderTitle}
+              captions={[]}
+              label={loaderTitle}
+            />
+          ) : (
+            <Notes9VideoLoader
+              compact
+              size="sm"
+              variant={loaderVariant}
+              title={loaderTitle}
+              captions={loaderCaptions}
+              label={loaderTitle}
+            />
+          )}
+        </div>
       </div>
     </>
   )

@@ -39,6 +39,7 @@ import {
   cleanDnaSequence,
   findCrisprGuides,
   getFileExtension,
+  molecularFileFormatLabel,
   parseSequenceText,
   shouldParseSequenceTextOnUpload,
   type AlignmentMode,
@@ -623,22 +624,37 @@ export function SamplePlasmidViewer({
     <div className={containerClass}>
       {/* Toolbar */}
       <div className="flex flex-wrap items-center gap-2 rounded-md border bg-card p-2">
-        <div className="flex min-w-0 items-center gap-2 px-1">
-          <span className="min-w-0 truncate text-sm font-medium text-foreground">
+        <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2 gap-y-1.5 px-1">
+          <span className="min-w-0 max-w-full truncate text-sm font-medium leading-tight text-foreground">
             {sequenceData?.name || fileName}
           </span>
+          <Badge
+            variant="outline"
+            className="h-5 shrink-0 px-2 py-0 font-mono text-[10px] font-semibold uppercase leading-none tracking-wide"
+          >
+            {molecularFileFormatLabel(fileName)}
+          </Badge>
           {sequenceLength ? (
-            <Badge variant="outline" className="font-mono text-[10px] tabular-nums">
+            <Badge
+              variant="outline"
+              className="h-5 shrink-0 px-2 py-0 font-mono text-[10px] font-semibold leading-none tabular-nums"
+            >
               {sequenceLength.toLocaleString()} bp
             </Badge>
           ) : null}
           {sequenceData?.circular === false ? (
-            <Badge variant="outline" className="text-[10px] uppercase tracking-wide">
+            <Badge
+              variant="outline"
+              className="h-5 shrink-0 px-2 py-0 text-[10px] font-semibold uppercase leading-none tracking-wide"
+            >
               linear
             </Badge>
           ) : null}
           {gcPercent != null ? (
-            <Badge variant="outline" className="font-mono text-[10px] tabular-nums">
+            <Badge
+              variant="outline"
+              className="h-5 shrink-0 px-2 py-0 font-mono text-[10px] font-semibold leading-none tabular-nums"
+            >
               {gcPercent}% GC
             </Badge>
           ) : null}

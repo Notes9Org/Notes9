@@ -67,6 +67,38 @@ export function getFileExtension(fileName: string): string {
   return part && part !== clean.toLowerCase() ? part : ""
 }
 
+/** Compact format label for badges next to file titles (PDB, mmCIF, DNA, …). */
+export function molecularFileFormatLabel(fileName: string): string {
+  switch (getFileExtension(fileName).toLowerCase()) {
+    case "pdb":
+    case "ent":
+      return "PDB"
+    case "cif":
+    case "mmcif":
+      return "mmCIF"
+    case "bcif":
+      return "BCIF"
+    case "dna":
+      return "DNA"
+    case "gb":
+    case "gbk":
+    case "genbank":
+      return "GenBank"
+    case "fasta":
+    case "fa":
+    case "fna":
+      return "FASTA"
+    case "json":
+      return "JSON"
+    case "txt":
+      return "TXT"
+    default: {
+      const e = getFileExtension(fileName)
+      return e ? e.toUpperCase() : "FILE"
+    }
+  }
+}
+
 export function inferSampleFileKind(fileName: string, _contentType?: string | null): SampleFileKind {
   const ext = getFileExtension(fileName)
   if (PROTEIN_STRUCTURE_EXTENSIONS.has(ext)) return "protein_structure"

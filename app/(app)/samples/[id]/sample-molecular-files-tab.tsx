@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { createClient } from "@/lib/supabase/client"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import {
@@ -26,6 +26,7 @@ import {
 import {
   inferSampleFileKind,
   isAllowedSampleMolecularFile,
+  molecularFileFormatLabel,
   parseSequenceText,
   shouldParseSequenceTextOnUpload,
   type SampleFileKind,
@@ -533,26 +534,47 @@ export function SampleMolecularFilesTab({ sampleId, initialFiles }: SampleMolecu
           ) : null}
 
           <Card className="min-w-0 overflow-hidden">
-            <CardHeader className="bg-muted/30 border-b">
-              <div className="flex items-start justify-between gap-3">
-                <div className="flex min-w-0 items-center gap-2">
+            <CardHeader className="border-b bg-muted/30 px-4 py-3.5 sm:px-6">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
+                <div className="flex min-w-0 flex-1 items-start gap-3 sm:items-center sm:gap-4">
                   {!listOpen ? (
                     <Button
                       type="button"
-                      variant="ghost"
+                      variant="outline"
                       size="sm"
-                      className="h-7 w-7 p-0"
+                      className="h-9 shrink-0 gap-2.5 whitespace-nowrap rounded-md border-dashed px-3 text-xs font-semibold leading-none tracking-tight"
                       onClick={() => setListOpen(true)}
-                      aria-label="Show file list"
+                      aria-label={`Show molecular files list (${files.length} files)`}
+                      title="Open the files sidebar"
                     >
-                      <PanelLeftOpen className="h-4 w-4" />
+                      <PanelLeftOpen className="size-4 shrink-0" aria-hidden />
+                      <span className="inline-flex items-baseline gap-1">
+                        <span>Files</span>
+                        {files.length > 0 ? (
+                          <span className="font-normal tabular-nums text-muted-foreground">
+                            ({files.length})
+                          </span>
+                        ) : null}
+                      </span>
                     </Button>
                   ) : null}
-                  <div className="min-w-0">
-                    <CardTitle className="text-base text-foreground">Viewer</CardTitle>
-                    <CardDescription className="truncate">
+                  <div className="flex min-w-0 flex-1 items-center gap-2.5">
+                    <CardTitle
+                      className={`min-w-0 flex-1 text-base font-semibold leading-tight tracking-tight line-clamp-2 break-words sm:line-clamp-none ${
+                        selectedFile ? "text-foreground" : "text-muted-foreground"
+                      }`}
+                      title={selectedFile?.file_name}
+                    >
                       {selectedFile?.file_name ?? "Select a molecular file"}
-                    </CardDescription>
+                    </CardTitle>
+                    {selectedFile ? (
+                      <Badge
+                        variant="outline"
+                        className="h-5 shrink-0 px-2 py-0 font-mono text-[10px] font-semibold uppercase leading-none tracking-wide"
+                      >
+                        {molecularFileFormatLabel(selectedFile.file_name)}
+                      </Badge>
+                    ) : null}
                   </div>
                 </div>
                 {signedUrl ? (
@@ -560,6 +582,7 @@ export function SampleMolecularFilesTab({ sampleId, initialFiles }: SampleMolecu
                     type="button"
                     variant="ghost"
                     size="sm"
+                    className="-mr-1 h-9 shrink-0 self-start sm:self-center"
                     onClick={copyShareLink}
                     aria-label="Copy signed link"
                   >

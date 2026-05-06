@@ -23,7 +23,7 @@ export function Notes9LoaderGif({
   return (
     <div
       className={cn(
-        "relative isolate inline-flex max-w-full -translate-y-[25px] items-center justify-center",
+        "relative isolate inline-flex max-w-full -translate-y-[34px] items-center justify-center",
         widthClassName,
         className,
       )}
