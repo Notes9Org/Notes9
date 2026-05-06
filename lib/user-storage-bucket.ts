@@ -19,10 +19,28 @@
  * @see scripts/045_user_bucket_experiment_and_profile_rls.sql
  */
 
+import type { SupabaseClient } from "@supabase/supabase-js"
 import { LITERATURE_STORAGE_BUCKET } from "@/types/literature-pdf"
 
 /** Canonical bucket id for all app-managed files (matches literature bucket). */
 export const USER_STORAGE_BUCKET = LITERATURE_STORAGE_BUCKET
+
+/**
+ * Create a short-lived signed URL for a sample file in the user bucket. RLS still applies on read.
+ * Returns null if the URL cannot be created.
+ */
+export async function createSampleFileSignedUrl(
+  supabase: SupabaseClient,
+  storagePath: string,
+  ttlSeconds = 3600
+): Promise<string | null> {
+  if (!storagePath) return null
+  const { data, error } = await supabase.storage
+    .from(USER_STORAGE_BUCKET)
+    .createSignedUrl(storagePath, ttlSeconds)
+  if (error || !data?.signedUrl) return null
+  return data.signedUrl
+}
 
 /** Public URL segment after which the object path begins (Supabase public object URL shape). */
 export const USER_STORAGE_PUBLIC_URL_MARKER = "/object/public/user/"

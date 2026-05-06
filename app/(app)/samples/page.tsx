@@ -55,17 +55,18 @@ export default async function SamplesPage() {
     samples = fallback.data
   }
 
+  const safeSamples = samples ?? []
   const statusCount = {
-    available: samples?.filter((s) => s.status === "available").length || 0,
-    in_use: samples?.filter((s) => s.status === "in_use").length || 0,
-    depleted: samples?.filter((s) => s.status === "depleted").length || 0,
-    disposed: samples?.filter((s) => s.status === "disposed").length || 0,
+    available: safeSamples.filter((s) => s.status === "available").length,
+    in_use: safeSamples.filter((s) => s.status === "in_use").length,
+    depleted: safeSamples.filter((s) => s.status === "depleted").length,
+    disposed: safeSamples.filter((s) => s.status === "disposed").length,
   }
 
   return (
     <div className="space-y-6">
-      {samples && samples.length > 0 ? (
-        <SamplesPageContent samples={samples} statusCount={statusCount} />
+      {safeSamples.length > 0 ? (
+        <SamplesPageContent samples={safeSamples} statusCount={statusCount} />
       ) : (
         <SamplesEmptyState />
       )}

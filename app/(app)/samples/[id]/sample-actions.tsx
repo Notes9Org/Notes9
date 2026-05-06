@@ -8,15 +8,42 @@ import {
 } from "@/components/ui/tooltip"
 import { EditSampleDialog } from './edit-sample-dialog'
 import { DeleteSampleDialog } from './delete-sample-dialog'
+import type { SampleLinkOption } from "../sample-context-picker"
 
-export function SampleActions({ sample }: { sample: any }) {
+type SampleActionsProps = {
+  sample: any
+  allProjects?: SampleLinkOption[]
+  allExperiments?: SampleLinkOption[]
+  allLabNotes?: SampleLinkOption[]
+  linkedProjectIds?: string[]
+  linkedExperimentIds?: string[]
+  linkedLabNoteIds?: string[]
+}
+
+export function SampleActions({
+  sample,
+  allProjects = [],
+  allExperiments = [],
+  allLabNotes = [],
+  linkedProjectIds = [],
+  linkedExperimentIds = [],
+  linkedLabNoteIds = [],
+}: SampleActionsProps) {
   return (
     <TooltipProvider>
       <div className="flex items-center gap-1">
         <Tooltip>
           <TooltipTrigger asChild>
             <span className="inline-flex">
-              <EditSampleDialog sample={sample} />
+              <EditSampleDialog
+                sample={sample}
+                allProjects={allProjects}
+                allExperiments={allExperiments}
+                allLabNotes={allLabNotes}
+                linkedProjectIds={linkedProjectIds}
+                linkedExperimentIds={linkedExperimentIds}
+                linkedLabNoteIds={linkedLabNoteIds}
+              />
             </span>
           </TooltipTrigger>
           <TooltipContent side="bottom">Edit</TooltipContent>
@@ -33,4 +60,3 @@ export function SampleActions({ sample }: { sample: any }) {
     </TooltipProvider>
   )
 }
-
