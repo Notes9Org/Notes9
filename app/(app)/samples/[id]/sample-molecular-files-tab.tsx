@@ -26,6 +26,7 @@ import {
 import {
   inferSampleFileKind,
   isAllowedSampleMolecularFile,
+  looksLikeBinarySnapGeneBlob,
   molecularFileFormatLabel,
   parseSequenceText,
   shouldParseSequenceTextOnUpload,
@@ -354,16 +355,31 @@ export function SampleMolecularFilesTab({ sampleId, initialFiles }: SampleMolecu
       try {
         if (ext === "dna") {
           const blob = await response.blob()
-          const fileObj = new File([blob], file.file_name, {
-            type: blob.type || "application/octet-stream",
-          })
           const { anyToJson } = await import("@teselagen/bio-parsers")
-          const parsed = await anyToJson(fileObj, {
-            fileName: file.file_name,
-            isProtein: false,
-          } as any)
-          const first = Array.isArray(parsed) ? parsed[0] : parsed
-          return first?.parsedSequence?.sequence ?? ""
+          if (await looksLikeBinarySnapGeneBlob(blob)) {
+            const fileObj = new File([blob], file.file_name, {
+              type: blob.type || "application/octet-stream",
+            })
+            const parsed = await anyToJson(fileObj, {
+              fileName: file.file_name,
+              isProtein: false,
+            } as any)
+            const first = Array.isArray(parsed) ? parsed[0] : parsed
+            return first?.parsedSequence?.sequence ?? ""
+          }
+          const text = await blob.text()
+          try {
+            const parsed = await anyToJson(text, {
+              fileName: file.file_name.replace(/\.dna$/i, ".txt"),
+            } as any)
+            const first = Array.isArray(parsed) ? parsed[0] : parsed
+            const seq = first?.parsedSequence?.sequence
+            if (typeof seq === "string" && seq.length) return seq
+          } catch {
+            /* fall through */
+          }
+          const fallback = parseSequenceText(file.file_name, text)
+          return (fallback?.sequence as string) ?? ""
         }
         const text = await response.text()
         if (shouldParseSequenceTextOnUpload(file.file_name)) {

@@ -49,7 +49,7 @@ import {
   DropdownMenuLabel,
   DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu"
-import { Notes9LoaderGif } from "@/components/brand/notes9-loader-gif"
+import { IceMascot } from "@/components/ui/ice-mascot"
 import { ClipboardInfoIcon } from "@/components/ui/clipboard-info-icon"
 import type { CatalystAgentMode } from "@/lib/catalyst-agent-types"
 
@@ -521,8 +521,12 @@ export function PaperAIPanel({
           <div ref={scrollRef} className="flex-1 overflow-y-auto">
             {messages.length === 0 ? (
               <div className="flex h-full flex-col items-center justify-center gap-3 px-6 text-center">
-                <div className="relative mb-1">
-                  <Notes9LoaderGif alt="Catalyst AI" widthPx={64} className="!translate-y-0" />
+                <div className="relative mb-1 flex justify-center">
+                  <IceMascot
+                    className="w-16 shrink-0 rounded-full"
+                    options={{ src: "/notes9-mascot-ui.png" }}
+                    aria-label="Catalyst AI"
+                  />
                 </div>
                 <h2 className="text-xl font-bold tracking-tight text-transparent bg-gradient-to-r from-orange-500 to-pink-600 bg-clip-text">
                   Catalyst AI

@@ -121,6 +121,22 @@ export function shouldParseSequenceTextOnUpload(fileName: string): boolean {
   return !BINARY_SEQUENCE_EXTENSIONS.has(ext)
 }
 
+/**
+ * True if the blob matches SnapGene's binary `.dna` header.
+ * Other `.dna` files (text FASTA/GenBank, renamed exports) should use the text parsers
+ * so we do not hit bio-parsers' snapgene path (which logs console.error on failure).
+ * Layout: 1 ignored byte, big-endian uint32 length === 14, 8-byte ASCII "SnapGene".
+ */
+export async function looksLikeBinarySnapGeneBlob(blob: Blob): Promise<boolean> {
+  const buf = await blob.slice(0, 13).arrayBuffer()
+  if (buf.byteLength < 13) return false
+  const u8 = new Uint8Array(buf)
+  const len = (u8[1] << 24) | (u8[2] << 16) | (u8[3] << 8) | u8[4]
+  if (len !== 14) return false
+  const title = String.fromCharCode(u8[5], u8[6], u8[7], u8[8], u8[9], u8[10], u8[11], u8[12])
+  return title === "SnapGene"
+}
+
 export function parseTagInput(value: string): string[] {
   return Array.from(
     new Set(
