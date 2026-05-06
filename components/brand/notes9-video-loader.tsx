@@ -88,7 +88,7 @@ function Mascot({
 
   return (
     <IceMascot
-      className={cn(widthCls, "shrink-0")}
+      className={cn(widthCls, "shrink-0 -translate-y-5")}
       options={{ src: "/notes9-mascot-ui.png" }}
       aria-label="Notes9 loader mascot"
     />

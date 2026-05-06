@@ -56,7 +56,7 @@ import {
 import { markdownToHtml } from "@/lib/markdown-to-editor-html"
 import { copyMarkdownForRichPaste } from "@/lib/copy-markdown-rich-paste"
 import { ClipboardInfoIcon } from "@/components/ui/clipboard-info-icon"
-import { Notes9LoaderGif } from "@/components/brand/notes9-loader-gif"
+import { IceMascot } from "@/components/ui/ice-mascot"
 import { useChatSessions } from "@/hooks/use-chat-sessions"
 import type { ChatMessage as DbChatMessage } from "@/hooks/use-chat-sessions"
 import { LiteratureSourcesDropdown } from "@/components/literature-sources-dropdown"
@@ -1159,7 +1159,11 @@ export function ProtocolAiSidechat({
             <div className="flex min-h-0 flex-1 flex-col items-center justify-center overflow-y-auto overscroll-contain px-4 py-4 text-center">
               <div className="mx-auto w-full max-w-xs">
                 <div className="relative mb-3 inline-flex items-center justify-center">
-                  <Notes9LoaderGif alt="Catalyst AI loader" widthPx={64} />
+                  <IceMascot
+                    className="w-16 shrink-0 rounded-full"
+                    options={{ src: "/notes9-mascot-ui.png" }}
+                    aria-label="Catalyst AI"
+                  />
                 </div>
                 <h2 className="text-lg font-bold tracking-tight bg-gradient-to-r from-orange-500 to-pink-600 bg-clip-text text-transparent">
                   Catalyst AI

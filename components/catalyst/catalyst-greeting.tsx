@@ -1,6 +1,6 @@
 'use client';
 
-import { Notes9LoaderGif } from '@/components/brand/notes9-loader-gif';
+import { IceMascot } from '@/components/ui/ice-mascot';
 
 interface CatalystGreetingProps {
   userName: string;
@@ -30,9 +30,11 @@ export function CatalystGreeting({ userName }: CatalystGreetingProps) {
       <div className="mx-auto max-w-2xl w-full text-center">
         {/* Animated Icon */}
         <div className="mb-6 inline-flex items-center justify-center">
-          <div className="relative">
-            <Notes9LoaderGif alt="Catalyst AI loader" widthPx={72} />
-          </div>
+          <IceMascot
+            className="w-[72px] shrink-0 rounded-full"
+            options={{ src: "/notes9-mascot-ui.png" }}
+            aria-label="Catalyst AI"
+          />
         </div>
 
         {/* Greeting */}

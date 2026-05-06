@@ -39,6 +39,7 @@ import {
   cleanDnaSequence,
   findCrisprGuides,
   getFileExtension,
+  looksLikeBinarySnapGeneBlob,
   molecularFileFormatLabel,
   parseSequenceText,
   shouldParseSequenceTextOnUpload,
@@ -353,12 +354,28 @@ export function SamplePlasmidViewer({
               type: blob.type || "application/octet-stream",
             })
             const { anyToJson } = await import("@teselagen/bio-parsers")
-            const parsed = await anyToJson(file, {
-              fileName,
-              isProtein: false,
-            } as any)
-            next = normalizeFromBioParser(parsed, fileName)
-            next.parser = "snapgene-dna"
+            if (await looksLikeBinarySnapGeneBlob(blob)) {
+              const parsed = await anyToJson(file, {
+                fileName,
+                isProtein: false,
+              } as any)
+              next = normalizeFromBioParser(parsed, fileName)
+              next.parser = "snapgene-dna"
+            } else {
+              const text = await blob.text()
+              try {
+                const parsed = await anyToJson(text, {
+                  fileName: fileName.replace(/\.dna$/i, ".txt"),
+                  isProtein: false,
+                } as any)
+                next = normalizeFromBioParser(parsed, fileName)
+                next.parser = "bio-parsers"
+              } catch {
+                const fallback = parseSequenceText(fileName, text)
+                next = normalizeFromBioParser(fallback, fileName)
+                next.parser = "fallback"
+              }
+            }
           } else if (shouldParseSequenceTextOnUpload(fileName)) {
             const text = await response.text()
             try {

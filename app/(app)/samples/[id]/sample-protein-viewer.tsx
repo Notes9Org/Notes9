@@ -160,11 +160,12 @@ async function buildResidueRangeLoci(
   startSeq: number,
   endSeq: number
 ) {
-  const [{ MolScriptBuilder: MS }, { compile }, { QueryContext, StructureSelection }] =
+  const [{ MolScriptBuilder: MS }, { compile }, { QueryContext }, { StructureSelection }] =
     await Promise.all([
       import("molstar/lib/mol-script/language/builder"),
       import("molstar/lib/mol-script/runtime/query/compiler"),
-      import("molstar/lib/mol-model/structure"),
+      import("molstar/lib/mol-model/structure/query/context"),
+      import("molstar/lib/mol-model/structure/query/selection"),
     ])
   const data = plugin?.managers?.structure?.hierarchy?.current?.structures?.[0]?.cell?.obj?.data
   if (!data) return null
@@ -186,8 +187,9 @@ async function buildResidueRangeLoci(
 }
 
 async function buildPolymerCALoci(plugin: any, structureIndex: number) {
-  const [{ QueryContext, StructureSelection }, { StructureSelectionQueries }] = await Promise.all([
-    import("molstar/lib/mol-model/structure"),
+  const [{ QueryContext }, { StructureSelection }, { StructureSelectionQueries }] = await Promise.all([
+    import("molstar/lib/mol-model/structure/query/context"),
+    import("molstar/lib/mol-model/structure/query/selection"),
     import("molstar/lib/mol-plugin-state/helpers/structure-selection-query"),
   ])
   const structures = plugin?.managers?.structure?.hierarchy?.current?.structures ?? []
@@ -223,6 +225,11 @@ export function SampleProteinViewer({
   const [rmsdInfo, setRmsdInfo] = useState<{ rmsd: number; n: number; label: string } | null>(null)
 
   const format = useMemo(() => inferFormat(fileName), [fileName])
+
+  useEffect(() => {
+    setSupSourceId("")
+    setRmsdInfo(null)
+  }, [fileUrl, fileName])
 
   useEffect(() => {
     let cancelled = false
