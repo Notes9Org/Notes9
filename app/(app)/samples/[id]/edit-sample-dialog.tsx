@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useMemo, useState } from "react"
 import { useRouter } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
 import { Button } from "@/components/ui/button"
@@ -26,6 +26,8 @@ import {
 import { Pencil } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { formatSampleTags, parseTagInput } from "@/lib/sample-molecular"
+import { replaceSampleContextLinks } from "@/lib/sample-context"
+import { SampleContextPicker, type SampleLinkOption } from "../sample-context-picker"
 
 const SAMPLE_TYPES = [
   "Chemical",
@@ -58,11 +60,38 @@ const STATUS_OPTIONS = [
   { value: "disposed", label: "Disposed" }
 ]
 
-export function EditSampleDialog({ sample }: { sample: any }) {
+type EditSampleDialogProps = {
+  sample: any
+  allProjects?: SampleLinkOption[]
+  allExperiments?: SampleLinkOption[]
+  allLabNotes?: SampleLinkOption[]
+  linkedProjectIds?: string[]
+  linkedExperimentIds?: string[]
+  linkedLabNoteIds?: string[]
+}
+
+export function EditSampleDialog({
+  sample,
+  allProjects = [],
+  allExperiments = [],
+  allLabNotes = [],
+  linkedProjectIds = [],
+  linkedExperimentIds = [],
+  linkedLabNoteIds = [],
+}: EditSampleDialogProps) {
   const router = useRouter()
   const { toast } = useToast()
   const [open, setOpen] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
+  const [projectIds, setProjectIds] = useState<string[]>(linkedProjectIds)
+  const [experimentIds, setExperimentIds] = useState<string[]>(linkedExperimentIds)
+  const [labNoteIds, setLabNoteIds] = useState<string[]>(linkedLabNoteIds)
+  const [jsonError, setJsonError] = useState<string | null>(null)
+
+  const filteredExperiments = useMemo(() => {
+    if (projectIds.length === 0) return allExperiments
+    return allExperiments.filter((e) => !e.project_id || projectIds.includes(e.project_id))
+  }, [allExperiments, projectIds])
   
   const [formData, setFormData] = useState({
     sample_type: sample.sample_type,
@@ -101,10 +130,27 @@ export function EditSampleDialog({ sample }: { sample: any }) {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setIsLoading(true)
+    setJsonError(null)
 
     try {
       const supabase = createClient()
-      const custom_metadata = customMetadataText.trim() ? JSON.parse(customMetadataText) : {}
+      let custom_metadata: Record<string, any> = {}
+      if (customMetadataText.trim()) {
+        try {
+          const parsed = JSON.parse(customMetadataText)
+          if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+            throw new Error("Custom metadata must be a JSON object.")
+          }
+          custom_metadata = parsed
+        } catch (err) {
+          const message = err instanceof Error ? err.message : "Invalid JSON"
+          setJsonError(message)
+          throw new Error(`Custom metadata: ${message}`)
+        }
+      }
+      const {
+        data: { user },
+      } = await supabase.auth.getUser()
 
       const { error } = await supabase
         .from("samples")
@@ -141,20 +187,27 @@ export function EditSampleDialog({ sample }: { sample: any }) {
 
       if (error) throw error
 
+      if (user) {
+        try {
+          await replaceSampleContextLinks(supabase, {
+            sampleId: sample.id,
+            userId: user.id,
+            projectIds,
+            experimentIds,
+            labNoteIds,
+          })
+        } catch (linkError) {
+          console.warn("Could not update sample context links", linkError)
+        }
+      }
+
       toast({
         title: "Sample updated",
         description: "Sample information has been updated successfully.",
       })
 
       setOpen(false)
-      
-      // Force refresh to show updated data
       router.refresh()
-      
-      // Fallback: hard refresh after a moment if soft refresh doesn't work
-      setTimeout(() => {
-        window.location.reload()
-      }, 1000)
     } catch (error: any) {
       toast({
         title: "Error",
@@ -173,7 +226,7 @@ export function EditSampleDialog({ sample }: { sample: any }) {
           <Pencil className="h-4 w-4" />
         </Button>
       </DialogTrigger>
-      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Edit Sample</DialogTitle>
           <DialogDescription>
@@ -369,11 +422,52 @@ export function EditSampleDialog({ sample }: { sample: any }) {
             <Textarea
               id="custom_metadata"
               value={customMetadataText}
-              onChange={(event) => setCustomMetadataText(event.target.value)}
+              onChange={(event) => {
+                setCustomMetadataText(event.target.value)
+                setJsonError(null)
+              }}
               className="min-h-28 font-mono text-xs"
               spellCheck={false}
+              aria-invalid={Boolean(jsonError)}
             />
+            {jsonError ? (
+              <p className="text-xs text-destructive">{jsonError}</p>
+            ) : null}
           </div>
+
+          {(allProjects.length > 0 || allExperiments.length > 0 || allLabNotes.length > 0) && (
+            <div className="space-y-3 rounded-md border bg-muted/20 p-3">
+              <div>
+                <h3 className="text-sm font-semibold text-foreground">Linked context</h3>
+                <p className="text-xs text-muted-foreground">
+                  Update which projects, experiments, and lab notes this sample is linked to.
+                </p>
+              </div>
+              <div className="grid gap-3 lg:grid-cols-3">
+                <SampleContextPicker
+                  label="Projects"
+                  options={allProjects}
+                  selectedIds={projectIds}
+                  onChange={setProjectIds}
+                  emptyLabel="No projects available"
+                />
+                <SampleContextPicker
+                  label="Experiments"
+                  options={filteredExperiments}
+                  selectedIds={experimentIds}
+                  onChange={setExperimentIds}
+                  emptyLabel="No experiments available"
+                />
+                <SampleContextPicker
+                  label="Lab Notes"
+                  options={allLabNotes}
+                  selectedIds={labNoteIds}
+                  onChange={setLabNoteIds}
+                  emptyLabel="No lab notes available"
+                />
+              </div>
+            </div>
+          )}
 
           {/* Actions */}
           <div className="flex justify-end gap-2 pt-4">

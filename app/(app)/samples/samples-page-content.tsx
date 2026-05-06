@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useMemo } from "react"
+import { useState, useMemo, useEffect } from "react"
 import { useMediaQuery } from "@/hooks/use-media-query"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -58,9 +58,18 @@ export function SamplesPageContent({ samples, statusCount }: SamplesPageContentP
   const [statusFilter, setStatusFilter] = useState(FILTER_ALL)
   const [typeFilter, setTypeFilter] = useState(FILTER_ALL)
 
-  useEffect(() => {
-    if (isMobile) setViewMode("grid")
-  }, [isMobile])
+  const filtersActive =
+    projectFilter !== FILTER_ALL ||
+    experimentFilter !== FILTER_ALL ||
+    statusFilter !== FILTER_ALL ||
+    typeFilter !== FILTER_ALL
+
+  const clearFilters = () => {
+    setProjectFilter(FILTER_ALL)
+    setExperimentFilter(FILTER_ALL)
+    setStatusFilter(FILTER_ALL)
+    setTypeFilter(FILTER_ALL)
+  }
 
   const projectOptions = useMemo(() => {
     const m = new Map<string, string>()
@@ -277,9 +286,16 @@ export function SamplesPageContent({ samples, statusCount }: SamplesPageContentP
       {filteredSamples.length > 0 ? (
         <SampleList samples={filteredSamples} viewMode={viewMode} setViewMode={setViewMode} hideToolbar />
       ) : (
-        <p className="py-10 text-center text-sm text-muted-foreground">
-          No samples match the selected filters.
-        </p>
+        <Card>
+          <CardContent className="flex flex-col items-center justify-center gap-3 py-10 text-center">
+            <p className="text-sm text-muted-foreground">No samples match the selected filters.</p>
+            {filtersActive ? (
+              <Button variant="outline" size="sm" onClick={clearFilters}>
+                Clear filters
+              </Button>
+            ) : null}
+          </CardContent>
+        </Card>
       )}
     </div>
   )

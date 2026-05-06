@@ -117,59 +117,68 @@ export function SampleList({ samples, viewMode: controlledView, setViewMode: set
 
       {effectiveViewMode === "grid" && (
         <div className="grid gap-4 grid-cols-[repeat(auto-fit,minmax(280px,1fr))]">
-          {samples.map((item) => (
-            <Card key={item.id} className="hover:border-primary transition-colors flex flex-col min-w-0 overflow-hidden">
-              <CardHeader className="pb-3 min-w-0">
-                <div className="flex items-start gap-3 min-w-0">
-                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10">
-                    <TestTube className="h-5 w-5 text-primary" />
-                  </div>
-                  <div className="min-w-0 flex-1 space-y-1 overflow-hidden">
-                    <CardTitle className="text-base text-foreground leading-tight truncate">
-                      {item.sample_code}
-                    </CardTitle>
-                    <CardDescription className="text-xs truncate">{item.sample_type}</CardDescription>
-                  </div>
-                </div>
-                <div className="flex items-center justify-between pt-2 gap-2 min-w-0">
-                  <Badge variant={getStatusVariant(item.status)} className="text-xs font-medium whitespace-nowrap shrink-0">
-                    {item.status}
-                  </Badge>
-                </div>
-              </CardHeader>
-              <CardContent className="space-y-3 flex-1 flex flex-col pt-0 min-w-0">
-                <div className="space-y-2 flex-1 min-w-0">
-                  {item.experiment && (
-                    <p className="text-sm text-muted-foreground truncate">{item.experiment.name}</p>
-                  )}
-                  {(item.quantity != null || item.storage_location) && (
-                    <p className="text-sm text-muted-foreground truncate">
-                      {item.quantity != null ? `${item.quantity} ${item.quantity_unit || ""}` : ""}
-                      {item.quantity != null && item.storage_location ? " · " : ""}
-                      {item.storage_location || ""}
-                    </p>
-                  )}
-                  {item.storage_condition && (
-                    <div className="flex items-center gap-1 text-sm text-muted-foreground">
-                      <Package className="h-3 w-3 shrink-0" />
-                      <span className="truncate">{item.storage_condition}</span>
+          {samples.map((item) => {
+            const ctx = contextSummary(item)
+            const proj = projectSummary(item)
+            return (
+              <Card
+                key={item.id}
+                className="hover:border-primary transition-colors flex flex-col min-w-0 overflow-hidden"
+              >
+                <CardHeader className="pb-3 min-w-0">
+                  <div className="flex items-start gap-3 min-w-0">
+                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10">
+                      <TestTube className="h-5 w-5 text-primary" />
                     </div>
-                  )}
-                  {item.sample_files && item.sample_files.length > 0 && (
-                    <p className="text-xs text-muted-foreground truncate">
-                      {item.sample_files.length} molecular file{item.sample_files.length === 1 ? "" : "s"}
-                    </p>
-                  )}
-                </div>
-                <Button variant="outline" size="sm" className="w-full mt-auto shrink-0" asChild>
-                  <Link href={`/samples/${item.id}`}>
-                    <ArrowUpRight className="h-4 w-4 mr-2" />
-                    <span className="truncate">View Details</span>
-                  </Link>
-                </Button>
-              </CardContent>
-            </Card>
-          ))}
+                    <div className="min-w-0 flex-1 space-y-1 overflow-hidden">
+                      <CardTitle className="text-base text-foreground leading-tight truncate">
+                        {item.sample_code}
+                      </CardTitle>
+                      <CardDescription className="text-xs truncate">{item.sample_type}</CardDescription>
+                    </div>
+                  </div>
+                  <div className="flex items-center justify-between pt-2 gap-2 min-w-0">
+                    <Badge
+                      variant={getStatusVariant(item.status)}
+                      className="text-xs font-medium whitespace-nowrap shrink-0"
+                    >
+                      {item.status.replace(/_/g, " ")}
+                    </Badge>
+                  </div>
+                </CardHeader>
+                <CardContent className="space-y-3 flex-1 flex flex-col pt-0 min-w-0">
+                  <div className="space-y-2 flex-1 min-w-0">
+                    <p className="text-sm text-muted-foreground truncate">{ctx}</p>
+                    <p className="text-xs text-muted-foreground truncate">{proj}</p>
+                    {(item.quantity != null || item.storage_location) && (
+                      <p className="text-sm text-muted-foreground truncate">
+                        {item.quantity != null ? `${item.quantity} ${item.quantity_unit || ""}` : ""}
+                        {item.quantity != null && item.storage_location ? " · " : ""}
+                        {item.storage_location || ""}
+                      </p>
+                    )}
+                    {item.storage_condition && (
+                      <div className="flex items-center gap-1 text-sm text-muted-foreground">
+                        <Package className="h-3 w-3 shrink-0" />
+                        <span className="truncate">{item.storage_condition}</span>
+                      </div>
+                    )}
+                    {item.sample_files && item.sample_files.length > 0 && (
+                      <p className="text-xs text-muted-foreground truncate">
+                        {item.sample_files.length} molecular file{item.sample_files.length === 1 ? "" : "s"}
+                      </p>
+                    )}
+                  </div>
+                  <Button variant="outline" size="sm" className="w-full mt-auto shrink-0" asChild>
+                    <Link href={`/samples/${item.id}`}>
+                      <ArrowUpRight className="h-4 w-4 mr-2" />
+                      <span className="truncate">View Details</span>
+                    </Link>
+                  </Button>
+                </CardContent>
+              </Card>
+            )
+          })}
         </div>
       )}
 
@@ -235,8 +244,17 @@ function SampleTableView({ samples }: { samples: Sample[] }) {
           {samples.map((item) => (
             <TableRow
               key={item.id}
-              className="cursor-pointer"
+              role="link"
+              tabIndex={0}
+              aria-label={`Open sample ${item.sample_code}`}
+              className="cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               onClick={() => router.push(`/samples/${item.id}`)}
+              onKeyDown={(event: React.KeyboardEvent) => {
+                if (event.key === "Enter" || event.key === " ") {
+                  event.preventDefault()
+                  router.push(`/samples/${item.id}`)
+                }
+              }}
             >
               <TableCell className="font-medium text-foreground">
                 <div className="flex items-center gap-2 min-w-0">

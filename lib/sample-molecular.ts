@@ -34,12 +34,13 @@ export const SAMPLE_MOLECULAR_EXTENSIONS = [
   ".pdb",
   ".cif",
   ".mmcif",
+  ".ent",
   ".txt",
 ]
 
-const PLASMID_EXTENSIONS = new Set(["gb", "gbk", "genbank", "dna"])
-const SEQUENCE_EXTENSIONS = new Set(["fasta", "fa", "fna"])
-const PROTEIN_STRUCTURE_EXTENSIONS = new Set(["pdb", "cif", "mmcif"])
+const PLASMID_EXTENSIONS = new Set(["gb", "gbk", "genbank", "dna", "json"])
+const SEQUENCE_EXTENSIONS = new Set(["fasta", "fa", "fna", "txt"])
+const PROTEIN_STRUCTURE_EXTENSIONS = new Set(["pdb", "cif", "mmcif", "ent"])
 const BINARY_SEQUENCE_EXTENSIONS = new Set(["dna"])
 const DNA_COMPLEMENT: Record<string, string> = {
   A: "T",
@@ -66,12 +67,11 @@ export function getFileExtension(fileName: string): string {
   return part && part !== clean.toLowerCase() ? part : ""
 }
 
-export function inferSampleFileKind(fileName: string, contentType?: string | null): SampleFileKind {
+export function inferSampleFileKind(fileName: string, _contentType?: string | null): SampleFileKind {
   const ext = getFileExtension(fileName)
-  if (PLASMID_EXTENSIONS.has(ext)) return "plasmid"
   if (PROTEIN_STRUCTURE_EXTENSIONS.has(ext)) return "protein_structure"
+  if (PLASMID_EXTENSIONS.has(ext)) return "plasmid"
   if (SEQUENCE_EXTENSIONS.has(ext)) return "sequence"
-  if (ext === "json" && contentType?.includes("json")) return "plasmid"
   return "other"
 }
 

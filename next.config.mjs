@@ -13,6 +13,12 @@ const nextConfig = {
       bodySizeLimit: "20mb",
     },
   },
+  turbopack: {
+    resolveAlias: {
+      fs: { browser: "./lib/stubs/empty-module.js" },
+      path: { browser: "./lib/stubs/empty-module.js" },
+    },
+  },
   images: {
     unoptimized: true,
     remotePatterns: [
