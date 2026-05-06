@@ -16,7 +16,7 @@ import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { toast } from "sonner"
 import { Loader2, Send } from "lucide-react"
-import { useState } from "react"
+import { useEffect, useState } from "react"
 
 const formSchema = z.object({
     email: z.string().email({
@@ -32,7 +32,12 @@ const formSchema = z.object({
 })
 
 export function ContactForm() {
+    const [mounted, setMounted] = useState(false)
     const [isSubmitting, setIsSubmitting] = useState(false)
+
+    useEffect(() => {
+        setMounted(true)
+    }, [])
 
     const form = useForm<z.infer<typeof formSchema>>({
         resolver: zodResolver(formSchema),
@@ -69,6 +74,41 @@ export function ContactForm() {
         } finally {
             setIsSubmitting(false)
         }
+    }
+
+    if (!mounted) {
+        return (
+            <div className="rounded-2xl border border-border/50 bg-card/80 p-6 backdrop-blur-sm dark:bg-card/60 sm:p-8">
+                <div className="mb-6">
+                    <h3 className="flex items-center gap-2 text-lg font-semibold text-foreground">
+                        <Send className="h-4 w-4 text-[var(--n9-accent)]" />
+                        Book a workflow conversation
+                    </h3>
+                    <p className="mt-1 text-sm text-muted-foreground">
+                        Tell us about your lab and where friction shows up today. Messages go to admin@notes9.com.
+                    </p>
+                </div>
+                <div className="space-y-5" aria-hidden="true">
+                    <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
+                        <div className="grid gap-2">
+                            <div className="h-4 w-16 rounded bg-muted/70" />
+                            <div className="h-9 rounded-md border border-border/60 bg-muted/40" />
+                        </div>
+                        <div className="grid gap-2">
+                            <div className="h-4 w-20 rounded bg-muted/70" />
+                            <div className="h-9 rounded-md border border-border/60 bg-muted/40" />
+                        </div>
+                    </div>
+                    <div className="grid gap-2">
+                        <div className="h-4 w-20 rounded bg-muted/70" />
+                        <div className="min-h-[120px] rounded-md border border-border/60 bg-muted/40" />
+                    </div>
+                    <div className="flex justify-end">
+                        <div className="h-10 w-full rounded-full bg-[var(--n9-accent)]/80 md:w-40" />
+                    </div>
+                </div>
+            </div>
+        )
     }
 
     return (

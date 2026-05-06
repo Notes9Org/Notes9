@@ -4,7 +4,7 @@ import { Plus, MessageSquare, Trash2, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { cn } from '@/lib/utils';
-import { Notes9LoaderGif } from '@/components/brand/notes9-loader-gif';
+import { IceMascot } from '@/components/ui/ice-mascot';
 import { formatDistanceToNow } from 'date-fns';
 import type { ChatSession } from '@/hooks/use-chat-sessions';
 
@@ -38,8 +38,12 @@ export function CatalystSidebar({
       {/* Search Header Area - Only visible when NO messages */}
       {!hasMessages && (
         <div className="flex flex-col items-center justify-center py-8 border-b border-border/50">
-          <div className="relative mb-3">
-            <Notes9LoaderGif alt="Catalyst AI loader" widthPx={56} />
+          <div className="relative mb-3 flex justify-center">
+            <IceMascot
+              className="w-14 shrink-0 rounded-full"
+              options={{ src: "/notes9-mascot-ui.png" }}
+              aria-label="Catalyst AI"
+            />
           </div>
           <span className="text-sm font-semibold bg-gradient-to-r from-orange-500 to-pink-600 bg-clip-text text-transparent">
             Catalyst AI

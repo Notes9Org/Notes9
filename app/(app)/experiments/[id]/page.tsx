@@ -65,12 +65,33 @@ export default async function ExperimentDetailPage({
     .eq("experiment_id", id)
     .order("added_at", { ascending: false })
 
-  // Fetch samples linked to this experiment
-  const { data: experimentSamples } = await supabase
+  // Fetch samples linked to this experiment, including legacy samples.experiment_id rows.
+  const { data: legacyExperimentSamples } = await supabase
     .from("samples")
-    .select("*")
+    .select("*, sample_files(id, file_kind)")
     .eq("experiment_id", id)
     .order("created_at", { ascending: false })
+
+  const { data: linkedSampleRows } = await supabase
+    .from("sample_experiments")
+    .select(`
+      sample:samples(
+        *,
+        sample_files(id, file_kind)
+      )
+    `)
+    .eq("experiment_id", id)
+    .order("linked_at", { ascending: false })
+
+  const sampleMap = new Map<string, any>()
+  for (const sample of legacyExperimentSamples ?? []) {
+    sampleMap.set(sample.id, sample)
+  }
+  for (const row of linkedSampleRows ?? []) {
+    const sample = Array.isArray(row.sample) ? row.sample[0] : row.sample
+    if (sample?.id) sampleMap.set(sample.id, sample)
+  }
+  const experimentSamples = Array.from(sampleMap.values())
 
   // Fetch all projects for dropdown
   const { data: projects } = await supabase
@@ -108,7 +129,7 @@ export default async function ExperimentDetailPage({
       : "Unassigned",
     progress: experimentData.progress || 0,
     protocols: linkedProtocols || [],
-    samples: experimentSamples || [],
+    samples: experimentSamples,
   }
 
   return (

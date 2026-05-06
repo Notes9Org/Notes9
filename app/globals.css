@@ -969,3 +969,149 @@ body > [data-radix-popper-content-wrapper] {
     animation: none;
   }
 }
+
+/* SeqViz (plasmid viewer) — theme-aware text colors so labels, name, and
+   sequence remain readable in both light and dark modes. We only override
+   text-like fills/colors, leaving annotation body fills (feature colors)
+   untouched. */
+.n9-seqviz-theme .la-vz-circular-bps,
+.n9-seqviz-theme .la-vz-circular-bps text,
+.n9-seqviz-theme .la-vz-circular-bps tspan,
+.n9-seqviz-theme .la-vz-circular-labels,
+.n9-seqviz-theme .la-vz-circular-labels text,
+.n9-seqviz-theme .la-vz-circular-labels tspan,
+.n9-seqviz-theme .la-vz-handle-label,
+.n9-seqviz-theme .la-vz-handle-label text,
+.n9-seqviz-theme .la-vz-handle-label tspan,
+.n9-seqviz-theme .la-vz-annotation-label,
+.n9-seqviz-theme .la-vz-annotation-label text,
+.n9-seqviz-theme .la-vz-annotation-label tspan,
+.n9-seqviz-theme .la-vz-primer-label,
+.n9-seqviz-theme .la-vz-primer-label text,
+.n9-seqviz-theme .la-vz-primer-label tspan,
+.n9-seqviz-theme .la-vz-cut-site-text,
+.n9-seqviz-theme .la-vz-translation-amino-acid-label,
+.n9-seqviz-theme .la-vz-index-tick-label {
+  fill: var(--foreground) !important;
+  color: var(--foreground) !important;
+}
+/* Sequence bases (`.la-vz-seq`, `.la-vz-comp-seq`, `.la-vz-base-*`) are
+   handled later via `mix-blend-mode: difference` so they auto-contrast
+   with the background AND the sky-blue selection overlay. */
+
+.n9-seqviz-theme .la-vz-index-line,
+.n9-seqviz-theme .la-vz-index-tick,
+.n9-seqviz-theme .la-vz-label-line {
+  stroke: var(--muted-foreground) !important;
+}
+
+/* ─── SeqViz selection overlay ───────────────────────────────────────────────
+   SeqViz sets `fill` on the selection rect via an inline `style` attribute,
+   which beats any CSS `fill` rule.  But CSS `opacity` is a different property
+   that always wins.  We hide the fill rect almost completely and rely on a
+   thick orange border (the edge lines) plus a dotted top/bottom rule rendered
+   via outline on the rect, so the selection boundary is clear without
+   covering the sequence text underneath.                                       */
+/* Bring the sky-blue selection block back at a comfortable opacity, with a
+   slightly stronger edge so the boundary is obvious.                          */
+.n9-seqviz-theme .la-vz-selection-block,
+.n9-seqviz-theme rect.la-vz-selection-block {
+  opacity: 0.55 !important;
+}
+.n9-seqviz-theme .la-vz-selection-edge {
+  stroke: #0284c7 !important;       /* sky-600 — visible boundary in both modes */
+  stroke-width: 2 !important;
+  stroke-opacity: 1 !important;
+}
+.dark .n9-seqviz-theme .la-vz-selection-edge {
+  stroke: #38bdf8 !important;       /* sky-400 in dark mode                    */
+}
+
+/* ─── Non-sequence labels: light in dark mode ──────────────────────────────
+   Sequence bases (`.la-vz-seq`, `.la-vz-comp-seq`, `.la-vz-base-*`) are
+   handled separately below via `mix-blend-mode: difference`, so they are
+   intentionally excluded here.                                               */
+.dark .n9-seqviz-theme .la-vz-index-tick-label,
+.dark .n9-seqviz-theme .la-vz-index-tick-label text,
+.dark .n9-seqviz-theme .la-vz-index-tick-label tspan,
+.dark .n9-seqviz-theme .la-vz-circular-bps text,
+.dark .n9-seqviz-theme .la-vz-circular-bps tspan,
+.dark .n9-seqviz-theme .la-vz-circular-labels text,
+.dark .n9-seqviz-theme .la-vz-circular-labels tspan,
+.dark .n9-seqviz-theme .la-vz-annotation-label text,
+.dark .n9-seqviz-theme .la-vz-annotation-label tspan,
+.dark .n9-seqviz-theme .la-vz-primer-label text,
+.dark .n9-seqviz-theme .la-vz-primer-label tspan,
+.dark .n9-seqviz-theme .la-vz-handle-label text,
+.dark .n9-seqviz-theme .la-vz-handle-label tspan,
+.dark .n9-seqviz-theme .la-vz-cut-site-text,
+.dark .n9-seqviz-theme .la-vz-translation-amino-acid-label {
+  fill: #f1f5f9 !important;
+  color: #f1f5f9 !important;
+}
+
+/* ─── Sequence bases: adaptive contrast via blend mode ─────────────────────
+   SeqViz applies inline `fill` styles on its base/sequence text, and the
+   selection rect on top is a translucent sky-blue. We need text that stays
+   legible in three regimes:
+     1. light card background (no selection)
+     2. dark card background  (no selection)
+     3. semi-transparent sky-blue selection overlay (both modes)
+   `mix-blend-mode: difference` with a white fill auto-inverts against
+   whatever is behind the text:
+     • white bg  → black glyphs
+     • dark bg   → white glyphs
+     • sky blue  → warm orange/red — strong contrast against blue.
+   The blend mode beats inline fill because it composites in the rendering
+   pipeline, not in the cascade.                                              */
+.n9-seqviz-theme .la-vz-seq text,
+.n9-seqviz-theme .la-vz-seq tspan,
+.n9-seqviz-theme .la-vz-comp-seq text,
+.n9-seqviz-theme .la-vz-comp-seq tspan,
+.n9-seqviz-theme [class^="la-vz-base-"],
+.n9-seqviz-theme [class*=" la-vz-base-"] {
+  fill: #ffffff !important;
+  color: #ffffff !important;
+  mix-blend-mode: difference;
+}
+
+/* Center circular plasmid title (construct name): same adaptive colour as the
+   linear sequence (white + difference blend → black on light card, white on
+   dark, strong contrast on coloured arcs) and bold for hierarchy.            */
+.n9-seqviz-theme .la-vz-circular-label,
+.n9-seqviz-theme .la-vz-circular-label text,
+.n9-seqviz-theme .la-vz-circular-label tspan {
+  fill: #ffffff !important;
+  color: #ffffff !important;
+  mix-blend-mode: difference;
+  font-weight: 700 !important;
+}
+
+/* Dark mode: true center construct name + "N bp" count. SeqViz renders these as
+   the first two unclassed <text> children inside the circular Index <g> (the
+   subtitle uses inline fill: gray, which is hard to read on a dark UI).       */
+.dark .n9-seqviz-theme .la-vz-viewer-circular .la-vz-circular-root > g:has(> text[font-size="20"]) > text[font-size="20"],
+.dark .n9-seqviz-theme .la-vz-viewer-circular .la-vz-circular-root > g:has(> text[font-size="20"]) > text[font-size="20"] tspan {
+  fill: #f8fafc !important;
+  color: #f8fafc !important;
+  mix-blend-mode: normal !important;
+  font-weight: 700 !important;
+}
+
+.dark .n9-seqviz-theme .la-vz-viewer-circular .la-vz-circular-root > g:has(> text[font-size="20"]) > text[font-size="12"][text-anchor="middle"] {
+  fill: #e2e8f0 !important;
+  color: #e2e8f0 !important;
+  mix-blend-mode: normal !important;
+  font-weight: 600 !important;
+}
+
+/* Dark mode: outer annotation name labels (class la-vz-circular-label) —
+   disable difference blend so they stay reliably bright on dark theme.       */
+.dark .n9-seqviz-theme .la-vz-circular-label,
+.dark .n9-seqviz-theme .la-vz-circular-label text,
+.dark .n9-seqviz-theme .la-vz-circular-label tspan {
+  fill: #f8fafc !important;
+  color: #f8fafc !important;
+  mix-blend-mode: normal !important;
+  font-weight: 700 !important;
+}

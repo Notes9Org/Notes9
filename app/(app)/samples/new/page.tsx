@@ -1,14 +1,15 @@
 "use client"
 
-import { useState, useEffect, Suspense } from "react"
+import { Suspense, useEffect, useMemo, useState } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
 import { useSmartBack } from "@/hooks/use-smart-back"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { TextareaWithWordCount } from "@/components/ui/textarea-with-word-count"
+import { Textarea } from "@/components/ui/textarea"
 import {
   Select,
   SelectContent,
@@ -16,7 +17,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { ArrowLeft, TestTube } from "lucide-react"
+import { Alert, AlertDescription } from "@/components/ui/alert"
+import { ArrowLeft, FlaskConical, Link2, Package, TestTube } from "lucide-react"
+import { SampleContextPicker, type SampleLinkOption } from "../sample-context-picker"
+import { parseTagInput } from "@/lib/sample-molecular"
+import { replaceSampleContextLinks } from "@/lib/sample-context"
 
 const SAMPLE_TYPES = [
   "Chemical",
@@ -27,27 +32,27 @@ const SAMPLE_TYPES = [
   "RNA",
   "Protein",
   "Cell Culture",
-  "Other"
+  "Plasmid",
+  "PDB Structure",
+  "Other",
 ]
 
 const QUANTITY_UNITS = ["μL", "mL", "L", "μg", "mg", "g", "kg", "units", "items"]
-
-const STORAGE_CONDITIONS = [
-  "Room Temperature",
-  "4°C",
-  "-20°C",
-  "-80°C",
-  "Liquid Nitrogen",
-  "Desiccated",
-  "Other"
-]
-
+const CONCENTRATION_UNITS = ["ng/μL", "μg/mL", "mg/mL", "nM", "μM", "mM", "M", "OD600", "cells/mL"]
+const STORAGE_CONDITIONS = ["Room Temperature", "4°C", "-20°C", "-80°C", "Liquid Nitrogen", "Desiccated", "Other"]
 const STATUS_OPTIONS = [
   { value: "available", label: "Available" },
   { value: "in_use", label: "In Use" },
   { value: "depleted", label: "Depleted" },
-  { value: "disposed", label: "Disposed" }
+  { value: "disposed", label: "Disposed" },
 ]
+
+function isSchemaMissingError(error: unknown) {
+  if (!error || typeof error !== "object") return false
+  const message = "message" in error && typeof error.message === "string" ? error.message : ""
+  const code = "code" in error && typeof error.code === "string" ? error.code : ""
+  return code === "PGRST204" || code === "42P01" || /column .* does not exist|schema cache|relation .* does not exist/i.test(message)
+}
 
 function NewSamplePageInner() {
   const router = useRouter()
@@ -55,10 +60,17 @@ function NewSamplePageInner() {
   const handleBack = useSmartBack("/samples")
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [experiments, setExperiments] = useState<any[]>([])
-  
+  const [projects, setProjects] = useState<SampleLinkOption[]>([])
+  const [experiments, setExperiments] = useState<SampleLinkOption[]>([])
+  const [labNotes, setLabNotes] = useState<SampleLinkOption[]>([])
+
+  const [projectIds, setProjectIds] = useState<string[]>([])
+  const [experimentIds, setExperimentIds] = useState<string[]>([])
+  const [labNoteIds, setLabNoteIds] = useState<string[]>([])
+  const [customMetadataText, setCustomMetadataText] = useState("")
+  const [tagText, setTagText] = useState("")
+
   const [formData, setFormData] = useState({
-    experiment_id: "",
     sample_code: "",
     sample_type: "",
     description: "",
@@ -69,33 +81,72 @@ function NewSamplePageInner() {
     quantity: "",
     quantity_unit: "",
     status: "available",
+    barcode: "",
+    external_id: "",
+    organism: "",
+    strain: "",
+    genotype: "",
+    supplier: "",
+    catalog_number: "",
+    lot_number: "",
+    concentration: "",
+    concentration_unit: "",
+    purity: "",
+    container_type: "",
+    box_position: "",
+    expiry_date: "",
+    hazard_class: "",
+    biosafety_level: "",
   })
 
   useEffect(() => {
-    fetchExperiments()
+    async function fetchContext() {
+      const supabase = createClient()
+      const [{ data: projectRows }, { data: experimentRows }, { data: labNoteRows }] = await Promise.all([
+        supabase.from("projects").select("id, name").order("name"),
+        supabase.from("experiments").select("id, name, project_id, project:projects(name)").order("created_at", { ascending: false }),
+        supabase.from("lab_notes").select("id, title, experiment_id, project_id").order("created_at", { ascending: false }).limit(200),
+      ])
+
+      setProjects((projectRows ?? []).map((p: any) => ({ id: p.id, label: p.name })))
+      setExperiments(
+        (experimentRows ?? []).map((e: any) => ({
+          id: e.id,
+          label: e.name,
+          detail: e.project?.name ?? null,
+          project_id: e.project_id,
+        }))
+      )
+      setLabNotes(
+        (labNoteRows ?? []).map((n: any) => ({
+          id: n.id,
+          label: n.title,
+          detail: n.experiment_id ? "Experiment note" : n.project_id ? "Project note" : "Lab note",
+        }))
+      )
+    }
+
+    fetchContext()
   }, [])
 
   useEffect(() => {
-    const exp = searchParams.get("experiment")
-    if (exp) {
-      setFormData((prev) => (prev.experiment_id ? prev : { ...prev, experiment_id: exp }))
-    }
+    const experimentId = searchParams.get("experiment")
+    if (!experimentId) return
+    setExperimentIds((current) => (current.includes(experimentId) ? current : [...current, experimentId]))
   }, [searchParams])
 
-  const fetchExperiments = async () => {
-    try {
-      const supabase = createClient()
-      const { data, error } = await supabase
-        .from("experiments")
-        .select("id, name, project:projects(name)")
-        .order("created_at", { ascending: false })
-      
-      if (error) throw error
-      setExperiments(data || [])
-    } catch (err: any) {
-      console.error("Error fetching experiments:", err)
-    }
-  }
+  useEffect(() => {
+    const selectedProjectIds = experiments
+      .filter((experiment) => experimentIds.includes(experiment.id) && experiment.project_id)
+      .map((experiment) => experiment.project_id as string)
+    if (selectedProjectIds.length === 0) return
+    setProjectIds((current) => Array.from(new Set([...current, ...selectedProjectIds])))
+  }, [experimentIds, experiments])
+
+  const filteredExperiments = useMemo(() => {
+    if (projectIds.length === 0) return experiments
+    return experiments.filter((experiment) => !experiment.project_id || projectIds.includes(experiment.project_id))
+  }, [experiments, projectIds])
 
   const generateSampleCode = () => {
     const year = new Date().getFullYear()
@@ -103,319 +154,353 @@ function NewSamplePageInner() {
     return `SMP-${year}-${random}`
   }
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
+  const parseCustomMetadata = () => {
+    if (!customMetadataText.trim()) return {}
+    const parsed = JSON.parse(customMetadataText)
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+      throw new Error("Custom metadata must be a JSON object.")
+    }
+    return parsed
+  }
+
+  const handleSubmit = async (event: React.FormEvent) => {
+    event.preventDefault()
     setIsLoading(true)
     setError(null)
 
     try {
-      const supabase = createClient()
-      const { data: { user } } = await supabase.auth.getUser()
-      
-      if (!user) throw new Error("Not authenticated")
-
-      // Validate required fields
       if (!formData.sample_code || !formData.sample_type) {
-        throw new Error("Sample code and type are required")
+        throw new Error("Sample code and sample type are required.")
       }
 
-      const { data, error: insertError } = await supabase
+      const supabase = createClient()
+      const {
+        data: { user },
+      } = await supabase.auth.getUser()
+      if (!user) throw new Error("Not authenticated")
+
+      const custom_metadata = parseCustomMetadata()
+      const primaryExperimentId = experimentIds[0] ?? null
+
+      const basePayload = {
+        experiment_id: primaryExperimentId,
+        sample_code: formData.sample_code,
+        sample_type: formData.sample_type,
+        description: formData.description || null,
+        source: formData.source || null,
+        collection_date: formData.collection_date || null,
+        storage_location: formData.storage_location || null,
+        storage_condition: formData.storage_condition || null,
+        quantity: formData.quantity ? parseFloat(formData.quantity) : null,
+        quantity_unit: formData.quantity_unit || null,
+        status: formData.status,
+        created_by: user.id,
+      }
+
+      const richPayload = {
+        ...basePayload,
+        barcode: formData.barcode || null,
+        external_id: formData.external_id || null,
+        organism: formData.organism || null,
+        strain: formData.strain || null,
+        genotype: formData.genotype || null,
+        supplier: formData.supplier || null,
+        catalog_number: formData.catalog_number || null,
+        lot_number: formData.lot_number || null,
+        concentration: formData.concentration ? parseFloat(formData.concentration) : null,
+        concentration_unit: formData.concentration_unit || null,
+        purity: formData.purity || null,
+        container_type: formData.container_type || null,
+        box_position: formData.box_position || null,
+        expiry_date: formData.expiry_date || null,
+        hazard_class: formData.hazard_class || null,
+        biosafety_level: formData.biosafety_level || null,
+        tags: parseTagInput(tagText),
+        custom_metadata,
+      }
+
+      let insertResult = await supabase
         .from("samples")
-        .insert({
-          experiment_id: formData.experiment_id || null,
-          sample_code: formData.sample_code,
-          sample_type: formData.sample_type,
-          description: formData.description || null,
-          source: formData.source || null,
-          collection_date: formData.collection_date || null,
-          storage_location: formData.storage_location || null,
-          storage_condition: formData.storage_condition || null,
-          quantity: formData.quantity ? parseFloat(formData.quantity) : null,
-          quantity_unit: formData.quantity_unit || null,
-          status: formData.status,
-          created_by: user.id,
-        })
+        .insert(richPayload)
         .select()
         .single()
 
-      if (insertError) throw insertError
-
-      if (formData.experiment_id) {
-        router.push(`/experiments/${formData.experiment_id}?tab=samples`)
-      } else {
-        router.push("/samples")
+      if (insertResult.error && isSchemaMissingError(insertResult.error)) {
+        insertResult = await supabase.from("samples").insert(basePayload).select().single()
       }
-    } catch (err: any) {
-      setError(err.message)
+
+      if (insertResult.error) throw insertResult.error
+      const data = insertResult.data
+
+      try {
+        await replaceSampleContextLinks(supabase, {
+          sampleId: data.id,
+          userId: user.id,
+          projectIds,
+          experimentIds,
+          labNoteIds,
+        })
+      } catch (linkError) {
+        if (!isSchemaMissingError(linkError)) throw linkError
+      }
+
+      router.push(`/samples/${data.id}`)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not create sample.")
     } finally {
       setIsLoading(false)
     }
   }
 
   return (
-      <div className="space-y-4 md:space-y-6">
-        {/* Header */}
-        <div className="flex items-center gap-3">
-          <Button variant="ghost" size="icon" onClick={handleBack} className="shrink-0">
-            <ArrowLeft className="h-4 w-4" />
-          </Button>
-          <div className="min-w-0">
-            <h1 className="text-2xl font-bold tracking-tight md:text-3xl">Add New Sample</h1>
-            <p className="text-muted-foreground mt-1 text-sm">
-              Register a new sample in the inventory
-            </p>
-          </div>
+    <div className="space-y-4 md:space-y-6">
+      <div className="flex items-start gap-3">
+        <Button variant="ghost" size="icon" onClick={handleBack} className="shrink-0" aria-label="Back">
+          <ArrowLeft className="h-4 w-4" />
+        </Button>
+        <div className="min-w-0">
+          <h1 className="text-2xl font-bold tracking-tight md:text-3xl">Add New Sample</h1>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Register sample metadata, storage, provenance, and linked research context.
+          </p>
         </div>
+      </div>
 
-        {/* Form */}
+      <form onSubmit={handleSubmit} className="space-y-4">
         <Card>
           <CardHeader>
-            <CardTitle className="flex items-center gap-2">
+            <CardTitle className="flex items-center gap-2 text-base">
               <TestTube className="h-5 w-5" />
-              Sample Information
+              Identity
             </CardTitle>
-            <CardDescription>
-              Fill in the details below to register a new sample
-            </CardDescription>
+            <CardDescription>Required sample identity and scientific descriptors.</CardDescription>
           </CardHeader>
-          <CardContent>
-            <form onSubmit={handleSubmit} className="space-y-6">
-              {/* Sample Code & Type */}
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="sample_code">
-                    Sample Code <span className="text-destructive">*</span>
-                  </Label>
-                  <div className="flex gap-2">
-                    <Input
-                      id="sample_code"
-                      placeholder="SMP-2025-0001"
-                      required
-                      value={formData.sample_code}
-                      onChange={(e) =>
-                        setFormData({ ...formData, sample_code: e.target.value })
-                      }
-                    />
-                    <Button
-                      type="button"
-                      variant="outline"
-                      onClick={() =>
-                        setFormData({ ...formData, sample_code: generateSampleCode() })
-                      }
-                    >
-                      Generate
-                    </Button>
-                  </div>
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="sample_type">
-                    Sample Type <span className="text-destructive">*</span>
-                  </Label>
-                  <Select
-                    value={formData.sample_type}
-                    onValueChange={(value) =>
-                      setFormData({ ...formData, sample_type: value })
-                    }
-                  >
-                    <SelectTrigger id="sample_type">
-                      <SelectValue placeholder="Select type" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {SAMPLE_TYPES.map((type) => (
-                        <SelectItem key={type} value={type}>
-                          {type}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+          <CardContent className="space-y-4">
+            <div className="grid gap-4 md:grid-cols-2">
+              <div className="space-y-2 min-w-0">
+                <Label htmlFor="sample_code">Sample Code *</Label>
+                <div className="flex flex-col gap-2 sm:flex-row">
+                  <Input
+                    id="sample_code"
+                    required
+                    value={formData.sample_code}
+                    onChange={(e) => setFormData({ ...formData, sample_code: e.target.value })}
+                    placeholder="SMP-2026-0001"
+                  />
+                  <Button type="button" variant="outline" onClick={() => setFormData({ ...formData, sample_code: generateSampleCode() })}>
+                    Generate
+                  </Button>
                 </div>
               </div>
-
-              {/* Experiment */}
-              <div className="space-y-2">
-                <Label htmlFor="experiment_id">Associated Experiment</Label>
-                <Select
-                  value={formData.experiment_id}
-                  onValueChange={(value) =>
-                    setFormData({ ...formData, experiment_id: value })
-                  }
-                >
-                  <SelectTrigger id="experiment_id">
-                    <SelectValue placeholder="Select experiment (optional)" />
+              <div className="space-y-2 min-w-0">
+                <Label htmlFor="sample_type">Sample Type *</Label>
+                <Select value={formData.sample_type} onValueChange={(value) => setFormData({ ...formData, sample_type: value })}>
+                  <SelectTrigger id="sample_type">
+                    <SelectValue placeholder="Select type" />
                   </SelectTrigger>
                   <SelectContent>
-                    {experiments.map((exp) => (
-                      <SelectItem key={exp.id} value={exp.id}>
-                        {exp.name}
-                        {exp.project && ` - ${exp.project.name}`}
+                    {SAMPLE_TYPES.map((type) => (
+                      <SelectItem key={type} value={type}>
+                        {type}
                       </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
               </div>
+            </div>
 
-              {/* Description */}
-              <div className="space-y-2">
-                <Label htmlFor="description">Description</Label>
-                <TextareaWithWordCount
-                  id="description"
-                  placeholder="Brief description of the sample..."
-                  rows={3}
-                  value={formData.description}
-                  onChange={(v) =>
-                    setFormData({ ...formData, description: v })
-                  }
-                  maxWords={1000}
-                />
-              </div>
+            <div className="grid gap-4 md:grid-cols-3">
+              <Field id="barcode" label="Barcode" value={formData.barcode} onChange={(value) => setFormData({ ...formData, barcode: value })} />
+              <Field id="external_id" label="External ID" value={formData.external_id} onChange={(value) => setFormData({ ...formData, external_id: value })} />
+              <Field id="source" label="Source" value={formData.source} onChange={(value) => setFormData({ ...formData, source: value })} placeholder="Patient, supplier, culture, etc." />
+            </div>
 
-              {/* Source & Collection Date */}
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="source">Source</Label>
-                  <Input
-                    id="source"
-                    placeholder="e.g., Patient ID, Supplier, etc."
-                    value={formData.source}
-                    onChange={(e) =>
-                      setFormData({ ...formData, source: e.target.value })
-                    }
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="collection_date">Collection Date</Label>
-                  <Input
-                    id="collection_date"
-                    type="date"
-                    value={formData.collection_date}
-                    onChange={(e) =>
-                      setFormData({ ...formData, collection_date: e.target.value })
-                    }
-                  />
-                </div>
-              </div>
-
-              {/* Storage Location & Condition */}
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="storage_location">Storage Location</Label>
-                  <Input
-                    id="storage_location"
-                    placeholder="e.g., Freezer B-12, Shelf A3"
-                    value={formData.storage_location}
-                    onChange={(e) =>
-                      setFormData({ ...formData, storage_location: e.target.value })
-                    }
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="storage_condition">Storage Condition</Label>
-                  <Select
-                    value={formData.storage_condition}
-                    onValueChange={(value) =>
-                      setFormData({ ...formData, storage_condition: value })
-                    }
-                  >
-                    <SelectTrigger id="storage_condition">
-                      <SelectValue placeholder="Select condition" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {STORAGE_CONDITIONS.map((condition) => (
-                        <SelectItem key={condition} value={condition}>
-                          {condition}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-
-              {/* Quantity & Unit */}
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="quantity">Quantity</Label>
-                  <Input
-                    id="quantity"
-                    type="number"
-                    step="0.01"
-                    placeholder="e.g., 250"
-                    value={formData.quantity}
-                    onChange={(e) =>
-                      setFormData({ ...formData, quantity: e.target.value })
-                    }
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="quantity_unit">Unit</Label>
-                  <Select
-                    value={formData.quantity_unit}
-                    onValueChange={(value) =>
-                      setFormData({ ...formData, quantity_unit: value })
-                    }
-                  >
-                    <SelectTrigger id="quantity_unit">
-                      <SelectValue placeholder="Select unit" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {QUANTITY_UNITS.map((unit) => (
-                        <SelectItem key={unit} value={unit}>
-                          {unit}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-
-              {/* Status */}
-              <div className="space-y-2">
-                <Label htmlFor="status">Status</Label>
-                <Select
-                  value={formData.status}
-                  onValueChange={(value) =>
-                    setFormData({ ...formData, status: value })
-                  }
-                >
-                  <SelectTrigger id="status">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {STATUS_OPTIONS.map((status) => (
-                      <SelectItem key={status.value} value={status.value}>
-                        {status.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              {/* Error Message */}
-              {error && (
-                <div className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">
-                  {error}
-                </div>
-              )}
-
-              {/* Actions */}
-              <div className="flex gap-3">
-                <Button type="submit" disabled={isLoading} className="w-full sm:w-auto">
-                  {isLoading ? "Creating..." : "Create Sample"}
-                </Button>
-              </div>
-            </form>
+            <div className="space-y-2">
+              <Label htmlFor="description">Description</Label>
+              <TextareaWithWordCount
+                id="description"
+                rows={3}
+                value={formData.description}
+                onChange={(value) => setFormData({ ...formData, description: value })}
+                maxWords={1000}
+                placeholder="Brief description of the sample..."
+              />
+            </div>
           </CardContent>
         </Card>
-      </div>
-    )
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-base">
+              <FlaskConical className="h-5 w-5" />
+              Scientific Details
+            </CardTitle>
+            <CardDescription>Optional biological, reagent, and safety metadata.</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid gap-4 md:grid-cols-3">
+              <Field id="organism" label="Organism" value={formData.organism} onChange={(value) => setFormData({ ...formData, organism: value })} />
+              <Field id="strain" label="Strain" value={formData.strain} onChange={(value) => setFormData({ ...formData, strain: value })} />
+              <Field id="genotype" label="Genotype" value={formData.genotype} onChange={(value) => setFormData({ ...formData, genotype: value })} />
+              <Field id="supplier" label="Supplier" value={formData.supplier} onChange={(value) => setFormData({ ...formData, supplier: value })} />
+              <Field id="catalog_number" label="Catalog Number" value={formData.catalog_number} onChange={(value) => setFormData({ ...formData, catalog_number: value })} />
+              <Field id="lot_number" label="Lot Number" value={formData.lot_number} onChange={(value) => setFormData({ ...formData, lot_number: value })} />
+              <Field id="purity" label="Purity" value={formData.purity} onChange={(value) => setFormData({ ...formData, purity: value })} />
+              <Field id="hazard_class" label="Hazard Class" value={formData.hazard_class} onChange={(value) => setFormData({ ...formData, hazard_class: value })} />
+              <Field id="biosafety_level" label="Biosafety Level" value={formData.biosafety_level} onChange={(value) => setFormData({ ...formData, biosafety_level: value })} />
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-base">
+              <Package className="h-5 w-5" />
+              Quantity & Storage
+            </CardTitle>
+            <CardDescription>Inventory amount, concentration, container, and storage conditions.</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid gap-4 md:grid-cols-4">
+              <Field id="quantity" label="Quantity" type="number" step="0.01" value={formData.quantity} onChange={(value) => setFormData({ ...formData, quantity: value })} />
+              <SelectField id="quantity_unit" label="Unit" value={formData.quantity_unit} options={QUANTITY_UNITS} onChange={(value) => setFormData({ ...formData, quantity_unit: value })} />
+              <Field id="concentration" label="Concentration" type="number" step="0.01" value={formData.concentration} onChange={(value) => setFormData({ ...formData, concentration: value })} />
+              <SelectField id="concentration_unit" label="Concentration Unit" value={formData.concentration_unit} options={CONCENTRATION_UNITS} onChange={(value) => setFormData({ ...formData, concentration_unit: value })} />
+            </div>
+            <div className="grid gap-4 md:grid-cols-3">
+              <Field id="storage_location" label="Storage Location" value={formData.storage_location} onChange={(value) => setFormData({ ...formData, storage_location: value })} placeholder="Freezer B-12, Shelf A3" />
+              <SelectField id="storage_condition" label="Storage Condition" value={formData.storage_condition} options={STORAGE_CONDITIONS} onChange={(value) => setFormData({ ...formData, storage_condition: value })} />
+              <Field id="container_type" label="Container Type" value={formData.container_type} onChange={(value) => setFormData({ ...formData, container_type: value })} />
+              <Field id="box_position" label="Box Position" value={formData.box_position} onChange={(value) => setFormData({ ...formData, box_position: value })} />
+              <Field id="collection_date" label="Collection Date" type="date" value={formData.collection_date} onChange={(value) => setFormData({ ...formData, collection_date: value })} />
+              <Field id="expiry_date" label="Expiry Date" type="date" value={formData.expiry_date} onChange={(value) => setFormData({ ...formData, expiry_date: value })} />
+            </div>
+            <div className="grid gap-4 md:grid-cols-2">
+              <SelectField id="status" label="Status" value={formData.status} options={STATUS_OPTIONS.map((s) => s.value)} optionLabels={STATUS_OPTIONS.reduce<Record<string, string>>((acc, s) => ({ ...acc, [s.value]: s.label }), {})} onChange={(value) => setFormData({ ...formData, status: value })} />
+              <Field id="tags" label="Tags" value={tagText} onChange={setTagText} placeholder="plasmid, glycerol stock, qc pending" />
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-base">
+              <Link2 className="h-5 w-5" />
+              Links
+            </CardTitle>
+            <CardDescription>Connect this sample to projects, experiments, and lab notes.</CardDescription>
+          </CardHeader>
+          <CardContent className="grid gap-4 lg:grid-cols-3">
+            <SampleContextPicker label="Projects" options={projects} selectedIds={projectIds} onChange={setProjectIds} emptyLabel="No projects available." />
+            <SampleContextPicker label="Experiments" options={filteredExperiments} selectedIds={experimentIds} onChange={setExperimentIds} emptyLabel="No experiments available." />
+            <SampleContextPicker label="Lab Notes" options={labNotes} selectedIds={labNoteIds} onChange={setLabNoteIds} emptyLabel="No lab notes available." />
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Custom Metadata</CardTitle>
+            <CardDescription>Optional JSON object for details that do not yet have a dedicated field.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Textarea
+              value={customMetadataText}
+              onChange={(event) => setCustomMetadataText(event.target.value)}
+              placeholder='{"antibiotic": "ampicillin", "insert": "GFP"}'
+              className="min-h-28 font-mono text-sm"
+              spellCheck={false}
+            />
+          </CardContent>
+        </Card>
+
+        {error ? (
+          <Alert variant="destructive">
+            <AlertDescription>{error}</AlertDescription>
+          </Alert>
+        ) : null}
+
+        <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+          <Button type="button" variant="outline" onClick={handleBack} disabled={isLoading}>
+            Cancel
+          </Button>
+          <Button type="submit" disabled={isLoading}>
+            {isLoading ? "Creating..." : "Create Sample"}
+          </Button>
+        </div>
+      </form>
+    </div>
+  )
+}
+
+function Field({
+  id,
+  label,
+  value,
+  onChange,
+  type = "text",
+  placeholder,
+  step,
+}: {
+  id: string
+  label: string
+  value: string
+  onChange: (value: string) => void
+  type?: string
+  placeholder?: string
+  step?: string
+}) {
+  return (
+    <div className="space-y-2 min-w-0">
+      <Label htmlFor={id}>{label}</Label>
+      <Input
+        id={id}
+        type={type}
+        step={step}
+        value={value}
+        placeholder={placeholder}
+        onChange={(event) => onChange(event.target.value)}
+      />
+    </div>
+  )
+}
+
+function SelectField({
+  id,
+  label,
+  value,
+  options,
+  optionLabels,
+  onChange,
+}: {
+  id: string
+  label: string
+  value: string
+  options: string[]
+  optionLabels?: Record<string, string>
+  onChange: (value: string) => void
+}) {
+  return (
+    <div className="space-y-2 min-w-0">
+      <Label htmlFor={id}>{label}</Label>
+      <Select value={value} onValueChange={onChange}>
+        <SelectTrigger id={id}>
+          <SelectValue placeholder="Select" />
+        </SelectTrigger>
+        <SelectContent>
+          {options.map((option) => (
+            <SelectItem key={option} value={option}>
+              {optionLabels?.[option] ?? option}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    </div>
+  )
 }
 
 export default function NewSamplePage() {
   return (
-    <Suspense fallback={<div className="p-6 text-sm text-muted-foreground">Loading…</div>}>
+    <Suspense fallback={<div className="p-6 text-sm text-muted-foreground">Loading...</div>}>
       <NewSamplePageInner />
     </Suspense>
   )

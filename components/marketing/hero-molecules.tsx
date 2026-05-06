@@ -60,7 +60,7 @@ const links: Link[] = [
 
 export function HeroMolecules() {
   return (
-    <div className="pointer-events-none absolute inset-0 overflow-hidden" aria-hidden="true">
+    <div className="pointer-events-none absolute inset-0 hidden overflow-hidden sm:block" aria-hidden="true">
       <svg
         viewBox="0 0 1000 320"
         fill="none"

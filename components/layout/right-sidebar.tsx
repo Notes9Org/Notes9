@@ -66,7 +66,7 @@ import { useChatSessions, ChatSession } from '@/hooks/use-chat-sessions';
 import { MarkdownRenderer } from '@/components/catalyst/markdown-renderer';
 import { PreviewAttachment, type Attachment } from '@/components/catalyst/preview-attachment';
 import { MessageActions } from '@/components/catalyst/message-actions';
-import { Notes9LoaderGif } from '@/components/brand/notes9-loader-gif';
+import { IceMascot } from '@/components/ui/ice-mascot';
 import { Notes9VideoLoader } from '@/components/brand/notes9-video-loader';
 import { toast } from 'sonner';
 import { createClient } from '@/lib/supabase/client';
@@ -2353,8 +2353,12 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
                 // --- Empty State: input at bottom; full screen = compact bar, narrow = full input card ---
                 <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
                 <div className="flex-1 flex flex-col items-center justify-center px-4">
-                    <div className="relative mb-3">
-                      <Notes9LoaderGif alt="Catalyst AI loader" widthPx={64} />
+                    <div className="relative mb-3 flex justify-center">
+                      <IceMascot
+                        className="w-16 shrink-0 rounded-full"
+                        options={{ src: "/notes9-mascot-ui.png" }}
+                        aria-label="Catalyst AI"
+                      />
                     </div>
                     <h2 className="text-lg font-bold tracking-tight bg-gradient-to-r from-orange-500 to-pink-600 bg-clip-text text-transparent">
                       Catalyst AI
