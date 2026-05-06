@@ -26,7 +26,7 @@ import {
   Target,
   X,
 } from "lucide-react"
-import { getFileExtension } from "@/lib/sample-molecular"
+import { getFileExtension, molecularFileFormatLabel } from "@/lib/sample-molecular"
 
 export type ProteinSuperpositionSource = {
   id: string
@@ -577,10 +577,15 @@ export function SampleProteinViewer({
     <div className="space-y-3">
       {/* Toolbar */}
       <div className="flex flex-wrap items-center gap-2 rounded-md border bg-card p-2">
-        <div className="flex min-w-0 items-center gap-2 px-1">
-          <p className="min-w-0 truncate text-sm font-medium text-foreground">{fileName}</p>
-          <Badge variant="outline" className="font-mono text-[10px] uppercase tracking-wide">
-            {format}
+        <div className="flex min-h-8 min-w-0 items-center gap-2.5 px-1">
+          <span className="min-w-0 flex-1 truncate text-sm font-medium leading-none text-foreground">
+            {fileName}
+          </span>
+          <Badge
+            variant="outline"
+            className="inline-flex h-5 shrink-0 items-center justify-center border px-2 py-0 font-mono text-[10px] font-semibold uppercase leading-none tracking-wide"
+          >
+            {molecularFileFormatLabel(fileName)}
           </Badge>
           {working ? (
             <span className="inline-flex items-center gap-1 text-[11px] text-muted-foreground">

@@ -977,9 +977,6 @@ body > [data-radix-popper-content-wrapper] {
 .n9-seqviz-theme .la-vz-circular-bps,
 .n9-seqviz-theme .la-vz-circular-bps text,
 .n9-seqviz-theme .la-vz-circular-bps tspan,
-.n9-seqviz-theme .la-vz-circular-label,
-.n9-seqviz-theme .la-vz-circular-label text,
-.n9-seqviz-theme .la-vz-circular-label tspan,
 .n9-seqviz-theme .la-vz-circular-labels,
 .n9-seqviz-theme .la-vz-circular-labels text,
 .n9-seqviz-theme .la-vz-circular-labels tspan,
@@ -1039,8 +1036,6 @@ body > [data-radix-popper-content-wrapper] {
 .dark .n9-seqviz-theme .la-vz-index-tick-label tspan,
 .dark .n9-seqviz-theme .la-vz-circular-bps text,
 .dark .n9-seqviz-theme .la-vz-circular-bps tspan,
-.dark .n9-seqviz-theme .la-vz-circular-label text,
-.dark .n9-seqviz-theme .la-vz-circular-label tspan,
 .dark .n9-seqviz-theme .la-vz-circular-labels text,
 .dark .n9-seqviz-theme .la-vz-circular-labels tspan,
 .dark .n9-seqviz-theme .la-vz-annotation-label text,
@@ -1078,4 +1073,45 @@ body > [data-radix-popper-content-wrapper] {
   fill: #ffffff !important;
   color: #ffffff !important;
   mix-blend-mode: difference;
+}
+
+/* Center circular plasmid title (construct name): same adaptive colour as the
+   linear sequence (white + difference blend → black on light card, white on
+   dark, strong contrast on coloured arcs) and bold for hierarchy.            */
+.n9-seqviz-theme .la-vz-circular-label,
+.n9-seqviz-theme .la-vz-circular-label text,
+.n9-seqviz-theme .la-vz-circular-label tspan {
+  fill: #ffffff !important;
+  color: #ffffff !important;
+  mix-blend-mode: difference;
+  font-weight: 700 !important;
+}
+
+/* Dark mode: true center construct name + "N bp" count. SeqViz renders these as
+   the first two unclassed <text> children inside the circular Index <g> (the
+   subtitle uses inline fill: gray, which is hard to read on a dark UI).       */
+.dark .n9-seqviz-theme .la-vz-viewer-circular .la-vz-circular-root > g:has(> text[font-size="20"]) > text[font-size="20"],
+.dark .n9-seqviz-theme .la-vz-viewer-circular .la-vz-circular-root > g:has(> text[font-size="20"]) > text[font-size="20"] tspan {
+  fill: #f8fafc !important;
+  color: #f8fafc !important;
+  mix-blend-mode: normal !important;
+  font-weight: 700 !important;
+}
+
+.dark .n9-seqviz-theme .la-vz-viewer-circular .la-vz-circular-root > g:has(> text[font-size="20"]) > text[font-size="12"][text-anchor="middle"] {
+  fill: #e2e8f0 !important;
+  color: #e2e8f0 !important;
+  mix-blend-mode: normal !important;
+  font-weight: 600 !important;
+}
+
+/* Dark mode: outer annotation name labels (class la-vz-circular-label) —
+   disable difference blend so they stay reliably bright on dark theme.       */
+.dark .n9-seqviz-theme .la-vz-circular-label,
+.dark .n9-seqviz-theme .la-vz-circular-label text,
+.dark .n9-seqviz-theme .la-vz-circular-label tspan {
+  fill: #f8fafc !important;
+  color: #f8fafc !important;
+  mix-blend-mode: normal !important;
+  font-weight: 700 !important;
 }
