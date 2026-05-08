@@ -25,7 +25,11 @@ export interface AgentStreamParams {
   session_id: string;
   history?: Array<{ role: string; content: string }>;
   scope?: object | null;
-  options?: { debug?: boolean; max_retries?: number };
+  options?: {
+    debug?: boolean;
+    max_retries?: number;
+    tags?: Array<{ kind: string; id: string; title: string }>;
+  };
 }
 
 export interface AgentStreamState {

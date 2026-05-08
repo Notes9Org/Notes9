@@ -1692,7 +1692,6 @@ function AssistantMessage({
             [word-break:break-word] [overflow-wrap:anywhere]
             [&_pre]:max-w-full [&_pre]:overflow-x-auto [&_pre]:whitespace-pre-wrap
             [&_code]:break-all
-            [&_table]:max-w-full [&_table]:table-fixed [&_td]:break-words [&_th]:break-words
           "
         />
       </div>

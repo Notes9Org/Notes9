@@ -6,7 +6,10 @@ import {
 
 export const maxDuration = 60;
 
-const NOTES9_API_BASE = process.env.NEXT_PUBLIC_NOTES9_API_URL?.replace(/\/$/, '') || '';
+const NOTES9_API_BASE =
+  process.env.NEXT_PUBLIC_NOTES9_API_URL?.replace(/\/$/, '') ||
+  process.env.CHAT_API_URL?.replace(/\/$/, '') ||
+  '';
 
 export async function POST(req: Request) {
   const headerToken = req.headers.get('Authorization')?.replace(/^Bearer\s+/i, '').trim();
@@ -38,7 +41,7 @@ export async function POST(req: Request) {
 
   if (!NOTES9_API_BASE) {
     return NextResponse.json(
-      { error: 'Notes9 API URL not configured.' },
+      { error: 'Notes9 API URL not configured. Set NEXT_PUBLIC_NOTES9_API_URL or CHAT_API_URL.' },
       { status: 503 }
     );
   }

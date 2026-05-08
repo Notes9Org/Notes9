@@ -46,8 +46,9 @@ export async function extractProtocolTemplateFromDocx(params: {
   const transparentGif =
     "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7"
 
+  // Node build of mammoth accepts `buffer` or `path`, not `arrayBuffer` (browser-only).
   const result = await mammoth.convertToHtml(
-    { arrayBuffer },
+    { buffer: Buffer.from(arrayBuffer) },
     {
       convertImage: mammoth.images.imgElement(async (image) => {
         const buffer = await image.readAsArrayBuffer()

@@ -14,6 +14,7 @@ import {
   ResourceFilterRow,
   ResourceListFilter,
 } from "@/components/ui/resource-list-filters"
+import { CATALYST_MENTION_DRAG_MIME } from "@/lib/catalyst-mention-types"
 
 // Format date consistently to avoid hydration mismatch between server/client locales
 const formatDate = (dateStr: string): string => {
@@ -213,7 +214,22 @@ export function ProjectList({ projects, viewMode: controlledView, setViewMode: s
       {effectiveViewMode === "grid" && (
         <div className="grid gap-4 grid-cols-[repeat(auto-fit,minmax(280px,1fr))]">
           {projects.map((project) => (
-            <Card key={project.id} className="hover:border-primary transition-colors flex flex-col min-w-0 overflow-hidden">
+            <Card
+              key={project.id}
+              draggable
+              onDragStart={(e) => {
+                e.dataTransfer.setData(
+                  CATALYST_MENTION_DRAG_MIME,
+                  JSON.stringify({
+                    kind: "project",
+                    id: project.id,
+                    title: project.name,
+                  })
+                )
+                e.dataTransfer.effectAllowed = "copy"
+              }}
+              className="hover:border-primary transition-colors flex flex-col min-w-0 overflow-hidden"
+            >
               <CardHeader className="pb-3 min-w-0">
                 <div className="space-y-2 min-w-0">
                   <CardTitle className="text-lg text-foreground leading-tight min-w-0 overflow-hidden text-ellipsis" style={{
@@ -337,7 +353,19 @@ function ProjectTableView({ projects }: { projects: Project[] }) {
               {projects.map((project) => (
                 <TableRow
                   key={project.id}
+                  draggable
                   className="cursor-pointer"
+                  onDragStart={(e) => {
+                    e.dataTransfer.setData(
+                      CATALYST_MENTION_DRAG_MIME,
+                      JSON.stringify({
+                        kind: "project",
+                        id: project.id,
+                        title: project.name,
+                      })
+                    )
+                    e.dataTransfer.effectAllowed = "copy"
+                  }}
                   onClick={() => router.push(`/projects/${project.id}`)}
                 >
                   <TableCell className="font-medium text-foreground">
