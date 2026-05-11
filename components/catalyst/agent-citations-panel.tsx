@@ -394,7 +394,7 @@ function RetrievedTextBlock({
   );
 }
 
-function CitationBlock({ item }: { item: AgentCitationPanelItem }) {
+function CitationBlock({ item, isStreaming }: { item: AgentCitationPanelItem; isStreaming?: boolean }) {
   const resolvedItem = useResolvedCitationItem(item);
   const titleHref = resolvedItem.highlightHref || resolvedItem.documentHref;
   const excerpt = resolvedItem.excerpt;
@@ -406,7 +406,12 @@ function CitationBlock({ item }: { item: AgentCitationPanelItem }) {
     (resolvedItem.documentHref && excerpt ? resolvedItem.documentHref : null);
 
   return (
-    <li className="px-3 py-2.5 text-sm">
+    <li
+      className={cn(
+        'px-3 py-2.5 text-sm',
+        isStreaming && 'animate-in fade-in-0 slide-in-from-bottom-2 duration-300'
+      )}
+    >
       <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
         <span className="font-mono text-xs text-muted-foreground tabular-nums">[{resolvedItem.index}]</span>
         {titleHref ? (
@@ -508,6 +513,8 @@ export interface AgentCitationsPanelProps {
   triggerLabel: string;
   className?: string;
   defaultOpen?: boolean;
+  /** Enable streaming mode with progressive fade-in animations */
+  isStreaming?: boolean;
 }
 
 /**
@@ -519,12 +526,17 @@ export function AgentCitationsPanel({
   triggerLabel,
   className,
   defaultOpen = false,
+  isStreaming = false,
 }: AgentCitationsPanelProps) {
   const sorted = [...items].sort((a, b) => a.index - b.index);
   if (sorted.length === 0) return null;
 
   if (sorted.length === 1) {
-    return <SingleCitationPanel item={sorted[0]} className={className} />;
+    return (
+      <div className={cn(isStreaming && 'animate-in fade-in-0 slide-in-from-bottom-2 duration-300')}>
+        <SingleCitationPanel item={sorted[0]} className={className} />
+      </div>
+    );
   }
 
   const [open, setOpen] = useState(defaultOpen);
@@ -537,7 +549,10 @@ export function AgentCitationsPanel({
           variant="outline"
           size="sm"
           aria-expanded={open}
-          className="h-8 gap-1.5 text-xs font-medium text-muted-foreground hover:text-foreground"
+          className={cn(
+            'h-8 gap-1.5 text-xs font-medium text-muted-foreground hover:text-foreground',
+            isStreaming && 'animate-in fade-in-0 slide-in-from-bottom-2 duration-300'
+          )}
         >
           <BookOpen className="size-3.5 shrink-0" aria-hidden />
           {triggerLabel}
@@ -560,7 +575,11 @@ export function AgentCitationsPanel({
       >
         <ul className="max-h-[min(22rem,55vh)] divide-y divide-border/60 overflow-y-auto">
           {sorted.map((item) => (
-            <CitationBlock key={`${item.index}-${item.title}-${item.excerpt.slice(0, 24)}`} item={item} />
+            <CitationBlock
+              key={`${item.index}-${item.title}-${item.excerpt.slice(0, 24)}`}
+              item={item}
+              isStreaming={isStreaming}
+            />
           ))}
         </ul>
       </CollapsibleContent>

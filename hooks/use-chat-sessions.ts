@@ -58,12 +58,6 @@ export interface ChatMessage {
   metadata?: Record<string, unknown>;
 }
 
-/**
- * Frontend direct DB persistence for messages.
- * Default OFF to avoid duplicate writes when backend already persists.
- */
-const FRONTEND_PERSISTS_CHAT_MESSAGES =
-  process.env.NEXT_PUBLIC_AGENT_API_PERSIST_CONVERSATION === 'true';
 
 /**
  * @param protocolId - When set, loads/creates sessions for Protocol AI (scoped to that protocol).
@@ -207,15 +201,16 @@ export function useChatSessions(protocolId?: string) {
         return;
       }
 
+      const now = new Date().toISOString();
       const { error } = await supabase
         .from('chat_sessions')
-        .update({ title })
+        .update({ title, updated_at: now })
         .eq('id', sessionId);
 
       if (error) throw error;
 
       setSessions((prev) =>
-        prev.map((s) => (s.id === sessionId ? { ...s, title } : s))
+        prev.map((s) => (s.id === sessionId ? { ...s, title, updated_at: now } : s))
       );
     } catch (error) {
       console.error('Error updating session title:', formatSupabaseErr(error));
@@ -318,17 +313,6 @@ export function useChatSessions(protocolId?: string) {
     metadata?: Record<string, unknown>
   ): Promise<ChatMessage | null> => {
     try {
-      if (!FRONTEND_PERSISTS_CHAT_MESSAGES) {
-        return {
-          id: `${role}-${crypto.randomUUID()}`,
-          session_id: sessionId,
-          role,
-          content,
-          created_at: new Date().toISOString(),
-          metadata: metadata ?? {},
-        };
-      }
-
       if (protocolId && protocolUseLocalRef.current) {
         return localProtocolSaveMessage(protocolId, sessionId, role, content, metadata) as ChatMessage | null;
       }

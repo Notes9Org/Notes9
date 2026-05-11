@@ -180,6 +180,13 @@ export function CatalystMessages({
                                 className="mt-2"
                               />
                             )}
+                            {/* Blinking cursor at end of streaming text */}
+                            {isLastAssistant && isLoading && (
+                              <span
+                                className="inline-block w-[3px] h-[1em] bg-foreground/70 rounded-sm animate-cursor-blink ml-0.5 translate-y-[2px]"
+                                aria-hidden
+                              />
+                            )}
                           </>
                         )}
                       </div>
@@ -209,7 +216,7 @@ export function CatalystMessages({
             );
           })}
 
-          {/* Thinking indicator or Notes9 agent stream */}
+          {/* Waiting for first token: show assistant avatar + blinking cursor */}
           {(isLoading || notes9Stream) && messages.at(-1)?.role === 'user' && (
             notes9Stream ? (
               <div className="flex w-full gap-3 justify-start">
@@ -244,18 +251,14 @@ export function CatalystMessages({
               </div>
             ) : (
               <div className="flex w-full gap-3 justify-start">
-                <div className="mt-0.5 flex size-7 shrink-0 -translate-y-[5px] items-center justify-center rounded-full bg-gradient-to-br from-orange-400 to-pink-500 text-white shadow-sm">
-                  <Sparkles className="size-3.5 animate-pulse" />
+                <div className="mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-orange-400 to-pink-500 text-white shadow-sm">
+                  <Sparkles className="size-3.5" />
                 </div>
-                <div className="flex flex-wrap items-center gap-2 text-muted-foreground text-sm">
-                  <span className="flex items-center gap-1">
-                    <span>Thinking</span>
-                    <span className="inline-flex">
-                      <span className="animate-bounce [animation-delay:0ms]">.</span>
-                      <span className="animate-bounce [animation-delay:150ms]">.</span>
-                      <span className="animate-bounce [animation-delay:300ms]">.</span>
-                    </span>
-                  </span>
+                <div className="flex items-center gap-3 rounded-2xl px-4 py-2.5 text-sm bg-transparent">
+                  <span
+                    className="inline-block w-[3px] h-[1em] bg-foreground/70 rounded-sm animate-cursor-blink translate-y-[1px]"
+                    aria-hidden
+                  />
                   {onStop && (
                     <Button
                       type="button"

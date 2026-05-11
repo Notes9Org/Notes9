@@ -72,7 +72,6 @@ import { MarkdownRenderer } from '@/components/catalyst/markdown-renderer';
 import { PreviewAttachment, type Attachment } from '@/components/catalyst/preview-attachment';
 import { MessageActions } from '@/components/catalyst/message-actions';
 import { IceMascot } from '@/components/ui/ice-mascot';
-import { Notes9VideoLoader } from '@/components/brand/notes9-video-loader';
 import { toast } from 'sonner';
 import { createClient } from '@/lib/supabase/client';
 import { useResizable } from '@/hooks/use-resizable';
@@ -2895,19 +2894,31 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
                           agentStream.donePayload != null) && (
                         <div className="flex gap-4 w-full justify-start">
                           <div className="size-7 shrink-0 flex items-center justify-center rounded-full bg-background border shadow-sm mt-1 -translate-y-[5px]">
-                            <Sparkles className="size-3.5 text-primary animate-pulse" />
+                            <Sparkles className="size-3.5 text-primary" />
                           </div>
                           <div className="flex-1 min-w-0 max-w-[85%]">
-                            <AgentStreamReply
-                              thinkingSteps={agentStream.thinkingSteps}
-                              sql={agentStream.sql}
-                              ragChunks={agentStream.ragChunks}
-                              streamedAnswer={agentStream.streamedAnswer}
-                              donePayload={agentStream.donePayload}
-                              error={agentStream.error}
-                              compact
-                              isThinkingStreaming={agentStream.isStreaming}
-                            />
+                            {agentStream.thinkingSteps.length === 0 &&
+                              !agentStream.streamedAnswer &&
+                              !agentStream.donePayload &&
+                              !agentStream.error ? (
+                              <div className="px-1 py-2.5 text-sm">
+                                <span
+                                  className="inline-block w-[3px] h-[1em] bg-foreground/70 rounded-sm animate-cursor-blink translate-y-[2px]"
+                                  aria-hidden
+                                />
+                              </div>
+                            ) : (
+                              <AgentStreamReply
+                                thinkingSteps={agentStream.thinkingSteps}
+                                sql={agentStream.sql}
+                                ragChunks={agentStream.ragChunks}
+                                streamedAnswer={agentStream.streamedAnswer}
+                                donePayload={agentStream.donePayload}
+                                error={agentStream.error}
+                                compact
+                                isThinkingStreaming={agentStream.isStreaming}
+                              />
+                            )}
                           </div>
                         </div>
                       )}
@@ -2916,20 +2927,16 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
                         !(agentMode === 'literature' && literatureAgentStream.isStreaming) &&
                         !literatureAwaitingClarify &&
                         messages.at(-1)?.role === 'user' && (
-                        <div className="flex w-full justify-start">
-                          <Notes9VideoLoader
-                            className="max-w-[280px]"
-                            compact
-                            inline
-                            size="sm"
-                            horizontal
-                            title="Generating response"
-                            captions={[
-                              "Working on your request.",
-                              "This may take a few seconds.",
-                            ]}
-                            label="Generating response"
-                          />
+                        <div className="flex gap-4 w-full justify-start">
+                          <div className="size-7 shrink-0 flex items-center justify-center rounded-full bg-background border shadow-sm mt-1">
+                            <Sparkles className="size-3.5 text-primary" />
+                          </div>
+                          <div className="px-1 py-2.5 text-sm">
+                            <span
+                              className="inline-block w-[3px] h-[1em] bg-foreground/70 rounded-sm animate-cursor-blink translate-y-[2px]"
+                              aria-hidden
+                            />
+                          </div>
                         </div>
                       )}
                       <div ref={messagesEndRef} className="h-2 shrink-0" aria-hidden />
