@@ -64,7 +64,7 @@ export function tightenChatMarkdown(source: string): string {
 }
 
 /** Distinct reference so `li` can unwrap `p` from GFM loose lists. */
-function MarkdownParagraph({ ...props }: React.ComponentPropsWithoutRef<'p'>) {
+function MarkdownParagraph({ children, ...props }: React.ComponentPropsWithoutRef<'p'>) {
   return (
     <p
       className={cn(
@@ -74,7 +74,9 @@ function MarkdownParagraph({ ...props }: React.ComponentPropsWithoutRef<'p'>) {
         'first:[&:has(>strong:only-child)]:mt-0'
       )}
       {...props}
-    />
+    >
+      {children}
+    </p>
   );
 }
 

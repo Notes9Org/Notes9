@@ -2221,20 +2221,55 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
 
         <div className="mt-1 flex min-h-9 items-center justify-between gap-2 px-2 pb-2">
           <div className="flex min-w-0 flex-1 flex-nowrap items-center gap-1.5 overflow-x-auto">
-            <Button
-              id="tour-ai-mode"
-              variant="ghost"
-              size="sm"
-              className="h-7 gap-1.5 rounded-md bg-muted/50 hover:bg-muted text-muted-foreground px-2 text-xs font-medium shrink-0"
-              type="button"
-              onClick={() => {
-                setMentionOpenForInput(true);
-                inputRef.current?.focus();
-              }}
-            >
-              <Sparkles className="size-3.5" />
-              Caty
-            </Button>
+            <TooltipProvider delayDuration={300}>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    id="tour-ai-mode"
+                    variant="ghost"
+                    size="icon"
+                    className="size-7 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted/60 shrink-0"
+                    type="button"
+                    onClick={() => {
+                      setMentionOpenForInput(true);
+                      inputRef.current?.focus();
+                    }}
+                    aria-label="Tag notes, experiments or projects"
+                  >
+                    <AtSign className="size-3.5" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="top" className="text-xs">
+                  Tag context (@)
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+
+            {agentMode === 'general' && (
+              <TooltipProvider delayDuration={300}>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <button
+                      type="button"
+                      aria-label={webSearchEnabled ? 'Web search on' : 'Web search off'}
+                      onClick={() => setWebSearchEnabled((v) => !v)}
+                      className={cn(
+                        'flex items-center gap-1.5 h-7 px-2 rounded-md text-xs font-medium transition-colors shrink-0',
+                        webSearchEnabled
+                          ? 'bg-muted/60 text-foreground hover:bg-muted'
+                          : 'text-muted-foreground hover:bg-muted/40 hover:text-foreground'
+                      )}
+                    >
+                      <Globe className={cn('size-3.5', webSearchEnabled ? 'text-foreground' : 'text-muted-foreground/60')} />
+                      <span>Web</span>
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent side="top" className="text-xs">
+                    {webSearchEnabled ? 'Web search enabled' : 'Web search disabled'}
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            )}
           </div>
 
           <div className="flex h-9 shrink-0 items-center justify-end gap-1">
@@ -2917,6 +2952,10 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
                             ) : (
                               <AgentStreamReply
                                 thinkingSteps={agentStream.thinkingSteps}
+                                currentStage={agentStream.currentStage}
+                                currentThinkingMessage={agentStream.currentThinkingMessage}
+                                currentThinkingDetail={agentStream.currentThinkingDetail}
+                                toolCards={agentStream.toolCards}
                                 sql={agentStream.sql}
                                 ragChunks={agentStream.ragChunks}
                                 streamedAnswer={agentStream.streamedAnswer}
