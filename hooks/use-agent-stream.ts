@@ -48,8 +48,44 @@ export interface ToolOutput {
   details: Record<string, unknown>;
 }
 
+/** A single live tool card — open while running, settled once result arrives */
+export interface ToolCard {
+  /** Unique key — tool name (e.g. "nlp_to_sql_tool") */
+  id: string;
+  /** Human label from TOOL_LABELS map */
+  label: string;
+  /** Preview of args if provided */
+  args_preview?: string;
+  /** "running" while tool_start; "done" or "error" after tool_result/tool_call */
+  status: 'running' | 'done' | 'error';
+  /** Summary text from tool_result / tool_call */
+  summary?: string;
+  /** Number of sources returned */
+  citations_count?: number;
+  /** Latency in ms */
+  latency_ms?: number;
+}
+
+/** Thinking stage values emitted by the backend */
+export type ThinkingStage =
+  | 'understanding'
+  | 'searching'
+  | 'analyzing'
+  | 'synthesizing'
+  | 'composing'
+  | 'validating'
+  | 'done';
+
 export interface AgentStreamState {
   thinkingSteps: ThinkingPayload[];
+  /** Latest stage emitted via thinking events — drives ThinkingBar */
+  currentStage: ThinkingStage | null;
+  /** Latest thinking message */
+  currentThinkingMessage: string | null;
+  /** Latest thinking detail */
+  currentThinkingDetail: string | null;
+  /** Live tool cards — keyed by tool id */
+  toolCards: ToolCard[];
   sql: string | null;
   ragChunks: RagChunksPayload | null;
   citationsManifest: CitationsManifest | null;
@@ -152,9 +188,37 @@ function ragFromPayload(data: Record<string, unknown> | null): RagChunksPayload 
   };
 }
 
+const TOOL_LABELS: Record<string, { label: string }> = {
+  nlp_to_sql_tool:        { label: 'Querying workspace records' },
+  rag_tool:               { label: 'Searching notes & documents' },
+  web_search_tool:        { label: 'Searching the web' },
+  full_record_fetch_tool: { label: 'Fetching document' },
+  document_analysis_tool: { label: 'Analyzing literature' },
+  biomni_tool:            { label: 'Designing experiment (Biomni)' },
+  biomni_full_tool:       { label: 'Running Biomni full' },
+  llm_chat_tool:          { label: 'Reasoning' },
+  extract_data_tool:      { label: 'Extracting data' },
+  episodic_memory_tool:   { label: 'Checking memory' },
+};
+
+const THINKING_STAGES: ThinkingStage[] = [
+  'understanding', 'searching', 'analyzing', 'synthesizing',
+  'composing', 'validating', 'done',
+];
+
+function normalizeStage(raw: unknown): ThinkingStage | null {
+  if (typeof raw !== 'string') return null;
+  const s = raw.toLowerCase() as ThinkingStage;
+  return THINKING_STAGES.includes(s) ? s : null;
+}
+
 export function useAgentStream() {
   const [state, setState] = useState<AgentStreamState>({
     thinkingSteps: [],
+    currentStage: null,
+    currentThinkingMessage: null,
+    currentThinkingDetail: null,
+    toolCards: [],
     sql: null,
     ragChunks: null,
     citationsManifest: null,
@@ -177,6 +241,10 @@ export function useAgentStream() {
 
       setState({
         thinkingSteps: [],
+        currentStage: null,
+        currentThinkingMessage: null,
+        currentThinkingDetail: null,
+        toolCards: [],
         sql: null,
         ragChunks: null,
         citationsManifest: null,
@@ -247,9 +315,62 @@ export function useAgentStream() {
               case 'thinking': {
                 const step = thinkingFromPayload(payload);
                 if (step) {
+                  const stage = normalizeStage((payload as Record<string, unknown>)?.stage);
+                  const detail =
+                    typeof (payload as Record<string, unknown>)?.detail === 'string'
+                      ? (payload as Record<string, unknown>).detail as string
+                      : undefined;
                   setState((s) => ({
                     ...s,
                     thinkingSteps: [...s.thinkingSteps, step],
+                    currentStage: stage ?? s.currentStage,
+                    currentThinkingMessage: step.message,
+                    currentThinkingDetail: detail ?? null,
+                  }));
+                }
+                break;
+              }
+              case 'tool_start': {
+                if (payload && typeof payload === 'object') {
+                  const p = payload as Record<string, unknown>;
+                  const toolId = typeof p.tool === 'string' ? p.tool : 'unknown';
+                  const labelEntry = TOOL_LABELS[toolId] ?? { icon: '🔧', label: toolId };
+                  const card: ToolCard = {
+                    id: toolId,
+                    label: labelEntry.label,
+                    args_preview: typeof p.args_preview === 'string' ? p.args_preview : undefined,
+                    status: 'running',
+                  };
+                  setState((s) => ({
+                    ...s,
+                    // Replace existing card for this tool (re-runs), or append
+                    toolCards: [
+                      ...s.toolCards.filter((c) => c.id !== toolId || c.status === 'done' || c.status === 'error'),
+                      card,
+                    ],
+                  }));
+                }
+                break;
+              }
+              case 'tool_call':
+              case 'tool_result': {
+                if (payload && typeof payload === 'object') {
+                  const p = payload as Record<string, unknown>;
+                  const toolId = typeof p.tool === 'string' ? p.tool : 'unknown';
+                  const status = (p.status === 'error' ? 'error' : 'done') as 'done' | 'error';
+                  setState((s) => ({
+                    ...s,
+                    toolCards: s.toolCards.map((c) =>
+                      c.id === toolId && c.status === 'running'
+                        ? {
+                            ...c,
+                            status,
+                            summary: typeof p.summary === 'string' ? p.summary : undefined,
+                            citations_count: typeof p.citations_count === 'number' ? p.citations_count : undefined,
+                            latency_ms: typeof p.latency_ms === 'number' ? p.latency_ms : undefined,
+                          }
+                        : c
+                    ),
                   }));
                 }
                 break;
@@ -381,6 +502,10 @@ export function useAgentStream() {
   const reset = useCallback(() => {
     setState({
       thinkingSteps: [],
+      currentStage: null,
+      currentThinkingMessage: null,
+      currentThinkingDetail: null,
+      toolCards: [],
       sql: null,
       ragChunks: null,
       citationsManifest: null,

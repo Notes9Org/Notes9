@@ -6,7 +6,10 @@ import {
   AgentCitationsPanel,
   mergeGroundingAndRagItems,
 } from '@/components/catalyst/agent-citations-panel';
+import { AgentThinkingBar } from '@/components/catalyst/agent-thinking-bar';
+import { AgentToolCards } from '@/components/catalyst/agent-tool-cards';
 import type { ThinkingPayload, RagChunksPayload, DonePayload } from '@/lib/agent-stream-types';
+import type { ThinkingStage, ToolCard } from '@/hooks/use-agent-stream';
 
 interface ToolOutput {
   tool: string;
@@ -16,6 +19,12 @@ interface ToolOutput {
 
 interface AgentStreamReplyProps {
   thinkingSteps: ThinkingPayload[];
+  /** Current stage from latest thinking event — drives the ThinkingBar */
+  currentStage?: ThinkingStage | null;
+  currentThinkingMessage?: string | null;
+  currentThinkingDetail?: string | null;
+  /** Live tool cards from tool_start / tool_result / tool_call events */
+  toolCards?: ToolCard[];
   sql: string | null;
   ragChunks: RagChunksPayload | null;
   toolOutputs?: ToolOutput[];
@@ -37,36 +46,12 @@ const TOOL_LABELS: Record<string, string> = {
   none: 'General',
 };
 
-function formatToolOutput(output: ToolOutput): string {
-  const { tool, details } = output;
-
-  if (tool === 'sql') {
-    const fileNames = details.file_names as string[] | undefined;
-    const rowCount = details.row_count as number | undefined;
-    if (fileNames && fileNames.length > 0) {
-      const preview = fileNames.slice(0, 3).join(', ');
-      const more = fileNames.length > 3 ? ` and ${fileNames.length - 3} more` : '';
-      return `Found ${rowCount || fileNames.length} results: ${preview}${more}`;
-    }
-    return `Found ${rowCount || 0} results from database`;
-  }
-
-  if (tool === 'rag') {
-    const docNames = details.document_names as string[] | undefined;
-    const chunkCount = details.chunk_count as number | undefined;
-    if (docNames && docNames.length > 0) {
-      const preview = docNames.slice(0, 3).join(', ');
-      const more = docNames.length > 3 ? ' and more' : '';
-      return `Retrieved ${chunkCount || docNames.length} chunks from: ${preview}${more}`;
-    }
-    return `Retrieved ${chunkCount || 0} document chunks`;
-  }
-
-  return `${tool} completed`;
-}
-
 export function AgentStreamReply({
   thinkingSteps,
+  currentStage,
+  currentThinkingMessage,
+  currentThinkingDetail,
+  toolCards = [],
   sql,
   ragChunks,
   toolOutputs = [],
@@ -90,6 +75,12 @@ export function AgentStreamReply({
       ? 'All citations'
       : ragChunks?.message?.trim() || 'Retrieved chunks';
 
+  const isStreaming = isThinkingStreaming;
+  const hasToolCards = toolCards.length > 0;
+  const hasThinkingBar =
+    isStreaming &&
+    (currentStage != null || currentThinkingMessage != null || thinkingSteps.length > 0);
+
   if (error) {
     return (
       <div className="rounded-2xl px-4 py-3 text-sm bg-destructive/10 text-destructive border border-destructive/20">
@@ -99,69 +90,58 @@ export function AgentStreamReply({
     );
   }
 
-  const liveSingleStep =
-    isThinkingStreaming && thinkingSteps.length > 0
-      ? thinkingSteps[thinkingSteps.length - 1]
-      : null;
-  const stepsForList =
-    isThinkingStreaming && liveSingleStep ? [liveSingleStep] : thinkingSteps;
-  const lastStepIndex = stepsForList.length - 1;
-
   return (
-    <div className={cn('flex flex-col gap-3', compact && 'gap-2')}>
-      {/* Tool outputs - show file names and summaries */}
-      {toolOutputs.length > 0 && !compact && (
-        <div className="rounded-lg border border-blue-200 bg-blue-50/50 px-3 py-2 text-sm text-blue-900 dark:border-blue-800 dark:bg-blue-950/30 dark:text-blue-100">
-          {toolOutputs.map((output, i) => (
-            <div key={i} className="flex items-start gap-2">
-              <span className="text-blue-600 dark:text-blue-400">•</span>
-              <span>{formatToolOutput(output)}</span>
-            </div>
-          ))}
-        </div>
+    <div className={cn('flex flex-col gap-2.5', compact && 'gap-2')}>
+
+      {/* ── Stage-aware thinking bar (live only) ── */}
+      {hasThinkingBar && (
+        <AgentThinkingBar
+          stage={currentStage ?? null}
+          message={currentThinkingMessage ?? null}
+          detail={currentThinkingDetail}
+          isStreaming={isStreaming}
+        />
       )}
 
-      {/* Live: one line; after stream: full step list */}
-      {stepsForList.length > 0 && (
-        <div className="rounded-xl border border-border/60 bg-muted/20 overflow-hidden">
-          <ul className="divide-y divide-border/40">
-            {stepsForList.map((step, i) => {
-              const cleanMessage = step.message
-                ?.replace(/^step\s*[-–]\s*/i, '')
-                .replace(/^thinking\s*[-–]\s*/i, '')
-                .trim() || step.message;
+      {/* ── Tool cards — live while running, collapsible when done ── */}
+      {hasToolCards && (
+        <AgentToolCards
+          cards={toolCards}
+          collapsible={!isStreaming}
+        />
+      )}
 
-              return (
-                <li
-                  key={
-                    isThinkingStreaming
-                      ? `${step.node}-${step.status}-${step.message}`
-                      : i
-                  }
+      {/* ── Legacy thinking steps (fallback when no stage/toolCards) ── */}
+      {!hasThinkingBar && !hasToolCards && thinkingSteps.length > 0 && (
+        <div className="flex flex-col gap-0.5">
+          {(isThinkingStreaming
+            ? [thinkingSteps[thinkingSteps.length - 1]!]
+            : thinkingSteps
+          ).map((step, i, arr) => {
+            const cleanMessage = step.message
+              ?.replace(/^step\s*[-–]\s*/i, '')
+              .replace(/^thinking\s*[-–]\s*/i, '')
+              .trim() || step.message;
+            const isLast = i === arr.length - 1;
+            return (
+              <div
+                key={isThinkingStreaming ? `${step.node}-${step.status}-${step.message}` : i}
+                className="flex items-start gap-2 px-1 py-1"
+              >
+                <span
                   className={cn(
-                    'px-3 py-2.5 text-sm flex items-start gap-3 transition-colors',
-                    isThinkingStreaming || (i === lastStepIndex && !donePayload)
-                      ? 'bg-primary/5 text-foreground'
-                      : 'text-muted-foreground'
+                    'shrink-0 mt-[5px] size-1.5 rounded-full bg-muted-foreground/40',
+                    isLast && isThinkingStreaming && 'animate-pulse'
                   )}
-                >
-                  <span
-                    className={cn(
-                      'shrink-0 mt-0.5 size-1.5 rounded-full bg-primary/60',
-                      isThinkingStreaming && i === lastStepIndex && 'animate-pulse'
-                    )}
-                  />
-                  <div className="flex-1 min-w-0">
-                    <span>{cleanMessage}</span>
-                  </div>
-                </li>
-              );
-            })}
-          </ul>
+                />
+                <span className="text-sm text-muted-foreground leading-snug">{cleanMessage}</span>
+              </div>
+            );
+          })}
         </div>
       )}
 
-      {/* SQL query */}
+      {/* ── SQL query block ── */}
       {sql && (
         <div className="rounded-xl border border-border/60 overflow-hidden">
           <div className="flex items-center gap-2 px-3 py-2 border-b border-border/50 bg-muted/30">
@@ -175,31 +155,35 @@ export function AgentStreamReply({
         </div>
       )}
 
-      {/* Answer with optional confidence and tool_used (per Notes9 API) */}
+      {/* ── Answer bubble ── */}
       {(displayAnswer || (!donePayload && streamedAnswer === '')) && (
         <div className="space-y-2">
-          <div className="rounded-2xl px-4 py-3 text-sm text-foreground min-w-0 max-w-full max-h-[60vh] overflow-auto">
-            {displayAnswer ? (
-              <>
-                <MarkdownRenderer
-                  content={displayAnswer}
-                  className="[&_pre]:max-w-full [&_pre]:max-h-[40vh] [&_pre]:overflow-auto [&_.notes9-md-table-scroll]:max-h-[40vh]"
+          <div className="px-1 text-sm text-foreground min-w-0 max-w-full max-h-[60vh] overflow-auto">
+            {donePayload ? (
+              /* Stream finished — render full markdown */
+              <MarkdownRenderer
+                content={displayAnswer}
+                className="[&_pre]:max-w-full [&_pre]:max-h-[40vh] [&_pre]:overflow-auto [&_.notes9-md-table-scroll]:max-h-[40vh]"
+              />
+            ) : displayAnswer ? (
+              /* Streaming live — plain pre-wrap so cursor stays truly inline */
+              <span className="whitespace-pre-wrap break-words leading-[1.55]">
+                {displayAnswer}
+                <span
+                  className="inline-block w-[3px] h-[1em] bg-foreground/70 rounded-sm animate-cursor-blink ml-0.5 translate-y-[2px]"
+                  aria-hidden
                 />
-                {/* Blinking cursor while streaming */}
-                {!donePayload && (
-                  <span
-                    className="inline-block w-[3px] h-[1em] bg-foreground/70 rounded-sm animate-cursor-blink ml-0.5 translate-y-[2px]"
-                    aria-hidden
-                  />
-                )}
-              </>
+              </span>
             ) : (
+              /* No content yet — standalone cursor */
               <span
                 className="inline-block w-[3px] h-[1em] bg-foreground/70 rounded-sm animate-cursor-blink translate-y-[2px]"
                 aria-hidden
               />
             )}
           </div>
+
+          {/* Confidence + tool badge */}
           {donePayload && (donePayload.confidence != null || donePayload.tool_used) && (
             <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
               {donePayload.confidence != null && (
@@ -224,7 +208,7 @@ export function AgentStreamReply({
         </div>
       )}
 
-      {/* RAG chunks + done `resources`, merged and deduped; each row links with ?highlight= (excerpt in payload). */}
+      {/* ── Citations panel ── */}
       {hasCitationPanel && (
         <AgentCitationsPanel items={mergedCitationItems} triggerLabel={citationTriggerLabel} />
       )}

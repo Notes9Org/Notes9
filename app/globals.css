@@ -1125,3 +1125,12 @@ body > [data-radix-popper-content-wrapper] {
 .animate-cursor-blink {
   animation: cursor-blink 1s ease-in-out infinite;
 }
+
+@keyframes shimmer {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(400%); }
+}
+
+.animate-shimmer {
+  animation: shimmer 1.6s ease-in-out infinite;
+}
