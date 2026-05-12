@@ -159,21 +159,13 @@ export function AgentStreamReply({
       {(displayAnswer || (!donePayload && streamedAnswer === '')) && (
         <div className="space-y-2">
           <div className="px-1 text-sm text-foreground min-w-0 max-w-full max-h-[60vh] overflow-auto">
-            {donePayload ? (
-              /* Stream finished — render full markdown */
+            {displayAnswer ? (
+              /* Render markdown at all times — showCursor injects ::after blink while streaming */
               <MarkdownRenderer
                 content={displayAnswer}
+                showCursor={!donePayload}
                 className="[&_pre]:max-w-full [&_pre]:max-h-[40vh] [&_pre]:overflow-auto [&_.notes9-md-table-scroll]:max-h-[40vh]"
               />
-            ) : displayAnswer ? (
-              /* Streaming live — plain pre-wrap so cursor stays truly inline */
-              <span className="whitespace-pre-wrap break-words leading-[1.55]">
-                {displayAnswer}
-                <span
-                  className="inline-block w-[3px] h-[1em] bg-foreground/70 rounded-sm animate-cursor-blink ml-0.5 translate-y-[2px]"
-                  aria-hidden
-                />
-              </span>
             ) : (
               /* No content yet — standalone cursor */
               <span
