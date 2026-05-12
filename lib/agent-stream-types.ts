@@ -73,6 +73,18 @@ export interface DonePayload {
   debug?: Record<string, unknown> | null;
 }
 
+/** SSE event: tool_output – Individual tool completion details */
+export interface ToolOutputPayload {
+  tool: 'sql' | 'rag' | 'web_search' | string;
+  success: boolean;
+  row_count?: number;
+  chunk_count?: number;
+  file_names?: string[];
+  document_names?: string[];
+  execution_time_ms?: number;
+  avg_similarity?: number;
+}
+
 /** SSE event: error */
 export interface ErrorPayload {
   error: string;

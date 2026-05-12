@@ -210,14 +210,34 @@ function useResolvedCitationItem(item: AgentCitationPanelItem): AgentCitationPan
 }
 
 /**
+ * Filter out SQL/workspace citations that aren't useful for scientists.
+ */
+function shouldShowCitation(item: AgentCitationPanelItem): boolean {
+  const sourceType = item.sourceType?.toLowerCase();
+
+  // Filter out SQL-only citations
+  if (sourceType === 'sql' || sourceType === 'workspace') {
+    return false;
+  }
+
+  // Filter out generic "Workspace data" without meaningful content
+  if (item.title?.toLowerCase().includes('workspace data') && !item.excerpt) {
+    return false;
+  }
+
+  return true;
+}
+
+/**
  * Final `resources` from the done event plus streaming RAG chunks, deduped so
  * chunks stay clickable when the API omits fields on `resources` only.
+ * Filters out SQL/workspace citations.
  */
 export function mergeGroundingAndRagItems(
   resources: GroundingResource[],
   ragChunks: RagChunk[] | null | undefined,
 ): AgentCitationPanelItem[] {
-  const base = resources.map((c, i) => groundingResourceToPanelItem(c, i));
+  const base = resources.map((c, i) => groundingResourceToPanelItem(c, i)).filter(shouldShowCitation);
   if (!ragChunks?.length) {
     return base.map((item, i) => ({ ...item, index: i + 1 }));
   }
@@ -225,6 +245,9 @@ export function mergeGroundingAndRagItems(
   const extras: AgentCitationPanelItem[] = [];
   for (const ch of ragChunks) {
     const item = ragChunkToPanelItem(ch, base.length + extras.length);
+    if (!shouldShowCitation(item)) {
+      continue; // Skip SQL citations
+    }
     const fp = fingerprintCitationItem(item);
     if (!seen.has(fp)) {
       seen.add(fp);

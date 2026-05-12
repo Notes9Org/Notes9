@@ -1105,8 +1105,13 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
   }, []);
 
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-    const id = requestAnimationFrame(() => updateChatJumpBottom());
+    const id = requestAnimationFrame(() => {
+      const el = chatScrollRef.current;
+      if (el) {
+        el.scrollTop = el.scrollHeight;
+      }
+      updateChatJumpBottom();
+    });
     return () => cancelAnimationFrame(id);
   }, [
     messages,
@@ -2673,11 +2678,13 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
                 </div>
               ) : (
                 // --- Active Chat View ---
-                <div className="flex-1 flex flex-col min-h-0 overflow-hidden relative">
-                  {/* Messages Area — native scroll so we can detect position (ScrollArea viewport is not exposed) */}
+                <div className="flex min-h-0 flex-1 flex-col overflow-hidden relative">
+                  {/* Messages Area — native scroll so we can detect position (ScrollArea viewport is not exposed).
+                      h-0 + flex-1 avoids nested-flex collapse where this region gets 0 height and transcripts are
+                      clipped while the composer still renders (see catalyst / flex scroll patterns). */}
                   <div
                     ref={chatScrollRef}
-                    className="flex-1 min-h-0 basis-0 overflow-y-auto overscroll-contain [scrollbar-gutter:stable]"
+                    className="h-0 min-h-0 flex-1 overflow-y-auto overscroll-contain [scrollbar-gutter:stable]"
                     onScroll={onChatScroll}
                     role="log"
                     aria-label="Chat messages"

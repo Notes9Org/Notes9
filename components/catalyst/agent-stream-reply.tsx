@@ -8,10 +8,17 @@ import {
 } from '@/components/catalyst/agent-citations-panel';
 import type { ThinkingPayload, RagChunksPayload, DonePayload } from '@/lib/agent-stream-types';
 
+interface ToolOutput {
+  tool: string;
+  success: boolean;
+  details: Record<string, unknown>;
+}
+
 interface AgentStreamReplyProps {
   thinkingSteps: ThinkingPayload[];
   sql: string | null;
   ragChunks: RagChunksPayload | null;
+  toolOutputs?: ToolOutput[];
   streamedAnswer: string;
   donePayload: DonePayload | null;
   error: string | null;
@@ -30,10 +37,39 @@ const TOOL_LABELS: Record<string, string> = {
   none: 'General',
 };
 
+function formatToolOutput(output: ToolOutput): string {
+  const { tool, details } = output;
+
+  if (tool === 'sql') {
+    const fileNames = details.file_names as string[] | undefined;
+    const rowCount = details.row_count as number | undefined;
+    if (fileNames && fileNames.length > 0) {
+      const preview = fileNames.slice(0, 3).join(', ');
+      const more = fileNames.length > 3 ? ` and ${fileNames.length - 3} more` : '';
+      return `Found ${rowCount || fileNames.length} results: ${preview}${more}`;
+    }
+    return `Found ${rowCount || 0} results from database`;
+  }
+
+  if (tool === 'rag') {
+    const docNames = details.document_names as string[] | undefined;
+    const chunkCount = details.chunk_count as number | undefined;
+    if (docNames && docNames.length > 0) {
+      const preview = docNames.slice(0, 3).join(', ');
+      const more = docNames.length > 3 ? ' and more' : '';
+      return `Retrieved ${chunkCount || docNames.length} chunks from: ${preview}${more}`;
+    }
+    return `Retrieved ${chunkCount || 0} document chunks`;
+  }
+
+  return `${tool} completed`;
+}
+
 export function AgentStreamReply({
   thinkingSteps,
   sql,
   ragChunks,
+  toolOutputs = [],
   streamedAnswer,
   donePayload,
   error,
@@ -73,6 +109,18 @@ export function AgentStreamReply({
 
   return (
     <div className={cn('flex flex-col gap-3', compact && 'gap-2')}>
+      {/* Tool outputs - show file names and summaries */}
+      {toolOutputs.length > 0 && !compact && (
+        <div className="rounded-lg border border-blue-200 bg-blue-50/50 px-3 py-2 text-sm text-blue-900 dark:border-blue-800 dark:bg-blue-950/30 dark:text-blue-100">
+          {toolOutputs.map((output, i) => (
+            <div key={i} className="flex items-start gap-2">
+              <span className="text-blue-600 dark:text-blue-400">•</span>
+              <span>{formatToolOutput(output)}</span>
+            </div>
+          ))}
+        </div>
+      )}
+
       {/* Live: one line; after stream: full step list */}
       {stepsForList.length > 0 && (
         <div className="rounded-xl border border-border/60 bg-muted/20 overflow-hidden">
