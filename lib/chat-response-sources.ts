@@ -32,16 +32,55 @@ export function escapeMarkdownLinkLabel(label: string): string {
   return label.replace(/\\/g, '\\\\').replace(/\[/g, '\\[').replace(/\]/g, '\\]');
 }
 
-function normalizeSourceItem(raw: unknown, index: number): { label: string; url?: string; excerpt?: string } | null {
+function shouldShowCitation(o: Record<string, unknown>): boolean {
+  const sourceType = pickString(o, ['source_type'])?.toLowerCase();
+
+  // Filter out SQL-only citations - they're not useful for scientists
+  if (sourceType === 'sql' || sourceType === 'workspace') {
+    return false;
+  }
+
+  // Filter out generic "Workspace data" labels without meaningful content
+  const displayLabel = pickString(o, ['display_label']);
+  if (displayLabel?.toLowerCase().includes('workspace data') && !pickString(o, ['excerpt'])) {
+    return false;
+  }
+
+  return true;
+}
+
+function normalizeSourceItem(raw: unknown, index: number): { label: string; url?: string; excerpt?: string; sourceType?: string } | null {
   if (!raw || typeof raw !== 'object') return null;
   const o = raw as Record<string, unknown>;
+
+  // Filter out SQL citations
+  if (!shouldShowCitation(o)) {
+    return null;
+  }
+
+  const sourceType = pickString(o, ['source_type']);
   const url = pickString(o, ['url', 'source_url', 'link', 'href']);
-  const label =
-    pickString(o, ['display_label', 'source_name', 'title', 'name']) ??
-    url ??
-    `Source ${index + 1}`;
   const excerpt = pickString(o, ['excerpt', 'snippet', 'summary', 'description']);
-  return { label: escapeMarkdownLinkLabel(label), url: url || undefined, excerpt };
+
+  // Better label generation: name > excerpt preview > generic
+  let label = pickString(o, ['display_label', 'source_name', 'title', 'name']);
+
+  if (!label && excerpt) {
+    // Use excerpt preview if no name (max 60 chars)
+    label = excerpt.length > 60 ? `${excerpt.slice(0, 57)}...` : excerpt;
+  }
+
+  if (!label) {
+    const typeLabel = sourceType?.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()) || 'Source';
+    label = `${typeLabel} ${index + 1}`;
+  }
+
+  return {
+    label: escapeMarkdownLinkLabel(label),
+    url: url || undefined,
+    excerpt,
+    sourceType
+  };
 }
 
 /**
@@ -77,12 +116,14 @@ export function appendSourcesMarkdownSection(
   }
   const slice = items.slice(0, MAX_SOURCES_IN_APPEND);
   const bodyLines: string[] = [];
+  let sourceIndex = 1;
   slice.forEach((raw, i) => {
     const s = normalizeSourceItem(raw, i);
-    if (!s) return;
-    const n = bodyLines.length + 1;
+    if (!s) return; // Skip filtered citations (e.g., SQL)
+    const n = sourceIndex++;
     let line = s.url ? `[${n}] [${s.label}](${s.url})` : `[${n}] ${s.label}`;
-    if (s.excerpt) {
+    if (s.excerpt && s.label !== s.excerpt) {
+      // Only show excerpt if it's not already the label
       const ex = s.excerpt.length > 220 ? `${s.excerpt.slice(0, 217)}…` : s.excerpt;
       line += ` — ${ex}`;
     }

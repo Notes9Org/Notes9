@@ -32,10 +32,28 @@ export interface AgentStreamParams {
   };
 }
 
+export interface CitationsManifest {
+  manifest: Record<string, {
+    source_type: string;
+    source_id: string;
+    source_name?: string;
+    source_url?: string;
+    excerpt?: string;
+  }>;
+}
+
+export interface ToolOutput {
+  tool: string;
+  success: boolean;
+  details: Record<string, unknown>;
+}
+
 export interface AgentStreamState {
   thinkingSteps: ThinkingPayload[];
   sql: string | null;
   ragChunks: RagChunksPayload | null;
+  citationsManifest: CitationsManifest | null;
+  toolOutputs: ToolOutput[];
   streamedAnswer: string;
   donePayload: DonePayload | null;
   error: string | null;
@@ -139,6 +157,8 @@ export function useAgentStream() {
     thinkingSteps: [],
     sql: null,
     ragChunks: null,
+    citationsManifest: null,
+    toolOutputs: [],
     streamedAnswer: '',
     donePayload: null,
     error: null,
@@ -159,6 +179,8 @@ export function useAgentStream() {
         thinkingSteps: [],
         sql: null,
         ragChunks: null,
+        citationsManifest: null,
+        toolOutputs: [],
         streamedAnswer: '',
         donePayload: null,
         error: null,
@@ -243,6 +265,29 @@ export function useAgentStream() {
               case 'rag_chunks': {
                 const rag = ragFromPayload(payload);
                 if (rag) setState((s) => ({ ...s, ragChunks: rag }));
+                break;
+              }
+              case 'citations_manifest': {
+                // Citation manifest for inline [N] resolution
+                const manifest = payload as CitationsManifest | null;
+                if (manifest?.manifest) {
+                  setState((s) => ({ ...s, citationsManifest: manifest }));
+                }
+                break;
+              }
+              case 'tool_output': {
+                // Tool completion details (file names, counts, etc.)
+                if (payload && typeof payload === 'object') {
+                  const toolOutput: ToolOutput = {
+                    tool: (payload as { tool?: string }).tool || 'unknown',
+                    success: (payload as { success?: boolean }).success ?? true,
+                    details: payload as Record<string, unknown>,
+                  };
+                  setState((s) => ({
+                    ...s,
+                    toolOutputs: [...s.toolOutputs, toolOutput],
+                  }));
+                }
                 break;
               }
               case 'token': {
@@ -338,6 +383,8 @@ export function useAgentStream() {
       thinkingSteps: [],
       sql: null,
       ragChunks: null,
+      citationsManifest: null,
+      toolOutputs: [],
       streamedAnswer: '',
       donePayload: null,
       error: null,
