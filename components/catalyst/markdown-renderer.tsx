@@ -87,6 +87,8 @@ interface MarkdownRendererProps {
   citations?: Array<{ number: number; data: any }>;
   /** Enable inline citation chips (default: false) */
   enableInlineCitations?: boolean;
+  /** When true renders a blinking cursor after the last line of content */
+  showCursor?: boolean;
 }
 
 export function MarkdownRenderer({
@@ -94,6 +96,7 @@ export function MarkdownRenderer({
   className,
   citations = [],
   enableInlineCitations = false,
+  showCursor = false,
 }: MarkdownRendererProps) {
   const md = tightenChatMarkdown(content);
 
@@ -104,6 +107,7 @@ export function MarkdownRenderer({
     <div
       className={cn(
         'notes9-md whitespace-normal prose prose-sm dark:prose-invert max-w-none overflow-hidden',
+        showCursor && 'notes9-md--streaming',
         'text-foreground prose-headings:text-foreground prose-p:text-foreground prose-li:text-foreground',
         '[&_.katex]:text-inherit [&_.katex-display]:my-1',
         'prose-p:my-0 leading-[1.55]',

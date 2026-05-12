@@ -1126,6 +1126,27 @@ body > [data-radix-popper-content-wrapper] {
   animation: cursor-blink 1s ease-in-out infinite;
 }
 
+/* Streaming markdown cursor — injected inline via ::after on the last rendered element */
+.notes9-md--streaming > p:last-child::after,
+.notes9-md--streaming > h1:last-child::after,
+.notes9-md--streaming > h2:last-child::after,
+.notes9-md--streaming > h3:last-child::after,
+.notes9-md--streaming > h4:last-child::after,
+.notes9-md--streaming > blockquote:last-child > p:last-child::after,
+.notes9-md--streaming > ul:last-child > li:last-child::after,
+.notes9-md--streaming > ol:last-child > li:last-child::after {
+  content: '';
+  display: inline-block;
+  width: 3px;
+  height: 0.85em;
+  background: currentColor;
+  opacity: 0.7;
+  border-radius: 1px;
+  vertical-align: text-bottom;
+  margin-left: 2px;
+  animation: cursor-blink 1s ease-in-out infinite;
+}
+
 @keyframes shimmer {
   0% { transform: translateX(-100%); }
   100% { transform: translateX(400%); }
