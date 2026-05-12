@@ -6,6 +6,7 @@ import { useRef, useEffect, useState, useCallback, useMemo } from 'react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import {
   Dialog,
   DialogContent,
@@ -37,6 +38,7 @@ export function CatalystChat({ open, onOpenChange }: CatalystChatProps) {
   const [isRegenerating, setIsRegenerating] = useState(false);
   const [savedMessageIds, setSavedMessageIds] = useState<Set<string>>(new Set());
   const [webSearchEnabled, setWebSearchEnabled] = useState(true);
+
 
   const prevStatusRef = useRef<string>('ready');
   const webSearchEnabledRef = useRef(true);
@@ -371,36 +373,42 @@ export function CatalystChat({ open, onOpenChange }: CatalystChatProps) {
                         </p>
                       </div>
                     ) : (
-                      messages.map((message, index) => (
-                        <ChatMessage
-                          key={message.id}
-                          role={message.role as 'user' | 'assistant'}
-                          content={getMessageContent(message)}
-                          userAvatar={userProfile?.avatar_url}
-                          userName={userProfile?.full_name || undefined}
-                          isLast={index === messages.length - 1 && message.role === 'assistant'}
-                          onRegenerate={handleRegenerate}
-                          isRegenerating={isRegenerating}
-                        />
-                      ))
+                      messages.map((message, index) => {
+                        const isLastAssistant = index === messages.length - 1 && message.role === 'assistant';
+                        const showStreamingStatus = isLastAssistant && isLoading;
+
+                        return (
+                          <ChatMessage
+                            key={message.id}
+                            role={message.role as 'user' | 'assistant'}
+                            content={getMessageContent(message)}
+                            userAvatar={userProfile?.avatar_url}
+                            userName={userProfile?.full_name || undefined}
+                            isLast={isLastAssistant}
+                            onRegenerate={handleRegenerate}
+                            isRegenerating={isRegenerating}
+                            isStreaming={showStreamingStatus}
+                          />
+                        );
+                      })
                     )}
                     {isLoading && messages[messages.length - 1]?.role === 'user' && (
                       <div className="flex gap-3 justify-start">
-                        <div className="bg-muted rounded-lg px-4 py-2.5 max-w-[85%]">
-                          <div className="flex gap-1">
-                            <span
-                              className="size-2 bg-foreground/50 rounded-full animate-bounce"
-                              style={{ animationDelay: '0ms' }}
-                            />
-                            <span
-                              className="size-2 bg-foreground/50 rounded-full animate-bounce"
-                              style={{ animationDelay: '150ms' }}
-                            />
-                            <span
-                              className="size-2 bg-foreground/50 rounded-full animate-bounce"
-                              style={{ animationDelay: '300ms' }}
-                            />
-                          </div>
+                        <Avatar className="size-8 shrink-0">
+                          <AvatarImage
+                            src="/notes9-logo-mark-transparent.png"
+                            alt=""
+                            className="object-contain p-1.5 dark:invert dark:brightness-125"
+                          />
+                          <AvatarFallback className="bg-primary/10 text-primary">
+                            <span className="notes9-mascot-mask size-[18px]" aria-hidden />
+                          </AvatarFallback>
+                        </Avatar>
+                        <div className="flex items-center px-4 py-2.5 text-sm">
+                          <span
+                            className="inline-block w-[3px] h-[1em] bg-foreground/70 rounded-sm animate-cursor-blink translate-y-[1px]"
+                            aria-hidden
+                          />
                         </div>
                       </div>
                     )}

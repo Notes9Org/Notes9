@@ -16,6 +16,8 @@ interface ChatMessageProps {
   isLast?: boolean;
   onRegenerate?: () => void;
   isRegenerating?: boolean;
+  /** When true, shows blinking cursor at end of message (streaming in progress) */
+  isStreaming?: boolean;
 }
 
 export function ChatMessage({
@@ -26,6 +28,7 @@ export function ChatMessage({
   isLast,
   onRegenerate,
   isRegenerating,
+  isStreaming = false,
 }: ChatMessageProps) {
   const [copied, setCopied] = useState(false);
 
@@ -75,12 +78,21 @@ export function ChatMessage({
           {isUser ? (
             <div className="whitespace-pre-wrap">{content}</div>
           ) : (
-            <MarkdownRenderer content={content} />
+            <>
+              <MarkdownRenderer content={content} />
+              {/* Blinking cursor while streaming */}
+              {isStreaming && (
+                <span
+                  className="inline-block w-[3px] h-[1em] bg-foreground/70 rounded-sm animate-cursor-blink ml-0.5 translate-y-[2px]"
+                  aria-hidden
+                />
+              )}
+            </>
           )}
         </div>
 
         {/* Actions (visible on hover for assistant messages) */}
-        {!isUser && content && (
+        {!isUser && content && !isStreaming && (
           <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
             <Tooltip>
               <TooltipTrigger asChild>

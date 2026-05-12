@@ -1,6 +1,5 @@
 import { createUIMessageStream, createUIMessageStreamResponse, generateId } from 'ai';
 import { updateChatContext, ChatMessage } from '@/lib/redis';
-import { saveChatMessage } from '@/lib/db/chat';
 import {
   appendSourcesMarkdownSection,
   assistantContentFromNotes9ChatPayload,
@@ -90,9 +89,6 @@ export async function POST(req: Request) {
   // 1. Extract the latest user query
   const lastMessage = messages[messages.length - 1];
   const userQuery = getPlainTextFromMessage(lastMessage);
-
-  // 2. Persist user message immediately (DB)
-  await saveChatMessage(sessionId, 'user', userQuery);
 
   // 3. Build history for external API (prior turns, exclude last user message)
   const history = messages.slice(0, -1).map((msg: { role: string; content?: unknown; parts?: Array<{ type?: string; text?: string }> }) => ({
@@ -193,8 +189,24 @@ export async function POST(req: Request) {
 
                 switch (block.event) {
                   case 'ping':
-                  case 'thinking':
                     break;
+                  case 'thinking': {
+                    // Forward thinking events to UI via custom message annotation
+                    const thinkingText = typeof payload?.text === 'string'
+                      ? payload.text
+                      : typeof payload?.thinking === 'string'
+                        ? payload.thinking
+                        : null;
+                    if (thinkingText) {
+                      ensureTextOpen();
+                      // Emit as a special annotation that frontend can parse
+                      writer.write({
+                        type: 'data',
+                        data: { thinking: thinkingText, event: 'thinking' },
+                      });
+                    }
+                    break;
+                  }
                   case 'token': {
                     const t =
                       typeof payload?.text === 'string'
@@ -209,9 +221,18 @@ export async function POST(req: Request) {
                     }
                     break;
                   }
-                  case 'source':
-                    if (payload && typeof payload === 'object') sourceItems.push(payload);
+                  case 'source': {
+                    if (payload && typeof payload === 'object') {
+                      sourceItems.push(payload);
+                      // Also forward sources incrementally for progressive citation display
+                      ensureTextOpen();
+                      writer.write({
+                        type: 'data',
+                        data: { source: payload, event: 'source' },
+                      });
+                    }
                     break;
+                  }
                   case 'clarify': {
                     const md = clarifyMarkdownFromPayload(payload);
                     if (md) {
@@ -349,9 +370,6 @@ export async function POST(req: Request) {
             searchedWeb: searchedWebFlag,
           });
         }
-
-        // Persist assistant response (DB)
-        await saveChatMessage(sessionId, 'assistant', assistantContent);
 
         // Update Redis sliding window
         const newUpdates: ChatMessage[] = [

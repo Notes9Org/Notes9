@@ -76,42 +76,39 @@ export function AgentStreamReply({
       {/* Live: one line; after stream: full step list */}
       {stepsForList.length > 0 && (
         <div className="rounded-xl border border-border/60 bg-muted/20 overflow-hidden">
-          <div className="flex items-center gap-2 px-3 py-2 border-b border-border/50 bg-muted/30">
-            <span
-              className={cn(
-                'inline-flex size-2 rounded-full bg-primary',
-                isThinkingStreaming && 'animate-pulse'
-              )}
-            />
-            <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
-              {isThinkingStreaming ? 'Thinking' : 'Steps'}
-            </span>
-          </div>
           <ul className="divide-y divide-border/40">
-            {stepsForList.map((step, i) => (
-              <li
-                key={
-                  isThinkingStreaming
-                    ? `${step.node}-${step.status}-${step.message}`
-                    : i
-                }
-                className={cn(
-                  'px-3 py-2.5 text-sm flex items-start gap-3 transition-colors',
-                  isThinkingStreaming || (i === lastStepIndex && !donePayload)
-                    ? 'bg-primary/5 text-foreground'
-                    : 'text-muted-foreground'
-                )}
-              >
-                <span className="shrink-0 mt-0.5 size-1.5 rounded-full bg-primary/60" />
-                <div className="flex-1 min-w-0">
-                  <span className="font-medium capitalize text-foreground/90">
-                    {step.node.replace(/_/g, ' ')}
-                  </span>
-                  <span className="text-muted-foreground"> – </span>
-                  <span>{step.message}</span>
-                </div>
-              </li>
-            ))}
+            {stepsForList.map((step, i) => {
+              const cleanMessage = step.message
+                ?.replace(/^step\s*[-–]\s*/i, '')
+                .replace(/^thinking\s*[-–]\s*/i, '')
+                .trim() || step.message;
+
+              return (
+                <li
+                  key={
+                    isThinkingStreaming
+                      ? `${step.node}-${step.status}-${step.message}`
+                      : i
+                  }
+                  className={cn(
+                    'px-3 py-2.5 text-sm flex items-start gap-3 transition-colors',
+                    isThinkingStreaming || (i === lastStepIndex && !donePayload)
+                      ? 'bg-primary/5 text-foreground'
+                      : 'text-muted-foreground'
+                  )}
+                >
+                  <span
+                    className={cn(
+                      'shrink-0 mt-0.5 size-1.5 rounded-full bg-primary/60',
+                      isThinkingStreaming && i === lastStepIndex && 'animate-pulse'
+                    )}
+                  />
+                  <div className="flex-1 min-w-0">
+                    <span>{cleanMessage}</span>
+                  </div>
+                </li>
+              );
+            })}
           </ul>
         </div>
       )}
@@ -135,12 +132,24 @@ export function AgentStreamReply({
         <div className="space-y-2">
           <div className="rounded-2xl px-4 py-3 text-sm text-foreground min-w-0 max-w-full max-h-[60vh] overflow-auto">
             {displayAnswer ? (
-              <MarkdownRenderer
-                content={displayAnswer}
-                className="[&_pre]:max-w-full [&_pre]:max-h-[40vh] [&_pre]:overflow-auto [&_.notes9-md-table-scroll]:max-h-[40vh]"
-              />
+              <>
+                <MarkdownRenderer
+                  content={displayAnswer}
+                  className="[&_pre]:max-w-full [&_pre]:max-h-[40vh] [&_pre]:overflow-auto [&_.notes9-md-table-scroll]:max-h-[40vh]"
+                />
+                {/* Blinking cursor while streaming */}
+                {!donePayload && (
+                  <span
+                    className="inline-block w-[3px] h-[1em] bg-foreground/70 rounded-sm animate-cursor-blink ml-0.5 translate-y-[2px]"
+                    aria-hidden
+                  />
+                )}
+              </>
             ) : (
-              <span className="text-muted-foreground italic">Generating answer...</span>
+              <span
+                className="inline-block w-[3px] h-[1em] bg-foreground/70 rounded-sm animate-cursor-blink translate-y-[2px]"
+                aria-hidden
+              />
             )}
           </div>
           {donePayload && (donePayload.confidence != null || donePayload.tool_used) && (

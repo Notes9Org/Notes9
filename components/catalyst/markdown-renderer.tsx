@@ -81,10 +81,22 @@ function MarkdownParagraph({ ...props }: React.ComponentPropsWithoutRef<'p'>) {
 interface MarkdownRendererProps {
   content: string;
   className?: string;
+  /** Optional citation data for inline [1] chip rendering */
+  citations?: Array<{ number: number; data: any }>;
+  /** Enable inline citation chips (default: false) */
+  enableInlineCitations?: boolean;
 }
 
-export function MarkdownRenderer({ content, className }: MarkdownRendererProps) {
+export function MarkdownRenderer({
+  content,
+  className,
+  citations = [],
+  enableInlineCitations = false,
+}: MarkdownRendererProps) {
   const md = tightenChatMarkdown(content);
+
+  // Build citation lookup map
+  const citationMap = new Map(citations.map((c) => [c.number, c.data]));
 
   return (
     <div

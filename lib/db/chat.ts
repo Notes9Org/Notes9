@@ -20,6 +20,12 @@ export async function saveChatMessage(
         console.error('Error saving chat message:', error);
         throw error;
     }
+
+    // Bump updated_at so the session floats to the top of the sidebar (ordered by updated_at DESC)
+    await supabase
+        .from('chat_sessions')
+        .update({ updated_at: new Date().toISOString() })
+        .eq('id', sessionId);
 }
 
 export async function getChatHistory(sessionId: string, limit = 10): Promise<ChatMessage[]> {
