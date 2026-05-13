@@ -4,7 +4,7 @@ import {
   type Notes9AgentHistoryItem,
 } from '@/lib/notes9-agent-request';
 
-export const maxDuration = 60;
+export const maxDuration = 300;
 
 const NOTES9_API_BASE = process.env.CHAT_API_URL?.replace(/\/$/, '') || '';
 
@@ -38,7 +38,7 @@ export async function POST(req: Request) {
 
   if (!NOTES9_API_BASE) {
     return NextResponse.json(
-      { error: 'Notes9 API URL not configured. Set NEXT_PUBLIC_NOTES9_API_URL or CHAT_API_URL.' },
+      { error: 'Notes9 API URL not configured. Set CHAT_API_URL.' },
       { status: 503 }
     );
   }

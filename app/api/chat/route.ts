@@ -12,7 +12,7 @@ import {
 } from '@/lib/general-chat-request';
 import { splitSseBuffer, parseSseDataJson } from '@/lib/sse-event-blocks';
 
-export const maxDuration = 120;
+export const maxDuration = 300;
 
 const NOTES9_API_BASE = process.env.CHAT_API_URL?.replace(/\/$/, '') || '';
 
@@ -72,7 +72,7 @@ export async function POST(req: Request) {
     return new Response('Missing session_id', { status: 400 });
   }
 
-  const baseUrl = process.env.AI_SERVICE_URL?.replace(/\/$/, '') || 'http://54.157.162.202:8000';
+  const baseUrl = process.env.AI_SERVICE_URL?.replace(/\/$/, '') || NOTES9_API_BASE;
   const bearerToken = process.env.AI_SERVICE_BEARER_TOKEN;
   const useNotes9Fallback = !bearerToken && supabaseToken && NOTES9_API_BASE;
 

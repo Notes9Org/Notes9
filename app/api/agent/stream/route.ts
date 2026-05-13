@@ -3,7 +3,7 @@ import {
   type Notes9AgentHistoryItem,
 } from '@/lib/notes9-agent-request';
 
-export const maxDuration = 60;
+export const maxDuration = 300;
 
 const NOTES9_API_BASE = process.env.CHAT_API_URL?.replace(/\/$/, '') || '';
 
@@ -34,7 +34,7 @@ export async function POST(req: Request) {
   if (!NOTES9_API_BASE) {
     return new Response(
       JSON.stringify({
-        error: 'Notes9 API URL not configured. Set NEXT_PUBLIC_NOTES9_API_URL or CHAT_API_URL.',
+        error: 'Notes9 API URL not configured. Set CHAT_API_URL.',
       }),
       { status: 503, headers: { 'Content-Type': 'application/json' } }
     );
@@ -71,7 +71,9 @@ export async function POST(req: Request) {
       headers: {
         'Content-Type': contentType,
         'Cache-Control': 'no-cache',
-        Connection: 'keep-alive',
+        'Connection': 'keep-alive',
+        'X-Accel-Buffering': 'no',
+        'Transfer-Encoding': 'chunked',
       },
     });
   } catch (error) {
