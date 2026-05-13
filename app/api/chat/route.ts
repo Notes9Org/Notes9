@@ -201,7 +201,7 @@ export async function POST(req: Request) {
                       ensureTextOpen();
                       // Emit as a special annotation that frontend can parse
                       writer.write({
-                        type: 'data',
+                        type: 'data-thinking',
                         data: { thinking: thinkingText, event: 'thinking' },
                       });
                     }
@@ -227,7 +227,7 @@ export async function POST(req: Request) {
                       // Also forward sources incrementally for progressive citation display
                       ensureTextOpen();
                       writer.write({
-                        type: 'data',
+                        type: 'data-source',
                         data: { source: payload, event: 'source' },
                       });
                     }
