@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 
 export const maxDuration = 60;
 
-const NOTES9_BASE = process.env.NEXT_PUBLIC_NOTES9_API_URL?.replace(/\/$/, '') ?? '';
+const NOTES9_BASE = process.env.CHAT_API_URL?.replace(/\/$/, '') ?? '';
 const DEFAULT_PAPER_ANALYZER = NOTES9_BASE ? `${NOTES9_BASE}/paper-analyzer` : '';
 const UPSTREAM =
   process.env.LITERATURE_COMPARE_AGENT_URL?.replace(/\/$/, '') || DEFAULT_PAPER_ANALYZER;

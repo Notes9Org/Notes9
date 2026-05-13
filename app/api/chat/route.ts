@@ -14,7 +14,7 @@ import { splitSseBuffer, parseSseDataJson } from '@/lib/sse-event-blocks';
 
 export const maxDuration = 120;
 
-const NOTES9_API_BASE = process.env.NEXT_PUBLIC_NOTES9_API_URL?.replace(/\/$/, '') || '';
+const NOTES9_API_BASE = process.env.CHAT_API_URL?.replace(/\/$/, '') || '';
 
 /** Unwrap stringified JSON parts (e.g. [{"type":"text","text":"..."}]) to plain text. Handles double/triple wrapping. */
 function normalizeContentToPlainText(raw: string): string {

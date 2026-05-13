@@ -2,7 +2,9 @@ import { NextRequest, NextResponse } from 'next/server'
 
 export const maxDuration = 60
 
-const NOTES9_API_BASE = process.env.NEXT_PUBLIC_NOTES9_API_URL?.replace(/\/$/, '') || ''
+const NOTES9_API_BASE =
+  process.env.CHAT_API_URL?.replace(/\/$/, '') ||
+  ''
 const AI_SERVICE_URL = process.env.AI_SERVICE_URL?.replace(/\/$/, '') || ''
 const AI_SERVICE_BEARER_TOKEN = process.env.AI_SERVICE_BEARER_TOKEN || ''
 
