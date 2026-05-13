@@ -2988,23 +2988,25 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
                       <div ref={messagesEndRef} className="h-2 shrink-0" aria-hidden />
                     </div>
                   </div>
-                  {chatShowJumpBottom && (
-                    <Button
-                      type="button"
-                      variant="secondary"
-                      size="icon"
-                      className="absolute bottom-[7.25rem] right-4 z-30 h-9 w-9 rounded-full border border-border/60 bg-background/95 shadow-md backdrop-blur-sm hover:bg-muted"
-                      onClick={scrollChatToBottom}
-                      aria-label="Scroll to latest message"
-                    >
-                      <ChevronDown className="size-4" />
-                    </Button>
-                  )}
 
-                  {/* Fixed Input at Bottom */}
-                  <div className="flex-shrink-0 p-4 bg-background/95 backdrop-blur z-20 border-t">
-                    <div className="max-w-3xl mx-auto min-w-0">
-                      {renderCursorInput()}
+                  {/* Fixed Input at Bottom — scroll-to-latest floats centered above, no full-width strip */}
+                  <div className="relative flex-shrink-0 z-20">
+                    {chatShowJumpBottom ? (
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        size="icon"
+                        className="absolute bottom-full left-1/2 z-30 mb-2 h-9 w-9 -translate-x-1/2 rounded-full border border-border/60 bg-background/95 shadow-md backdrop-blur-sm hover:bg-muted"
+                        onClick={scrollChatToBottom}
+                        aria-label="Scroll to latest message"
+                      >
+                        <ChevronDown className="size-4" />
+                      </Button>
+                    ) : null}
+                    <div className="border-t bg-background/95 p-4 backdrop-blur">
+                      <div className="max-w-3xl mx-auto min-w-0">
+                        {renderCursorInput()}
+                      </div>
                     </div>
                   </div>
                 </div>
