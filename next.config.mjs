@@ -4,6 +4,13 @@ const nextConfig = {
     ignoreBuildErrors: true,
   },
   /**
+   * Expose CHAT_API_URL to the browser so client-side SSE calls can reach the
+   * backend directly, bypassing Vercel function timeouts entirely.
+   */
+  env: {
+    NEXT_PUBLIC_CHAT_API_URL: process.env.CHAT_API_URL || '',
+  },
+  /**
    * Default is ~10MB; protocol template uploads allow up to 15MB. Without this,
    * larger POST bodies can fail in dev/proxy with a client-side "Failed to fetch".
    */

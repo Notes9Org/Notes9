@@ -19,6 +19,15 @@ import {
   normalizeAgentRelevance0to1,
 } from '@/lib/document-highlight';
 
+/**
+ * Direct backend URL used for SSE streaming — the browser holds this connection
+ * open itself, so there is no Vercel function timeout regardless of how long the
+ * agent takes. Falls back to the Vercel proxy only when the public URL is absent.
+ */
+const DIRECT_STREAM_URL =
+  (process.env.NEXT_PUBLIC_CHAT_API_URL?.replace(/\/$/, '') || '') + '/notes9/stream';
+const PROXY_STREAM_URL = '/api/agent/stream';
+
 /** Request shape for POST /notes9/stream (proxied via /api/agent/stream). */
 export interface AgentStreamParams {
   query: string;
@@ -260,7 +269,8 @@ export function useAgentStream() {
       let tokenBuffer = '';
 
       try {
-        const response = await fetch('/api/agent/stream', {
+        const streamUrl = DIRECT_STREAM_URL || PROXY_STREAM_URL;
+        const response = await fetch(streamUrl, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
