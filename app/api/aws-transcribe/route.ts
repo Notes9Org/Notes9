@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 
 const NOTES9_API_BASE =
-  process.env.NEXT_PUBLIC_NOTES9_API_URL?.replace(/\/$/, "") || "";
+  process.env.CHAT_API_URL?.replace(/\/$/, "") ||
+  "";
 
 export async function POST(req: Request) {
   if (!NOTES9_API_BASE) {

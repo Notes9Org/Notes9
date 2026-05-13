@@ -4,7 +4,7 @@ import {
   type GeneralChatHistoryItem,
 } from '@/lib/general-chat-request';
 
-const API_BASE = process.env.NEXT_PUBLIC_NOTES9_API_URL || '';
+const API_BASE = process.env.CHAT_API_URL || '';
 
 /** Use server proxy to avoid CORS when calling from browser. */
 const AGENT_PROXY = '/api/agent/run';
