@@ -387,7 +387,7 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
   const [literatureMentionStartIndex, setLiteratureMentionStartIndex] = useState(-1);
   const [literaturePlainLen, setLiteraturePlainLen] = useState(0);
   const [fallbackMentionCandidates, setFallbackMentionCandidates] = useState<LiteratureMentionCandidate[]>([]);
-  const [webSearchEnabled, setWebSearchEnabled] = useState(true);
+  const [webSearchEnabled, setWebSearchEnabled] = useState(false);
   const [mentionQuery, setMentionQuery] = useState('');
   const [mentionOpenForInput, setMentionOpenForInput] = useState(false);
   const [mentionSelectIndex, setMentionSelectIndex] = useState(0);
@@ -453,11 +453,19 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
   }, []);
 
   const supabaseTokenRef = useRef<string | null>(null);
-  const webSearchEnabledRef = useRef(true);
+  const webSearchEnabledRef = useRef(false);
 
   useEffect(() => {
     webSearchEnabledRef.current = webSearchEnabled;
   }, [webSearchEnabled]);
+
+  const buildNotes9StreamOptions = useCallback(
+    (tags: Array<{ kind: CatalystMentionKind; id: string; title: string }>) => ({
+      tags,
+      web_search: webSearchEnabledRef.current ? ('on' as const) : ('off' as const),
+    }),
+    []
+  );
 
   useEffect(() => {
     const loadUserId = async () => {
@@ -1458,10 +1466,8 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
           query: text,
           session_id: sessionId,
           history,
-          options: {
-            tags: requestTags,
-          },
-        } as any,
+          options: buildNotes9StreamOptions(requestTags),
+        },
         token
       );
       setNotes9Loading(false);
@@ -1625,14 +1631,12 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
         const parsedEditTags = extractTagItemsFromMarkdown(newContent);
         const requestTags = mergeUniqueTags(selectedMentions, parsedEditTags);
         const { donePayload, error } = await agentStream.runStream(
-        {
-          query: newContent,
-          session_id: sid,
-          history,
-          options: {
-              tags: requestTags,
+          {
+            query: newContent,
+            session_id: sid,
+            history,
+            options: buildNotes9StreamOptions(requestTags),
           },
-          } as any,
           token
         );
         setNotes9Loading(false);
@@ -1783,10 +1787,8 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
           query,
           session_id: sid,
           history,
-          options: {
-            tags: requestTags,
-          },
-        } as any,
+          options: buildNotes9StreamOptions(requestTags),
+        },
         token
       );
       setNotes9Loading(false);
@@ -2221,51 +2223,40 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
 
         <div className="mt-1 flex min-h-9 items-center justify-between gap-2 px-2 pb-2">
           <div className="flex min-w-0 flex-1 flex-nowrap items-center gap-1.5 overflow-x-auto">
-            <TooltipProvider delayDuration={300}>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    id="tour-ai-mode"
-                    variant="ghost"
-                    size="icon"
-                    className="size-7 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted/60 shrink-0"
-                    type="button"
-                    onClick={() => {
-                      setMentionOpenForInput(true);
-                      inputRef.current?.focus();
-                    }}
-                    aria-label="Tag notes, experiments or projects"
-                  >
-                    <AtSign className="size-3.5" />
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent side="top" className="text-xs">
-                  Tag context (@)
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
-
-            {agentMode === 'general' && (
+            {agentMode !== 'literature' && (
               <TooltipProvider delayDuration={300}>
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    <button
-                      type="button"
-                      aria-label={webSearchEnabled ? 'Web search on' : 'Web search off'}
-                      onClick={() => setWebSearchEnabled((v) => !v)}
+                    <span
+                      id="tour-ai-web-search"
                       className={cn(
-                        'flex items-center gap-1.5 h-7 px-2 rounded-md text-xs font-medium transition-colors shrink-0',
+                        'inline-flex h-7 shrink-0 cursor-default items-center gap-1.5 rounded-md border px-2 transition-colors',
                         webSearchEnabled
-                          ? 'bg-muted/60 text-foreground hover:bg-muted'
-                          : 'text-muted-foreground hover:bg-muted/40 hover:text-foreground'
+                          ? 'border-primary/25 bg-primary/5 text-foreground'
+                          : 'border-border/50 bg-muted/30 text-muted-foreground'
                       )}
                     >
-                      <Globe className={cn('size-3.5', webSearchEnabled ? 'text-foreground' : 'text-muted-foreground/60')} />
-                      <span>Web</span>
-                    </button>
+                      <Globe
+                        className={cn(
+                          'size-3.5 shrink-0',
+                          webSearchEnabled ? 'text-primary' : 'text-muted-foreground/70'
+                        )}
+                        aria-hidden
+                      />
+                      <span className="text-xs font-medium whitespace-nowrap">Web</span>
+                      <Switch
+                        checked={webSearchEnabled}
+                        onCheckedChange={setWebSearchEnabled}
+                        disabled={isLoading || notes9Loading}
+                        aria-label="Toggle web search"
+                        className="scale-[0.82] data-[state=checked]:bg-primary"
+                      />
+                    </span>
                   </TooltipTrigger>
                   <TooltipContent side="top" className="text-xs">
-                    {webSearchEnabled ? 'Web search enabled' : 'Web search disabled'}
+                    {webSearchEnabled
+                      ? 'Web search on — agent may search the web for this reply'
+                      : 'Web search off — lab data and documents only'}
                   </TooltipContent>
                 </Tooltip>
               </TooltipProvider>

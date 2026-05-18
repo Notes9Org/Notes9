@@ -35,12 +35,12 @@ export function CatalystChat({ sessionId }: CatalystChatProps) {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [votes, setVotes] = useState<Vote[]>([]);
   const [agentMode, setAgentMode] = useState<AgentMode>('general');
-  const [webSearchEnabled, setWebSearchEnabled] = useState(true);
+  const [webSearchEnabled, setWebSearchEnabled] = useState(false);
   const [userId, setUserId] = useState<string>('');
   const [notes9Loading, setNotes9Loading] = useState(false);
 
   const prevStatusRef = useRef<string>('ready');
-  const webSearchEnabledRef = useRef(true);
+  const webSearchEnabledRef = useRef(false);
   const currentSessionRef = useRef<string | null>(sessionId || null);
   const hasLoadedSessionRef = useRef<string | null>(null);
   const supabaseTokenRef = useRef<string | null>(null);
@@ -347,6 +347,7 @@ export function CatalystChat({ sessionId }: CatalystChatProps) {
           query: text,
           session_id: sid,
           history,
+          options: { web_search: webSearchEnabledRef.current ? 'on' : 'off' },
         },
         token
       );
@@ -489,7 +490,7 @@ export function CatalystChat({ sessionId }: CatalystChatProps) {
 
         setNotes9Loading(true);
         const { donePayload, error } = await agentStream.runStream(
-          { query: newContent, session_id: sid, history },
+          { query: newContent, session_id: sid, history, options: { web_search: webSearchEnabledRef.current ? 'on' : 'off' } },
           token
         );
         setNotes9Loading(false);
@@ -583,7 +584,7 @@ export function CatalystChat({ sessionId }: CatalystChatProps) {
 
       setNotes9Loading(true);
       const { donePayload, error } = await agentStream.runStream(
-        { query, session_id: sid, history },
+        { query, session_id: sid, history, options: { web_search: webSearchEnabledRef.current ? 'on' : 'off' } },
         token
       );
       setNotes9Loading(false);

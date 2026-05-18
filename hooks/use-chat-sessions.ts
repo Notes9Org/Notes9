@@ -323,7 +323,7 @@ export function useChatSessions(protocolId?: string) {
         .eq('session_id', sessionId)
         .eq('role', role)
         .eq('content', content)
-        .gte('created_at', new Date(Date.now() - 5000).toISOString())
+        .gte('created_at', new Date(Date.now() - 60_000).toISOString())
         .limit(1);
 
       if (existing && existing.length > 0) {

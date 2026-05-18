@@ -1,7 +1,7 @@
 "use client"
 
 import React, { useMemo, useState, useEffect } from "react"
-import { Loader2, Upload } from "lucide-react"
+import { AlertTriangle, CheckCircle2, Loader2, Upload } from "lucide-react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { cn } from "@/lib/utils"
@@ -320,7 +320,11 @@ export function UploadLiteraturePdfDialog({
           <div className="rounded-xl border border-primary/20 bg-primary/5 px-3 py-2 animate-in zoom-in-95 duration-200">
             <div className="flex items-center gap-3">
               <div className="size-6 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
-                <span className="text-xs">{analysis.status === "duplicate" ? "⚠️" : "✨"}</span>
+                {analysis.status === "duplicate" ? (
+                  <AlertTriangle className="h-3.5 w-3.5 text-amber-600" aria-hidden="true" />
+                ) : (
+                  <CheckCircle2 className="h-3.5 w-3.5 text-primary" aria-hidden="true" />
+                )}
               </div>
               <div className="flex-1 min-w-0">
                 <p className="text-xs font-bold leading-tight truncate">

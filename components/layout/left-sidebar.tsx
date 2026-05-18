@@ -9,6 +9,7 @@ import { ScrollArea } from "@/components/ui/scroll-area"
 import { Home, Folder, FlaskConical, TestTube, Microscope, FileText, BarChart3, Settings, Search, Plus, ChevronRight, X } from 'lucide-react'
 import { ClipboardInfoIcon } from "@/components/ui/clipboard-info-icon"
 import { cn } from "@/lib/utils"
+import { formatEntityTitle } from "@/lib/format-title"
 
 interface LeftSidebarProps {
   onClose: () => void
@@ -114,7 +115,7 @@ export function LeftSidebar({ onClose }: LeftSidebarProps) {
                           project.status === "active" ? "bg-success" : "bg-warning"
                         )}
                       />
-                      <span className="truncate">{project.name}</span>
+                      <span className="truncate">{formatEntityTitle(project.name)}</span>
                     </div>
                   </Button>
                 </Link>

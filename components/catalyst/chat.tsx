@@ -5,7 +5,6 @@ import { DefaultChatTransport } from 'ai';
 import { useRef, useEffect, useState, useCallback, useMemo } from 'react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
-import { ScrollArea } from '@/components/ui/scroll-area';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import {
   Dialog,
@@ -20,6 +19,7 @@ import { ChatHistory } from './chat-history';
 import { ChatMessage } from './chat-message';
 import { createClient } from '@/lib/supabase/client';
 import { TooltipProvider } from '@/components/ui/tooltip';
+import { cn } from '@/lib/utils';
 
 interface CatalystChatProps {
   open: boolean;
@@ -37,14 +37,15 @@ export function CatalystChat({ open, onOpenChange }: CatalystChatProps) {
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [isRegenerating, setIsRegenerating] = useState(false);
   const [savedMessageIds, setSavedMessageIds] = useState<Set<string>>(new Set());
-  const [webSearchEnabled, setWebSearchEnabled] = useState(true);
+  const [webSearchEnabled, setWebSearchEnabled] = useState(false);
 
 
   const prevStatusRef = useRef<string>('ready');
-  const webSearchEnabledRef = useRef(true);
+  const webSearchEnabledRef = useRef(false);
   const currentSessionRef = useRef<string | null>(null);
   const hasLoadedSessionRef = useRef<string | null>(null);
   const supabaseTokenRef = useRef<string | null>(null);
+  const submitInFlightRef = useRef(false);
 
   const supabase = createClient();
 
@@ -84,7 +85,6 @@ export function CatalystChat({ open, onOpenChange }: CatalystChatProps) {
         body: {
           messages: request.messages,
           sessionId: currentSessionRef.current,
-          supabaseToken: token ?? undefined,
           webSearch: webSearchEnabledRef.current,
           ...request.body,
         },
@@ -97,7 +97,7 @@ export function CatalystChat({ open, onOpenChange }: CatalystChatProps) {
     transport,
   });
 
-  const scrollAreaRef = useRef<HTMLDivElement>(null);
+  const scrollViewportRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const isLoading = status === 'streaming' || status === 'submitted';
@@ -121,20 +121,38 @@ export function CatalystChat({ open, onOpenChange }: CatalystChatProps) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Load messages when selecting a session from history
+  // Load messages when selecting a session from history.
+  // Hydrate the AI SDK message shape with `parts` that include text + data parts
+  // (sources, thinking) reconstructed from metadata so loaded sessions render
+  // identically to live ones.
   const loadSessionMessages = useCallback(async (sessionId: string) => {
-    // Prevent loading the same session twice
     if (hasLoadedSessionRef.current === sessionId) return;
-    
+
     const msgs = await loadMessages(sessionId);
     if (msgs.length > 0) {
-      const chatMessages = msgs.map((m) => ({
-        id: m.id,
-        role: m.role as 'user' | 'assistant',
-        content: m.content,
-        parts: [{ type: 'text' as const, text: m.content }],
-        createdAt: new Date(m.created_at),
-      }));
+      const chatMessages = msgs.map((m) => {
+        const meta = (m.metadata || {}) as { sources?: unknown[]; thinking?: string };
+        const parts: Array<Record<string, unknown>> = [
+          { type: 'text', text: m.content },
+        ];
+        if (Array.isArray(meta.sources)) {
+          for (const src of meta.sources) {
+            if (src && typeof src === 'object') {
+              parts.push({ type: 'data-source', data: { source: src } });
+            }
+          }
+        }
+        if (typeof meta.thinking === 'string' && meta.thinking.trim()) {
+          parts.push({ type: 'data-thinking', data: { thinking: meta.thinking } });
+        }
+        return {
+          id: m.id,
+          role: m.role as 'user' | 'assistant',
+          content: m.content,
+          parts: parts as unknown as Array<{ type: 'text'; text: string }>,
+          createdAt: new Date(m.created_at),
+        };
+      });
       setMessages(chatMessages);
       setSavedMessageIds(new Set(msgs.map((m) => m.id)));
     } else {
@@ -147,10 +165,13 @@ export function CatalystChat({ open, onOpenChange }: CatalystChatProps) {
 
   // Auto-scroll to bottom when new messages arrive
   useEffect(() => {
-    if (scrollAreaRef.current) {
-      scrollAreaRef.current.scrollTop = scrollAreaRef.current.scrollHeight;
+    const scrollContainer = scrollViewportRef.current;
+    if (scrollContainer) {
+      requestAnimationFrame(() => {
+        scrollContainer.scrollTop = scrollContainer.scrollHeight;
+      });
     }
-  }, [messages]);
+  }, [messages, isLoading]);
 
   // Focus textarea when dialog opens
   useEffect(() => {
@@ -163,49 +184,85 @@ export function CatalystChat({ open, onOpenChange }: CatalystChatProps) {
   useEffect(() => {
     const saveNewMessages = async () => {
       const sessionId = currentSessionRef.current;
-      
+
       // Only save when transitioning from streaming/submitted to ready
       if (prevStatusRef.current !== 'ready' && status === 'ready' && sessionId && messages.length > 0) {
-        // Save all unsaved messages
+        // Save all unsaved messages - FIX: Better content extraction
         const newSavedIds = new Set(savedMessageIds);
-        
+
         for (const message of messages) {
           if (!newSavedIds.has(message.id)) {
-            const content = message.parts
-              ?.filter((p) => p.type === 'text')
-              .map((p) => ('text' in p ? p.text : ''))
-              .join('') || '';
-            
-            if (content) {
-              await saveMessage(sessionId, message.role as 'user' | 'assistant', content);
-              newSavedIds.add(message.id);
+            // Extract TEXT only — never include thinking, sources, or tool parts
+            // in the persisted content. Those go in metadata so they can be
+            // rendered separately (and never leak into the visible chat history).
+            let content = '';
+            if (message.parts && message.parts.length > 0) {
+              content = message.parts
+                .filter((p) => p.type === 'text')
+                .map((p) => ('text' in p ? p.text : ''))
+                .join('');
+            } else if (typeof (message as unknown as { content?: unknown }).content === 'string') {
+              content = (message as unknown as { content: string }).content;
+            }
+
+            // Build metadata bundle: thinking, sources, role provenance
+            const metadata: Record<string, unknown> = {};
+            const sources = getMessageSources(message);
+            const thinking = getMessageThinking(message);
+            if (sources.length > 0) metadata.sources = sources;
+            if (thinking) metadata.thinking = thinking;
+
+            if (content.trim()) {
+              try {
+                await saveMessage(
+                  sessionId,
+                  message.role as 'user' | 'assistant',
+                  content.trim(),
+                  Object.keys(metadata).length > 0 ? metadata : undefined,
+                );
+                newSavedIds.add(message.id);
+              } catch (error) {
+                console.error('Error saving message:', error);
+                // Continue trying to save other messages
+              }
             }
           }
         }
-        
+
         setSavedMessageIds(newSavedIds);
 
         // Update title if this is the first exchange
-        if (messages.length <= 2) {
+        if (messages.length <= 2 && !sessions.find(s => s.id === sessionId)?.title) {
           const firstUserMessage = messages.find((m) => m.role === 'user');
           if (firstUserMessage) {
-            const title = firstUserMessage.parts
-              ?.filter((p) => p.type === 'text')
-              .map((p) => ('text' in p ? p.text : ''))
-              .join('')
-              .slice(0, 50) || 'New conversation';
-            await updateSessionTitle(sessionId, title);
+            let title = '';
+            if (firstUserMessage.parts && firstUserMessage.parts.length > 0) {
+              title = firstUserMessage.parts
+                .filter((p) => p.type === 'text')
+                .map((p) => ('text' in p ? p.text : ''))
+                .join('')
+                .slice(0, 50);
+            } else if (typeof (firstUserMessage as unknown as { content?: unknown }).content === 'string') {
+              title = (firstUserMessage as unknown as { content: string }).content.slice(0, 50);
+            }
+
+            if (title.trim()) {
+              try {
+                await updateSessionTitle(sessionId, title.trim());
+                // Refresh sessions list to show updated title
+                await loadSessions();
+              } catch (error) {
+                console.error('Error updating session title:', error);
+              }
+            }
           }
         }
-        
-        // Refresh sessions list to show updated title
-        loadSessions();
       }
       prevStatusRef.current = status;
     };
     saveNewMessages();
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [status]);
+  }, [status, messages.length]); // FIX: Also depend on messages.length to catch updates
 
   const handleNewChat = useCallback(async () => {
     // Clear current state
@@ -246,49 +303,83 @@ export function CatalystChat({ open, onOpenChange }: CatalystChatProps) {
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!input.trim() || isLoading) return;
+    if (submitInFlightRef.current) return;
+    submitInFlightRef.current = true;
 
     const messageText = input;
     setInput('');
 
-    // Create session if none exists
-    let sessionId = currentSessionRef.current;
-    if (!sessionId) {
-      sessionId = await createSession();
-      if (!sessionId) return;
-      currentSessionRef.current = sessionId;
-      hasLoadedSessionRef.current = sessionId;
-    }
+    try {
+      // Create session if none exists
+      let sessionId = currentSessionRef.current;
+      if (!sessionId) {
+        sessionId = await createSession();
+        if (!sessionId) return;
+        currentSessionRef.current = sessionId;
+        hasLoadedSessionRef.current = sessionId;
+      }
 
-    // Let AI SDK handle the message - it will be saved when streaming completes
-    await sendMessage({ text: messageText });
+      // Let AI SDK handle the message - it will be saved when streaming completes
+      await sendMessage({ text: messageText });
+    } finally {
+      submitInFlightRef.current = false;
+    }
   };
 
   const handleRegenerate = useCallback(async () => {
-    if (messages.length < 2 || !currentSessionRef.current) return;
-    
+    if (messages.length < 2 || !currentSessionRef.current || isLoading) return;
+
     setIsRegenerating(true);
-    
-    // Get the last user message
-    const lastUserMessageIndex = messages.length - 2;
-    const lastUserMessage = messages[lastUserMessageIndex];
-    
-    if (lastUserMessage?.role !== 'user') {
+
+    // Find the LAST user message — assistant message we're regenerating may not
+    // be the very last entry if errors/edits left state in flux.
+    let lastUserMessageIndex = -1;
+    for (let i = messages.length - 1; i >= 0; i--) {
+      if (messages[i]?.role === 'user') {
+        lastUserMessageIndex = i;
+        break;
+      }
+    }
+    if (lastUserMessageIndex < 0) {
       setIsRegenerating(false);
       return;
     }
+    const lastUserMessage = messages[lastUserMessageIndex];
 
     const userContent = lastUserMessage.parts
       ?.filter((p) => p.type === 'text')
       .map((p) => ('text' in p ? p.text : ''))
       .join('') || '';
 
-    // Remove the last assistant message from UI
-    setMessages(messages.slice(0, -1));
-    
-    // Regenerate
-    await sendMessage({ text: userContent });
-    setIsRegenerating(false);
-  }, [messages, setMessages, sendMessage]);
+    if (!userContent.trim()) {
+      setIsRegenerating(false);
+      return;
+    }
+
+    // Drop the user message AND everything after it — then resend.
+    // The user message will be re-added by `sendMessage`, and the assistant
+    // response starts fresh. Also clear the assistant rows from the DB so
+    // stale orphaned replies don't accumulate on retry.
+    const messagesBeforeRetry = messages.slice(0, lastUserMessageIndex);
+    setMessages(messagesBeforeRetry);
+
+    // Strip saved-message tracking for anything we just removed so future
+    // saves don't think they were already persisted.
+    const removedIds = new Set(
+      messages.slice(lastUserMessageIndex).map((m) => m.id)
+    );
+    setSavedMessageIds((prev) => {
+      const next = new Set(prev);
+      removedIds.forEach((id) => next.delete(id));
+      return next;
+    });
+
+    try {
+      await sendMessage({ text: userContent });
+    } finally {
+      setIsRegenerating(false);
+    }
+  }, [messages, setMessages, sendMessage, isLoading]);
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -312,7 +403,28 @@ export function CatalystChat({ open, onOpenChange }: CatalystChatProps) {
         .map((p) => ('text' in p ? p.text : ''))
         .join('');
     }
-    return 'content' in message ? String(message.content) : '';
+    return 'content' in message ? String((message as unknown as { content: unknown }).content) : '';
+  };
+
+  const getMessageSources = (message: typeof messages[0]): Array<Record<string, unknown>> => {
+    if (!message.parts) return [];
+    return message.parts
+      .filter((p): p is { type: 'data-source'; data: { source: Record<string, unknown> } } =>
+        (p as { type: string }).type === 'data-source'
+      )
+      .map((p) => (p as { type: string; data: { source: Record<string, unknown> } }).data?.source)
+      .filter(Boolean) as Array<Record<string, unknown>>;
+  };
+
+  const getMessageThinking = (message: typeof messages[0]): string | null => {
+    if (!message.parts) return null;
+    const parts = message.parts
+      .filter((p): p is { type: 'data-thinking'; data: { thinking: string } } =>
+        (p as { type: string }).type === 'data-thinking'
+      )
+      .map((p) => (p as { type: string; data: { thinking: string } }).data?.thinking)
+      .filter(Boolean);
+    return parts.length > 0 ? parts.join('') : null;
   };
 
   return (
@@ -357,10 +469,9 @@ export function CatalystChat({ open, onOpenChange }: CatalystChatProps) {
 
             {/* Main Chat Area */}
             <div className="flex-1 flex flex-col min-w-0">
-              {/* Messages Area */}
-              <ScrollArea className="flex-1 overflow-hidden">
-                <div ref={scrollAreaRef} className="h-full overflow-y-auto">
-                  <div className="flex flex-col gap-4 p-6">
+              {/* Messages Area — plain div so the ref targets the real scroll container */}
+              <div ref={scrollViewportRef} className="flex-1 overflow-y-auto">
+                <div className="flex flex-col gap-4 p-6">
                     {messages.length === 0 ? (
                       <div className="flex flex-col items-center justify-center h-[40vh] text-center">
                         <Sparkles className="size-12 text-muted-foreground/50 mb-4" />
@@ -382,6 +493,8 @@ export function CatalystChat({ open, onOpenChange }: CatalystChatProps) {
                             key={message.id}
                             role={message.role as 'user' | 'assistant'}
                             content={getMessageContent(message)}
+                            sources={getMessageSources(message)}
+                            thinking={getMessageThinking(message)}
                             userAvatar={userProfile?.avatar_url}
                             userName={userProfile?.full_name || undefined}
                             isLast={isLastAssistant}
@@ -391,6 +504,16 @@ export function CatalystChat({ open, onOpenChange }: CatalystChatProps) {
                           />
                         );
                       })
+                    )}
+                    {status === 'error' && (
+                      <div className="flex gap-3 justify-start">
+                        <Avatar className="size-8 shrink-0">
+                          <AvatarFallback className="bg-destructive/10 text-destructive text-xs">!</AvatarFallback>
+                        </Avatar>
+                        <div className="rounded-lg px-4 py-2.5 text-sm bg-destructive/10 text-destructive border border-destructive/20">
+                          Something went wrong. Please try again.
+                        </div>
+                      </div>
                     )}
                     {isLoading && messages[messages.length - 1]?.role === 'user' && (
                       <div className="flex gap-3 justify-start">
@@ -413,19 +536,38 @@ export function CatalystChat({ open, onOpenChange }: CatalystChatProps) {
                       </div>
                     )}
                   </div>
-                </div>
-              </ScrollArea>
+              </div>
 
               {/* Input Area */}
               <div className="border-t p-4 shrink-0 space-y-2">
-                <div className="flex items-center justify-end gap-2 px-0.5">
-                  <Globe className="size-3.5 shrink-0 text-muted-foreground" aria-hidden />
-                  <Switch
-                    checked={webSearchEnabled}
-                    onCheckedChange={setWebSearchEnabled}
-                    disabled={isLoading}
-                    aria-label="Web search"
-                  />
+                <div className="flex items-center justify-between px-0.5">
+                  <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                    {isLoading && webSearchEnabled && (
+                      <span className="flex items-center gap-1.5 animate-pulse">
+                        <Globe className="size-3 shrink-0" />
+                        <span>Searching the web...</span>
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className={cn(
+                      "text-xs transition-colors",
+                      webSearchEnabled ? "text-primary font-medium" : "text-muted-foreground"
+                    )}>
+                      Web Search
+                    </span>
+                    <Globe className={cn(
+                      "size-3.5 shrink-0 transition-colors",
+                      webSearchEnabled ? "text-primary" : "text-muted-foreground"
+                    )} aria-hidden />
+                    <Switch
+                      checked={webSearchEnabled}
+                      onCheckedChange={setWebSearchEnabled}
+                      disabled={isLoading}
+                      aria-label="Toggle web search"
+                      className="transition-transform active:scale-95"
+                    />
+                  </div>
                 </div>
                 <form onSubmit={onSubmit} className="flex gap-2">
                   <Textarea

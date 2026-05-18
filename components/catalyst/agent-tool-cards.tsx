@@ -44,48 +44,68 @@ function ToolCardItem({ card }: ToolCardItemProps) {
   const Icon: LucideIcon = TOOL_ICONS[card.id] ?? Wrench;
   const isRunning = card.status === 'running';
   const isError = card.status === 'error';
+  const hasSourceNames = (card.source_names?.length ?? 0) > 0;
+  const hasDetail = !isRunning && (card.summary || hasSourceNames);
 
   return (
     <div className="flex flex-col">
       <button
         type="button"
         className={cn(
-          'flex items-center gap-2 px-1 py-1 text-left group rounded-md transition-colors',
-          !isRunning && card.summary && 'hover:bg-muted/30 cursor-pointer',
+          'flex items-start gap-2 px-1 py-1 text-left group rounded-md transition-colors',
+          hasDetail && 'hover:bg-muted/30 cursor-pointer',
           isRunning && 'cursor-default'
         )}
-        onClick={() => !isRunning && card.summary && setExpanded((v) => !v)}
-        disabled={isRunning || !card.summary}
+        onClick={() => hasDetail && setExpanded((v) => !v)}
+        disabled={isRunning || !hasDetail}
         aria-expanded={expanded}
       >
         {/* Status / icon */}
-        {isRunning ? (
-          <Loader2 className="shrink-0 size-3.5 animate-spin text-muted-foreground/50" aria-hidden />
-        ) : isError ? (
-          <XCircle className="shrink-0 size-3.5 text-destructive/60" aria-hidden />
-        ) : (
-          <CheckCircle2 className="shrink-0 size-3.5 text-muted-foreground/40" aria-hidden />
-        )}
+        <div className="mt-0.5 shrink-0">
+          {isRunning ? (
+            <Loader2 className="size-3.5 animate-spin text-muted-foreground/50" aria-hidden />
+          ) : isError ? (
+            <XCircle className="size-3.5 text-destructive/60" aria-hidden />
+          ) : (
+            <CheckCircle2 className="size-3.5 text-muted-foreground/40" aria-hidden />
+          )}
+        </div>
 
         {/* Tool icon */}
-        <Icon className="shrink-0 size-3 text-muted-foreground/40" aria-hidden />
+        <Icon className="mt-0.5 shrink-0 size-3 text-muted-foreground/40" aria-hidden />
 
-        {/* Label */}
-        <span
-          className={cn(
-            'flex-1 min-w-0 text-sm truncate',
-            isRunning ? 'text-muted-foreground' : 'text-muted-foreground/70'
+        {/* Label + source names */}
+        <div className="flex-1 min-w-0">
+          <span
+            className={cn(
+              'text-sm',
+              isRunning ? 'text-muted-foreground' : 'text-muted-foreground/70'
+            )}
+          >
+            {card.label}
+          </span>
+          {/* Row count for SQL when there is no expandable source list */}
+          {!isRunning && card.row_count != null && !hasSourceNames && (
+            <p className="text-[11px] text-muted-foreground/50 mt-0.5 leading-tight">
+              {card.row_count} record{card.row_count !== 1 ? 's' : ''}
+            </p>
           )}
-        >
-          {card.label}
-        </span>
+        </div>
 
-        {/* Meta: source count + latency */}
-        {!isRunning && (
-          <div className="flex items-center gap-1.5 shrink-0">
-            {card.citations_count != null && (
+        {/* Meta: source count + latency.
+            Prefer source_names.length so the header pill matches what the
+            user can actually see in the expanded list. Falls back to
+            citations_count only when source_names hasn't arrived yet. */}
+        {!isRunning && (() => {
+          const visibleCount =
+            card.source_names && card.source_names.length > 0
+              ? card.source_names.length
+              : (card.citations_count ?? 0);
+          return (
+          <div className="flex items-center gap-1.5 shrink-0 mt-0.5">
+            {visibleCount > 0 && (
               <span className="text-[11px] text-muted-foreground/50">
-                {card.citations_count} {card.citations_count === 1 ? 'source' : 'sources'}
+                {visibleCount} {visibleCount === 1 ? 'source' : 'sources'}
               </span>
             )}
             {card.latency_ms != null && (
@@ -93,20 +113,52 @@ function ToolCardItem({ card }: ToolCardItemProps) {
                 {(card.latency_ms / 1000).toFixed(1)}s
               </span>
             )}
-            {card.summary && (
+            {hasDetail && (
               expanded
                 ? <ChevronDown className="size-3 text-muted-foreground/40" aria-hidden />
                 : <ChevronRight className="size-3 text-muted-foreground/40" aria-hidden />
             )}
           </div>
-        )}
+          );
+        })()}
       </button>
 
-      {/* Expandable summary */}
-      {!isRunning && expanded && card.summary && (
-        <p className="ml-[1.625rem] text-xs text-muted-foreground/60 leading-relaxed pb-1 pr-1">
-          {card.summary}
-        </p>
+      {/* Expandable: all source names */}
+      {!isRunning && expanded && (
+        <div className="ml-[1.625rem] pb-1 pr-1 space-y-0.5">
+          {card.source_names && card.source_names.length > 0 && (
+            <ul className="space-y-1">
+              {card.source_names.map((entry, i) => {
+                // Backend ships "Type: Name" (e.g., "Project: Vaccine_Production");
+                // render Type as a small monochrome pill so a researcher can
+                // tell projects from lab notes from papers at a glance.
+                const colonIdx = entry.indexOf(': ');
+                const hasType = colonIdx > 0 && colonIdx < 24;
+                const type = hasType ? entry.slice(0, colonIdx) : '';
+                const name = hasType ? entry.slice(colonIdx + 2) : entry;
+                return (
+                  <li
+                    key={i}
+                    className="text-xs text-muted-foreground/80 leading-relaxed flex items-start gap-2"
+                  >
+                    <span className="mt-1.5 shrink-0 size-1 rounded-full bg-muted-foreground/30" />
+                    {hasType && (
+                      <span className="shrink-0 mt-px rounded-sm border border-border bg-muted/40 px-1.5 py-px text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                        {type}
+                      </span>
+                    )}
+                    <span className="break-words">{name}</span>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+          {card.summary && (
+            <p className="text-xs text-muted-foreground/60 leading-relaxed">
+              {card.summary}
+            </p>
+          )}
+        </div>
       )}
     </div>
   );

@@ -48,7 +48,7 @@ import {
 } from "./protocol-literature-panel"
 import { formatDistanceToNow } from "date-fns"
 import { diffWords } from "diff"
-import { MarkdownRenderer, tightenChatMarkdown } from "@/components/catalyst/markdown-renderer"
+import { MarkdownRenderer } from "@/components/catalyst/markdown-renderer"
 import {
   AgentCitationsPanel,
   groundingResourceToPanelItem,
@@ -711,7 +711,7 @@ export function ProtocolAiSidechat({
             content: line,
             session_id: activeSessionId,
             history,
-            web_search: "on",
+            web_search: "off",
             response_format: "json",
           },
           token
@@ -813,8 +813,7 @@ export function ProtocolAiSidechat({
   const handleApply = useCallback(
     (msg: ChatMessage) => {
       void (async () => {
-        const md = tightenChatMarkdown(msg.text)
-        const html = await markdownToHtml(md)
+        const html = await markdownToHtml(msg.text)
         onApplyToEditor(html)
         updateMessage(msg.id, { state: "applied" })
       })()
@@ -1633,14 +1632,13 @@ function AssistantMessage({
   const hasSteps = (message.steps?.length ?? 0) > 0
 
   const handleCopy = useCallback(async () => {
-    const md = tightenChatMarkdown(message.text)
     try {
-      await copyMarkdownForRichPaste(md)
+      await copyMarkdownForRichPaste(message.text)
       setCopied(true)
       setTimeout(() => setCopied(false), 2000)
     } catch {
       try {
-        await navigator.clipboard.writeText(md)
+        await navigator.clipboard.writeText(message.text)
         setCopied(true)
         setTimeout(() => setCopied(false), 2000)
       } catch {
@@ -1687,7 +1685,7 @@ function AssistantMessage({
           className="
             w-full min-w-0 max-w-full break-words
             text-xs
-            [&_.notes9-md]:text-xs [&_p]:text-xs [&_li]:text-xs
+            [&_p]:text-xs [&_li]:text-xs
             [&_h1]:text-sm [&_h2]:text-xs [&_h3]:text-xs
             [word-break:break-word] [overflow-wrap:anywhere]
             [&_pre]:max-w-full [&_pre]:overflow-x-auto [&_pre]:whitespace-pre-wrap

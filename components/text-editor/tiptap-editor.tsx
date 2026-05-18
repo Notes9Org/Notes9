@@ -79,6 +79,7 @@ import {
   Square,
   Circle,
   ArrowRight,
+  Check,
 } from "lucide-react"
 import { Extension, Mark, mergeAttributes } from "@tiptap/core"
 import { Plugin, PluginKey } from "@tiptap/pm/state"
@@ -2205,7 +2206,7 @@ export function TiptapEditor({
       } catch (error: any) {
         console.error("AI API error:", error)
         // Fallback to demo mode if API fails
-        return `⚠️ AI API unavailable. ${error.message || "Please check your API key configuration."}`
+        return `[AI unavailable] ${error.message || "Check your API key configuration."}`
       } finally {
         setIsAIProcessing(false)
       }
@@ -2225,7 +2226,7 @@ export function TiptapEditor({
       editor
         .chain()
         .focus()
-        .insertContent("⚠️ Please select some text to improve")
+        .insertContent("[Select text to improve]")
         .run()
     }
     setToolbarClusterMenu(null)
@@ -2251,7 +2252,7 @@ export function TiptapEditor({
       editor
         .chain()
         .focus()
-        .insertContent("⚠️ Please select some text to make shorter")
+        .insertContent("[Select text to shorten]")
         .run()
     }
     setToolbarClusterMenu(null)
@@ -2269,7 +2270,7 @@ export function TiptapEditor({
       editor
         .chain()
         .focus()
-        .insertContent("⚠️ Please select some text to expand")
+        .insertContent("[Select text to expand]")
         .run()
     }
     setToolbarClusterMenu(null)
@@ -2287,7 +2288,7 @@ export function TiptapEditor({
       editor
         .chain()
         .focus()
-        .insertContent("⚠️ Please select some text to simplify")
+        .insertContent("[Select text to simplify]")
         .run()
     }
     setToolbarClusterMenu(null)
@@ -2305,7 +2306,7 @@ export function TiptapEditor({
       editor
         .chain()
         .focus()
-        .insertContent("⚠️ Please select some text to fix grammar")
+        .insertContent("[Select text to fix grammar]")
         .run()
     }
     setToolbarClusterMenu(null)
@@ -2323,7 +2324,7 @@ export function TiptapEditor({
       editor
         .chain()
         .focus()
-        .insertContent("⚠️ Please select chemical text to structure properly")
+        .insertContent("[Select chemical text to structure]")
         .run()
     }
     setToolbarClusterMenu(null)
@@ -5023,7 +5024,7 @@ export function TiptapEditor({
                         "flex-shrink-0 w-6 h-6 rounded-full border-2 flex items-center justify-center text-xs font-semibold transition-colors",
                         isSelected ? "border-primary bg-primary text-primary-foreground" : "border-muted-foreground/30"
                       )}>
-                        {isSelected && '✓'}
+                        {isSelected && <Check className="h-3.5 w-3.5" aria-hidden="true" />}
                       </div>
                       <div className="flex-1 min-w-0">
                         <h4 className="font-medium text-sm line-clamp-2 mb-1">

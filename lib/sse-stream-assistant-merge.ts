@@ -5,6 +5,12 @@
 
 export function extractSseTokenPiece(payload: Record<string, unknown> | null): string {
   if (!payload) return '';
+  // Support every shape any backend has ever emitted for a streamed text
+  // chunk. The core agent emits `{ delta: "..." }` (matches Anthropic's own
+  // SSE convention); the legacy pipeline emitted `text` or `token`. We
+  // accept all three rather than locking into one — adding a fourth shape
+  // tomorrow is a one-line extension here, no backend coordination needed.
+  if (typeof payload.delta === 'string') return payload.delta;
   if (typeof payload.text === 'string') return payload.text;
   if (typeof payload.token === 'string') return payload.token;
   return '';

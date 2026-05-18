@@ -11,7 +11,7 @@ const NOTES9_API_BASE = process.env.CHAT_API_URL?.replace(/\/$/, '') || '';
 export async function POST(req: Request) {
   const headerToken = req.headers.get('Authorization')?.replace(/^Bearer\s+/i, '').trim();
   const body = await req.json().catch(() => ({}));
-  const { supabaseToken: bodyToken, ...rest } = body;
+  const { supabaseToken: _bodyToken, ...rest } = body;
   const upstreamBody = buildNotes9AgentRequestBody({
     query: typeof rest.query === 'string' ? rest.query : String(rest.query ?? ''),
     session_id:
@@ -23,11 +23,7 @@ export async function POST(req: Request) {
         : undefined,
     scope: rest.scope && typeof rest.scope === 'object' ? rest.scope : undefined,
   });
-  console.log(
-    'Agent Request Body:',
-    JSON.stringify({ ...upstreamBody, supabaseToken: bodyToken ? '[REDACTED]' : undefined }, null, 2)
-  );
-  const token = headerToken || bodyToken;
+  const token = headerToken;
 
   if (!token) {
     return NextResponse.json(
@@ -44,14 +40,22 @@ export async function POST(req: Request) {
   }
 
   try {
-    const response = await fetch(`${NOTES9_API_BASE}/notes9`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${token}`,
-      },
-      body: JSON.stringify(upstreamBody),
-    });
+    const _ctrl = new AbortController();
+    const _timeout = setTimeout(() => _ctrl.abort(), 30_000);
+    let response: Response;
+    try {
+      response = await fetch(`${NOTES9_API_BASE}/notes9`, {
+        method: 'POST',
+        signal: _ctrl.signal,
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(upstreamBody),
+      });
+    } finally {
+      clearTimeout(_timeout);
+    }
 
     const data = await response.json().catch(() => ({}));
     if (!response.ok) {

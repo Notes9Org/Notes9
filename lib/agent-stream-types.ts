@@ -69,7 +69,8 @@ export interface DonePayload {
   /** Legacy / streaming shape; prefer `resources`. */
   citations?: GroundingResource[];
   confidence?: number;
-  tool_used?: 'sql' | 'rag' | 'hybrid' | 'none';
+  /** Free-text label describing what the agent did this turn (display only). */
+  tool_used?: string;
   debug?: Record<string, unknown> | null;
 }
 

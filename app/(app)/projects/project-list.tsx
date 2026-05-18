@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Users, ArrowUpRight, Grid3x3, List, Plus, FlaskConical } from 'lucide-react'
+import { formatEntityTitle } from "@/lib/format-title"
 import {
   FILTER_ALL,
   ResourceFilterRow,
@@ -239,7 +240,7 @@ export function ProjectList({ projects, viewMode: controlledView, setViewMode: s
                     wordBreak: 'normal',
                     overflowWrap: 'normal'
                   }}>
-                    {project.name}
+                    {formatEntityTitle(project.name)}
                   </CardTitle>
                   {project.description && (
                     <CardDescription className="text-sm min-w-0 overflow-hidden text-ellipsis" style={{
@@ -371,7 +372,7 @@ function ProjectTableView({ projects }: { projects: Project[] }) {
                   <TableCell className="font-medium text-foreground">
                     <div className="flex items-center gap-2">
                       <Users className="h-4 w-4 text-primary shrink-0" />
-                      <span className="truncate">{project.name}</span>
+                      <span className="truncate">{formatEntityTitle(project.name)}</span>
                     </div>
                   </TableCell>
                   <TableCell className="text-muted-foreground">

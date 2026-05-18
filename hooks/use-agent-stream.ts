@@ -38,6 +38,7 @@ export interface AgentStreamParams {
     debug?: boolean;
     max_retries?: number;
     tags?: Array<{ kind: string; id: string; title: string }>;
+    web_search?: 'on' | 'off';
   };
 }
 
@@ -73,6 +74,10 @@ export interface ToolCard {
   citations_count?: number;
   /** Latency in ms */
   latency_ms?: number;
+  /** Actual document/source names found (from tool_output event) */
+  source_names?: string[];
+  /** Row count for SQL results */
+  row_count?: number;
 }
 
 /** Thinking stage values emitted by the backend */
@@ -197,17 +202,22 @@ function ragFromPayload(data: Record<string, unknown> | null): RagChunksPayload 
   };
 }
 
+// LEGACY FALLBACK ONLY.
+// The core agent supplies researcher-friendly labels directly in every
+// tool_start / tool_call / tool_result payload (the `label` field). This map
+// is kept only so requests routed through the deprecated NOTES9_AGENT=legacy
+// pipeline still get readable card labels.
 const TOOL_LABELS: Record<string, { label: string }> = {
-  nlp_to_sql_tool:        { label: 'Querying workspace records' },
-  rag_tool:               { label: 'Searching notes & documents' },
-  web_search_tool:        { label: 'Searching the web' },
-  full_record_fetch_tool: { label: 'Fetching document' },
+  nlp_to_sql_tool:        { label: 'Looking through your workspace' },
+  rag_tool:               { label: 'Reading your notes and documents' },
+  web_search_tool:        { label: 'Checking external sources' },
+  full_record_fetch_tool: { label: 'Opening a document' },
   document_analysis_tool: { label: 'Analyzing literature' },
-  biomni_tool:            { label: 'Designing experiment (Biomni)' },
-  biomni_full_tool:       { label: 'Running Biomni full' },
-  llm_chat_tool:          { label: 'Reasoning' },
-  extract_data_tool:      { label: 'Extracting data' },
-  episodic_memory_tool:   { label: 'Checking memory' },
+  biomni_tool:            { label: 'Drafting an experiment design' },
+  biomni_full_tool:       { label: 'Drafting an experiment design' },
+  llm_chat_tool:          { label: 'Thinking' },
+  extract_data_tool:      { label: 'Pulling out the relevant data' },
+  episodic_memory_tool:   { label: 'Checking past sessions' },
 };
 
 const THINKING_STAGES: ThinkingStage[] = [
@@ -325,35 +335,70 @@ export function useAgentStream() {
               case 'thinking': {
                 const step = thinkingFromPayload(payload);
                 if (step) {
-                  const stage = normalizeStage((payload as Record<string, unknown>)?.stage);
-                  const detail =
-                    typeof (payload as Record<string, unknown>)?.detail === 'string'
-                      ? (payload as Record<string, unknown>).detail as string
-                      : undefined;
-                  setState((s) => ({
-                    ...s,
-                    thinkingSteps: [...s.thinkingSteps, step],
-                    currentStage: stage ?? s.currentStage,
-                    currentThinkingMessage: step.message,
-                    currentThinkingDetail: detail ?? null,
-                  }));
+                  const p = payload as Record<string, unknown>;
+                  const stage = normalizeStage(p?.stage);
+                  const detail = typeof p?.detail === 'string' ? p.detail as string : undefined;
+                  const node = typeof p?.node === 'string' ? p.node : '';
+                  const status = typeof p?.status === 'string' ? p.status : '';
+                  const message = step.message || '';
+
+                  setState((s) => {
+                    let toolCards = s.toolCards;
+
+                    // Extract names from RAG completed thinking message: "Retrieved N chunk(s) from: Name1, Name2"
+                    if (node === 'rag' && status === 'completed' && message.includes(' from: ')) {
+                      const afterFrom = message.split(' from: ')[1] || '';
+                      const rawNames = afterFrom.replace(' and more', '').split(', ').filter(Boolean);
+                      if (rawNames.length > 0) {
+                        toolCards = s.toolCards.map((c) =>
+                          c.id === 'rag_tool' && (!c.source_names || c.source_names.length === 0)
+                            ? { ...c, source_names: rawNames }
+                            : c
+                        );
+                      }
+                    }
+
+                    // Extract names from SQL completed thinking message: "Found N results: Name1, Name2"
+                    if (node === 'sql' && status === 'completed' && message.includes(': ')) {
+                      const afterColon = message.split(': ').slice(1).join(': ');
+                      const rawNames = afterColon.replace(/ and \d+ more$/, '').split(', ').filter(Boolean);
+                      if (rawNames.length > 0) {
+                        toolCards = s.toolCards.map((c) =>
+                          c.id === 'nlp_to_sql_tool' && (!c.source_names || c.source_names.length === 0)
+                            ? { ...c, source_names: rawNames }
+                            : c
+                        );
+                      }
+                    }
+
+                    return {
+                      ...s,
+                      toolCards,
+                      thinkingSteps: [...s.thinkingSteps, step],
+                      currentStage: stage ?? s.currentStage,
+                      currentThinkingMessage: step.message,
+                      currentThinkingDetail: detail ?? null,
+                    };
+                  });
                 }
                 break;
               }
               case 'tool_start': {
+                // Prefer the server-provided researcher-friendly label.
+                // Fall back to TOOL_LABELS (legacy) only if no label was sent.
                 if (payload && typeof payload === 'object') {
                   const p = payload as Record<string, unknown>;
                   const toolId = typeof p.tool === 'string' ? p.tool : 'unknown';
-                  const labelEntry = TOOL_LABELS[toolId] ?? { icon: '🔧', label: toolId };
+                  const serverLabel = typeof p.label === 'string' ? p.label : '';
+                  const label = serverLabel || (TOOL_LABELS[toolId]?.label ?? toolId);
                   const card: ToolCard = {
                     id: toolId,
-                    label: labelEntry.label,
+                    label,
                     args_preview: typeof p.args_preview === 'string' ? p.args_preview : undefined,
                     status: 'running',
                   };
                   setState((s) => ({
                     ...s,
-                    // Replace existing card for this tool (re-runs), or append
                     toolCards: [
                       ...s.toolCards.filter((c) => c.id !== toolId || c.status === 'done' || c.status === 'error'),
                       card,
@@ -362,25 +407,58 @@ export function useAgentStream() {
                 }
                 break;
               }
-              case 'tool_call':
-              case 'tool_result': {
+              case 'tool_call': {
                 if (payload && typeof payload === 'object') {
                   const p = payload as Record<string, unknown>;
                   const toolId = typeof p.tool === 'string' ? p.tool : 'unknown';
-                  const status = (p.status === 'error' ? 'error' : 'done') as 'done' | 'error';
+                  const quality = typeof p.quality === 'string' ? p.quality : '';
+                  const status = (quality === 'error' || p.status === 'error' ? 'error' : 'done') as 'done' | 'error';
+                  const serverLabel = typeof p.label === 'string' ? p.label : '';
                   setState((s) => ({
                     ...s,
                     toolCards: s.toolCards.map((c) =>
                       c.id === toolId && c.status === 'running'
                         ? {
                             ...c,
+                            // Server sends an updated label describing what came back —
+                            // "Found 5 projects: …" — promote it onto the card.
+                            label: serverLabel || c.label,
                             status,
-                            summary: typeof p.summary === 'string' ? p.summary : undefined,
-                            citations_count: typeof p.citations_count === 'number' ? p.citations_count : undefined,
-                            latency_ms: typeof p.latency_ms === 'number' ? p.latency_ms : undefined,
+                            citations_count: typeof p.citations_count === 'number' ? p.citations_count : c.citations_count,
+                            latency_ms: typeof p.latency_ms === 'number' ? p.latency_ms : c.latency_ms,
                           }
                         : c
                     ),
+                  }));
+                }
+                break;
+              }
+              case 'tool_result': {
+                if (payload && typeof payload === 'object') {
+                  const p = payload as Record<string, unknown>;
+                  const toolId = typeof p.tool === 'string' ? p.tool : 'unknown';
+                  const quality = typeof p.quality === 'string' ? p.quality : '';
+                  const status = (quality === 'error' || p.status === 'error' ? 'error' : 'done') as 'done' | 'error';
+                  const serverLabel = typeof p.label === 'string' ? p.label : '';
+
+                  const sourceNames = Array.isArray(p.source_names)
+                    ? (p.source_names as unknown[]).filter((n): n is string => typeof n === 'string')
+                    : [];
+
+                  setState((s) => ({
+                    ...s,
+                    toolCards: s.toolCards.map((c) => {
+                      if (c.id !== toolId) return c;
+                      return {
+                        ...c,
+                        label: serverLabel || c.label,
+                        status: c.status === 'running' ? status : c.status,
+                        citations_count: typeof p.citations_count === 'number' ? p.citations_count : c.citations_count,
+                        latency_ms: typeof p.latency_ms === 'number' ? p.latency_ms : c.latency_ms,
+                        summary: typeof p.preview === 'string' ? p.preview : c.summary,
+                        source_names: sourceNames.length > 0 ? sourceNames : c.source_names,
+                      };
+                    }),
                   }));
                 }
                 break;
@@ -395,7 +473,29 @@ export function useAgentStream() {
               }
               case 'rag_chunks': {
                 const rag = ragFromPayload(payload);
-                if (rag) setState((s) => ({ ...s, ragChunks: rag }));
+                if (rag) {
+                  // Extract unique source names from chunks to display in tool card
+                  const seenRag = new Set<string>();
+                  const ragSourceNames: string[] = [];
+                  for (const chunk of rag.chunks) {
+                    const n = chunk.source_name?.trim();
+                    if (n && !seenRag.has(n.toLowerCase())) {
+                      seenRag.add(n.toLowerCase());
+                      ragSourceNames.push(n.length > 80 ? n.slice(0, 77) + '…' : n);
+                    }
+                    if (ragSourceNames.length >= 5) break;
+                  }
+                  setState((s) => ({
+                    ...s,
+                    ragChunks: rag,
+                    // Enrich the rag_tool card with source names from chunks
+                    toolCards: s.toolCards.map((c) =>
+                      c.id === 'rag_tool' && ragSourceNames.length > 0
+                        ? { ...c, source_names: ragSourceNames }
+                        : c
+                    ),
+                  }));
+                }
                 break;
               }
               case 'citations_manifest': {
@@ -409,14 +509,33 @@ export function useAgentStream() {
               case 'tool_output': {
                 // Tool completion details (file names, counts, etc.)
                 if (payload && typeof payload === 'object') {
+                  const p = payload as Record<string, unknown>;
+                  const toolId = typeof p.tool === 'string' ? p.tool : 'unknown';
                   const toolOutput: ToolOutput = {
-                    tool: (payload as { tool?: string }).tool || 'unknown',
-                    success: (payload as { success?: boolean }).success ?? true,
-                    details: payload as Record<string, unknown>,
+                    tool: toolId,
+                    success: (p.success as boolean) ?? true,
+                    details: p,
                   };
+
+                  // Extract source names from document_names (RAG) or file_names (SQL)
+                  const documentNames = Array.isArray(p.document_names)
+                    ? (p.document_names as unknown[]).filter((n): n is string => typeof n === 'string')
+                    : [];
+                  const rowCount = typeof p.row_count === 'number' ? p.row_count : undefined;
+
                   setState((s) => ({
                     ...s,
                     toolOutputs: [...s.toolOutputs, toolOutput],
+                    // Enrich the matching tool card with source names
+                    toolCards: s.toolCards.map((c) =>
+                      c.id === toolId
+                        ? {
+                            ...c,
+                            source_names: documentNames.length > 0 ? documentNames : c.source_names,
+                            row_count: rowCount ?? c.row_count,
+                          }
+                        : c
+                    ),
                   }));
                 }
                 break;

@@ -252,7 +252,7 @@ function keypadReducerImpl(state: KeypadState, action: KeypadAction): KeypadStat
       const input = parseFloat(state.display)
       const logOp = pushPress(state.pressLog, `Operation: ${opPressCaption(action.op)}`)
       if (!Number.isFinite(input)) {
-        return { ...initialKeypadState(), display: "Error", hasError: true, pressLog: pushPress(logOp, "✗ Invalid number") }
+        return { ...initialKeypadState(), display: "Error", hasError: true, pressLog: pushPress(logOp, "Error: invalid number") }
       }
 
       let acc = state.accumulator
@@ -266,12 +266,12 @@ function keypadReducerImpl(state: KeypadState, action: KeypadAction): KeypadStat
             ...initialKeypadState(),
             display: "Error",
             hasError: true,
-            pressLog: pushPress(logOp, "✗ Division by zero"),
+            pressLog: pushPress(logOp, "Error: division by zero"),
           }
         }
         const result = applyBinary(acc, state.pendingOp, input)
         if (!Number.isFinite(result)) {
-          return { ...initialKeypadState(), display: "Error", hasError: true, pressLog: pushPress(logOp, "✗ Invalid result") }
+          return { ...initialKeypadState(), display: "Error", hasError: true, pressLog: pushPress(logOp, "Error: invalid result") }
         }
         nextDisplay = formatKeypadNumber(result)
         nextTape = `${tapeBinaryLabel(state.pendingOp, acc, input)} = ${formatKeypadNumber(result)}`
@@ -300,14 +300,14 @@ function keypadReducerImpl(state: KeypadState, action: KeypadAction): KeypadStat
       const logEq = pushPress(state.pressLog, "= (equals / calculate)")
       const right = parseFloat(state.display)
       if (!Number.isFinite(right)) {
-        return { ...initialKeypadState(), display: "Error", hasError: true, pressLog: pushPress(logEq, "✗ Invalid number") }
+        return { ...initialKeypadState(), display: "Error", hasError: true, pressLog: pushPress(logEq, "Error: invalid number") }
       }
       if (state.pendingOp === "div" && right === 0) {
-        return { ...initialKeypadState(), display: "Error", hasError: true, pressLog: pushPress(logEq, "✗ Division by zero") }
+        return { ...initialKeypadState(), display: "Error", hasError: true, pressLog: pushPress(logEq, "Error: division by zero") }
       }
       const result = applyBinary(state.accumulator, state.pendingOp, right)
       if (!Number.isFinite(result)) {
-        return { ...initialKeypadState(), display: "Error", hasError: true, pressLog: pushPress(logEq, "✗ Invalid result") }
+        return { ...initialKeypadState(), display: "Error", hasError: true, pressLog: pushPress(logEq, "Error: invalid result") }
       }
       const tape = `${tapeBinaryLabel(state.pendingOp, state.accumulator, right)} = ${formatKeypadNumber(result)}`
       return {
@@ -341,7 +341,7 @@ function keypadReducerImpl(state: KeypadState, action: KeypadAction): KeypadStat
         ...initialKeypadState(),
         display: "Error",
         hasError: true,
-        pressLog: pushPress(state.pressLog, "✗ Scientific: invalid for this value"),
+        pressLog: pushPress(state.pressLog, "Error: scientific operation invalid for this value"),
       }
     }
 

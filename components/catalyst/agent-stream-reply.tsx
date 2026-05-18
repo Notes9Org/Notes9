@@ -39,10 +39,15 @@ interface AgentStreamReplyProps {
   isThinkingStreaming?: boolean;
 }
 
+// Display labels only. Unknown keys fall through to the raw value via the
+// `?? donePayload.tool_used` guard at the usage site — no schema lock-in.
 const TOOL_LABELS: Record<string, string> = {
-  sql: 'From database',
-  rag: 'From documents',
-  hybrid: 'Both',
+  sql: 'From your records',
+  rag: 'From your documents',
+  hybrid: 'Records + documents',
+  biomni: 'From biomedical synthesis',
+  web: 'From the web',
+  clarification: 'Awaiting your reply',
   none: 'General',
 };
 
