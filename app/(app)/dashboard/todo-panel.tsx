@@ -941,12 +941,14 @@ export function TodoPanel({ initialTasks }: { initialTasks: DashboardTask[] }) {
             value={dueDateStr}
             onChange={(e) => setDueDateStr(e.target.value)}
             className="w-[140px] md:text-xs"
+            aria-label="Task due date"
           />
           <Input
             type="time"
             value={dueTime}
             onChange={(e) => setDueTime(e.target.value)}
             className="w-[100px] md:text-xs"
+            aria-label="Task due time"
           />
           <Select
             value={priority}
@@ -962,8 +964,8 @@ export function TodoPanel({ initialTasks }: { initialTasks: DashboardTask[] }) {
             </SelectContent>
           </Select>
 
-          <Button onClick={addTask} size="sm" className="h8 w-16.5">
-            Add
+          <Button onClick={addTask} size="sm" aria-label="Add task">
+            Add task
           </Button>
         </div>
 
@@ -1283,7 +1285,7 @@ function TaskRow({
                 </Select>
 
                 <div className="flex flex-row gap-0.5 items-center">
-                  <Button size="icon" className="h-8 w-8" onClick={handleSaveEdit}>
+                  <Button size="icon-sm" onClick={handleSaveEdit}>
                     <Check className="h-4 w-4" />
                   </Button>
                   <Button size="icon" variant="ghost" className="h-8 w-8" onClick={onCancelEdit}>

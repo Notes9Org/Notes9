@@ -40,8 +40,8 @@ export function ProjectActions({ project, experimentCount = 0 }: ProjectActionsP
           <TooltipTrigger asChild>
             <Button
               variant="ghost"
-              size="icon"
-              className="h-8 w-8"
+              size="icon-sm"
+              className=""
               onClick={() => setEditOpen(true)}
               aria-label="Edit project"
             >
@@ -55,8 +55,8 @@ export function ProjectActions({ project, experimentCount = 0 }: ProjectActionsP
           <TooltipTrigger asChild>
             <Button
               variant="ghost"
-              size="icon"
-              className="h-8 w-8"
+              size="icon-sm"
+              className=""
               onClick={() => setDuplicateOpen(true)}
               aria-label="Duplicate project"
             >
@@ -70,8 +70,8 @@ export function ProjectActions({ project, experimentCount = 0 }: ProjectActionsP
           <TooltipTrigger asChild>
             <Button
               variant="ghost"
-              size="icon"
-              className="h-8 w-8 text-destructive hover:text-destructive"
+              size="icon-sm"
+              className="text-destructive hover:text-destructive"
               onClick={() => setDeleteOpen(true)}
               aria-label="Delete project"
             >

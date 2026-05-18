@@ -313,9 +313,19 @@ export default function LabNotesPage() {
           </CardContent>
         </Card>
       ) : filteredNotes.length === 0 ? (
-        <p className="py-10 text-center text-sm text-muted-foreground">
-          No lab notes match the selected filters.
-        </p>
+        <div className="flex flex-col items-center gap-3 py-10 text-center text-sm text-muted-foreground">
+          <p>No lab notes match the selected filters.</p>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              setProjectFilter(FILTER_ALL)
+              setExperimentFilter(FILTER_ALL)
+            }}
+          >
+            Clear filters
+          </Button>
+        </div>
       ) : (
         <LabNotesList
           notes={filteredNotes}

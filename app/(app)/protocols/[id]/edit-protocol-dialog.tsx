@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useMemo, useState } from "react"
 import { useRouter } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
 import { Button } from "@/components/ui/button"
@@ -8,6 +8,7 @@ import {
   Dialog,
   DialogContent,
   DialogDescription,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
   DialogTrigger,
@@ -39,9 +40,22 @@ const PROTOCOL_CATEGORIES = [
   "General SOP"
 ]
 
-export function EditProtocolDialog({ protocol }: { protocol: any }) {
+interface EditProtocolDialogProps {
+  protocol: {
+    id: string
+    name: string
+    description?: string | null
+    version: string
+    content: string
+    category?: string | null
+    is_active: boolean
+  }
+}
+
+export function EditProtocolDialog({ protocol }: EditProtocolDialogProps) {
   const router = useRouter()
   const { toast } = useToast()
+  const supabase = useMemo(() => createClient(), [])
   const [open, setOpen] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   
@@ -59,8 +73,6 @@ export function EditProtocolDialog({ protocol }: { protocol: any }) {
     setIsLoading(true)
 
     try {
-      const supabase = createClient()
-
       const { error } = await supabase
         .from("protocols")
         .update({
@@ -82,10 +94,6 @@ export function EditProtocolDialog({ protocol }: { protocol: any }) {
 
       setOpen(false)
       router.refresh()
-      
-      setTimeout(() => {
-        window.location.reload()
-      }, 1000)
     } catch (error: any) {
       toast({
         title: "Error",
@@ -100,7 +108,7 @@ export function EditProtocolDialog({ protocol }: { protocol: any }) {
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button variant="ghost" size="icon" className="h-8 w-8" aria-label="Edit protocol">
+        <Button variant="ghost" size="icon-sm" aria-label="Edit protocol">
           <Pencil className="h-4 w-4" />
         </Button>
       </DialogTrigger>
@@ -182,7 +190,7 @@ export function EditProtocolDialog({ protocol }: { protocol: any }) {
                 title={formData.name || "protocol"}
                 htmlContent={formData.content || ""}
                 trigger={
-                  <Button type="button" variant="ghost" size="icon" className="h-8 w-8 shrink-0" aria-label="Export">
+                  <Button type="button" variant="ghost" size="icon-sm" className="shrink-0" aria-label="Export">
                     <Download className="h-4 w-4" />
                   </Button>
                 }
@@ -221,7 +229,7 @@ export function EditProtocolDialog({ protocol }: { protocol: any }) {
           </div>
 
           {/* Actions */}
-          <div className="flex justify-end gap-2 pt-4">
+          <DialogFooter className="pt-4">
             <Button
               type="button"
               variant="outline"
@@ -233,7 +241,7 @@ export function EditProtocolDialog({ protocol }: { protocol: any }) {
             <Button type="submit" disabled={isLoading}>
               {isLoading ? "Saving..." : "Save Changes"}
             </Button>
-          </div>
+          </DialogFooter>
         </form>
       </DialogContent>
     </Dialog>

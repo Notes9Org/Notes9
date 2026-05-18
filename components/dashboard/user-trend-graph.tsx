@@ -75,7 +75,7 @@ function UserTrendNode({ data, selected }: NodeProps<UserTrendRFNode>) {
         style={{ backgroundColor: meta.color }}
         title={displayLabel}
       />
-      <p className="max-w-[6.5rem] text-center text-[10px] font-semibold leading-tight text-slate-800 [overflow-wrap:anywhere] dark:text-zinc-100">
+      <p className="max-w-[6.5rem] text-center text-2xs font-semibold leading-tight text-slate-800 [overflow-wrap:anywhere] dark:text-zinc-100">
         {displayLabel}
       </p>
       <Handle
@@ -95,14 +95,14 @@ function EntityLegendPanel() {
       position="top-left"
       className="m-2 max-h-[min(42vh,320px)] w-[11.75rem] overflow-y-auto rounded-lg border border-slate-200 bg-white/95 p-2.5 text-left shadow-lg backdrop-blur-sm [scrollbar-width:thin] dark:border-zinc-700 dark:bg-zinc-950/95"
     >
-      <p className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-slate-500 dark:text-zinc-400">
+      <p className="mb-2 text-2xs font-semibold uppercase tracking-wide text-slate-500 dark:text-zinc-400">
         Entity types
       </p>
       <ul className="space-y-1.5">
         {Object.entries(USER_TREND_ENTITY_LEGEND).map(([key, v]) => (
           <li
             key={key}
-            className="flex items-center gap-2 text-[11px] font-medium text-slate-800 dark:text-zinc-100"
+            className="flex items-center gap-2 text-micro font-medium text-slate-800 dark:text-zinc-100"
           >
             <span
               className="size-2.5 shrink-0 rounded-full border border-white/50 shadow-sm dark:border-zinc-800"
@@ -371,7 +371,7 @@ function UserTrendCanvas({
                 >
                   <span className="text-foreground">{other}</span>
                   {d?.edgeType != null && d.edgeType !== "" && (
-                    <span className="ml-1 text-[10px] uppercase tracking-wide">
+                    <span className="ml-1 text-2xs uppercase tracking-wide">
                       · {d.edgeType}
                     </span>
                   )}
@@ -379,7 +379,7 @@ function UserTrendCanvas({
                     <span className="ml-1">· weight {d.weight}</span>
                   )}
                   {d?.lastSeen != null && d.lastSeen !== "" && (
-                    <span className="mt-0.5 block text-[10px] text-muted-foreground/90">
+                    <span className="mt-0.5 block text-2xs text-muted-foreground/90">
                       {d.lastSeen}
                     </span>
                   )}

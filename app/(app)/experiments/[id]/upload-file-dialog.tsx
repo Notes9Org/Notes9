@@ -52,11 +52,10 @@ const ALLOWED_MIME_TYPES = [
   'text/csv',
   'text/markdown',
   'text/x-markdown',
-  // Images
+  // Images (SVG omitted — embedded <script> in user-supplied SVG is a stored-XSS vector)
   'image/jpeg',
   'image/png',
   'image/gif',
-  'image/svg+xml',
   'image/tiff',
   // Spreadsheets
   'application/vnd.ms-excel',
@@ -73,10 +72,11 @@ const ALLOWED_MIME_TYPES = [
   'application/x-zip-compressed',
 ]
 
-// File extensions that are allowed (in addition to MIME types)
+// File extensions that are allowed (in addition to MIME types).
+// `.svg` deliberately omitted alongside the MIME allowlist above.
 const ALLOWED_EXTENSIONS = [
   '.pdf', '.txt', '.csv', '.md', '.markdown',
-  '.jpg', '.jpeg', '.png', '.gif', '.svg', '.tiff',
+  '.jpg', '.jpeg', '.png', '.gif', '.tif', '.tiff',
   '.xls', '.xlsx',
   '.json', '.xml',
   '.fasta', '.fa', '.fna', '.ffn', '.faa', '.frn',
@@ -230,12 +230,12 @@ export function UploadFileDialog({ experimentId, onUploadComplete }: UploadFileD
             idx === i ? { ...f, progress: 60 } : f
           ))
 
-          const { data: urlData } = supabase.storage
-            .from(USER_STORAGE_BUCKET)
-            .getPublicUrl(storagePath)
+          // Bucket is private — keep the canonical path in `file_url` so we can
+          // sign a fresh URL at read time (see data-files-tab and storage-signed-url).
+          const fileUrlValue = storagePath
 
           // Update progress
-          setSelectedFiles(prev => prev.map((f, idx) => 
+          setSelectedFiles(prev => prev.map((f, idx) =>
             idx === i ? { ...f, progress: 80 } : f
           ))
 
@@ -257,7 +257,7 @@ export function UploadFileDialog({ experimentId, onUploadComplete }: UploadFileD
               experiment_id: experimentId,
               data_type: dataType,
               file_name: file.name,
-              file_url: urlData.publicUrl,
+              file_url: fileUrlValue,
               file_size: file.size,
               file_type: file.type,
               uploaded_by: user.id,
@@ -405,7 +405,7 @@ export function UploadFileDialog({ experimentId, onUploadComplete }: UploadFileD
                   Drag and drop files or click to select
                 </p>
                 <p className="text-xs text-muted-foreground">
-                  Multiple files supported • PDF, images, CSV, MD, FASTA, JSON, XML, text (max {MAX_FILE_SIZE_MB} MB each)
+                  Multiple files supported • PDF, images (JPG/PNG/GIF/TIFF), CSV, MD, FASTA, JSON, XML, text (max {MAX_FILE_SIZE_MB} MB each)
                 </p>
                 <input
                   ref={fileInputRef}
@@ -434,7 +434,7 @@ export function UploadFileDialog({ experimentId, onUploadComplete }: UploadFileD
               
               <div className="space-y-2 max-h-[300px] overflow-y-auto">
                 {selectedFiles.map((fileStatus, index) => (
-                  <Card key={index} className="p-3">
+                  <Card key={`${fileStatus.file.name}-${fileStatus.file.size}-${fileStatus.file.lastModified}-${index}`} className="p-3">
                     <div className="flex items-start justify-between gap-3">
                       <div className="flex items-start gap-3 flex-1 min-w-0">
                         {getFileIcon(fileStatus)}

@@ -22,6 +22,7 @@ interface Equipment {
   manufacturer: string | null
   location: string | null
   status: string
+  created_at: string
   next_maintenance_date: string | null
 }
 
@@ -184,9 +185,20 @@ export function EquipmentPageContent({ equipment, statusCount }: EquipmentPageCo
       {filteredEquipment.length > 0 ? (
         <EquipmentList equipment={filteredEquipment} viewMode={viewMode} setViewMode={setViewMode} hideToolbar />
       ) : (
-        <p className="py-10 text-center text-sm text-muted-foreground">
-          No equipment matches the selected filters.
-        </p>
+        <div className="flex flex-col items-center gap-3 py-10 text-center text-sm text-muted-foreground">
+          <p>No equipment matches the selected filters.</p>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              setStatusFilter(FILTER_ALL)
+              setCategoryFilter(FILTER_ALL)
+              setLocationFilter(FILTER_ALL)
+            }}
+          >
+            Clear filters
+          </Button>
+        </div>
       )}
     </div>
   )

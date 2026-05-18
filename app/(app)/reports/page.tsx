@@ -56,15 +56,6 @@ export default async function ReportsPage() {
 
   return (
     <div className="space-y-4 md:space-y-6">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight text-foreground md:text-3xl">Reports & Analytics</h1>
-          <p className="text-muted-foreground mt-1 text-sm">
-            View and generate research reports
-          </p>
-        </div>
-      </div>
-
       <ReportsPageClient
         reports={(reports ?? []) as ReportRow[]}
         projects={safeProjects}

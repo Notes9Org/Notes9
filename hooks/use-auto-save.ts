@@ -16,12 +16,14 @@ export function useAutoSave({
   const [status, setStatus] = useState<SaveStatus>('saved')
   const [lastSaved, setLastSaved] = useState<Date | null>(null)
   const timeoutRef = useRef<NodeJS.Timeout | undefined>(undefined)
+  const retryTimeoutRef = useRef<NodeJS.Timeout | undefined>(undefined)
   const paramsRef = useRef<[string, ...any[]]>([''])
   const isSavingRef = useRef<boolean>(false)
+  const unmountedRef = useRef<boolean>(false)
 
   const save = useCallback(async (content: string, ...args: any[]) => {
-    if (isSavingRef.current) {
-      // If already saving, schedule another save after this one completes
+    if (isSavingRef.current || unmountedRef.current) {
+      // If already saving or unmounted, skip
       return
     }
 
@@ -29,14 +31,16 @@ export function useAutoSave({
       isSavingRef.current = true
       setStatus('saving')
       await onSave(content, ...args)
+      if (unmountedRef.current) return
       setStatus('saved')
       setLastSaved(new Date())
     } catch (error) {
+      if (unmountedRef.current) return
       console.error('Auto-save error:', error)
       setStatus('error')
-      // Retry after 5 seconds on error
-      setTimeout(() => {
-        if (paramsRef.current) {
+      // Retry after 5 seconds on error, but only if still mounted
+      retryTimeoutRef.current = setTimeout(() => {
+        if (!unmountedRef.current && paramsRef.current) {
           save(...paramsRef.current)
         }
       }, 5000)
@@ -87,8 +91,12 @@ export function useAutoSave({
   // Cleanup on unmount
   useEffect(() => {
     return () => {
+      unmountedRef.current = true
       if (timeoutRef.current) {
         clearTimeout(timeoutRef.current)
+      }
+      if (retryTimeoutRef.current) {
+        clearTimeout(retryTimeoutRef.current)
       }
     }
   }, [])

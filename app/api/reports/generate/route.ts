@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { createClient } from '@/lib/supabase/server'
 
 export const maxDuration = 60
 
@@ -78,11 +79,25 @@ RULES:
 
 export async function POST(req: NextRequest) {
   try {
-    const token = req.headers.get('Authorization')?.replace(/^Bearer\s+/i, '').trim()
+    // Verify the Bearer token is an actual Supabase session, not any non-empty string.
+    const supabase = await createClient()
+    const { data: { user }, error: authError } = await supabase.auth.getUser()
+    if (authError || !user) {
+      return NextResponse.json(
+        { error: 'Unauthorized — sign in to generate reports.' },
+        { status: 401 }
+      )
+    }
+
+    // The upstream Notes9 backend wants the user's bearer token. Read it from
+    // the session cookie via the Supabase client (no longer trusted from the
+    // raw Authorization header).
+    const { data: sessionData } = await supabase.auth.getSession()
+    const token = sessionData.session?.access_token?.trim() ?? ''
 
     if (!token) {
       return NextResponse.json(
-        { error: 'Authorization required. Please provide a valid Bearer token.' },
+        { error: 'No active session token available.' },
         { status: 401 }
       )
     }

@@ -15,6 +15,17 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
+import { buttonVariants } from "@/components/ui/button"
+import {
   FILTER_ALL,
   ResourceFilterRow,
   ResourceListFilter,
@@ -53,10 +64,13 @@ function formatDate(dateStr: string): string {
 
 export function ReportsPageClient({ reports: initialReports, projects, experiments, userId }: ReportsPageClientProps) {
   const router = useRouter()
+  const supabase = useMemo(() => createClient(), [])
   const [reports, setReports] = useState(initialReports)
   const [dialogOpen, setDialogOpen] = useState(false)
   const [projectFilter, setProjectFilter] = useState(FILTER_ALL)
   const [experimentFilter, setExperimentFilter] = useState(FILTER_ALL)
+  const [deleteTarget, setDeleteTarget] = useState<{ id: string; title: string } | null>(null)
+  const [isDeleting, setIsDeleting] = useState(false)
 
   const projectOptions = useMemo(() => {
     const m = new Map<string, string>()
@@ -107,29 +121,57 @@ export function ReportsPageClient({ reports: initialReports, projects, experimen
     })
   }, [reports, projectFilter, experimentFilter])
 
-  const handleDelete = async (e: React.MouseEvent, reportId: string) => {
+  const requestDelete = (e: React.MouseEvent, report: ReportRow) => {
     e.stopPropagation()
-    if (!confirm("Delete this report? This cannot be undone.")) return
-    const supabase = createClient()
-    const { error } = await supabase.from("reports").delete().eq("id", reportId)
-    if (error) {
-      toast.error(`Failed to delete: ${error.message}`)
-    } else {
-      setReports((prev) => prev.filter((r) => r.id !== reportId))
+    setDeleteTarget({ id: report.id, title: report.title })
+  }
+
+  const confirmDelete = async () => {
+    if (!deleteTarget) return
+    setIsDeleting(true)
+    try {
+      const { error } = await supabase.from("reports").delete().eq("id", deleteTarget.id)
+      if (error) {
+        toast.error(`Failed to delete: ${error.message}`)
+        return
+      }
+      setReports((prev) => prev.filter((r) => r.id !== deleteTarget.id))
       toast.success("Report deleted")
+      setDeleteTarget(null)
+    } finally {
+      setIsDeleting(false)
     }
   }
 
+  // Header matches every other top-level list page (Experiments, Projects, …).
+  const pageHeader = (
+    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+      <div>
+        <h1 className="text-2xl font-bold tracking-tight text-foreground md:text-3xl">
+          Reports &amp; Analytics
+        </h1>
+        <p className="text-muted-foreground mt-1 text-sm">
+          View and generate research reports
+        </p>
+      </div>
+      <Button onClick={() => setDialogOpen(true)} className="w-full sm:w-auto">
+        <Plus className="h-4 w-4 mr-2" />
+        Generate report
+      </Button>
+    </div>
+  )
+
   if (reports.length === 0) {
     return (
-      <>
+      <div className="space-y-6">
+        {pageHeader}
         <Card>
           <CardContent className="flex flex-col items-center justify-center py-12">
             <FileText className="h-12 w-12 text-muted-foreground mb-4" />
             <p className="text-muted-foreground mb-4">No reports generated yet</p>
             <Button onClick={() => setDialogOpen(true)}>
               <Plus className="h-4 w-4 mr-2" />
-              Generate First Report
+              Generate first report
             </Button>
           </CardContent>
         </Card>
@@ -140,12 +182,13 @@ export function ReportsPageClient({ reports: initialReports, projects, experimen
           experiments={experiments ?? []}
           userId={userId ?? ""}
         />
-      </>
+      </div>
     )
   }
 
   return (
-    <>
+    <div className="space-y-6">
+      {pageHeader}
       <ResourceFilterRow>
         {projectOptions.length > 0 && (
           <ResourceListFilter
@@ -168,7 +211,7 @@ export function ReportsPageClient({ reports: initialReports, projects, experimen
         <div className="flex items-end ml-auto">
           <Button onClick={() => setDialogOpen(true)} size="sm">
             <Plus className="h-4 w-4 mr-2" />
-            Generate Report
+            New report
           </Button>
         </div>
       </ResourceFilterRow>
@@ -211,7 +254,7 @@ export function ReportsPageClient({ reports: initialReports, projects, experimen
                       <Button
                         variant="ghost"
                         size="sm"
-                        onClick={(e) => handleDelete(e, report.id)}
+                        onClick={(e) => requestDelete(e, report)}
                         title="Delete report"
                         className="text-muted-foreground hover:text-destructive"
                       >
@@ -233,6 +276,33 @@ export function ReportsPageClient({ reports: initialReports, projects, experimen
         experiments={experiments ?? []}
         userId={userId ?? ""}
       />
-    </>
+
+      <AlertDialog open={deleteTarget !== null} onOpenChange={(o) => !o && setDeleteTarget(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete report?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {deleteTarget ? (
+                <>
+                  This will permanently delete <strong>"{deleteTarget.title}"</strong>. This action cannot be undone.
+                </>
+              ) : (
+                "This action cannot be undone."
+              )}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isDeleting}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={confirmDelete}
+              disabled={isDeleting}
+              className={buttonVariants({ variant: "destructive" })}
+            >
+              {isDeleting ? "Deleting..." : "Delete"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </div>
   )
 }

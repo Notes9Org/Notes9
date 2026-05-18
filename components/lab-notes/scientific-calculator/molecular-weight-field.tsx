@@ -50,7 +50,7 @@ export function MolecularWeightField({
         ))}
       </datalist>
       {resolved.ok === true && resolved.source === "compound" && (
-        <p className="text-[10px] text-muted-foreground">
+        <p className="text-2xs text-muted-foreground">
           Using {resolved.compoundName}: {resolved.mw} g/mol
         </p>
       )}

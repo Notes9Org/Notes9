@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useRef } from "react"
+import { useState, useEffect, useRef, useCallback, useMemo } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -143,8 +143,10 @@ export function LabNotesTab({
   const [linkedProtocols, setLinkedProtocols] = useState<LinkedProtocol[]>([]);
   const [availableProtocols, setAvailableProtocols] = useState<ProtocolItem[]>([]);
 
-  // Notebook list panel collapsed for more note-taking space (start closed)
-  const [notebookPanelOpen, setNotebookPanelOpen] = useState(false);
+  // Notebook list panel opens by default so the user immediately sees other
+  // notes in this experiment (matches the protocol design-mode sidebar pattern).
+  // On mobile the layout collapses regardless via the isMobile branch below.
+  const [notebookPanelOpen, setNotebookPanelOpen] = useState(true);
 
   const [scientificCalculatorOpen, setScientificCalculatorOpen] = useState(false);
 
@@ -317,9 +319,9 @@ export function LabNotesTab({
         // Do not update `savedContent` here: that baseline drives the diff bar vs draft.
         // Autosave would match them and hide "Pending changes" before the user clicks Accept & Save.
 
-        // Update local state
-        setNotes(
-          notes.map((note) =>
+        // Update local state — use functional updater to avoid stale closure
+        setNotes((prev) =>
+          prev.map((note) =>
             note.id === selectedNote.id
               ? {
                 ...note,
@@ -365,6 +367,67 @@ export function LabNotesTab({
   // Fetch existing lab notes
   const noteIdFromQuery = searchParams.get("noteId");
 
+  // Memoize the protocols projection — without this, every keystroke recreates
+  // a new array reference and busts memoization inside <TiptapEditor>.
+  const editorProtocols = useMemo(
+    () => availableProtocols.map((p) => ({ id: p.id, name: p.name, version: p.version })),
+    [availableProtocols],
+  )
+
+  // Stable editor callbacks — also recreated on every render previously, which
+  // forced TiptapEditor's child memoization to invalidate per keystroke.
+  const handleEditorContentChange = useCallback((nextContent: string) => {
+    setFormData((prev) => ({ ...prev, content: nextContent }))
+    debouncedSave(nextContent)
+  // debouncedSave is hoisted below; eslint can't see the order yet
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  const handleEditorReady = useCallback((ed: import("@tiptap/react").Editor | null) => {
+    noteEditorRef.current = ed
+    setNoteEditorReady(!!ed)
+  }, [])
+
+  const openScientificCalculator = useCallback(() => setScientificCalculatorOpen(true), [])
+
+  const fetchNotes = useCallback(async (preferredNoteId?: string | null) => {
+    try {
+      const supabase = createClient();
+      const { data, error } = await supabase
+        .from("lab_notes")
+        .select("*")
+        .eq("experiment_id", experimentId)
+        .order("created_at", { ascending: false });
+
+      if (error) throw error;
+      setNotes(data || []);
+
+      // Auto-select preferred note (from query) or first available when not creating
+      if (data && data.length > 0 && !isCreating) {
+        const next =
+          (preferredNoteId && data.find((n) => n.id === preferredNoteId)) ||
+          data.find((n) => n.id === selectedNote?.id) ||
+          data[0];
+
+        if (next) {
+          setSelectedNote(next);
+          setFormData({
+            title: next.title,
+            content: next.content,
+            note_type: next.note_type || "general",
+          });
+        }
+      }
+    } catch (error: any) {
+      console.error("Error fetching notes:", error);
+      toast({
+        title: "Couldn't load lab notes",
+        description: error?.message ?? "Please refresh the page.",
+        variant: "destructive",
+      });
+    }
+  }, [experimentId, isCreating, selectedNote?.id, toast]);
+
   // Fetch current user ID
   useEffect(() => {
     const fetchCurrentUser = async () => {
@@ -379,7 +442,7 @@ export function LabNotesTab({
 
   useEffect(() => {
     fetchNotes(noteIdFromQuery);
-  }, [experimentId, noteIdFromQuery]);
+  }, [experimentId, noteIdFromQuery, fetchNotes]);
 
   // Sync header breadcrumb: project › experiment › current note name
   useEffect(() => {
@@ -599,38 +662,6 @@ export function LabNotesTab({
     }
   };
 
-  const fetchNotes = async (preferredNoteId?: string | null) => {
-    try {
-      const supabase = createClient();
-      const { data, error } = await supabase
-        .from("lab_notes")
-        .select("*")
-        .eq("experiment_id", experimentId)
-        .order("created_at", { ascending: false });
-
-      if (error) throw error;
-      setNotes(data || []);
-
-      // Auto-select preferred note (from query) or first available when not creating
-      if (data && data.length > 0 && !isCreating) {
-        const next =
-          (preferredNoteId && data.find((n) => n.id === preferredNoteId)) ||
-          data.find((n) => n.id === selectedNote?.id) ||
-          data[0];
-
-        if (next) {
-          setSelectedNote(next);
-          setFormData({
-            title: next.title,
-            content: next.content,
-            note_type: next.note_type || "general",
-          });
-        }
-      }
-    } catch (error: any) {
-      console.error("Error fetching notes:", error);
-    }
-  };
 
   const handleSave = async () => {
     if (!formData.title.trim()) {
@@ -798,9 +829,14 @@ export function LabNotesTab({
       })).filter((item: any) => item.protocol);
 
       setLinkedProtocols(mapped);
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error fetching linked protocols:", error);
       setLinkedProtocols([]);
+      toast({
+        title: "Couldn't load linked protocols",
+        description: error?.message ?? "Try refreshing the page.",
+        variant: "destructive",
+      });
     }
   };
 
@@ -949,8 +985,8 @@ export function LabNotesTab({
       <Button
         type="button"
         variant="ghost"
-        size="icon"
-        className="h-8 w-8 shrink-0 text-muted-foreground hover:text-foreground pointer-events-auto"
+        size="icon-sm"
+        className="shrink-0 text-muted-foreground hover:text-foreground pointer-events-auto"
         onClick={(e) => {
           e.preventDefault();
           e.stopPropagation();
@@ -1030,8 +1066,8 @@ export function LabNotesTab({
     <>
       <Button
         variant="ghost"
-        size="icon"
-        className="h-8 w-8 m-0 shrink-0 text-muted-foreground hover:text-foreground"
+        size="icon-sm"
+        className="m-0 shrink-0 text-muted-foreground hover:text-foreground"
         disabled={isCreatingNew}
         onClick={() => {
           setNotebookPanelOpen(true);
@@ -1061,8 +1097,8 @@ export function LabNotesTab({
             trigger={
               <Button
                 variant="ghost"
-                size="icon"
-                className="h-8 w-8 shrink-0 text-muted-foreground hover:text-foreground"
+                size="icon-sm"
+                className="shrink-0 text-muted-foreground hover:text-foreground"
                 aria-label="Export"
               >
                 <Download className="h-4 w-4" />
@@ -1372,8 +1408,8 @@ export function LabNotesTab({
                     <Button
                       type="button"
                       variant="ghost"
-                      size="icon"
-                      className="h-8 w-8 shrink-0 text-muted-foreground hover:text-foreground pointer-events-auto"
+                      size="icon-sm"
+                      className="shrink-0 text-muted-foreground hover:text-foreground pointer-events-auto"
                       onClick={(e) => {
                         e.preventDefault();
                         e.stopPropagation();
@@ -1458,8 +1494,8 @@ export function LabNotesTab({
                   <div className="flex items-center gap-1 shrink-0">
                     <Button
                       variant="ghost"
-                      size="icon"
-                      className="h-8 w-8 m-0 text-muted-foreground hover:text-foreground"
+                      size="icon-sm"
+                      className="m-0 text-muted-foreground hover:text-foreground"
                       disabled={isCreatingNew}
                       onClick={() => {
                         setNotebookPanelOpen(true);
@@ -1489,8 +1525,8 @@ export function LabNotesTab({
                           trigger={
                             <Button
                               variant="ghost"
-                              size="icon"
-                              className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                              size="icon-sm"
+                              className="text-muted-foreground hover:text-foreground"
                               aria-label="Export"
                             >
                               <Download className="h-4 w-4" />
@@ -1521,10 +1557,7 @@ export function LabNotesTab({
                     <div className="relative min-h-0 min-w-0 flex-1 overflow-hidden">
                       <TiptapEditor
                         content={formData.content}
-                        onChange={(content) => {
-                          setFormData({ ...formData, content });
-                          debouncedSave(content);
-                        }}
+                        onChange={handleEditorContentChange}
                         placeholder="Write your lab notes here... Use @ to tag protocols"
                         title={resolvedExportTitle}
                         minHeight="100%"
@@ -1535,20 +1568,13 @@ export function LabNotesTab({
                         trailingToolbarSlot={labNoteFullscreenToolbarTrailing}
                         showAITools={true}
                         showAiWritingDropdown={false}
-                        protocols={availableProtocols.map(p => ({
-                          id: p.id,
-                          name: p.name,
-                          version: p.version,
-                        }))}
+                        protocols={editorProtocols}
                         hideExportControls
                         exportIncludeCommentsInPdf
                         enableMath
                         className="min-h-0 flex-1"
-                        onOpenScientificCalculator={() => setScientificCalculatorOpen(true)}
-                        onEditorReady={(ed) => {
-                          noteEditorRef.current = ed;
-                          setNoteEditorReady(!!ed);
-                        }}
+                        onOpenScientificCalculator={openScientificCalculator}
+                        onEditorReady={handleEditorReady}
                       />
                       <ScientificCalculatorSheet
                         open={scientificCalculatorOpen}

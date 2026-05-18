@@ -87,20 +87,17 @@ describe("Accessibility: Right sidebar SheetTitle (Req 13.5)", () => {
 })
 
 
-describe("Toast providers in root layout (Req 14.1)", () => {
-  it("root layout imports shadcn Toaster component", () => {
-    const src = readSource("app/layout.tsx")
-    expect(src).toContain('import { Toaster } from "@/components/ui/toaster"')
-  })
-
+describe("Toast provider in root layout (Req 14.1)", () => {
+  // Notifications now route exclusively through sonner. The radix-based
+  // <Toaster /> was removed to avoid two toast UIs running side-by-side;
+  // the legacy useToast() hook is an adapter that forwards to sonner.
   it("root layout imports Sonner toast component", () => {
     const src = readSource("app/layout.tsx")
     expect(src).toContain('import { Toaster as Sonner } from "@/components/ui/sonner"')
   })
 
-  it("root layout renders both <Toaster /> and <Sonner /> in the JSX", () => {
+  it("root layout renders <Sonner /> in the JSX", () => {
     const src = readSource("app/layout.tsx")
-    expect(src).toContain("<Toaster />")
     expect(src).toContain("<Sonner />")
   })
 })

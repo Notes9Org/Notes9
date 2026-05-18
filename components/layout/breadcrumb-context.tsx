@@ -5,6 +5,7 @@ import {
   useCallback,
   useContext,
   useEffect,
+  useMemo,
   useState,
   type ReactNode,
 } from "react"
@@ -29,8 +30,13 @@ export function BreadcrumbProvider({ children }: { children: ReactNode }) {
     setSegmentsState([])
   }, [pathname])
 
+  const value = useMemo<BreadcrumbContextValue>(
+    () => ({ segments, setSegments }),
+    [segments, setSegments],
+  )
+
   return (
-    <BreadcrumbContext.Provider value={{ segments, setSegments }}>
+    <BreadcrumbContext.Provider value={value}>
       {children}
     </BreadcrumbContext.Provider>
   )

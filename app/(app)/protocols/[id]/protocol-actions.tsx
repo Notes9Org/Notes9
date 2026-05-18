@@ -8,7 +8,16 @@ import {
 } from "@/components/ui/tooltip"
 import { DeleteProtocolDialog } from './delete-protocol-dialog'
 
-export function ProtocolActions({ protocol, usageCount }: { protocol: any; usageCount?: number }) {
+interface ProtocolActionsProps {
+  protocol: {
+    id: string
+    name: string
+    experiment_protocols?: unknown[]
+  }
+  usageCount?: number
+}
+
+export function ProtocolActions({ protocol, usageCount }: ProtocolActionsProps) {
   const resolvedUsage = usageCount ?? protocol.experiment_protocols?.length ?? 0
   return (
     <TooltipProvider>

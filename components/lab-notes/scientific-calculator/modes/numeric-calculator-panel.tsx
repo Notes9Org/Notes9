@@ -221,7 +221,7 @@ export function NumericCalculatorPanel({
   }
 
   const keyBtn = "h-9 min-w-0 rounded-md text-sm font-medium tabular-nums"
-  const sciBtn = "h-8 min-w-0 rounded-md px-1 text-[11px] font-medium tabular-nums"
+  const sciBtn = "h-8 min-w-0 rounded-md px-1 text-micro font-medium tabular-nums"
 
   return (
     <div
@@ -245,7 +245,7 @@ export function NumericCalculatorPanel({
 
       {scientific && (
         <div className="mb-2 space-y-1 rounded-md border border-border/50 bg-muted/15 p-1.5">
-          <p className="px-0.5 text-[9px] font-medium uppercase tracking-wide text-muted-foreground">
+          <p className="px-0.5 text-3xs font-medium uppercase tracking-wide text-muted-foreground">
             Scientific (applies to value on screen)
           </p>
           {UNARY_ROWS.map((row, i) => (
@@ -281,7 +281,7 @@ export function NumericCalculatorPanel({
               log_x(y) — base, then arg, =
             </Button>
           </div>
-          <p className="px-0.5 text-[9px] leading-snug text-muted-foreground">
+          <p className="px-0.5 text-3xs leading-snug text-muted-foreground">
             Trig uses radians. For xʸ and log_x(y), use like + − × ÷: enter base, tap op, enter second number, =.
           </p>
         </div>
@@ -359,7 +359,7 @@ export function NumericCalculatorPanel({
         </Button>
       </div>
 
-      <p className="mt-2 text-[10px] leading-snug text-muted-foreground">
+      <p className="mt-2 text-2xs leading-snug text-muted-foreground">
         Keyboard: digits, + − * /, Enter or =, Esc clears, Backspace.
         {scientific ? " Scientific buttons apply to the current display value." : ""}
       </p>

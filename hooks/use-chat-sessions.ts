@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import {
   localProtocolClearMessages,
@@ -67,7 +67,7 @@ export function useChatSessions(protocolId?: string) {
   const [sessions, setSessions] = useState<ChatSession[]>([]);
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
-  const supabase = createClient();
+  const supabase = useMemo(() => createClient(), []);
 
   /** Protocol AI: persist in localStorage when `protocol_id` column is not migrated. */
   const protocolUseLocalRef = useRef(false);

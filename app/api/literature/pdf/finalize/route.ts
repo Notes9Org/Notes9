@@ -207,14 +207,15 @@ export async function POST(request: Request) {
       pdfByteLength = downloaded.size
     }
 
-    const { data: urlData } = storage.getPublicUrl(finalStoragePath)
+    // Bucket is private — store the storage path; readers (viewer-pdf route,
+    // literature-pdf-viewer component) generate signed URLs on demand.
     const metadata = payload.extractedMetadata ?? null
     const matchSource = resolveMatchSource(payload.action, payload.saveMode)
 
     const { error: updateError } = await supabase
       .from("literature_reviews")
       .update({
-        pdf_file_url: urlData.publicUrl,
+        pdf_file_url: finalStoragePath,
         pdf_file_name: clampText(payload.fileName, "pdf_file_name"),
         pdf_file_size: pdfByteLength,
         pdf_file_type: clampText("application/pdf", "pdf_file_type"),
@@ -248,7 +249,9 @@ export async function POST(request: Request) {
     return NextResponse.json({
       success: true,
       literatureId,
-      pdfUrl: urlData.publicUrl,
+      // Caller should fetch a signed URL via /api/literature/[id]/viewer-pdf
+      // (the bucket is private after migration 051).
+      pdfUrl: null,
       storagePath: finalStoragePath,
       matchSource,
     })

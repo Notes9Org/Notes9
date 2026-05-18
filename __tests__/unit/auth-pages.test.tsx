@@ -71,7 +71,10 @@ vi.mock("@/lib/supabase/client", () => ({
       chain.single = vi.fn().mockImplementation(() => {
         const result = mockSupabaseConfig.profileQueryResult
         // Support both direct values and promises
-        if (result && typeof (result as Promise<unknown>).then === "function") {
+        if (
+          result &&
+          typeof (result as unknown as Promise<unknown>).then === "function"
+        ) {
           return result
         }
         return Promise.resolve(result)

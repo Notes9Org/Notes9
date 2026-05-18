@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import {
   Dialog,
   DialogContent,
@@ -25,7 +25,7 @@ import {
   type StepCategory,
   type StepStatus,
   type ExperimentStep,
-} from "@/lib/experiment-steps-mock"
+} from "@/lib/experiment-steps"
 
 interface AddStepDialogProps {
   open: boolean
@@ -51,9 +51,9 @@ export function AddStepDialog({ open, onOpenChange, onSave, editingStep }: AddSt
   const [status, setStatus] = useState<StepStatus>(editingStep?.status || "pending")
   const [notes, setNotes] = useState(editingStep?.notes || "")
 
-  // Reset form when dialog opens with new/different step
-  const handleOpenChange = (isOpen: boolean) => {
-    if (isOpen) {
+  // Reset form whenever the dialog opens (covers both fresh-open and edit-target switch)
+  useEffect(() => {
+    if (open) {
       setTitle(editingStep?.title || "")
       setCategory(editingStep?.category || "Sample Handling")
       setStepType(editingStep?.step_type || "")
@@ -62,8 +62,7 @@ export function AddStepDialog({ open, onOpenChange, onSave, editingStep }: AddSt
       setStatus(editingStep?.status || "pending")
       setNotes(editingStep?.notes || "")
     }
-    onOpenChange(isOpen)
-  }
+  }, [open, editingStep])
 
   const handleSave = () => {
     if (!title.trim()) return
@@ -82,7 +81,7 @@ export function AddStepDialog({ open, onOpenChange, onSave, editingStep }: AddSt
   const availableTypes = STEP_TYPES[category] || []
 
   return (
-    <Dialog open={open} onOpenChange={handleOpenChange}>
+    <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>{editingStep ? "Edit Step" : "Add Step"}</DialogTitle>

@@ -37,8 +37,8 @@ function ResetPasswordForm() {
       return
     }
 
-    if (password.length < 6) {
-      setError("Password must be at least 6 characters long")
+    if (password.length < 8) {
+      setError("Password must be at least 8 characters long")
       setIsLoading(false)
       return
     }
@@ -140,7 +140,7 @@ function ResetPasswordForm() {
                       required
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
-                      minLength={6}
+                      minLength={8}
                     />
                   </div>
                   <div className="grid gap-2">
@@ -152,7 +152,7 @@ function ResetPasswordForm() {
                       required
                       value={confirmPassword}
                       onChange={(e) => setConfirmPassword(e.target.value)}
-                      minLength={6}
+                      minLength={8}
                     />
                   </div>
                   {error && (

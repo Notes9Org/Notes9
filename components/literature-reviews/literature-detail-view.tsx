@@ -458,7 +458,7 @@ ER  - `;
               <CardContent>
                 <div className="flex flex-wrap gap-2">
                   {literature.keywords.map((keyword: string, index: number) => (
-                    <Badge key={index} variant="secondary">
+                    <Badge key={`${keyword}-${index}`} variant="secondary">
                       {keyword}
                     </Badge>
                   ))}
@@ -539,7 +539,7 @@ ER  - `;
                       
                       <div className="flex flex-col gap-3 items-center">
                         <div className="flex items-center gap-3">
-                          <span className="flex h-6 w-6 items-center justify-center rounded-full bg-destructive/10 text-[10px] font-bold text-destructive border border-destructive/20">1</span>
+                          <span className="flex h-6 w-6 items-center justify-center rounded-full bg-destructive/10 text-2xs font-bold text-destructive border border-destructive/20">1</span>
                           <a
                             href={`https://doi.org/${literature.doi}`}
                             target="_blank"
@@ -552,7 +552,7 @@ ER  - `;
                         </div>
                         
                         <div className="flex items-center gap-3">
-                          <span className="flex h-6 w-6 items-center justify-center rounded-full bg-destructive/10 text-[10px] font-bold text-destructive border border-destructive/20">2</span>
+                          <span className="flex h-6 w-6 items-center justify-center rounded-full bg-destructive/10 text-2xs font-bold text-destructive border border-destructive/20">2</span>
                           <p className="text-muted-foreground font-medium">
                             Use the <span className="text-foreground">"Upload PDF"</span> button above to save the file.
                           </p>
@@ -576,7 +576,7 @@ ER  - `;
                       
                       <div className="flex flex-col gap-3 items-center">
                         <div className="flex items-center gap-3">
-                          <span className="flex h-6 w-6 items-center justify-center rounded-full bg-primary/10 text-[10px] font-bold text-primary border border-primary/20">1</span>
+                          <span className="flex h-6 w-6 items-center justify-center rounded-full bg-primary/10 text-2xs font-bold text-primary border border-primary/20">1</span>
                           <a
                             href={`https://doi.org/${literature.doi}`}
                             target="_blank"
@@ -589,7 +589,7 @@ ER  - `;
                         </div>
                         
                         <div className="flex items-center gap-3">
-                          <span className="flex h-6 w-6 items-center justify-center rounded-full bg-primary/10 text-[10px] font-bold text-primary border border-primary/20">2</span>
+                          <span className="flex h-6 w-6 items-center justify-center rounded-full bg-primary/10 text-2xs font-bold text-primary border border-primary/20">2</span>
                           <p className="text-muted-foreground font-medium">
                             Use the <span className="text-foreground">"Upload PDF"</span> button above to save the file.
                           </p>
@@ -621,7 +621,7 @@ ER  - `;
                     literatureId={literature.id}
                     pdfUrl={`/api/literature/${literature.id}/viewer-pdf`}
                     pdfFileName={literature.pdf_file_name}
-                    openInNewTabFallbackUrl={literature.pdf_file_url ?? undefined}
+                    openInNewTabFallbackUrl={`/api/literature/${literature.id}/viewer-pdf`}
                     highlightExcerpt={
                       activeLitHighlight && highlightSurface === "pdf"
                         ? activeLitHighlight.excerpt

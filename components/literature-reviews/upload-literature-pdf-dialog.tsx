@@ -284,33 +284,33 @@ export function UploadLiteraturePdfDialog({
         <div className="rounded-2xl border bg-muted/20 p-4 space-y-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <Badge variant="secondary" className="px-2 py-0.5 text-[10px] uppercase tracking-wider font-bold bg-primary/10 text-primary border-primary/20">
+              <Badge variant="secondary" className="px-2 py-0.5 text-2xs uppercase tracking-wider font-bold bg-primary/10 text-primary border-primary/20">
                 {analysis.status}
               </Badge>
               {analysis.matchSource && (
-                <Badge variant="outline" className="px-2 py-0.5 text-[10px] uppercase tracking-wider font-medium text-muted-foreground">
+                <Badge variant="outline" className="px-2 py-0.5 text-2xs uppercase tracking-wider font-medium text-muted-foreground">
                   {analysis.matchSource}
                 </Badge>
               )}
             </div>
           </div>
           
-          <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-[10px]">
+          <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-2xs">
             <div className="col-span-2 pb-0.5 border-b border-border/40">
-              <p className="font-bold text-muted-foreground uppercase text-[9px] mb-0.5">Detected Title</p>
+              <p className="font-bold text-muted-foreground uppercase text-3xs mb-0.5">Detected Title</p>
               <p className="font-semibold line-clamp-1 leading-tight text-xs">{extracted.title ?? "Unknown Title"}</p>
             </div>
             <div className="col-span-2 pb-0.5 border-b border-border/40">
-              <p className="font-bold text-muted-foreground uppercase text-[9px] mb-0.5">Authors & Source</p>
+              <p className="font-bold text-muted-foreground uppercase text-3xs mb-0.5">Authors & Source</p>
               <p className="font-medium text-foreground truncate">{extracted.authors || "Unknown Authors"}</p>
               <p className="text-muted-foreground italic truncate mt-0.5">{extracted.journal || "—"}</p>
             </div>
             <div>
-              <p className="font-bold text-muted-foreground uppercase text-[9px] mb-0.5">DOI/PMID</p>
+              <p className="font-bold text-muted-foreground uppercase text-3xs mb-0.5">DOI/PMID</p>
               <p className="font-mono text-primary/80 truncate">{extracted.doi ?? extracted.pmid ?? "—"}</p>
             </div>
             <div>
-              <p className="font-bold text-muted-foreground uppercase text-[9px] mb-0.5">Publication</p>
+              <p className="font-bold text-muted-foreground uppercase text-3xs mb-0.5">Publication</p>
               <p className="font-medium text-foreground">{extracted.publicationYear ?? "—"}{extracted.pageCount ? ` • ${extracted.pageCount}p` : ""}</p>
             </div>
           </div>
@@ -330,12 +330,12 @@ export function UploadLiteraturePdfDialog({
                 <p className="text-xs font-bold leading-tight truncate">
                   {analysis.status === "duplicate" ? "Duplicate record" : "Matched existing"}
                 </p>
-                <p className="text-[10px] text-muted-foreground truncate font-medium">
+                <p className="text-2xs text-muted-foreground truncate font-medium">
                   {(analysis.duplicateRecord ?? analysis.matchCandidates[0])?.title}
                 </p>
               </div>
               {analysis.status === "duplicate" && analysis.duplicateRecord && (
-                <Button variant="link" className="h-auto p-0 text-[10px] font-bold text-primary shrink-0" asChild>
+                <Button variant="link" className="h-auto p-0 text-2xs font-bold text-primary shrink-0" asChild>
                   <Link href={`/literature-reviews/${analysis.duplicateRecord.id}`}>View</Link>
                 </Button>
               )}

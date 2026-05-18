@@ -1,9 +1,9 @@
 "use client"
 
-import { useState } from "react"
+import { useMemo, useState } from "react"
 import { useRouter } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
-import { Button } from "@/components/ui/button"
+import { Button, buttonVariants } from "@/components/ui/button"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -23,7 +23,6 @@ import {
 } from "@/components/ui/alert-dialog"
 import { MoreHorizontal, Trash2, FileCheck, FileEdit } from "lucide-react"
 import { toast } from "sonner"
-import { IS_PAPERS_MOCKED, updateMockPaper, deleteMockPaper } from "@/lib/papers-mock"
 
 interface PaperActionsProps {
   paper: {
@@ -37,18 +36,10 @@ interface PaperActionsProps {
 
 export function PaperActions({ paper, onAfterMutation }: PaperActionsProps) {
   const router = useRouter()
+  const supabase = useMemo(() => createClient(), [])
   const [deleteOpen, setDeleteOpen] = useState(false)
 
   const updateStatus = async (status: string) => {
-    if (IS_PAPERS_MOCKED) {
-      updateMockPaper(paper.id, { status })
-      toast.success(`Status updated to ${status.replace("_", " ")}`)
-      onAfterMutation?.()
-      router.refresh()
-      return
-    }
-
-    const supabase = createClient()
     const { error } = await supabase
       .from("papers")
       .update({ status, updated_at: new Date().toISOString() })
@@ -64,15 +55,6 @@ export function PaperActions({ paper, onAfterMutation }: PaperActionsProps) {
   }
 
   const handleDelete = async () => {
-    if (IS_PAPERS_MOCKED) {
-      deleteMockPaper(paper.id)
-      toast.success("Paper deleted")
-      onAfterMutation?.()
-      router.push("/papers")
-      return
-    }
-
-    const supabase = createClient()
     const { error } = await supabase
       .from("papers")
       .delete()
@@ -135,7 +117,7 @@ export function PaperActions({ paper, onAfterMutation }: PaperActionsProps) {
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={handleDelete} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+            <AlertDialogAction onClick={handleDelete} className={buttonVariants({ variant: "destructive" })}>
               Delete
             </AlertDialogAction>
           </AlertDialogFooter>

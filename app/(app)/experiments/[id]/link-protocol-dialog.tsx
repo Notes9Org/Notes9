@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { createClient } from "@/lib/supabase/client"
 import { Button } from "@/components/ui/button"
 import {
@@ -44,7 +44,7 @@ export function LinkProtocolDialog({
 }: LinkProtocolDialogProps) {
   const { toast } = useToast()
   const router = useRouter()
-  const supabase = createClient()
+  const supabase = useMemo(() => createClient(), [])
 
   const [open, setOpen] = useState(false)
   const [isLoading, setIsLoading] = useState(false)

@@ -45,13 +45,28 @@ import type { Editor } from "@tiptap/react"
 type ProjectOption = { id: string; name: string }
 type ExperimentOption = { id: string; name: string; project_id: string }
 
+interface ProtocolEditorProtocol {
+  id: string
+  name: string
+  description?: string | null
+  version?: string | null
+  content?: string | null
+  category?: string | null
+  is_active?: boolean | null
+  project_id?: string | null
+  experiment_id?: string | null
+  document_template_id?: string | null
+  document_template?: { id: string; name: string } | null
+  [key: string]: unknown
+}
+
 export function ProtocolEditor({
   protocol,
   defaultDesignMode = false,
   designModeHref,
   viewHref,
 }: {
-  protocol: any
+  protocol: ProtocolEditorProtocol
   defaultDesignMode?: boolean
   designModeHref: string
   viewHref: string
@@ -175,7 +190,10 @@ export function ProtocolEditor({
     return () => {
       cancelled = true
     }
-  }, [formData.project_id, formData.experiment_id])
+    // Intentionally omit formData.experiment_id: clearing it inside this effect
+    // would otherwise trigger an infinite refetch loop.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [formData.project_id])
 
   // Highlight from AI reference navigation — retries until content is loaded
   const highlightParam = searchParams.get(HIGHLIGHT_PARAM)
@@ -354,16 +372,20 @@ export function ProtocolEditor({
   )
 
   // ─── Design mode (?design=1) — full editing in ProtocolDesignMode ───────
+  // Outer shell mirrors lab-notes-tab so the inner Card/sidebar/editor flex
+  // chain has the same heights and overflow rules.
   if (defaultDesignMode) {
     return (
-      <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-        <ProtocolDesignMode
-          protocol={designProtocol}
-          onSaved={() => router.refresh()}
-          onExitDesignMode={() => router.push(viewHref)}
-          onContextChange={handleContextChange}
-          onProtocolNameChange={(name) => setFormData((c) => ({ ...c, name }))}
-        />
+      <div className="flex h-full min-h-0 w-full flex-1 flex-col overflow-hidden">
+        <div className="flex-1 min-w-0 min-h-0 flex flex-col">
+          <ProtocolDesignMode
+            protocol={designProtocol}
+            onSaved={() => router.refresh()}
+            onExitDesignMode={() => router.push(viewHref)}
+            onContextChange={handleContextChange}
+            onProtocolNameChange={(name) => setFormData((c) => ({ ...c, name }))}
+          />
+        </div>
       </div>
     )
   }

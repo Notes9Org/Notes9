@@ -47,7 +47,7 @@ export function HhBufferPanel({ onResultChange }: { onResultChange: CalculatorRe
           className="h-8 text-sm"
         />
       </div>
-      <p className="text-[10px] text-muted-foreground">Henderson–Hasselbalch: pH = pKₐ + log₁₀([A⁻]/[HA]).</p>
+      <p className="text-2xs text-muted-foreground">Henderson–Hasselbalch: pH = pKₐ + log₁₀([A⁻]/[HA]).</p>
     </div>
   )
 }

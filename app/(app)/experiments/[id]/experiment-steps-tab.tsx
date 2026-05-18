@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useCallback } from "react"
+import { useState, useCallback, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -28,7 +28,6 @@ import {
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import {
-  IS_STEPS_MOCKED,
   getSteps,
   addStep,
   updateStep,
@@ -37,7 +36,7 @@ import {
   type ExperimentStep,
   type StepCategory,
   type StepStatus,
-} from "@/lib/experiment-steps-mock"
+} from "@/lib/experiment-steps"
 import { AddStepDialog } from "./add-step-dialog"
 
 interface ExperimentStepsTabProps {
@@ -71,59 +70,56 @@ function formatDuration(minutes: number | null): string {
   return m > 0 ? `${h}h ${m}m` : `${h}h`
 }
 
+type StepDraft = Omit<ExperimentStep, "id" | "experiment_id" | "order" | "created_at" | "updated_at">
+
 export function ExperimentStepsTab({ experimentId }: ExperimentStepsTabProps) {
-  const [steps, setSteps] = useState<ExperimentStep[]>(() => {
-    if (IS_STEPS_MOCKED) return getSteps(experimentId)
-    return []
-  })
+  const [steps, setSteps] = useState<ExperimentStep[]>([])
   const [dialogOpen, setDialogOpen] = useState(false)
   const [editingStep, setEditingStep] = useState<ExperimentStep | null>(null)
+  const [isLoading, setIsLoading] = useState(true)
 
-  const refresh = useCallback(() => {
-    if (IS_STEPS_MOCKED) setSteps(getSteps(experimentId))
+  const refresh = useCallback(async () => {
+    const list = await getSteps(experimentId)
+    setSteps(list)
+    setIsLoading(false)
   }, [experimentId])
 
-  const handleAddStep = useCallback((stepData: any) => {
-    if (IS_STEPS_MOCKED) {
-      addStep(experimentId, stepData)
-      refresh()
-    }
+  useEffect(() => {
+    void refresh()
+  }, [refresh])
+
+  const handleAddStep = useCallback(async (stepData: StepDraft) => {
+    await addStep(experimentId, stepData)
+    await refresh()
     setEditingStep(null)
   }, [experimentId, refresh])
 
-  const handleEditStep = useCallback((stepData: any) => {
-    if (IS_STEPS_MOCKED && editingStep) {
-      updateStep(experimentId, editingStep.id, stepData)
-      refresh()
-    }
+  const handleEditStep = useCallback(async (stepData: StepDraft) => {
+    if (!editingStep) return
+    await updateStep(experimentId, editingStep.id, stepData)
+    await refresh()
     setEditingStep(null)
   }, [experimentId, editingStep, refresh])
 
-  const handleDelete = useCallback((stepId: string) => {
-    if (IS_STEPS_MOCKED) {
-      deleteStep(experimentId, stepId)
-      refresh()
-    }
+  const handleDelete = useCallback(async (stepId: string) => {
+    await deleteStep(experimentId, stepId)
+    await refresh()
   }, [experimentId, refresh])
 
-  const handleMove = useCallback((stepId: string, direction: "up" | "down") => {
+  const handleMove = useCallback(async (stepId: string, direction: "up" | "down") => {
     const idx = steps.findIndex((s) => s.id === stepId)
     if (idx < 0) return
     const swapIdx = direction === "up" ? idx - 1 : idx + 1
     if (swapIdx < 0 || swapIdx >= steps.length) return
     const ids = steps.map((s) => s.id)
     ;[ids[idx], ids[swapIdx]] = [ids[swapIdx], ids[idx]]
-    if (IS_STEPS_MOCKED) {
-      reorderSteps(experimentId, ids)
-      refresh()
-    }
+    await reorderSteps(experimentId, ids)
+    await refresh()
   }, [steps, experimentId, refresh])
 
-  const handleStatusChange = useCallback((stepId: string, status: StepStatus) => {
-    if (IS_STEPS_MOCKED) {
-      updateStep(experimentId, stepId, { status })
-      refresh()
-    }
+  const handleStatusChange = useCallback(async (stepId: string, status: StepStatus) => {
+    await updateStep(experimentId, stepId, { status })
+    await refresh()
   }, [experimentId, refresh])
 
   const completedCount = steps.filter((s) => s.status === "completed").length
@@ -158,7 +154,13 @@ export function ExperimentStepsTab({ experimentId }: ExperimentStepsTabProps) {
       )}
 
       {/* Steps pipeline */}
-      {steps.length === 0 ? (
+      {isLoading ? (
+        <Card>
+          <CardContent className="flex items-center justify-center py-12">
+            <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+          </CardContent>
+        </Card>
+      ) : steps.length === 0 ? (
         <Card>
           <CardContent className="flex flex-col items-center justify-center py-12">
             <FlaskConical className="h-12 w-12 text-muted-foreground/50 mb-4" />
@@ -205,10 +207,10 @@ export function ExperimentStepsTab({ experimentId }: ExperimentStepsTabProps) {
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 mb-1">
                           <h4 className="font-medium text-sm">{step.title}</h4>
-                          <Badge variant="outline" className="text-[10px] px-1.5 py-0">
+                          <Badge variant="outline" className="text-2xs px-1.5 py-0">
                             {step.step_type}
                           </Badge>
-                          <Badge variant="outline" className={cn("text-[10px] px-1.5 py-0", statusCfg.color)}>
+                          <Badge variant="outline" className={cn("text-2xs px-1.5 py-0", statusCfg.color)}>
                             <StatusIcon className={cn("h-3 w-3 mr-1", step.status === "in_progress" && "animate-spin")} />
                             {statusCfg.label}
                           </Badge>
@@ -217,9 +219,9 @@ export function ExperimentStepsTab({ experimentId }: ExperimentStepsTabProps) {
                           <p className="text-xs text-muted-foreground line-clamp-2">{step.description}</p>
                         )}
                         <div className="flex items-center gap-3 mt-2">
-                          <span className="text-[10px] text-muted-foreground">{step.category}</span>
+                          <span className="text-2xs text-muted-foreground">{step.category}</span>
                           {step.duration_minutes && (
-                            <span className="text-[10px] text-muted-foreground flex items-center gap-1">
+                            <span className="text-2xs text-muted-foreground flex items-center gap-1">
                               <Clock className="h-3 w-3" />
                               {formatDuration(step.duration_minutes)}
                             </span>

@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useState, useCallback, useEffect } from 'react'
+import React from 'react'
 import { useEditor, EditorContent } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
 import { Table } from '@tiptap/extension-table'
@@ -36,7 +36,6 @@ export function RichTextEditor({
   disabled = false,
   className
 }: RichTextEditorProps) {
-  const [tableCols, setTableCols] = useState(3)
   const editorRef = React.useRef<HTMLDivElement>(null)
 
   const editor = useEditor({
@@ -60,34 +59,6 @@ export function RichTextEditor({
     immediatelyRender: false,
   })
 
-  // Handle table click to show controls
-  useEffect(() => {
-    if (!editorRef.current) return
-
-    const handleMouseUp = (e: MouseEvent) => {
-      const target = e.target as HTMLElement
-      const table = target.closest('table') as HTMLTableElement
-      setSelectedTable(table)
-    }
-
-    editorRef.current.addEventListener('mouseup', handleMouseUp)
-    return () => {
-      editorRef.current?.removeEventListener('mouseup', handleMouseUp)
-    }
-  }, [])
-
-  // Close table controls when clicking outside
-  useEffect(() => {
-    const handleClickOutside = (e: MouseEvent) => {
-      if (!editorRef.current?.contains(e.target as Node)) {
-        setSelectedTable(null)
-      }
-    }
-
-    document.addEventListener('click', handleClickOutside)
-    return () => document.removeEventListener('click', handleClickOutside)
-  }, [])
-
   if (!editor) {
     return (
       <div className={cn("border rounded-md p-3 min-h-[120px] bg-muted/10", className)}>
@@ -95,32 +66,6 @@ export function RichTextEditor({
       </div>
     )
   }
-
-  const addTable = () => {
-    editor.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run()
-  }
-
-  const deleteTable = () => {
-    editor.chain().focus().deleteTable().run()
-  }
-
-  const addColumnBefore = () => {
-    editor.chain().focus().addColumnBefore().run()
-  }
-
-  const deleteColumn = () => {
-    editor.chain().focus().deleteColumn().run()
-  }
-
-  const addRowBefore = () => {
-    editor.chain().focus().addRowBefore().run()
-  }
-
-  const deleteRow = () => {
-    editor.chain().focus().deleteRow().run()
-  }
-
-  const isTableActive = editor.isActive('table')
 
   return (
     <div className={cn("border rounded-md rich-text-editor", className)}>

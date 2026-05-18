@@ -198,7 +198,7 @@ export function ScientificCalculatorSheet({
         <Sigma className="size-4 text-muted-foreground" aria-hidden />
         <SheetTitle className="text-sm">Scientific calculator</SheetTitle>
       </div>
-      <SheetDescription className="text-[11px] leading-snug">
+      <SheetDescription className="text-micro leading-snug">
         Lab formulas, logs/trig, and unit conversions. Verification only.
       </SheetDescription>
     </SheetHeader>
@@ -213,7 +213,7 @@ export function ScientificCalculatorSheet({
             Calculator
           </h2>
         </div>
-        <p className="mt-0.5 text-[10px] leading-snug text-muted-foreground">
+        <p className="mt-0.5 text-2xs leading-snug text-muted-foreground">
           Lab math and scientific number tools — verification only.
         </p>
       </div>
@@ -258,7 +258,7 @@ export function ScientificCalculatorSheet({
               <SelectContent className="z-[280] max-h-[min(70vh,28rem)]">
                 {MODE_GROUPS.map((group) => (
                   <SelectGroup key={group.label}>
-                    <SelectLabel className="text-[10px] text-muted-foreground">{group.label}</SelectLabel>
+                    <SelectLabel className="text-2xs text-muted-foreground">{group.label}</SelectLabel>
                     {group.modes.map((o) => (
                       <SelectItem key={o.id} value={o.id} className="text-xs">
                         {o.label}
@@ -269,7 +269,7 @@ export function ScientificCalculatorSheet({
               </SelectContent>
             </Select>
             {modeMeta && (
-              <p className="text-[10px] text-muted-foreground">{modeMeta.hint}</p>
+              <p className="text-2xs text-muted-foreground">{modeMeta.hint}</p>
             )}
           </div>
 
@@ -293,17 +293,17 @@ export function ScientificCalculatorSheet({
               resultError ? "border-destructive/40 bg-destructive/5" : "border-border/70 bg-muted/25"
             )}
           >
-            <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+            <p className="text-2xs font-medium uppercase tracking-wide text-muted-foreground">
               Result
             </p>
-            {resultError && <p className="mt-0.5 text-[11px] text-destructive">{resultError}</p>}
+            {resultError && <p className="mt-0.5 text-micro text-destructive">{resultError}</p>}
             {!resultError && resultText && (
-              <pre className="mt-1 whitespace-pre-wrap break-words font-mono text-[11px] leading-snug text-foreground">
+              <pre className="mt-1 whitespace-pre-wrap break-words font-mono text-micro leading-snug text-foreground">
                 {resultText}
               </pre>
             )}
             {!resultError && !resultText && (
-              <p className="mt-0.5 text-[10px] text-muted-foreground">
+              <p className="mt-0.5 text-2xs text-muted-foreground">
                 {mode === "numericKeypad" || mode === "numericSci"
                   ? "Use the keypad above — the calculation and result appear here."
                   : "Enter valid positive numbers."}
@@ -342,7 +342,7 @@ export function ScientificCalculatorSheet({
             Insert at cursor
           </Button>
         </div>
-        <p className="text-[9px] leading-snug text-muted-foreground">
+        <p className="text-3xs leading-snug text-muted-foreground">
           Insert adds an inline math node (LaTeX). Verify safety-critical amounts independently.
         </p>
       </div>

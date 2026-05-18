@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { normalizeRequestedTables, type BackupPayload, type ExportTable } from "@/lib/data-transfer"
+import { escapeHtml } from "@/lib/sanitize-html"
 import {
   USER_STORAGE_BUCKET,
   createExperimentDataStoragePath,
@@ -225,8 +226,8 @@ async function importResearchFolder({
       continue
     }
 
-    const { data: publicUrlData } = supabase.storage.from(USER_STORAGE_BUCKET).getPublicUrl(storagePath)
-    const fileUrl = publicUrlData.publicUrl
+    // Bucket is private — `fileUrl` holds the storage path; readers sign on demand.
+    const fileUrl = storagePath
 
     try {
       await persistImportedFile({
@@ -286,7 +287,7 @@ async function persistImportedFile({
   if (category === "lab_note_document") {
     const { error } = await supabase.from("lab_notes").insert({
       title: baseName || "Imported Lab Note",
-      content: `Imported file: <a href="${fileUrl}" target="_blank" rel="noopener noreferrer">${file.name}</a>`,
+      content: `Imported file: <a href="${escapeHtml(fileUrl)}" target="_blank" rel="noopener noreferrer">${escapeHtml(file.name)}</a>`,
       note_type: "general",
       experiment_id: experimentId,
       project_id: projectId,
@@ -303,7 +304,7 @@ async function persistImportedFile({
         organization_id: organizationId,
         name: baseName || "Imported Protocol",
         description: `Imported from file ${file.name}`,
-        content: `Imported file: <a href="${fileUrl}" target="_blank" rel="noopener noreferrer">${file.name}</a>`,
+        content: `Imported file: <a href="${escapeHtml(fileUrl)}" target="_blank" rel="noopener noreferrer">${escapeHtml(file.name)}</a>`,
         category: "Imported",
         is_active: true,
         created_by: userId,

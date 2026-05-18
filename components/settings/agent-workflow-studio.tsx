@@ -786,8 +786,8 @@ export function AgentWorkflowStudio() {
                 <Button
                   type="button"
                   variant="ghost"
-                  size="icon"
-                  className="h-8 w-8"
+                  size="icon-sm"
+                  className=""
                   aria-label="Zoom out"
                   onClick={() => setCanvasZoom((current) => Math.max(0.4, Number((current - 0.1).toFixed(2))))}
                 >
@@ -796,8 +796,8 @@ export function AgentWorkflowStudio() {
                 <Button
                   type="button"
                   variant="ghost"
-                  size="icon"
-                  className="h-8 w-8"
+                  size="icon-sm"
+                  className=""
                   aria-label="Zoom in"
                   onClick={() => setCanvasZoom((current) => Math.min(3.5, Number((current + 0.1).toFixed(2))))}
                 >
@@ -806,8 +806,8 @@ export function AgentWorkflowStudio() {
                 <Button
                   type="button"
                   variant="ghost"
-                  size="icon"
-                  className="h-8 w-8"
+                  size="icon-sm"
+                  className=""
                   aria-label="Reset view"
                   onClick={() => {
                     setCanvasPan({ x: 0, y: 0 })
@@ -819,8 +819,8 @@ export function AgentWorkflowStudio() {
                 <Button
                   type="button"
                   variant="ghost"
-                  size="icon"
-                  className="h-8 w-8"
+                  size="icon-sm"
+                  className=""
                   aria-label="Add rectangle"
                   onClick={() => addShapeNode("rectangle")}
                 >
@@ -829,8 +829,8 @@ export function AgentWorkflowStudio() {
                 <Button
                   type="button"
                   variant="ghost"
-                  size="icon"
-                  className="h-8 w-8"
+                  size="icon-sm"
+                  className=""
                   aria-label="Add circle"
                   onClick={() => addShapeNode("circle")}
                 >
@@ -839,8 +839,8 @@ export function AgentWorkflowStudio() {
                 <Button
                   type="button"
                   variant="ghost"
-                  size="icon"
-                  className="h-8 w-8"
+                  size="icon-sm"
+                  className=""
                   aria-label="Add note"
                   onClick={() => addShapeNode("note")}
                 >
@@ -849,8 +849,8 @@ export function AgentWorkflowStudio() {
                 <Button
                   type="button"
                   variant="ghost"
-                  size="icon"
-                  className="h-8 w-8"
+                  size="icon-sm"
+                  className=""
                   aria-label="Add image URL"
                   onClick={() => {
                     const url = window.prompt("Paste image URL")
@@ -862,8 +862,8 @@ export function AgentWorkflowStudio() {
                 <Button
                   type="button"
                   variant="ghost"
-                  size="icon"
-                  className="h-8 w-8"
+                  size="icon-sm"
+                  className=""
                   aria-label="Upload image"
                   onClick={() => imageInputRef.current?.click()}
                 >
@@ -872,8 +872,8 @@ export function AgentWorkflowStudio() {
                 <Button
                   type="button"
                   variant={isCanvasExpanded ? "secondary" : "ghost"}
-                  size="icon"
-                  className="h-8 w-8"
+                  size="icon-sm"
+                  className=""
                   aria-label={isCanvasExpanded ? "Collapse canvas" : "Expand canvas"}
                   onClick={() => setIsCanvasExpanded((previous) => !previous)}
                 >
@@ -930,7 +930,7 @@ export function AgentWorkflowStudio() {
                     <p className="text-xs mt-1 line-clamp-2" style={{ color: canvasVisual.nodeSubtext }}>
                       {agent.role}
                     </p>
-                    <Badge variant="outline" className={cn("mt-2 text-[10px]", getStatusBadge(status))}>
+                    <Badge variant="outline" className={cn("mt-2 text-2xs", getStatusBadge(status))}>
                       {status}
                     </Badge>
                     {isSelectedNode && canDeleteNode(agent.id) && (
@@ -1118,7 +1118,7 @@ export function AgentWorkflowStudio() {
                   </div>
                   <div className="grid grid-cols-2 gap-2">
                     <div className="space-y-1">
-                      <Label className="text-[11px]">Width</Label>
+                      <Label className="text-micro">Width</Label>
                       <Input
                         type="number"
                         min={100}
@@ -1134,7 +1134,7 @@ export function AgentWorkflowStudio() {
                       />
                     </div>
                     <div className="space-y-1">
-                      <Label className="text-[11px]">Height</Label>
+                      <Label className="text-micro">Height</Label>
                       <Input
                         type="number"
                         min={60}
@@ -1165,7 +1165,7 @@ export function AgentWorkflowStudio() {
                     />
                     <div className="min-w-0 flex-1">
                       <p className="text-xs font-medium">{agent.name}</p>
-                      <p className="text-[11px] text-muted-foreground">
+                      <p className="text-micro text-muted-foreground">
                         Step {index + 1} {agent.enabled ? "enabled" : "disabled"}
                       </p>
                     </div>
@@ -1191,7 +1191,7 @@ export function AgentWorkflowStudio() {
                     </Button>
                   </div>
                 ))}
-                <p className="text-[11px] text-muted-foreground">
+                <p className="text-micro text-muted-foreground">
                   Stop the workflow, change enabled stages or order, then start again to run the new flow.
                 </p>
               </div>
@@ -1247,11 +1247,11 @@ export function AgentWorkflowStudio() {
                   <div key={id} className="rounded-md border p-2">
                     <div className="flex items-center justify-between gap-2">
                       <p className="text-xs font-semibold">{node.name}</p>
-                      <Badge variant="outline" className={cn("text-[10px]", getStatusBadge(status))}>
+                      <Badge variant="outline" className={cn("text-2xs", getStatusBadge(status))}>
                         {status}
                       </Badge>
                     </div>
-                    <p className="text-[11px] text-muted-foreground mt-1">
+                    <p className="text-micro text-muted-foreground mt-1">
                       Stage {index + 1} {status === "running" ? "is active now" : ""}
                     </p>
                   </div>
@@ -1316,7 +1316,7 @@ export function AgentWorkflowStudio() {
                 </div>
                 <p className="text-xs mt-1">{log.message}</p>
                 {log.details && (
-                  <pre className="mt-2 max-h-40 overflow-auto whitespace-pre-wrap rounded bg-muted/40 p-2 text-[11px] text-muted-foreground">
+                  <pre className="mt-2 max-h-40 overflow-auto whitespace-pre-wrap rounded bg-muted/40 p-2 text-micro text-muted-foreground">
                     {log.details}
                   </pre>
                 )}

@@ -35,30 +35,30 @@ export function ExperimentActions({ experiment, projects, users }: ExperimentAct
       <div className="flex items-center gap-1">
         <Button
           variant="ghost"
-          size="icon"
-          className="h-8 w-8 text-muted-foreground hover:text-foreground"
+          size="icon-sm"
+          className="text-muted-foreground hover:text-foreground"
           onClick={() => setEditDialogOpen(true)}
           aria-label="Edit experiment"
         >
-          <Pencil className="h-4 w-4" />
+          <Pencil />
         </Button>
         <Button
           variant="ghost"
-          size="icon"
-          className="h-8 w-8 text-muted-foreground hover:text-foreground"
+          size="icon-sm"
+          className="text-muted-foreground hover:text-foreground"
           onClick={() => setDuplicateDialogOpen(true)}
           aria-label="Duplicate experiment"
         >
-          <Copy className="h-4 w-4" />
+          <Copy />
         </Button>
         <Button
           variant="ghost"
-          size="icon"
-          className="h-8 w-8 text-destructive hover:text-destructive"
+          size="icon-sm"
+          className="text-destructive hover:text-destructive"
           onClick={() => setDeleteDialogOpen(true)}
           aria-label="Delete experiment"
         >
-          <Trash2 className="h-4 w-4" />
+          <Trash2 />
         </Button>
       </div>
 

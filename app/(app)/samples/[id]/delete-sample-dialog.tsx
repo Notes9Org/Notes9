@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useMemo, useState } from "react"
 import { useRouter } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
 import { Button } from "@/components/ui/button"
@@ -27,6 +27,7 @@ export function DeleteSampleDialog({
 }) {
   const router = useRouter()
   const { toast } = useToast()
+  const supabase = useMemo(() => createClient(), [])
   const [open, setOpen] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
 
@@ -34,8 +35,6 @@ export function DeleteSampleDialog({
     setIsLoading(true)
 
     try {
-      const supabase = createClient()
-
       const { error } = await supabase
         .from("samples")
         .delete()
@@ -48,19 +47,15 @@ export function DeleteSampleDialog({
         description: `Sample ${sampleCode} has been deleted successfully.`,
       })
 
-      // Redirect to samples list
       router.push("/samples")
-      
-      // Force a hard refresh to clear cache
-      setTimeout(() => {
-        window.location.href = "/samples"
-      }, 500)
+      router.refresh()
     } catch (error: any) {
       toast({
         title: "Error",
         description: error.message,
         variant: "destructive",
       })
+    } finally {
       setIsLoading(false)
     }
   }
@@ -68,7 +63,7 @@ export function DeleteSampleDialog({
   return (
     <AlertDialog open={open} onOpenChange={setOpen}>
       <AlertDialogTrigger asChild>
-        <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:text-destructive" aria-label="Delete sample">
+        <Button variant="ghost" size="icon-sm" className="text-destructive hover:text-destructive" aria-label="Delete sample">
           <Trash2 className="h-4 w-4" />
         </Button>
       </AlertDialogTrigger>

@@ -17,6 +17,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sh
 import { useResizable } from "@/hooks/use-resizable"
 import { cn } from "@/lib/utils"
 import { Menu, X, Sparkles, ChevronRight, Sun, Moon, CircleHelp } from 'lucide-react'
+import { PageTransition } from "./page-transition"
 import { useTheme } from "next-themes"
 import { useMediaQuery } from "@/hooks/use-media-query"
 
@@ -126,7 +127,7 @@ function HeaderTitle() {
           className="flex flex-nowrap items-center gap-1.5 text-sm text-muted-foreground min-w-0 flex-1 overflow-x-auto overflow-y-hidden scroll-smooth hide-scrollbar"
         >
           {filtered.map((seg, i) => (
-            <span key={i} className="inline-flex items-center gap-1.5 shrink-0">
+            <span key={seg.href ?? `${seg.label}-${i}`} className="inline-flex items-center gap-1.5 shrink-0">
               {i > 0 && <ChevronRight className="size-3.5 shrink-0" aria-hidden />}
               {seg.href ? (
                 <Link
@@ -152,7 +153,7 @@ function HeaderTitle() {
   return (
     <nav aria-label="breadcrumb" className="flex flex-nowrap items-center gap-1.5 text-sm text-muted-foreground sm:gap-2.5 min-w-0 overflow-hidden">
       {filtered.map((seg, i) => (
-        <span key={i} className="inline-flex items-center gap-1.5 shrink-0 min-w-0">
+        <span key={seg.href ?? `${seg.label}-${i}`} className="inline-flex items-center gap-1.5 shrink-0 min-w-0">
           {i > 0 && <ChevronRight className="size-3.5 shrink-0" aria-hidden />}
           {seg.href ? (
             <Link href={seg.href} className="transition-colors hover:text-foreground truncate min-w-0 block">
@@ -395,9 +396,7 @@ function AppLayoutBody({ children }: AppLayoutProps) {
           {/* Main Content — flex column so routes can use h-full / flex-1 (e.g. research map) */}
           <main className="flex min-h-0 flex-1 flex-col overflow-auto p-3 sm:p-4 md:p-6 min-w-0">
             {/* h-full lets nested routes use h-full / percentage heights reliably (e.g. protocol design mode) */}
-            <div className="flex h-full min-h-0 w-full min-w-0 flex-1 flex-col">
-              {children}
-            </div>
+            <PageTransition>{children}</PageTransition>
           </main>
         </SidebarInset>
 

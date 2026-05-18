@@ -44,7 +44,10 @@ export async function loadProtocolExperimentUsage(
     .eq("protocol_id", protocolId)
 
   for (const row of junctionRows ?? []) {
-    const ex = row.experiment as
+    // PostgREST nested-relation typings come back as an array, but our query
+    // joins one-to-one — flatten then cast through `unknown` to the intended shape.
+    const exRaw: unknown = Array.isArray(row.experiment) ? row.experiment[0] : row.experiment
+    const ex = exRaw as
       | { id: string; name: string; status: string | null; project?: { id: string; name: string } | null }
       | null
     if (!ex?.id) continue
@@ -81,13 +84,25 @@ export async function loadProtocolExperimentUsage(
     .eq("protocol_id", protocolId)
 
   for (const row of noteLinkRows ?? []) {
-    const note = row.lab_note as {
+    const noteRaw: unknown = Array.isArray(row.lab_note) ? row.lab_note[0] : row.lab_note
+    const noteCast = noteRaw as {
       id: string
       title: string | null
-      experiment?: { id: string; name: string; status: string | null; project?: { id: string; name: string } | null } | null
-      project?: { id: string; name: string } | null
+      experiment?:
+        | { id: string; name: string; status: string | null; project?: { id: string; name: string } | null }
+        | Array<{ id: string; name: string; status: string | null; project?: { id: string; name: string } | null }>
+        | null
+      project?:
+        | { id: string; name: string }
+        | Array<{ id: string; name: string }>
+        | null
     } | null
-    if (!note) continue
+    if (!noteCast) continue
+    const note = {
+      ...noteCast,
+      experiment: Array.isArray(noteCast.experiment) ? noteCast.experiment[0] ?? null : noteCast.experiment,
+      project: Array.isArray(noteCast.project) ? noteCast.project[0] ?? null : noteCast.project,
+    }
 
     if (note.experiment?.id) {
       if (seenExperimentIds.has(note.experiment.id)) continue
@@ -130,7 +145,8 @@ export async function loadProtocolExperimentUsage(
       .maybeSingle()
 
     if (ex?.id) {
-      const project = ex.project as { id: string; name: string } | null | undefined
+      const projectRaw: unknown = Array.isArray(ex.project) ? ex.project[0] : ex.project
+      const project = projectRaw as { id: string; name: string } | null | undefined
       rows.push({
         key: "direct-protocol-experiment",
         source: "direct_protocol",

@@ -113,7 +113,15 @@ export function CatalystChat({ open, onOpenChange }: CatalystChatProps) {
           .eq('id', user.id)
           .single();
         if (data) {
-          setUserProfile(data);
+          // avatar_url stores either a legacy public URL or (post-051) a
+          // storage path inside the private `user` bucket — sign it for display.
+          if (data.avatar_url) {
+            const { createBucketSignedUrl, USER_STORAGE_BUCKET } = await import('@/lib/storage-signed-url');
+            const signed = await createBucketSignedUrl(supabase, USER_STORAGE_BUCKET, data.avatar_url);
+            setUserProfile({ ...data, avatar_url: signed });
+          } else {
+            setUserProfile(data);
+          }
         }
       }
     };

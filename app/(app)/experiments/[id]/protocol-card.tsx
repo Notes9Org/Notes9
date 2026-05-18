@@ -9,20 +9,26 @@ import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { useToast } from "@/hooks/use-toast"
 
+interface ProtocolRef {
+  id: string
+  name: string
+  description?: string | null
+  version?: string | null
+  [key: string]: unknown
+}
+
 interface ProtocolCardProps {
   protocolLink: {
     id: string
-    added_at: string
-    protocol: {
-      id: string
-      name: string
-      description: string | null
-      version: string | null
-    }
+    added_at?: string | null
+    protocol: ProtocolRef | ProtocolRef[]
   }
 }
 
 export function ProtocolCard({ protocolLink }: ProtocolCardProps) {
+  const protocol = Array.isArray(protocolLink.protocol)
+    ? protocolLink.protocol[0]
+    : protocolLink.protocol
   const [isUnlinking, setIsUnlinking] = useState(false)
   const router = useRouter()
   const { toast } = useToast()
@@ -61,20 +67,21 @@ export function ProtocolCard({ protocolLink }: ProtocolCardProps) {
       <CardHeader>
         <div className="flex items-center justify-between">
           <div>
-            <CardTitle className="text-foreground">{protocolLink.protocol.name}</CardTitle>
+            <CardTitle className="text-foreground">{protocol.name}</CardTitle>
             <CardDescription>
-              Version {protocolLink.protocol.version || "1.0"} • Added {new Date(protocolLink.added_at).toLocaleDateString()}
+              Version {protocol.version || "1.0"}
+              {protocolLink.added_at ? ` • Added ${new Date(protocolLink.added_at).toISOString().slice(0, 10)}` : ""}
             </CardDescription>
           </div>
           <div className="flex gap-2">
             <Button variant="outline" size="sm" asChild>
-              <Link href={`/protocols/${protocolLink.protocol.id}`}>
+              <Link href={`/protocols/${protocol.id}`}>
                 <FileText className="h-4 w-4 mr-2" />
                 View Protocol
               </Link>
             </Button>
-            <Button 
-              variant="ghost" 
+            <Button
+              variant="ghost"
               size="sm"
               onClick={handleUnlink}
               disabled={isUnlinking}
@@ -91,10 +98,10 @@ export function ProtocolCard({ protocolLink }: ProtocolCardProps) {
           </div>
         </div>
       </CardHeader>
-      {protocolLink.protocol.description && (
+      {protocol.description && (
         <CardContent>
           <p className="text-sm text-muted-foreground">
-            {protocolLink.protocol.description}
+            {protocol.description}
           </p>
         </CardContent>
       )}

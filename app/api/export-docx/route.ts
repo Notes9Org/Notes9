@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { createClient } from '@/lib/supabase/server'
 
 export const runtime = 'nodejs'
+
+const MAX_HTML_BYTES = 5 * 1024 * 1024 // 5 MB upper bound on input HTML
 
 // Lazy load the module
 let htmlDocx: any = null
@@ -20,18 +23,25 @@ function getHtmlDocx() {
 
 export async function POST(request: NextRequest) {
   try {
+    const supabase = await createClient()
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
     const body = await request.json()
     const { html, title } = body
 
-    console.log('Export DOCX request received')
-    console.log('HTML provided:', !!html)
-    console.log('HTML length:', html?.length)
-    console.log('Title:', title)
-
-    if (!html) {
+    if (!html || typeof html !== 'string') {
       return NextResponse.json(
         { error: 'No HTML provided' },
         { status: 400 }
+      )
+    }
+    if (html.length > MAX_HTML_BYTES) {
+      return NextResponse.json(
+        { error: 'HTML payload too large' },
+        { status: 413 }
       )
     }
 

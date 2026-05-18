@@ -480,11 +480,12 @@ function parseInlineContent(el: Element, comments: ICommentOptions[]): any[] {
         // shading can take hex.
         if (tagName === 'mark') {
           runOpts.highlight = 'yellow'
-        } else if (isValidHex(bgColor)) {
+        } else if (bgColor && isValidHex(bgColor)) {
+          const hex = bgColor.replace('#', '')
           runOpts.shading = {
             type: ShadingType.SOLID,
-            color: bgColor.replace('#', ''),
-            fill: bgColor.replace('#', '')
+            color: hex,
+            fill: hex,
           }
         }
       }

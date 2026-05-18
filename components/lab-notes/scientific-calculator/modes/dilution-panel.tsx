@@ -124,7 +124,7 @@ export function DilutionPanel({
       </div>
       <div className="grid grid-cols-2 gap-2">
         <div className="grid gap-1.5">
-          <Label className="text-[10px] text-muted-foreground">Conc. unit</Label>
+          <Label className="text-2xs text-muted-foreground">Conc. unit</Label>
           <Select value={concUnit} onValueChange={(v) => setConcUnit(v as ConcUnit)}>
             <SelectTrigger className="h-8 text-xs">
               <SelectValue />
@@ -137,7 +137,7 @@ export function DilutionPanel({
           </Select>
         </div>
         <div className="grid gap-1.5">
-          <Label className="text-[10px] text-muted-foreground">Vol. unit</Label>
+          <Label className="text-2xs text-muted-foreground">Vol. unit</Label>
           <Select value={volUnit} onValueChange={(v) => setVolUnit(v as VolumeUnit)}>
             <SelectTrigger className="h-8 text-xs">
               <SelectValue />
@@ -150,7 +150,7 @@ export function DilutionPanel({
           </Select>
         </div>
       </div>
-      <p className="text-[10px] leading-snug text-muted-foreground">
+      <p className="text-2xs leading-snug text-muted-foreground">
         C1×V1 = C2×V2. Leave the solved field empty.
       </p>
       {field("C1", c1, setC1)}

@@ -69,7 +69,7 @@ export const PasteMenu = ({ editor }: PasteMenuProps) => {
                 // Actually, usually interacting with anything else should close the menu.
                 // Tiptap's BubbleMenu closes on selection change.
                 // We close on explicit outside click.
-                editor.chain().focus().pasteCloseMenu().run()
+                (editor.chain().focus() as any).pasteCloseMenu().run()
             }
         }
 
@@ -97,14 +97,14 @@ export const PasteMenu = ({ editor }: PasteMenuProps) => {
             }}
         >
             <div className="flex items-center justify-between px-2 py-1 border-b border-border/50 mb-1">
-                <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Paste Options</span>
+                <span className="text-2xs font-semibold text-muted-foreground uppercase tracking-wider">Paste Options</span>
                 <Button
                     variant="ghost"
                     size="icon"
                     className="h-4 w-4 ml-2 hover:bg-muted"
                     onClick={() => {
-                        console.log('PasteMenu: X clicked')
-                        editor.chain().focus().pasteCloseMenu().run()
+                        console.log('PasteMenu: X clicked');
+                        (editor.chain().focus() as any).pasteCloseMenu().run();
                     }}
                 >
                     <X className="h-3 w-3" />
@@ -116,8 +116,8 @@ export const PasteMenu = ({ editor }: PasteMenuProps) => {
                 size="sm"
                 className="justify-start h-8 px-2 text-xs font-normal"
                 onClick={() => {
-                    console.log('PasteMenu: Keep Source clicked')
-                    editor.chain().focus().pasteApplyOption('keep-source').run()
+                    console.log('PasteMenu: Keep Source clicked');
+                    (editor.chain().focus() as any).pasteApplyOption('keep-source').run();
                 }}
             >
                 <Clipboard className="mr-2 h-3.5 w-3.5 text-blue-500" />
@@ -129,8 +129,8 @@ export const PasteMenu = ({ editor }: PasteMenuProps) => {
                 size="sm"
                 className="justify-start h-8 px-2 text-xs font-normal"
                 onClick={() => {
-                    console.log('PasteMenu: Merge Formatting clicked')
-                    editor.chain().focus().pasteApplyOption('merge-formatting').run()
+                    console.log('PasteMenu: Merge Formatting clicked');
+                    (editor.chain().focus() as any).pasteApplyOption('merge-formatting').run();
                 }}
             >
                 <RemoveFormatting className="mr-2 h-3.5 w-3.5 text-orange-500" />
@@ -142,8 +142,8 @@ export const PasteMenu = ({ editor }: PasteMenuProps) => {
                 size="sm"
                 className="justify-start h-8 px-2 text-xs font-normal"
                 onClick={() => {
-                    console.log('PasteMenu: Keep Text clicked')
-                    editor.chain().focus().pasteApplyOption('keep-text').run()
+                    console.log('PasteMenu: Keep Text clicked');
+                    (editor.chain().focus() as any).pasteApplyOption('keep-text').run();
                 }}
             >
                 <FileText className="mr-2 h-3.5 w-3.5 text-green-500" />

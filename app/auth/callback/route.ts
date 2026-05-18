@@ -120,10 +120,29 @@ export async function GET(request: NextRequest) {
   }
 }
 
+/**
+ * Strip absolute URLs / scheme-relative inputs from the `next` query parameter
+ * to prevent open-redirect attacks (e.g. `?next=https://evil.com`). Only allow
+ * an in-app relative path; anything else falls back to /dashboard.
+ */
+function safeNextPath(raw: string | null): string {
+  if (!raw) return "/dashboard"
+  if (!raw.startsWith("/") || raw.startsWith("//")) return "/dashboard"
+  // Reject paths that try to break out via `\\` or a backslash trick
+  if (raw.includes("\\")) return "/dashboard"
+  try {
+    const probe = new URL(raw, "http://localhost")
+    if (probe.origin !== "http://localhost") return "/dashboard"
+    return probe.pathname + probe.search + probe.hash
+  } catch {
+    return "/dashboard"
+  }
+}
+
 async function handleAuthCallback(request: NextRequest): Promise<NextResponse> {
   const requestUrl = new URL(request.url)
   const code = requestUrl.searchParams.get("code")
-  const nextPath = requestUrl.searchParams.get("next") ?? "/dashboard"
+  const nextPath = safeNextPath(requestUrl.searchParams.get("next"))
   const errorParam = requestUrl.searchParams.get("error")
   const errorDescription = requestUrl.searchParams.get("error_description")
 

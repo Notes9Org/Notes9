@@ -86,7 +86,7 @@ function ToolCardItem({ card }: ToolCardItemProps) {
           </span>
           {/* Row count for SQL when there is no expandable source list */}
           {!isRunning && card.row_count != null && !hasSourceNames && (
-            <p className="text-[11px] text-muted-foreground/50 mt-0.5 leading-tight">
+            <p className="text-micro text-muted-foreground/50 mt-0.5 leading-tight">
               {card.row_count} record{card.row_count !== 1 ? 's' : ''}
             </p>
           )}
@@ -104,12 +104,12 @@ function ToolCardItem({ card }: ToolCardItemProps) {
           return (
           <div className="flex items-center gap-1.5 shrink-0 mt-0.5">
             {visibleCount > 0 && (
-              <span className="text-[11px] text-muted-foreground/50">
+              <span className="text-micro text-muted-foreground/50">
                 {visibleCount} {visibleCount === 1 ? 'source' : 'sources'}
               </span>
             )}
             {card.latency_ms != null && (
-              <span className="text-[11px] text-muted-foreground/50">
+              <span className="text-micro text-muted-foreground/50">
                 {(card.latency_ms / 1000).toFixed(1)}s
               </span>
             )}
@@ -143,7 +143,7 @@ function ToolCardItem({ card }: ToolCardItemProps) {
                   >
                     <span className="mt-1.5 shrink-0 size-1 rounded-full bg-muted-foreground/30" />
                     {hasType && (
-                      <span className="shrink-0 mt-px rounded-sm border border-border bg-muted/40 px-1.5 py-px text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                      <span className="shrink-0 mt-px rounded-sm border border-border bg-muted/40 px-1.5 py-px text-2xs font-medium uppercase tracking-wide text-muted-foreground">
                         {type}
                       </span>
                     )}

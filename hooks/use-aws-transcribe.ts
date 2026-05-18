@@ -242,6 +242,7 @@ export function useAwsTranscribe(options: UseAwsTranscribeOptions = {}) {
 
           setIsListening(true);
         } catch (err) {
+          if (stoppedRef.current) return;
           const message =
             err instanceof Error
               ? err.message

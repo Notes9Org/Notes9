@@ -41,7 +41,7 @@ export function StockDilutionPanel({ onResultChange }: { onResultChange: Calcula
     <div className="space-y-2">
       <div className="grid grid-cols-2 gap-2">
         <div className="grid gap-1.5">
-          <Label className="text-[10px] text-muted-foreground">Conc. unit</Label>
+          <Label className="text-2xs text-muted-foreground">Conc. unit</Label>
           <Select value={concUnit} onValueChange={(v) => setConcUnit(v as ConcUnit)}>
             <SelectTrigger className="h-8 text-xs">
               <SelectValue />
@@ -54,7 +54,7 @@ export function StockDilutionPanel({ onResultChange }: { onResultChange: Calcula
           </Select>
         </div>
         <div className="grid gap-1.5">
-          <Label className="text-[10px] text-muted-foreground">Final vol. unit</Label>
+          <Label className="text-2xs text-muted-foreground">Final vol. unit</Label>
           <Select value={volUnit} onValueChange={(v) => setVolUnit(v as VolumeUnit)}>
             <SelectTrigger className="h-8 text-xs">
               <SelectValue />
@@ -79,7 +79,7 @@ export function StockDilutionPanel({ onResultChange }: { onResultChange: Calcula
         <Label className="text-xs">V_final (total)</Label>
         <Input type="number" step="any" min={0} value={vFinal} onChange={(e) => setVFinal(e.target.value)} className="h-8 text-sm" />
       </div>
-      <p className="text-[10px] text-muted-foreground">V_stock = V_final × (C_final/C_stock); diluent = V_final − V_stock.</p>
+      <p className="text-2xs text-muted-foreground">V_stock = V_final × (C_final/C_stock); diluent = V_final − V_stock.</p>
     </div>
   )
 }

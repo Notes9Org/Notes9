@@ -2213,7 +2213,7 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
               >
                 <AtSign className="size-3.5 shrink-0" />
                 <span className="truncate">{item.title}</span>
-                <span className="ml-auto shrink-0 text-[10px] uppercase text-muted-foreground">
+                <span className="ml-auto shrink-0 text-2xs uppercase text-muted-foreground">
                   {item.kind.replace('_', ' ')}
                 </span>
               </button>
@@ -2264,7 +2264,7 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
           </div>
 
           <div className="flex h-9 shrink-0 items-center justify-end gap-1">
-            <span className="mr-1 hidden text-[11px] text-muted-foreground sm:inline">
+            <span className="mr-1 hidden text-micro text-muted-foreground sm:inline">
               {input.length}
               /{MAX_CHAT_CHARS}
             </span>
@@ -2330,7 +2330,7 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
             : "hover:bg-muted/50 text-muted-foreground hover:text-foreground"
         )}
       >
-        <span className="text-[10px] shrink-0 opacity-70 whitespace-nowrap opacity-0 transition-opacity group-hover/item:opacity-70 mr-2">
+        <span className="text-2xs shrink-0 opacity-70 whitespace-nowrap opacity-0 transition-opacity group-hover/item:opacity-70 mr-2">
           {formatSessionTime(session.updated_at)}
         </span>
         <span className="truncate min-w-0 flex-1">{session.title || 'New conversation'}</span>
@@ -2518,7 +2518,7 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
                                       >
                                         {session.title || 'New conversation'}
                                       </span>
-                                      <span className="shrink-0 text-[10px] text-sidebar-foreground/70 opacity-70">
+                                      <span className="shrink-0 text-2xs text-sidebar-foreground/70 opacity-70">
                                         {new Date(session.updated_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
                                       </span>
                                     </button>
@@ -2625,7 +2625,7 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
                                 currentSessionId === session.id && "bg-sidebar-accent font-medium text-sidebar-accent-foreground"
                               )}
                             >
-                              <span className="flex size-8 shrink-0 items-center justify-center text-[10px] text-sidebar-foreground/70 tabular-nums whitespace-nowrap" aria-hidden>
+                              <span className="flex size-8 shrink-0 items-center justify-center text-2xs text-sidebar-foreground/70 tabular-nums whitespace-nowrap" aria-hidden>
                                 {formatSessionTime(session.updated_at)}
                               </span>
                               <span

@@ -116,7 +116,7 @@ export function ChatMessage({
         {/* Sources */}
         {!isUser && normalizedSources.length > 0 && !isStreaming && (
           <div className="flex flex-col gap-1 mt-0.5">
-            <span className="text-[11px] font-medium text-muted-foreground flex items-center gap-1">
+            <span className="text-micro font-medium text-muted-foreground flex items-center gap-1">
               <Globe className="size-3" /> Sources
             </span>
             <div className="flex flex-wrap gap-1.5">
@@ -135,7 +135,7 @@ export function ChatMessage({
                     href={url}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1 rounded-full border border-border/60 bg-background px-2 py-0.5 text-[11px] text-muted-foreground hover:text-foreground hover:border-border transition-colors max-w-[180px]"
+                    className="inline-flex items-center gap-1 rounded-full border border-border/60 bg-background px-2 py-0.5 text-micro text-muted-foreground hover:text-foreground hover:border-border transition-colors max-w-[180px]"
                     title={title}
                   >
                     <Globe className="size-2.5 shrink-0" />
@@ -144,7 +144,7 @@ export function ChatMessage({
                 ) : (
                   <span
                     key={i}
-                    className="inline-flex items-center gap-1 rounded-full border border-border/40 bg-muted/40 px-2 py-0.5 text-[11px] text-muted-foreground max-w-[180px]"
+                    className="inline-flex items-center gap-1 rounded-full border border-border/40 bg-muted/40 px-2 py-0.5 text-micro text-muted-foreground max-w-[180px]"
                   >
                     <span className="truncate">{title}</span>
                   </span>

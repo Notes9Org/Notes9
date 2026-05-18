@@ -102,7 +102,7 @@ export function PaperList({
               {paper.status?.replace("_", " ")}
             </Badge>
             <span className="truncate text-xs text-muted-foreground">
-              {new Date(paper.updated_at).toLocaleDateString()}
+              {new Date(paper.updated_at).toISOString().slice(0, 10)}
             </span>
           </div>
         </CardHeader>

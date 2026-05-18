@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { searchPapers, searchPapersWithMeta } from '@/lib/paper-search'
 import type { PaperSearchSortMode } from '@/types/paper-search'
+import { createClient } from '@/lib/supabase/server'
 
 function parseSort(param: string | null): PaperSearchSortMode {
   if (param === 'recent' || param === 'cited') return param
@@ -16,11 +17,20 @@ function parseRecentYears(param: string | null): number | undefined {
 
 export async function GET(request: NextRequest) {
   try {
+    const supabase = await createClient()
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
     const searchParams = request.nextUrl.searchParams
     const query = searchParams.get('query')
 
     if (!query) {
       return NextResponse.json({ error: 'Query parameter is required' }, { status: 400 })
+    }
+    if (query.length > 1000) {
+      return NextResponse.json({ error: 'Query too long' }, { status: 413 })
     }
 
     const sort = parseSort(searchParams.get('sort'))

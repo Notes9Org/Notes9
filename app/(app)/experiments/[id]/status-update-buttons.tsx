@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useMemo, useState } from "react"
 import { createClient } from "@/lib/supabase/client"
 import { Button } from "@/components/ui/button"
 import {
@@ -32,7 +32,7 @@ interface StatusUpdateButtonsProps {
 export function StatusUpdateButtons({ experimentId, currentStatus }: StatusUpdateButtonsProps) {
   const { toast } = useToast()
   const router = useRouter()
-  const supabase = createClient()
+  const supabase = useMemo(() => createClient(), [])
 
   const [isUpdating, setIsUpdating] = useState(false)
   const [dialogOpen, setDialogOpen] = useState(false)

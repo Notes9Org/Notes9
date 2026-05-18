@@ -233,9 +233,11 @@ export function SampleProteinViewer({
 
   useEffect(() => {
     let cancelled = false
+    let localViewer: any = null
+    const host = containerRef.current
 
     async function mount() {
-      if (!containerRef.current) return
+      if (!host) return
       setState("loading")
       setError(null)
       try {
@@ -243,9 +245,9 @@ export function SampleProteinViewer({
           import("molstar/lib/apps/viewer/app"),
           import("molstar/build/viewer/molstar.css" as any).catch(() => null),
         ])
-        if (cancelled || !containerRef.current) return
+        if (cancelled || !host.isConnected) return
         const bgColor = readThemeColor("--card", "#fffdfa")
-        const viewer = await Viewer.create(containerRef.current, {
+        const viewer = await Viewer.create(host, {
           layoutIsExpanded: false,
           layoutShowControls: false,
           layoutShowRemoteState: false,
@@ -265,18 +267,18 @@ export function SampleProteinViewer({
           viewportShowTrajectoryControls: false,
           viewportBackgroundColor: `0x${bgColor.toString(16).padStart(6, "0")}`,
         } as any)
+        localViewer = viewer
         if (cancelled) {
           try {
-            viewer.plugin.dispose()
+            viewer.plugin?.dispose?.()
           } catch {}
           return
         }
         viewerRef.current = viewer
         await viewer.loadStructureFromUrl(fileUrl, format, false, { label: fileName })
-        if (!cancelled) {
-          setState("ready")
-          setChainSequences(extractChainSequences(viewer.plugin))
-        }
+        if (cancelled) return
+        setState("ready")
+        setChainSequences(extractChainSequences(viewer.plugin))
       } catch (err) {
         console.error(err)
         if (!cancelled) {
@@ -294,10 +296,20 @@ export function SampleProteinViewer({
 
     return () => {
       cancelled = true
-      try {
-        viewerRef.current?.plugin?.dispose?.()
-      } catch {}
+      const viewer = viewerRef.current ?? localViewer
       viewerRef.current = null
+      try {
+        viewer?.plugin?.canvas3d?.pause?.()
+        viewer?.plugin?.dispose?.()
+      } catch {}
+      // Mol* leaves its <canvas> child in the host even after dispose. Clearing
+      // it lets the GPU release the WebGL context — browsers cap ~16 contexts
+      // and we'd otherwise exhaust them after a few file switches.
+      if (host) {
+        try {
+          while (host.firstChild) host.removeChild(host.firstChild)
+        } catch {}
+      }
     }
   }, [fileUrl, fileName, format])
 
@@ -475,6 +487,11 @@ export function SampleProteinViewer({
     } catch {}
   }, [])
 
+  const selectionRef = useRef<ResidueSelection | null>(null)
+  useEffect(() => {
+    selectionRef.current = residueSel
+  }, [residueSel])
+
   const onResidueMouseDown = (chain: ChainSequence, residueIndex: number) => {
     const seq = chain.seqIds[residueIndex] ?? residueIndex + 1
     dragAnchor.current = { chainId: chain.chainId, seq }
@@ -494,16 +511,20 @@ export function SampleProteinViewer({
     setResidueSel(next)
     void highlightSelection(next)
   }
+  // Stable mouseup listener — read latest selection through a ref instead of
+  // re-binding window every selection change. Re-binding on each drag tick
+  // could miss the mouseup event and leave dragAnchor stuck.
   useEffect(() => {
     const onUp = () => {
-      if (dragAnchor.current && residueSel) {
-        void focusSelection(residueSel)
+      const sel = selectionRef.current
+      if (dragAnchor.current && sel) {
+        void focusSelection(sel)
       }
       dragAnchor.current = null
     }
     window.addEventListener("mouseup", onUp)
     return () => window.removeEventListener("mouseup", onUp)
-  }, [residueSel, focusSelection])
+  }, [focusSelection])
 
   const clearResidueSelection = () => {
     setResidueSel(null)
@@ -590,12 +611,12 @@ export function SampleProteinViewer({
           </span>
           <Badge
             variant="outline"
-            className="inline-flex h-5 shrink-0 items-center justify-center border px-2 py-0 font-mono text-[10px] font-semibold uppercase leading-none tracking-wide"
+            className="inline-flex h-5 shrink-0 items-center justify-center border px-2 py-0 font-mono text-2xs font-semibold uppercase leading-none tracking-wide"
           >
             {molecularFileFormatLabel(fileName)}
           </Badge>
           {working ? (
-            <span className="inline-flex items-center gap-1 text-[11px] text-muted-foreground">
+            <span className="inline-flex items-center gap-1 text-micro text-muted-foreground">
               <Loader2 className="h-3 w-3 animate-spin" />
               applying…
             </span>
@@ -744,7 +765,7 @@ export function SampleProteinViewer({
             </p>
             <div className="flex items-center gap-2">
               {residueSel ? (
-                <Badge variant="outline" className="font-mono text-[10px] tabular-nums">
+                <Badge variant="outline" className="font-mono text-2xs tabular-nums">
                   Chain {residueSel.chainId} · {Math.min(residueSel.startSeq, residueSel.endSeq)}-
                   {Math.max(residueSel.startSeq, residueSel.endSeq)}
                 </Badge>
@@ -753,7 +774,7 @@ export function SampleProteinViewer({
                 type="button"
                 variant="ghost"
                 size="sm"
-                className="h-7 px-2 text-[11px]"
+                className="h-7 px-2 text-micro"
                 onClick={clearResidueSelection}
                 disabled={!residueSel}
               >
@@ -797,7 +818,7 @@ export function SampleProteinViewer({
             >
               <Minimize2 className="mr-1.5 h-3.5 w-3.5" />
               Exit fullscreen
-              <kbd className="ml-2 rounded-sm border bg-muted/60 px-1 py-0.5 font-mono text-[10px] text-muted-foreground">
+              <kbd className="ml-2 rounded-sm border bg-muted/60 px-1 py-0.5 font-mono text-2xs text-muted-foreground">
                 Esc
               </kbd>
             </Button>
@@ -811,7 +832,7 @@ export function SampleProteinViewer({
         </div>
       </Card>
 
-      <div className="flex flex-wrap gap-3 px-1 text-[11px] text-muted-foreground">
+      <div className="flex flex-wrap gap-3 px-1 text-micro text-muted-foreground">
         <Tip label="Drag" detail="rotate" />
         <Tip label="Scroll" detail="zoom" />
         <Tip label="Right-drag" detail="pan" />
@@ -837,14 +858,14 @@ function SequenceChainRow({
   return (
     <div className="mb-2 last:mb-0">
       <div className="mb-1 flex items-center gap-2">
-        <Badge variant="outline" className="font-mono text-[10px] uppercase">
+        <Badge variant="outline" className="font-mono text-2xs uppercase">
           {chain.kind === "protein" ? "AA" : chain.kind} · {chain.chainId}
         </Badge>
-        <span className="font-mono text-[10px] tabular-nums text-muted-foreground">
+        <span className="font-mono text-2xs tabular-nums text-muted-foreground">
           {chain.code.length} residues
         </span>
       </div>
-      <div className="flex flex-wrap font-mono text-[12px] leading-5 select-none">
+      <div className="flex flex-wrap font-mono text-mini leading-5 select-none">
         {chain.code.split("").map((aa, i) => {
           const seqId = chain.seqIds[i] ?? i + 1
           const selected = start != null && end != null && seqId >= start && seqId <= end
@@ -872,7 +893,7 @@ function SequenceChainRow({
 function Tip({ label, detail }: { label: string; detail: string }) {
   return (
     <span className="inline-flex items-center gap-1">
-      <span className="rounded-sm border bg-muted/40 px-1.5 py-0.5 font-mono text-[10px] text-foreground">
+      <span className="rounded-sm border bg-muted/40 px-1.5 py-0.5 font-mono text-2xs text-foreground">
         {label}
       </span>
       <span>{detail}</span>

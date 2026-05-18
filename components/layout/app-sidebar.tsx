@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useMemo, useCallback } from "react"
 import Link from "next/link"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import Image from "next/image"
@@ -130,7 +130,7 @@ export function AppSidebar() {
   const [searchResults, setSearchResults] = useState<SearchResultItem[]>([])
   const [searchLoading, setSearchLoading] = useState(false)
   const [fetchError, setFetchError] = useState(false)
-  const supabase = createClient()
+  const supabase = useMemo(() => createClient(), [])
 
   const isIconMode = !open
 
@@ -165,7 +165,7 @@ export function AppSidebar() {
     return () => clearTimeout(t)
   }, [searchQuery])
 
-  async function fetchData() {
+  const fetchData = useCallback(async () => {
     try {
       setLoading(true)
       setFetchError(false)
@@ -461,32 +461,37 @@ export function AppSidebar() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [supabase])
 
   useEffect(() => {
     fetchData()
 
-    // Subscribe to real-time updates for projects
+    // Debounce realtime refetches: bursts of project mutations would otherwise
+    // fire `fetchData` many times in quick succession. Also: drop the `profiles`
+    // subscription — profile edits in Settings should not trigger a full
+    // sidebar reload (the sidebar derives projects/experiments, not profile).
+    let pending: ReturnType<typeof setTimeout> | null = null
+    const scheduleRefetch = () => {
+      if (pending) clearTimeout(pending)
+      pending = setTimeout(() => {
+        pending = null
+        fetchData()
+      }, 250)
+    }
+
     const channel = supabase
       .channel('sidebar-projects')
       .on('postgres_changes',
         { event: '*', schema: 'public', table: 'projects' },
-        () => {
-          fetchData()
-        }
-      )
-      .on('postgres_changes',
-        { event: '*', schema: 'public', table: 'profiles' },
-        () => {
-          fetchData()
-        }
+        scheduleRefetch,
       )
       .subscribe()
 
     return () => {
+      if (pending) clearTimeout(pending)
       supabase.removeChannel(channel)
     }
-  }, [])
+  }, [supabase, fetchData])
 
   const handleSignOut = async () => {
     await supabase.auth.signOut()
@@ -521,7 +526,10 @@ export function AppSidebar() {
     <Sidebar
       variant="sidebar"
       collapsible="icon"
-      className="shadow-[2px_0_18px_-16px_rgba(44,36,24,0.22)] transition-all duration-200 ease-in-out dark:shadow-[2px_0_18px_-16px_rgba(0,0,0,0.45)]"
+      // The primitive already paints `border-r` on the left sidebar;
+      // we keep just a soft outer glow on top of it instead of a second
+      // hard line to avoid the visually doubled seam.
+      className="transition-all duration-200 ease-in-out"
     >
       {/* Header with Workspace Dropdown */}
       <SidebarHeader
@@ -597,14 +605,17 @@ export function AppSidebar() {
       >
         {/* Search - Hidden in icon mode */}
         <SidebarGroup className={cn(isIconMode && "hidden")}>
-          <SidebarGroupContent className="relative px-2">
+          <SidebarGroupContent className="px-2">
             <Popover open={searchQuery.length >= 2}>
               <PopoverAnchor asChild>
                 <div className="relative" id="tour-search">
-                  <Search className="pointer-events-none absolute left-4 top-1/2 size-4 -translate-y-1/2 select-none opacity-50" />
+                  {/* Icon offset is tuned to sit ~9px inside the input's
+                      visible left edge — `left-2.5` instead of the prior
+                      `left-4` which left a noticeable dead-space gap. */}
+                  <Search className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 select-none text-muted-foreground" />
                   <SidebarInput
                     placeholder="Search..."
-                    className="pl-8"
+                    className="pl-9"
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
                     onKeyDown={(e) => {
@@ -731,7 +742,7 @@ export function AppSidebar() {
                       onClick={(e) => {
                         e.preventDefault()
                         e.stopPropagation()
-                        window.location.href = "/projects/new"
+                        router.push("/projects/new")
                       }}
                       className="flex aspect-square w-5 items-center justify-center rounded-md p-0 text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground transition-colors"
                     >
@@ -744,7 +755,7 @@ export function AppSidebar() {
                       <SidebarMenu>
                         {loading ? (
                           Array.from({ length: 3 }).map((_, index) => (
-                            <SidebarMenuItem key={index}>
+                            <SidebarMenuItem key={`sidebar-skeleton-${index}`}>
                               <SidebarMenuSkeleton showIcon />
                             </SidebarMenuItem>
                           ))

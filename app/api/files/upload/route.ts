@@ -1,18 +1,20 @@
 import { NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { USER_STORAGE_BUCKET } from "@/lib/user-storage-bucket"
+import { createBucketSignedUrl } from "@/lib/storage-signed-url"
 
 // Max file size: 10MB
 const MAX_FILE_SIZE = 10 * 1024 * 1024;
 
-// Allowed MIME types for chat attachments
+// Allowed MIME types for chat attachments.
+// SVG is intentionally excluded — it can contain embedded <script> that
+// executes when fetched directly from the storage origin (stored XSS).
 const ALLOWED_MIME_TYPES = [
   // Images
   'image/jpeg',
   'image/png',
   'image/gif',
   'image/webp',
-  'image/svg+xml',
   // Documents
   'application/pdf',
   'text/plain',
@@ -77,10 +79,11 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Failed to upload file" }, { status: 500 })
     }
 
-    const { data: urlData } = supabase.storage.from(USER_STORAGE_BUCKET).getPublicUrl(storagePath)
+    const signedUrl = await createBucketSignedUrl(supabase, USER_STORAGE_BUCKET, storagePath)
 
     return NextResponse.json({
-      url: urlData.publicUrl,
+      url: signedUrl,
+      storagePath,
       pathname: file.name,
       contentType: file.type,
       size: file.size,

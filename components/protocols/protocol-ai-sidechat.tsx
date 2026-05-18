@@ -9,6 +9,7 @@ import {
   useState,
 } from "react"
 import { createClient } from "@/lib/supabase/client"
+import { sanitizeHtml } from "@/lib/sanitize-html"
 import { chat as notes9Chat } from "@/lib/notes9-api"
 import { useAgentStream } from "@/hooks/use-agent-stream"
 import { useLiteratureAgentStream } from "@/hooks/use-literature-agent-stream"
@@ -914,7 +915,7 @@ export function ProtocolAiSidechat({
                 <div className="px-2 py-8 text-center">
                   <MessageSquare className="mx-auto mb-2 size-6 opacity-30" />
                   <p className="text-xs font-medium text-muted-foreground">No conversations yet</p>
-                  <p className="mt-1 text-[10px] text-muted-foreground opacity-70">Start a new chat below</p>
+                  <p className="mt-1 text-2xs text-muted-foreground opacity-70">Start a new chat below</p>
                 </div>
               ) : (
                 sessions.map((s) => (
@@ -938,7 +939,7 @@ export function ProtocolAiSidechat({
                       <p className="truncate font-medium text-foreground">
                         {s.title?.trim() ? s.title : "New conversation"}
                       </p>
-                      <p className="text-[10px] opacity-60">
+                      <p className="text-2xs opacity-60">
                         {formatDistanceToNow(new Date(s.updated_at), { addSuffix: true })}
                       </p>
                     </div>
@@ -1034,14 +1035,14 @@ export function ProtocolAiSidechat({
         {viewerTabs.length > 0 && (
           <div className="shrink-0 border-b border-border/40 bg-muted/10">
             <div className="flex items-center justify-between gap-2 px-3 py-2">
-              <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+              <p className="text-2xs font-medium uppercase tracking-wide text-muted-foreground">
                 Open context documents
               </p>
               <Button
                 type="button"
                 variant="ghost"
                 size="sm"
-                className="h-6 px-2 text-[10px]"
+                className="h-6 px-2 text-2xs"
                 onClick={() => setViewerOpen((v) => !v)}
               >
                 {viewerOpen ? "Hide" : "Show"}
@@ -1053,7 +1054,7 @@ export function ProtocolAiSidechat({
                   key={tab.key}
                   type="button"
                   className={cn(
-                    "shrink-0 rounded-full border px-2 py-1 text-[10px] transition-colors",
+                    "shrink-0 rounded-full border px-2 py-1 text-2xs transition-colors",
                     tab.key === activeViewerTabKey
                       ? "border-primary/50 bg-primary/10 text-foreground"
                       : "border-border/60 bg-background text-muted-foreground hover:text-foreground"
@@ -1077,7 +1078,7 @@ export function ProtocolAiSidechat({
                     type="button"
                     variant="ghost"
                     size="sm"
-                    className="h-6 px-2 text-[10px]"
+                    className="h-6 px-2 text-2xs"
                     onClick={() => setViewerOpen(false)}
                   >
                     Back to editing
@@ -1092,7 +1093,7 @@ export function ProtocolAiSidechat({
                 ) : activeViewerTab.kind === "protocol" ? (
                   <div className="max-h-56 overflow-y-auto rounded-md border bg-muted/20 p-2 text-xs text-foreground">
                     {activeViewerTab.content ? (
-                      <div dangerouslySetInnerHTML={{ __html: activeViewerTab.content }} />
+                      <div dangerouslySetInnerHTML={{ __html: sanitizeHtml(activeViewerTab.content) }} />
                     ) : (
                       <p className="text-muted-foreground">No protocol content available.</p>
                     )}
@@ -1110,7 +1111,7 @@ export function ProtocolAiSidechat({
         {/* ── Context strip (papers + protocols) */}
         {(aiContextPapers.length > 0 || aiContextProtocols.length > 0) && (
           <div className="shrink-0 border-b border-border/40 bg-muted/10 px-4 py-2">
-            <p className="mb-1.5 flex items-center gap-1.5 text-[10px] font-medium text-muted-foreground">
+            <p className="mb-1.5 flex items-center gap-1.5 text-2xs font-medium text-muted-foreground">
               <FileText className="size-3 shrink-0" aria-hidden />
               AI context ({aiContextPapers.length} papers, {aiContextProtocols.length} protocols)
             </p>
@@ -1118,7 +1119,7 @@ export function ProtocolAiSidechat({
               {aiContextPapers.map((p) => (
                 <li
                   key={p.id}
-                  className="flex items-center gap-1 rounded-full border border-border/50 bg-background px-2 py-0.5 text-[10px] text-foreground"
+                  className="flex items-center gap-1 rounded-full border border-border/50 bg-background px-2 py-0.5 text-2xs text-foreground"
                 >
                   <span className="max-w-[120px] truncate">{p.title}</span>
                   <button
@@ -1134,7 +1135,7 @@ export function ProtocolAiSidechat({
               {aiContextProtocols.map((p) => (
                 <li
                   key={p.id}
-                  className="flex items-center gap-1 rounded-full border border-border/50 bg-background px-2 py-0.5 text-[10px] text-foreground"
+                  className="flex items-center gap-1 rounded-full border border-border/50 bg-background px-2 py-0.5 text-2xs text-foreground"
                 >
                   <span className="max-w-[120px] truncate">Protocol: {p.name}</span>
                   <button
@@ -1326,7 +1327,7 @@ export function ProtocolAiSidechat({
             {/* Context hint — inside container like Catalyst's mode toggle */}
             {!hasAnyContext && (
               <div className="border-b border-border/50 px-3 py-2">
-                <p className="text-[10px] text-amber-700/90 dark:text-amber-400/90">
+                <p className="text-2xs text-amber-700/90 dark:text-amber-400/90">
                   No context yet — drag papers from Literature, use @ for papers, or add existing protocols.
                 </p>
               </div>
@@ -1374,7 +1375,7 @@ export function ProtocolAiSidechat({
                       >
                         <span className="truncate font-medium">{p.title}</span>
                         {p.authors && (
-                          <span className="truncate text-[10px] text-muted-foreground">
+                          <span className="truncate text-2xs text-muted-foreground">
                             {p.authors}
                           </span>
                         )}
@@ -1502,7 +1503,7 @@ export function ProtocolAiSidechat({
                 </Button>
               </div>
               <div className="flex h-9 shrink-0 items-center justify-end gap-1">
-                <span className="mr-1 hidden text-[11px] text-muted-foreground sm:inline">
+                <span className="mr-1 hidden text-micro text-muted-foreground sm:inline">
                   {input.length}/4096
                 </span>
                 {isAnyStreaming ? (
@@ -1579,7 +1580,7 @@ function ThinkingIndicator({ steps }: { steps: string[] }) {
             {steps.map((s, i) => (
               <p
                 key={i}
-                className="max-w-full min-w-0 break-all font-mono text-[10px] leading-relaxed text-muted-foreground [overflow-wrap:anywhere] whitespace-pre-wrap"
+                className="max-w-full min-w-0 break-all font-mono text-2xs leading-relaxed text-muted-foreground [overflow-wrap:anywhere] whitespace-pre-wrap"
               >
                 {s}
               </p>
@@ -1654,7 +1655,7 @@ function AssistantMessage({
         <button
           type="button"
           onClick={() => setShowSteps((v) => !v)}
-          className="flex items-center gap-1.5 text-[10px] text-muted-foreground hover:text-foreground transition-colors"
+          className="flex items-center gap-1.5 text-2xs text-muted-foreground hover:text-foreground transition-colors"
         >
           <ChevronDown
             className={cn("h-3 w-3 transition-transform", showSteps && "rotate-180")}
@@ -1669,7 +1670,7 @@ function AssistantMessage({
             {message.steps!.map((s, i) => (
               <p
                 key={i}
-                className="max-w-full min-w-0 break-words font-mono text-[10px] leading-relaxed text-muted-foreground [overflow-wrap:anywhere] whitespace-pre-wrap"
+                className="max-w-full min-w-0 break-words font-mono text-2xs leading-relaxed text-muted-foreground [overflow-wrap:anywhere] whitespace-pre-wrap"
               >
                 {s}
               </p>
@@ -1709,7 +1710,7 @@ function AssistantMessage({
       {/* Diff preview */}
       {showDiff && (
         <div className="rounded-md border bg-muted/20 p-2.5">
-          <p className="text-[10px] font-medium uppercase text-muted-foreground mb-1.5">
+          <p className="text-2xs font-medium uppercase text-muted-foreground mb-1.5">
             Changes vs current draft (new version: {bumpVersion(currentVersion)})
           </p>
           <div className="max-h-48 w-full min-w-0 max-w-full overflow-y-auto overflow-x-hidden">
@@ -1764,7 +1765,7 @@ function AssistantMessage({
               type="button"
               variant="ghost"
               size="sm"
-              className="h-6 text-[10px] gap-1 text-muted-foreground px-1.5"
+              className="h-6 text-2xs gap-1 text-muted-foreground px-1.5"
               onClick={() => setShowDiff((v) => !v)}
             >
               <ChevronRight
@@ -1772,7 +1773,7 @@ function AssistantMessage({
               />
               {showDiff ? "Hide diff" : "Diff"}
               {(changeStats.added > 0 || changeStats.removed > 0) && (
-                <span className="text-[10px]">
+                <span className="text-2xs">
                   +{changeStats.added}/−{changeStats.removed}
                 </span>
               )}
@@ -1783,7 +1784,7 @@ function AssistantMessage({
                 type="button"
                 variant="ghost"
                 size="sm"
-                className="h-6 text-[10px] gap-1 text-muted-foreground hover:text-destructive hover:bg-destructive/10 px-1.5"
+                className="h-6 text-2xs gap-1 text-muted-foreground hover:text-destructive hover:bg-destructive/10 px-1.5"
                 onClick={() => onDiscard(message.id)}
               >
                 <X className="size-3" />
@@ -1792,7 +1793,7 @@ function AssistantMessage({
               <Button
                 type="button"
                 size="sm"
-                className="h-6 text-[10px] gap-1 px-2 bg-primary text-primary-foreground hover:bg-primary/90"
+                className="h-6 text-2xs gap-1 px-2 bg-primary text-primary-foreground hover:bg-primary/90"
                 onClick={() => onApply(message)}
               >
                 <Check className="size-3" />
@@ -1802,13 +1803,13 @@ function AssistantMessage({
           </>
         )}
         {isApplied && (
-          <div className="ml-1 flex items-center gap-1 text-[10px] text-muted-foreground">
+          <div className="ml-1 flex items-center gap-1 text-2xs text-muted-foreground">
             <Check className="h-3 w-3" />
             Applied
           </div>
         )}
         {isDiscarded && (
-          <div className="text-[10px] text-muted-foreground ml-1">Discarded</div>
+          <div className="text-2xs text-muted-foreground ml-1">Discarded</div>
         )}
       </div>
     </div>

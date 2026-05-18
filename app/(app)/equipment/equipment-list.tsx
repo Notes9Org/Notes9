@@ -195,7 +195,13 @@ function EquipmentTableView({ equipment }: { equipment: Equipment[] }) {
                 {formatDate(item.created_at)}
               </TableCell>
               <TableCell className="text-right">
-                <Button variant="ghost" size="sm" asChild onClick={(e: React.MouseEvent) => e.stopPropagation()}>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  asChild
+                  onClick={(e: React.MouseEvent) => e.stopPropagation()}
+                  aria-label={`Open equipment ${item.name}`}
+                >
                   <Link href={`/equipment/${item.id}`}>
                     <ArrowUpRight className="h-4 w-4" />
                   </Link>

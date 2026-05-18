@@ -269,6 +269,12 @@ export function NewLabNoteDialog({
               value={title}
               onChange={(e) => setTitle(e.target.value)}
               placeholder="e.g. Day 1 observations"
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && selectedExperimentId && !creating) {
+                  e.preventDefault()
+                  void handleCreate()
+                }
+              }}
             />
           </div>
         </div>
@@ -277,6 +283,7 @@ export function NewLabNoteDialog({
             Cancel
           </Button>
           <Button
+            type="submit"
             onClick={handleCreate}
             disabled={!selectedExperimentId || creating}
           >

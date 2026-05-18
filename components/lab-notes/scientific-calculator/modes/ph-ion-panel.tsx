@@ -40,7 +40,7 @@ export function PhIonPanel({ onResultChange }: { onResultChange: CalculatorResul
           className="h-8 text-sm"
         />
       </div>
-      <p className="text-[10px] text-muted-foreground">Shows pOH, [H⁺], [OH⁻] at 25 °C.</p>
+      <p className="text-2xs text-muted-foreground">Shows pOH, [H⁺], [OH⁻] at 25 °C.</p>
     </div>
   )
 }

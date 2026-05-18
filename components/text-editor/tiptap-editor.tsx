@@ -91,6 +91,7 @@ import {
   useCallback,
   useEffect,
   useLayoutEffect,
+  useMemo,
   useRef,
   useState,
   type CSSProperties,
@@ -100,7 +101,9 @@ import {
 import { createPortal } from "react-dom"
 import "@/styles/inline-diff.css"
 // @ts-ignore
-import * as mammoth from "mammoth"
+// `mammoth` is large (~500KB) and only needed when the user actually drops a
+// .docx file — load it dynamically inside `insertDocxFromFile` instead of
+// bundling it into the initial editor chunk.
 import { toast } from "sonner"
 import {
   Tooltip,
@@ -470,14 +473,14 @@ function CommentSidebar({ editor, open, onClose }: { editor: any; open: boolean;
               }}
             >
               <div className="flex justify-between items-start mb-1">
-                <span className="text-[10px] font-bold text-primary uppercase">{comment.author}</span>
-                <span className="text-[9px] text-muted-foreground">
+                <span className="text-2xs font-bold text-primary uppercase">{comment.author}</span>
+                <span className="text-3xs text-muted-foreground">
                   {new Date(comment.createdAt).toLocaleString()}
                 </span>
               </div>
               <p className="text-xs text-foreground mb-2 line-clamp-3">{comment.content}</p>
               <div className="flex justify-between items-center opacity-0 group-hover:opacity-100 transition-opacity">
-                <span className="text-[10px] text-muted-foreground italic truncate max-w-[120px]">"{comment.text}"</span>
+                <span className="text-2xs text-muted-foreground italic truncate max-w-[120px]">"{comment.text}"</span>
                 <Button
                   variant="ghost"
                   size="icon"
@@ -540,14 +543,25 @@ const TableControlsOverlay = ({
     startRowHeights: number[]
   } | null>(null)
 
-  // Update rect periodically or on table change
+  // Observe size + position changes rather than polling at 10Hz. The old
+  // `setInterval(updateRect, 100)` forced a layout reflow ten times per second
+  // for every visible table; ResizeObserver fires only when geometry changes.
   useEffect(() => {
-    const updateRect = () => {
-      setRect(table.getBoundingClientRect())
-    }
+    const updateRect = () => setRect(table.getBoundingClientRect())
     updateRect()
-    const interval = setInterval(updateRect, 100)
-    return () => clearInterval(interval)
+
+    const ro = new ResizeObserver(updateRect)
+    ro.observe(table)
+
+    // Picks up scroll-induced position changes that ResizeObserver misses.
+    window.addEventListener('scroll', updateRect, { passive: true, capture: true })
+    window.addEventListener('resize', updateRect, { passive: true })
+
+    return () => {
+      ro.disconnect()
+      window.removeEventListener('scroll', updateRect, { capture: true } as AddEventListenerOptions)
+      window.removeEventListener('resize', updateRect)
+    }
   }, [table])
 
   useEffect(() => {
@@ -726,13 +740,13 @@ const TableControlsOverlay = ({
               <Button
                 variant="outline"
                 size="sm"
-                className="h-7 px-2 text-[10px] gap-1.5 bg-background shadow-sm hover:bg-accent border-muted-foreground/20"
+                className="h-7 px-2 text-2xs gap-1.5 bg-background shadow-sm hover:bg-accent border-muted-foreground/20"
               >
                 <TableIcon className="h-3 w-3" /> Edit Table
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-56 p-1 bg-background/95 backdrop-blur-sm border-border shadow-2xl">
-              <DropdownMenuLabel className="text-[10px] uppercase text-muted-foreground font-semibold px-2 py-1">Rows</DropdownMenuLabel>
+              <DropdownMenuLabel className="text-2xs uppercase text-muted-foreground font-semibold px-2 py-1">Rows</DropdownMenuLabel>
               <DropdownMenuItem onClick={() => editor.chain().focus().addRowBefore().run()} className="text-xs gap-2">
                 <Rows className="h-3.5 w-3.5 rotate-180 opacity-70" /> Add Row Above
               </DropdownMenuItem>
@@ -745,7 +759,7 @@ const TableControlsOverlay = ({
 
               <DropdownMenuSeparator />
 
-              <DropdownMenuLabel className="text-[10px] uppercase text-muted-foreground font-semibold px-2 py-1">Columns</DropdownMenuLabel>
+              <DropdownMenuLabel className="text-2xs uppercase text-muted-foreground font-semibold px-2 py-1">Columns</DropdownMenuLabel>
               <DropdownMenuItem onClick={() => editor.chain().focus().addColumnBefore().run()} className="text-xs gap-2">
                 <Columns className="h-3.5 w-3.5 -scale-x-100 opacity-70" /> Add Column Left
               </DropdownMenuItem>
@@ -758,7 +772,7 @@ const TableControlsOverlay = ({
 
               <DropdownMenuSeparator />
 
-              <DropdownMenuLabel className="text-[10px] uppercase text-muted-foreground font-semibold px-2 py-1">Cells & Headers</DropdownMenuLabel>
+              <DropdownMenuLabel className="text-2xs uppercase text-muted-foreground font-semibold px-2 py-1">Cells & Headers</DropdownMenuLabel>
               <DropdownMenuItem onClick={() => editor.chain().focus().mergeCells().run()} className="text-xs gap-2">
                 <Maximize2 className="h-3.5 w-3.5 opacity-70" /> Merge Cells
               </DropdownMenuItem>
@@ -774,12 +788,12 @@ const TableControlsOverlay = ({
 
               <DropdownMenuSeparator />
 
-              <DropdownMenuLabel className="text-[10px] uppercase text-muted-foreground font-semibold px-2 py-1 flex items-center gap-2">
+              <DropdownMenuLabel className="text-2xs uppercase text-muted-foreground font-semibold px-2 py-1 flex items-center gap-2">
                 <Paintbrush className="h-3 w-3" /> Cell Background
               </DropdownMenuLabel>
               <div className="flex flex-wrap gap-1.5 p-2 px-3">
                 {[
-                  { name: 'No Color', value: null, className: 'bg-transparent border border-muted-foreground/30 flex items-center justify-center after:content-["/"] after:text-muted-foreground/40 after:text-[10px] after:font-bold' },
+                  { name: 'No Color', value: null, className: 'bg-transparent border border-muted-foreground/30 flex items-center justify-center after:content-["/"] after:text-muted-foreground/40 after:text-2xs after:font-bold' },
                   { name: 'Blue', value: '#e3f2fd', className: 'bg-[#e3f2fd] border border-blue-200' },
                   { name: 'Green', value: '#e8f5e9', className: 'bg-[#e8f5e9] border border-green-200' },
                   { name: 'Red', value: '#ffebee', className: 'bg-[#ffebee] border border-red-200' },
@@ -889,7 +903,7 @@ export const Indent = Extension.create<IndentOptions>({
     return {
       setIndent:
         () =>
-          ({ tr, state, dispatch, editor }) => {
+          ({ tr, state, dispatch, editor }: any) => {
             const { selection } = state;
             const { from, to } = selection;
 
@@ -901,7 +915,7 @@ export const Indent = Extension.create<IndentOptions>({
               return editor.chain().sinkListItem('listItem').run();
             }
 
-            tr.doc.nodesBetween(from, to, (node, pos) => {
+            tr.doc.nodesBetween(from, to, (node: any, pos: number) => {
               if (this.options.types.includes(node.type.name)) {
                 const indent = node.attrs.indent || 0;
                 const nextLevel =
@@ -924,7 +938,7 @@ export const Indent = Extension.create<IndentOptions>({
           },
       unsetIndent:
         () =>
-          ({ tr, state, dispatch, editor }) => {
+          ({ tr, state, dispatch, editor }: any) => {
             const { selection } = state;
             const { from, to } = selection;
 
@@ -936,7 +950,7 @@ export const Indent = Extension.create<IndentOptions>({
               return editor.chain().liftListItem('listItem').run();
             }
 
-            tr.doc.nodesBetween(from, to, (node, pos) => {
+            tr.doc.nodesBetween(from, to, (node: any, pos: number) => {
               if (this.options.types.includes(node.type.name)) {
                 const indent = node.attrs.indent || 0;
                 const prevLevel =
@@ -964,8 +978,8 @@ export const Indent = Extension.create<IndentOptions>({
 
   addKeyboardShortcuts() {
     return {
-      Tab: () => this.editor.commands.setIndent(),
-      'Shift-Tab': () => this.editor.commands.unsetIndent(),
+      Tab: () => (this.editor.commands as any).setIndent(),
+      'Shift-Tab': () => (this.editor.commands as any).unsetIndent(),
     };
   },
 });
@@ -1609,7 +1623,9 @@ export function TiptapEditor({
   // Citation store (single source of truth for citations + style)
   const [citationState, citationDispatch] = useCitationReducer(paperMode)
   const selectedCitationStyle = citationState.style
-  const citationMetadata = buildMetadataMap(citationState)
+  // Memoize the metadata map — `buildMetadataMap` walks the full citation
+  // store and runs on every render (the editor re-renders on selection change).
+  const citationMetadata = useMemo(() => buildMetadataMap(citationState), [citationState])
   const [isCommenting, setIsCommenting] = useState(false)
   const [commentText, setCommentText] = useState("")
   const [commentsSidebarOpen, setCommentsSidebarOpen] = useState(false)
@@ -2174,161 +2190,23 @@ export function TiptapEditor({
     }
   }, [activeCommentData])
 
+  // Mirror `content` prop into the editor ONLY when an external source changes
+  // it (note switch, AI insert, etc.) — not when the change came from this
+  // editor's own onUpdate -> parent setState round trip. `lastEmittedHtmlRef`
+  // captures whatever we just emitted upward so we can compare against it.
+  const lastEmittedHtmlRef = useRef<string>(content ?? "")
   useEffect(() => {
-    if (editor && content !== editor.getHTML()) {
-      editor.commands.setContent(content)
-    }
+    if (!editor) return
+    if (content === lastEmittedHtmlRef.current) return
+    if (content === editor.getHTML()) return
+    editor.commands.setContent(content)
+    lastEmittedHtmlRef.current = content
   }, [content, editor])
 
-  // AI Functions using Gemini API
-  const callGeminiAPI = useCallback(
-    async (action: string, selectedText: string) => {
-      setIsAIProcessing(true)
-      try {
-        const response = await fetch("/api/ai/gemini", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            action,
-            selectedText,
-          }),
-        })
-
-        if (!response.ok) {
-          const error = await response.json()
-          throw new Error(error.error || "AI request failed")
-        }
-
-        const data = await response.json()
-        return data.text
-      } catch (error: any) {
-        console.error("AI API error:", error)
-        // Fallback to demo mode if API fails
-        return `[AI unavailable] ${error.message || "Check your API key configuration."}`
-      } finally {
-        setIsAIProcessing(false)
-      }
-    },
-    []
-  )
-
-  const aiImprove = useCallback(async () => {
-    if (!editor) return
-    const { from, to } = editor.state.selection
-    const selectedText = editor.state.doc.textBetween(from, to, " ")
-
-    if (selectedText) {
-      const improved = await callGeminiAPI("improve", selectedText)
-      editor.chain().focus().deleteRange({ from, to }).insertContent(improved).run()
-    } else {
-      editor
-        .chain()
-        .focus()
-        .insertContent("[Select text to improve]")
-        .run()
-    }
-    setToolbarClusterMenu(null)
-  }, [editor, callGeminiAPI])
-
-  const aiContinue = useCallback(async () => {
-    if (!editor) return
-    const text = editor.getText()
-    const continuation = await callGeminiAPI("continue", text)
-    editor.chain().focus().insertContent(" " + continuation).run()
-    setToolbarClusterMenu(null)
-  }, [editor, callGeminiAPI])
-
-  const aiShorter = useCallback(async () => {
-    if (!editor) return
-    const { from, to } = editor.state.selection
-    const selectedText = editor.state.doc.textBetween(from, to, " ")
-
-    if (selectedText) {
-      const shorter = await callGeminiAPI("shorter", selectedText)
-      editor.chain().focus().deleteRange({ from, to }).insertContent(shorter).run()
-    } else {
-      editor
-        .chain()
-        .focus()
-        .insertContent("[Select text to shorten]")
-        .run()
-    }
-    setToolbarClusterMenu(null)
-  }, [editor, callGeminiAPI])
-
-  const aiLonger = useCallback(async () => {
-    if (!editor) return
-    const { from, to } = editor.state.selection
-    const selectedText = editor.state.doc.textBetween(from, to, " ")
-
-    if (selectedText) {
-      const longer = await callGeminiAPI("longer", selectedText)
-      editor.chain().focus().deleteRange({ from, to }).insertContent(longer).run()
-    } else {
-      editor
-        .chain()
-        .focus()
-        .insertContent("[Select text to expand]")
-        .run()
-    }
-    setToolbarClusterMenu(null)
-  }, [editor, callGeminiAPI])
-
-  const aiSimplify = useCallback(async () => {
-    if (!editor) return
-    const { from, to } = editor.state.selection
-    const selectedText = editor.state.doc.textBetween(from, to, " ")
-
-    if (selectedText) {
-      const simplified = await callGeminiAPI("simplify", selectedText)
-      editor.chain().focus().deleteRange({ from, to }).insertContent(simplified).run()
-    } else {
-      editor
-        .chain()
-        .focus()
-        .insertContent("[Select text to simplify]")
-        .run()
-    }
-    setToolbarClusterMenu(null)
-  }, [editor, callGeminiAPI])
-
-  const aiGrammar = useCallback(async () => {
-    if (!editor) return
-    const { from, to } = editor.state.selection
-    const selectedText = editor.state.doc.textBetween(from, to, " ")
-
-    if (selectedText) {
-      const corrected = await callGeminiAPI("grammar", selectedText)
-      editor.chain().focus().deleteRange({ from, to }).insertContent(corrected).run()
-    } else {
-      editor
-        .chain()
-        .focus()
-        .insertContent("[Select text to fix grammar]")
-        .run()
-    }
-    setToolbarClusterMenu(null)
-  }, [editor, callGeminiAPI])
-
-  const aiStructure = useCallback(async () => {
-    if (!editor) return
-    const { from, to } = editor.state.selection
-    const selectedText = editor.state.doc.textBetween(from, to, " ")
-
-    if (selectedText) {
-      const structured = await callGeminiAPI("structure", selectedText)
-      editor.chain().focus().deleteRange({ from, to }).insertContent(structured).run()
-    } else {
-      editor
-        .chain()
-        .focus()
-        .insertContent("[Select chemical text to structure]")
-        .run()
-    }
-    setToolbarClusterMenu(null)
-  }, [editor, callGeminiAPI])
+  // AI writing helpers (improve/continue/shorter/longer/simplify/grammar/structure)
+  // previously routed through Google Gemini and were removed when the product
+  // stopped using any Google APIs. `aiCite` below uses an independent citation-
+  // search endpoint and is intentionally kept.
 
   const aiCite = useCallback(async () => {
     if (!editor) return
@@ -3332,6 +3210,8 @@ export function TiptapEditor({
   const insertDocxFromFile = async (file: File) => {
     if (!editor || !file.name.toLowerCase().endsWith(".docx")) return
     const arrayBuffer = await file.arrayBuffer()
+    // Dynamic import keeps mammoth out of the initial editor bundle.
+    const mammoth = await import("mammoth")
     const { value: html } = await mammoth.convertToHtml({ arrayBuffer })
     editor.chain().focus().insertContent(html).run()
   }
@@ -3611,7 +3491,7 @@ export function TiptapEditor({
         >
           <div ref={textMenuLayoutRef} className="flex max-h-[inherit] min-h-0 flex-col overflow-y-auto px-2 py-2 [scrollbar-width:thin]">
             <div className="space-y-1.5 rounded-lg px-1 py-1">
-              <DropdownMenuLabel className="px-1 py-0 text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+              <DropdownMenuLabel className="px-1 py-0 text-2xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">
                 Paragraph
               </DropdownMenuLabel>
               <div className="px-1" onPointerDown={(e) => e.stopPropagation()}>
@@ -3638,7 +3518,7 @@ export function TiptapEditor({
             </div>
             <DropdownMenuSeparator className="my-1" />
             <div data-toolbar-focus="font-family" className="space-y-1.5 rounded-lg px-1 py-1">
-              <DropdownMenuLabel className="px-1 py-0 text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+              <DropdownMenuLabel className="px-1 py-0 text-2xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">
                 Font
               </DropdownMenuLabel>
               <div className="px-1" onPointerDown={(e) => e.stopPropagation()}>
@@ -3664,7 +3544,7 @@ export function TiptapEditor({
             </div>
             <DropdownMenuSeparator className="my-1" />
             <div data-toolbar-focus="font-size" className="space-y-1.5 rounded-lg px-1 py-1">
-              <DropdownMenuLabel className="px-1 py-0 text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+              <DropdownMenuLabel className="px-1 py-0 text-2xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">
                 Size
               </DropdownMenuLabel>
               <div className="px-1">
@@ -3714,7 +3594,7 @@ export function TiptapEditor({
                     className="h-8 min-w-0 flex-1 rounded-none border-0 bg-transparent px-1 py-0 text-center text-xs tabular-nums shadow-none focus-visible:z-[1] focus-visible:ring-0 focus-visible:ring-offset-0"
                     aria-label="Font size in pixels (8-96)"
                   />
-                  <div className="flex h-8 items-center border-l border-border px-2 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                  <div className="flex h-8 items-center border-l border-border px-2 text-2xs font-medium uppercase tracking-wide text-muted-foreground">
                     px
                   </div>
                   <Button
@@ -3737,7 +3617,7 @@ export function TiptapEditor({
             </div>
             <DropdownMenuSeparator className="my-1" />
             <div data-toolbar-focus="text-color" className="space-y-2 rounded-lg px-1 py-1">
-              <DropdownMenuLabel className="px-1 py-0 text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+              <DropdownMenuLabel className="px-1 py-0 text-2xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">
                 Color
               </DropdownMenuLabel>
               <div className="flex items-center gap-2 px-1">
@@ -3955,11 +3835,11 @@ export function TiptapEditor({
           </DropdownMenuItem>
           <DropdownMenuSeparator />
           <DropdownMenuLabel className="text-xs text-muted-foreground">Indent</DropdownMenuLabel>
-          <DropdownMenuItem onClick={() => editor.chain().focus().unsetIndent().run()}>
+          <DropdownMenuItem onClick={() => (editor.chain().focus() as any).unsetIndent().run()}>
             <IndentDecrease className="mr-2 h-4 w-4" />
             Decrease indent
           </DropdownMenuItem>
-          <DropdownMenuItem onClick={() => editor.chain().focus().setIndent().run()}>
+          <DropdownMenuItem onClick={() => (editor.chain().focus() as any).setIndent().run()}>
             <IndentIncrease className="mr-2 h-4 w-4" />
             Increase indent
           </DropdownMenuItem>
@@ -4170,10 +4050,6 @@ export function TiptapEditor({
             <FlaskConical className="mr-2 h-4 w-4" />
             Chemical formula
           </DropdownMenuItem>
-          <DropdownMenuItem onClick={aiStructure} disabled={isAIProcessing}>
-            <FlaskConical className="mr-2 h-4 w-4" />
-            Structure properly
-          </DropdownMenuItem>
           {enableMath && (
             <>
               <DropdownMenuItem
@@ -4280,58 +4156,6 @@ export function TiptapEditor({
             </TooltipTrigger>
             <TooltipContent>Generate bibliography</TooltipContent>
           </Tooltip>
-          {showAiWritingDropdown && (
-            <>
-              <Separator orientation="vertical" className="mx-px h-5 shrink-0" />
-              <DropdownMenu modal={false} open={toolbarClusterMenu === "ai"} onOpenChange={handleToolbarClusterChange("ai")}>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <DropdownMenuTrigger asChild>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className={
-                          showAiWritingToolbarLabel
-                            ? "h-8 shrink-0 gap-1 rounded-lg px-2"
-                            : "h-8 w-8 shrink-0 rounded-lg p-0"
-                        }
-                        disabled={isAIProcessing}
-                        aria-label="AI writing tools"
-                      >
-                        {isAIProcessing ? (
-                          <Loader2 className="h-4 w-4 animate-spin" />
-                        ) : (
-                          <Sparkles className="h-4 w-4" />
-                        )}
-                        {showAiWritingToolbarLabel && (
-                          <span className="text-xs hidden sm:inline">AI</span>
-                        )}
-                      </Button>
-                    </DropdownMenuTrigger>
-                  </TooltipTrigger>
-                  <TooltipContent>AI &amp; dictation</TooltipContent>
-                </Tooltip>
-                <DropdownMenuContent {...dockPopperOpts} className="z-[200] w-56">
-                  <DropdownMenuLabel className="flex items-center gap-2 text-xs">
-                    <WandSparkles className="h-4 w-4" />
-                    Writing
-                  </DropdownMenuLabel>
-                  <DropdownMenuItem onClick={aiShorter} disabled={isAIProcessing}>
-                    Make shorter
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={aiLonger} disabled={isAIProcessing}>
-                    Make longer
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={aiSimplify} disabled={isAIProcessing}>
-                    Simplify language
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={aiGrammar} disabled={isAIProcessing}>
-                    Fix grammar
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-            </>
-          )}
         </>
       )}
       </div>
@@ -4652,7 +4476,7 @@ export function TiptapEditor({
             >
               <div className="font-semibold text-muted-foreground flex justify-between items-center">
                 <span>{activeCommentData.author}</span>
-                <span className="text-[10px] opacity-70">
+                <span className="text-2xs opacity-70">
                   {activeCommentData.createdAt ? new Date(activeCommentData.createdAt).toLocaleString() : ""}
                 </span>
               </div>
@@ -5092,18 +4916,21 @@ export function TiptapEditor({
                   <h3 className="text-base font-semibold mb-2">References</h3>
                   <div className="space-y-1.5">
                     {Array.from(citationMetadata.entries())
-                      .sort((a, b) => a[0] - b[0])
-                      .map(([number, metadata]) => (
-                        <div key={number} className="text-sm leading-relaxed">
-                          <span className="font-medium inline-block min-w-[2rem]">[{number}]</span>
-                          <span
-                            className="inline"
-                            dangerouslySetInnerHTML={{
-                              __html: formatCitation(metadata, selectedCitationStyle)
-                            }}
-                          />
-                        </div>
-                      ))}
+                      .sort(([a], [b]) => (a as number) - (b as number))
+                      .map((entry) => {
+                        const [number, metadata] = entry as [number, ReturnType<typeof buildMetadataMap> extends Map<number, infer V> ? V : never]
+                        return (
+                          <div key={number} className="text-sm leading-relaxed">
+                            <span className="font-medium inline-block min-w-[2rem]">[{number}]</span>
+                            <span
+                              className="inline"
+                              dangerouslySetInnerHTML={{
+                                __html: formatCitation(metadata, selectedCitationStyle)
+                              }}
+                            />
+                          </div>
+                        )
+                      })}
                   </div>
                 </div>
               </div>

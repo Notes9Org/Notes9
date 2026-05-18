@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useMemo, useState } from "react"
 import { useRouter } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
 import { Button } from "@/components/ui/button"
@@ -29,6 +29,7 @@ export function DeleteProtocolDialog({
 }) {
   const router = useRouter()
   const { toast } = useToast()
+  const supabase = useMemo(() => createClient(), [])
   const [open, setOpen] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
 
@@ -36,8 +37,6 @@ export function DeleteProtocolDialog({
     setIsLoading(true)
 
     try {
-      const supabase = createClient()
-
       const { error } = await supabase
         .from("protocols")
         .delete()
@@ -51,16 +50,14 @@ export function DeleteProtocolDialog({
       })
 
       router.push("/protocols")
-      
-      setTimeout(() => {
-        window.location.href = "/protocols"
-      }, 500)
+      router.refresh()
     } catch (error: any) {
       toast({
         title: "Error",
         description: error.message,
         variant: "destructive",
       })
+    } finally {
       setIsLoading(false)
     }
   }
@@ -68,7 +65,7 @@ export function DeleteProtocolDialog({
   return (
     <AlertDialog open={open} onOpenChange={setOpen}>
       <AlertDialogTrigger asChild>
-        <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:text-destructive" aria-label="Delete protocol">
+        <Button variant="ghost" size="icon-sm" className="text-destructive hover:text-destructive" aria-label="Delete protocol">
           <Trash2 className="h-4 w-4" />
         </Button>
       </AlertDialogTrigger>

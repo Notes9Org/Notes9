@@ -59,3 +59,12 @@ lib/supabase/admin.ts
 public/notes9-logo.svg
 litreview-ai-assistant_V01.zip
 litreview-ai-assistant_V01
+
+# Claude Code plugin-private state (Ruflo plugins). These files are local
+# vector stores / lock files written by `npx ruvector`, `agentdb`, etc.
+# They mutate on every plugin invocation, contain conversation embeddings,
+# and are NOT referenced by any application code in this repo.
+ruvector.db
+ruvector.db-journal
+agentdb.rvf
+agentdb.rvf.lock

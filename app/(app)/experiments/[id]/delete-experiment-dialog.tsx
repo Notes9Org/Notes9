@@ -1,8 +1,8 @@
 "use client"
 
-import { useState } from "react"
+import { useMemo, useState } from "react"
 import { createClient } from "@/lib/supabase/client"
-import { Button } from "@/components/ui/button"
+import { Button, buttonVariants } from "@/components/ui/button"
 import {
   AlertDialog,
   AlertDialogAction,
@@ -36,7 +36,7 @@ export function DeleteExperimentDialog({
 }: DeleteExperimentDialogProps) {
   const { toast } = useToast()
   const router = useRouter()
-  const supabase = createClient()
+  const supabase = useMemo(() => createClient(), [])
 
   const [internalOpen, setInternalOpen] = useState(false)
   const open = externalOpen !== undefined ? externalOpen : internalOpen
@@ -72,6 +72,7 @@ export function DeleteExperimentDialog({
         description: error.message || "Failed to delete experiment",
         variant: "destructive",
       })
+    } finally {
       setIsDeleting(false)
     }
   }
@@ -131,7 +132,7 @@ export function DeleteExperimentDialog({
           <AlertDialogAction
             onClick={handleDelete}
             disabled={isDeleting}
-            className="bg-destructive hover:bg-destructive/90"
+            className={buttonVariants({ variant: "destructive" })}
           >
             {isDeleting ? (
               <>

@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react"
 import { createClient } from "@/lib/supabase/client"
+import { createBucketSignedUrl } from "@/lib/storage-signed-url"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -41,6 +42,10 @@ import {
   ExperimentDataTabularDialog,
   isTabularExperimentFile,
 } from "@/components/experiments/experiment-data-tabular-dialog"
+import {
+  ExperimentDataPreviewDialog,
+  isPreviewableExperimentFile,
+} from "@/components/experiments/experiment-data-preview-dialog"
 import { createEmptyWorkbookSnapshot } from "@/components/spreadsheet/spreadsheet-univer-shared"
 import { fetchOrganizationIdForExperiment } from "@/lib/experiment-storage"
 import {
@@ -70,7 +75,14 @@ export function DataFilesTab({ experimentId }: { experimentId: string }) {
   const [isLoading, setIsLoading] = useState(true)
   const [tabularOpen, setTabularOpen] = useState(false)
   const [tabularFile, setTabularFile] = useState<ExperimentFile | null>(null)
+  const [previewOpen, setPreviewOpen] = useState(false)
+  const [previewFile, setPreviewFile] = useState<ExperimentFile | null>(null)
   const [creatingEmpty, setCreatingEmpty] = useState(false)
+
+  const openPreview = (file: ExperimentFile) => {
+    setPreviewFile(file)
+    setPreviewOpen(true)
+  }
 
   useEffect(() => {
     fetchFiles()
@@ -191,8 +203,7 @@ export function DataFilesTab({ experimentId }: { experimentId: string }) {
       })
       if (uploadError) throw uploadError
 
-      const { data: urlData } = supabase.storage.from(USER_STORAGE_BUCKET).getPublicUrl(storagePath)
-
+      // Bucket is private — store the storage path; readers sign URLs on demand.
       const { data: inserted, error: dbError } = await supabase
         .from("experiment_data")
         .insert({
@@ -200,7 +211,7 @@ export function DataFilesTab({ experimentId }: { experimentId: string }) {
           experiment_id: experimentId,
           data_type: "raw",
           file_name: fileName,
-          file_url: urlData.publicUrl,
+          file_url: storagePath,
           file_size: 0,
           file_type: "text/csv",
           uploaded_by: user.id,
@@ -264,14 +275,30 @@ export function DataFilesTab({ experimentId }: { experimentId: string }) {
     }
   }
 
-  const handleDownload = (file: ExperimentFile) => {
+  // After migration 051 the bucket is private — `file_url` holds the storage
+  // path for new rows, or a legacy public URL for old rows. Resolve to a
+  // short-lived signed URL on demand so both shapes work.
+  const resolveFileUrl = async (file: ExperimentFile): Promise<string> => {
+    const supabase = createClient()
+    return createBucketSignedUrl(supabase, USER_STORAGE_BUCKET, file.file_url)
+  }
+
+  const handleDownload = async (file: ExperimentFile) => {
+    const href = await resolveFileUrl(file)
+    if (!href) return
     const link = document.createElement('a')
-    link.href = file.file_url
+    link.href = href
     link.download = file.file_name
     link.target = '_blank'
     document.body.appendChild(link)
     link.click()
     document.body.removeChild(link)
+  }
+
+  const handleView = async (file: ExperimentFile) => {
+    const href = await resolveFileUrl(file)
+    if (!href) return
+    window.open(href, "_blank")
   }
 
   const getFileIcon = (file: ExperimentFile) => {
@@ -317,6 +344,18 @@ export function DataFilesTab({ experimentId }: { experimentId: string }) {
         experimentId={experimentId}
         fileId={tabularFile.id}
         fileName={tabularFile.file_name}
+      />
+    )}
+    {previewFile && (
+      <ExperimentDataPreviewDialog
+        open={previewOpen}
+        onOpenChange={(o: boolean) => {
+          setPreviewOpen(o)
+          if (!o) setPreviewFile(null)
+        }}
+        fileUrl={previewFile.file_url}
+        fileName={previewFile.file_name}
+        fileType={previewFile.file_type}
       />
     )}
     <Card>
@@ -399,10 +438,21 @@ export function DataFilesTab({ experimentId }: { experimentId: string }) {
                         <Button
                           variant="ghost"
                           size="sm"
-                          onClick={() =>
+                          onClick={() => {
+                            if (isTabularExperimentFile(file)) {
+                              openTabularViewer(file)
+                            } else if (isPreviewableExperimentFile(file)) {
+                              openPreview(file)
+                            } else {
+                              void handleView(file)
+                            }
+                          }}
+                          title={
                             isTabularExperimentFile(file)
-                              ? openTabularViewer(file)
-                              : window.open(file.file_url, "_blank")
+                              ? "Open spreadsheet"
+                              : isPreviewableExperimentFile(file)
+                                ? "Preview file"
+                                : "Open file"
                           }
                         >
                           <Eye className="h-4 w-4" />
@@ -410,7 +460,7 @@ export function DataFilesTab({ experimentId }: { experimentId: string }) {
                         <Button
                           variant="ghost"
                           size="sm"
-                          onClick={() => handleDownload(file)}
+                          onClick={() => void handleDownload(file)}
                         >
                           <Download className="h-4 w-4" />
                         </Button>

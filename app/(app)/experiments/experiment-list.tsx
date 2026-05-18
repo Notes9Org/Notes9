@@ -181,8 +181,6 @@ export function ExperimentsPageContent({
         <ExperimentList
           experiments={filteredExperiments}
           viewMode={viewMode}
-          setViewMode={setViewMode}
-          hideToolbar
           linkProjectId={linkProjectId}
         />
       ) : (
@@ -217,22 +215,16 @@ export function ExperimentsPageContent({
 interface ExperimentListProps {
   experiments: Experiment[]
   viewMode?: "grid" | "table"
-  setViewMode?: (mode: "grid" | "table") => void
-  hideToolbar?: boolean
   linkProjectId?: string | null
 }
 
 export function ExperimentList({
   experiments,
   viewMode: controlledView,
-  setViewMode: setControlledView,
-  hideToolbar,
   linkProjectId = null,
 }: ExperimentListProps) {
   const isMobile = useMediaQuery("(max-width: 768px)")
-  const [internalView, setInternalView] = useState<"grid" | "table">("table")
-  const viewMode = controlledView ?? internalView
-  const setViewMode = setControlledView ?? setInternalView
+  const viewMode = controlledView ?? "table"
   const effectiveViewMode = isMobile ? "grid" : viewMode
 
   // Helper function to get shorter status text for better display
@@ -255,36 +247,6 @@ export function ExperimentList({
 
   return (
     <>
-      {/* View Toggle - only when not in header */}
-      {!hideToolbar && (
-        <div className="flex justify-end mb-4">
-          <div className="inline-flex gap-1 rounded-lg border p-1">
-            <Button
-              variant={effectiveViewMode === "grid" ? "default" : "ghost"}
-              size="sm"
-              onClick={() => setViewMode("grid")}
-              className="gap-2"
-              aria-label="Switch to grid view"
-            >
-              <Grid3x3 className="h-4 w-4" />
-              Grid
-            </Button>
-            <Button
-              variant={isMobile ? "ghost" : effectiveViewMode === "table" ? "default" : "ghost"}
-              size="sm"
-              onClick={() => !isMobile && setViewMode("table")}
-              className="gap-2"
-              disabled={isMobile}
-              aria-disabled={isMobile}
-              aria-label="Switch to table view"
-            >
-              <List className="h-4 w-4" />
-              Table
-            </Button>
-          </div>
-        </div>
-      )}
-
       {/* Grid View - Use auto-fill with fixed card sizes to prevent expansion */}
       {effectiveViewMode === "grid" && (
         <div className="grid gap-4 grid-cols-[repeat(auto-fit,minmax(280px,1fr))]">
@@ -311,20 +273,11 @@ export function ExperimentList({
                     <FlaskConical className="h-5 w-5 text-primary" />
                   </div>
                   <div className="min-w-0 flex-1 space-y-1 overflow-hidden">
-                    <CardTitle className="text-base text-foreground leading-tight min-w-0 overflow-hidden text-ellipsis" style={{
-                      display: '-webkit-box',
-                      WebkitLineClamp: 2,
-                      WebkitBoxOrient: 'vertical',
-                      wordBreak: 'normal',
-                      overflowWrap: 'normal'
-                    }}>
+                    <CardTitle className="text-base text-foreground leading-tight min-w-0 line-clamp-2 [overflow-wrap:normal] [word-break:normal]">
                       {experiment.name}
                     </CardTitle>
                     {experiment.project && (
-                      <CardDescription className="text-xs min-w-0 overflow-hidden text-ellipsis" style={{
-                        wordBreak: 'normal',
-                        overflowWrap: 'normal'
-                      }}>
+                      <CardDescription className="text-xs min-w-0 truncate [overflow-wrap:normal] [word-break:normal]">
                         {experiment.project.name}
                       </CardDescription>
                     )}
@@ -363,14 +316,7 @@ export function ExperimentList({
                   )}
                   <HtmlContentTruncated
                     content={experiment.description}
-                    className="text-sm text-muted-foreground min-w-0 overflow-hidden text-ellipsis"
-                    style={{
-                      display: '-webkit-box',
-                      WebkitLineClamp: 2,
-                      WebkitBoxOrient: 'vertical',
-                      wordBreak: 'normal',
-                      overflowWrap: 'normal'
-                    } as React.CSSProperties}
+                    className="text-sm text-muted-foreground min-w-0 line-clamp-2 [overflow-wrap:normal] [word-break:normal]"
                   />
                 </div>
                 <Button variant="outline" size="sm" className="w-full mt-auto shrink-0" asChild>
@@ -440,7 +386,13 @@ function ExperimentTableView({ experiments, linkProjectId }: { experiments: Expe
                     {formatDate(experiment.created_at)}
                   </TableCell>
                   <TableCell className="text-right">
-                    <Button variant="ghost" size="sm" asChild onClick={(e: React.MouseEvent) => e.stopPropagation()}>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      asChild
+                      onClick={(e: React.MouseEvent) => e.stopPropagation()}
+                      aria-label={`Open experiment ${experiment.name}`}
+                    >
                       <Link href={experimentDetailHref(experiment.id, linkProjectId)}>
                         <ArrowUpRight className="h-4 w-4" />
                       </Link>
