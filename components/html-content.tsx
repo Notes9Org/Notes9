@@ -1,6 +1,8 @@
 "use client"
 
+import { useMemo } from 'react'
 import { cn } from '@/lib/utils'
+import { sanitizeHtml } from '@/lib/sanitize-html'
 import '@/styles/html-content.css'
 
 interface HtmlContentProps {
@@ -11,6 +13,8 @@ interface HtmlContentProps {
 }
 
 export function HtmlContent({ content, className, fallback = "No description" }: HtmlContentProps) {
+  const sanitized = useMemo(() => sanitizeHtml(content), [content])
+
   if (!content || content.trim() === '' || content === '<p></p>') {
     return <span className={cn("text-muted-foreground", className)}>{fallback}</span>
   }
@@ -18,7 +22,7 @@ export function HtmlContent({ content, className, fallback = "No description" }:
   return (
     <div
       className={cn("prose prose-sm max-w-none html-content", className)}
-      dangerouslySetInnerHTML={{ __html: content }}
+      dangerouslySetInnerHTML={{ __html: sanitized }}
       style={{
         // Override prose styles to match your app's design
         '--tw-prose-body': 'var(--foreground)',

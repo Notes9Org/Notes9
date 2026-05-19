@@ -86,7 +86,7 @@ export default function PublicNotePage() {
 
                     <div className="flex items-center gap-2">
                         <span className="h-2 w-2 rounded-full bg-green-500 animate-pulse" title="Live Updates Active"></span>
-                        <p className="text-[10px] font-medium text-muted-foreground leading-none">
+                        <p className="text-2xs font-medium text-muted-foreground leading-none">
                             Powered by <span className="font-bold text-foreground">Notes9</span>
                         </p>
                     </div>

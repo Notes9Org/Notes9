@@ -170,12 +170,12 @@ export function TableOfContents({ editor, className }: TableOfContentsProps) {
                             >
                                 <span
                                     className={cn(
-                                        "min-w-0 truncate text-left text-[11px] font-medium whitespace-nowrap opacity-0 transition-[max-width,opacity] duration-500 ease-out",
+                                        "min-w-0 truncate text-left text-micro font-medium whitespace-nowrap opacity-0 transition-[max-width,opacity] duration-500 ease-out",
                                         "max-w-0 overflow-hidden group-hover:max-w-[min(210px,100%)] group-hover:flex-1 group-hover:opacity-100",
                                         isActive && "font-semibold text-primary group-hover:text-secondary-foreground",
                                         !isActive && "text-muted-foreground group-hover:text-foreground",
                                         item.level === 1 && !isActive && "text-foreground",
-                                        item.level === 3 && "text-[10px]"
+                                        item.level === 3 && "text-2xs"
                                     )}
                                 >
                                     {item.text || "Untitled"}

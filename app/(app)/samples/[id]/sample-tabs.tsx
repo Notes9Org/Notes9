@@ -1,6 +1,6 @@
 "use client"
 
-import { useId, useState, useEffect } from "react"
+import { useCallback, useEffect, useId, useState } from "react"
 import { useRouter, useSearchParams, usePathname } from "next/navigation"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import type { ReactNode } from "react"
@@ -36,30 +36,30 @@ export function SampleTabs({
   const searchParams = useSearchParams()
   const baseId = useId()
   const [mounted, setMounted] = useState(false)
-  const [active, setActive] = useState<TabValue>(
-    isValidTab(initialTab) ? initialTab : "overview"
-  )
+
+  // Tab state is derived directly from URL — no useState/useEffect sync dance.
+  // The old useState + useEffect([searchParams, active]) pattern raced router.replace:
+  // a click would set state, then the effect would re-run with stale searchParams
+  // (still showing the previous tab) and revert the click.
+  const fromUrl = searchParams.get("tab")
+  const initialFromProps = isValidTab(initialTab) ? initialTab : "overview"
+  const active: TabValue = isValidTab(fromUrl) ? fromUrl : initialFromProps
 
   useEffect(() => {
     setMounted(true)
   }, [])
 
-  useEffect(() => {
-    const fromUrl = searchParams.get("tab")
-    if (isValidTab(fromUrl) && fromUrl !== active) {
-      setActive(fromUrl)
-    }
-  }, [searchParams, active])
-
-  const handleChange = (value: string) => {
-    if (!isValidTab(value)) return
-    setActive(value)
-    const next = new URLSearchParams(searchParams.toString())
-    if (value === "overview") next.delete("tab")
-    else next.set("tab", value)
-    const query = next.toString()
-    router.replace(query ? `${pathname}?${query}` : pathname, { scroll: false })
-  }
+  const handleChange = useCallback(
+    (value: string) => {
+      if (!isValidTab(value)) return
+      const next = new URLSearchParams(searchParams.toString())
+      if (value === "overview") next.delete("tab")
+      else next.set("tab", value)
+      const query = next.toString()
+      router.replace(query ? `${pathname}?${query}` : pathname, { scroll: false })
+    },
+    [router, pathname, searchParams]
+  )
 
   if (!mounted) {
     return <div className="min-h-[400px]" />

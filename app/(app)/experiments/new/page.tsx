@@ -23,6 +23,7 @@ import { ArrowLeft } from 'lucide-react'
 import { getUniqueNameErrorMessage } from "@/lib/unique-name-error"
 import { DATE_ORDER_ERROR, isEndDateBeforeStartDate } from "@/lib/date-order"
 import { recordRumEvent } from "@/lib/rum"
+import { toast } from "sonner"
 
 function NewExperimentForm() {
   const router = useRouter()
@@ -63,9 +64,15 @@ function NewExperimentForm() {
         .eq("is_active", true)
         .order("name")
       
-      if (projectsError) console.error("Error fetching projects:", projectsError)
-      if (protocolsError) console.error("Error fetching protocols:", protocolsError)
-      
+      if (projectsError) {
+        console.error("Error fetching projects:", projectsError)
+        toast.error("Couldn't load projects", { description: projectsError.message })
+      }
+      if (protocolsError) {
+        console.error("Error fetching protocols:", protocolsError)
+        toast.error("Couldn't load protocols", { description: protocolsError.message })
+      }
+
       if (projectsData) setProjects(projectsData)
       if (protocolsData) setProtocols(protocolsData)
     }
@@ -131,7 +138,12 @@ function NewExperimentForm() {
             protocol_id: formData.protocol_id,
           })
         
-        if (protocolError) console.error("Error linking protocol:", protocolError)
+        if (protocolError) {
+          console.error("Error linking protocol:", protocolError)
+          toast.warning("Experiment created, but the protocol could not be linked", {
+            description: "You can link it from the experiment's Protocol tab.",
+          })
+        }
       }
 
       recordRumEvent('experiment_created', { projectId: formData.project_id })

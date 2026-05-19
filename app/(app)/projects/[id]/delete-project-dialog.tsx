@@ -1,8 +1,8 @@
 "use client"
 
-import { useState } from "react"
+import { useMemo, useState } from "react"
 import { createClient } from "@/lib/supabase/client"
-import { Button } from "@/components/ui/button"
+import { Button, buttonVariants } from "@/components/ui/button"
 import {
   AlertDialog,
   AlertDialogAction,
@@ -32,7 +32,7 @@ interface DeleteProjectDialogProps {
 export function DeleteProjectDialog({ projectId, projectName, experimentCount = 0, asMenuItem = false, open: controlledOpen, onOpenChange: controlledOnOpenChange }: DeleteProjectDialogProps) {
   const { toast } = useToast()
   const router = useRouter()
-  const supabase = createClient()
+  const supabase = useMemo(() => createClient(), [])
 
   const [internalOpen, setInternalOpen] = useState(false)
   const isControlled = controlledOpen !== undefined && controlledOnOpenChange !== undefined
@@ -66,6 +66,7 @@ export function DeleteProjectDialog({ projectId, projectName, experimentCount = 
         description: error.message || "Failed to delete project",
         variant: "destructive",
       })
+    } finally {
       setIsDeleting(false)
     }
   }
@@ -123,7 +124,7 @@ export function DeleteProjectDialog({ projectId, projectName, experimentCount = 
           <AlertDialogAction
             onClick={handleDelete}
             disabled={isDeleting}
-            className="bg-destructive hover:bg-destructive/90"
+            className={buttonVariants({ variant: "destructive" })}
           >
             {isDeleting ? (
               <>

@@ -1,5 +1,7 @@
 "use client"
 
+import { Button } from "@/components/ui/button"
+
 export default function ExperimentsError({
   error,
   reset,
@@ -10,12 +12,7 @@ export default function ExperimentsError({
   return (
     <div className="flex flex-col items-center justify-center h-64 gap-4">
       <p className="text-destructive">{error.message || "Something went wrong loading experiments."}</p>
-      <button
-        onClick={reset}
-        className="px-4 py-2 text-sm font-medium rounded-md bg-primary text-primary-foreground hover:bg-primary/90"
-      >
-        Try again
-      </button>
+      <Button onClick={reset}>Try again</Button>
     </div>
   )
 }

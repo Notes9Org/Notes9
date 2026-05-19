@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { useToast } from "@/hooks/use-toast"
 import { cn } from "@/lib/utils"
+import { sanitizeHtml } from "@/lib/sanitize-html"
 import type { LiteraturePdfAnnotation } from "@/types/literature-pdf"
 
 interface LiteraturePdfAnnotationSidebarProps {
@@ -112,7 +113,7 @@ export function LiteraturePdfAnnotationSidebar({
                     {annotation.comment_text && (
                       <div
                         className="prose prose-sm max-w-none break-words text-foreground dark:prose-invert [&_*]:break-words"
-                        dangerouslySetInnerHTML={{ __html: annotation.comment_text }}
+                        dangerouslySetInnerHTML={{ __html: sanitizeHtml(annotation.comment_text) }}
                       />
                     )}
                   </div>

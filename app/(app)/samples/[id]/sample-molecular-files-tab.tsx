@@ -120,15 +120,24 @@ export function SampleMolecularFilesTab({ sampleId, initialFiles }: SampleMolecu
     async function resolve() {
       if (!selectedFile) {
         setSignedUrl(null)
+        setSignedUrlLoading(false)
         return
       }
       setSignedUrlLoading(true)
       setSignedUrl(null)
-      const supabase = createClient()
-      const url = await createSampleFileSignedUrl(supabase, selectedFile.storage_path, 3600)
-      if (cancelled) return
-      setSignedUrl(url)
-      setSignedUrlLoading(false)
+      try {
+        const supabase = createClient()
+        const url = await createSampleFileSignedUrl(supabase, selectedFile.storage_path, 3600)
+        if (cancelled) return
+        setSignedUrl(url)
+      } catch (err) {
+        if (cancelled) return
+        console.error("Could not sign sample file URL", err)
+        setSignedUrl(null)
+        setError(err instanceof Error ? err.message : "Could not load this file.")
+      } finally {
+        if (!cancelled) setSignedUrlLoading(false)
+      }
     }
     resolve()
     return () => {
@@ -236,8 +245,10 @@ export function SampleMolecularFilesTab({ sampleId, initialFiles }: SampleMolecu
       })
       if (dbError) throw dbError
 
-      await refreshFiles()
+      // Select the new file BEFORE refresh so refreshFiles' fallback selector
+      // doesn't briefly pick a different row and trigger a wasted signed-URL fetch.
       setSelectedId(sampleFileId)
+      await refreshFiles()
       toast({ title: "File uploaded", description: `${file.name} is linked to this sample.` })
     } catch (err) {
       console.error(err)
@@ -586,7 +597,7 @@ export function SampleMolecularFilesTab({ sampleId, initialFiles }: SampleMolecu
                     {selectedFile ? (
                       <Badge
                         variant="outline"
-                        className="h-5 shrink-0 px-2 py-0 font-mono text-[10px] font-semibold uppercase leading-none tracking-wide"
+                        className="h-5 shrink-0 px-2 py-0 font-mono text-2xs font-semibold uppercase leading-none tracking-wide"
                       >
                         {molecularFileFormatLabel(selectedFile.file_name)}
                       </Badge>

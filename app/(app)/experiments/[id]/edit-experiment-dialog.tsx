@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useMemo } from "react"
 import { createClient } from "@/lib/supabase/client"
 import { usePreventSpaceMenuClose } from "@/hooks/use-prevent-space-menu-close"
 import { Button } from "@/components/ui/button"
@@ -63,7 +63,7 @@ export function EditExperimentDialog({
 }: EditExperimentDialogProps) {
   const { toast } = useToast()
   const router = useRouter()
-  const supabase = createClient()
+  const supabase = useMemo(() => createClient(), [])
 
   const [internalOpen, setInternalOpen] = useState(false)
   const open = externalOpen !== undefined ? externalOpen : internalOpen
@@ -335,26 +335,26 @@ export function EditExperimentDialog({
         </div>
 
           {/* Actions */}
-          <div className="flex justify-end gap-2 pt-4">
+          <DialogFooter className="pt-4">
             <Button
               type="button"
               variant="outline"
               onClick={() => setOpen(false)}
               disabled={isSaving}
             >
-            Cancel
-          </Button>
+              Cancel
+            </Button>
             <Button type="submit" disabled={isSaving}>
-            {isSaving ? (
-              <>
-                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                Saving...
-              </>
-            ) : (
-              "Save Changes"
-            )}
-          </Button>
-          </div>
+              {isSaving ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Saving...
+                </>
+              ) : (
+                "Save Changes"
+              )}
+            </Button>
+          </DialogFooter>
         </form>
       </DialogContent>
     </Dialog>

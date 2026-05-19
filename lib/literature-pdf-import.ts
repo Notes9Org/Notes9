@@ -396,11 +396,10 @@ export async function importLiteraturePdfFromRemote(params: {
     throw new Error(uploadError.message)
   }
 
-  const { data: urlData } = storage.getPublicUrl(storagePath)
   const { error: updateError } = await params.supabase
     .from("literature_reviews")
     .update({
-      pdf_file_url: urlData.publicUrl,
+      pdf_file_url: storagePath,
       pdf_file_name: clampText(fileName, "pdf_file_name"),
       pdf_file_size: len,
       pdf_file_type: clampText("application/pdf", "pdf_file_type"),

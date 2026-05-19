@@ -116,8 +116,8 @@ export function NoteExportMenu({
         {trigger ?? (
           <Button
             variant="ghost"
-            size="icon"
-            className="h-8 w-8 text-muted-foreground hover:text-foreground"
+            size="icon-sm"
+            className="text-muted-foreground hover:text-foreground"
             disabled={disabled}
             aria-label="Export"
           >

@@ -63,7 +63,7 @@ export function buildRumConfig(): RumConfig {
  * Extract session metadata from a user object.
  * Returns only the opaque user UUID — no PII (email, name, etc.).
  */
-export function extractSessionMetadata(user: { id: string; [key: string]: unknown }): {
+export function extractSessionMetadata(user: { id: string }): {
   userId: string
 } {
   return { userId: user.id }

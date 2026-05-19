@@ -22,15 +22,23 @@ export async function GET(_request: Request, context: { params: Promise<{ id: st
       .eq("id", noteId)
       .maybeSingle()
 
+    // Return an identical 404 whether the note row is missing or merely
+    // unpublished, so a caller can't use this endpoint as an oracle to
+    // enumerate which lab note UUIDs exist (closes audit finding LOW-4).
+    const notFound = NextResponse.json(
+      { error: "This note has not been published or does not exist." },
+      { status: 404 },
+    )
+
     if (noteErr || !note?.created_by) {
-      return NextResponse.json({ error: "Not found" }, { status: 404 })
+      return notFound
     }
 
     const path = createPublishedLabNoteStoragePath(String(note.created_by), noteId)
     const { data: blob, error: dlErr } = await admin.storage.from(USER_STORAGE_BUCKET).download(path)
 
     if (dlErr || !blob) {
-      return NextResponse.json({ error: "This note has not been published or does not exist." }, { status: 404 })
+      return notFound
     }
 
     const text = await blob.text()

@@ -87,7 +87,7 @@ function ReferenceBlock({ item: r }: { item: PaperAnalyzerReference }) {
       )}
       {sentences.length > 0 && (
         <div className="mt-2 space-y-1 border-l-2 border-muted pl-2">
-          <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+          <p className="text-2xs font-medium uppercase tracking-wide text-muted-foreground">
             Supporting text
           </p>
           {sentences.map((s, i) => {

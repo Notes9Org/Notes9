@@ -69,7 +69,15 @@ export default function SettingsPage() {
           setFirstName(data.first_name ?? "")
           setLastName(data.last_name ?? "")
           setRole(data.role ?? "researcher")
-          setAvatarUrl(data.avatar_url ?? null)
+          // avatar_url stores either a legacy public URL or (post-051) a storage
+          // path; sign whichever it is so the bucket can stay private.
+          if (data.avatar_url) {
+            const { createBucketSignedUrl } = await import("@/lib/storage-signed-url")
+            const signed = await createBucketSignedUrl(supabase, USER_STORAGE_BUCKET, data.avatar_url)
+            setAvatarUrl(signed)
+          } else {
+            setAvatarUrl(null)
+          }
         }
       }
       setLoading(false)
@@ -170,21 +178,21 @@ export default function SettingsPage() {
 
       if (uploadError) throw uploadError
 
-      const { data: urlData } = supabase.storage.from(USER_STORAGE_BUCKET).getPublicUrl(path)
-      const publicUrl = urlData.publicUrl
-
+      // Bucket is private — persist the storage path; sign for display.
       const { error: updateError } = await supabase
         .from("profiles")
         .update({
-          avatar_url: publicUrl,
+          avatar_url: path,
           updated_at: new Date().toISOString(),
         })
         .eq("id", profile.id)
 
       if (updateError) throw updateError
 
-      setAvatarUrl(publicUrl)
-      setProfile((p: any) => (p ? { ...p, avatar_url: publicUrl } : p))
+      const { createBucketSignedUrl } = await import("@/lib/storage-signed-url")
+      const signed = await createBucketSignedUrl(supabase, USER_STORAGE_BUCKET, path)
+      setAvatarUrl(signed)
+      setProfile((p: any) => (p ? { ...p, avatar_url: path } : p))
       toast({ title: "Avatar updated", description: "Your profile photo has been updated." })
     } catch (err: any) {
       toast({
@@ -427,7 +435,7 @@ export default function SettingsPage() {
                     Receive email updates about your experiments
                   </p>
                 </div>
-                <Button variant="outline" size="sm">
+                <Button variant="outline" size="sm" disabled title="Coming soon">
                   Configure
                 </Button>
               </div>
@@ -439,7 +447,7 @@ export default function SettingsPage() {
                     Set your preferred dashboard layout
                   </p>
                 </div>
-                <Button variant="outline" size="sm">
+                <Button variant="outline" size="sm" disabled title="Coming soon">
                   Configure
                 </Button>
               </div>

@@ -192,7 +192,7 @@ export function ProtocolDraftBiomniPanel({
       </div>
 
       <div className="px-3 py-2 border-b space-y-1.5 shrink-0">
-        <p className="text-[11px] text-muted-foreground leading-snug">
+        <p className="text-micro text-muted-foreground leading-snug">
           Selected papers are sent to the Biomni literature stream only — they are not inserted into
           the protocol body until you apply an assistant reply below.
         </p>
@@ -206,7 +206,7 @@ export function ProtocolDraftBiomniPanel({
               <Badge
                 key={p.id}
                 variant="secondary"
-                className="text-[10px] gap-1 pr-0.5 max-w-[140px] font-normal"
+                className="text-2xs gap-1 pr-0.5 max-w-[140px] font-normal"
               >
                 <span className="truncate">{p.title}</span>
                 <button
@@ -292,7 +292,7 @@ export function ProtocolDraftBiomniPanel({
                   : "bg-background border mr-4"
               )}
             >
-              <span className="text-[10px] uppercase text-muted-foreground font-medium block mb-1">
+              <span className="text-2xs uppercase text-muted-foreground font-medium block mb-1">
                 {m.role === "user" ? "You" : "Assistant"}
               </span>
               <div className="whitespace-pre-wrap">{m.text}</div>
@@ -300,7 +300,7 @@ export function ProtocolDraftBiomniPanel({
           ))}
 
           {isStreaming && steps.length > 0 && (
-            <div className="text-[10px] text-muted-foreground font-mono space-y-0.5 border rounded-md p-2 bg-muted/30">
+            <div className="text-2xs text-muted-foreground font-mono space-y-0.5 border rounded-md p-2 bg-muted/30">
               {steps.slice(-8).map((s, i) => (
                 <div key={i}>{s}</div>
               ))}

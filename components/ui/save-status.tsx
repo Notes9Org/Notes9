@@ -77,9 +77,12 @@ export function SaveStatusIndicator({
         )}
       >
         <Icon
-          className={cn('h-3.5 w-3.5', config.animate && 'animate-spin')}
+          className={cn(
+            'h-3.5 w-3.5',
+            'animate' in config && config.animate && 'animate-spin',
+          )}
         />
-        <span>{config.text}</span>
+        <span>{config.detail}</span>
       </div>
     )
   }
@@ -107,7 +110,7 @@ export function SaveStatusIndicator({
             aria-label={onClick ? "Save note" : undefined}
           >
             <Icon
-              className={cn('h-4 w-4', config.animate && 'animate-spin')}
+              className={cn('h-4 w-4', 'animate' in config && config.animate && 'animate-spin')}
             />
           </Button>
         </TooltipTrigger>

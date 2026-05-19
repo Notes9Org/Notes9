@@ -270,7 +270,7 @@ function LiteraturePdfPageBlock({
       <div
         ref={pageRef}
         data-pdf-page={pageNumber}
-        className="relative overflow-hidden rounded border bg-white shadow-sm"
+        className="relative overflow-hidden rounded border bg-muted shadow-sm"
         style={{
           width: viewportSize.width || undefined,
           height: viewportSize.height || undefined,
@@ -286,7 +286,7 @@ function LiteraturePdfPageBlock({
           })
         }}
       >
-        <canvas ref={canvasRef} className="absolute inset-0 block bg-white" />
+        <canvas ref={canvasRef} className="absolute inset-0 block bg-muted" />
         <div ref={textLayerRef} className="n9-pdf-text-layer textLayer absolute inset-0 overflow-hidden" />
         <div
           ref={annotationLayerRef}

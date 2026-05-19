@@ -156,11 +156,11 @@ export function ContentChangeApprovalBar(props: ContentChangeApprovalBarProps) {
 
   const statusBadge =
     props.variant === "protocol" ? (
-      <Badge variant="outline" className="ml-auto text-[10px] tabular-nums">
+      <Badge variant="outline" className="ml-auto text-2xs tabular-nums">
         v{props.currentVersion}
       </Badge>
     ) : (
-      <Badge variant="outline" className="ml-auto text-[10px] tabular-nums">
+      <Badge variant="outline" className="ml-auto text-2xs tabular-nums">
         Saved
       </Badge>
     )
@@ -178,7 +178,7 @@ export function ContentChangeApprovalBar(props: ContentChangeApprovalBarProps) {
             <Button
               variant="ghost"
               size="sm"
-              className="min-h-9 gap-1 px-2 text-[11px] text-muted-foreground touch-manipulation sm:min-h-6"
+              className="min-h-9 gap-1 px-2 text-micro text-muted-foreground touch-manipulation sm:min-h-6"
               onClick={handleHistoryOpen}
               disabled={historyDisabled}
               title={
@@ -244,7 +244,7 @@ export function ContentChangeApprovalBar(props: ContentChangeApprovalBarProps) {
             <Button
               variant="ghost"
               size="sm"
-              className="min-h-10 gap-1 px-2 text-[11px] text-muted-foreground touch-manipulation sm:min-h-6"
+              className="min-h-10 gap-1 px-2 text-micro text-muted-foreground touch-manipulation sm:min-h-6"
               onClick={() => setIsExpanded((v) => !v)}
             >
               <ClipboardList className="h-3.5 w-3.5" />
@@ -259,7 +259,7 @@ export function ContentChangeApprovalBar(props: ContentChangeApprovalBarProps) {
             <Button
               variant="ghost"
               size="sm"
-              className="min-h-10 gap-1 px-2 text-[11px] text-muted-foreground touch-manipulation sm:min-h-6"
+              className="min-h-10 gap-1 px-2 text-micro text-muted-foreground touch-manipulation sm:min-h-6"
               onClick={handleHistoryOpen}
               disabled={historyDisabled}
               title={
@@ -275,7 +275,7 @@ export function ContentChangeApprovalBar(props: ContentChangeApprovalBarProps) {
             <Button
               variant="ghost"
               size="sm"
-              className="min-h-10 min-w-0 gap-1 px-2 text-[11px] text-muted-foreground hover:bg-destructive/10 hover:text-destructive touch-manipulation sm:min-h-6"
+              className="min-h-10 min-w-0 gap-1 px-2 text-micro text-muted-foreground hover:bg-destructive/10 hover:text-destructive touch-manipulation sm:min-h-6"
               onClick={onReject}
               disabled={isAccepting}
             >
@@ -285,7 +285,7 @@ export function ContentChangeApprovalBar(props: ContentChangeApprovalBarProps) {
 
             <Button
               size="sm"
-              className="min-h-10 min-w-0 gap-1 px-2 text-[11px] touch-manipulation sm:min-h-6 sm:px-2.5"
+              className="min-h-10 min-w-0 gap-1 px-2 text-micro touch-manipulation sm:min-h-6 sm:px-2.5"
               onClick={handleAccept}
               disabled={isAccepting}
             >

@@ -67,43 +67,92 @@ export function LiteratureRecordCreateForm({
     <div className="space-y-4">
       <div className="space-y-2">
         <Label htmlFor="new-title">Title</Label>
-        <Input id="new-title" value={value.title} onChange={(event) => update("title", event.target.value)} />
+        <Input
+          id="new-title"
+          value={value.title}
+          onChange={(event) => update("title", event.target.value)}
+          placeholder="e.g., CRISPR-Cas9 enables efficient genome editing in mammalian cells"
+        />
       </div>
       <div className="grid gap-4 md:grid-cols-2">
         <div className="space-y-2">
           <Label htmlFor="new-authors">Authors</Label>
-          <Input id="new-authors" value={value.authors} onChange={(event) => update("authors", event.target.value)} />
+          <Input
+            id="new-authors"
+            value={value.authors}
+            onChange={(event) => update("authors", event.target.value)}
+            placeholder="e.g., Smith J, Doe A, Lee K"
+          />
         </div>
         <div className="space-y-2">
           <Label htmlFor="new-journal">Journal</Label>
-          <Input id="new-journal" value={value.journal} onChange={(event) => update("journal", event.target.value)} />
+          <Input
+            id="new-journal"
+            value={value.journal}
+            onChange={(event) => update("journal", event.target.value)}
+            placeholder="e.g., Nature Biotechnology"
+          />
         </div>
       </div>
       <div className="grid gap-4 md:grid-cols-3">
         <div className="space-y-2">
           <Label htmlFor="new-year">Year</Label>
-          <Input id="new-year" value={value.publication_year} onChange={(event) => update("publication_year", event.target.value)} />
+          <Input
+            id="new-year"
+            value={value.publication_year}
+            onChange={(event) => update("publication_year", event.target.value)}
+            placeholder="e.g., 2024"
+            inputMode="numeric"
+          />
         </div>
         <div className="space-y-2">
           <Label htmlFor="new-doi">DOI</Label>
-          <Input id="new-doi" value={value.doi} onChange={(event) => update("doi", event.target.value)} />
+          <Input
+            id="new-doi"
+            value={value.doi}
+            onChange={(event) => update("doi", event.target.value)}
+            placeholder="e.g., 10.1038/s41586-020-0000-0"
+          />
         </div>
         <div className="space-y-2">
           <Label htmlFor="new-pmid">PMID</Label>
-          <Input id="new-pmid" value={value.pmid} onChange={(event) => update("pmid", event.target.value)} />
+          <Input
+            id="new-pmid"
+            value={value.pmid}
+            onChange={(event) => update("pmid", event.target.value)}
+            placeholder="e.g., 12345678"
+            inputMode="numeric"
+          />
         </div>
       </div>
       <div className="space-y-2">
         <Label htmlFor="new-url">URL</Label>
-        <Input id="new-url" value={value.url} onChange={(event) => update("url", event.target.value)} placeholder={extractedMetadata.url ?? ""} />
+        <Input
+          id="new-url"
+          value={value.url}
+          onChange={(event) => update("url", event.target.value)}
+          placeholder={extractedMetadata.url ?? "https://doi.org/…"}
+        />
       </div>
       <div className="space-y-2">
         <Label htmlFor="new-abstract">Abstract</Label>
-        <Textarea id="new-abstract" value={value.abstract} onChange={(event) => update("abstract", event.target.value)} rows={5} />
+        <Textarea
+          id="new-abstract"
+          value={value.abstract}
+          onChange={(event) => update("abstract", event.target.value)}
+          rows={5}
+          placeholder="Paste or type the paper abstract…"
+        />
       </div>
       <div className="space-y-2">
         <Label htmlFor="new-notes">Personal Notes</Label>
-        <Textarea id="new-notes" value={value.personal_notes} onChange={(event) => update("personal_notes", event.target.value)} rows={4} />
+        <Textarea
+          id="new-notes"
+          value={value.personal_notes}
+          onChange={(event) => update("personal_notes", event.target.value)}
+          rows={4}
+          placeholder="e.g., Key figure: Fig. 3b shows dose–response. Relevant to project Q3 aim."
+        />
       </div>
       <div className="rounded-lg border p-4">
         <div className="mb-3">

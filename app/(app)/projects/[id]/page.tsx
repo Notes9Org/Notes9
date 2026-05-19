@@ -1,4 +1,5 @@
 import { redirect, notFound } from 'next/navigation'
+import Link from 'next/link'
 import { createClient } from "@/lib/supabase/server"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -170,7 +171,7 @@ export default async function ProjectDetailPage({
           <TabsContent value="team" className="space-y-4">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <h2 className="text-lg font-semibold md:text-xl">Team Members</h2>
-              <Button className="w-full sm:w-auto">
+              <Button className="w-full sm:w-auto" disabled title="Member invitations coming soon">
                 <Plus className="h-4 w-4 mr-2" />
                 Add Member
               </Button>
@@ -211,9 +212,11 @@ export default async function ProjectDetailPage({
           <TabsContent value="reports" className="space-y-4">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <h2 className="text-lg font-semibold md:text-xl">Project Reports</h2>
-              <Button className="w-full sm:w-auto">
-                <Plus className="h-4 w-4 mr-2" />
-                Generate Report
+              <Button className="w-full sm:w-auto" asChild>
+                <Link href={`/reports?project=${id}`}>
+                  <Plus className="h-4 w-4 mr-2" />
+                  Generate Report
+                </Link>
               </Button>
             </div>
 
@@ -221,9 +224,11 @@ export default async function ProjectDetailPage({
               <CardContent className="flex flex-col items-center justify-center py-12">
                 <FileText className="h-12 w-12 text-muted-foreground mb-4" />
                 <p className="text-muted-foreground mb-4">No reports generated yet</p>
-                <Button>
-                  <Plus className="h-4 w-4 mr-2" />
-                  Create First Report
+                <Button asChild>
+                  <Link href={`/reports?project=${id}`}>
+                    <Plus className="h-4 w-4 mr-2" />
+                    Create First Report
+                  </Link>
                 </Button>
               </CardContent>
             </Card>
@@ -261,7 +266,18 @@ export default async function ProjectDetailPage({
                   <div className="grid grid-cols-2 gap-3 sm:gap-4 text-sm">
                     <div>
                       <p className="text-muted-foreground">Status</p>
-                      <Badge className="mt-1">{project.status}</Badge>
+                      <Badge
+                        className="mt-1"
+                        variant={
+                          project.status === "active"
+                            ? "default"
+                            : project.status === "completed"
+                            ? "secondary"
+                            : "outline"
+                        }
+                      >
+                        {project.status}
+                      </Badge>
                     </div>
                     <div>
                       <p className="text-muted-foreground">Priority</p>

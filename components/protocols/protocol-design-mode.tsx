@@ -17,15 +17,18 @@ import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { Separator } from "@/components/ui/separator"
 import { SaveStatusIndicator } from "@/components/ui/save-status"
-import Link from "next/link"
-import { BookOpen, Download, LayoutTemplate, PanelLeftClose, X } from "lucide-react"
 import {
-  ProtocolLiteraturePanel,
-  type LiteraturePaperItem,
-} from "./protocol-literature-panel"
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet"
+import { ChevronLeft, Download, LayoutTemplate, List, X } from "lucide-react"
 import { ProtocolChangeApprovalBar } from "./protocol-change-approval"
-import { ProtocolAiSidechat } from "./protocol-ai-sidechat"
+import { ProtocolSiblingsList } from "./protocol-siblings-list"
+// ProtocolAiSidechat + ProtocolLiteraturePanel are no longer mounted in edit mode.
 import { extractProtocolTemplateShell } from "@/lib/extract-protocol-template-shell"
+import { sanitizeHtml } from "@/lib/sanitize-html"
 import { buildProtocolDraftHtmlFromExtracted } from "@/lib/build-protocol-draft-from-template"
 import { updateProtocolWithOptionalContext } from "@/lib/protocol-context-supabase"
 import {
@@ -50,7 +53,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
-import { useHeaderAi } from "@/components/layout/header-ai-context"
+// useHeaderAi removed — Protocol AI sidechat is no longer mounted in edit mode.
 import { ScientificCalculatorSheet } from "@/components/lab-notes/scientific-calculator"
 import { useMediaQuery } from "@/hooks/use-media-query"
 import { cn } from "@/lib/utils"
@@ -97,7 +100,6 @@ export function ProtocolDesignMode({
   onProtocolNameChange,
 }: ProtocolDesignModeProps) {
   const { toast } = useToast()
-  const { setRegistration } = useHeaderAi()
 
   const [draftContent, setDraftContent] = useState(protocol.content)
   const [savedContent, setSavedContent] = useState(protocol.content)
@@ -105,23 +107,12 @@ export function ProtocolDesignMode({
   const [isEditingTitle, setIsEditingTitle] = useState(false)
   const titleInputRef = useRef<HTMLInputElement>(null)
 
-  const [aiContextPapers, setAiContextPapers] = useState<LiteraturePaperItem[]>([])
-  const [aiContextProtocols, setAiContextProtocols] = useState<ProtocolContextItem[]>([])
-  const [protocolContextCandidates, setProtocolContextCandidates] = useState<
-    ProtocolContextItem[]
-  >([])
-  const [literatureViewerMeta, setLiteratureViewerMeta] = useState<
-    Record<string, { title: string; abstract: string | null; pdfUrl: string | null }>
-  >({})
-  const [activeMainTabKey, setActiveMainTabKey] = useState<string>("editor")
-  /** Filtered repo papers from the literature panel — same list as @-mention picker. */
-  const [literaturePanelPapers, setLiteraturePanelPapers] = useState<
-    LiteraturePaperItem[]
-  >([])
-  /** Closed until client knows viewport — avoids a flash of the desktop sidebar on phones. */
-  const [showLiteraturePanel, setShowLiteraturePanel] = useState(false)
-  const isNarrow = useMediaQuery("(max-width: 767px)")
-  const [showAiPanel, setShowAiPanel] = useState(false)
+  // AI-context paper/protocol lists removed alongside the AI sidechat.
+  const [activeMainTabKey] = useState<string>("editor")
+  // Match lab-notes breakpoint (768px) and default the siblings panel open so
+  // researchers see other protocols in scope as soon as they enter design mode.
+  const isMobile = useMediaQuery("(max-width: 768px)")
+  const [siblingsPanelOpen, setSiblingsPanelOpen] = useState(true)
   const [scientificCalculatorOpen, setScientificCalculatorOpen] = useState(false)
   const protocolEditorRef = useRef<Editor | null>(null)
   /** Literature column + editor column — Tiptap region fullscreen covers this whole strip. */
@@ -168,11 +159,6 @@ export function ProtocolDesignMode({
   }, [])
 
   useEffect(() => {
-    if (typeof window === "undefined") return
-    setShowLiteraturePanel(window.innerWidth >= 768)
-  }, [])
-
-  useEffect(() => {
     setDraftContent(protocol.content)
     setSavedContent(protocol.content)
     setCurrentVersion(protocol.version)
@@ -202,133 +188,11 @@ export function ProtocolDesignMode({
     [draftContent]
   )
 
-  const mergeAiPapers = useCallback((items: LiteraturePaperItem[]) => {
-    setAiContextPapers((prev) => {
-      const m = new Map(prev.map((p) => [p.id, p]))
-      for (const p of items) m.set(p.id, p)
-      return Array.from(m.values())
-    })
-  }, [])
-
-  const removeAiPaper = useCallback((id: string) => {
-    setAiContextPapers((prev) => prev.filter((p) => p.id !== id))
-  }, [])
-
-  const addAiProtocols = useCallback((items: ProtocolContextItem[]) => {
-    setAiContextProtocols((prev) => {
-      const m = new Map(prev.map((p) => [p.id, p]))
-      for (const p of items) m.set(p.id, p)
-      return Array.from(m.values())
-    })
-  }, [])
-
-  const removeAiProtocol = useCallback((id: string) => {
-    setAiContextProtocols((prev) => prev.filter((p) => p.id !== id))
-  }, [])
-
-  useEffect(() => {
-    let cancelled = false
-    if (!organizationId) {
-      setProtocolContextCandidates([])
-      return
-    }
-
-    const run = async () => {
-      const supabase = createClient()
-      let query = supabase
-        .from("protocols")
-        .select("id, name, content, version")
-        .eq("organization_id", organizationId)
-        .neq("id", protocol.id)
-        .order("updated_at", { ascending: false })
-        .limit(80)
-
-      if (protocol.project_id) query = query.eq("project_id", protocol.project_id)
-      if (protocol.experiment_id) query = query.eq("experiment_id", protocol.experiment_id)
-
-      const { data, error } = await query
-      if (cancelled) return
-      if (error) {
-        setProtocolContextCandidates([])
-        return
-      }
-      setProtocolContextCandidates((data as ProtocolContextItem[]) ?? [])
-    }
-
-    void run()
-    return () => {
-      cancelled = true
-    }
-  }, [organizationId, protocol.id, protocol.project_id, protocol.experiment_id])
-
-  useEffect(() => {
-    const ids = aiContextPapers.map((p) => p.id).filter(Boolean)
-    if (ids.length === 0) return
-    let cancelled = false
-    const run = async () => {
-      const supabase = createClient()
-      const { data } = await supabase
-        .from("literature_reviews")
-        .select("id, title, abstract, pdf_file_url")
-        .in("id", ids)
-      if (cancelled) return
-      const rows = (data ??
-        []) as Array<{
-        id: string
-        title: string
-        abstract: string | null
-        pdf_file_url: string | null
-      }>
-      setLiteratureViewerMeta((prev) => {
-        const next = { ...prev }
-        for (const row of rows) {
-          next[row.id] = {
-            title: row.title,
-            abstract: row.abstract ?? null,
-            // Always prefer same-origin authenticated stream route for in-app viewing.
-            pdfUrl: `/api/literature/${row.id}/viewer-pdf`,
-          }
-        }
-        return next
-      })
-    }
-    void run()
-    return () => {
-      cancelled = true
-    }
-  }, [aiContextPapers])
-
-  const contextViewerTabs = useMemo<ContextViewerTab[]>(() => {
-    const literatureTabs = aiContextPapers.map((p) => {
-      const meta = literatureViewerMeta[p.id]
-      return {
-        key: `literature:${p.id}`,
-        kind: "literature" as const,
-        id: p.id,
-        title: meta?.title || p.title,
-        pdfUrl: meta?.pdfUrl ?? null,
-        abstract: meta?.abstract ?? null,
-      }
-    })
-    const protocolTabs = aiContextProtocols.map((p) => ({
-      key: `protocol:${p.id}`,
-      kind: "protocol" as const,
-      id: p.id,
-      title: p.name || "Untitled protocol",
-      content: p.content ?? "",
-    }))
-    return [...literatureTabs, ...protocolTabs]
-  }, [aiContextPapers, aiContextProtocols, literatureViewerMeta])
-
-  useEffect(() => {
-    if (activeMainTabKey === "editor") return
-    if (!contextViewerTabs.some((t) => t.key === activeMainTabKey)) {
-      setActiveMainTabKey("editor")
-    }
-  }, [contextViewerTabs, activeMainTabKey])
-
-  const activeContextTab =
-    contextViewerTabs.find((tab) => tab.key === activeMainTabKey) ?? null
+  // AI-context lists, candidate protocols, literature-viewer metadata, and the
+  // multi-tab viewer have all been retired with the Protocol AI panel removal.
+  // Edit mode is now a single editor tab — no side panels.
+  const contextViewerTabs: ContextViewerTab[] = []
+  const activeContextTab: ContextViewerTab | null = null
 
   const handleAccept = useCallback(
     async (newContent: string, newVersion: string) => {
@@ -413,85 +277,10 @@ export function ProtocolDesignMode({
     }
   }, [])
 
-  const handleAiApply = useCallback((html: string) => {
-    setDraftContent((prev) => prev + "\n" + html)
-  }, [])
-
-  const addPapersToAiContext = useCallback(
-    (papers: LiteraturePaperItem[]) => {
-      mergeAiPapers(papers)
-      setShowAiPanel(true)
-    },
-    [mergeAiPapers]
-  )
-
-  const aiPanel = useMemo(
-    () => (
-      <ProtocolAiSidechat
-        protocolId={protocol.id}
-        templateShellHtml={templateShellForAi}
-        protocolTitle={protocol.name}
-        currentEditorContent={draftContent}
-        currentVersion={currentVersion}
-        aiContextPapers={aiContextPapers}
-        aiContextProtocols={aiContextProtocols}
-        literatureCandidates={literaturePanelPapers}
-        onAddPapers={addPapersToAiContext}
-        onAddProtocols={addAiProtocols}
-        onRemovePaper={removeAiPaper}
-        onRemoveProtocol={removeAiProtocol}
-        onApplyToEditor={handleAiApply}
-        onHighlightInEditor={(excerpt) => {
-          const editor = protocolEditorRef.current
-          if (!editor) return
-          editor.commands.setRagHighlight(excerpt)
-          requestAnimationFrame(() => {
-            const el = editor.view.dom.querySelector('.rag-chunk-highlight')
-            if (el) {
-              el.scrollIntoView({ behavior: 'smooth', block: 'center' })
-              setTimeout(() => {
-                document.querySelectorAll('.rag-chunk-highlight').forEach((e) => e.classList.add('fading'))
-                setTimeout(() => { try { editor.commands.clearRagHighlight() } catch {} }, 1_200)
-              }, 12_000)
-            }
-          })
-        }}
-        onClose={() => setShowAiPanel(false)}
-        className="h-full"
-      />
-    ),
-    [
-      protocol.id,
-      templateShellForAi,
-      protocol.name,
-      draftContent,
-      currentVersion,
-      aiContextPapers,
-      aiContextProtocols,
-      literaturePanelPapers,
-      addPapersToAiContext,
-      protocolContextCandidates,
-      addAiProtocols,
-      removeAiPaper,
-      removeAiProtocol,
-      handleAiApply,
-    ]
-  )
-
-  useEffect(() => {
-    setRegistration({
-      active: true,
-      isOpen: showAiPanel,
-      onToggle: () => setShowAiPanel((v) => !v),
-      panel: aiPanel,
-      ariaLabel: showAiPanel ? "Close protocol AI" : "Open protocol AI",
-      title: showAiPanel ? "Close protocol AI" : "Open protocol AI",
-    })
-  }, [setRegistration, showAiPanel, aiPanel])
-
-  useEffect(() => {
-    return () => setRegistration(null)
-  }, [setRegistration])
+  // Protocol AI sidechat and its supporting helpers (handleAiApply,
+  // addPapersToAiContext, mergeAiPapers, etc.) have been removed from edit
+  // mode per product direction. The header-AI registration is gone too so the
+  // global layout no longer mounts a right-side AI panel for protocols.
 
   /** Fullscreen editor: literature + title share one row with Tiptap toolbar (same pattern as lab notes). */
   const protocolMergedFullscreenToolbar =
@@ -499,23 +288,6 @@ export function ProtocolDesignMode({
 
   const protocolFullscreenToolbarLeading = protocolMergedFullscreenToolbar ? (
     <div className="flex min-w-0 max-w-[min(11rem,56vw)] shrink-0 items-center gap-1.5 sm:max-w-[min(18rem,38%)] sm:gap-2">
-      <Button
-        type="button"
-        variant="ghost"
-        size="icon"
-        className="h-8 w-8 shrink-0 text-muted-foreground hover:text-foreground"
-        onClick={() => setShowLiteraturePanel((v) => !v)}
-        aria-pressed={showLiteraturePanel}
-        aria-expanded={showLiteraturePanel}
-        aria-controls={isNarrow ? "protocol-literature-mobile" : "protocol-literature-desktop"}
-        title={showLiteraturePanel ? "Hide literature" : "Show literature"}
-      >
-        {showLiteraturePanel ? (
-          <PanelLeftClose className="h-4 w-4" aria-hidden />
-        ) : (
-          <BookOpen className="h-4 w-4" aria-hidden />
-        )}
-      </Button>
       <div className="min-w-0 flex-1">
         {isEditingTitle ? (
           <input
@@ -572,7 +344,7 @@ export function ProtocolDesignMode({
         status={hasPendingChanges ? "unsaved" : "saved"}
         variant="icon"
       />
-      <Badge variant="outline" className="shrink-0 text-[10px] font-normal">
+      <Badge variant="outline" className="shrink-0 text-2xs font-normal">
         v{currentVersion}
       </Badge>
       <NoteExportMenu
@@ -582,8 +354,8 @@ export function ProtocolDesignMode({
           <Button
             type="button"
             variant="ghost"
-            size="icon"
-            className="h-8 w-8 shrink-0 text-muted-foreground hover:text-foreground"
+            size="icon-sm"
+            className="shrink-0 text-muted-foreground hover:text-foreground"
             aria-label="Export protocol"
           >
             <Download className="h-4 w-4" />
@@ -594,8 +366,8 @@ export function ProtocolDesignMode({
         <Button
           type="button"
           variant="ghost"
-          size="icon"
-          className="h-8 w-8 shrink-0 text-muted-foreground hover:text-foreground"
+          size="icon-sm"
+          className="shrink-0 text-muted-foreground hover:text-foreground"
           onClick={onExitDesignMode}
           aria-label="Exit design mode"
           title="Exit design mode"
@@ -606,165 +378,86 @@ export function ProtocolDesignMode({
     </>
   ) : undefined
 
+  // Toggle for both the desktop sidebar collapse and the mobile Sheet trigger.
+  // Mirrors lab-notes pattern so the same icon button serves both modes.
+  const siblingsToggleButton = (
+    <Button
+      type="button"
+      variant="ghost"
+      size="icon-sm"
+      onClick={() => setSiblingsPanelOpen((v) => !v)}
+      aria-label={siblingsPanelOpen ? "Hide protocols" : "Show protocols"}
+      title={siblingsPanelOpen ? "Hide protocols list" : "Show protocols list"}
+      className="text-muted-foreground hover:text-foreground"
+    >
+      {siblingsPanelOpen ? (
+        <ChevronLeft className="h-4 w-4" />
+      ) : (
+        <List className="h-4 w-4" />
+      )}
+    </Button>
+  )
+
   return (
-    <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
-      {/* ── Card shell (matches lab notes Card) ──────────────────────────── */}
-      <Card className="flex min-h-0 min-w-0 flex-1 w-full flex-col gap-0 rounded-none border-0 border-t border-border/40 py-0 shadow-none">
-        <div
-          ref={protocolDesignWorkspaceRef}
-          className="relative flex min-h-0 min-w-0 flex-1 flex-row items-stretch overflow-hidden"
-        >
-          {/* Mobile: literature as full-height sheet over the editor */}
-          {isNarrow && showLiteraturePanel && (
-            <>
-              <button
-                type="button"
-                className="fixed inset-0 z-[115] bg-black/40"
-                aria-label="Close literature panel"
-                onClick={() => setShowLiteraturePanel(false)}
-              />
-              <aside
-                className="fixed inset-y-0 left-0 z-[120] flex w-[min(22rem,calc(100vw-0.75rem))] min-w-0 flex-col overflow-hidden border-r border-border bg-background shadow-xl"
-                id="protocol-literature-mobile"
-              >
-                <ProtocolLiteraturePanel
-                  projectId={protocol.project_id}
-                  experimentId={protocol.experiment_id}
-                  variant="aiContext"
-                  onAddToAiContext={(papers) => {
-                    mergeAiPapers(papers)
-                    setShowAiPanel(true)
-                  }}
-                  onPapersChange={setLiteraturePanelPapers}
-                  showFilters={Boolean(onContextChange)}
-                  onContextChange={onContextChange}
-                  protocolCandidates={protocolContextCandidates}
-                  onAddProtocols={addAiProtocols}
-                  onRequestClose={() => setShowLiteraturePanel(false)}
-                />
-              </aside>
-            </>
-          )}
-
-          {/* Desktop: inline literature column */}
-          {!isNarrow && (
-            <>
-              <aside
-                className={cn(
-                  "flex min-h-0 shrink-0 flex-col self-stretch overflow-hidden border-r border-border bg-background transition-all duration-200",
-                  showLiteraturePanel
-                    ? cn(
-                        "w-64 min-w-[16rem]",
-                        tiptapRegionFullscreen && "relative z-[120]",
-                      )
-                    : "w-0 min-w-0 border-r-0",
-                )}
-                aria-hidden={!showLiteraturePanel}
-                id="protocol-literature-desktop"
-              >
-                {showLiteraturePanel && (
-                  <ProtocolLiteraturePanel
-                    projectId={protocol.project_id}
-                    experimentId={protocol.experiment_id}
-                    variant="aiContext"
-                    onAddToAiContext={(papers) => {
-                      mergeAiPapers(papers)
-                      setShowAiPanel(true)
-                    }}
-                    onPapersChange={setLiteraturePanelPapers}
-                    showFilters={Boolean(onContextChange)}
-                    onContextChange={onContextChange}
-                    protocolCandidates={protocolContextCandidates}
-                    onAddProtocols={addAiProtocols}
-                    onRequestClose={() => setShowLiteraturePanel(false)}
-                  />
-                )}
-              </aside>
-
-              {showLiteraturePanel && (
-                <Separator
-                  orientation="vertical"
-                  decorative
-                  className="min-h-0 shrink-0 self-stretch bg-border/70"
+    <>
+    <div className="flex h-full min-h-0 w-full flex-1 flex-col overflow-hidden">
+      <div className="flex-1 min-w-0 min-h-0 flex flex-col">
+        {/* Card shell — same shape as the lab-notes single-card wrapper */}
+        <Card className="flex h-full min-h-0 flex-col gap-0 py-0">
+          <div
+            ref={protocolDesignWorkspaceRef}
+            className="flex h-full min-h-0 min-w-0 flex-1 flex-row items-stretch overflow-hidden"
+          >
+            {/* Siblings list — desktop column. Collapses to width 0 when hidden. */}
+            <aside
+              className={cn(
+                "flex min-h-0 shrink-0 flex-col self-stretch overflow-hidden border-r border-border bg-muted/30 relative",
+                !isMobile && siblingsPanelOpen
+                  ? cn(
+                      "w-52 min-w-[13rem] bg-card",
+                      tiptapRegionFullscreen ? "z-[120]" : "z-10",
+                    )
+                  : "w-0 min-w-0 border-r-0 overflow-hidden",
+              )}
+              aria-hidden={!siblingsPanelOpen || isMobile}
+            >
+              {!isMobile && siblingsPanelOpen && (
+                <ProtocolSiblingsList
+                  currentProtocolId={protocol.id}
+                  organizationId={organizationId}
+                  projectId={protocol.project_id ?? null}
+                  experimentId={protocol.experiment_id ?? null}
                 />
               )}
-            </>
-          )}
+            </aside>
+
+            {/* Mobile: protocols list in a left Sheet overlay (matches lab-notes) */}
+            {isMobile && (
+              <Sheet open={siblingsPanelOpen} onOpenChange={setSiblingsPanelOpen}>
+                <SheetContent side="left" className="w-72 p-0">
+                  <SheetHeader className="border-b px-4 py-3">
+                    <SheetTitle>Protocols</SheetTitle>
+                  </SheetHeader>
+                  <div className="flex h-[calc(100%-3rem)] min-h-0 flex-col">
+                    <ProtocolSiblingsList
+                      currentProtocolId={protocol.id}
+                      organizationId={organizationId}
+                      projectId={protocol.project_id ?? null}
+                      experimentId={protocol.experiment_id ?? null}
+                    />
+                  </div>
+                </SheetContent>
+              </Sheet>
+            )}
 
           {/* ── Main editor area ──────────────────────────────────────── */}
           <div
             className={cn(
-              "relative z-0 flex min-h-0 min-w-0 flex-1 flex-col",
-              tiptapRegionFullscreen
-                ? "gap-0 py-0 sm:py-0"
-                : "gap-3 py-3 sm:gap-4 sm:py-4",
+              "relative z-0 flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden",
+              tiptapRegionFullscreen ? "gap-0 py-0 sm:py-0" : "gap-4 py-4",
             )}
           >
-            {contextViewerTabs.length > 0 && !tiptapRegionFullscreen && (
-              <div className="shrink-0 px-3 sm:px-6">
-                <div className="rounded-xl border border-border/60 bg-background/80 shadow-sm backdrop-blur">
-                  <div className="flex gap-1.5 overflow-x-auto px-2 py-2">
-                    <button
-                      type="button"
-                      className={cn(
-                        "shrink-0 rounded-lg px-3 py-1.5 text-[11px] font-medium transition-all",
-                        activeMainTabKey === "editor"
-                          ? "bg-primary text-primary-foreground shadow-sm"
-                          : "text-muted-foreground hover:bg-muted/70 hover:text-foreground"
-                      )}
-                      onClick={() => setActiveMainTabKey("editor")}
-                    >
-                      Editor
-                    </button>
-                    {contextViewerTabs.length > 0 && (
-                      <span className="shrink-0 px-1 py-1.5 text-xs text-muted-foreground/70">
-                        |
-                      </span>
-                    )}
-                    {contextViewerTabs.map((tab) => (
-                      <div
-                        key={tab.key}
-                        className={cn(
-                          "flex shrink-0 items-center rounded-lg transition-all",
-                          tab.key === activeMainTabKey
-                            ? "bg-primary text-primary-foreground shadow-sm"
-                            : "text-muted-foreground hover:bg-muted/70 hover:text-foreground"
-                        )}
-                      >
-                        <button
-                          type="button"
-                          className="max-w-[220px] truncate px-3 py-1.5 text-[11px] font-medium"
-                          onClick={() => setActiveMainTabKey(tab.key)}
-                          title={tab.title}
-                        >
-                          {tab.title}
-                        </button>
-                        <button
-                          type="button"
-                          className={cn(
-                            "mr-1 rounded p-0.5 transition-colors",
-                            tab.key === activeMainTabKey
-                              ? "hover:bg-primary-foreground/20"
-                              : "hover:bg-muted"
-                          )}
-                          aria-label={`Close ${tab.title}`}
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            if (tab.kind === "literature") {
-                              removeAiPaper(tab.id)
-                            } else {
-                              removeAiProtocol(tab.id)
-                            }
-                          }}
-                        >
-                          <X className="h-3 w-3" />
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            )}
+            {/* Context viewer tabs removed — edit mode is editor-only. */}
 
             {activeMainTabKey === "editor" ? (
               <>
@@ -773,25 +466,7 @@ export function ProtocolDesignMode({
                   (tiptapRegionFullscreen ? (
                   <CardHeader className="shrink-0 gap-1 border-b border-border/70 px-3 py-1.5 sm:px-4 [.border-b]:pb-1.5 items-center">
                     <div className="flex min-w-0 items-center gap-2">
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon"
-                        className="h-8 w-8 shrink-0 text-muted-foreground hover:text-foreground"
-                        onClick={() => setShowLiteraturePanel((v) => !v)}
-                        aria-pressed={showLiteraturePanel}
-                        aria-expanded={showLiteraturePanel}
-                        aria-controls={
-                          isNarrow ? "protocol-literature-mobile" : "protocol-literature-desktop"
-                        }
-                        title={showLiteraturePanel ? "Hide literature" : "Show literature"}
-                      >
-                        {showLiteraturePanel ? (
-                          <PanelLeftClose className="h-4 w-4" aria-hidden />
-                        ) : (
-                          <BookOpen className="h-4 w-4" aria-hidden />
-                        )}
-                      </Button>
+                      {siblingsToggleButton}
                       <div className="min-w-0 flex-1">
                         {isEditingTitle ? (
                           <input
@@ -847,30 +522,11 @@ export function ProtocolDesignMode({
                     </div>
                   </CardHeader>
                 ) : (
-                  <CardHeader className="shrink-0 px-3 pb-0 sm:px-6">
+                  <CardHeader className="shrink-0 px-4 pb-0 sm:px-6">
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
                 <div className="flex min-w-0 flex-1 items-center gap-2">
-                  {/* Literature toggle — mirrors the notes-list toggle in lab notes */}
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    className="h-8 w-8 shrink-0 text-muted-foreground hover:text-foreground"
-                    onClick={() => setShowLiteraturePanel((v) => !v)}
-                    aria-pressed={showLiteraturePanel}
-                    aria-expanded={showLiteraturePanel}
-                    aria-controls={
-                      isNarrow ? "protocol-literature-mobile" : "protocol-literature-desktop"
-                    }
-                    title={showLiteraturePanel ? "Hide literature" : "Show literature"}
-                  >
-                    {showLiteraturePanel ? (
-                      <PanelLeftClose className="h-4 w-4" aria-hidden />
-                    ) : (
-                      <BookOpen className="h-4 w-4" aria-hidden />
-                    )}
-                  </Button>
-
+                  {/* Sidebar toggle — first control in the header, like lab notes */}
+                  {siblingsToggleButton}
                   {/* Editable title — same pattern as lab notes inline-edit */}
                   <div className="flex min-w-0 flex-1 items-center gap-1">
                     <div className="min-w-0 flex-1">
@@ -936,11 +592,40 @@ export function ProtocolDesignMode({
                   </div>
                 </div>
 
-                {/* Right action buttons */}
+                {/* Right action buttons — matches lab-notes compact icon row */}
                 <div className="flex shrink-0 flex-wrap items-center justify-end gap-1 sm:justify-start">
-                  <Badge variant="outline" className="shrink-0 text-[10px] font-normal">
+                  <Badge variant="outline" className="shrink-0 text-2xs font-normal">
                     v{currentVersion}
                   </Badge>
+                  {/* Template picker collapsed into a small icon button — replaces
+                      the loud horizontal "Document template" strip so the header
+                      visually matches lab notes. Hover/title reveals the current
+                      template name. */}
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon-sm"
+                    className={cn(
+                      "text-muted-foreground hover:text-foreground",
+                      draftDocumentTemplateId && "text-foreground",
+                    )}
+                    onClick={() => {
+                      setPickerChoice(null)
+                      setTemplateDialogOpen(true)
+                    }}
+                    aria-label={
+                      draftDocumentTemplateId
+                        ? `Change template (current: ${draftTemplateLabel ?? "selected"})`
+                        : "Choose template"
+                    }
+                    title={
+                      draftDocumentTemplateId
+                        ? `Template: ${draftTemplateLabel ?? "selected"}`
+                        : "No template — click to pick one"
+                    }
+                  >
+                    <LayoutTemplate className="h-4 w-4" />
+                  </Button>
                   <NoteExportMenu
                     title={protocol.name}
                     htmlContent={draftContent}
@@ -948,8 +633,8 @@ export function ProtocolDesignMode({
                       <Button
                         type="button"
                         variant="ghost"
-                        size="icon"
-                        className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                        size="icon-sm"
+                        className="text-muted-foreground hover:text-foreground"
                         aria-label="Export protocol"
                       >
                         <Download className="h-4 w-4" />
@@ -960,8 +645,8 @@ export function ProtocolDesignMode({
                     <Button
                       type="button"
                       variant="ghost"
-                      size="icon"
-                      className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                      size="icon-sm"
+                      className="text-muted-foreground hover:text-foreground"
                       onClick={onExitDesignMode}
                       aria-label="Exit design mode"
                       title="Exit design mode"
@@ -971,51 +656,11 @@ export function ProtocolDesignMode({
                   )}
                 </div>
               </div>
-
-              <div className="mt-3 flex flex-col gap-2 border-t border-border/50 pt-3 sm:flex-row sm:flex-wrap sm:items-center sm:gap-2">
-                <span className="text-xs font-medium text-muted-foreground shrink-0">
-                  Document template
-                </span>
-                <div className="flex min-w-0 flex-wrap items-center gap-2">
-                  {draftDocumentTemplateId ? (
-                    <Badge
-                      variant="secondary"
-                      className="text-xs font-normal gap-1 max-w-full truncate sm:max-w-[min(100%,240px)]"
-                      title={draftTemplateLabel ?? undefined}
-                    >
-                      {draftTemplateLabel ?? "Document template"}
-                    </Badge>
-                  ) : (
-                    <span className="text-xs text-muted-foreground">
-                      None (blank or library letterhead shell)
-                    </span>
-                  )}
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    className="h-8 min-h-9 w-full gap-1.5 text-xs sm:h-7 sm:min-h-0 sm:w-auto touch-manipulation"
-                    onClick={() => {
-                      setPickerChoice(null)
-                      setTemplateDialogOpen(true)
-                    }}
-                  >
-                    <LayoutTemplate className="h-3.5 w-3.5" />
-                    Change template
-                  </Button>
-                </div>
-                <Link
-                  href="/protocols?tab=templates"
-                  className="text-xs text-primary hover:underline sm:ml-auto"
-                >
-                  Manage uploads
-                </Link>
-              </div>
                 </CardHeader>
                 ))}
 
                 {/* ── Editor (mirrors lab notes CardContent) ── */}
-                <CardContent className="flex min-h-0 min-w-0 flex-1 flex-col space-y-3 px-3 sm:px-6">
+                <CardContent className="flex min-h-0 min-w-0 flex-1 flex-col space-y-3 overflow-hidden px-4 sm:px-6">
                   <div className="relative min-h-0 min-w-0 flex-1 overflow-hidden">
                     <TiptapEditor
                       content={draftContent}
@@ -1057,42 +702,21 @@ export function ProtocolDesignMode({
                   />
                 </CardContent>
               </>
-            ) : (
-              <div className="min-h-0 flex-1 px-3 sm:px-6">
-                <div className="h-full min-h-0 rounded-lg border border-border/50 bg-background p-3">
-                  {activeContextTab?.kind === "literature" && activeContextTab.pdfUrl ? (
-                    <iframe
-                      src={activeContextTab.pdfUrl}
-                      title={activeContextTab.title}
-                      className="h-full min-h-0 w-full rounded-md border"
-                    />
-                  ) : activeContextTab?.kind === "protocol" ? (
-                    <div className="h-full min-h-0 overflow-y-auto rounded-md border bg-muted/20 p-3 text-xs text-foreground">
-                      {activeContextTab.content ? (
-                        <div dangerouslySetInnerHTML={{ __html: activeContextTab.content }} />
-                      ) : (
-                        <p className="text-muted-foreground">No protocol content available.</p>
-                      )}
-                    </div>
-                  ) : (
-                    <div className="h-full min-h-0 overflow-y-auto rounded-md border bg-muted/20 p-3 text-xs text-foreground">
-                      <p>{activeContextTab?.abstract || "No PDF available for this literature item."}</p>
-                    </div>
-                  )}
-                </div>
-              </div>
-            )}
+            ) : null}
           </div>
-        </div>
-      </Card>
+          </div>
+        </Card>
+      </div>
+    </div>
 
       <Dialog open={templateDialogOpen} onOpenChange={setTemplateDialogOpen}>
         <DialogContent className="max-h-[min(90dvh,85vh)] w-[calc(100vw-1rem)] max-w-3xl overflow-y-auto p-4 sm:p-6">
           <DialogHeader>
             <DialogTitle>Change template</DialogTitle>
             <DialogDescription>
-              Replaces the draft body with the selected letterhead and section skeleton. Confirm with{" "}
-              <span className="font-medium text-foreground">Accept changes</span> below to save.
+              Replaces the draft body with the selected letterhead and section skeleton. Your existing
+              content will be replaced — nothing is saved until you confirm Accept changes in the
+              approval bar below.
             </DialogDescription>
           </DialogHeader>
           <ProtocolTemplatePicker
@@ -1140,6 +764,6 @@ export function ProtocolDesignMode({
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-    </div>
+    </>
   )
 }

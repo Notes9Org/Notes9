@@ -23,6 +23,17 @@ import { useAutoSave } from "@/hooks/use-auto-save"
 import { createClient } from "@/lib/supabase/client"
 import { toast } from "sonner"
 import type { ReportRow } from "../reports-page-client"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
+import { buttonVariants } from "@/components/ui/button"
 
 interface ReportDetailViewProps {
   report: ReportRow & { content: string | null }
@@ -88,6 +99,7 @@ function isMarkdown(content: string): boolean {
 
 export function ReportDetailView({ report }: ReportDetailViewProps) {
   const router = useRouter()
+  const supabase = useMemo(() => createClient(), [])
 
   const initialHtml = useMemo(() => {
     if (!report.content) return ""
@@ -96,17 +108,18 @@ export function ReportDetailView({ report }: ReportDetailViewProps) {
   }, [report.content])
 
   const [content, setContent] = useState(initialHtml)
+  const [deleteOpen, setDeleteOpen] = useState(false)
+  const [isDeleting, setIsDeleting] = useState(false)
 
   const statusVariant =
     report.status === "final" ? "default" : report.status === "review" ? "secondary" : "outline"
 
   const handleAutoSave = useCallback(
     async (htmlContent: string) => {
-      const supabase = createClient()
       const { error } = await supabase.from("reports").update({ content: htmlContent }).eq("id", report.id)
       if (error) throw new Error(error.message)
     },
-    [report.id]
+    [report.id, supabase]
   )
 
   const { status: autoSaveStatus, lastSaved, debouncedSave } = useAutoSave({
@@ -123,15 +136,20 @@ export function ReportDetailView({ report }: ReportDetailViewProps) {
     [debouncedSave]
   )
 
-  const handleDelete = async () => {
-    if (!confirm("Delete this report? This cannot be undone.")) return
-    const supabase = createClient()
-    const { error } = await supabase.from("reports").delete().eq("id", report.id)
-    if (error) {
-      toast.error(`Failed to delete: ${error.message}`)
-    } else {
+  const confirmDelete = async () => {
+    setIsDeleting(true)
+    try {
+      const { error } = await supabase.from("reports").delete().eq("id", report.id)
+      if (error) {
+        toast.error(`Failed to delete: ${error.message}`)
+        return
+      }
       toast.success("Report deleted")
+      setDeleteOpen(false)
       router.push("/reports")
+      router.refresh()
+    } finally {
+      setIsDeleting(false)
     }
   }
 
@@ -142,7 +160,7 @@ export function ReportDetailView({ report }: ReportDetailViewProps) {
       <div className="flex items-start justify-between gap-4">
         <div className="space-y-2">
           <div className="flex items-center gap-2">
-            <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0" onClick={() => router.push("/reports")} title="Back to reports">
+            <Button variant="ghost" size="icon-sm" className="shrink-0" onClick={() => router.push("/reports")} title="Back to reports">
               <ArrowLeft className="h-4 w-4" />
             </Button>
             <h1 className="text-2xl font-bold tracking-tight">{report.title}</h1>
@@ -158,16 +176,37 @@ export function ReportDetailView({ report }: ReportDetailViewProps) {
             title={exportTitle}
             htmlContent={content}
             trigger={
-              <Button variant="ghost" size="icon" className="h-8 w-8" title="Download report">
+              <Button variant="ghost" size="icon-sm" title="Download report">
                 <Download className="h-4 w-4" />
               </Button>
             }
           />
-          <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={handleDelete} title="Delete report">
+          <Button variant="ghost" size="icon-sm" className="text-destructive" onClick={() => setDeleteOpen(true)} title="Delete report">
             <Trash2 className="h-4 w-4" />
           </Button>
         </div>
       </div>
+
+      <AlertDialog open={deleteOpen} onOpenChange={setDeleteOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete report?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will permanently delete <strong>"{report.title}"</strong>. This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isDeleting}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={confirmDelete}
+              disabled={isDeleting}
+              className={buttonVariants({ variant: "destructive" })}
+            >
+              {isDeleting ? "Deleting..." : "Delete"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <Card>
         <CardHeader>

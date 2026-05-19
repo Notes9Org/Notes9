@@ -105,7 +105,7 @@ export function IdealGasPanel({ onResultChange }: { onResultChange: CalculatorRe
           </SelectContent>
         </Select>
       </div>
-      <p className="text-[10px] leading-snug text-muted-foreground">
+      <p className="text-2xs leading-snug text-muted-foreground">
         PV = nRT, R = 0.082057 L·atm/(mol·K). Leave one field empty.
       </p>
       {field("P", p, setP)}

@@ -14,7 +14,6 @@ import { toast } from "sonner"
 import { SaveStatusIndicator } from "@/components/ui/save-status"
 import { useAutoSave } from "@/hooks/use-auto-save"
 import { PaperActions } from "./[id]/paper-actions"
-import { IS_PAPERS_MOCKED, getMockPaper, updateMockPaper } from "@/lib/papers-mock"
 import { downloadLatex } from "@/lib/latex-export"
 import { JOURNAL_TEMPLATES } from "@/lib/latex-templates"
 import { downloadBibtex, parseBibtex, parseAuthors, type CitationForBib, type BibEntry } from "@/lib/bibtex"
@@ -84,20 +83,6 @@ export function PaperWorkspace({ paperId, backLink, onPaperMutated, onPaperTitle
   useEffect(() => {
     const fetchPaper = async () => {
       setLoading(true)
-      if (IS_PAPERS_MOCKED) {
-        const mock = getMockPaper(id)
-        if (!mock) {
-          toast.error("Paper not found")
-          router.push("/papers")
-          return
-        }
-        setPaper(mock as Record<string, unknown>)
-        const c = mock.content && mock.content.trim().length > 0 ? mock.content : DEFAULT_PAPER_TEMPLATE
-        setContent(c)
-        setLoading(false)
-        return
-      }
-
       const supabase = createClient()
       const { data, error } = await supabase.from("papers").select("*").eq("id", id).single()
 
@@ -122,11 +107,6 @@ export function PaperWorkspace({ paperId, backLink, onPaperMutated, onPaperTitle
 
   const handleAutoSave = useCallback(
     async (newContent: string) => {
-      if (IS_PAPERS_MOCKED) {
-        updateMockPaper(id, { content: newContent })
-        return
-      }
-
       const supabase = createClient()
       const { error } = await supabase
         .from("papers")
@@ -159,14 +139,6 @@ export function PaperWorkspace({ paperId, backLink, onPaperMutated, onPaperTitle
     const next = titleInput.trim() || "Untitled"
     const current = ((paper?.title as string) || "").trim() || "Untitled"
     if (!paper || next === current) return
-
-    if (IS_PAPERS_MOCKED) {
-      updateMockPaper(id, { title: next })
-      setPaper((p) => (p ? { ...p, title: next } : p))
-      onPaperTitleUpdated?.(id, next)
-      router.refresh()
-      return
-    }
 
     const supabase = createClient()
     const { error } = await supabase

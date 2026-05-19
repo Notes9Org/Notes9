@@ -125,7 +125,7 @@ export function Notes9Brand({
           <span aria-hidden="true" className={metrics.textNudgeY}>tes9</span>
         </div>
         {withTagline ? (
-          <span className="mt-0.5 block truncate text-[11px] font-medium uppercase leading-normal tracking-[0.18em] text-muted-foreground">
+          <span className="mt-0.5 block truncate text-micro font-medium uppercase leading-normal tracking-[0.18em] text-muted-foreground">
             Research Lab
           </span>
         ) : null}

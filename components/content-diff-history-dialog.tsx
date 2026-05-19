@@ -213,14 +213,14 @@ function DiffEntry({ diff }: { diff: ContentDiff }) {
             <span className="font-normal text-muted-foreground">User </span>
             {userName}
           </p>
-          <p className="mt-0.5 text-[10px] leading-snug text-muted-foreground" title={`${date} at ${time}`}>
+          <p className="mt-0.5 text-2xs leading-snug text-muted-foreground" title={`${date} at ${time}`}>
             {relative} · {date} at {time}
           </p>
           {diff.change_summary ? (
             <p className="mt-2 text-xs leading-relaxed text-foreground/90 line-clamp-4">{diff.change_summary}</p>
           ) : null}
           {(diff.words_added > 0 || diff.words_removed > 0) && (
-            <div className="mt-2 flex flex-col gap-0.5 text-[10px]">
+            <div className="mt-2 flex flex-col gap-0.5 text-2xs">
               {diff.words_added > 0 && (
                 <span className="inline-flex items-center gap-1 text-emerald-600 dark:text-emerald-400">
                   <Plus className="h-2.5 w-2.5 shrink-0" aria-hidden />
@@ -237,7 +237,7 @@ function DiffEntry({ diff }: { diff: ContentDiff }) {
           )}
           {hasStructureHints && (
             <p
-              className="mt-2 text-[10px] leading-relaxed text-muted-foreground sm:line-clamp-6"
+              className="mt-2 text-2xs leading-relaxed text-muted-foreground sm:line-clamp-6"
               title={structureHintsLine}
             >
               <span className="font-medium text-foreground/80">Document / sections</span>
@@ -250,7 +250,7 @@ function DiffEntry({ diff }: { diff: ContentDiff }) {
         <Button
           variant="ghost"
           size="sm"
-          className="h-9 w-full shrink-0 gap-1 px-2 text-[10px] text-muted-foreground touch-manipulation sm:h-6 sm:w-auto sm:self-start sm:px-1.5"
+          className="h-9 w-full shrink-0 gap-1 px-2 text-2xs text-muted-foreground touch-manipulation sm:h-6 sm:w-auto sm:self-start sm:px-1.5"
           onClick={() => setExpanded((v) => !v)}
           aria-label={expanded ? "Hide diff" : "Show diff"}
         >
@@ -262,7 +262,7 @@ function DiffEntry({ diff }: { diff: ContentDiff }) {
       {/* Inline diff view */}
       {expanded && resolved.kind === "none" && (
         <div className="border-t border-border/40 bg-muted/10 px-3 py-2">
-          <p className="text-[11px] text-muted-foreground">
+          <p className="text-micro text-muted-foreground">
             No diff detail is stored for this entry (e.g. created before compact diff storage).
           </p>
         </div>
@@ -270,11 +270,11 @@ function DiffEntry({ diff }: { diff: ContentDiff }) {
 
       {expanded && resolved.kind === "segments" && (
         <div className="border-t border-border/40 bg-muted/10 px-3 pb-3 pt-2">
-          <p className="mb-1.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+          <p className="mb-1.5 text-2xs font-medium uppercase tracking-wide text-muted-foreground">
             Word-level diff · removed / added (unchanged runs shown as ···)
           </p>
           <div className="max-h-[min(45vh,14rem)] overflow-y-auto rounded border border-border/40 bg-background p-2 sm:max-h-48">
-            <p className="font-mono text-[11px] leading-relaxed whitespace-pre-wrap break-words">
+            <p className="font-mono text-micro leading-relaxed whitespace-pre-wrap break-words">
               {resolved.segments.map((seg, i) => {
                 if (seg.k === "_") {
                   return (
@@ -310,19 +310,19 @@ function DiffEntry({ diff }: { diff: ContentDiff }) {
           </div>
           <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2">
             <div>
-              <p className="mb-1 text-[10px] font-medium text-muted-foreground uppercase tracking-wide">
+              <p className="mb-1 text-2xs font-medium text-muted-foreground uppercase tracking-wide">
                 Removed
               </p>
               <div className="max-h-[min(28vh,8rem)] overflow-y-auto rounded border border-border/40 bg-background p-1.5 sm:max-h-28">
-                <p className="text-[11px] leading-relaxed text-foreground/80 whitespace-pre-wrap break-words font-mono">
+                <p className="text-micro leading-relaxed text-foreground/80 whitespace-pre-wrap break-words font-mono">
                   {joinRemovedExcerpts(resolved.segments).trim() || "(none)"}
                 </p>
               </div>
             </div>
             <div>
-              <p className="mb-1 text-[10px] font-medium text-muted-foreground uppercase tracking-wide">Added</p>
+              <p className="mb-1 text-2xs font-medium text-muted-foreground uppercase tracking-wide">Added</p>
               <div className="max-h-[min(28vh,8rem)] overflow-y-auto rounded border border-border/40 bg-background p-1.5 sm:max-h-28">
-                <p className="text-[11px] leading-relaxed text-foreground/80 whitespace-pre-wrap break-words font-mono">
+                <p className="text-micro leading-relaxed text-foreground/80 whitespace-pre-wrap break-words font-mono">
                   {joinAddedExcerpts(resolved.segments).trim() || "(none)"}
                 </p>
               </div>
@@ -333,11 +333,11 @@ function DiffEntry({ diff }: { diff: ContentDiff }) {
 
       {expanded && resolved.kind === "legacy" && (
         <div className="border-t border-border/40 bg-muted/10 px-3 pb-3 pt-2">
-          <p className="mb-1.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+          <p className="mb-1.5 text-2xs font-medium uppercase tracking-wide text-muted-foreground">
             Word-level diff · previous → current
           </p>
           <div className="max-h-[min(45vh,14rem)] overflow-y-auto rounded border border-border/40 bg-background p-2 sm:max-h-48">
-            <p className="font-mono text-[11px] leading-relaxed whitespace-pre-wrap break-words">
+            <p className="font-mono text-micro leading-relaxed whitespace-pre-wrap break-words">
               {legacyParts.map((part, i) => {
                 if (!part.added && !part.removed) {
                   return (
@@ -363,17 +363,17 @@ function DiffEntry({ diff }: { diff: ContentDiff }) {
           </div>
           <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2">
             <div>
-              <p className="mb-1 text-[10px] font-medium text-muted-foreground uppercase tracking-wide">Previous</p>
+              <p className="mb-1 text-2xs font-medium text-muted-foreground uppercase tracking-wide">Previous</p>
               <div className="max-h-[min(28vh,8rem)] overflow-y-auto rounded border border-border/40 bg-background p-1.5 sm:max-h-28">
-                <p className="text-[11px] leading-relaxed text-foreground/80 whitespace-pre-wrap break-words font-mono">
+                <p className="text-micro leading-relaxed text-foreground/80 whitespace-pre-wrap break-words font-mono">
                   {resolved.prevPlain || "(empty)"}
                 </p>
               </div>
             </div>
             <div>
-              <p className="mb-1 text-[10px] font-medium text-muted-foreground uppercase tracking-wide">Current</p>
+              <p className="mb-1 text-2xs font-medium text-muted-foreground uppercase tracking-wide">Current</p>
               <div className="max-h-[min(28vh,8rem)] overflow-y-auto rounded border border-border/40 bg-background p-1.5 sm:max-h-28">
-                <p className="text-[11px] leading-relaxed text-foreground/80 whitespace-pre-wrap break-words font-mono">
+                <p className="text-micro leading-relaxed text-foreground/80 whitespace-pre-wrap break-words font-mono">
                   {resolved.nextPlain || "(empty)"}
                 </p>
               </div>
@@ -448,14 +448,14 @@ export function ContentDiffHistoryDialog({
 
         {!loading && diffs.length > 0 && (
           <div className="flex shrink-0 flex-col gap-2 border-t border-border/40 px-3 py-2 sm:flex-row sm:items-center sm:justify-between sm:gap-2 sm:px-4">
-            <p className="text-[10px] text-muted-foreground min-w-0">
+            <p className="text-2xs text-muted-foreground min-w-0">
               {diffs.length} change{diffs.length !== 1 ? "s" : ""} · append-only log
             </p>
             <Button
               type="button"
               variant="outline"
               size="sm"
-              className="h-9 w-full gap-1.5 text-[11px] touch-manipulation sm:h-7 sm:w-auto sm:shrink-0"
+              className="h-9 w-full gap-1.5 text-micro touch-manipulation sm:h-7 sm:w-auto sm:shrink-0"
               onClick={() =>
                 downloadContentDiffsLog(diffs, {
                   title,

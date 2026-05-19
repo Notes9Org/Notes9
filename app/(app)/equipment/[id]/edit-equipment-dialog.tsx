@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useMemo, useState } from "react"
 import { useRouter } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
 import { Button } from "@/components/ui/button"
@@ -8,6 +8,7 @@ import {
   Dialog,
   DialogContent,
   DialogDescription,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
   DialogTrigger,
@@ -39,9 +40,27 @@ const EQUIPMENT_CATEGORIES = [
   "Other"
 ]
 
-export function EditEquipmentDialog({ equipment }: { equipment: any }) {
+interface EditEquipmentDialogProps {
+  equipment: {
+    id: string
+    name: string
+    equipment_code: string
+    category?: string | null
+    model?: string | null
+    manufacturer?: string | null
+    serial_number?: string | null
+    location?: string | null
+    status: string
+    next_maintenance_date?: string | null
+    purchase_date?: string | null
+    notes?: string | null
+  }
+}
+
+export function EditEquipmentDialog({ equipment }: EditEquipmentDialogProps) {
   const router = useRouter()
   const { toast } = useToast()
+  const supabase = useMemo(() => createClient(), [])
   const [open, setOpen] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   
@@ -73,8 +92,6 @@ export function EditEquipmentDialog({ equipment }: { equipment: any }) {
     setIsLoading(true)
 
     try {
-      const supabase = createClient()
-
       const { error } = await supabase
         .from("equipment")
         .update({
@@ -101,10 +118,6 @@ export function EditEquipmentDialog({ equipment }: { equipment: any }) {
 
       setOpen(false)
       router.refresh()
-      
-      setTimeout(() => {
-        window.location.reload()
-      }, 1000)
     } catch (error: any) {
       toast({
         title: "Error",
@@ -119,7 +132,7 @@ export function EditEquipmentDialog({ equipment }: { equipment: any }) {
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button variant="ghost" size="icon" className="h-8 w-8" aria-label="Edit equipment">
+        <Button variant="ghost" size="icon-sm" aria-label="Edit equipment">
           <Pencil className="h-4 w-4" />
         </Button>
       </DialogTrigger>
@@ -303,7 +316,7 @@ export function EditEquipmentDialog({ equipment }: { equipment: any }) {
           </div>
 
           {/* Actions */}
-          <div className="flex justify-end gap-2 pt-4">
+          <DialogFooter className="pt-4">
             <Button
               type="button"
               variant="outline"
@@ -315,7 +328,7 @@ export function EditEquipmentDialog({ equipment }: { equipment: any }) {
             <Button type="submit" disabled={isLoading}>
               {isLoading ? "Saving..." : "Save Changes"}
             </Button>
-          </div>
+          </DialogFooter>
         </form>
       </DialogContent>
     </Dialog>

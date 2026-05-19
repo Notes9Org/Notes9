@@ -13,6 +13,35 @@ import { ProtocolCard } from './protocol-card'
 import { ExperimentStepsTab } from './experiment-steps-tab'
 import Link from 'next/link'
 
+interface ProtocolRef {
+  id: string
+  name: string
+  description?: string | null
+  version?: string | null
+  [key: string]: unknown
+}
+
+interface ProtocolLink {
+  id: string
+  added_at?: string | null
+  protocol: ProtocolRef | ProtocolRef[]
+}
+
+interface ExperimentSample {
+  id: string
+  sample_code?: string | null
+  name?: string | null
+  sample_type?: string | null
+  status?: string | null
+  storage_location?: string | null
+  created_at?: string | null
+  [key: string]: unknown
+}
+
+function normalizeProtocol(p: ProtocolRef | ProtocolRef[]): ProtocolRef {
+  return Array.isArray(p) ? p[0] : p
+}
+
 interface ExperimentTabsProps {
   experiment: {
     id: string
@@ -23,12 +52,22 @@ interface ExperimentTabsProps {
     completionDate: string | null
     project: string
     projectId: string
-    protocols: any[]
-    samples: any[]
+    protocols: ProtocolLink[]
+    samples: ExperimentSample[]
   }
   initialTab: string
   /** Breadcrumb link for the experiment segment (e.g. includes `?project=` when scoped). */
   experimentPageHref?: string
+}
+
+function formatDuration(startDate: string | null | undefined, endDate: string | null | undefined): string {
+  if (!startDate) return "Not set"
+  const start = new Date(startDate)
+  if (Number.isNaN(start.getTime())) return "Not set"
+  const end = endDate ? new Date(endDate) : new Date()
+  if (Number.isNaN(end.getTime())) return "Not set"
+  const days = Math.max(0, Math.round((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)))
+  return `${days} day${days === 1 ? "" : "s"}`
 }
 
 export function ExperimentTabs({ experiment, initialTab, experimentPageHref }: ExperimentTabsProps) {
@@ -131,7 +170,7 @@ export function ExperimentTabs({ experiment, initialTab, experimentPageHref }: E
               </div>
               <div>
                 <p className="text-sm font-medium text-muted-foreground">Duration</p>
-                <p className="text-sm text-foreground">15 days</p>
+                <p className="text-sm text-foreground">{formatDuration(experiment.startDate, experiment.completionDate)}</p>
               </div>
             </CardContent>
           </Card>
@@ -153,14 +192,14 @@ export function ExperimentTabs({ experiment, initialTab, experimentPageHref }: E
           <div className="w-full sm:w-auto">
             <LinkProtocolDialog
               experimentId={experiment.id}
-              linkedProtocolIds={experiment.protocols.map((p: any) => p.protocol.id)}
+              linkedProtocolIds={experiment.protocols.map((p) => normalizeProtocol(p.protocol).id)}
             />
           </div>
         </div>
 
         {experiment.protocols && experiment.protocols.length > 0 ? (
           <div className="space-y-4">
-            {experiment.protocols.map((protocolLink: any) => (
+            {experiment.protocols.map((protocolLink) => (
               <ProtocolCard key={protocolLink.id} protocolLink={protocolLink} />
             ))}
           </div>
@@ -189,7 +228,7 @@ export function ExperimentTabs({ experiment, initialTab, experimentPageHref }: E
         </div>
         {experiment.samples && experiment.samples.length > 0 ? (
           <div className="space-y-2">
-            {experiment.samples.map((sample: any) => (
+            {experiment.samples.map((sample) => (
               <Card key={sample.id}>
                 <CardHeader className="py-3">
                   <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">

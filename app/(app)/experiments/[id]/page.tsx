@@ -48,40 +48,54 @@ export default async function ExperimentDetailPage({
     notFound()
   }
 
-  // Fetch linked protocols for this experiment
-  const { data: linkedProtocols } = await supabase
-    .from("experiment_protocols")
-    .select(`
-      id,
-      added_at,
-      protocol:protocols(
+  // All remaining queries are independent of each other — fire them in parallel
+  // so the page renders ~5 round-trips faster on cold loads.
+  const [
+    linkedProtocolsRes,
+    legacyExperimentSamplesRes,
+    linkedSampleRowsRes,
+    projectsRes,
+    usersRes,
+  ] = await Promise.all([
+    supabase
+      .from("experiment_protocols")
+      .select(`
         id,
-        name,
-        description,
-        version,
-        created_at
-      )
-    `)
-    .eq("experiment_id", id)
-    .order("added_at", { ascending: false })
+        added_at,
+        protocol:protocols(
+          id,
+          name,
+          description,
+          version,
+          created_at
+        )
+      `)
+      .eq("experiment_id", id)
+      .order("added_at", { ascending: false }),
+    supabase
+      .from("samples")
+      .select("*, sample_files(id, file_kind)")
+      .eq("experiment_id", id)
+      .order("created_at", { ascending: false }),
+    supabase
+      .from("sample_experiments")
+      .select(`
+        sample:samples(
+          *,
+          sample_files(id, file_kind)
+        )
+      `)
+      .eq("experiment_id", id)
+      .order("linked_at", { ascending: false }),
+    supabase.from("projects").select("id, name").order("name"),
+    supabase.from("profiles").select("id, first_name, last_name").order("first_name"),
+  ])
 
-  // Fetch samples linked to this experiment, including legacy samples.experiment_id rows.
-  const { data: legacyExperimentSamples } = await supabase
-    .from("samples")
-    .select("*, sample_files(id, file_kind)")
-    .eq("experiment_id", id)
-    .order("created_at", { ascending: false })
-
-  const { data: linkedSampleRows } = await supabase
-    .from("sample_experiments")
-    .select(`
-      sample:samples(
-        *,
-        sample_files(id, file_kind)
-      )
-    `)
-    .eq("experiment_id", id)
-    .order("linked_at", { ascending: false })
+  const linkedProtocols = linkedProtocolsRes.data
+  const legacyExperimentSamples = legacyExperimentSamplesRes.data
+  const linkedSampleRows = linkedSampleRowsRes.data
+  const projects = projectsRes.data
+  const users = usersRes.data
 
   const sampleMap = new Map<string, any>()
   for (const sample of legacyExperimentSamples ?? []) {
@@ -93,12 +107,6 @@ export default async function ExperimentDetailPage({
   }
   const experimentSamples = Array.from(sampleMap.values())
 
-  // Fetch all projects for dropdown
-  const { data: projects } = await supabase
-    .from("projects")
-    .select("id, name")
-    .order("name")
-
   const allowedProjectIds = (projects ?? []).map((p) => p.id)
   const projectFromUrl = resolveInitialProjectIdParam(
     resolvedSearch.project,
@@ -106,12 +114,6 @@ export default async function ExperimentDetailPage({
   )
   const useProjectScopedHeader =
     Boolean(projectFromUrl) && projectFromUrl === experimentData.project_id
-
-  // Fetch all users for assignment dropdown
-  const { data: users } = await supabase
-    .from("profiles")
-    .select("id, first_name, last_name")
-    .order("first_name")
 
   // Use real data with fallback to dummy data for display
   const experiment = {

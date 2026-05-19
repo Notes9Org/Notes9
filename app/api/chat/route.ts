@@ -56,16 +56,15 @@ function getPlainTextFromMessage(msg: {
 
 export async function POST(req: Request) {
   const body = await req.json();
-  const { messages, sessionId, supabaseToken: bodyToken, webSearch } = body;
+  const { messages, sessionId, webSearch } = body;
   const webSearchOn = webSearch === true;
   const rawResponseFormat = body.response_format ?? body.responseFormat;
   const notes9ResponseFormat =
     rawResponseFormat === 'json' || rawResponseFormat === 'text'
       ? rawResponseFormat
       : undefined;
-  console.log('API Request Body:', JSON.stringify({ ...body, supabaseToken: bodyToken ? '[REDACTED]' : undefined }, null, 2));
-  const headerToken = req.headers.get('Authorization')?.replace(/^Bearer\s+/i, '').trim();
-  const supabaseToken = bodyToken || headerToken;
+  console.log('API Request Body:', JSON.stringify({ ...body }, null, 2));
+  const supabaseToken = req.headers.get('Authorization')?.replace(/^Bearer\s+/i, '').trim() || null;
 
   if (!sessionId) {
     console.error('Missing session_id. Body:', body);
@@ -111,8 +110,11 @@ export async function POST(req: Request) {
           if (useStream) {
             const skipClarify =
               body.skip_clarify === true || body.chat_options?.skip_clarify === true;
+            const _upstream_ctrl = new AbortController();
+            const _upstream_timeout = setTimeout(() => _upstream_ctrl.abort(), 90_000);
             const response = await fetch(`${NOTES9_API_BASE}/chat/stream`, {
               method: 'POST',
+              signal: _upstream_ctrl.signal,
               headers: {
                 Accept: 'text/event-stream',
                 'Content-Type': 'application/json',
@@ -201,7 +203,7 @@ export async function POST(req: Request) {
                       ensureTextOpen();
                       // Emit as a special annotation that frontend can parse
                       writer.write({
-                        type: 'data',
+                        type: 'data-thinking',
                         data: { thinking: thinkingText, event: 'thinking' },
                       });
                     }
@@ -227,7 +229,7 @@ export async function POST(req: Request) {
                       // Also forward sources incrementally for progressive citation display
                       ensureTextOpen();
                       writer.write({
-                        type: 'data',
+                        type: 'data-source',
                         data: { source: payload, event: 'source' },
                       });
                     }
@@ -261,6 +263,7 @@ export async function POST(req: Request) {
               }
             }
 
+            clearTimeout(_upstream_timeout);
             if (errored) return;
 
             const pseudoPayload: Record<string, unknown> = { sources: sourceItems };

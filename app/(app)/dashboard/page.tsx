@@ -11,7 +11,6 @@ import {
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
-import { UserTrendGraph } from "@/components/dashboard/user-trend-graph";
 import {
   FlaskConical,
   TestTube,
@@ -32,97 +31,66 @@ export default async function DashboardPage() {
     redirect("/auth/login");
   }
 
-  // Fetch user profile
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("*")
-    .eq("id", user.id)
-    .single();
+  // Dashboard queries — fire in parallel. The previous version also fetched
+  // `profiles`, `projects`, `experiments`, `equipment`, `reports`, and the
+  // chat-researcher graph snapshot. None of them are rendered after we removed
+  // the stats cards and the relation-graph button, so they're dropped here to
+  // cut ~5 round-trips and a `chat_researcher_profiles.graph_data` blob from
+  // every dashboard hit.
+  const [recentExperimentsRes, recentNotesRes, dashboardTasksRes] =
+    await Promise.all([
+      supabase
+        .from("experiments")
+        .select(`
+          *,
+          project:projects(name),
+          assigned_to:profiles!experiments_assigned_to_fkey(first_name, last_name)
+        `)
+        .order("created_at", { ascending: false })
+        .limit(3),
+      supabase
+        .from("lab_notes")
+        .select(`
+          id,
+          title,
+          created_at,
+          updated_at,
+          note_type,
+          experiment_id,
+          experiment:experiments (
+            name,
+            project:projects ( name )
+          )
+        `)
+        .order("updated_at", { ascending: false })
+        .limit(3),
+      supabase
+        .from("dashboard_tasks")
+        .select("*")
+        .eq("user_id", user.id)
+        .order("completed", { ascending: true })
+        .order("due_at", { ascending: true, nullsFirst: false })
+        .order("created_at", { ascending: false }),
+    ])
 
-  // First, let's get simple counts for the stats
-  const [
-    { data: projects },
-    { data: experiments },
-    { data: equipment },
-    { data: reports },
-  ] = await Promise.all([
-    supabase
-      .from("projects")
-      .select("id, status")
-      .in("status", ["active", "planning"]),
-    supabase
-      .from("experiments")
-      .select("id, status")
-      .in("status", ["in_progress", "data_collection"]),
-    supabase.from("equipment").select("id, status"),
-    supabase.from("reports").select("id, status").eq("status", "draft"),
-  ]);
+  const recentExperiments = recentExperimentsRes.data
+  const recentNotes = recentNotesRes.data
+  const dashboardTasks = dashboardTasksRes.data
 
-  // Get recent experiments using the same query as experiments page
-  const { data: recentExperiments } = await supabase
-    .from("experiments")
-    .select(
-      `
-      *,
-      project:projects(name),
-      assigned_to:profiles!experiments_assigned_to_fkey(first_name, last_name)
-    `
-    )
-    .order("created_at", { ascending: false })
-    .limit(3);
-
-  // Get recent lab notes
-  const { data: recentNotes } = await supabase
-    .from("lab_notes")
-    .select(
-      `
-      id,
-      title,
-      created_at,
-      updated_at,
-      note_type,
-      experiment_id,
-      experiment:experiments (
-        name,
-        project:projects ( name )
-      )
-    `
-    )
-    .order("updated_at", { ascending: false })
-    .limit(3);
-
-  // Dashboard To-Do tasks (user-scoped)
-  const { data: dashboardTasks } = await supabase
-    .from("dashboard_tasks")
-    .select("*")
-    .eq("user_id", user.id)
-    .order("completed", { ascending: true })
-    .order("due_at", { ascending: true, nullsFirst: false })
-    .order("created_at", { ascending: false });
-
-  const { data: chatResearcherProfile } = await supabase
-    .from("chat_researcher_profiles")
-    .select("graph_data, updated_at")
-    .eq("user_id", user.id)
-    .maybeSingle();
-
-  // Calculate statistics
-  const activeProjectsCount = projects?.length || 0;
-  const runningExperimentsCount = experiments?.length || 0;
-  const availableEquipmentCount =
-    equipment?.filter((eq) => eq.status === "available").length || 0;
-  const totalEquipmentCount = equipment?.length || 1;
-  const equipmentAvailabilityPercentage = Math.round(
-    (availableEquipmentCount / totalEquipmentCount) * 100
-  );
-  const pendingReportsCount = reports?.length || 0;
+  // First-name lives in user_metadata too; avoid an extra profiles round-trip
+  // just for the greeting.
+  const greetingName =
+    (user.user_metadata?.first_name as string | undefined) ||
+    (user.user_metadata?.full_name as string | undefined)?.split(" ")[0] ||
+    user.email?.split("@")[0] ||
+    "User"
 
   return (
     <div className="min-w-0 space-y-4 md:space-y-6 pb-6">
       {/* Welcome Section */}
       <div>
         <h1 className="text-2xl font-bold tracking-tight md:text-3xl">
-          Hello, {profile?.first_name || "User"}
+          Hello, {greetingName}
         </h1>
         <p className="text-muted-foreground mt-1">
           Here's what's happening in your laboratory today
@@ -197,10 +165,7 @@ export default async function DashboardPage() {
       <Card className="min-w-0 overflow-hidden">
         <CardHeader>
           <CardTitle>Quick Actions</CardTitle>
-          <CardDescription>
-            Common tasks to get you started—including your relationship graph from
-            chat themes (entity-colored map).
-          </CardDescription>
+          <CardDescription>Common tasks to get you started.</CardDescription>
         </CardHeader>
         <CardContent className="flex flex-wrap gap-2">
           <Link href="/projects/new">
@@ -212,10 +177,6 @@ export default async function DashboardPage() {
           <Link href="/samples/new">
             <Button variant="outline">Record Sample</Button>
           </Link>
-          <UserTrendGraph
-            graphData={chatResearcherProfile?.graph_data ?? {}}
-            updatedAt={chatResearcherProfile?.updated_at ?? null}
-          />
         </CardContent>
       </Card>
 
@@ -236,7 +197,7 @@ export default async function DashboardPage() {
               recentExperiments.map((exp) => (
                 <div key={exp.id} className="space-y-2">
                   <div className="flex items-start justify-between gap-2">
-                    <div className="space-y-1.25 flex-1 min-w-0">
+                    <div className="space-y-1.5 flex-1 min-w-0">
                       <p className="text-sm font-medium leading-none truncate">
                         {exp.name}
                       </p>
@@ -264,8 +225,8 @@ export default async function DashboardPage() {
                         {exp.status?.replace("_", " ") || "planned"}
                       </Badge>
                       <Link href={`/experiments/${exp.id}`}>
-                        <Button variant="ghost" size="icon" className="h-8 w-8">
-                          <ArrowUpRight className="h-4 w-4" />
+                        <Button variant="ghost" size="icon-sm">
+                          <ArrowUpRight />
                           <span className="sr-only">View experiment</span>
                         </Button>
                       </Link>
@@ -298,7 +259,7 @@ export default async function DashboardPage() {
                   className="pb-4 border-b last:border-0 last:pb-0"
                 >
                   <div className="flex items-start justify-between gap-2">
-                    <div className="space-y-1.25 flex-1 min-w-0">
+                    <div className="space-y-1.5 flex-1 min-w-0">
                       <p className="text-sm font-medium leading-none truncate">
                         {note.title}
                       </p>
@@ -308,7 +269,7 @@ export default async function DashboardPage() {
                           ` · ${note.experiment.project.name}`}
                       </p>
                       <p className="text-xs text-muted-foreground">
-                        Updated {new Date(note.updated_at).toLocaleDateString()}
+                        Updated {new Date(note.updated_at).toISOString().slice(0, 10)}
                       </p>
                     </div>
                     <div className="flex items-center gap-2 shrink-0">
@@ -324,8 +285,8 @@ export default async function DashboardPage() {
                             : `/lab-notes`
                         }
                       >
-                        <Button variant="ghost" size="icon" className="h-8 w-8">
-                          <ArrowUpRight className="h-4 w-4" />
+                        <Button variant="ghost" size="icon-sm">
+                          <ArrowUpRight />
                           <span className="sr-only">View note</span>
                         </Button>
                       </Link>

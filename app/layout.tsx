@@ -2,7 +2,6 @@ import type { Metadata } from 'next'
 import { JetBrains_Mono, Space_Grotesk, Work_Sans } from 'next/font/google'
 import "./globals.css"
 import { ThemeProvider } from "@/components/theme-provider"
-import { Toaster } from "@/components/ui/toaster"
 import { Toaster as Sonner } from "@/components/ui/sonner"
 import { NavigationLoader } from "@/components/navigation-loader"
 import { RumProvider } from "@/components/rum-provider"
@@ -65,6 +64,18 @@ export const metadata: Metadata = {
   },
 }
 
+// Pre-extract the Supabase host so we can preconnect to it from <head>.
+// Browsers do the TCP+TLS handshake in parallel with HTML parsing instead of
+// waiting until the first Supabase request fires.
+const SUPABASE_ORIGIN = (() => {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL || ""
+  try {
+    return url ? new URL(url).origin : ""
+  } catch {
+    return ""
+  }
+})()
+
 export default function RootLayout({
   children,
 }: {
@@ -72,6 +83,14 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en" suppressHydrationWarning>
+      <head>
+        {SUPABASE_ORIGIN ? (
+          <>
+            <link rel="preconnect" href={SUPABASE_ORIGIN} crossOrigin="anonymous" />
+            <link rel="dns-prefetch" href={SUPABASE_ORIGIN} />
+          </>
+        ) : null}
+      </head>
       <body className={`font-sans ${workSans.variable} ${spaceGrotesk.variable} ${jetbrainsMono.variable} antialiased`}>
         <ThemeProvider
           attribute="class"
@@ -82,7 +101,6 @@ export default function RootLayout({
           <RumProvider>
             <NavigationLoader />
             {children}
-            <Toaster />
             <Sonner />
           </RumProvider>
           {/*

@@ -590,7 +590,7 @@ function ResearchMapCanvas() {
             {KINDS.map((k) => (
               <label
                 key={k}
-                className="flex shrink-0 cursor-pointer items-center gap-1 text-[11px] whitespace-nowrap"
+                className="flex shrink-0 cursor-pointer items-center gap-1 text-micro whitespace-nowrap"
               >
                 <Checkbox
                   checked={include[k]}

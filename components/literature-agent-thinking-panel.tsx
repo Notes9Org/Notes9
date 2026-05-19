@@ -52,7 +52,7 @@ export function LiteratureStreamProgressHint({
     upstreamActivityAt != null ? Math.floor((Date.now() - upstreamActivityAt) / 1000) : null;
 
   return (
-    <div className="mt-1 space-y-1 text-[11px] leading-snug text-muted-foreground" data-pulse={pulse}>
+    <div className="mt-1 space-y-1 text-micro leading-snug text-muted-foreground" data-pulse={pulse}>
       <p className="flex flex-wrap items-center gap-x-1 tabular-nums">
         <span>Running</span>
         <span className="font-medium text-foreground/85">{formatElapsed(elapsedSec)}</span>
@@ -99,9 +99,9 @@ export function LiteratureAgentThinkingPanel({ steps }: { steps: string[] }) {
         </Button>
       </CollapsibleTrigger>
       <CollapsibleContent className="overflow-hidden data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:animate-in data-[state=open]:fade-in-0">
-        <ul className="mt-1.5 max-h-36 list-disc space-y-2 overflow-y-auto rounded-md border border-border/40 bg-muted/25 py-2 pl-8 pr-2.5 text-left shadow-sm marker:text-[10px] marker:text-muted-foreground/35 dark:bg-muted/15">
+        <ul className="mt-1.5 max-h-36 list-disc space-y-2 overflow-y-auto rounded-md border border-border/40 bg-muted/25 py-2 pl-8 pr-2.5 text-left shadow-sm marker:text-2xs marker:text-muted-foreground/35 dark:bg-muted/15">
           {steps.map((raw, i) => (
-            <li key={`${i}-${raw.slice(0, 20)}`} className="text-[11px] leading-relaxed text-muted-foreground">
+            <li key={`${i}-${raw.slice(0, 20)}`} className="text-micro leading-relaxed text-muted-foreground">
               {compactStep(raw)}
             </li>
           ))}

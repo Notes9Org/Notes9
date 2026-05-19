@@ -338,14 +338,25 @@ export function ReportGeneratorDialog({
             </div>
           )}
 
-          {/* Query textarea */}
+          {/* Query textarea — Cmd/Ctrl+Enter submits (Enter alone is reserved for newlines) */}
           <div className="space-y-2">
-            <Label htmlFor="query-textarea">Analysis Query *</Label>
+            <Label htmlFor="query-textarea">
+              Analysis Query *{" "}
+              <span className="text-xs font-normal text-muted-foreground">
+                (⌘/Ctrl+Enter to generate)
+              </span>
+            </Label>
             <Textarea
               id="query-textarea"
               placeholder="Describe the analysis you need, e.g. 'Analyze trends in cell viability data across all experiments'"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && (e.metaKey || e.ctrlKey) && canSubmit) {
+                  e.preventDefault()
+                  void handleGenerate()
+                }
+              }}
               disabled={isGenerating}
               rows={4}
             />
@@ -401,7 +412,17 @@ export function ReportGeneratorDialog({
           >
             Cancel
           </Button>
-          <Button onClick={handleGenerate} disabled={!canSubmit}>
+          <Button
+            onClick={handleGenerate}
+            disabled={!canSubmit}
+            title={
+              !selectedProjectId
+                ? "Select a project first"
+                : !query.trim()
+                  ? "Enter an analysis query"
+                  : undefined
+            }
+          >
             {isGenerating ? (
               <>
                 <Loader2 className="h-4 w-4 animate-spin" />

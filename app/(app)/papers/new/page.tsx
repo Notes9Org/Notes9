@@ -17,7 +17,6 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { ArrowLeft } from "lucide-react"
 import Link from "next/link"
 import { toast } from "sonner"
-import { IS_PAPERS_MOCKED, createMockPaper, getMockProjects } from "@/lib/papers-mock"
 
 export default function NewPaperPage() {
   const router = useRouter()
@@ -28,10 +27,6 @@ export default function NewPaperPage() {
 
   useEffect(() => {
     const fetchProjects = async () => {
-      if (IS_PAPERS_MOCKED) {
-        setProjects(getMockProjects())
-        return
-      }
       const supabase = createClient()
       const { data } = await supabase
         .from("projects")
@@ -50,13 +45,6 @@ export default function NewPaperPage() {
 
     setIsCreating(true)
     try {
-      if (IS_PAPERS_MOCKED) {
-        const paper = createMockPaper(title.trim(), projectId || null)
-        toast.success("Paper created")
-        router.push(`/papers?open=${paper.id}`)
-        return
-      }
-
       const supabase = createClient()
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) throw new Error("Not authenticated")

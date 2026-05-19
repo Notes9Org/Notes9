@@ -104,7 +104,7 @@ export function BeerLambertPanel({ onResultChange }: { onResultChange: Calculato
           </SelectContent>
         </Select>
       </div>
-      <p className="text-[10px] text-muted-foreground">A = ε l c. Leave one unknown blank.</p>
+      <p className="text-2xs text-muted-foreground">A = ε l c. Leave one unknown blank.</p>
       {field("A", A, setA)}
       {field("epsilon", epsilon, setEpsilon)}
       {field("l", l, setL)}

@@ -177,3 +177,63 @@
   animation: rag-highlight-fade 1.2s ease forwards;
   outline: none;
 }
+
+/* Chat Streaming Improvements */
+@keyframes cursor-blink {
+  0%, 50% { opacity: 1; }
+  50.1%, 100% { opacity: 0; }
+}
+
+.animate-cursor-blink {
+  animation: cursor-blink 1s step-end infinite;
+}
+
+.streaming-message {
+  /* Prevent layout shifts during streaming */
+  min-height: 2rem;
+}
+
+/* CSS cursor for streaming markdown — appears after last rendered line */
+.notes9-md--streaming::after {
+  content: '▋';
+  display: inline;
+  font-size: 0.75em;
+  vertical-align: text-bottom;
+  opacity: 1;
+  animation: cursor-blink 1s step-end infinite;
+  margin-left: 1px;
+  color: var(--foreground);
+}
+
+/* Better table scrolling in chat */
+.notes9-md-table-scroll::-webkit-scrollbar {
+  height: 8px;
+  width: 8px;
+}
+
+.notes9-md-table-scroll::-webkit-scrollbar-track {
+  background: var(--muted);
+  border-radius: 4px;
+}
+
+.notes9-md-table-scroll::-webkit-scrollbar-thumb {
+  background: var(--muted-foreground);
+  border-radius: 4px;
+  opacity: 0.5;
+}
+
+.notes9-md-table-scroll::-webkit-scrollbar-thumb:hover {
+  background: var(--foreground);
+  opacity: 0.7;
+}
+
+/* Chat markdown uses .html-content (marked GFM) */
+.html-content pre {
+  overflow-x: auto;
+  max-width: 100%;
+}
+
+/* Scroll wrapper only — no second “frame”; table keeps html-content borders */
+.notes9-md-table-scroll table {
+  margin: 0 !important;
+}

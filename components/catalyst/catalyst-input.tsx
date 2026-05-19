@@ -5,7 +5,6 @@ import {
   ArrowUp,
   Square,
   Paperclip,
-  Clock,
   Globe,
   MessageSquare,
   NotebookPen,
@@ -361,18 +360,12 @@ export function CatalystInput({
                 className="size-8 rounded-lg text-muted-foreground hover:text-foreground"
                 disabled={isLoading || isUploading}
                 onClick={() => fileInputRef.current?.click()}
+                aria-label="Attach file"
+                title="Attach file"
               >
                 <Paperclip className="size-4" />
               </Button>
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon"
-                className="size-8 rounded-lg text-muted-foreground hover:text-foreground"
-                disabled={isLoading}
-              >
-                <Clock className="size-4" />
-              </Button>
+              {/* Clock button removed — it had no handler and was always disabled or no-op. */}
             </div>
 
             {/* Right - Submit/Stop button */}

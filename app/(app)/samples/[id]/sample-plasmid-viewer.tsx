@@ -90,7 +90,8 @@ type SeqVizPrimer = {
   name: string
   start: number
   end: number
-  direction?: 1 | -1
+  // SeqViz requires a concrete direction; we default to 1 in `toSeqVizPrimers`.
+  direction: 1 | -1
 }
 
 type CustomAnnotation = {
@@ -498,6 +499,19 @@ export function SamplePlasmidViewer({
         )
         return
       }
+      // Dynamic-programming alignment allocates O(query × subject) cells on
+      // the main thread. ~25M cells (~5kbp × 5kbp) is already a noticeable
+      // hitch; refuse anything bigger so the tab doesn't lock up.
+      const MAX_DP_CELLS = 25_000_000
+      const dpCells = (query.length + 1) * (currentSequence.length + 1)
+      if (dpCells > MAX_DP_CELLS) {
+        setError(
+          `Sequences are too large to align in the browser (${query.length.toLocaleString()} × ${currentSequence.length.toLocaleString()}). Try a shorter query or pre-trim the construct.`
+        )
+        return
+      }
+      // Yield to the browser so the spinner can render before the long sync work.
+      await new Promise<void>((r) => requestAnimationFrame(() => r()))
       const result = alignDnaSequencesAdvanced(query, currentSequence, {
         mode: alignmentMode,
         tryReverseComplement,
@@ -647,14 +661,14 @@ export function SamplePlasmidViewer({
           </span>
           <Badge
             variant="outline"
-            className="h-5 shrink-0 px-2 py-0 font-mono text-[10px] font-semibold uppercase leading-none tracking-wide"
+            className="h-5 shrink-0 px-2 py-0 font-mono text-2xs font-semibold uppercase leading-none tracking-wide"
           >
             {molecularFileFormatLabel(fileName)}
           </Badge>
           {sequenceLength ? (
             <Badge
               variant="outline"
-              className="h-5 shrink-0 px-2 py-0 font-mono text-[10px] font-semibold leading-none tabular-nums"
+              className="h-5 shrink-0 px-2 py-0 font-mono text-2xs font-semibold leading-none tabular-nums"
             >
               {sequenceLength.toLocaleString()} bp
             </Badge>
@@ -662,7 +676,7 @@ export function SamplePlasmidViewer({
           {sequenceData?.circular === false ? (
             <Badge
               variant="outline"
-              className="h-5 shrink-0 px-2 py-0 text-[10px] font-semibold uppercase leading-none tracking-wide"
+              className="h-5 shrink-0 px-2 py-0 text-2xs font-semibold uppercase leading-none tracking-wide"
             >
               linear
             </Badge>
@@ -670,7 +684,7 @@ export function SamplePlasmidViewer({
           {gcPercent != null ? (
             <Badge
               variant="outline"
-              className="h-5 shrink-0 px-2 py-0 font-mono text-[10px] font-semibold leading-none tabular-nums"
+              className="h-5 shrink-0 px-2 py-0 font-mono text-2xs font-semibold leading-none tabular-nums"
             >
               {gcPercent}% GC
             </Badge>
@@ -824,7 +838,7 @@ export function SamplePlasmidViewer({
               <TabsTrigger value="selection" className="h-7 px-2.5 text-xs">
                 Selection
                 {selection && selection.length > 0 ? (
-                  <Badge variant="secondary" className="ml-1.5 px-1 font-mono text-[10px] tabular-nums">
+                  <Badge variant="secondary" className="ml-1.5 px-1 font-mono text-2xs tabular-nums">
                     {selection.length}
                   </Badge>
                 ) : null}
@@ -833,7 +847,7 @@ export function SamplePlasmidViewer({
                 <Tag className="mr-1 h-3 w-3" />
                 Annotate
                 {customAnnotations.length > 0 ? (
-                  <Badge variant="secondary" className="ml-1.5 px-1 font-mono text-[10px] tabular-nums">
+                  <Badge variant="secondary" className="ml-1.5 px-1 font-mono text-2xs tabular-nums">
                     {customAnnotations.length}
                   </Badge>
                 ) : null}
@@ -867,7 +881,7 @@ export function SamplePlasmidViewer({
               <div className="space-y-3">
                 <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_140px_auto]">
                   <div className="space-y-1">
-                    <Label className="text-[11px] text-muted-foreground">Name</Label>
+                    <Label className="text-micro text-muted-foreground">Name</Label>
                     <Input
                       value={annotationName}
                       onChange={(event) => setAnnotationName(event.target.value)}
@@ -877,7 +891,7 @@ export function SamplePlasmidViewer({
                     />
                   </div>
                   <div className="space-y-1">
-                    <Label className="text-[11px] text-muted-foreground">Color</Label>
+                    <Label className="text-micro text-muted-foreground">Color</Label>
                     <div className="flex flex-wrap gap-1">
                       {ANNOTATION_COLOR_OPTIONS.map((c) => (
                         <button
@@ -907,7 +921,7 @@ export function SamplePlasmidViewer({
                   </div>
                 </div>
                 {selection && selection.length > 0 ? (
-                  <p className="text-[11px] text-muted-foreground">
+                  <p className="text-micro text-muted-foreground">
                     Adding annotation at{" "}
                     <span className="font-mono">
                       {selection.start}-{selection.end}
@@ -915,14 +929,14 @@ export function SamplePlasmidViewer({
                     ({selection.length.toLocaleString()} bp).
                   </p>
                 ) : (
-                  <p className="text-[11px] text-muted-foreground">
+                  <p className="text-micro text-muted-foreground">
                     Click and drag on the map to select a region, then add a named annotation.
                   </p>
                 )}
 
                 {customAnnotations.length > 0 ? (
                   <div className="space-y-1">
-                    <Label className="text-[11px] text-muted-foreground">Your annotations</Label>
+                    <Label className="text-micro text-muted-foreground">Your annotations</Label>
                     <div className="space-y-1">
                       {customAnnotations.map((a) => (
                         <div
@@ -936,7 +950,7 @@ export function SamplePlasmidViewer({
                           <span className="min-w-0 flex-1 truncate text-sm text-foreground">
                             {a.name}
                           </span>
-                          <span className="font-mono text-[11px] tabular-nums text-muted-foreground">
+                          <span className="font-mono text-micro tabular-nums text-muted-foreground">
                             {a.start}-{a.end}
                           </span>
                           <button
@@ -959,7 +973,7 @@ export function SamplePlasmidViewer({
               <div className="space-y-3">
                 <div className="grid gap-2 sm:grid-cols-3">
                   <div className="space-y-1">
-                    <Label className="text-[11px] text-muted-foreground">Query source</Label>
+                    <Label className="text-micro text-muted-foreground">Query source</Label>
                     <Select value={alignSourceId} onValueChange={setAlignSourceId}>
                       <SelectTrigger className="h-8 text-xs">
                         <SelectValue />
@@ -977,7 +991,7 @@ export function SamplePlasmidViewer({
                     </Select>
                   </div>
                   <div className="space-y-1">
-                    <Label className="text-[11px] text-muted-foreground">Alignment type</Label>
+                    <Label className="text-micro text-muted-foreground">Alignment type</Label>
                     <Select
                       value={alignmentMode}
                       onValueChange={(value) => setAlignmentMode(value as AlignmentMode)}
@@ -999,7 +1013,7 @@ export function SamplePlasmidViewer({
                     </Select>
                   </div>
                   <div className="space-y-1">
-                    <Label className="text-[11px] text-muted-foreground">Strand</Label>
+                    <Label className="text-micro text-muted-foreground">Strand</Label>
                     <button
                       type="button"
                       onClick={() => setTryReverseComplement((v) => !v)}
@@ -1010,7 +1024,7 @@ export function SamplePlasmidViewer({
                       }`}
                     >
                       <span>Try reverse complement</span>
-                      <span className="font-mono text-[10px]">
+                      <span className="font-mono text-2xs">
                         {tryReverseComplement ? "ON" : "OFF"}
                       </span>
                     </button>
@@ -1036,14 +1050,14 @@ export function SamplePlasmidViewer({
                 )}
 
                 <div className="flex flex-wrap items-center gap-2">
-                  <Badge variant="outline" className="font-mono text-[10px] tabular-nums">
+                  <Badge variant="outline" className="font-mono text-2xs tabular-nums">
                     {(alignSourceId === "paste"
                       ? pastedClean.length
                       : alignmentSources.find((s) => s.id === alignSourceId)?.sequence?.length ?? 0
                     ).toLocaleString()}{" "}
                     bp query
                   </Badge>
-                  <Badge variant="outline" className="font-mono text-[10px] tabular-nums">
+                  <Badge variant="outline" className="font-mono text-2xs tabular-nums">
                     {currentSequence.length.toLocaleString()} bp construct
                   </Badge>
                   <div className="ml-auto flex gap-2">
@@ -1182,14 +1196,14 @@ function SelectionPanel({
   return (
     <div className="space-y-2">
       <div className="flex flex-wrap items-center gap-2">
-        <Badge variant="outline" className="font-mono text-[10px] tabular-nums">
+        <Badge variant="outline" className="font-mono text-2xs tabular-nums">
           {selection.start}-{selection.end}
         </Badge>
-        <Badge variant="outline" className="font-mono text-[10px] tabular-nums">
+        <Badge variant="outline" className="font-mono text-2xs tabular-nums">
           {selection.length.toLocaleString()} bp
         </Badge>
         {selectedGc != null ? (
-          <Badge variant="outline" className="font-mono text-[10px] tabular-nums">
+          <Badge variant="outline" className="font-mono text-2xs tabular-nums">
             {selectedGc}% GC
           </Badge>
         ) : null}
@@ -1204,7 +1218,7 @@ function SelectionPanel({
           </Button>
         </div>
       </div>
-      <div className="max-h-44 overflow-auto rounded-md border bg-muted/30 p-3 font-mono text-[12px] leading-5 text-foreground">
+      <div className="max-h-44 overflow-auto rounded-md border bg-muted/30 p-3 font-mono text-mini leading-5 text-foreground">
         {formatSequence(selectedSeq)}
       </div>
     </div>
@@ -1236,7 +1250,7 @@ function AlignmentResultPanel({ result }: { result: ExtendedAlignmentResult }) {
   return (
     <div className="space-y-2">
       <div className="flex flex-wrap items-center gap-2">
-        <Badge variant="outline" className="font-mono text-[10px] tabular-nums">
+        <Badge variant="outline" className="font-mono text-2xs tabular-nums">
           mode: {result.mode}
         </Badge>
         <Badge
@@ -1275,7 +1289,7 @@ function AlignmentResultPanel({ result }: { result: ExtendedAlignmentResult }) {
         <div className="bg-rose-500" style={{ width: `${mismatchPct}%` }} title={`Mismatches ${mismatchPct}%`} />
         <div className="bg-rose-300 dark:bg-rose-900" style={{ width: `${gapPct}%` }} title={`Gaps ${gapPct}%`} />
       </div>
-      <div className="flex flex-wrap gap-3 text-[10px] text-muted-foreground">
+      <div className="flex flex-wrap gap-3 text-2xs text-muted-foreground">
         <span className="inline-flex items-center gap-1">
           <span className="inline-block h-2 w-2 rounded-sm bg-emerald-500" /> match
         </span>
@@ -1287,7 +1301,7 @@ function AlignmentResultPanel({ result }: { result: ExtendedAlignmentResult }) {
         </span>
       </div>
 
-      <div className="max-h-72 overflow-auto rounded-md border bg-muted/30 p-3 font-mono text-[11px] leading-5">
+      <div className="max-h-72 overflow-auto rounded-md border bg-muted/30 p-3 font-mono text-micro leading-5">
         {blocks.map((block, idx) => (
           <div key={idx} className="mb-2 last:mb-0">
             <div className="flex">

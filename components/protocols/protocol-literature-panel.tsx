@@ -381,7 +381,7 @@ export function ProtocolLiteraturePanel({
           </span>
           <div className="flex items-center gap-1.5 shrink-0">
             {!isLoading && papers.length > 0 && (
-              <Badge variant="secondary" className="text-[10px] shrink-0 tabular-nums">
+              <Badge variant="secondary" className="text-2xs shrink-0 tabular-nums">
                 {papers.length}
               </Badge>
             )}
@@ -389,7 +389,7 @@ export function ProtocolLiteraturePanel({
               <Button
                 variant="ghost"
                 size="sm"
-                className="h-6 px-2 text-[10px] text-muted-foreground shrink-0"
+                className="h-6 px-2 text-2xs text-muted-foreground shrink-0"
                 onClick={toggleAll}
               >
                 {selected.size === papers.length ? "None" : "All"}

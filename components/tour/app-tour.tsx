@@ -601,14 +601,14 @@ export function AppTour() {
         },
       },
       {
-        element: "#tour-ai-mode",
+        element: "#tour-ai-web-search",
         onHighlightStarted: () => {
           window.dispatchEvent(new Event("notes9:tour-open-ai-sidebar"))
         },
         popover: {
-          title: "Choose the right AI mode",
+          title: "Web search when you need it",
           description: renderMascot(
-            "Use <b>General</b> for broad research help and web-aware tasks. Switch to <b>Notes9</b> when you want the assistant to stay grounded in your workspace context and uploaded materials."
+            "Turn on <b>Web</b> to let Caty search the internet alongside your lab data. Type <b>@</b> in the chat box to tag notes, experiments, projects, and literature."
           ),
           side: "top",
           align: "start",

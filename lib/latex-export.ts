@@ -255,7 +255,7 @@ function convertTable(table: HTMLElement): string {
     const isHeader = cells[0]?.tagName.toLowerCase() === "th"
 
     const cellTexts = cells.map((cell) => {
-      const text = Array.from(cell.childNodes).map(convertNode).join("").trim()
+      const text = Array.from(cell.childNodes).map((node) => convertNode(node)).join("").trim()
       return isHeader ? `\\textbf{${text}}` : text
     })
 

@@ -395,7 +395,7 @@ function RetrievedTextBlock({
           title="Open source document and scroll to this passage"
           className="group -mx-1 block rounded-sm px-1 py-0.5 transition-colors hover:bg-primary/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
-          <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground group-hover:text-primary">
+          <p className="text-2xs font-medium uppercase tracking-wide text-muted-foreground group-hover:text-primary">
             Retrieved text
           </p>
           <span className="mt-1 flex items-start gap-1.5 text-xs leading-snug text-primary underline underline-offset-2 decoration-primary/50 group-hover:decoration-primary">
@@ -407,7 +407,7 @@ function RetrievedTextBlock({
         </SmartCitationLink>
       ) : (
         <>
-          <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+          <p className="text-2xs font-medium uppercase tracking-wide text-muted-foreground">
             Retrieved text
           </p>
           <p className="text-xs leading-snug text-muted-foreground">{excerptPreview}</p>
@@ -513,7 +513,7 @@ function SingleCitationPanel({
       {resolvedItem.relevance != null &&
         resolvedItem.relevance >= 0 &&
         resolvedItem.relevance <= 1 && (
-          <p className="text-[11px] text-muted-foreground pl-6">
+          <p className="text-micro text-muted-foreground pl-6">
             {resolvedItem.sourceTypeLabel} · {Math.round(resolvedItem.relevance * 100)}% match
           </p>
         )}

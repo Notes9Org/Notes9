@@ -261,7 +261,15 @@ export function registerSpreadsheetEmbedWheelIsolation(): () => void {
   if (embedWheelIsolationRefCount === 0) {
     embedWheelIsolationHandler = (e: WheelEvent) => {
       const t = e.target
-      const el = t instanceof Element ? t : t.parentElement
+      if (!t) return
+      // EventTarget doesn't expose parentElement; fall back only when the
+      // target itself isn't already an Element we can query.
+      const el =
+        t instanceof Element
+          ? t
+          : t instanceof Node
+            ? t.parentElement
+            : null
       if (!el?.closest("[data-spreadsheet-embed-root]")) return
       e.preventDefault()
     }

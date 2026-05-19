@@ -236,8 +236,8 @@ export function SampleList({ samples, viewMode: controlledView, setViewMode: set
                       />
                       <Button
                         variant="ghost"
-                        size="icon"
-                        className="h-8 w-8 text-muted-foreground hover:bg-rose-50/50 hover:text-rose-500/80 dark:hover:bg-rose-950/20 dark:hover:text-rose-400/80"
+                        size="icon-sm"
+                        className="text-muted-foreground hover:bg-rose-50/50 hover:text-rose-500/80 dark:hover:bg-rose-950/20 dark:hover:text-rose-400/80"
                         onClick={() => setDeleteTarget(item)}
                         aria-label={`Delete ${item.sample_code}`}
                       >
@@ -542,8 +542,8 @@ function SampleTableView({
                   </Button>
                   <Button
                     variant="ghost"
-                    size="icon"
-                    className="h-8 w-8 text-muted-foreground hover:bg-rose-50/50 hover:text-rose-500/80 dark:hover:bg-rose-950/20 dark:hover:text-rose-400/80"
+                    size="icon-sm"
+                    className="text-muted-foreground hover:bg-rose-50/50 hover:text-rose-500/80 dark:hover:bg-rose-950/20 dark:hover:text-rose-400/80"
                     onClick={() => onDeleteClick(item)}
                     aria-label={`Delete ${item.sample_code}`}
                   >

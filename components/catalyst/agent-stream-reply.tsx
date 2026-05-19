@@ -8,6 +8,7 @@ import {
 } from '@/components/catalyst/agent-citations-panel';
 import { AgentThinkingBar } from '@/components/catalyst/agent-thinking-bar';
 import { AgentToolCards } from '@/components/catalyst/agent-tool-cards';
+import { AgentFlowPipeline } from '@/components/catalyst/agent-flow-pipeline';
 import type { ThinkingPayload, RagChunksPayload, DonePayload } from '@/lib/agent-stream-types';
 import type { ThinkingStage, ToolCard } from '@/hooks/use-agent-stream';
 
@@ -39,10 +40,15 @@ interface AgentStreamReplyProps {
   isThinkingStreaming?: boolean;
 }
 
+// Display labels only. Unknown keys fall through to the raw value via the
+// `?? donePayload.tool_used` guard at the usage site — no schema lock-in.
 const TOOL_LABELS: Record<string, string> = {
-  sql: 'From database',
-  rag: 'From documents',
-  hybrid: 'Both',
+  sql: 'From your records',
+  rag: 'From your documents',
+  hybrid: 'Records + documents',
+  biomni: 'From biomedical synthesis',
+  web: 'From the web',
+  clarification: 'Awaiting your reply',
   none: 'General',
 };
 
@@ -80,6 +86,11 @@ export function AgentStreamReply({
   const hasThinkingBar =
     isStreaming &&
     (currentStage != null || currentThinkingMessage != null || thinkingSteps.length > 0);
+  // Show the pipeline whenever we have either a known stage or any tool activity.
+  // Once streaming finishes AND no tools fired (e.g. greetings), hide it so simple
+  // replies stay clean.
+  const showPipeline =
+    (isStreaming && (currentStage != null || hasToolCards)) || (hasToolCards && !!donePayload);
 
   if (error) {
     return (
@@ -93,8 +104,17 @@ export function AgentStreamReply({
   return (
     <div className={cn('flex flex-col gap-2.5', compact && 'gap-2')}>
 
-      {/* ── Stage-aware thinking bar (live only) ── */}
-      {hasThinkingBar && (
+      {/* ── Visual ReAct pipeline (live while streaming, settled when done) ── */}
+      {showPipeline && (
+        <AgentFlowPipeline
+          stage={currentStage ?? null}
+          toolCards={toolCards}
+          isStreaming={isStreaming}
+        />
+      )}
+
+      {/* ── One-line status under the pipeline while streaming ── */}
+      {isStreaming && currentThinkingMessage && !hasToolCards && (
         <AgentThinkingBar
           stage={currentStage ?? null}
           message={currentThinkingMessage ?? null}
@@ -103,11 +123,11 @@ export function AgentStreamReply({
         />
       )}
 
-      {/* ── Tool cards — live while running, collapsible when done ── */}
-      {hasToolCards && (
+      {/* ── Detailed tool cards (collapsible) — only after streaming finishes ── */}
+      {hasToolCards && !isStreaming && (
         <AgentToolCards
           cards={toolCards}
-          collapsible={!isStreaming}
+          collapsible
         />
       )}
 

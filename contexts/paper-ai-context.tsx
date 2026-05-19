@@ -1,6 +1,6 @@
 "use client"
 
-import { createContext, useContext, useState, useCallback, useRef, type ReactNode } from "react"
+import { createContext, useContext, useState, useCallback, useMemo, useRef, type ReactNode } from "react"
 
 interface PaperAIContextValue {
   isActive: boolean
@@ -70,22 +70,21 @@ export function PaperAIProvider({ children }: { children: ReactNode }) {
     return isActive ? getContentRef.current() : ""
   }, [isActive])
 
-  return (
-    <PaperAIContext.Provider
-      value={{
-        isActive,
-        paperTitle,
-        paperId,
-        getContent,
-        register,
-        unregister,
-        onInsert,
-        getEditorContext,
-      }}
-    >
-      {children}
-    </PaperAIContext.Provider>
+  const value = useMemo<PaperAIContextValue>(
+    () => ({
+      isActive,
+      paperTitle,
+      paperId,
+      getContent,
+      register,
+      unregister,
+      onInsert,
+      getEditorContext,
+    }),
+    [isActive, paperTitle, paperId, getContent, register, unregister, onInsert, getEditorContext],
   )
+
+  return <PaperAIContext.Provider value={value}>{children}</PaperAIContext.Provider>
 }
 
 export function usePaperAI() {

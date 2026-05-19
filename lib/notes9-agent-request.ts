@@ -23,6 +23,8 @@ export type Notes9AgentRequestInput = {
     debug?: boolean;
     max_retries?: number;
     tags?: Array<{ kind: string; id: string; title: string }>;
+    /** When supported by upstream, enables web search tool alongside SQL/RAG. */
+    web_search?: 'on' | 'off';
   };
 };
 

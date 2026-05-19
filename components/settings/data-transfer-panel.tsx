@@ -607,7 +607,7 @@ export function DataTransferPanel() {
                         }
                         placeholder="Experiment name"
                       />
-                      <p className="text-[11px] text-muted-foreground mt-2">
+                      <p className="text-micro text-muted-foreground mt-2">
                         Drop a file row here to assign quickly.
                       </p>
                     </div>
@@ -645,7 +645,7 @@ export function DataTransferPanel() {
                           )}
                           <span className="truncate text-sm">{file.file.name}</span>
                         </div>
-                        <p className="text-[11px] text-muted-foreground truncate mt-1 pl-6">
+                        <p className="text-micro text-muted-foreground truncate mt-1 pl-6">
                           {file.relativePath}
                         </p>
                       </div>
@@ -742,7 +742,11 @@ export function DataTransferPanel() {
               )}
             </Button>
 
-            {isImporting && <Progress value={72} />}
+            {isImporting && (
+              // No real per-file progress is plumbed through yet — render an
+              // indeterminate bar (animated stripe) instead of a fake 72%.
+              <Progress className="animate-pulse" />
+            )}
 
             {importReport && (
               <div className="rounded-lg border p-3 text-xs space-y-2">

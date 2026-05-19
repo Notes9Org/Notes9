@@ -83,6 +83,12 @@ export default function SignUpPage() {
     setIsLoading(true)
     setError(null)
 
+    if (password.length < 8) {
+      setError("Password must be at least 8 characters long")
+      setIsLoading(false)
+      return
+    }
+
     try {
       // Check if email already exists in profiles table
       const { data: existingProfile, error: checkError } = await supabase
@@ -338,9 +344,11 @@ export default function SignUpPage() {
                       id="password"
                       type="password"
                       required
+                      minLength={8}
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
                     />
+                    <p className="text-xs text-muted-foreground">At least 8 characters.</p>
                   </div>
                   {error && (
                     <div className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">

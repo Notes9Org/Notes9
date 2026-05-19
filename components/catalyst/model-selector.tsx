@@ -29,11 +29,8 @@ interface ModelSelectorProps {
   disabled?: boolean;
 }
 
-// Provider icons (Google/Gemini uses Sparkles as before)
 function ProviderIcon({ provider, className }: { provider: string; className?: string }) {
   switch (provider) {
-    case 'google':
-      return <Sparkles className={cn('text-blue-500', className)} />;
     case 'openai':
       return <Zap className={cn('text-green-500', className)} />;
     case 'anthropic':
@@ -68,7 +65,7 @@ export function ModelSelector({
           <Button
             variant="ghost"
             size="sm"
-            className="h-5 sm:h-6 px-1.5 sm:px-2 text-[10px] sm:text-xs text-muted-foreground hover:text-foreground gap-1.5"
+            className="h-5 sm:h-6 px-1.5 sm:px-2 text-2xs sm:text-xs text-muted-foreground hover:text-foreground gap-1.5"
             disabled={disabled}
           >
             <ProviderIcon provider={selectedModel.provider} className="size-2.5 sm:size-3 shrink-0" />

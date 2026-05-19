@@ -1,49 +1,26 @@
-// AI Models Configuration for Catalyst
-// Using Google AI models via @ai-sdk/google
+// Catalyst model registry.
+// The actual model is selected and run server-side by the Notes9 backend
+// (see CHAT_API_URL). This client-side list controls only the dropdown labels
+// and the `catalyst-model` cookie sent on each request; the backend is the
+// source of truth for which provider/key is used.
 
-export const DEFAULT_MODEL_ID = 'gemini-2.5-flash-lite';
+export const DEFAULT_MODEL_ID = 'default';
 
 export interface ChatModel {
   id: string;
   name: string;
-  provider: 'google' | 'openai' | 'anthropic';
+  provider: 'notes9';
   description: string;
   isReasoning?: boolean;
 }
 
 export const chatModels: ChatModel[] = [
-  // Google Models (Primary - using your API key)
   {
-    id: 'gemini-2.5-flash-lite',
-    name: 'Gemini 2.5 Flash Lite',
-    provider: 'google',
-    description: 'Fast and efficient for most tasks',
+    id: 'default',
+    name: 'Notes9 Assistant',
+    provider: 'notes9',
+    description: 'Default research assistant for the Notes9 workspace',
   },
-  {
-    id: 'gemini-2.5-flash',
-    name: 'Gemini 2.5 Flash',
-    provider: 'google',
-    description: 'Quick responses, good for simple queries',
-  },
-  {
-    id: 'gemini-3-flash-preview',
-    name: 'Gemini 3 Flash Preview',
-    provider: 'google',
-    description: 'Most capable, best for complex tasks',
-  },
-  // Can add more providers later when API keys are available
-  // {
-  //   id: 'gpt-4o-mini',
-  //   name: 'GPT-4o Mini',
-  //   provider: 'openai',
-  //   description: 'Fast and affordable',
-  // },
-  // {
-  //   id: 'claude-3-haiku',
-  //   name: 'Claude 3 Haiku',
-  //   provider: 'anthropic',
-  //   description: 'Fast and affordable',
-  // },
 ];
 
 // Group models by provider for UI
@@ -60,18 +37,13 @@ export const modelsByProvider = chatModels.reduce(
 
 // Provider display names
 export const providerNames: Record<string, string> = {
-  google: 'Google',
-  openai: 'OpenAI',
-  anthropic: 'Anthropic',
+  notes9: 'Notes9',
 };
 
-// Get model by ID
 export function getModelById(id: string): ChatModel | undefined {
   return chatModels.find((m) => m.id === id);
 }
 
-// Get default model
 export function getDefaultModel(): ChatModel {
   return chatModels.find((m) => m.id === DEFAULT_MODEL_ID) || chatModels[0];
 }
-

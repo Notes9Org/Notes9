@@ -463,7 +463,7 @@ export function PaperAIPanel({
                 >
                   <div className="flex-1 min-w-0">
                     <p className="text-xs font-medium truncate">{s.title}</p>
-                    <p className="text-[10px] text-muted-foreground">{s.messages.length} messages · {new Date(s.updatedAt).toLocaleDateString()}</p>
+                    <p className="text-2xs text-muted-foreground">{s.messages.length} messages · {new Date(s.updatedAt).toLocaleDateString()}</p>
                   </div>
                   <Button
                     variant="ghost" size="icon" className="size-6 opacity-0 group-hover:opacity-100 shrink-0"
@@ -482,13 +482,13 @@ export function PaperAIPanel({
           <div className="flex items-center gap-2 px-3 py-2 border-b border-border bg-muted/40">
             <FileText className="h-3.5 w-3.5 text-muted-foreground" />
             <span className="text-xs font-medium text-muted-foreground truncate">{paperTitle || "Untitled"} — AI suggestion</span>
-            <span className="ml-auto text-[10px] font-mono px-1.5 py-0.5 rounded bg-green-500/15 text-green-600 dark:text-green-400">+{diffPreview.addCount}</span>
+            <span className="ml-auto text-2xs font-mono px-1.5 py-0.5 rounded bg-green-500/15 text-green-600 dark:text-green-400">+{diffPreview.addCount}</span>
           </div>
           <div className="px-3 py-1.5 bg-blue-500/8 dark:bg-blue-500/10 border-b border-border/50">
-            <span className="text-[11px] font-mono text-blue-600 dark:text-blue-400">@@ Insert at cursor position @@</span>
+            <span className="text-micro font-mono text-blue-600 dark:text-blue-400">@@ Insert at cursor position @@</span>
           </div>
           <div className="flex-1 overflow-y-auto">
-            <div className="font-mono text-[12px] leading-[20px]">
+            <div className="font-mono text-mini leading-[20px]">
               {diffPreview.lines.map((line, i) => {
                 if (line.type === "separator") {
                   return (
@@ -573,7 +573,7 @@ export function PaperAIPanel({
                             <div key={idx} className="rounded-lg border border-green-500/30 bg-green-500/5 overflow-hidden">
                               <div className="flex items-center gap-1.5 px-3 py-1.5 bg-green-500/10 border-b border-green-500/20">
                                 <FileText className="h-3 w-3 text-green-600 dark:text-green-400" />
-                                <span className="text-[11px] font-medium text-green-700 dark:text-green-400">Suggested Content</span>
+                                <span className="text-micro font-medium text-green-700 dark:text-green-400">Suggested Content</span>
                               </div>
                               <div className="px-3 py-2.5">
                                 <MarkdownRenderer content={part.text} className="text-sm leading-relaxed" />
@@ -591,12 +591,12 @@ export function PaperAIPanel({
                     {msg.role === "assistant" && (
                       <div className="flex items-center gap-1 flex-wrap">
                         {extractInsertableContent(msg.content).hasMarkers && (
-                          <Button variant="ghost" size="sm" className="h-6 text-[11px] gap-1 text-muted-foreground hover:text-foreground px-2"
+                          <Button variant="ghost" size="sm" className="h-6 text-micro gap-1 text-muted-foreground hover:text-foreground px-2"
                             onClick={() => handleShowDiff(msg.id, msg.content)}>
                             <Eye className="h-3 w-3" />Review & Insert
                           </Button>
                         )}
-                        <Button variant="ghost" size="sm" className="h-6 text-[11px] gap-1 text-muted-foreground hover:text-foreground px-2 opacity-0 group-hover/msg:opacity-100"
+                        <Button variant="ghost" size="sm" className="h-6 text-micro gap-1 text-muted-foreground hover:text-foreground px-2 opacity-0 group-hover/msg:opacity-100"
                           onClick={() => handleRevertToMessage(msg.id)} title="Revert chat to this point">
                           <CornerDownLeft className="h-3 w-3" />Revert here
                         </Button>
@@ -683,7 +683,7 @@ export function PaperAIPanel({
                         <Button
                           variant="ghost"
                           size="sm"
-                          className="h-7 shrink-0 gap-1 px-2 text-[11px] text-muted-foreground"
+                          className="h-7 shrink-0 gap-1 px-2 text-micro text-muted-foreground"
                         >
                           <span className="text-muted-foreground">Cite:</span>
                           <span>{currentCitationLabel}</span>

@@ -117,7 +117,7 @@ function LoginForm() {
       <div className="w-full max-w-md relative z-10">
         <div className="flex flex-col gap-6">
           <div className="flex flex-col items-center gap-3 text-center">
-            <div className="inline-flex items-center gap-2 rounded-full border border-border/70 bg-card/80 px-3 py-1 text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground shadow-sm backdrop-blur-sm">
+            <div className="inline-flex items-center gap-2 rounded-full border border-border/70 bg-card/80 px-3 py-1 text-micro font-medium uppercase tracking-[0.18em] text-muted-foreground shadow-sm backdrop-blur-sm">
               <FlaskConical className="size-3.5 text-primary/80" />
               Research workspace access
             </div>

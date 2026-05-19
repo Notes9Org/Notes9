@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { createClient } from "@/lib/supabase/client"
 import { Button } from "@/components/ui/button"
 import {
@@ -44,7 +44,7 @@ export function DuplicateExperimentDialog({
 }: DuplicateExperimentDialogProps) {
   const { toast } = useToast()
   const router = useRouter()
-  const supabase = createClient()
+  const supabase = useMemo(() => createClient(), [])
 
   const [internalOpen, setInternalOpen] = useState(false)
   const open = externalOpen !== undefined ? externalOpen : internalOpen
@@ -55,6 +55,13 @@ export function DuplicateExperimentDialog({
   const [isDuplicating, setIsDuplicating] = useState(false)
   const [newName, setNewName] = useState(`${experiment.name} (Copy)`)
   const [includeProtocols, setIncludeProtocols] = useState(true)
+
+  useEffect(() => {
+    if (open) {
+      setNewName(`${experiment.name} (Copy)`)
+      setIncludeProtocols(true)
+    }
+  }, [open, experiment.name])
 
   const handleDuplicate = async () => {
     if (!newName.trim()) {

@@ -119,14 +119,14 @@ describe("resolveMolecularWeightInput", () => {
   it("resolves compound by name or alias", () => {
     const r1 = resolveMolecularWeightInput("NaCl")
     expect(r1.ok).toBe(true)
-    if (r1.ok) {
+    if (r1.ok === true) {
       expect(r1.source).toBe("compound")
       expect(r1.mw).toBeCloseTo(58.44, 4)
       expect(r1.compoundName).toBe("Sodium chloride")
     }
     const r2 = resolveMolecularWeightInput("nacl")
     expect(r2.ok).toBe(true)
-    if (r2.ok) expect(r2.mw).toBeCloseTo(58.44, 4)
+    if (r2.ok === true) expect(r2.mw).toBeCloseTo(58.44, 4)
   })
 
   it("rejects unknown strings", () => {

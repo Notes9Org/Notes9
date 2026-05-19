@@ -8,10 +8,16 @@ export function isPersistedChatMessageId(id: string): boolean {
 /** Appended to saved assistant markdown; stripped for display, history, and parsing. */
 export const NOTES9_GROUNDING_MARKER = '\n§§NOTES9_GROUNDING§§\n';
 
+// Display labels only. Unknown keys fall through to the raw value at the
+// usage site via `?? tool` — adding a new agent capability requires no
+// change here.
 const TOOL_USED_LABEL: Record<string, string> = {
-  sql: 'From database',
+  sql: 'From your records',
   rag: 'From your documents',
-  hybrid: 'Database + documents',
+  hybrid: 'Records + documents',
+  biomni: 'From biomedical synthesis',
+  web: 'From the web',
+  clarification: 'Awaiting your reply',
   none: '',
 };
 

@@ -380,7 +380,7 @@ export function StagingTab({
                 literatureId={lit.id}
                 pdfUrl={`/api/literature/${lit.id}/viewer-pdf`}
                 pdfFileName={lit.pdf_file_name || "paper.pdf"}
-                openInNewTabFallbackUrl={lit.pdf_file_url ?? undefined}
+                openInNewTabFallbackUrl={`/api/literature/${lit.id}/viewer-pdf`}
               />
             ) : isClosedSource ? (
               <div className="rounded-xl border border-dashed bg-muted/20 px-8 py-12 text-center">
@@ -598,11 +598,11 @@ export function StagingTab({
                           <TableCell>
                             <div className="flex flex-col gap-1">
                               <span className="text-xs font-medium">{lit.journal || "—"}</span>
-                              <span className="text-[10px] text-muted-foreground">{lit.publication_year || "—"}</span>
+                              <span className="text-2xs text-muted-foreground">{lit.publication_year || "—"}</span>
                             </div>
                           </TableCell>
                           <TableCell>
-                            <Badge variant={getStatusBadge(lit.status)} className="capitalize text-[10px]">
+                            <Badge variant={getStatusBadge(lit.status)} className="capitalize text-2xs">
                               {lit.status}
                             </Badge>
                           </TableCell>

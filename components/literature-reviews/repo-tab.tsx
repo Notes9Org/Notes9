@@ -726,13 +726,13 @@ export function RepoTab({
                           {lit.title}
                         </button>
                         <div className="flex items-center gap-2">
-                          <span className="text-[11px] font-medium text-muted-foreground/80 truncate" style={{ maxWidth: columnWidths.details - 100 }}>
+                          <span className="text-micro font-medium text-muted-foreground/80 truncate" style={{ maxWidth: columnWidths.details - 100 }}>
                             {lit.authors || "Unknown Authors"}
                           </span>
                           {lit.pdf_storage_path && (
                             <Badge 
                               variant="outline" 
-                              className="h-4 px-1 text-[9px] font-bold border-[var(--n9-accent)]/30 text-[var(--n9-accent)] bg-[var(--n9-accent)]/5 flex-shrink-0 cursor-pointer hover:bg-[var(--n9-accent)]/10"
+                              className="h-4 px-1 text-3xs font-bold border-[var(--n9-accent)]/30 text-[var(--n9-accent)] bg-[var(--n9-accent)]/5 flex-shrink-0 cursor-pointer hover:bg-[var(--n9-accent)]/10"
                               onClick={(e) => {
                                 e.stopPropagation();
                                 handleOpenPaper(lit.id, 'pdf');
@@ -746,10 +746,10 @@ export function RepoTab({
                     </TableCell>
                     <TableCell style={{ width: columnWidths.journal }}>
                       <div className="flex flex-col gap-0.5 w-full overflow-hidden" style={{ maxWidth: columnWidths.journal - 32 }}>
-                        <span className="text-[11px] font-bold text-foreground/70 truncate w-full" title={lit.journal || "Unknown Journal"}>
+                        <span className="text-micro font-bold text-foreground/70 truncate w-full" title={lit.journal || "Unknown Journal"}>
                           {lit.journal || "No journal info"}
                         </span>
-                        <span className="text-[10px] tabular-nums font-medium text-muted-foreground">
+                        <span className="text-2xs tabular-nums font-medium text-muted-foreground">
                           {lit.publication_year || "n.d."}
                         </span>
                       </div>
@@ -757,7 +757,7 @@ export function RepoTab({
                     <TableCell>
                       <Badge
                         variant={getStatusBadge(lit.status)}
-                        className="text-[9px] font-bold uppercase tracking-tighter px-1.5 h-4.5 rounded-sm"
+                        className="text-3xs font-bold uppercase tracking-tighter px-1.5 h-4 rounded-sm"
                       >
                         {lit.status}
                       </Badge>
@@ -767,7 +767,7 @@ export function RepoTab({
                         <Button
                           variant="secondary"
                           size="sm"
-                          className="h-7 px-2.5 text-[11px] font-bold uppercase tracking-wider shadow-sm"
+                          className="h-7 px-2.5 text-micro font-bold uppercase tracking-wider shadow-sm"
                           onClick={() => handleOpenPaper(lit.id)}
                         >
                           Open

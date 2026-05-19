@@ -1,4 +1,4 @@
-import type { LucideIcon } from "lucide-react"
+import type { ComponentType } from "react"
 import {
   BarChart3,
   BookOpen,
@@ -12,8 +12,11 @@ import {
 } from "lucide-react"
 import { ClipboardInfoIcon } from "@/components/ui/clipboard-info-icon"
 
+/** Accepts both Lucide icons and our custom SVG-based wrapper icons. */
+type NavIcon = ComponentType<{ className?: string }>
+
 /** Single source of truth: primary app nav (mirrors [components/layout/app-sidebar](components/layout/app-sidebar)). */
-export const APP_PRIMARY_NAV: { name: string; href: string; icon: LucideIcon }[] = [
+export const APP_PRIMARY_NAV: { name: string; href: string; icon: NavIcon }[] = [
   { name: "Dashboard", href: "/dashboard", icon: Home },
   { name: "Projects", href: "/projects", icon: Folder },
   { name: "Experiments", href: "/experiments", icon: FlaskConical },

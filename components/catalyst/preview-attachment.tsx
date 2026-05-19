@@ -93,7 +93,7 @@ export function PreviewAttachment({
             <FileText className="size-8 text-muted-foreground" />
           </div>
         )}
-        <span className="text-[10px] text-muted-foreground truncate w-full text-center mt-1">
+        <span className="text-2xs text-muted-foreground truncate w-full text-center mt-1">
           {attachment.name.length > 12
             ? `${attachment.name.slice(0, 8)}...${attachment.name.split('.').pop()}`
             : attachment.name}

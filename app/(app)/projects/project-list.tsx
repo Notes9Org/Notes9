@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Users, ArrowUpRight, Grid3x3, List, Plus, FlaskConical } from 'lucide-react'
+import { formatEntityTitle } from "@/lib/format-title"
 import {
   FILTER_ALL,
   ResourceFilterRow,
@@ -101,6 +102,7 @@ export function ProjectsPageContent({ projects }: { projects: Project[] }) {
               disabled={isMobile}
               aria-disabled={isMobile}
               aria-label="Switch to table view"
+              title={isMobile ? "Table view isn't available on mobile" : undefined}
             >
               <List className="h-4 w-4" />
               Table
@@ -202,6 +204,7 @@ export function ProjectList({ projects, viewMode: controlledView, setViewMode: s
               disabled={isMobile}
               aria-disabled={isMobile}
               aria-label="Switch to table view"
+              title={isMobile ? "Table view isn't available on mobile" : undefined}
             >
               <List className="h-4 w-4" />
               Table
@@ -232,23 +235,11 @@ export function ProjectList({ projects, viewMode: controlledView, setViewMode: s
             >
               <CardHeader className="pb-3 min-w-0">
                 <div className="space-y-2 min-w-0">
-                  <CardTitle className="text-lg text-foreground leading-tight min-w-0 overflow-hidden text-ellipsis" style={{
-                    display: '-webkit-box',
-                    WebkitLineClamp: 2,
-                    WebkitBoxOrient: 'vertical',
-                    wordBreak: 'normal',
-                    overflowWrap: 'normal'
-                  }}>
-                    {project.name}
+                  <CardTitle className="text-lg text-foreground leading-tight min-w-0 line-clamp-2 [overflow-wrap:normal] [word-break:normal]">
+                    {formatEntityTitle(project.name)}
                   </CardTitle>
                   {project.description && (
-                    <CardDescription className="text-sm min-w-0 overflow-hidden text-ellipsis" style={{
-                      display: '-webkit-box',
-                      WebkitLineClamp: 2,
-                      WebkitBoxOrient: 'vertical',
-                      wordBreak: 'normal',
-                      overflowWrap: 'normal'
-                    }}>
+                    <CardDescription className="text-sm min-w-0 line-clamp-2 [overflow-wrap:normal] [word-break:normal]">
                       {project.description}
                     </CardDescription>
                   )}
@@ -299,7 +290,9 @@ export function ProjectList({ projects, viewMode: controlledView, setViewMode: s
                     </div>
                     <div className="flex items-center gap-1 text-muted-foreground min-w-0 overflow-hidden">
                       <FlaskConical className="h-4 w-4 shrink-0" />
-                      <span className="truncate text-ellipsis overflow-hidden">{project.no_of_experiments} experiments</span>
+                      <span className="truncate text-ellipsis overflow-hidden">
+                        {project.no_of_experiments} {project.no_of_experiments === 1 ? "experiment" : "experiments"}
+                      </span>
                     </div>
                   </div>
                   {project.created_by && (
@@ -371,14 +364,20 @@ function ProjectTableView({ projects }: { projects: Project[] }) {
                   <TableCell className="font-medium text-foreground">
                     <div className="flex items-center gap-2">
                       <Users className="h-4 w-4 text-primary shrink-0" />
-                      <span className="truncate">{project.name}</span>
+                      <span className="truncate">{formatEntityTitle(project.name)}</span>
                     </div>
                   </TableCell>
                   <TableCell className="text-muted-foreground">
                     {formatDate(project.created_at)}
                   </TableCell>
                   <TableCell className="text-right">
-                    <Button variant="ghost" size="sm" asChild onClick={(e: React.MouseEvent) => e.stopPropagation()}>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      asChild
+                      onClick={(e: React.MouseEvent) => e.stopPropagation()}
+                      aria-label={`Open project ${project.name}`}
+                    >
                       <Link href={`/projects/${project.id}`}>
                         <ArrowUpRight className="h-4 w-4" />
                       </Link>

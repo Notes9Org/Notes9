@@ -180,7 +180,7 @@ export function ProtocolTemplatePicker({
           )}
         >
           <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-muted">
-            <FilePlus className="h-4.5 w-4.5 text-muted-foreground" />
+            <FilePlus className="size-4 text-muted-foreground" />
           </div>
           <div className="min-w-0 flex-1">
             <p className="text-sm font-semibold text-foreground">Blank Protocol</p>
@@ -238,7 +238,7 @@ export function ProtocolTemplatePicker({
                     <Badge variant="secondary" className="text-xs px-1.5 py-0 h-4">
                       Document
                     </Badge>
-                    <span className="text-[10px] text-muted-foreground">
+                    <span className="text-2xs text-muted-foreground">
                       {sections} sections · {logos} logos
                     </span>
                   </div>

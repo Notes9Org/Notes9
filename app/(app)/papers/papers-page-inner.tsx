@@ -9,7 +9,6 @@ import { LayoutList, Plus } from "lucide-react"
 import { PaperList, type PaperListItem } from "./paper-list"
 import { PaperWorkspace } from "./paper-workspace"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { IS_PAPERS_MOCKED, getMockPapers } from "@/lib/papers-mock"
 import { SetPageBreadcrumb } from "@/components/layout/breadcrumb-context"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 
@@ -25,13 +24,6 @@ export function PapersPageInner() {
   const [viewMode, setViewMode] = useState<"grid" | "table">("table")
 
   const fetchPapers = useCallback(async () => {
-    if (IS_PAPERS_MOCKED) {
-      setPapers(getMockPapers() as PaperListItem[])
-      setFetchError(null)
-      setLoading(false)
-      return
-    }
-
     const supabase = createClient()
     const {
       data: { user },

@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { createClient } from '@/lib/supabase/server';
 
 const PERPLEXITY_API_KEY = process.env.PERPLEXITY_API_KEY;
 const PERPLEXITY_API_URL = process.env.PERPLEXITY_API_URL || 'https://api.perplexity.ai/chat/completions';
+const MAX_QUERY_LEN = 1000;
 
 interface PerplexityCitation {
   url: string;
@@ -26,7 +28,13 @@ interface PaperResult {
 }
 
 export async function POST(request: NextRequest) {
-  // Check API key
+  // Require an authenticated session — this route forwards to a paid API
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
   if (!PERPLEXITY_API_KEY) {
     return NextResponse.json(
       { error: 'Perplexity API key not configured' },
@@ -42,6 +50,12 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         { error: 'Query is required and must be a string' },
         { status: 400 }
+      );
+    }
+    if (query.length > MAX_QUERY_LEN) {
+      return NextResponse.json(
+        { error: `Query exceeds ${MAX_QUERY_LEN} characters` },
+        { status: 413 }
       );
     }
 

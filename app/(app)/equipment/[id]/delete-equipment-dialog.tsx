@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useMemo, useState } from "react"
 import { useRouter } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
 import { Button } from "@/components/ui/button"
@@ -27,6 +27,7 @@ export function DeleteEquipmentDialog({
 }) {
   const router = useRouter()
   const { toast } = useToast()
+  const supabase = useMemo(() => createClient(), [])
   const [open, setOpen] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
 
@@ -34,8 +35,6 @@ export function DeleteEquipmentDialog({
     setIsLoading(true)
 
     try {
-      const supabase = createClient()
-
       // Check if equipment has usage history
       const { count: usageCount } = await supabase
         .from("equipment_usage")
@@ -54,7 +53,6 @@ export function DeleteEquipmentDialog({
           description: "This equipment has usage or maintenance records. Consider marking it as offline instead.",
           variant: "destructive",
         })
-        setIsLoading(false)
         return
       }
 
@@ -71,16 +69,14 @@ export function DeleteEquipmentDialog({
       })
 
       router.push("/equipment")
-      
-      setTimeout(() => {
-        window.location.href = "/equipment"
-      }, 500)
+      router.refresh()
     } catch (error: any) {
       toast({
         title: "Error",
         description: error.message,
         variant: "destructive",
       })
+    } finally {
       setIsLoading(false)
     }
   }
@@ -88,7 +84,7 @@ export function DeleteEquipmentDialog({
   return (
     <AlertDialog open={open} onOpenChange={setOpen}>
       <AlertDialogTrigger asChild>
-        <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:text-destructive" aria-label="Delete equipment">
+        <Button variant="ghost" size="icon-sm" className="text-destructive hover:text-destructive" aria-label="Delete equipment">
           <Trash2 className="h-4 w-4" />
         </Button>
       </AlertDialogTrigger>
