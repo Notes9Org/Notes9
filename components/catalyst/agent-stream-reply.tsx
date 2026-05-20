@@ -8,7 +8,6 @@ import {
 } from '@/components/catalyst/agent-citations-panel';
 import { AgentThinkingBar } from '@/components/catalyst/agent-thinking-bar';
 import { AgentToolCards } from '@/components/catalyst/agent-tool-cards';
-import { AgentFlowPipeline } from '@/components/catalyst/agent-flow-pipeline';
 import type { ThinkingPayload, RagChunksPayload, DonePayload } from '@/lib/agent-stream-types';
 import type { ThinkingStage, ToolCard } from '@/hooks/use-agent-stream';
 
@@ -60,7 +59,6 @@ export function AgentStreamReply({
   toolCards = [],
   sql,
   ragChunks,
-  toolOutputs = [],
   streamedAnswer,
   donePayload,
   error,
@@ -86,11 +84,6 @@ export function AgentStreamReply({
   const hasThinkingBar =
     isStreaming &&
     (currentStage != null || currentThinkingMessage != null || thinkingSteps.length > 0);
-  // Show the pipeline whenever we have either a known stage or any tool activity.
-  // Once streaming finishes AND no tools fired (e.g. greetings), hide it so simple
-  // replies stay clean.
-  const showPipeline =
-    (isStreaming && (currentStage != null || hasToolCards)) || (hasToolCards && !!donePayload);
 
   if (error) {
     return (
@@ -104,30 +97,27 @@ export function AgentStreamReply({
   return (
     <div className={cn('flex flex-col gap-2.5', compact && 'gap-2')}>
 
-      {/* ── Visual ReAct pipeline (live while streaming, settled when done) ── */}
-      {showPipeline && (
-        <AgentFlowPipeline
-          stage={currentStage ?? null}
-          toolCards={toolCards}
-          isStreaming={isStreaming}
+      {/* ── Tool calls — single vertical stack. Every call rendered as a
+            Cursor/Claude-style bordered block with status, args preview, and
+            expandable result. Always-visible while streaming so the user can
+            watch each tool run; collapses to "Used N tools" once settled to
+            keep the bubble tight. The horizontal pipeline strip has been
+            removed per user request. ── */}
+      {hasToolCards && (
+        <AgentToolCards
+          cards={toolCards}
+          collapsible={!isStreaming}
         />
       )}
 
-      {/* ── One-line status under the pipeline while streaming ── */}
+      {/* ── One-line "what stage is the agent in" indicator — only shown
+            before any tool has fired so the user knows the agent is alive. ── */}
       {isStreaming && currentThinkingMessage && !hasToolCards && (
         <AgentThinkingBar
           stage={currentStage ?? null}
           message={currentThinkingMessage ?? null}
           detail={currentThinkingDetail}
           isStreaming={isStreaming}
-        />
-      )}
-
-      {/* ── Detailed tool cards (collapsible) — only after streaming finishes ── */}
-      {hasToolCards && !isStreaming && (
-        <AgentToolCards
-          cards={toolCards}
-          collapsible
         />
       )}
 
@@ -175,16 +165,19 @@ export function AgentStreamReply({
         </div>
       )}
 
-      {/* ── Answer bubble ── */}
+      {/* ── Answer bubble — no inner scroll. The message grows naturally and
+            the parent scroll container handles overflow. The old `max-h-[60vh]
+            overflow-auto` created a second scrollbar inside each reply, which
+            fought the outer chat scroll and felt broken. Code blocks keep
+            their horizontal scroll only (long lines still need it). ── */}
       {(displayAnswer || (!donePayload && streamedAnswer === '')) && (
         <div className="space-y-2">
-          <div className="px-1 text-sm text-foreground min-w-0 max-w-full max-h-[60vh] overflow-auto">
+          <div className="px-1 text-sm text-foreground min-w-0 max-w-full">
             {displayAnswer ? (
-              /* Render markdown at all times — showCursor injects ::after blink while streaming */
               <MarkdownRenderer
                 content={displayAnswer}
                 showCursor={!donePayload}
-                className="[&_pre]:max-w-full [&_pre]:max-h-[40vh] [&_pre]:overflow-auto [&_.notes9-md-table-scroll]:max-h-[40vh]"
+                className="[&_pre]:max-w-full [&_pre]:overflow-x-auto"
               />
             ) : (
               /* No content yet — standalone cursor */

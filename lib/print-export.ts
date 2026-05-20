@@ -1,6 +1,7 @@
 /**
  * Shared print / PDF HTML for lab notes and TipTap editor exports.
- * Uses platform-aligned typography (Work Sans body, Space Grotesk headings).
+ * Uses platform-aligned typography (IBM Plex Sans body, Familjen Grotesk
+ * headings, IBM Plex Serif for the top-level document title).
  */
 
 export type PrintMarginsMm = {
@@ -105,12 +106,12 @@ export function buildPrintDocumentHtml(options: {
   <title>${safeTitle}</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;600;700&family=Work+Sans:ital,wght@0,400;0,600;0,700;1,400&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Familjen+Grotesk:wght@400;500;600;700&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400&family=IBM+Plex+Serif:wght@400;600;700&display=swap" rel="stylesheet" />
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     @page { margin: ${marginCss}; }
     body {
-      font-family: "Work Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      font-family: "IBM Plex Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
       font-size: 11pt;
       line-height: 1.55;
       padding: ${marginCss};
@@ -119,10 +120,11 @@ export function buildPrintDocumentHtml(options: {
       max-width: 100%;
     }
     h1, h2, h3, h4, h5, h6 {
-      font-family: "Space Grotesk", "Work Sans", sans-serif;
+      font-family: "Familjen Grotesk", "IBM Plex Sans", sans-serif;
     }
     h1 { font-size: 20pt; font-weight: 700; margin: 0 0 14pt; border-bottom: 1.5pt solid #333; padding-bottom: 8pt; }
     h1.print-document-title {
+      font-family: "IBM Plex Serif", "Familjen Grotesk", ui-serif, Georgia, serif;
       page-break-after: avoid;
       break-after: avoid-page;
       -webkit-print-color-adjust: exact;

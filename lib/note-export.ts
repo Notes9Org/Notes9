@@ -57,10 +57,11 @@ export function exportNoteAsHtml(html: string, title: string) {
 <head>
   <meta charset="UTF-8" />
   <title>${safeTitle}</title>
-  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;600;700&family=Work+Sans:ital,wght@0,400;0,600;0,700;1,400&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Familjen+Grotesk:wght@400;500;600;700&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400&family=IBM+Plex+Serif:wght@400;600;700&display=swap" rel="stylesheet" />
   <style>
-    body { font-family: "Work Sans", system-ui, sans-serif; max-width: 800px; margin: 40px auto; padding: 20px; line-height: 1.6; color: #1a1a1a; }
-    h1, h2, h3 { font-family: "Space Grotesk", "Work Sans", sans-serif; margin-top: 1.2em; }
+    body { font-family: "IBM Plex Sans", system-ui, sans-serif; max-width: 800px; margin: 40px auto; padding: 20px; line-height: 1.6; color: #1a1a1a; }
+    h1, h2, h3 { font-family: "Familjen Grotesk", "IBM Plex Sans", sans-serif; margin-top: 1.2em; }
+    h1 { font-family: "IBM Plex Serif", "Familjen Grotesk", ui-serif, Georgia, serif; }
     code { background: #f4f4f4; padding: 2px 6px; border-radius: 3px; }
     pre { background: #f4f4f4; padding: 15px; border-radius: 5px; overflow-x: auto; }
     blockquote { border-left: 4px solid #ddd; margin: 0; padding-left: 20px; color: #666; }

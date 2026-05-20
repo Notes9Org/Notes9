@@ -686,7 +686,10 @@ export function CatalystChat({ sessionId }: CatalystChatProps) {
         {/* Messages or Greeting */}
         <div className="flex-1 overflow-hidden">
           {messages.length === 0 ? (
-            <CatalystGreeting userName={userName} />
+            <CatalystGreeting
+              userName={userName}
+              onSuggest={(prompt) => setInput(prompt)}
+            />
           ) : (
             <CatalystMessages
               messages={messages}

@@ -35,103 +35,172 @@ const TOOL_ICONS: Record<string, LucideIcon> = {
   episodic_memory_tool:   BrainCircuit,
 };
 
+// Short mono-cased name shown only when the backend gave us a recognized
+// tool id. Random handles like `t_61z6cd0e8` would otherwise leak into the
+// UI and confuse the user — for unknown ids we skip the mono pill entirely
+// and rely on the icon + the server-provided friendly label.
+const TOOL_NAMES: Record<string, string> = {
+  nlp_to_sql_tool:        'records',
+  rag_tool:               'documents',
+  web_search_tool:        'web_search',
+  full_record_fetch_tool: 'open_record',
+  document_analysis_tool: 'analyze_doc',
+  biomni_tool:            'biomni',
+  biomni_full_tool:       'biomni_full',
+  llm_chat_tool:          'reason',
+  extract_data_tool:      'extract',
+  episodic_memory_tool:   'memory',
+};
+
+function toolDisplayName(id: string): string | null {
+  return TOOL_NAMES[id] ?? null;
+}
+
 interface ToolCardItemProps {
   card: ToolCard;
 }
 
+/**
+ * Cursor/Claude-style tool-call block.
+ *
+ * Header (always visible, single row):
+ *   ●  ▣ records · Looking through your workspace      12 sources · 2.1s ▸
+ *
+ * Args (visible whenever an args_preview was supplied):
+ *   args  SELECT * FROM projects WHERE …
+ *
+ * Body (collapsed by default after settle; click header to open):
+ *   • Project: Vaccine Production
+ *   • Project: Cell Line Development
+ *   Summary: Found 12 matching records …
+ */
 function ToolCardItem({ card }: ToolCardItemProps) {
   const [expanded, setExpanded] = useState(false);
   const Icon: LucideIcon = TOOL_ICONS[card.id] ?? Wrench;
   const isRunning = card.status === 'running';
   const isError = card.status === 'error';
   const hasSourceNames = (card.source_names?.length ?? 0) > 0;
+  const hasArgsPreview = !!card.args_preview;
   const hasDetail = !isRunning && (card.summary || hasSourceNames);
+  const displayName = toolDisplayName(card.id);
+  const sourceCount =
+    card.source_names && card.source_names.length > 0
+      ? card.source_names.length
+      : (card.citations_count ?? 0);
 
   return (
-    <div className="flex flex-col">
+    <div
+      className={cn(
+        'rounded-md border bg-card/40 overflow-hidden transition-colors',
+        isRunning && 'border-primary/40 bg-primary/[0.03]',
+        isError && 'border-destructive/40 bg-destructive/[0.04]',
+        !isRunning && !isError && 'border-border/60',
+      )}
+    >
       <button
         type="button"
         className={cn(
-          'flex items-start gap-2 px-1 py-1 text-left group rounded-md transition-colors',
-          hasDetail && 'hover:bg-muted/30 cursor-pointer',
-          isRunning && 'cursor-default'
+          'flex w-full items-center gap-2 px-2.5 py-1.5 text-left',
+          hasDetail && 'cursor-pointer hover:bg-muted/40',
+          (isRunning || !hasDetail) && 'cursor-default',
         )}
         onClick={() => hasDetail && setExpanded((v) => !v)}
         disabled={isRunning || !hasDetail}
-        aria-expanded={expanded}
+        aria-expanded={hasDetail ? expanded : undefined}
+        aria-label={
+          isRunning
+            ? `${card.label} (running)`
+            : isError
+              ? `${card.label} (failed)${hasDetail ? ' — click to expand' : ''}`
+              : `${card.label}${hasDetail ? ' — click to expand' : ''}`
+        }
       >
-        {/* Status / icon */}
-        <div className="mt-0.5 shrink-0">
+        <span className="shrink-0 inline-flex items-center justify-center size-3.5">
           {isRunning ? (
-            <Loader2 className="size-3.5 animate-spin text-muted-foreground/50" aria-hidden />
+            <Loader2 className="size-3.5 animate-spin text-primary" aria-hidden />
           ) : isError ? (
-            <XCircle className="size-3.5 text-destructive/60" aria-hidden />
+            <XCircle className="size-3.5 text-destructive" aria-hidden />
           ) : (
-            <CheckCircle2 className="size-3.5 text-muted-foreground/40" aria-hidden />
+            <CheckCircle2 className="size-3.5 text-emerald-600 dark:text-emerald-500" aria-hidden />
           )}
-        </div>
+        </span>
 
-        {/* Tool icon */}
-        <Icon className="mt-0.5 shrink-0 size-3 text-muted-foreground/40" aria-hidden />
+        <Icon
+          className={cn(
+            'shrink-0 size-3.5',
+            isRunning ? 'text-primary' : isError ? 'text-destructive' : 'text-muted-foreground',
+          )}
+          aria-hidden
+        />
 
-        {/* Label + source names */}
-        <div className="flex-1 min-w-0">
+        {/* Mono tool name pill — only when we have a friendly mapping.
+            Random backend handles (e.g. `t_61z6cd0e8`) are hidden so the
+            user never sees a meaningless token in the chat. */}
+        {displayName && (
           <span
             className={cn(
-              'text-sm',
-              isRunning ? 'text-muted-foreground' : 'text-muted-foreground/70'
+              'shrink-0 font-mono text-xs font-semibold tracking-tight',
+              isRunning ? 'text-foreground' : 'text-foreground/80',
             )}
           >
-            {card.label}
+            {displayName}
+            <span className="text-muted-foreground/60 ml-1.5">·</span>
           </span>
-          {/* Row count for SQL when there is no expandable source list */}
+        )}
+
+        <span
+          className={cn(
+            'flex-1 min-w-0 truncate text-sm',
+            isRunning ? 'text-foreground/90' : 'text-foreground/70',
+          )}
+          title={card.label}
+        >
+          {card.label}
+        </span>
+
+        <div className="shrink-0 flex items-center gap-2">
+          {!isRunning && sourceCount > 0 && (
+            <span className="text-2xs tabular-nums text-muted-foreground/70">
+              {sourceCount} {sourceCount === 1 ? 'source' : 'sources'}
+            </span>
+          )}
           {!isRunning && card.row_count != null && !hasSourceNames && (
-            <p className="text-micro text-muted-foreground/50 mt-0.5 leading-tight">
-              {card.row_count} record{card.row_count !== 1 ? 's' : ''}
-            </p>
+            <span className="text-2xs tabular-nums text-muted-foreground/70">
+              {card.row_count} {card.row_count === 1 ? 'record' : 'records'}
+            </span>
+          )}
+          {card.latency_ms != null && (
+            <span className="text-2xs tabular-nums text-muted-foreground/60">
+              {(card.latency_ms / 1000).toFixed(1)}s
+            </span>
+          )}
+          {hasDetail && (
+            expanded
+              ? <ChevronDown className="size-3.5 text-muted-foreground/50" aria-hidden />
+              : <ChevronRight className="size-3.5 text-muted-foreground/50" aria-hidden />
           )}
         </div>
-
-        {/* Meta: source count + latency.
-            Prefer source_names.length so the header pill matches what the
-            user can actually see in the expanded list. Falls back to
-            citations_count only when source_names hasn't arrived yet. */}
-        {!isRunning && (() => {
-          const visibleCount =
-            card.source_names && card.source_names.length > 0
-              ? card.source_names.length
-              : (card.citations_count ?? 0);
-          return (
-          <div className="flex items-center gap-1.5 shrink-0 mt-0.5">
-            {visibleCount > 0 && (
-              <span className="text-micro text-muted-foreground/50">
-                {visibleCount} {visibleCount === 1 ? 'source' : 'sources'}
-              </span>
-            )}
-            {card.latency_ms != null && (
-              <span className="text-micro text-muted-foreground/50">
-                {(card.latency_ms / 1000).toFixed(1)}s
-              </span>
-            )}
-            {hasDetail && (
-              expanded
-                ? <ChevronDown className="size-3 text-muted-foreground/40" aria-hidden />
-                : <ChevronRight className="size-3 text-muted-foreground/40" aria-hidden />
-            )}
-          </div>
-          );
-        })()}
       </button>
 
-      {/* Expandable: all source names */}
-      {!isRunning && expanded && (
-        <div className="ml-[1.625rem] pb-1 pr-1 space-y-0.5">
+      {hasArgsPreview && (
+        <div className="px-2.5 pb-1.5 -mt-0.5">
+          <code
+            className="block rounded bg-muted/60 px-2 py-1 text-2xs font-mono text-muted-foreground/90 break-words leading-relaxed"
+            title={card.args_preview}
+          >
+            <span className="text-muted-foreground/50 select-none mr-1.5">args</span>
+            {card.args_preview!.length > 220
+              ? `${card.args_preview!.slice(0, 220)}…`
+              : card.args_preview}
+          </code>
+        </div>
+      )}
+
+      {!isRunning && expanded && hasDetail && (
+        <div className="px-2.5 pb-2 pt-1 border-t border-border/40 bg-muted/20 space-y-1.5">
           {card.source_names && card.source_names.length > 0 && (
             <ul className="space-y-1">
               {card.source_names.map((entry, i) => {
-                // Backend ships "Type: Name" (e.g., "Project: Vaccine_Production");
-                // render Type as a small monochrome pill so a researcher can
-                // tell projects from lab notes from papers at a glance.
                 const colonIdx = entry.indexOf(': ');
                 const hasType = colonIdx > 0 && colonIdx < 24;
                 const type = hasType ? entry.slice(0, colonIdx) : '';
@@ -139,11 +208,11 @@ function ToolCardItem({ card }: ToolCardItemProps) {
                 return (
                   <li
                     key={i}
-                    className="text-xs text-muted-foreground/80 leading-relaxed flex items-start gap-2"
+                    className="text-xs text-muted-foreground/85 leading-relaxed flex items-start gap-2"
                   >
-                    <span className="mt-1.5 shrink-0 size-1 rounded-full bg-muted-foreground/30" />
+                    <span className="mt-1.5 shrink-0 size-1 rounded-full bg-muted-foreground/40" />
                     {hasType && (
-                      <span className="shrink-0 mt-px rounded-sm border border-border bg-muted/40 px-1.5 py-px text-2xs font-medium uppercase tracking-wide text-muted-foreground">
+                      <span className="shrink-0 mt-px rounded-sm border border-border/70 bg-background/80 px-1.5 py-px text-2xs font-medium uppercase tracking-wide text-muted-foreground">
                         {type}
                       </span>
                     )}
@@ -154,7 +223,7 @@ function ToolCardItem({ card }: ToolCardItemProps) {
             </ul>
           )}
           {card.summary && (
-            <p className="text-xs text-muted-foreground/60 leading-relaxed">
+            <p className="text-xs text-muted-foreground/75 leading-relaxed whitespace-pre-wrap">
               {card.summary}
             </p>
           )}
@@ -180,21 +249,25 @@ export function AgentToolCards({ cards, collapsible = false, className }: AgentT
 
   if (collapsible && !hasRunning) {
     return (
-      <div className={cn('flex flex-col gap-0.5', className)}>
+      <div className={cn('flex flex-col gap-1', className)}>
         <button
           type="button"
-          className="flex items-center gap-1.5 px-1 py-1 text-xs text-muted-foreground/60 hover:text-muted-foreground transition-colors"
+          className="flex items-center gap-1.5 px-1 py-1 text-xs text-muted-foreground/70 hover:text-foreground transition-colors self-start"
           onClick={() => setShowAll((v) => !v)}
+          aria-expanded={showAll}
+          aria-label={showAll ? 'Hide tool calls' : `Show ${cards.length} tool call${cards.length > 1 ? 's' : ''}`}
         >
           {showAll
             ? <ChevronDown className="size-3" aria-hidden />
             : <ChevronRight className="size-3" aria-hidden />}
           <span>
-            {showAll ? 'Hide reasoning' : `Used ${cards.length} tool${cards.length > 1 ? 's' : ''}`}
+            {showAll
+              ? `Hide tool calls (${cards.length})`
+              : `Used ${cards.length} tool${cards.length > 1 ? 's' : ''}`}
           </span>
         </button>
         {showAll && (
-          <div className="flex flex-col gap-0.5 ml-1">
+          <div className="flex flex-col gap-1.5">
             {cards.map((card, i) => (
               <ToolCardItem key={`${card.id}-${i}`} card={card} />
             ))}
@@ -205,7 +278,7 @@ export function AgentToolCards({ cards, collapsible = false, className }: AgentT
   }
 
   return (
-    <div className={cn('flex flex-col gap-0.5', className)}>
+    <div className={cn('flex flex-col gap-1.5', className)}>
       {cards.map((card, i) => (
         <ToolCardItem key={`${card.id}-${i}`} card={card} />
       ))}

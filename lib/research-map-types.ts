@@ -5,6 +5,7 @@ export type ResearchMapNodeKind =
   | "literature"
   | "lab_note"
   | "paper"
+  | "report"
 
 export interface ResearchMapNode {
   id: string

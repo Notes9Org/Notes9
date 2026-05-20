@@ -1,182 +1,117 @@
 # Notes9
 
-A comprehensive, full-stack Laboratory Inventory Management System built with Next.js 16, Supabase, and modern web technologies.
+Next.js 16 frontend for an electronic lab notebook (ELN). Researchers organise projects, experiments, samples, lab notes, protocols, literature reviews, and equipment in one workspace, with an embedded AI assistant ("Catalyst") that reasons over their data and external biomedical sources.
 
-## Features
+The backend lives in a separate repo (`AI/catalyst`, FastAPI + AWS Bedrock). This repo is the React + Supabase client and the SSE consumer for the agent stream.
 
-### Core Functionality
-- **Project Management** - Organize research initiatives with team collaboration
-- **Experiment Tracking** - Design, execute, and monitor experimental procedures
-- **Sample Inventory** - Track laboratory samples with detailed metadata
-- **Equipment Management** - Monitor equipment status and maintenance schedules
-- **Protocol Library** - Store and manage Standard Operating Procedures (SOPs)
-- **Lab Notes** - Rich text editor (Text Block) for documenting observations
-- **Reports & Analytics** - Generate comprehensive project and experiment reports
-- **User Management** - Role-based access control with Supabase Auth
+## Stack
 
-### User Interface
-- **Three-Panel Layout**
-  - Left Sidebar: Navigation and active projects
-  - Center: Main content area
-  - Right Sidebar: AI Assistant, calendar, and recent activity
-- **Dark Theme** - Professional scientific aesthetic with proper contrast
-- **Responsive Design** - Works on desktop and mobile devices
-- **Real-time Updates** - Live data from Supabase
-
-## Tech Stack
-
-- **Framework**: Next.js 16 (App Router, React Server Components)
-- **Database**: Supabase (PostgreSQL with Row Level Security)
-- **Authentication**: Supabase Auth
-- **Styling**: Tailwind CSS v4, shadcn/ui components
+- **Framework**: Next.js 16.0.7 (App Router, React 19, Turbopack build)
 - **Language**: TypeScript
-- **State Management**: React hooks, SWR for data fetching
+- **Styling**: Tailwind CSS v4, shadcn/ui (Radix primitives + lucide-react)
+- **Database & Auth**: Supabase (Postgres, RLS, Storage) — `@supabase/ssr`, `@supabase/supabase-js`
+- **Rich text**: TipTap 3 (lab notes, protocols)
+- **Molecular viewers**: SeqViz (DNA plasmid maps), Mol* (`molstar`, protein structures), UTIF (TIFF preview), `@teselagen/bio-parsers` (sequence parsing)
+- **Spreadsheets**: Univer (`@univerjs/preset-sheets-*`)
+- **HTML sanitisation**: `dompurify` (browser-only; do not switch back to `isomorphic-dompurify` — see "Build gotchas")
+- **AI stream**: single `useAgentStream` hook on top of the Fetch streaming API
+- **Package manager**: pnpm 10
 
-## Database Schema
+## Quickstart
 
-The system includes 18+ tables covering:
-- Organizations, Profiles (Users)
-- Projects, Experiments, Assays
-- Protocols/SOPs
-- Samples, Equipment
-- Lab Notes, Reports
-- Quality Control, Project Members
-- Equipment Maintenance, Sample Transfers
+```bash
+# Prerequisites: Node 20+, pnpm 10
+pnpm install
+pnpm dev   # http://localhost:3000
+```
 
-All tables have RLS policies for secure multi-tenant data access.
+Required environment variables in `.env.local`:
 
-## Getting Started
+```bash
+NEXT_PUBLIC_SUPABASE_URL=https://<project>.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=<anon-key>
+SUPABASE_SERVICE_ROLE_KEY=<service-role>     # server-only mutations
+CHAT_API_URL=https://<catalyst-host>         # Catalyst SSE endpoint
+```
 
-### 1. Database Setup
+`CHAT_API_URL` is re-exported to the browser as `NEXT_PUBLIC_CHAT_API_URL` via `next.config.mjs`, so the client can call catalyst directly and bypass Vercel's function timeout for long SSE streams.
 
-Run the SQL scripts in order:
-\`\`\`bash
-# From Supabase SQL Editor or v0 scripts folder:
-1. scripts/001_create_tables.sql
-2. scripts/002_enable_rls.sql
-3. scripts/003_seed_data.sql
-4. scripts/004_create_profile_trigger.sql
-\`\`\`
+## Directory map
 
-### 2. Environment Variables
+| Path | Role |
+|------|------|
+| `app/` | Next.js App Router |
+| `app/(app)/` | Authenticated app group. Layout gates auth and wraps with `AppLayout`. |
+| `app/(app)/dashboard|projects|experiments|samples|lab-notes|protocols|literature-reviews|papers|reports|equipment|settings|catalyst|research-map/` | Feature routes |
+| `app/(marketing)/`, `app/(legal)/`, `app/marketing/` | Public pages |
+| `app/api/` | Server route handlers (e.g. data-transfer import) |
+| `components/layout/` | App shell — sidebar, topbar, breadcrumb, `PageTransition` |
+| `components/catalyst/` | AI chat UI — stream consumer, ReAct pipeline visual, citations, tool cards |
+| `components/text-editor/tiptap-editor.tsx` | Shared TipTap editor (lab notes + protocols) |
+| `components/protocols/` | Protocol design mode, siblings list, template picker |
+| `components/lab-notes/` | Lab note tab, scientific calculator, formula tools |
+| `components/experiments/` | Experiment data file preview, tabular spreadsheet dialog |
+| `components/research-map/` | Cytoscape entity-relationship graph |
+| `components/spreadsheet/` | Univer spreadsheet wrappers |
+| `components/ui/` | shadcn primitives |
+| `hooks/use-agent-stream.ts` | SSE state machine for the catalyst stream |
+| `lib/supabase/` | Client/server Supabase factories |
+| `lib/sanitize-html.ts` | DOMPurify sanitiser + `escapeHtml` |
+| `lib/agent-stream-types.ts` | TS types mirroring the backend SSE payloads |
+| `lib/document-highlight.ts` | Citation → scroll-target linking |
+| `lib/sample-molecular.ts` | DNA alignment, CRISPR scan, file-kind inference |
+| `lib/user-storage-bucket.ts` | Supabase storage path conventions, signed URL helper |
+| `types/custom-modules.d.ts` | Ambient module decls (utif, html-docx-js, pdfjs-dist) |
+| `next.config.mjs` | Turbopack aliases, optimizePackageImports, image config |
+| `app/globals.css` | Tailwind v4 theme + keyframes. Honours `prefers-reduced-motion`. |
+| `proxy.ts` | Edge proxy for SSE — bypasses serverless function timeouts |
+| `__tests__/`, `vitest.config.ts` | Vitest tests |
+| `scripts/0xx_*.sql` | Database migrations (Supabase) |
 
-Already configured in your v0 project:
-- `NEXT_PUBLIC_SUPABASE_URL`
-- `NEXT_PUBLIC_SUPABASE_ANON_KEY`
-- `SUPABASE_SERVICE_ROLE_KEY`
-- Database connection strings
+## Key pages
 
-### 3. Run the Application
+- `app/(app)/dashboard` — recent experiments, recent notes, todo panel
+- `app/(app)/projects/[id]` — project overview with linked experiments, samples, notes
+- `app/(app)/experiments/[id]` — tabbed view: overview, steps, protocols & assays, samples, data & files, lab notes
+- `app/(app)/samples/[id]` — sample detail with molecular files tab (plasmid / protein structure viewer)
+- `app/(app)/protocols/[id]` — protocol view; `?design=1` opens the two-pane editor
+- `app/(app)/lab-notes/[id]` — full-page lab note editor
+- `app/(app)/catalyst` — AI assistant chat
+- `app/(app)/research-map` — entity-relationship graph (Cytoscape)
 
-\`\`\`bash
-npm run dev
-\`\`\`
+## Testing
 
-Open [http://localhost:3000](http://localhost:3000)
+```bash
+pnpm test            # vitest
+pnpm test:watch
+pnpm exec tsc --noEmit --skipLibCheck   # type check
+```
 
-## User Stories
+One pre-existing TS error in `components/marketing/status-section.tsx` is expected; marketing is excluded from audits by project convention.
 
-### Story 1: Project Design & Setup
-**Actor**: Dr. Sarah Chen (Principal Investigator)
+## Production build
 
-1. Login → Dashboard
-2. Create new project: "Cancer Drug Discovery Initiative"
-3. Add team members and set priority
-4. Create first experiment with assays and protocols
-5. Schedule equipment and assign researchers
+```bash
+rm -rf .next && pnpm build
+pnpm start
+```
 
-### Story 2: Experiment Execution
-**Actor**: Mike Rodriguez (Lab Technician)
+The build uses Turbopack. If you hit `NftJsonAsset: cannot handle filepath node:worker_threads`, the cause is a transitive dep importing `node:`-prefixed builtins — see "Build gotchas".
 
-1. View assigned experiments in dashboard
-2. Access experiment details with protocol steps
-3. Record sample information and storage location
-4. Upload raw data files (CSV, images)
-5. Add lab notes using the text editor
-6. Mark experiment as "Data Ready"
+## Build gotchas
 
-### Story 3: Data Analysis & Reporting
-**Actor**: Dr. Emily Watson (Data Analyst)
+- **Do not reinstall `md-to-docx`**. It pulls `mermaid → @mermaid-js/parser → langium`, which imports `node:worker_threads` and breaks the Turbopack NFT tracer.
+- **Use `dompurify`, not `isomorphic-dompurify`**. The isomorphic variant pulls `jsdom → undici → node:worker_threads`. All in-app callers of `sanitizeHtml` are client components, and the one server caller (`app/api/data-transfer/import/route.ts`) only uses `escapeHtml`.
+- **Keep `next.config.mjs` `serverExternalPackages` tight**. Adding seqviz / molstar / pdfjs-dist / `@univerjs/*` breaks the build (`.css` and ESM-only sub-imports). Only externalise a package when you have evidence it's part of a `node:`-prefix trace error.
+- Mol* and SeqViz are loaded with `next/dynamic` + `ssr: false`. Their dispose paths must run on unmount or browser WebGL context limits (~16) will exhaust after a few file switches. See `ARCHITECTURE.md`.
 
-1. Filter completed experiments
-2. Review uploaded data and visualizations
-3. Document conclusions in experiment report
-4. Navigate to project level
-5. Generate consolidated project report
-6. Export as PDF and share with stakeholders
+## Documentation
 
-## Key Pages
+- **[ARCHITECTURE.md](./ARCHITECTURE.md)** — component hierarchy, catalyst stream flow, ReAct pipeline visualization, molecular viewer lifecycle, page transitions, performance budget.
 
-- `/dashboard` - Overview with stats and recent activity
-- `/projects` - List all projects, create new
-- `/projects/[id]` - Project details with experiments and team
-- `/experiments` - List all experiments
-- `/experiments/[id]` - Experiment detail with tabs (overview, protocol, samples, data, notes)
-- `/samples` - Sample inventory with search
-- `/equipment` - Equipment status and tracking
-- `/protocols` - SOP library
-- `/reports` - Analytics and report generation
-- `/settings` - User profile and preferences
+## Conventions
 
-## Components
-
-### Reusable Components
-- `AppLayout` - Three-panel layout wrapper
-- `LeftSidebar` - Navigation and projects
-- `RightSidebar` - AI assistant and tools
-- `Text Block` - Rich text editor for lab notes
-- shadcn/ui components (Button, Card, Input, Select, etc.)
-
-## Authentication Flow
-
-1. User visits `/` → redirects to `/auth/login`
-2. Sign up creates account and profile
-3. Email verification required
-4. Protected routes check auth via middleware
-5. Sign out from `/settings`
-
-## Data Flow
-
-1. **Server Components** fetch data from Supabase
-2. **Client Components** handle forms and interactivity
-3. **Supabase Client** for client-side operations
-4. **Supabase Server** for server-side queries
-5. **RLS Policies** enforce data access rules
-
-## Deployment
-
-This project is ready to deploy on Vercel:
-
-\`\`\`bash
-# Push to GitHub
-git init
-git add .
-git commit -m "Initial LIMS system"
-git push origin main
-
-# Deploy via Vercel Dashboard or CLI
-vercel deploy
-\`\`\`
-
-Environment variables are automatically synced from your v0 project.
-
-## Future Enhancements
-
-- Real AI Assistant integration
-- Advanced analytics charts
-- Batch operations for samples
-- Equipment reservation system
-- Email notifications
-- PDF report generation
-- Data export functionality
-- Audit logging
-- Advanced search and filters
-- Mobile app
-
-## Support
-
-For issues or questions, refer to the documentation:
-- [Next.js Docs](https://nextjs.org/docs)
-- [Supabase Docs](https://supabase.com/docs)
-- [shadcn/ui](https://ui.shadcn.com/)
-
+- Server components fetch from Supabase; client components mutate via the JS client.
+- Storage paths follow `<org_id>/<scope>/<resource_id>/<file_id>/<filename>` (`lib/user-storage-bucket.ts`); signed URLs generated on demand (3600s TTL).
+- Inline `[N]` citations in AI responses are clickable and scroll the referenced source into view via `lib/document-highlight.ts`.
+- Tailwind animations honour `prefers-reduced-motion` and are GPU-cheap (opacity + transform only).

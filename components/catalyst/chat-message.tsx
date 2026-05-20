@@ -7,6 +7,8 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 import { Copy, Check, RefreshCw, Globe, ChevronDown, ChevronUp } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { MarkdownRenderer } from './markdown-renderer';
+import { AgentToolCards } from './agent-tool-cards';
+import type { ToolCard } from '@/hooks/use-agent-stream';
 
 interface SourceItem {
   url?: string;
@@ -20,6 +22,7 @@ interface ChatMessageProps {
   content: string;
   sources?: Array<Record<string, unknown>>;
   thinking?: string | null;
+  toolCards?: ToolCard[];
   userAvatar?: string | null;
   userName?: string;
   isLast?: boolean;
@@ -33,6 +36,7 @@ export function ChatMessage({
   content,
   sources = [],
   thinking = null,
+  toolCards = [],
   userAvatar,
   userName,
   isLast,
@@ -94,24 +98,39 @@ export function ChatMessage({
           </div>
         )}
 
-        {/* Message Bubble */}
-        <div
-          className={cn(
-            'rounded-lg px-4 py-2.5 text-sm',
-            isUser
-              ? 'bg-primary text-primary-foreground'
-              : 'bg-muted overflow-hidden',
-          )}
-        >
-          {isUser ? (
-            <div className="whitespace-pre-wrap break-words overflow-wrap-anywhere">{content}</div>
-          ) : (
-            <MarkdownRenderer
-              content={deferredContent}
-              showCursor={isStreaming}
-            />
-          )}
-        </div>
+        {/* Tool calls — Cursor/Claude-style inline transcript. While running,
+            every card is visible (collapsible=false) so the user can see what
+            the agent is doing right now. Once settled, the stack collapses
+            behind a single "Used N tools" affordance to keep the bubble tight. */}
+        {!isUser && toolCards.length > 0 && (
+          <AgentToolCards
+            cards={toolCards}
+            collapsible={!isStreaming}
+            className="mt-0.5"
+          />
+        )}
+
+        {/* Message Bubble — suppressed when the assistant has only tool cards
+            and no answer text yet (avoids an empty grey block while tools run). */}
+        {(isUser || content || !isStreaming) && (
+          <div
+            className={cn(
+              'rounded-lg px-4 py-2.5 text-sm',
+              isUser
+                ? 'bg-primary text-primary-foreground'
+                : 'bg-muted overflow-hidden',
+            )}
+          >
+            {isUser ? (
+              <div className="whitespace-pre-wrap break-words overflow-wrap-anywhere">{content}</div>
+            ) : (
+              <MarkdownRenderer
+                content={deferredContent}
+                showCursor={isStreaming}
+              />
+            )}
+          </div>
+        )}
 
         {/* Sources */}
         {!isUser && normalizedSources.length > 0 && !isStreaming && (

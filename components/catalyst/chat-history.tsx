@@ -61,41 +61,57 @@ export function ChatHistory({
               No conversations yet
             </div>
           ) : (
-            sessions.map((session) => (
-              <div
-                key={session.id}
-                className={cn(
-                  'group flex items-center gap-2 rounded-lg px-3 py-2 text-sm cursor-pointer transition-colors',
-                  currentSessionId === session.id
-                    ? 'bg-primary/10 text-primary'
-                    : 'hover:bg-muted'
-                )}
-                onClick={() => onSelectSession(session.id)}
-              >
-                <MessageSquare className="size-4 shrink-0" />
-                <div className="flex-1 min-w-0">
-                  <p className="truncate font-medium">
-                    {session.title || 'New conversation'}
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    {formatDistanceToNow(new Date(session.updated_at), {
-                      addSuffix: true,
-                    })}
-                  </p>
-                </div>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="size-6 opacity-0 group-hover:opacity-100 transition-opacity"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onDeleteSession(session.id);
-                  }}
+            sessions.map((session) => {
+              const isCurrent = currentSessionId === session.id;
+              const sessionTitle = session.title || 'New conversation';
+              return (
+                <div
+                  key={session.id}
+                  className={cn(
+                    'group flex items-center gap-2 rounded-lg pr-1.5 text-sm transition-colors',
+                    isCurrent ? 'bg-primary/10' : 'hover:bg-muted',
+                  )}
                 >
-                  <Trash2 className="size-3" />
-                </Button>
-              </div>
-            ))
+                  {/* Real button — keyboard reachable, focus ring, full hit area */}
+                  <button
+                    type="button"
+                    onClick={() => onSelectSession(session.id)}
+                    aria-current={isCurrent ? 'page' : undefined}
+                    aria-label={`Open chat: ${sessionTitle}`}
+                    className={cn(
+                      'flex flex-1 min-w-0 items-center gap-2 px-3 py-2 text-left rounded-lg',
+                      'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50',
+                      isCurrent ? 'text-primary' : 'text-foreground',
+                    )}
+                  >
+                    <MessageSquare className="size-4 shrink-0" aria-hidden />
+                    <div className="flex-1 min-w-0">
+                      <p className="truncate font-medium">{sessionTitle}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {formatDistanceToNow(new Date(session.updated_at), {
+                          addSuffix: true,
+                        })}
+                      </p>
+                    </div>
+                  </button>
+                  {/* Delete — always reachable on focus; visible on hover/focus.
+                      Size bumped from size-6 (24px) to icon (36px) to meet the
+                      ~40px hit-target threshold. */}
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="size-8 shrink-0 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity"
+                    aria-label={`Delete chat: ${sessionTitle}`}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onDeleteSession(session.id);
+                    }}
+                  >
+                    <Trash2 className="size-3.5" />
+                  </Button>
+                </div>
+              );
+            })
           )}
         </div>
       </ScrollArea>

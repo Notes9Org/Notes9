@@ -12,7 +12,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { Send, Square, Sparkles, PanelLeftClose, PanelLeft, Globe } from 'lucide-react';
+import { Send, Square, Sparkles, PanelLeftClose, PanelLeft, Globe, ChevronDown } from 'lucide-react';
 import { Switch } from '@/components/ui/switch';
 import { useChatSessions } from '@/hooks/use-chat-sessions';
 import { ChatHistory } from './chat-history';
@@ -20,6 +20,9 @@ import { ChatMessage } from './chat-message';
 import { createClient } from '@/lib/supabase/client';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
+import { extractToolCards } from '@/lib/chat-tool-parts';
+import type { ToolCard } from '@/hooks/use-agent-stream';
+import { usePinnedAutoScroll } from '@/hooks/use-pinned-auto-scroll';
 
 interface CatalystChatProps {
   open: boolean;
@@ -171,15 +174,15 @@ export function CatalystChat({ open, onOpenChange }: CatalystChatProps) {
     currentSessionRef.current = sessionId;
   }, [loadMessages, setMessages]);
 
-  // Auto-scroll to bottom when new messages arrive
-  useEffect(() => {
-    const scrollContainer = scrollViewportRef.current;
-    if (scrollContainer) {
-      requestAnimationFrame(() => {
-        scrollContainer.scrollTop = scrollContainer.scrollHeight;
-      });
-    }
-  }, [messages, isLoading]);
+  // Smart auto-scroll — only follows when the user is pinned to the bottom.
+  // Scrolling up releases the pin so the user can read prior context while
+  // streaming; the floating "↓" button re-pins on click.
+  const {
+    onScroll: onMessagesScroll,
+    scrollToBottom: scrollMessagesToBottom,
+    repin: repinMessages,
+    showJumpBottom,
+  } = usePinnedAutoScroll(scrollViewportRef, [messages, isLoading]);
 
   // Focus textarea when dialog opens
   useEffect(() => {
@@ -317,6 +320,11 @@ export function CatalystChat({ open, onOpenChange }: CatalystChatProps) {
     const messageText = input;
     setInput('');
 
+    // Sending a new message is an explicit "I want to see what comes next"
+    // signal — re-pin so the user's own message + the streamed reply scroll
+    // into view even if they were previously reading earlier history.
+    repinMessages();
+
     try {
       // Create session if none exists
       let sessionId = currentSessionRef.current;
@@ -394,8 +402,47 @@ export function CatalystChat({ open, onOpenChange }: CatalystChatProps) {
       e.preventDefault();
       onSubmit(e);
     }
-    if (e.key === 'Escape') {
-      onOpenChange(false);
+    // ESC is owned by Radix `<Dialog onEscapeKeyDown>`. Don't double-fire it
+    // from the textarea — used to close the modal mid-typing and destroy
+    // the draft. The dialog still closes on ESC when focus is outside.
+  };
+
+  // Example prompts mirror what the full-page `<CatalystGreeting>` exposes so
+  // first-time users of the modal see actionable starting points instead of a
+  // blank textarea. Clicking sends the prompt immediately.
+  const EXAMPLE_PROMPTS: { label: string; prompt: string }[] = [
+    {
+      label: 'Summarize my last experiment',
+      prompt: 'Summarize my most recent experiment and its outcome.',
+    },
+    {
+      label: 'Draft a protocol',
+      prompt: 'Help me draft a protocol for transformation of E. coli with a plasmid.',
+    },
+    {
+      label: 'Explain a calculation',
+      prompt: 'Walk me through how to calculate molarity from mass and volume.',
+    },
+    {
+      label: 'Find related notes',
+      prompt: 'Find lab notes and protocols related to my current project.',
+    },
+  ];
+
+  const sendExamplePrompt = async (text: string) => {
+    if (isLoading || submitInFlightRef.current) return;
+    submitInFlightRef.current = true;
+    try {
+      let sessionId = currentSessionRef.current;
+      if (!sessionId) {
+        sessionId = await createSession();
+        if (!sessionId) return;
+        currentSessionRef.current = sessionId;
+        hasLoadedSessionRef.current = sessionId;
+      }
+      await sendMessage({ text });
+    } finally {
+      submitInFlightRef.current = false;
     }
   };
 
@@ -435,10 +482,20 @@ export function CatalystChat({ open, onOpenChange }: CatalystChatProps) {
     return parts.length > 0 ? parts.join('') : null;
   };
 
+  // Reduce the message's `data-tool` parts back into ordered ToolCard[].
+  // Forwarded by `/api/chat/route.ts` from upstream SSE tool_start /
+  // tool_call / tool_result / tool_output events. Same shape the full-page
+  // surface consumes — keeps the UI consistent across modal and page.
+  const getMessageToolCards = (message: typeof messages[0]): ToolCard[] =>
+    extractToolCards(message.parts);
+
   return (
     <TooltipProvider>
       <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent className="sm:max-w-[900px] h-[85vh] flex flex-col p-0 gap-0">
+        <DialogContent
+          className="sm:max-w-[900px] h-[85vh] flex flex-col p-0 gap-0"
+          onEscapeKeyDown={() => onOpenChange(false)}
+        >
           <DialogHeader className="px-6 py-4 border-b shrink-0">
             <div className="flex items-center justify-between">
               <DialogTitle className="flex items-center gap-2">
@@ -478,17 +535,46 @@ export function CatalystChat({ open, onOpenChange }: CatalystChatProps) {
             {/* Main Chat Area */}
             <div className="flex-1 flex flex-col min-w-0">
               {/* Messages Area — plain div so the ref targets the real scroll container */}
-              <div ref={scrollViewportRef} className="flex-1 overflow-y-auto">
+              <div
+                ref={scrollViewportRef}
+                onScroll={onMessagesScroll}
+                className="relative flex-1 overflow-y-auto"
+              >
                 <div className="flex flex-col gap-4 p-6">
                     {messages.length === 0 ? (
-                      <div className="flex flex-col items-center justify-center h-[40vh] text-center">
-                        <Sparkles className="size-12 text-muted-foreground/50 mb-4" />
-                        <h3 className="text-lg font-medium text-muted-foreground">
+                      <div className="flex flex-col items-center justify-center min-h-[40vh] py-10 text-center">
+                        <Sparkles className="size-10 text-primary/70 mb-3" />
+                        <h3 className="font-display text-2xl md:text-3xl font-medium tracking-tight text-foreground">
                           How can I help you today?
                         </h3>
-                        <p className="text-sm text-muted-foreground/70 mt-2 max-w-sm">
-                          Ask me about experiments, protocols, chemistry calculations,
-                          or scientific documentation.
+                        <p className="text-sm text-muted-foreground mt-2 max-w-md">
+                          Ask Catalyst about experiments, protocols, chemistry
+                          calculations, or anything in your workspace.
+                        </p>
+                        <div className="mt-6 grid grid-cols-1 sm:grid-cols-2 gap-2 w-full max-w-md">
+                          {EXAMPLE_PROMPTS.map((p) => (
+                            <button
+                              key={p.label}
+                              type="button"
+                              onClick={() => sendExamplePrompt(p.prompt)}
+                              className={cn(
+                                'rounded-lg border border-border/70 bg-background',
+                                'px-3 py-2.5 text-left text-sm text-foreground/90',
+                                'transition-colors hover:border-primary/40 hover:bg-primary/[0.04]',
+                                'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50',
+                              )}
+                              aria-label={`Send example prompt: ${p.label}`}
+                            >
+                              <div className="font-medium">{p.label}</div>
+                              <div className="text-xs text-muted-foreground mt-0.5 line-clamp-1">
+                                {p.prompt}
+                              </div>
+                            </button>
+                          ))}
+                        </div>
+                        <p className="mt-5 text-xs text-muted-foreground/70">
+                          Press <kbd className="rounded border border-border bg-muted px-1.5 py-0.5 font-mono text-2xs">Esc</kbd> to close ·{' '}
+                          <kbd className="rounded border border-border bg-muted px-1.5 py-0.5 font-mono text-2xs">⇧ Enter</kbd> for new line
                         </p>
                       </div>
                     ) : (
@@ -503,6 +589,7 @@ export function CatalystChat({ open, onOpenChange }: CatalystChatProps) {
                             content={getMessageContent(message)}
                             sources={getMessageSources(message)}
                             thinking={getMessageThinking(message)}
+                            toolCards={getMessageToolCards(message)}
                             userAvatar={userProfile?.avatar_url}
                             userName={userProfile?.full_name || undefined}
                             isLast={isLastAssistant}
@@ -545,6 +632,21 @@ export function CatalystChat({ open, onOpenChange }: CatalystChatProps) {
                     )}
                   </div>
               </div>
+
+              {/* Floating jump-to-bottom — appears only when the user has
+                  scrolled away from the latest message. Re-pins on click. */}
+              {showJumpBottom && (
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="icon"
+                  className="absolute bottom-[88px] right-4 z-10 size-9 rounded-full border border-border/60 bg-background/95 shadow-md backdrop-blur-sm hover:bg-muted"
+                  onClick={scrollMessagesToBottom}
+                  aria-label="Scroll to latest message"
+                >
+                  <ChevronDown className="size-4" />
+                </Button>
+              )}
 
               {/* Input Area */}
               <div className="border-t p-4 shrink-0 space-y-2">

@@ -732,7 +732,7 @@ export function AppSidebar() {
             {mounted ? (
               <Collapsible defaultOpen={true} className="group/collapsible">
                 <SidebarGroup>
-                  <div className="flex h-8 shrink-0 items-center gap-2 rounded-md px-2 text-xs font-medium text-sidebar-foreground/70 outline-hidden ring-sidebar-ring focus-visible:ring-2 [&>svg]:size-4 [&>svg]:shrink-0">
+                  <div className="flex h-8 shrink-0 items-center gap-2 rounded-md px-2 text-xs font-medium text-sidebar-foreground/70 outline-none ring-sidebar-ring focus-visible:ring-2 [&>svg]:size-4 [&>svg]:shrink-0">
                     <CollapsibleTrigger className="flex min-w-0 flex-1 items-center gap-2 text-left hover:text-sidebar-foreground transition-colors">
                       <span className="truncate">Recent Projects</span>
                       <ChevronDown className="size-4 shrink-0 transition-transform duration-200 group-data-[state=open]/collapsible:rotate-180" />
