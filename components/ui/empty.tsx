@@ -62,7 +62,12 @@ function EmptyTitle({ className, ...props }: React.ComponentProps<'div'>) {
   return (
     <div
       data-slot="empty-title"
-      className={cn('text-lg font-medium tracking-tight', className)}
+      className={cn(
+        // Editorial display face — every empty state in the product flows
+        // through here, so the new IBM Plex Serif lands consistently.
+        'font-display text-xl font-medium tracking-tight',
+        className,
+      )}
       {...props}
     />
   )

@@ -17,6 +17,7 @@ const ALL_KINDS: ResearchMapNodeKind[] = [
   "literature",
   "lab_note",
   "paper",
+  "report",
 ]
 
 function parseIncludeTypes(raw: string | null): Set<ResearchMapNodeKind> {
@@ -368,7 +369,54 @@ export async function GET(req: NextRequest) {
               source: nodeId("project", projectRow.id),
               target: nodeId("paper", paper.id),
               kind: "project_contains_paper",
-              label: "Paper",
+              label: "Writing",
+            })
+          }
+        }
+      }
+
+      // Reports linked to this project (and to any of its experiments).
+      // Each row can carry a project_id, an experiment_id, or both — we draw
+      // whichever edges land in the included-types set so the researcher sees
+      // every connection without the noise of a hub-only graph.
+      if (includeTypes.has("report")) {
+        const { data: reportRows } = await supabase
+          .from("reports")
+          .select("id, title, status, report_type, project_id, experiment_id")
+          .or(
+            experimentIds.length > 0
+              ? `project_id.eq.${projectId},experiment_id.in.(${experimentIds.join(",")})`
+              : `project_id.eq.${projectId}`,
+          )
+          .order("updated_at", { ascending: false })
+          .limit(200)
+        for (const r of reportRows ?? []) {
+          addNode({
+            id: nodeId("report", r.id),
+            kind: "report",
+            label: r.title || "Untitled report",
+            href: `/reports/${r.id}`,
+            meta: { status: r.status ?? null, report_type: r.report_type ?? null },
+          })
+          if (
+            includeTypes.has("experiment") &&
+            r.experiment_id &&
+            experimentIds.includes(r.experiment_id)
+          ) {
+            queueEdge({
+              id: `experiment_report:${r.experiment_id}:${r.id}`,
+              source: nodeId("experiment", r.experiment_id),
+              target: nodeId("report", r.id),
+              kind: "experiment_has_report",
+              label: "Report",
+            })
+          } else if (includeTypes.has("project") && r.project_id === projectId) {
+            queueEdge({
+              id: `project_report:${projectRow.id}:${r.id}`,
+              source: nodeId("project", projectRow.id),
+              target: nodeId("report", r.id),
+              kind: "project_contains_report",
+              label: "Report",
             })
           }
         }
@@ -682,7 +730,54 @@ export async function GET(req: NextRequest) {
               source: nodeId("project", paper.project_id),
               target: nodeId("paper", paper.id),
               kind: "project_contains_paper",
-              label: "Paper",
+              label: "Writing",
+            })
+          }
+        }
+      }
+
+      // Reports — org-wide. Connect to the most specific scope available:
+      // experiment first, project second. RLS limits visibility to rows the
+      // user can see; we still gate edges on whether the parent node was
+      // included (via project_id / experiment_id presence in the graph).
+      if (includeTypes.has("report")) {
+        const { data: reportRows } = await supabase
+          .from("reports")
+          .select("id, title, status, report_type, project_id, experiment_id")
+          .order("updated_at", { ascending: false })
+          .limit(300)
+        const includedExpIds = new Set(allExperiments.map((e) => e.id))
+        for (const r of reportRows ?? []) {
+          addNode({
+            id: nodeId("report", r.id),
+            kind: "report",
+            label: r.title || "Untitled report",
+            href: `/reports/${r.id}`,
+            meta: { status: r.status ?? null, report_type: r.report_type ?? null },
+          })
+          if (
+            includeTypes.has("experiment") &&
+            r.experiment_id &&
+            includedExpIds.has(r.experiment_id)
+          ) {
+            queueEdge({
+              id: `experiment_report:${r.experiment_id}:${r.id}`,
+              source: nodeId("experiment", r.experiment_id),
+              target: nodeId("report", r.id),
+              kind: "experiment_has_report",
+              label: "Report",
+            })
+          } else if (
+            includeTypes.has("project") &&
+            r.project_id &&
+            projectIdSet.has(r.project_id)
+          ) {
+            queueEdge({
+              id: `project_report:${r.project_id}:${r.id}`,
+              source: nodeId("project", r.project_id),
+              target: nodeId("report", r.id),
+              kind: "project_contains_report",
+              label: "Report",
             })
           }
         }

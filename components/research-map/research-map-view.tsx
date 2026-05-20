@@ -4,7 +4,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import {
   Background,
   BackgroundVariant,
+  Controls,
   EdgeLabelRenderer,
+  MiniMap,
   Panel,
   ReactFlow,
   ReactFlowProvider,
@@ -27,7 +29,9 @@ import type {
 import {
   layoutResearchMap,
   RESEARCH_NODE_DIM,
+  edgeColorForKind,
   kindDotClass,
+  kindHexColor,
   kindLabel,
 } from "@/lib/research-map-layout"
 import { ResearchEntityNode } from "@/components/research-map/research-entity-node"
@@ -48,7 +52,13 @@ import { toast } from "sonner"
 
 const nodeTypes = { researchEntity: ResearchEntityNode }
 
-/** Custom edge that renders the label as an HTML chip via EdgeLabelRenderer for perfect centering. */
+/**
+ * Custom edge with a label that's hidden by default and only renders on
+ * hover or when the edge is selected/highlighted. Hiding labels is the fix
+ * for the "tags overlapping" problem on dense graphs — color already
+ * encodes the relationship (`edgeColorForKind`), so the label is redundant
+ * until the user is actively inspecting an edge.
+ */
 function LabelledEdge({
   id,
   sourceX,
@@ -61,6 +71,7 @@ function LabelledEdge({
   style,
   markerEnd,
   label,
+  selected,
 }: EdgeProps) {
   const [edgePath, labelX, labelY] = getSmoothStepPath({
     sourceX,
@@ -69,11 +80,26 @@ function LabelledEdge({
     targetX,
     targetY,
     targetPosition,
-    borderRadius: 10,
+    borderRadius: 12,
+    offset: 18,
   })
   const text = (label as string) || (data?.humanLabel as string)
+  const baseStroke = (data?.baseStroke as string) || "#9ca3af"
+  // Style-driven flag — the highlight controller bumps strokeWidth on the
+  // edges it wants to surface. We treat anything ≥ 2.4px as "active" so we
+  // can decide whether to render the label without re-plumbing props.
+  const styleObj = (style as { strokeWidth?: number; opacity?: number } | undefined) || {}
+  const isActive = selected || (styleObj.strokeWidth ?? 0) >= 2.4
   return (
     <>
+      {/* Invisible widened hit area so hover targets feel forgiving (12px). */}
+      <path
+        d={edgePath}
+        fill="none"
+        stroke="transparent"
+        strokeWidth={12}
+        className="react-flow__edge-interaction"
+      />
       <path
         id={id}
         className="react-flow__edge-path"
@@ -81,31 +107,30 @@ function LabelledEdge({
         style={style}
         markerEnd={markerEnd as string}
       />
-      {text && (
+      {text && isActive && (
         <EdgeLabelRenderer>
           <div
             style={{
               position: "absolute",
               transform: `translate(-50%, -50%) translate(${labelX}px,${labelY}px)`,
-              pointerEvents: "all",
+              pointerEvents: "none",
             }}
             className="nodrag nopan"
           >
             <span
               style={{
                 display: "inline-block",
-                background: "#fff",
-                border: "1px solid #e5e7eb",
-                borderRadius: 6,
-                padding: "2px 7px",
-                fontSize: 9,
+                background: "var(--card)",
+                border: `1px solid ${baseStroke}`,
+                borderRadius: 999,
+                padding: "1px 8px",
+                fontSize: 10,
                 fontWeight: 600,
-                color: "#6b7280",
-                letterSpacing: "0.05em",
-                textTransform: "uppercase",
-                lineHeight: "1.4",
+                color: baseStroke,
+                letterSpacing: "0.03em",
+                lineHeight: "1.6",
                 whiteSpace: "nowrap",
-                boxShadow: "0 1px 2px rgba(0,0,0,0.06)",
+                boxShadow: "0 1px 2px rgba(0,0,0,0.08)",
               }}
             >
               {text}
@@ -126,6 +151,7 @@ const KINDS: ResearchMapNodeKind[] = [
   "literature",
   "lab_note",
   "paper",
+  "report",
 ]
 
 /** Tables whose changes affect the research map graph (requires Realtime enabled in Supabase). */
@@ -138,6 +164,7 @@ const RESEARCH_MAP_REALTIME_TABLES = [
   "experiment_protocols",
   "lab_note_protocols",
   "papers",
+  "reports",
 ] as const
 
 function buildIncomingIndex(edges: Edge[]) {
@@ -147,6 +174,15 @@ function buildIncomingIndex(edges: Edge[]) {
     incomingByTarget.get(e.target)!.push(e)
   }
   return incomingByTarget
+}
+
+function buildOutgoingIndex(edges: Edge[]) {
+  const outgoingBySource = new Map<string, Edge[]>()
+  for (const e of edges) {
+    if (!outgoingBySource.has(e.source)) outgoingBySource.set(e.source, [])
+    outgoingBySource.get(e.source)!.push(e)
+  }
+  return outgoingBySource
 }
 
 /**
@@ -184,8 +220,55 @@ function buildUpwardAncestorHighlight(
 }
 
 /**
- * On edge click: clicked edge, child (target), parent (source), and full ancestor chain
- * from the parent toward root.
+ * Symmetric to `buildUpwardAncestorHighlight`. Walks downward from `startNode`,
+ * collecting every descendant by following outgoing edges (parent → child).
+ * Used so a click selects the full subtree below the node/edge, not just one hop.
+ */
+function buildDownwardDescendantHighlight(
+  startNode: string,
+  edges: Edge[],
+): { nodeIds: Set<string>; edgeIds: Set<string> } {
+  const outgoingBySource = buildOutgoingIndex(edges)
+  const nodeIds = new Set<string>([startNode])
+  const edgeIds = new Set<string>()
+  const expanded = new Set<string>()
+  const queue = [startNode]
+
+  while (queue.length) {
+    const v = queue.shift()!
+    if (expanded.has(v)) continue
+    expanded.add(v)
+
+    const outgoing = outgoingBySource.get(v) ?? []
+    for (const e of outgoing) {
+      const c = e.target
+      edgeIds.add(e.id)
+      nodeIds.add(c)
+      if (!expanded.has(c)) {
+        queue.push(c)
+      }
+    }
+  }
+
+  return { nodeIds, edgeIds }
+}
+
+function mergeHighlights(
+  parts: Array<{ nodeIds: Set<string>; edgeIds: Set<string> }>,
+): { nodeIds: Set<string>; edgeIds: Set<string> } {
+  const nodeIds = new Set<string>()
+  const edgeIds = new Set<string>()
+  for (const part of parts) {
+    for (const id of part.nodeIds) nodeIds.add(id)
+    for (const id of part.edgeIds) edgeIds.add(id)
+  }
+  return { nodeIds, edgeIds }
+}
+
+/**
+ * On edge click: light up the **entire connected chain** — every ancestor
+ * above the source AND every descendant below the target. The researcher can
+ * trace, in one click, where the relationship sits in the bigger graph.
  */
 function buildEdgeAncestorHighlight(
   edgeId: string,
@@ -194,41 +277,27 @@ function buildEdgeAncestorHighlight(
   const clicked = edges.find((e) => e.id === edgeId)
   if (!clicked) return { nodeIds: new Set(), edgeIds: new Set() }
 
-  const { source: parent, target: child } = clicked
-  const upward = buildUpwardAncestorHighlight(parent, edges)
+  const upward = buildUpwardAncestorHighlight(clicked.source, edges)
+  const downward = buildDownwardDescendantHighlight(clicked.target, edges)
 
-  const nodeIds = new Set(upward.nodeIds)
-  nodeIds.add(child)
-  const edgeIds = new Set(upward.edgeIds)
-  edgeIds.add(edgeId)
-
-  return { nodeIds, edgeIds }
+  const merged = mergeHighlights([upward, downward])
+  merged.edgeIds.add(edgeId)
+  return merged
 }
 
 /**
- * On node click: immediate neighbours (one hop) plus full upward chain from the clicked
- * node (so literature shows experiment and project even when only experiment↔literature
- * is directly visible in the neighbour set after layout filtering).
+ * On node click: full ancestor chain upward AND full descendant chain
+ * downward from the clicked node — every ancestor, every descendant, and
+ * every edge between them. Lets a researcher see "everything this is
+ * connected to" in one gesture.
  */
 function buildNodeHighlight(
   nodeId: string,
   edges: Edge[],
 ): { nodeIds: Set<string>; edgeIds: Set<string> } {
-  const nodeIds = new Set<string>([nodeId])
-  const edgeIds = new Set<string>()
-  for (const e of edges) {
-    if (e.source === nodeId || e.target === nodeId) {
-      nodeIds.add(e.source)
-      nodeIds.add(e.target)
-      edgeIds.add(e.id)
-    }
-  }
-
   const upward = buildUpwardAncestorHighlight(nodeId, edges)
-  for (const id of upward.nodeIds) nodeIds.add(id)
-  for (const id of upward.edgeIds) edgeIds.add(id)
-
-  return { nodeIds, edgeIds }
+  const downward = buildDownwardDescendantHighlight(nodeId, edges)
+  return mergeHighlights([upward, downward])
 }
 
 function mapApiToFlow(
@@ -260,15 +329,31 @@ function mapApiToFlow(
     }
   })
 
-  const edges: Edge[] = edgesRaw.map((e) => ({
-    id: e.id,
-    source: e.source,
-    target: e.target,
-    label: e.label,
-    type: "labelled",
-    markerEnd: { type: MarkerType.ArrowClosed, width: 18, height: 18 },
-    data: { kind: e.kind, humanLabel: e.label },
-  }))
+  // Color-code edges by relationship so the eye can trace
+  // experiment-→-report, project-→-writing, etc. The arrowhead inherits the
+  // stroke color via `markerEnd.color` so direction and meaning are encoded
+  // together.
+  const edges: Edge[] = edgesRaw.map((e) => {
+    const stroke = edgeColorForKind(e.kind)
+    return {
+      id: e.id,
+      source: e.source,
+      target: e.target,
+      label: e.label,
+      type: "labelled",
+      markerEnd: {
+        type: MarkerType.ArrowClosed,
+        width: 16,
+        height: 16,
+        color: stroke,
+      },
+      // Soft default stroke so dense graphs don't feel like a wire bundle.
+      // The highlight controller fattens active edges to ≥2.4 — used by
+      // LabelledEdge to decide whether to render the label chip.
+      style: { stroke, strokeWidth: 1.4, opacity: 0.85 },
+      data: { kind: e.kind, humanLabel: e.label, baseStroke: stroke },
+    }
+  })
 
   return { nodes, edges }
 }
@@ -287,6 +372,7 @@ function ResearchMapCanvas() {
     literature: true,
     lab_note: true,
     paper: true,
+    report: true,
   })
   const [labelQuery, setLabelQuery] = useState("")
   const [debouncedQuery, setDebouncedQuery] = useState("")
@@ -461,13 +547,23 @@ function ResearchMapCanvas() {
         curr.map((e) => {
           const inComp = he?.has(e.id) ?? false
           const isSel = e.id === edgeSelected
-          // Node-click: bold dotted lines for connected edges
           const isNodeConnected = Boolean(nodeSelected && he?.has(e.id))
+          // Preserve the per-edge brand color so the legend stays meaningful
+          // even when highlight/dim is applied. Without this the dimmed state
+          // would paint everything a neutral gray.
+          const baseStroke =
+            (e.data as { baseStroke?: string } | undefined)?.baseStroke ||
+            (e.style as { stroke?: string } | undefined)?.stroke ||
+            "var(--border)"
           return {
             ...e,
             style: {
-              opacity: he && !he.has(e.id) ? 0.12 : 1,
-              strokeWidth: isSel ? 3.2 : isNodeConnected ? 2.8 : inComp ? 2.4 : 1.5,
+              stroke: baseStroke,
+              // Dim non-relevant edges aggressively so the active path
+              // really stands out; soft 0.85 baseline keeps idle graphs
+              // calm without disappearing.
+              opacity: he && !he.has(e.id) ? 0.08 : 0.95,
+              strokeWidth: isSel ? 3.2 : isNodeConnected ? 2.8 : inComp ? 2.4 : 1.4,
               strokeDasharray: isNodeConnected && !isSel ? "6 4" : undefined,
             },
             animated: Boolean(isSel || (edgeSelected && he?.has(e.id))),
@@ -531,11 +627,26 @@ function ResearchMapCanvas() {
     [router],
   )
 
+  // Empty-state guard. Distinct from `loading`: the canvas has finished
+  // rendering but yielded zero nodes (fresh account or aggressive filters).
+  const isEmpty = !loading && nodes.length === 0
+
   return (
     <div className="relative h-full min-h-[min(70vh,640px)] min-w-0 flex-1 overflow-hidden rounded-xl border bg-muted/20 lg:min-h-0">
         {loading && (
           <div className="absolute inset-0 z-10 flex items-center justify-center rounded-xl bg-background/60 backdrop-blur-[1px]">
             <Loader2 className="size-8 animate-spin text-muted-foreground" />
+          </div>
+        )}
+        {isEmpty && (
+          <div className="pointer-events-none absolute inset-0 z-[5] flex flex-col items-center justify-center text-center px-6">
+            <div className="font-display text-xl font-medium text-foreground">
+              Your research map is empty
+            </div>
+            <p className="mt-2 max-w-sm text-sm text-muted-foreground">
+              Add projects, experiments, lab notes, literature, writing, or
+              reports and they&apos;ll appear here connected by relationship.
+            </p>
           </div>
         )}
         <div className="absolute inset-0 min-h-0">
@@ -551,15 +662,48 @@ function ResearchMapCanvas() {
           onEdgeClick={onEdgeClick}
           onPaneClick={onPaneClick}
           fitView
+          fitViewOptions={{ padding: 0.25, minZoom: 0.35, maxZoom: 1.1 }}
           minZoom={0.08}
           maxZoom={1.5}
           proOptions={{ hideAttribution: true }}
           className="h-full w-full rounded-xl"
           defaultEdgeOptions={{
-            style: { stroke: "var(--border)", strokeWidth: 1.5 },
+            style: { stroke: "var(--border)", strokeWidth: 1.8 },
           }}
         >
           <Background variant={BackgroundVariant.Dots} gap={16} size={1} />
+          {/* Pan/zoom/fit controls — bottom-left, out of the way of node
+              clicks. Themed via `.react-flow__controls*` overrides in
+              globals.css so the +/-/fit buttons inherit Notes9's paper
+              background and foreground tokens in both light and dark mode. */}
+          <Controls
+            position="bottom-left"
+            showInteractive={false}
+          />
+          {/* Mini-map — Supabase-style. Drag the viewport lens to pan the
+              main canvas, scroll on the minimap to zoom. Each dot is colored
+              by node kind so the minimap doubles as a live legend. */}
+          <MiniMap
+            position="bottom-right"
+            pannable
+            zoomable
+            ariaLabel="Research map mini overview — drag to pan, scroll to zoom"
+            nodeBorderRadius={3}
+            nodeStrokeWidth={2}
+            nodeColor={(n) => {
+              const data = n.data as { kind?: ResearchMapNodeKind } | undefined
+              return data?.kind ? kindHexColor(data.kind) : "#9ca3af"
+            }}
+            nodeStrokeColor={(n) => {
+              const data = n.data as { kind?: ResearchMapNodeKind } | undefined
+              return data?.kind ? kindHexColor(data.kind) : "#6b7280"
+            }}
+            maskColor="rgba(150, 80, 52, 0.10)"
+            maskStrokeColor="#965034"
+            maskStrokeWidth={2}
+            className="!rounded-lg !border !border-border !bg-card/95 !shadow-md overflow-hidden cursor-grab active:cursor-grabbing"
+            style={{ width: 200, height: 140 }}
+          />
           <Panel
             position="top-left"
             className="m-2 flex max-w-[calc(100%-1rem)] flex-nowrap items-center gap-2 overflow-x-auto rounded-lg border bg-card/95 py-1.5 pl-2 pr-2 shadow-sm backdrop-blur-sm [scrollbar-width:thin]"

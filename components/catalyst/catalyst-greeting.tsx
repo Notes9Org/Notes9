@@ -7,6 +7,13 @@ import { IceMascot } from '@/components/ui/ice-mascot';
 
 interface CatalystGreetingProps {
   userName: string;
+  /**
+   * Prefill the chat input with the suggestion's starter prompt. When omitted
+   * the suggestion chips render as decorative-only (preserves the legacy
+   * appearance for callers that haven't migrated). Provide this from the
+   * Catalyst page so first-time users have a working entry point.
+   */
+  onSuggest?: (prompt: string) => void;
 }
 
 function getGreeting(): string {
@@ -25,14 +32,30 @@ function getGreeting(): string {
   return `Happy ${day}`;
 }
 
-const SUGGESTIONS: Array<{ icon: LucideIcon; label: string }> = [
-  { icon: FlaskConical, label: 'Experiments' },
-  { icon: ClipboardList, label: 'Protocols' },
-  { icon: LineChart, label: 'Data Analysis' },
-  { icon: FileText, label: 'Documentation' },
+const SUGGESTIONS: Array<{ icon: LucideIcon; label: string; prompt: string }> = [
+  {
+    icon: FlaskConical,
+    label: 'Experiments',
+    prompt: 'Summarize my most recent experiments and their outcomes.',
+  },
+  {
+    icon: ClipboardList,
+    label: 'Protocols',
+    prompt: 'Help me draft a new protocol — start by asking what I need it for.',
+  },
+  {
+    icon: LineChart,
+    label: 'Data Analysis',
+    prompt: 'Walk me through analyzing the data from my most recent experiment.',
+  },
+  {
+    icon: FileText,
+    label: 'Documentation',
+    prompt: 'Help me write a clean lab note for the experiment I just finished.',
+  },
 ];
 
-export function CatalystGreeting({ userName }: CatalystGreetingProps) {
+export function CatalystGreeting({ userName, onSuggest }: CatalystGreetingProps) {
   const greeting = getGreeting();
 
   return (
@@ -46,7 +69,9 @@ export function CatalystGreeting({ userName }: CatalystGreetingProps) {
           />
         </div>
 
-        <h1 className="text-3xl font-semibold tracking-tight text-foreground md:text-4xl">
+        {/* Editorial display face — pairs the new IBM Plex Serif with the
+            burnt-sienna palette so the greeting feels thoughtful, not system-y. */}
+        <h1 className="font-display text-3xl font-medium tracking-tight text-foreground md:text-5xl">
           {greeting}, {userName || 'there'}
         </h1>
 
@@ -55,8 +80,14 @@ export function CatalystGreeting({ userName }: CatalystGreetingProps) {
         </p>
 
         <div className="mt-8 flex flex-wrap items-center justify-center gap-2">
-          {SUGGESTIONS.map(({ icon: Icon, label }) => (
-            <SuggestedAction key={label} icon={Icon} label={label} />
+          {SUGGESTIONS.map(({ icon: Icon, label, prompt }) => (
+            <SuggestedAction
+              key={label}
+              icon={Icon}
+              label={label}
+              prompt={prompt}
+              onSuggest={onSuggest}
+            />
           ))}
         </div>
       </div>
@@ -64,11 +95,26 @@ export function CatalystGreeting({ userName }: CatalystGreetingProps) {
   );
 }
 
-function SuggestedAction({ icon: Icon, label }: { icon: LucideIcon; label: string }) {
+function SuggestedAction({
+  icon: Icon,
+  label,
+  prompt,
+  onSuggest,
+}: {
+  icon: LucideIcon;
+  label: string;
+  prompt: string;
+  onSuggest?: (prompt: string) => void;
+}) {
+  const interactive = !!onSuggest;
   return (
     <button
       type="button"
-      className="inline-flex items-center gap-2 rounded-full border border-border bg-background px-4 py-2 text-sm font-medium text-foreground transition-colors hover:bg-muted"
+      onClick={interactive ? () => onSuggest!(prompt) : undefined}
+      disabled={!interactive}
+      title={interactive ? prompt : undefined}
+      aria-label={interactive ? `Use suggestion: ${prompt}` : label}
+      className="inline-flex items-center gap-2 rounded-full border border-border bg-background px-4 py-2 text-sm font-medium text-foreground transition-colors hover:border-primary/40 hover:bg-primary/[0.04] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 disabled:cursor-default disabled:hover:bg-background disabled:hover:border-border"
     >
       <Icon className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
       <span>{label}</span>

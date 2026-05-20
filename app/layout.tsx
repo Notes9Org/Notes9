@@ -1,24 +1,45 @@
 import type { Metadata } from 'next'
-import { JetBrains_Mono, Space_Grotesk, Work_Sans } from 'next/font/google'
+import {
+  Familjen_Grotesk,
+  IBM_Plex_Sans,
+  IBM_Plex_Serif,
+  JetBrains_Mono,
+} from 'next/font/google'
 import "./globals.css"
 import { ThemeProvider } from "@/components/theme-provider"
 import { Toaster as Sonner } from "@/components/ui/sonner"
 import { NavigationLoader } from "@/components/navigation-loader"
 import { RumProvider } from "@/components/rum-provider"
 
-const workSans = Work_Sans({
+// Body — IBM Plex Sans. Carries every long-form sentence in the product.
+const ibmPlexSans = IBM_Plex_Sans({
   subsets: ['latin'],
-  variable: '--font-work-sans',
+  weight: ['300', '400', '500', '600', '700'],
+  variable: '--font-ibm-sans',
+  display: 'swap',
 })
 
-const spaceGrotesk = Space_Grotesk({
+// Display — IBM Plex Serif. Reserved for hero/editorial moments (page H1s,
+// dashboard stat numbers, empty-state titles, marketing surfaces).
+const ibmPlexSerif = IBM_Plex_Serif({
   subsets: ['latin'],
-  variable: '--font-space-grotesk',
+  weight: ['400', '500', '600', '700'],
+  variable: '--font-ibm-serif',
+  display: 'swap',
+})
+
+// Heading — Familjen Grotesk. Drives every h1-h6 inside the app.
+const familjenGrotesk = Familjen_Grotesk({
+  subsets: ['latin'],
+  weight: ['400', '500', '600', '700'],
+  variable: '--font-familjen',
+  display: 'swap',
 })
 
 const jetbrainsMono = JetBrains_Mono({
   subsets: ['latin'],
   variable: '--font-jetbrains-mono',
+  display: 'swap',
 })
 
 export const metadata: Metadata = {
@@ -91,7 +112,9 @@ export default function RootLayout({
           </>
         ) : null}
       </head>
-      <body className={`font-sans ${workSans.variable} ${spaceGrotesk.variable} ${jetbrainsMono.variable} antialiased`}>
+      <body
+        className={`font-sans ${ibmPlexSans.variable} ${ibmPlexSerif.variable} ${familjenGrotesk.variable} ${jetbrainsMono.variable} antialiased`}
+      >
         <ThemeProvider
           attribute="class"
           defaultTheme="system"

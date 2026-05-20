@@ -64,6 +64,7 @@ import {
   serializeLiteratureAssistantStoredContent,
 } from '@/lib/literature-assistant-stored';
 import { useAgentStream } from '@/hooks/use-agent-stream';
+import { usePinnedAutoScroll } from '@/hooks/use-pinned-auto-scroll';
 import { deleteTrailingMessages } from '@/app/(app)/catalyst/actions';
 import { MessageEditor } from '@/components/catalyst/message-editor';
 import { AgentStreamReply } from '@/components/catalyst/agent-stream-reply';
@@ -407,7 +408,6 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const chatScrollRef = useRef<HTMLDivElement>(null);
-  const [chatShowJumpBottom, setChatShowJumpBottom] = useState(false);
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [uploadQueue, setUploadQueue] = useState<string[]>([]);
   const [mounted, setMounted] = useState(false);
@@ -1094,34 +1094,14 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
     literatureAwaitingClarify;
   const isUploading = uploadQueue.length > 0;
 
-  const updateChatJumpBottom = useCallback(() => {
-    const el = chatScrollRef.current;
-    if (!el) return;
-    const { scrollTop, scrollHeight, clientHeight } = el;
-    const distFromBottom = scrollHeight - scrollTop - clientHeight;
-    setChatShowJumpBottom(distFromBottom > 120);
-  }, []);
-
-  const onChatScroll = useCallback(() => {
-    updateChatJumpBottom();
-  }, [updateChatJumpBottom]);
-
-  const scrollChatToBottom = useCallback(() => {
-    const el = chatScrollRef.current;
-    if (!el) return;
-    el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
-  }, []);
-
-  useEffect(() => {
-    const id = requestAnimationFrame(() => {
-      const el = chatScrollRef.current;
-      if (el) {
-        el.scrollTop = el.scrollHeight;
-      }
-      updateChatJumpBottom();
-    });
-    return () => cancelAnimationFrame(id);
-  }, [
+  // Smart auto-scroll — only follows when the user is pinned to the bottom.
+  // The previous unconditional auto-scroll fought the user any time they
+  // tried to read earlier output while a response was still streaming.
+  const {
+    onScroll: onChatScroll,
+    scrollToBottom: scrollChatToBottom,
+    showJumpBottom: chatShowJumpBottom,
+  } = usePinnedAutoScroll(chatScrollRef, [
     messages,
     agentStream.thinkingSteps,
     agentStream.streamedAnswer,
@@ -1132,7 +1112,6 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
     literatureAgentStream.clarify,
     literatureAgentStream.isStreaming,
     notes9Loading,
-    updateChatJumpBottom,
   ]);
 
   useEffect(() => {

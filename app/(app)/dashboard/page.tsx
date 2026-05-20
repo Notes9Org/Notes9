@@ -18,6 +18,7 @@ import {
   FileText,
   BookOpen,
   ArrowUpRight,
+  Plus,
 } from "lucide-react";
 import { TodoPanel } from "./todo-panel";
 
@@ -87,13 +88,14 @@ export default async function DashboardPage() {
 
   return (
     <div className="min-w-0 space-y-4 md:space-y-6 pb-6">
-      {/* Welcome Section */}
+      {/* Welcome Section — editorial display face (IBM Plex Serif) anchors the
+          arrival moment; the Familjen Grotesk body keeps the rest system-y. */}
       <div>
-        <h1 className="text-2xl font-bold tracking-tight md:text-3xl">
+        <h1 className="font-display text-3xl font-medium tracking-tight md:text-4xl">
           Hello, {greetingName}
         </h1>
         <p className="text-muted-foreground mt-1">
-          Here's what's happening in your laboratory today
+          Here&apos;s what&apos;s happening in your laboratory today.
         </p>
       </div>
 
@@ -225,8 +227,8 @@ export default async function DashboardPage() {
                         {exp.status?.replace("_", " ") || "planned"}
                       </Badge>
                       <Link href={`/experiments/${exp.id}`}>
-                        <Button variant="ghost" size="icon-sm">
-                          <ArrowUpRight />
+                        <Button variant="ghost" size="icon" aria-label="View experiment">
+                          <ArrowUpRight className="size-4" />
                           <span className="sr-only">View experiment</span>
                         </Button>
                       </Link>
@@ -236,9 +238,15 @@ export default async function DashboardPage() {
                 </div>
               ))
             ) : (
-              <p className="text-sm text-muted-foreground">
-                No recent experiments
-              </p>
+              <div className="text-sm text-muted-foreground space-y-2">
+                <p>No recent experiments.</p>
+                <Link
+                  href="/experiments/new"
+                  className="inline-flex items-center gap-1 text-primary hover:underline"
+                >
+                  <Plus className="size-3.5" /> Start your first experiment
+                </Link>
+              </div>
             )}
           </CardContent>
         </Card>
@@ -285,8 +293,8 @@ export default async function DashboardPage() {
                             : `/lab-notes`
                         }
                       >
-                        <Button variant="ghost" size="icon-sm">
-                          <ArrowUpRight />
+                        <Button variant="ghost" size="icon" aria-label="View note">
+                          <ArrowUpRight className="size-4" />
                           <span className="sr-only">View note</span>
                         </Button>
                       </Link>
@@ -295,7 +303,15 @@ export default async function DashboardPage() {
                 </div>
               ))
             ) : (
-              <p className="text-sm text-muted-foreground">No recent notes</p>
+              <div className="text-sm text-muted-foreground space-y-2">
+                <p>No recent notes.</p>
+                <Link
+                  href="/lab-notes"
+                  className="inline-flex items-center gap-1 text-primary hover:underline"
+                >
+                  <Plus className="size-3.5" /> Write your first lab note
+                </Link>
+              </div>
             )}
           </CardContent>
         </Card>

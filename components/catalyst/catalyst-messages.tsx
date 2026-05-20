@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState, useCallback } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import { ChevronDown } from 'lucide-react';
 import type { UIMessage } from 'ai';
 import { Sparkles, Square } from 'lucide-react';
@@ -10,6 +10,7 @@ import { MarkdownRenderer } from './markdown-renderer';
 import { MessageActions } from './message-actions';
 import { MessageEditor } from './message-editor';
 import { AgentStreamReply } from './agent-stream-reply';
+import { usePinnedAutoScroll } from '@/hooks/use-pinned-auto-scroll';
 import {
   AgentCitationsPanel,
   groundingResourceToPanelItem,
@@ -52,29 +53,22 @@ export function CatalystMessages({
   notes9Stream,
 }: CatalystMessagesProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
-  const endRef = useRef<HTMLDivElement>(null);
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
-  const [showJumpBottom, setShowJumpBottom] = useState(false);
 
-  const updateJumpBottom = useCallback(() => {
-    const el = scrollRef.current;
-    if (!el) return;
-    const dist = el.scrollHeight - el.scrollTop - el.clientHeight;
-    setShowJumpBottom(dist > 120);
-  }, []);
-
-  const scrollToBottom = useCallback(() => {
-    const el = scrollRef.current;
-    if (!el) return;
-    el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
-  }, []);
-
-  // Auto-scroll to bottom when messages or stream updates
-  useEffect(() => {
-    endRef.current?.scrollIntoView({ behavior: 'smooth' });
-    const id = requestAnimationFrame(() => updateJumpBottom());
-    return () => cancelAnimationFrame(id);
-  }, [messages, notes9Stream, updateJumpBottom]);
+  // Smart auto-scroll — only follows when the user is pinned to the bottom.
+  // Scrolling up immediately releases the pin so the user can read previous
+  // content while streaming, and the "↓" button below re-pins on click.
+  const { onScroll, scrollToBottom, showJumpBottom } = usePinnedAutoScroll(
+    scrollRef,
+    [
+      messages,
+      notes9Stream?.streamedAnswer,
+      notes9Stream?.thinkingSteps?.length,
+      notes9Stream?.donePayload,
+      notes9Stream?.isStreaming,
+    ],
+    { smooth: false },
+  );
 
   const getVoteForMessage = useCallback(
     (messageId: string): Vote | undefined => {
@@ -95,7 +89,7 @@ export function CatalystMessages({
       <div
         ref={scrollRef}
         className="h-full overflow-y-auto overflow-x-hidden overscroll-contain [scrollbar-gutter:stable]"
-        onScroll={updateJumpBottom}
+        onScroll={onScroll}
         role="log"
         aria-label="Chat messages"
       >
@@ -276,7 +270,7 @@ export function CatalystMessages({
             )
           )}
 
-          <div ref={endRef} className="h-2 shrink-0" aria-hidden />
+          <div className="h-2 shrink-0" aria-hidden />
           </div>
         </div>
       </div>

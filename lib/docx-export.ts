@@ -24,18 +24,18 @@ export async function exportHtmlToDocx(html: string, title: string) {
       default: {
         document: {
           run: {
-            font: 'Work Sans',
+            font: 'IBM Plex Sans',
             size: 22,
           },
         },
         heading1: {
-          run: { font: 'Space Grotesk', size: 32, bold: true },
+          run: { font: 'IBM Plex Serif', size: 32, bold: true },
         },
         heading2: {
-          run: { font: 'Space Grotesk', size: 28, bold: true },
+          run: { font: 'Familjen Grotesk', size: 28, bold: true },
         },
         heading3: {
-          run: { font: 'Space Grotesk', size: 26, bold: true },
+          run: { font: 'Familjen Grotesk', size: 26, bold: true },
         },
       },
     },

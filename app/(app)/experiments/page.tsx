@@ -104,7 +104,7 @@ export default async function ExperimentsPage({
             <Card>
               <CardContent className="flex flex-col items-center justify-center py-12">
                 <p className="text-muted-foreground mb-4">No experiments yet</p>
-                <Button id="tour-create-experiment" asChild>
+                <Button id="tour-create-experiment-empty" asChild>
                   <Link
                     href={
                       projectContext

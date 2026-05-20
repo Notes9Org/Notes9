@@ -235,6 +235,22 @@ export async function POST(req: Request) {
                     }
                     break;
                   }
+                  // Forward tool lifecycle events so the modal chat can render
+                  // Cursor/Claude-style inline tool cards (status, args, result).
+                  // Mirrors the shape the full-page agent stream consumes.
+                  case 'tool_start':
+                  case 'tool_call':
+                  case 'tool_result':
+                  case 'tool_output': {
+                    if (payload && typeof payload === 'object') {
+                      ensureTextOpen();
+                      writer.write({
+                        type: 'data-tool',
+                        data: { event: block.event, payload },
+                      });
+                    }
+                    break;
+                  }
                   case 'clarify': {
                     const md = clarifyMarkdownFromPayload(payload);
                     if (md) {
