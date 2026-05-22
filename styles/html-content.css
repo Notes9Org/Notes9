@@ -86,3 +86,51 @@
 .html-content p:last-child {
   margin-bottom: 0 !important;
 }
+
+/* Inline citation chips — emitted by markdown-renderer postProcessHtml when
+ * citationsManifest is present. Hover surfaces the source name via the
+ * `title` attribute; click handlers can be wired by parents via
+ * `data-cite-n` / `data-cite-token` if richer interactions are needed.
+ *
+ * Two variants render the same way:
+ *   <sup class="notes9-cite">             ← workspace citation (passive chip)
+ *   <a   class="notes9-cite notes9-cite--link" target="_blank">  ← web citation
+ * The anchor variant gets text-decoration:none so the chip doesn't render
+ * an underline, and a stronger hover so the user knows it's clickable. */
+.html-content .notes9-cite,
+.notes9-cite {
+  display: inline-block;
+  margin: 0 0.1em;
+  padding: 0 0.4em;
+  min-width: 1.25em;
+  text-align: center;
+  font-size: 0.7em;
+  line-height: 1.4;
+  font-weight: 600;
+  vertical-align: super;
+  color: var(--primary, #0070f3);
+  background: color-mix(in srgb, var(--primary, #0070f3) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--primary, #0070f3) 25%, transparent);
+  border-radius: 999px;
+  cursor: pointer;
+  transition: background 120ms ease, transform 120ms ease;
+  user-select: none;
+}
+.html-content .notes9-cite:hover,
+.notes9-cite:hover {
+  background: color-mix(in srgb, var(--primary, #0070f3) 22%, transparent);
+  transform: translateY(-1px);
+}
+/* Anchor variant: kill the default underline + visited color so the chip
+ * looks identical to the passive sup variant regardless of link state. */
+.html-content a.notes9-cite,
+a.notes9-cite,
+.html-content a.notes9-cite--link,
+a.notes9-cite--link {
+  text-decoration: none;
+  color: var(--primary, #0070f3);
+}
+.html-content a.notes9-cite:visited,
+a.notes9-cite:visited {
+  color: var(--primary, #0070f3);
+}

@@ -142,6 +142,10 @@ export type AgentCitationPanelItem = {
   documentHref: string | null;
   highlightTarget: HighlightTarget | null;
   highlightHref: string | null;
+  /** External URL for web citations (or signed PDF URL for some lit refs).
+   * When set, used as the chip's `titleHref` instead of the internal
+   * `documentHref` so clicking opens the actual source. */
+  sourceUrl: string | null;
 };
 
 function fingerprintCitationItem(item: AgentCitationPanelItem): string {
@@ -280,6 +284,12 @@ export function groundingResourceToPanelItem(
   const excerpt = coalesceAgentExcerpt(row) ?? (c.excerpt ?? '').trim();
   const relevance =
     typeof c.relevance === 'number' ? normalizeAgentRelevance0to1(c.relevance) : undefined;
+  // External URL: for `web` citations this is the actual article link the
+  // user should be able to click. For workspace records it's usually null
+  // and we fall back to the internal documentHref.
+  const sourceUrl = typeof c.source_url === 'string' && c.source_url.trim()
+    ? c.source_url.trim()
+    : null;
   return {
     index: index + 1,
     title,
@@ -297,6 +307,7 @@ export function groundingResourceToPanelItem(
     documentHref,
     highlightTarget,
     highlightHref,
+    sourceUrl,
   };
 }
 
@@ -316,6 +327,11 @@ export function ragChunkToPanelItem(chunk: RagChunk, i: number): AgentCitationPa
     typeof chunk.relevance === 'number' && Number.isFinite(chunk.relevance)
       ? normalizeAgentRelevance0to1(chunk.relevance)
       : undefined;
+  const chunkRow = chunk as { source_url?: string | null };
+  const sourceUrl =
+    typeof chunkRow.source_url === 'string' && chunkRow.source_url.trim()
+      ? chunkRow.source_url.trim()
+      : null;
   return {
     index: i + 1,
     title,
@@ -333,7 +349,17 @@ export function ragChunkToPanelItem(chunk: RagChunk, i: number): AgentCitationPa
     documentHref,
     highlightTarget,
     highlightHref,
+    sourceUrl,
   };
+}
+
+/** Heuristic for an external URL. We treat anything that starts with
+ * http(s):// as off-platform and route it through a plain anchor with
+ * target="_blank"; everything else goes through Next's `<Link>` for
+ * client-side navigation. Notes9-internal routes are relative paths
+ * (`/lab-notes/<uuid>`) so this matches them correctly. */
+function isExternalUrl(href: string): boolean {
+  return /^https?:\/\//i.test(href);
 }
 
 function SmartCitationLink({
@@ -349,6 +375,21 @@ function SmartCitationLink({
   className?: string;
   children: ReactNode;
 }) {
+  if (isExternalUrl(href)) {
+    // External link — open in new tab, no SPA navigation, no highlight
+    // dispatch (which only makes sense for in-app document anchors).
+    return (
+      <a
+        href={href}
+        title={title}
+        target="_blank"
+        rel="noopener noreferrer"
+        className={className}
+      >
+        {children}
+      </a>
+    );
+  }
   return (
     <Link
       href={href}
@@ -419,15 +460,26 @@ function RetrievedTextBlock({
 
 function CitationBlock({ item, isStreaming }: { item: AgentCitationPanelItem; isStreaming?: boolean }) {
   const resolvedItem = useResolvedCitationItem(item);
-  const titleHref = resolvedItem.highlightHref || resolvedItem.documentHref;
+  // Prefer external sourceUrl (web pages, signed PDF links) → highlightHref
+  // (deep-link into a doc viewer) → documentHref (internal route).
+  // Without sourceUrl falling back, a `web` citation had no clickable title
+  // because documentHref is null for off-platform sources.
+  const titleHref =
+    resolvedItem.sourceUrl || resolvedItem.highlightHref || resolvedItem.documentHref;
   const excerpt = resolvedItem.excerpt;
   const excerptPreview =
     excerpt.length > EXCERPT_PREVIEW ? `${excerpt.slice(0, EXCERPT_PREVIEW - 1)}…` : excerpt;
 
   const excerptLinkHref =
+    resolvedItem.sourceUrl ||
     resolvedItem.highlightHref ||
     (resolvedItem.documentHref && excerpt ? resolvedItem.documentHref : null);
 
+  // Show the bare URL beneath the title for external/web citations so the
+  // user can see where the link will take them without hovering. Workspace
+  // routes (/lab-notes/…) are intentionally NOT displayed — those go
+  // through SPA navigation and the title alone reads better.
+  const displayUrl = resolvedItem.sourceUrl;
   return (
     <li
       className={cn(
@@ -460,6 +512,17 @@ function CitationBlock({ item, isStreaming }: { item: AgentCitationPanelItem; is
             <span> · {Math.round(resolvedItem.relevance * 100)}% match</span>
         )}
       </p>
+      {displayUrl && (
+        <a
+          href={displayUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="mt-0.5 block truncate text-2xs text-primary/80 hover:text-primary hover:underline"
+          title={displayUrl}
+        >
+          {displayUrl}
+        </a>
+      )}
       {excerpt && (
         <RetrievedTextBlock
           item={resolvedItem}
@@ -479,13 +542,19 @@ function SingleCitationPanel({
   className?: string;
 }) {
   const resolvedItem = useResolvedCitationItem(item);
-  const titleHref = resolvedItem.highlightHref || resolvedItem.documentHref;
+  // Same precedence as CitationBlock — external sourceUrl first so web
+  // citations actually link out instead of failing silently to a null
+  // internal route.
+  const titleHref =
+    resolvedItem.sourceUrl || resolvedItem.highlightHref || resolvedItem.documentHref;
   const excerpt = resolvedItem.excerpt;
   const excerptPreview =
     excerpt.length > EXCERPT_PREVIEW ? `${excerpt.slice(0, EXCERPT_PREVIEW - 1)}…` : excerpt;
   const excerptLinkHref =
+    resolvedItem.sourceUrl ||
     resolvedItem.highlightHref ||
     (resolvedItem.documentHref && excerpt ? resolvedItem.documentHref : null);
+  const displayUrl = resolvedItem.sourceUrl;
 
   return (
     <div
@@ -517,6 +586,17 @@ function SingleCitationPanel({
             {resolvedItem.sourceTypeLabel} · {Math.round(resolvedItem.relevance * 100)}% match
           </p>
         )}
+      {displayUrl && (
+        <a
+          href={displayUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="pl-6 truncate text-2xs text-primary/80 hover:text-primary hover:underline"
+          title={displayUrl}
+        >
+          {displayUrl}
+        </a>
+      )}
       {excerpt && (
         <RetrievedTextBlock
           item={resolvedItem}

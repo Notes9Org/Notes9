@@ -2930,6 +2930,7 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
                                 ragChunks={agentStream.ragChunks}
                                 streamedAnswer={agentStream.streamedAnswer}
                                 donePayload={agentStream.donePayload}
+                                citationsManifest={agentStream.citationsManifest}
                                 error={agentStream.error}
                                 compact
                                 isThinkingStreaming={agentStream.isStreaming}

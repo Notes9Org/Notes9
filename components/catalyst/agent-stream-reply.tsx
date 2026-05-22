@@ -9,7 +9,7 @@ import {
 import { AgentThinkingBar } from '@/components/catalyst/agent-thinking-bar';
 import { AgentToolCards } from '@/components/catalyst/agent-tool-cards';
 import type { ThinkingPayload, RagChunksPayload, DonePayload } from '@/lib/agent-stream-types';
-import type { ThinkingStage, ToolCard } from '@/hooks/use-agent-stream';
+import type { CitationsManifest, ThinkingStage, ToolCard } from '@/hooks/use-agent-stream';
 
 interface ToolOutput {
   tool: string;
@@ -30,6 +30,9 @@ interface AgentStreamReplyProps {
   toolOutputs?: ToolOutput[];
   streamedAnswer: string;
   donePayload: DonePayload | null;
+  /** Per-run citation manifest keyed by display number (e.g. "1", "2").
+   * Drives the inline `[N]` chip post-processor in MarkdownRenderer. */
+  citationsManifest?: CitationsManifest | null;
   error: string | null;
   compact?: boolean;
   /**
@@ -61,6 +64,7 @@ export function AgentStreamReply({
   ragChunks,
   streamedAnswer,
   donePayload,
+  citationsManifest = null,
   error,
   compact = false,
   isThinkingStreaming = false,
@@ -178,6 +182,7 @@ export function AgentStreamReply({
                 content={displayAnswer}
                 showCursor={!donePayload}
                 className="[&_pre]:max-w-full [&_pre]:overflow-x-auto"
+                citationsManifest={citationsManifest}
               />
             ) : (
               /* No content yet — standalone cursor */
