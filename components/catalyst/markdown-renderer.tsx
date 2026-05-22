@@ -4,6 +4,7 @@ import * as React from 'react';
 import { useMemo } from 'react';
 import { cn } from '@/lib/utils';
 import { markdownToHtml } from '@/lib/markdown-to-html';
+import type { CitationsManifest } from '@/hooks/use-agent-stream';
 import '@/styles/html-content.css';
 
 const PROSE_CSS_VARS = {
@@ -33,23 +34,94 @@ interface MarkdownRendererProps {
   enableInlineCitations?: boolean;
   /** When true, shows a blinking cursor after the last line via CSS ::after */
   showCursor?: boolean;
+  /** Citations manifest from the agent stream. When present, `[N]` markers
+   * in the answer are wrapped as clickable superscript chips with source
+   * metadata in data-* attributes (`data-cite-n`, `data-cite-token`,
+   * `data-cite-name`). When absent, `[N]` renders as plain text. */
+  citationsManifest?: CitationsManifest | null;
+}
+
+// `[N]` matcher used by the citation chip post-processor. Limited to 1-3 digit
+// numerics so it does not eat bracketed text like [optional] or [Note].
+const CITATION_BRACKET_RE = /\[(\d{1,3})\]/g;
+
+function escapeHtmlAttr(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/"/g, '&quot;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
 }
 
 /**
  * Post-process rendered HTML:
  * - Add target="_blank" rel="noopener noreferrer" to all <a> tags
  * - Wrap <table> elements in a scrollable container
+ * - Wrap `[N]` markers as `<sup class="notes9-cite" data-cite-...>` chips so
+ *   the AgentCitationsPanel can scroll-into-view / highlight on click and
+ *   show source metadata on hover.
  */
-function postProcessHtml(html: string): string {
+function postProcessHtml(html: string, manifest?: CitationsManifest | null): string {
   // Links: open in new tab
   let processed = html.replace(
     /<a\s/g,
     '<a target="_blank" rel="noopener noreferrer" '
   );
-  // Tables: wrap in scrollable div
-  processed = processed
-    .replace(/<table/g, '<div class="notes9-md-table-scroll overflow-x-auto my-2"><table')
-    .replace(/<\/table>/g, '</table></div>');
+  // Tables are already wrapped in a scrollable container by
+  // ``markdownToHtml`` (``wrapTablesForScroll`` in lib/markdown-to-html.ts).
+  // Don't double-wrap here — the previous duplicate replacement injected a
+  // second <div> around each table, breaking direct-child CSS selectors
+  // and adding spurious DOM nodes.
+  // Citations: wrap [N] in a styleable chip. Only match brackets that sit
+  // in TEXT nodes — never inside an HTML attribute value or a tag itself.
+  // The earlier naive global replace could rewrite a `title="See [1]"` into
+  // `title="See <sup ...>[1]</sup>"`, breaking the attribute. Splitting on
+  // tag boundaries and only transforming text segments is the safe move.
+  const segments = processed.split(/(<[^>]+>)/g);
+  for (let i = 0; i < segments.length; i++) {
+    // Even indices are text between tags; odd indices are the tags themselves.
+    if (i % 2 !== 0) continue;
+    segments[i] = segments[i].replace(CITATION_BRACKET_RE, (_full, nStr: string) => {
+      const n = nStr;
+      const entry = manifest && manifest.manifest ? manifest.manifest[n] : undefined;
+      const name = entry?.source_name || '';
+      const token = (entry as { token?: string } | undefined)?.token || '';
+      const sType = entry?.source_type || '';
+      const url = entry?.source_url || '';
+      // Show the URL in the tooltip when present so the user can preview
+      // where the chip points without opening it. Falls back to the source
+      // name / type if there's no URL (workspace records).
+      const tip = url || name || sType || '';
+      // External URL → render as a real anchor so clicking the chip opens
+      // the source in a new tab. No URL → keep the original styleable
+      // <sup> chip (workspace records get their click handler from the
+      // citations panel below the message).
+      if (url && /^https?:\/\//i.test(url)) {
+        return (
+          `<a class="notes9-cite notes9-cite--link" `
+          + `href="${escapeHtmlAttr(url)}" `
+          + `target="_blank" rel="noopener noreferrer" `
+          + `data-cite-n="${n}" `
+          + (token ? `data-cite-token="${escapeHtmlAttr(token)}" ` : '')
+          + (sType ? `data-cite-type="${escapeHtmlAttr(sType)}" ` : '')
+          + (name ? `data-cite-name="${escapeHtmlAttr(name)}" ` : '')
+          + `data-cite-url="${escapeHtmlAttr(url)}" `
+          + `title="${escapeHtmlAttr(tip)}"`
+          + `>[${n}]</a>`
+        );
+      }
+      return (
+        `<sup class="notes9-cite" `
+        + `data-cite-n="${n}" `
+        + (token ? `data-cite-token="${escapeHtmlAttr(token)}" ` : '')
+        + (sType ? `data-cite-type="${escapeHtmlAttr(sType)}" ` : '')
+        + (name ? `data-cite-name="${escapeHtmlAttr(name)}" ` : '')
+        + (tip ? `title="${escapeHtmlAttr(tip)}"` : '')
+        + `>[${n}]</sup>`
+      );
+    });
+  }
+  processed = segments.join('');
   return processed;
 }
 
@@ -57,12 +129,13 @@ export function MarkdownRenderer({
   content,
   className,
   showCursor = false,
+  citationsManifest,
 }: MarkdownRendererProps) {
   const html = useMemo(() => {
     const raw = markdownToHtml(content);
     if (!raw) return '';
-    return postProcessHtml(raw);
-  }, [content]);
+    return postProcessHtml(raw, citationsManifest);
+  }, [content, citationsManifest]);
 
   if (!html) return null;
 

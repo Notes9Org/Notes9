@@ -28,12 +28,49 @@ const BACKEND_BASE = process.env.NEXT_PUBLIC_CHAT_API_URL?.replace(/\/$/, '') ||
 const DIRECT_STREAM_URL = BACKEND_BASE ? `${BACKEND_BASE}/notes9/stream` : '';
 const PROXY_STREAM_URL = '/api/agent/stream';
 
+/** Workspace entity the user explicitly tagged for this turn. Catalyst preflights
+ * each via fetch_full_records before the LLM loop runs. */
+export type AgentAttachment = {
+  kind:
+    | 'lab_note'
+    | 'literature_review'
+    | 'protocol'
+    | 'experiment'
+    | 'project'
+    | 'sample'
+    | 'report';
+  id: string;
+  title?: string;
+};
+
+/** User-uploaded file (image or PDF) for the chat. Catalyst fetches the URL
+ * server-side, magic-byte verifies, base64-encodes, and forwards to the LLM
+ * as a multi-modal content block. The signed URL never reaches the LLM. */
+export type AgentFileAttachment = {
+  url: string;
+  name: string;
+  content_type:
+    | 'image/jpeg'
+    | 'image/png'
+    | 'image/gif'
+    | 'image/webp'
+    | 'application/pdf';
+  size: number;
+};
+
 /** Request shape for POST /notes9/stream (proxied via /api/agent/stream). */
 export interface AgentStreamParams {
   query: string;
   session_id: string;
   history?: Array<{ role: string; content: string }>;
   scope?: object | null;
+  /** Tagged workspace records. Backend preflight-loads each via
+   * fetch_full_records before the first LLM turn so the LLM never burns a
+   * tool call rediscovering them. */
+  attachments?: AgentAttachment[];
+  /** User-uploaded files (images, PDFs). Forwarded to catalyst which
+   * fetches + verifies + base64-encodes before passing to the LLM. */
+  file_attachments?: AgentFileAttachment[];
   options?: {
     debug?: boolean;
     max_retries?: number;
@@ -44,8 +81,18 @@ export interface AgentStreamParams {
 
 export interface CitationsManifest {
   manifest: Record<string, {
+    /** Display number `[N]` the answer text uses (also the key). */
+    index?: number;
+    /** Stable per-source token from Option C citations (`lit_7c4f`, `lab_a1b2`).
+     * Present even when the answer renders numerics — lets the chip stay bound
+     * to source identity if display numbering shifts during a re-render. */
+    token?: string;
     source_type: string;
-    source_id: string;
+    /** Server-side identity for the source. Backend intentionally omits raw
+     * UUIDs from the wire payload (see CitationResponse), so this is almost
+     * always absent in practice — kept optional so consumers don't crash on
+     * the missing field. Bind chips to `token`, not `source_id`. */
+    source_id?: string;
     source_name?: string;
     source_url?: string;
     excerpt?: string;
@@ -546,6 +593,16 @@ export function useAgentStream() {
                   tokenBuffer += t;
                   setState((s) => ({ ...s, streamedAnswer: s.streamedAnswer + t }));
                 }
+                break;
+              }
+              case 'text_reset': {
+                // Backend signals end of an intermediate ReAct turn that
+                // streamed reasoning preamble before a tool_use. Wipe the
+                // streamed answer so the next turn's text starts on a
+                // clean slate — keeps the chat message free of "thinking"
+                // leaks while preserving live streaming during each turn.
+                tokenBuffer = '';
+                setState((s) => ({ ...s, streamedAnswer: '' }));
                 break;
               }
               case 'done': {

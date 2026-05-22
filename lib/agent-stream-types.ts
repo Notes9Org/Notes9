@@ -53,6 +53,14 @@ export interface GroundingResource {
   chunk_id?: string | null;
   page_number?: number | null;
   content_surface?: string | null;
+  /** External URL when the source has one — e.g. the actual web page for a
+   * `web` citation, or the signed PDF URL for a literature review. Workspace
+   * records (lab notes, protocols, etc.) leave this empty and rely on the
+   * internal route from `getCitationRoute` instead. */
+  source_url?: string | null;
+  /** Where the excerpt came from inside the source — e.g. `pdf_extracted_text`,
+   * `abstract`. Display-only hint; safe to ignore. */
+  excerpt_source?: string | null;
 }
 
 /** @deprecated Use GroundingResource; kept for imports that still say Citation */

@@ -238,6 +238,7 @@ export function CatalystMessages({
                     ragChunks={notes9Stream.ragChunks}
                     streamedAnswer={notes9Stream.streamedAnswer}
                     donePayload={notes9Stream.donePayload}
+                    citationsManifest={notes9Stream.citationsManifest}
                     error={notes9Stream.error}
                     isThinkingStreaming={notes9Stream.isStreaming}
                   />

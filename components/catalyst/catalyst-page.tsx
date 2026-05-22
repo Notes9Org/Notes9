@@ -342,11 +342,38 @@ export function CatalystChat({ sessionId }: CatalystChatProps) {
       }));
 
       setNotes9Loading(true);
+      // Convert the input's file Attachment[] (url, name, contentType, size)
+      // into the contract shape catalyst expects (snake_case content_type).
+      // Only the MIME types our backend allowlist supports are forwarded;
+      // any other type is silently dropped (the upload route should have
+      // rejected it already, but defence in depth).
+      const SUPPORTED_FILE_MIMES = new Set([
+        'image/jpeg',
+        'image/png',
+        'image/gif',
+        'image/webp',
+        'application/pdf',
+      ]);
+      const fileAttachments = (attachments ?? [])
+        .filter((a) => SUPPORTED_FILE_MIMES.has(a.contentType))
+        .slice(0, 5) // mirror backend MAX_FILE_ATTACHMENTS_PER_REQUEST
+        .map((a) => ({
+          url: a.url,
+          name: a.name,
+          content_type: a.contentType as
+            | 'image/jpeg'
+            | 'image/png'
+            | 'image/gif'
+            | 'image/webp'
+            | 'application/pdf',
+          size: a.size ?? 0,
+        }));
       const { donePayload, error } = await agentStream.runStream(
         {
           query: text,
           session_id: sid,
           history,
+          file_attachments: fileAttachments.length > 0 ? fileAttachments : undefined,
           options: { web_search: webSearchEnabledRef.current ? 'on' : 'off' },
         },
         token
