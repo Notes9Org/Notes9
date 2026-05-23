@@ -59,56 +59,13 @@ async function supabaseRequest(
  */
 export function createDatabaseExtension(): Database {
   return new Database({
-    async fetch({ documentName }) {
-      const paperId = documentName;
-
-      // Try to load existing Yjs state
-      const yjsResponse = await supabaseRequest(
-        `paper_yjs_documents?paper_id=eq.${paperId}&select=yjs_state`,
-        { headers: { Accept: "application/json" } }
-      );
-
-      const yjsRows = (await yjsResponse.json()) as Array<{ yjs_state: string | null }>;
-
-      if (yjsRows.length > 0 && yjsRows[0].yjs_state) {
-        // yjs_state is stored as base64 in the REST API response (bytea → base64)
-        const base64 = yjsRows[0].yjs_state;
-        const binary = Buffer.from(base64, "base64");
-        return new Uint8Array(binary);
-      }
-
-      // No Yjs state found — return null and let Hocuspocus create a fresh document.
-      // HTML migration from papers.content is skipped for now to avoid encoding issues.
+    async fetch() {
+      // Database persistence disabled temporarily — return null to use in-memory only
       return null;
     },
 
-    async store({ documentName, state }) {
-      const paperId = documentName;
-
-      // Upsert Yjs binary state (send as hex-encoded bytea)
-      await supabaseRequest("paper_yjs_documents", {
-        method: "POST",
-        headers: { Prefer: "resolution=merge-duplicates" },
-        body: {
-          paper_id: paperId,
-          yjs_state: `\\x${Buffer.from(state).toString("hex")}`,
-          updated_at: new Date().toISOString(),
-        },
-      });
-
-      // Render Yjs doc to HTML and update papers.content
-      const ydoc = new Y.Doc();
-      Y.applyUpdate(ydoc, state);
-      const html = yDocToHtml(ydoc);
-      ydoc.destroy();
-
-      await supabaseRequest(`papers?id=eq.${paperId}`, {
-        method: "PATCH",
-        body: {
-          content: html,
-          updated_at: new Date().toISOString(),
-        },
-      });
+    async store() {
+      // Database persistence disabled temporarily — edits stay in memory only
     },
   });
 }
