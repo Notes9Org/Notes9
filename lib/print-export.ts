@@ -1,8 +1,16 @@
 /**
  * Shared print / PDF HTML for lab notes and TipTap editor exports.
- * Uses platform-aligned typography (IBM Plex Sans body, Familjen Grotesk
- * headings, IBM Plex Serif for the top-level document title).
+ * Preserves TipTap inline typography (font family, size, color) with Calibri
+ * as the platform default when no explicit style is set on a text run.
  */
+
+import { normalizeCodeInExportHtml } from "@/lib/export-code-blocks"
+import {
+  buildExportGoogleFontsLink,
+  EXPORT_DEFAULT_FONT_STACK,
+  prepareTypographyForExport,
+} from "@/lib/export-formatting"
+import { normalizeTablesInExportHtml } from "@/lib/export-table-normalize"
 
 export type PrintMarginsMm = {
   top: number
@@ -26,6 +34,15 @@ export function sanitizeExportHtml(html: string): string {
     .replace(/oklch\([^)]+\)/gi, "#000000")
     .replace(/color-mix\([^)]+\)/gi, "#808080")
     .replace(/var\([^)]+\)/gi, "#000000")
+}
+
+/** Color-safe HTML plus table/code/typography suitable for Word/PDF/HTML/Markdown export. */
+export function prepareHtmlForExport(html: string): string {
+  return normalizeCodeInExportHtml(
+    prepareTypographyForExport(
+      normalizeTablesInExportHtml(sanitizeExportHtml(html))
+    )
+  )
 }
 
 export function processCommentsForExport(html: string): {
@@ -99,32 +116,33 @@ export function buildPrintDocumentHtml(options: {
     ? `<h1 class="print-document-title">${safeTitle}</h1>${options.bodyHtml}`
     : options.bodyHtml
 
+  const googleFonts = buildExportGoogleFontsLink(options.bodyHtml)
+
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
   <title>${safeTitle}</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Familjen+Grotesk:wght@400;500;600;700&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400&family=IBM+Plex+Serif:wght@400;600;700&display=swap" rel="stylesheet" />
+  ${googleFonts}
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     @page { margin: ${marginCss}; }
     body {
-      font-family: "IBM Plex Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-      font-size: 11pt;
+      font-family: ${EXPORT_DEFAULT_FONT_STACK};
+      font-size: 12pt;
       line-height: 1.55;
       padding: ${marginCss};
       background: #fff;
       color: #1a1a1a;
       max-width: 100%;
     }
-    h1, h2, h3, h4, h5, h6 {
-      font-family: "Familjen Grotesk", "IBM Plex Sans", sans-serif;
+    /* Inline styles from TipTap (font-family, font-size, color) take precedence over defaults. */
+    [style*="font-family"], [style*="font-size"], [style*="color"] {
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
     }
     h1 { font-size: 20pt; font-weight: 700; margin: 0 0 14pt; border-bottom: 1.5pt solid #333; padding-bottom: 8pt; }
     h1.print-document-title {
-      font-family: "IBM Plex Serif", "Familjen Grotesk", ui-serif, Georgia, serif;
       page-break-after: avoid;
       break-after: avoid-page;
       -webkit-print-color-adjust: exact;
@@ -164,19 +182,32 @@ export function buildPrintDocumentHtml(options: {
       border-radius: 3px;
     }
     pre {
-      font-family: ui-monospace, monospace;
+      font-family: ui-monospace, Consolas, "Courier New", monospace;
       font-size: 9pt;
-      background: #1f2937;
-      color: #e5e7eb;
+      background: #f3f4f6 !important;
+      color: #111827 !important;
       padding: 12px;
       border-radius: 6px;
       margin: 10pt 0;
       white-space: pre-wrap;
       word-break: break-word;
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
     }
-    pre code { background: none; color: inherit; padding: 0; }
-    table { border-collapse: collapse; width: 100%; margin: 10pt 0; font-size: 10pt; border: 1px solid #000; }
-    th, td { border: 1px solid #000; padding: 8px 10px; text-align: left; vertical-align: top; }
+    pre code, code, kbd {
+      font-family: ui-monospace, Consolas, "Courier New", monospace;
+      background: #f3f4f6 !important;
+      color: #111827 !important;
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+    }
+    pre code { padding: 0; }
+    p code, li code, td code, th code {
+      padding: 2px 5px;
+      border-radius: 3px;
+    }
+    table { border-collapse: collapse; width: 100% !important; table-layout: auto !important; margin: 10pt 0; font-size: 10pt; border: 1px solid #000; }
+    th, td { border: 1px solid #000; padding: 8px 10px; text-align: left; vertical-align: top; width: auto !important; min-width: 0 !important; max-width: none !important; }
     th { background: #f3f4f6; font-weight: 700; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
     tr:nth-child(even) { background: #fafafa; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
     img { max-width: 100%; height: auto; margin: 6pt 0; }

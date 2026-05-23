@@ -2,10 +2,14 @@
 
 import { toast } from "sonner"
 import {
+  buildExportGoogleFontsLink,
+  EXPORT_DEFAULT_FONT_STACK,
+} from "@/lib/export-formatting"
+import {
   buildCommentsSectionHtml,
   buildPrintDocumentHtml,
   processCommentsForExport,
-  sanitizeExportHtml,
+  prepareHtmlForExport,
   writePrintIframeDocument,
 } from "@/lib/print-export"
 
@@ -31,9 +35,22 @@ export async function exportNoteAsMarkdown(html: string, title: string, toasts =
       codeBlockStyle: "fenced",
       bulletListMarker: "-",
     })
+
+    turndownService.addRule("preserveStyledSpan", {
+      filter: (node) => {
+        if (node.nodeName !== "SPAN") return false
+        const style = (node as HTMLElement).getAttribute("style") || ""
+        return /font-family|font-size|color|background/i.test(style)
+      },
+      replacement: (content, node) => {
+        const style = (node as HTMLElement).getAttribute("style") || ""
+        return `<span style="${style.replace(/"/g, "&quot;")}">${content}</span>`
+      },
+    })
+
     turndownService.use(gfm)
 
-    const markdown = turndownService.turndown(html)
+    const markdown = turndownService.turndown(prepareHtmlForExport(html))
     const blob = new Blob([markdown], { type: "text/markdown" })
     const url = URL.createObjectURL(blob)
     const a = document.createElement("a")
@@ -52,27 +69,29 @@ export async function exportNoteAsMarkdown(html: string, title: string, toasts =
 
 export function exportNoteAsHtml(html: string, title: string) {
   const safeTitle = title || "note"
+  const bodyHtml = prepareHtmlForExport(html)
+  const googleFonts = buildExportGoogleFontsLink(bodyHtml)
   const fullHTML = `<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
   <title>${safeTitle}</title>
-  <link href="https://fonts.googleapis.com/css2?family=Familjen+Grotesk:wght@400;500;600;700&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400&family=IBM+Plex+Serif:wght@400;600;700&display=swap" rel="stylesheet" />
+  ${googleFonts}
   <style>
-    body { font-family: "IBM Plex Sans", system-ui, sans-serif; max-width: 800px; margin: 40px auto; padding: 20px; line-height: 1.6; color: #1a1a1a; }
-    h1, h2, h3 { font-family: "Familjen Grotesk", "IBM Plex Sans", sans-serif; margin-top: 1.2em; }
-    h1 { font-family: "IBM Plex Serif", "Familjen Grotesk", ui-serif, Georgia, serif; }
-    code { background: #f4f4f4; padding: 2px 6px; border-radius: 3px; }
-    pre { background: #f4f4f4; padding: 15px; border-radius: 5px; overflow-x: auto; }
+    body { font-family: ${EXPORT_DEFAULT_FONT_STACK}; max-width: 800px; margin: 40px auto; padding: 20px; line-height: 1.6; color: #1a1a1a; }
+    [style*="font-family"], [style*="font-size"], [style*="color"] { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    code, kbd { font-family: Consolas, "Courier New", monospace; background: #f3f4f6; color: #111827; padding: 2px 6px; border-radius: 3px; }
+    pre { font-family: Consolas, "Courier New", monospace; background: #f3f4f6; color: #111827; padding: 15px; border-radius: 5px; overflow-x: auto; white-space: pre-wrap; }
+    pre code { background: transparent; color: inherit; padding: 0; }
     blockquote { border-left: 4px solid #ddd; margin: 0; padding-left: 20px; color: #666; }
-    table { border-collapse: collapse; width: 100%; margin: 20px 0; }
-    th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+    table { border-collapse: collapse; width: 100% !important; table-layout: auto !important; margin: 20px 0; }
+    th, td { border: 1px solid #ddd; padding: 8px; text-align: left; width: auto !important; min-width: 0 !important; }
     th { background: #f4f4f4; }
   </style>
 </head>
 <body>
   <h1>${safeTitle}</h1>
-  ${html}
+  ${bodyHtml}
 </body>
 </html>`
   const blob = new Blob([fullHTML], { type: "text/html" })
@@ -126,10 +145,10 @@ export async function exportNoteAsPdfFromHtml(
     let commentsHtml = ""
     if (options?.includeComments) {
       const { content, comments } = processCommentsForExport(html)
-      bodyHtml = sanitizeExportHtml(content)
+      bodyHtml = prepareHtmlForExport(content)
       commentsHtml = buildCommentsSectionHtml(comments)
     } else {
-      bodyHtml = sanitizeExportHtml(html)
+      bodyHtml = prepareHtmlForExport(html)
     }
 
     const docTitle = (title || "").trim() || "Document"
@@ -182,7 +201,7 @@ function safeDownloadBasename(title: string, fallback: string): string {
 /** Download plain text derived from HTML (TipTap `getText()` equivalent for stored HTML). */
 export function exportNoteAsPlainText(html: string, title: string) {
   if (typeof document === "undefined") return
-  const doc = new DOMParser().parseFromString(html || "", "text/html")
+  const doc = new DOMParser().parseFromString(prepareHtmlForExport(html || ""), "text/html")
   const text = doc.body.innerText.replace(/\r\n/g, "\n").replace(/\n{3,}/g, "\n\n").trim()
   const name = safeDownloadBasename(title, "note")
   const blob = new Blob([text], { type: "text/plain;charset=utf-8" })

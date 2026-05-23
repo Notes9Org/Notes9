@@ -4,15 +4,12 @@ import { useState, useCallback } from "react"
 import { diffWords } from "diff"
 import { createClient } from "@/lib/supabase/client"
 import { buildStoredSegments } from "@/lib/content-diff-segments"
+import { htmlToDiffPlainText } from "@/lib/content-diff-plain-text"
 import {
   computeStructuralHints,
   mergeStructureHintsWithContext,
 } from "@/lib/content-diff-structure"
 import type { ContentDiff, ContentDiffStructureHints } from "@/lib/db/schema"
-
-function stripHtml(html: string): string {
-  return html.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim()
-}
 
 function countWords(text: string): number {
   return text.trim().split(/\s+/).filter(Boolean).length
@@ -83,8 +80,8 @@ export function useContentDiffs(
       } = input
       if (!rid || previousContent === newContent) return
 
-      const prevText = stripHtml(previousContent)
-      const nextText = stripHtml(newContent)
+      const prevText = htmlToDiffPlainText(previousContent)
+      const nextText = htmlToDiffPlainText(newContent)
       if (prevText === nextText) return
 
       const parts = diffWords(prevText, nextText)

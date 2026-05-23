@@ -1,11 +1,11 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useState, type ReactNode } from "react"
 import { createClient } from "@/lib/supabase/client"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import { Skeleton } from "@/components/ui/skeleton"
-import { FileText, FilePlus, Search, Check, Upload } from "lucide-react"
+import { FileStack, FilePlus, Search, Check, Upload } from "lucide-react"
 import { cn } from "@/lib/utils"
 import type { ProtocolTemplateExtracted } from "@/lib/protocol-template-types"
 
@@ -47,9 +47,90 @@ function choiceMatches(a: ProtocolTemplateChoice | null, b: ProtocolTemplateChoi
   return false
 }
 
+function TruncateBadge({
+  children,
+  variant = "secondary",
+  className,
+}: {
+  children: ReactNode
+  variant?: "secondary" | "outline"
+  className?: string
+}) {
+  return (
+    <Badge
+      variant={variant}
+      title={typeof children === "string" ? children : undefined}
+      className={cn(
+        "h-5 max-w-full min-w-0 shrink truncate px-1.5 py-0 text-xs font-normal",
+        className
+      )}
+    >
+      {children}
+    </Badge>
+  )
+}
+
+function TemplatePickerCard({
+  selected,
+  onClick,
+  icon,
+  title,
+  meta,
+  badges,
+  description,
+  dashed,
+}: {
+  selected: boolean
+  onClick: () => void
+  icon: ReactNode
+  title: string
+  meta?: string
+  badges?: ReactNode
+  description?: string
+  dashed?: boolean
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={cn(
+        "relative flex w-full min-w-0 flex-col gap-2 overflow-hidden rounded-lg border-2 p-3 text-left transition-all",
+        "hover:border-primary/50 hover:bg-accent/40",
+        selected
+          ? "border-primary bg-primary/5 shadow-sm"
+          : dashed
+            ? "border-dashed border-muted-foreground/30"
+            : "border-border"
+      )}
+    >
+      <div className="flex min-w-0 w-full items-start gap-2.5">
+        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-muted">
+          {icon}
+        </div>
+        <div className="min-w-0 flex-1 overflow-hidden">
+          <p className="line-clamp-2 text-sm font-semibold leading-snug text-foreground">{title}</p>
+          {meta && (
+            <p className="mt-0.5 truncate text-2xs text-muted-foreground" title={meta}>
+              {meta}
+            </p>
+          )}
+        </div>
+        {selected && <Check className="mt-0.5 h-4 w-4 shrink-0 text-primary" aria-hidden />}
+      </div>
+
+      {badges ? <div className="flex min-w-0 w-full flex-wrap gap-1">{badges}</div> : null}
+
+      {description ? (
+        <p className="line-clamp-2 text-xs leading-snug text-muted-foreground">{description}</p>
+      ) : null}
+    </button>
+  )
+}
+
 type DocumentTemplateRow = {
   id: string
   name: string
+  source_filename: string | null
   extracted: ProtocolTemplateExtracted | null
 }
 
@@ -59,6 +140,11 @@ interface ProtocolTemplatePickerProps {
   selected: ProtocolTemplateChoice | null
   /** Shorter copy for dialogs */
   compact?: boolean
+  /**
+   * When false (default), only uploaded document templates + blank are shown.
+   * Library protocols are not templates and are hidden unless explicitly enabled.
+   */
+  includeLibraryProtocols?: boolean
 }
 
 export function ProtocolTemplatePicker({
@@ -66,6 +152,7 @@ export function ProtocolTemplatePicker({
   onSelect,
   selected,
   compact = false,
+  includeLibraryProtocols = false,
 }: ProtocolTemplatePickerProps) {
   const [protocolTemplates, setProtocolTemplates] = useState<ProtocolTemplate[]>([])
   const [documentTemplates, setDocumentTemplates] = useState<DocumentTemplateRow[]>([])
@@ -74,7 +161,11 @@ export function ProtocolTemplatePicker({
   const [search, setSearch] = useState("")
 
   useEffect(() => {
-    if (!organizationId) return
+    if (!organizationId || !includeLibraryProtocols) {
+      setProtocolTemplates([])
+      setLoadingProtocols(false)
+      return
+    }
     setLoadingProtocols(true)
     const supabase = createClient()
     supabase
@@ -96,7 +187,7 @@ export function ProtocolTemplatePicker({
         setProtocolTemplates(items)
         setLoadingProtocols(false)
       })
-  }, [organizationId])
+  }, [organizationId, includeLibraryProtocols])
 
   useEffect(() => {
     if (!organizationId) return
@@ -107,12 +198,14 @@ export function ProtocolTemplatePicker({
         const rows = (data.templates ?? []) as {
           id: string
           name: string
+          source_filename?: string | null
           extracted: ProtocolTemplateExtracted | null
         }[]
         setDocumentTemplates(
           rows.map((r) => ({
             id: r.id,
             name: r.name,
+            source_filename: r.source_filename ?? null,
             extracted: r.extracted,
           }))
         )
@@ -126,22 +219,28 @@ export function ProtocolTemplatePicker({
   const filteredDoc = useMemo(() => {
     return documentTemplates.filter((t) => {
       if (!q) return true
-      return t.name.toLowerCase().includes(q)
+      return (
+        t.name.toLowerCase().includes(q) ||
+        (t.source_filename ?? "").toLowerCase().includes(q)
+      )
     })
   }, [documentTemplates, q])
 
   const filteredProtocol = useMemo(() => {
+    if (!includeLibraryProtocols) return []
     return protocolTemplates.filter(
       (t) =>
         !q ||
         t.name.toLowerCase().includes(q) ||
         (t.category ?? "").toLowerCase().includes(q)
     )
-  }, [protocolTemplates, q])
+  }, [protocolTemplates, q, includeLibraryProtocols])
 
-  const isLoading = loadingProtocols || loadingDocuments
-  const showSearch =
-    documentTemplates.length + protocolTemplates.length > 4 || search.length > 0
+  const isLoading =
+    loadingDocuments || (includeLibraryProtocols && loadingProtocols)
+  const templateCount =
+    documentTemplates.length + (includeLibraryProtocols ? protocolTemplates.length : 0)
+  const showSearch = templateCount > 4 || search.length > 0
 
   const blankSelected = selected ? choiceMatches(selected, { kind: "blank" }) : false
 
@@ -149,49 +248,43 @@ export function ProtocolTemplatePicker({
     <div className="space-y-3">
       {showSearch && (
         <div className="relative">
-          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+          <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground/70" />
           <Input
             placeholder="Search templates…"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="pl-8 h-8 text-sm"
+            className="h-8 border-transparent bg-transparent pl-8 text-sm shadow-none transition-colors hover:border-border focus-visible:border-border focus-visible:ring-0 dark:bg-transparent"
           />
         </div>
       )}
 
       {!compact && (
         <p className="text-xs text-muted-foreground">
-          <strong className="text-foreground/90">Uploaded documents</strong> use headings and logos from your file.
-          <strong className="text-foreground/90"> Library protocols</strong> copy only the letterhead (titles, logos,
-          short header lines), not the full procedure. You can manage uploads under{" "}
-          <span className="font-medium">Protocols → Templates</span>.
+          Choose an <strong className="text-foreground/90">uploaded document template</strong> from
+          Protocols → Templates (DOCX/PDF letterhead and section skeleton), or start blank.
+          {includeLibraryProtocols ? (
+            <>
+              {" "}
+              You can also reuse letterhead from an existing protocol below — that copies titles and
+              logos only, not the full procedure.
+            </>
+          ) : null}
         </p>
       )}
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
-        <button
-          type="button"
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <TemplatePickerCard
+          selected={blankSelected}
           onClick={() => onSelect({ kind: "blank" })}
-          className={cn(
-            "relative flex items-start gap-3 rounded-lg border-2 p-3.5 text-left transition-all hover:border-primary/50 hover:bg-accent/40",
-            blankSelected
-              ? "border-primary bg-primary/5 shadow-sm"
-              : "border-dashed border-muted-foreground/30"
-          )}
-        >
-          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-muted">
-            <FilePlus className="size-4 text-muted-foreground" />
-          </div>
-          <div className="min-w-0 flex-1">
-            <p className="text-sm font-semibold text-foreground">Blank Protocol</p>
-            <p className="text-xs text-muted-foreground mt-0.5">Start from scratch with an empty editor</p>
-          </div>
-          {blankSelected && <Check className="h-4 w-4 text-primary shrink-0 mt-0.5" />}
-        </button>
+          dashed
+          icon={<FilePlus className="size-4 text-muted-foreground" />}
+          title="Blank protocol"
+          description="Start from scratch with an empty editor"
+        />
 
         {isLoading &&
-          Array.from({ length: 3 }).map((_, i) => (
-            <div key={i} className="rounded-lg border p-3.5 space-y-2">
+          Array.from({ length: 2 }).map((_, i) => (
+            <div key={i} className="rounded-lg border p-3 space-y-2">
               <Skeleton className="h-4 w-3/4" />
               <Skeleton className="h-3 w-full" />
               <Skeleton className="h-3 w-2/3" />
@@ -199,8 +292,8 @@ export function ProtocolTemplatePicker({
           ))}
 
         {!isLoading && filteredDoc.length > 0 && (
-          <div className="col-span-full text-xs font-semibold text-muted-foreground pt-1">
-            Uploaded document templates
+          <div className="col-span-full text-xs font-semibold text-muted-foreground pt-0.5">
+            Document templates
           </div>
         )}
 
@@ -216,88 +309,80 @@ export function ProtocolTemplatePicker({
             const hit = selected ? choiceMatches(selected, choice) : false
             const sections = t.extracted?.sectionHeadings?.length ?? 0
             const logos = t.extracted?.logos?.length ?? 0
+            const fileLabel = t.source_filename?.trim() || null
+
             return (
-              <button
+              <TemplatePickerCard
                 key={`d-${t.id}`}
-                type="button"
+                selected={hit}
                 onClick={() => onSelect(choice)}
-                className={cn(
-                  "relative flex items-start gap-3 rounded-lg border-2 p-3.5 text-left transition-all hover:border-primary/50 hover:bg-accent/40",
-                  hit ? "border-primary bg-primary/5 shadow-sm" : "border-border"
-                )}
-              >
-                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10">
-                  <Upload className="h-4 w-4 text-primary" />
-                </div>
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-start justify-between gap-1.5">
-                    <p className="text-sm font-semibold text-foreground leading-tight truncate">{t.name}</p>
-                    {hit && <Check className="h-4 w-4 text-primary shrink-0 mt-0.5" />}
-                  </div>
-                  <div className="flex items-center gap-1.5 mt-1 flex-wrap">
-                    <Badge variant="secondary" className="text-xs px-1.5 py-0 h-4">
-                      Document
-                    </Badge>
-                    <span className="text-2xs text-muted-foreground">
+                icon={<Upload className="h-4 w-4 text-primary" />}
+                title={t.name}
+                meta={fileLabel ?? undefined}
+                badges={
+                  <>
+                    <TruncateBadge>Document template</TruncateBadge>
+                    <TruncateBadge variant="outline">
                       {sections} sections · {logos} logos
-                    </span>
-                  </div>
-                </div>
-              </button>
+                    </TruncateBadge>
+                  </>
+                }
+                description={
+                  sections > 0
+                    ? `Includes ${sections} section heading${sections === 1 ? "" : "s"} from your upload.`
+                    : "Letterhead and structure from your uploaded file."
+                }
+              />
             )
           })}
 
-        {!isLoading && filteredProtocol.length > 0 && (
+        {!isLoading && filteredDoc.length === 0 && !includeLibraryProtocols && !q && (
+          <div className="col-span-full rounded-lg border border-dashed border-muted-foreground/25 bg-muted/20 px-4 py-6 text-center text-sm text-muted-foreground">
+            No document templates yet. Upload DOCX or PDF under{" "}
+            <span className="font-medium text-foreground">Protocols → Templates</span>.
+          </div>
+        )}
+
+        {!isLoading && includeLibraryProtocols && filteredProtocol.length > 0 && (
           <div className="col-span-full text-xs font-semibold text-muted-foreground pt-1">
-            Protocols in your library
+            Letterhead from existing protocol
           </div>
         )}
 
         {!isLoading &&
+          includeLibraryProtocols &&
           filteredProtocol.map((template) => {
             const choice: ProtocolTemplateChoice = { kind: "protocol", template }
             const hit = selected ? choiceMatches(selected, choice) : false
             return (
-              <button
+              <TemplatePickerCard
                 key={template.id}
-                type="button"
+                selected={hit}
                 onClick={() => onSelect(choice)}
-                className={cn(
-                  "relative flex items-start gap-3 rounded-lg border-2 p-3.5 text-left transition-all hover:border-primary/50 hover:bg-accent/40",
-                  hit ? "border-primary bg-primary/5 shadow-sm" : "border-border"
-                )}
-              >
-                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10">
-                  <FileText className="h-4 w-4 text-primary" />
-                </div>
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-start justify-between gap-1.5">
-                    <p className="text-sm font-semibold text-foreground leading-tight truncate">{template.name}</p>
-                    {hit && <Check className="h-4 w-4 text-primary shrink-0 mt-0.5" />}
-                  </div>
-                  <div className="flex items-center gap-1.5 mt-1 flex-wrap">
-                    {template.category && (
-                      <Badge variant="secondary" className="text-xs px-1.5 py-0 h-4">
-                        {template.category}
-                      </Badge>
-                    )}
-                    <Badge variant="outline" className="text-xs px-1.5 py-0 h-4 font-mono">
+                icon={<FileStack className="h-4 w-4 text-primary" />}
+                title={template.name}
+                badges={
+                  <>
+                    <TruncateBadge>Letterhead only</TruncateBadge>
+                    {template.category ? (
+                      <TruncateBadge variant="outline">{template.category}</TruncateBadge>
+                    ) : null}
+                    <TruncateBadge variant="outline" className="font-mono">
                       v{template.version}
-                    </Badge>
-                  </div>
-                  {template.contentPreview && (
-                    <p className="text-xs text-muted-foreground mt-1.5 line-clamp-2 leading-snug">
-                      {template.contentPreview}
-                      {template.contentPreview.length === 160 ? "…" : ""}
-                    </p>
-                  )}
-                </div>
-              </button>
+                    </TruncateBadge>
+                  </>
+                }
+                description={
+                  template.contentPreview
+                    ? `${template.contentPreview}${template.contentPreview.length === 160 ? "…" : ""}`
+                    : "Copies titles and logos from this protocol, not the full procedure."
+                }
+              />
             )
           })}
 
         {!isLoading && filteredDoc.length === 0 && filteredProtocol.length === 0 && q && (
-          <div className="col-span-full text-center py-6 text-sm text-muted-foreground">
+          <div className="col-span-full py-6 text-center text-sm text-muted-foreground">
             No templates match &quot;{search}&quot;
           </div>
         )}

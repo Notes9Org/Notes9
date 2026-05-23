@@ -1,4 +1,5 @@
 import { diffWords } from "diff"
+import { htmlToDiffPlainText } from "@/lib/content-diff-plain-text"
 import type { ContentDiff, ContentDiffSegment } from "@/lib/db/schema"
 
 /** Build compact JSON for DB: +/- word fragments and `_` placeholders for unchanged run lengths (no full document text). */
@@ -48,13 +49,9 @@ export function resolveDiffDisplay(diff: ContentDiff): {
   const prev = diff.previous_content ?? ""
   const next = diff.new_content ?? ""
   if (prev !== "" || next !== "") {
-    return { kind: "legacy", prevPlain: stripHtml(prev), nextPlain: stripHtml(next) }
+    return { kind: "legacy", prevPlain: htmlToDiffPlainText(prev), nextPlain: htmlToDiffPlainText(next) }
   }
   return { kind: "none" }
-}
-
-function stripHtml(html: string): string {
-  return html.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim()
 }
 
 export function joinRemovedExcerpts(segments: ContentDiffSegment[]): string {

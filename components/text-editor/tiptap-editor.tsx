@@ -2453,9 +2453,10 @@ export function TiptapEditor({
     URL.revokeObjectURL(url)
   }, [editor, title])
 
-  const downloadAsHTML = useCallback(() => {
+  const downloadAsHTML = useCallback(async () => {
     if (!editor) return
-    const html = editor.getHTML()
+    const { prepareHtmlForExport } = await import("@/lib/print-export")
+    const html = prepareHtmlForExport(editor.getHTML())
     const fullHTML = `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -2464,18 +2465,20 @@ export function TiptapEditor({
   <title>${title}</title>
   <style>
     body {
-      font-family: system-ui, -apple-system, sans-serif;
+      font-family: Calibri, 'Segoe UI', sans-serif;
       max-width: 800px;
       margin: 40px auto;
       padding: 20px;
       line-height: 1.6;
     }
+    [style*="font-family"], [style*="font-size"], [style*="color"] { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
     h1, h2, h3 { margin-top: 1.5em; }
-    code { background: #f4f4f4; padding: 2px 6px; border-radius: 3px; }
-    pre { background: #f4f4f4; padding: 15px; border-radius: 5px; overflow-x: auto; }
+    code, kbd { font-family: Consolas, "Courier New", monospace; background: #f3f4f6; color: #111827; padding: 2px 6px; border-radius: 3px; }
+    pre { font-family: Consolas, "Courier New", monospace; background: #f3f4f6; color: #111827; padding: 15px; border-radius: 5px; overflow-x: auto; white-space: pre-wrap; }
+    pre code { background: transparent; color: inherit; padding: 0; }
     blockquote { border-left: 4px solid #ddd; margin: 0; padding-left: 20px; color: #666; }
-    table { border-collapse: collapse; width: 100%; margin: 20px 0; }
-    th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+    table { border-collapse: collapse; width: 100% !important; table-layout: auto !important; margin: 20px 0; }
+    th, td { border: 1px solid #ddd; padding: 8px; text-align: left; width: auto !important; min-width: 0 !important; }
     th { background: #f4f4f4; }
     .chemical-formula { font-family: monospace; font-weight: 500; }
     .chemistry-term { color: #0066cc; font-weight: 500; }
@@ -2527,6 +2530,8 @@ export function TiptapEditor({
   const downloadAsPDF = useCallback(async () => {
     if (!editor) return
     try {
+      const { prepareHtmlForExport } = await import("@/lib/print-export")
+      const exportHtml = prepareHtmlForExport(editor.getHTML())
       // Create an iframe for complete style isolation
       const iframe = document.createElement("iframe")
       iframe.style.cssText = `
@@ -2558,9 +2563,9 @@ export function TiptapEditor({
             
             /* Base */
             body {
-              font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
-              font-size: 15px;
-              line-height: 1.7;
+              font-family: Calibri, 'Segoe UI', sans-serif;
+              font-size: 12pt;
+              line-height: 1.55;
               padding: 48px;
               background: #fff;
               color: #1a1a1a;
@@ -2613,18 +2618,18 @@ export function TiptapEditor({
             
             /* Code */
             code {
-              font-family: 'SF Mono', 'Monaco', 'Menlo', 'Consolas', monospace;
+              font-family: Consolas, 'SF Mono', 'Monaco', 'Menlo', monospace;
               font-size: 0.9em;
-              background: #f3f4f6;
+              background: #f3f4f6 !important;
               padding: 2px 6px;
               border-radius: 4px;
-              color: #dc2626;
+              color: #111827 !important;
             }
             pre {
-              font-family: 'SF Mono', 'Monaco', 'Menlo', 'Consolas', monospace;
+              font-family: Consolas, 'SF Mono', 'Monaco', 'Menlo', monospace;
               font-size: 0.9em;
-              background: #1f2937;
-              color: #e5e7eb;
+              background: #f3f4f6 !important;
+              color: #111827 !important;
               padding: 16px;
               border-radius: 8px;
               margin: 1em 0;
@@ -2632,12 +2637,18 @@ export function TiptapEditor({
               white-space: pre-wrap;
               word-break: break-word;
             }
-            pre code { background: none; color: inherit; padding: 0; }
+            pre code, code, kbd {
+              font-family: Consolas, 'SF Mono', 'Monaco', 'Menlo', monospace;
+              background: #f3f4f6 !important;
+              color: #111827 !important;
+            }
+            pre code { padding: 0; }
             
             /* Tables - High contrast for PDF */
             table {
               border-collapse: collapse;
-              width: 100%;
+              width: 100% !important;
+              table-layout: auto !important;
               margin: 1em 0;
               font-size: 0.95em;
               border: 1px solid #000;
@@ -2647,6 +2658,9 @@ export function TiptapEditor({
               padding: 10px 14px;
               text-align: left;
               vertical-align: top;
+              width: auto !important;
+              min-width: 0 !important;
+              max-width: none !important;
             }
             th {
               background: #f3f4f6;
@@ -2676,7 +2690,7 @@ export function TiptapEditor({
             .table-col-handle, .table-row-handle, .table-diag-handle { display: none !important; }
           </style>
         </head>
-        <body>${editor.getHTML()}</body>
+        <body>${exportHtml}</body>
         </html>
       `)
       iframeDoc.close()

@@ -7,13 +7,33 @@ import {
   CommentRangeStart, CommentRangeEnd, CommentReference, ICommentOptions
 } from 'docx'
 import { saveAs } from 'file-saver'
+import {
+  extractCodePlainText,
+  EXPORT_CODE_FONT,
+  EXPORT_CODE_SHADING_FILL,
+  EXPORT_CODE_TEXT_COLOR,
+} from '@/lib/export-code-blocks'
+import {
+  countTableColumns,
+  DOCX_TABLE_CONTENT_WIDTH_INCHES,
+} from '@/lib/export-table-normalize'
+import {
+  DEFAULT_EXPORT_INLINE_STYLE,
+  EXPORT_DEFAULT_FONT_FAMILY,
+  type ExportInlineStyle,
+  mergeExportInlineStyles,
+  parseBlockParagraphSpacing,
+  stylesFromElement,
+} from '@/lib/export-formatting'
+import { prepareHtmlForExport } from '@/lib/print-export'
 
 // Parse HTML content and convert to DOCX elements
 export async function exportHtmlToDocx(html: string, title: string) {
+  const preparedHtml = prepareHtmlForExport(html)
   const children: any[] = []
   const comments: ICommentOptions[] = []
 
-  const elements = parseHtmlToDocElements(html, comments)
+  const elements = parseHtmlToDocElements(preparedHtml, comments)
   children.push(...elements)
 
   const doc = new Document({
@@ -24,18 +44,9 @@ export async function exportHtmlToDocx(html: string, title: string) {
       default: {
         document: {
           run: {
-            font: 'IBM Plex Sans',
-            size: 22,
+            font: EXPORT_DEFAULT_FONT_FAMILY,
+            size: DEFAULT_EXPORT_INLINE_STYLE.size ?? 24,
           },
-        },
-        heading1: {
-          run: { font: 'IBM Plex Serif', size: 32, bold: true },
-        },
-        heading2: {
-          run: { font: 'Familjen Grotesk', size: 28, bold: true },
-        },
-        heading3: {
-          run: { font: 'Familjen Grotesk', size: 26, bold: true },
         },
       },
     },
@@ -87,7 +98,7 @@ function parseNode(node: Node, comments: ICommentOptions[]): any | null {
     const text = node.textContent?.trim()
     if (text) {
       return new Paragraph({
-        children: [new TextRun({ text, size: 22 })],
+        children: [textRunFromStyle(text, DEFAULT_EXPORT_INLINE_STYLE)],
         spacing: { before: 120, after: 120 },
       })
     }
@@ -121,6 +132,20 @@ function parseNode(node: Node, comments: ICommentOptions[]): any | null {
         return parseBlockquote(el, comments)
       case 'pre':
         return parseCodeBlock(el)
+      case 'code': {
+        if (el.parentElement?.tagName.toLowerCase() === 'pre') {
+          return null
+        }
+        const text = extractCodePlainText(el).trim()
+        if (!text) return null
+        if (text.includes('\n')) {
+          return parseCodeBlock(el)
+        }
+        return new Paragraph({
+          children: [buildCodeTextRun(text)],
+          spacing: { before: 60, after: 60 },
+        })
+      }
       case 'table':
         return parseTable(el, comments)
       case 'hr':
@@ -165,55 +190,45 @@ function parseNode(node: Node, comments: ICommentOptions[]): any | null {
 }
 
 function parseParagraph(el: Element, comments: ICommentOptions[]): Paragraph {
-  const runs = parseInlineContent(el, comments)
+  const runs = parseInlineContent(el, comments, DEFAULT_EXPORT_INLINE_STYLE)
+  const block = el as HTMLElement
 
-  // Check for alignment
-  const style = (el as HTMLElement).style
-  let alignment: any = undefined
-  if (style.textAlign === 'center') alignment = AlignmentType.CENTER
-  if (style.textAlign === 'right') alignment = AlignmentType.RIGHT
-  if (style.textAlign === 'justify') alignment = AlignmentType.JUSTIFIED
+  let alignment: typeof AlignmentType[keyof typeof AlignmentType] | undefined
+  if (block.style.textAlign === 'center') alignment = AlignmentType.CENTER
+  if (block.style.textAlign === 'right') alignment = AlignmentType.RIGHT
+  if (block.style.textAlign === 'justify') alignment = AlignmentType.JUSTIFIED
 
   return new Paragraph({
-    children: runs.length > 0 ? runs : [new TextRun({ text: '', size: 22 })],
-    spacing: { before: 120, after: 120 },
+    children: runs.length > 0 ? runs : [textRunFromStyle('', DEFAULT_EXPORT_INLINE_STYLE)],
+    spacing: parseBlockParagraphSpacing(block),
     alignment,
   })
 }
 
-function parseHeading(el: Element, level: any, comments: ICommentOptions[]): Paragraph {
-  const runs = parseInlineContent(el, comments)
+function headingBaseStyle(level: typeof HeadingLevel[keyof typeof HeadingLevel]): ExportInlineStyle {
+  const size = getHeadingSize(level)
+  return mergeExportInlineStyles(DEFAULT_EXPORT_INLINE_STYLE, { size, bold: true })
+}
 
-  // Force bold and size for heading runs that don't have specific adjustments
-  runs.forEach(run => {
-    // We can't easily modify the TextRun object after creation if it's strictly typed without type assertion 
-    // or we just rely on the Paragraph heading property to style it, 
-    // but word sometimes needs explicit run properties for direct formatting.
-    // However, the `heading: level` in Paragraph usually takes care of it.
-    // Let's just return the runs. Word styles should handle it.
-    // But to match previous behavior (explicit bold/size):
-    // We'd need to reconstruct TextRuns.
-    // The previous code was: new TextRun({ text, bold: true, size: getHeadingSize(level) })
-  })
+function parseHeading(el: Element, level: typeof HeadingLevel[keyof typeof HeadingLevel], comments: ICommentOptions[]): Paragraph {
+  const base = headingBaseStyle(level)
+  const runs = parseInlineContent(el, comments, base)
+  const block = el as HTMLElement
 
-  // To maintain visual consistency with the previous implementation, 
-  // we might want applied styles. But `parseInlineContent` applies its own styles.
-  // Overriding them might be tricky. 
-  // Generally, Headings in Word are styled by the Style, so we shouldn't manually set size/bold on every run 
-  // UNLESS we want to override the default Heading style.
-  // The previous implementation manually set it. 
-  // Let's trust `heading: level` to do the heavy lifting, but if we really needed that size manual override:
+  let alignment: typeof AlignmentType[keyof typeof AlignmentType] | undefined
+  if (block.style.textAlign === 'center') alignment = AlignmentType.CENTER
+  if (block.style.textAlign === 'right') alignment = AlignmentType.RIGHT
+  if (block.style.textAlign === 'justify') alignment = AlignmentType.JUSTIFIED
 
-  // Actually, let's just pass `heading: level`.
-
+  const spacing = parseBlockParagraphSpacing(block)
   return new Paragraph({
-    children: runs.length > 0 ? runs : [new TextRun({ text: '', size: getHeadingSize(level) })],
-    heading: level,
-    spacing: { before: 240, after: 120 },
+    children: runs.length > 0 ? runs : [textRunFromStyle('', base)],
+    spacing: { ...spacing, before: Math.max(spacing.before, 200), after: spacing.after },
+    alignment,
   })
 }
 
-function getHeadingSize(level: any): number {
+function getHeadingSize(level: typeof HeadingLevel[keyof typeof HeadingLevel]): number {
   switch (level) {
     case HeadingLevel.HEADING_1: return 32
     case HeadingLevel.HEADING_2: return 28
@@ -242,12 +257,12 @@ function parseList(el: Element, comments: ICommentOptions[], depth = 0): any[] {
       if (t === 'ul' || t === 'ol') liClone.removeChild(child)
     })
 
-    const runs = parseInlineContent(liClone, comments)
+    const runs = parseInlineContent(liClone, comments, DEFAULT_EXPORT_INLINE_STYLE)
     const prefix = isOrdered ? `${index}. ` : '• '
-    runs.unshift(new TextRun({ text: prefix, size: 22 }))
+    runs.unshift(textRunFromStyle(prefix, DEFAULT_EXPORT_INLINE_STYLE))
 
     items.push(new Paragraph({
-      children: runs.length > 0 ? runs : [new TextRun({ text: prefix.trimEnd(), size: 22 })],
+      children: runs.length > 0 ? runs : [textRunFromStyle(prefix.trimEnd(), DEFAULT_EXPORT_INLINE_STYLE)],
       spacing: { before: 60, after: 60 },
       indent: { left: convertInchesToTwip(0.25 * (depth + 1)) },
     }))
@@ -262,35 +277,66 @@ function parseList(el: Element, comments: ICommentOptions[], depth = 0): any[] {
 }
 
 function parseBlockquote(el: Element, comments: ICommentOptions[]): Paragraph {
-  const runs = parseInlineContent(el, comments)
+  const runs = parseInlineContent(el, comments, DEFAULT_EXPORT_INLINE_STYLE)
   return new Paragraph({
-    children: runs.length > 0 ? runs : [new TextRun({ text: '', size: 22 })],
+    children: runs.length > 0 ? runs : [textRunFromStyle('', DEFAULT_EXPORT_INLINE_STYLE)],
     spacing: { before: 120, after: 120 },
     indent: { left: convertInchesToTwip(0.5) },
     border: { left: { style: BorderStyle.SINGLE, size: 24, color: '999999', space: 10 } },
   })
 }
 
-function parseCodeBlock(el: Element): any[] {
-  const text = el.textContent || ''
-  const lines = text.split('\n')
+function buildCodeTextRun(text: string): TextRun {
+  return new TextRun({
+    text: text || ' ',
+    font: EXPORT_CODE_FONT,
+    size: 20,
+    color: EXPORT_CODE_TEXT_COLOR,
+    shading: {
+      type: ShadingType.SOLID,
+      color: EXPORT_CODE_SHADING_FILL,
+      fill: EXPORT_CODE_SHADING_FILL,
+    },
+  })
+}
 
-  return lines.map(line => new Paragraph({
-    children: [new TextRun({ text: line || ' ', font: 'Courier New', size: 20 })],
-    spacing: { before: 0, after: 0 },
-    shading: { type: ShadingType.SOLID, fill: 'F5F5F5' },
-  }))
+function parseCodeBlock(el: Element): any[] {
+  const text = extractCodePlainText(el)
+  const lines = text.length > 0 ? text.split('\n') : ['']
+
+  return lines.map((line, index) =>
+    new Paragraph({
+      children: [buildCodeTextRun(line)],
+      spacing: {
+        before: index === 0 ? 120 : 0,
+        after: index === lines.length - 1 ? 120 : 0,
+      },
+      shading: {
+        type: ShadingType.SOLID,
+        color: EXPORT_CODE_SHADING_FILL,
+        fill: EXPORT_CODE_SHADING_FILL,
+      },
+    })
+  )
 }
 
 function parseTable(el: Element, comments: ICommentOptions[]): Table {
   const rows: TableRow[] = []
+  const colCount = countTableColumns(el)
+  const contentWidthTwip = convertInchesToTwip(DOCX_TABLE_CONTENT_WIDTH_INCHES)
+  const defaultColWidthTwip =
+    colCount > 0 ? Math.floor(contentWidthTwip / colCount) : contentWidthTwip
+  const columnWidths =
+    colCount > 0 ? Array.from({ length: colCount }, () => defaultColWidthTwip) : undefined
 
   for (const tr of el.querySelectorAll('tr')) {
     const cells: TableCell[] = []
 
     for (const cell of tr.querySelectorAll('th, td')) {
       const isHeader = cell.tagName.toLowerCase() === 'th'
-      const cellRuns = parseInlineContent(cell, comments)
+      const cellRuns = parseInlineContent(cell, comments, DEFAULT_EXPORT_INLINE_STYLE)
+      const colspan = Math.max(1, parseInt(cell.getAttribute('colspan') || '1', 10) || 1)
+      const cellWidthTwip = defaultColWidthTwip * colspan
 
       // Get background color from style
       const style = (cell as HTMLElement).style
@@ -299,9 +345,10 @@ function parseTable(el: Element, comments: ICommentOptions[]): Table {
 
       const cellOpts: any = {
         children: [new Paragraph({
-          children: cellRuns.length > 0 ? cellRuns : [new TextRun({ text: '', size: 22 })],
+          children: cellRuns.length > 0 ? cellRuns : [textRunFromStyle('', DEFAULT_EXPORT_INLINE_STYLE)],
           spacing: { before: 40, after: 40 },
         })],
+        width: { size: cellWidthTwip, type: WidthType.DXA },
         borders: {
           top: { style: BorderStyle.SINGLE, size: 8, color: '000000' },
           bottom: { style: BorderStyle.SINGLE, size: 8, color: '000000' },
@@ -315,6 +362,10 @@ function parseTable(el: Element, comments: ICommentOptions[]): Table {
           right: convertInchesToTwip(0.08),
         },
         verticalAlign: VerticalAlign.CENTER,
+      }
+
+      if (colspan > 1) {
+        cellOpts.columnSpan = colspan
       }
 
       // Apply background color
@@ -343,6 +394,7 @@ function parseTable(el: Element, comments: ICommentOptions[]): Table {
   return new Table({
     rows,
     width: { size: 100, type: WidthType.PERCENTAGE },
+    ...(columnWidths ? { columnWidths } : {}),
     borders: {
       top: { style: BorderStyle.SINGLE, size: 8, color: '000000' },
       bottom: { style: BorderStyle.SINGLE, size: 8, color: '000000' },
@@ -354,171 +406,121 @@ function parseTable(el: Element, comments: ICommentOptions[]): Table {
   })
 }
 
-function parseCssFontSizeToHalfPoints(fontSize: string): number | undefined {
-  if (!fontSize || !fontSize.trim()) return undefined
-  const s = fontSize.trim().toLowerCase()
-  const pxMatch = s.match(/^([\d.]+)px$/)
-  if (pxMatch) {
-    const px = parseFloat(pxMatch[1])
-    if (!Number.isNaN(px)) return Math.max(8, Math.round((px * 72) / 96 * 2))
+function textRunFromStyle(text: string, style: ExportInlineStyle): TextRun {
+  const opts: Record<string, unknown> = {
+    text: text || ' ',
+    size: style.size ?? DEFAULT_EXPORT_INLINE_STYLE.size ?? 24,
+    font: style.font ?? EXPORT_DEFAULT_FONT_FAMILY,
   }
-  const ptMatch = s.match(/^([\d.]+)pt$/)
-  if (ptMatch) {
-    const pt = parseFloat(ptMatch[1])
-    if (!Number.isNaN(pt)) return Math.max(8, Math.round(pt * 2))
-  }
-  return undefined
-}
-
-function parseCssFontFamily(fontFamily: string): string | undefined {
-  if (!fontFamily || !fontFamily.trim()) return undefined
-  const first = fontFamily.split(',')[0].replace(/['"]/g, '').trim()
-  return first || undefined
-}
-
-function parseInlineContent(el: Element, comments: ICommentOptions[]): any[] {
-  const runs: any[] = []
-
-  for (const node of el.childNodes) {
-    if (node.nodeType === Node.TEXT_NODE) {
-      const text = node.textContent
-      if (text) {
-        runs.push(new TextRun({ text, size: 22 }))
-      }
-    } else if (node.nodeType === Node.ELEMENT_NODE) {
-      const childEl = node as Element
-      const tagName = childEl.tagName.toLowerCase()
-      const text = childEl.textContent || ''
-
-      // Get styles
-      const style = (childEl as HTMLElement).style
-      const color = style.color ? rgbToHex(style.color) : undefined
-      const bgColor = style.backgroundColor ? rgbToHex(style.backgroundColor) : undefined
-
-      const runOpts: any = {
-        text,
-        size: parseCssFontSizeToHalfPoints(style.fontSize) ?? 22,
-        bold: tagName === 'strong' || tagName === 'b',
-        italics: tagName === 'em' || tagName === 'i',
-        strike: tagName === 's' || tagName === 'strike' || tagName === 'del',
-      }
-
-      const inlineFont = parseCssFontFamily(style.fontFamily)
-      if (inlineFont && tagName !== 'code') {
-        runOpts.font = inlineFont
-      }
-
-      // Underline
-      if (tagName === 'u') {
-        runOpts.underline = { type: 'single' }
-      }
-
-      // Check for comment
-      if (childEl.hasAttribute('data-comment')) {
-        const id = childEl.getAttribute('data-id')
-        const author = childEl.getAttribute('data-author')
-        const content = childEl.getAttribute('data-content')
-        const createdAt = childEl.getAttribute('data-created-at')
-
-        if (content && id) {
-          // Used predictable numeric ID for internal DOCX comment referencing
-          // We'll use the current length of the comments array as the reference ID
-          const commentId = comments.length
-
-          comments.push({
-            id: commentId,
-            author: author || "Unknown",
-            initials: author ? author.charAt(0).toUpperCase() : "U",
-            date: createdAt ? new Date(Number(createdAt)) : new Date(),
-            children: [
-              new Paragraph({
-                children: [
-                  new TextRun({ text: content })
-                ]
-              })
-            ]
-          })
-
-          // Apply highlight
-          runOpts.highlight = 'magenta' // Standard Word highlight color
-
-          // Wrap text with comment range start/end
-          runs.push(new CommentRangeStart(commentId))
-          runs.push(new TextRun(runOpts))
-          runs.push(new CommentRangeEnd(commentId))
-          runs.push(new TextRun({
-            children: [new CommentReference(commentId)],
-            superScript: true
-          }))
-          continue
-        }
-      }
-
-      // Code
-      if (tagName === 'code') {
-        runOpts.font = 'Courier New'
-        runOpts.size = 20
-      }
-
-      // Sub/Sup
-      if (tagName === 'sub') {
-        runOpts.subScript = true
-      }
-      if (tagName === 'sup') {
-        runOpts.superScript = true
-      }
-
-      // Color from inline style
-      if (color && color !== 'transparent' && isValidHex(color)) {
-        runOpts.color = color.replace('#', '')
-      }
-
-      // Background/highlight from mark or style
-      if (tagName === 'mark' || (bgColor && bgColor !== 'transparent' && isValidHex(bgColor))) {
-        // If it's a valid hex, we might want to map it to closest highlighting color or use shading
-        // docx highlight only supports specific enum values (yellow, green, etc.)
-        // shading can take hex.
-        if (tagName === 'mark') {
-          runOpts.highlight = 'yellow'
-        } else if (bgColor && isValidHex(bgColor)) {
-          const hex = bgColor.replace('#', '')
-          runOpts.shading = {
-            type: ShadingType.SOLID,
-            color: hex,
-            fill: hex,
-          }
-        }
-      }
-
-      runs.push(new TextRun(runOpts))
+  if (style.color) opts.color = style.color
+  if (style.bold) opts.bold = true
+  if (style.italics) opts.italics = true
+  if (style.strike) opts.strike = true
+  if (style.underline) opts.underline = { type: 'single' }
+  if (style.subScript) opts.subScript = true
+  if (style.superScript) opts.superScript = true
+  if (style.highlight) opts.highlight = style.highlight
+  if (style.shading) {
+    opts.shading = {
+      type: ShadingType.SOLID,
+      color: style.shading.color,
+      fill: style.shading.fill,
     }
   }
-
-  return runs.length > 0 ? runs : [new TextRun({ text: '', size: 22 })]
+  return new TextRun(opts as ConstructorParameters<typeof TextRun>[0])
 }
 
-// Convert RGB to Hex
-function rgbToHex(rgb: string): string {
-  if (!rgb) return ''
+const INLINE_CONTAINER_TAGS = new Set([
+  'span', 'strong', 'b', 'em', 'i', 'u', 's', 'strike', 'del',
+  'sub', 'sup', 'mark', 'a', 'font',
+])
 
-  // If already hex, return it
-  if (rgb.startsWith('#')) {
-    return rgb
+function walkInlineNodes(
+  parent: Element,
+  inherited: ExportInlineStyle,
+  runs: TextRun[],
+  comments: ICommentOptions[]
+): void {
+  for (const node of parent.childNodes) {
+    if (node.nodeType === Node.TEXT_NODE) {
+      const text = node.textContent
+      if (text) runs.push(textRunFromStyle(text, inherited))
+      continue
+    }
+
+    if (node.nodeType !== Node.ELEMENT_NODE) continue
+    const childEl = node as Element
+    const tag = childEl.tagName.toLowerCase()
+
+    if (tag === 'br') {
+      runs.push(textRunFromStyle('\n', inherited))
+      continue
+    }
+
+    const isCodeLike = tag === 'code' || tag === 'pre' || tag === 'kbd'
+    if (isCodeLike) {
+      const codeStyle = mergeExportInlineStyles(inherited, {
+        font: EXPORT_CODE_FONT,
+        size: 20,
+        color: EXPORT_CODE_TEXT_COLOR,
+        shading: { fill: EXPORT_CODE_SHADING_FILL, color: EXPORT_CODE_SHADING_FILL },
+      })
+      runs.push(textRunFromStyle(extractCodePlainText(childEl), codeStyle))
+      continue
+    }
+
+    if (childEl.hasAttribute('data-comment')) {
+      const content = childEl.getAttribute('data-content')
+      if (content) {
+        const commentId = comments.length
+        const author = childEl.getAttribute('data-author')
+        const createdAt = childEl.getAttribute('data-created-at')
+        comments.push({
+          id: commentId,
+          author: author || 'Unknown',
+          initials: author ? author.charAt(0).toUpperCase() : 'U',
+          date: createdAt ? new Date(Number(createdAt)) : new Date(),
+          children: [
+            new Paragraph({
+              children: [new TextRun({ text: content })],
+            }),
+          ],
+        })
+        const marked = mergeExportInlineStyles(stylesFromElement(childEl, inherited), {
+          highlight: 'magenta',
+        })
+        const text = childEl.textContent || ''
+        runs.push(new CommentRangeStart(commentId))
+        runs.push(textRunFromStyle(text, marked))
+        runs.push(new CommentRangeEnd(commentId))
+        runs.push(
+          new TextRun({
+            children: [new CommentReference(commentId)],
+            superScript: true,
+          })
+        )
+        continue
+      }
+    }
+
+    const childStyle = stylesFromElement(childEl, inherited)
+
+    if (INLINE_CONTAINER_TAGS.has(tag) || tag === 'span') {
+      walkInlineNodes(childEl, childStyle, runs, comments)
+      continue
+    }
+
+    const text = childEl.textContent || ''
+    if (text) runs.push(textRunFromStyle(text, childStyle))
   }
-
-  // Parse rgb(r, g, b) format
-  const match = rgb.match(/rgb\((\d+),\s*(\d+),\s*(\d+)\)/)
-  if (match) {
-    const r = parseInt(match[1])
-    const g = parseInt(match[2])
-    const b = parseInt(match[3])
-    return '#' + [r, g, b].map(x => x.toString(16).padStart(2, '0')).join('')
-  }
-
-  // Handle common names or return original if can't parse (will be filtered by isValidHex)
-  return rgb
 }
 
-function isValidHex(color: string): boolean {
-  return /^#([0-9A-F]{3}){1,2}$/i.test(color)
+function parseInlineContent(
+  el: Element,
+  comments: ICommentOptions[],
+  baseStyle: ExportInlineStyle = DEFAULT_EXPORT_INLINE_STYLE
+): TextRun[] {
+  const runs: TextRun[] = []
+  walkInlineNodes(el, baseStyle, runs, comments)
+  return runs.length > 0 ? runs : [textRunFromStyle('', baseStyle)]
 }
