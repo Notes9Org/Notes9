@@ -1,0 +1,35 @@
+{
+  "name": "collaboration-server",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Hocuspocus collaboration server for real-time paper editing",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "dev": "tsx watch src/index.ts"
+  },
+  "dependencies": {
+    "@hocuspocus/extension-database": "3.4.3",
+    "@hocuspocus/extension-logger": "3.4.3",
+    "@hocuspocus/server": "3.4.3",
+    "@tiptap/core": "^3.23.4",
+    "@tiptap/html": "^3.23.4",
+    "@tiptap/pm": "3.17.1",
+    "@tiptap/starter-kit": "3.17.1",
+    "jsonwebtoken": "9.0.2",
+    "pg": "8.13.1",
+    "y-prosemirror": "^1.3.7",
+    "yjs": "13.6.29"
+  },
+  "devDependencies": {
+    "@types/jsonwebtoken": "9.0.9",
+    "@types/node": "22.15.18",
+    "@types/pg": "8.11.13",
+    "tsx": "4.21.0",
+    "typescript": "5.8.3"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}
