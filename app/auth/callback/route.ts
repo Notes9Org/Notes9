@@ -185,7 +185,13 @@ async function handleAuthCallback(request: NextRequest): Promise<NextResponse> {
         authEvent = await provisionOauthProfileAndOrg(supabase, db, user)
       }
 
-      const nextUrl = new URL(nextPath, request.url)
+      // If an invitation token is present, redirect to the invite acceptance page
+      const invitationToken = requestUrl.searchParams.get("token")
+      const redirectPath = invitationToken
+        ? `/auth/invite?token=${encodeURIComponent(invitationToken)}`
+        : nextPath
+
+      const nextUrl = new URL(redirectPath, request.url)
       nextUrl.searchParams.set("auth_event", authEvent)
       return NextResponse.redirect(nextUrl)
     }
