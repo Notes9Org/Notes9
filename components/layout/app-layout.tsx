@@ -16,9 +16,10 @@ import { SidebarProvider, SidebarInset, useSidebar } from "@/components/ui/sideb
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet"
 import { useResizable } from "@/hooks/use-resizable"
 import { cn } from "@/lib/utils"
-import { Menu, X, Sparkles, ChevronRight, Sun, Moon, CircleHelp } from 'lucide-react'
+import { Menu, X, Sparkles, ChevronRight, Sun, Moon, CircleHelp, Flag } from 'lucide-react'
 import { useTheme } from "next-themes"
 import { useMediaQuery } from "@/hooks/use-media-query"
+import { ReportIssueDialog } from "./report-issue-dialog"
 
 const ROUTE_TITLES: { path: string; title: string }[] = [
   { path: "/dashboard", title: "Dashboard" },
@@ -344,6 +345,7 @@ function AppLayoutBody({ children }: AppLayoutProps) {
               </div>
 
             <div className="flex items-center gap-1 sm:gap-2">
+              <ReportIssueDialog />
               <Button
                 type="button"
                 variant="ghost"

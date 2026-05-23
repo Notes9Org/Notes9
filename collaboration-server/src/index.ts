@@ -42,7 +42,7 @@ const server = new Server({
 
   // Connection hook — enforce allowed origins
   async onConnect({ request }: onConnectPayload) {
-    if (allowedOrigins.length > 0) {
+    if (allowedOrigins.length > 0 && !allowedOrigins.includes("*")) {
       const origin = request.headers.origin;
       if (origin && !allowedOrigins.includes(origin)) {
         throw new Error(`Origin ${origin} is not allowed`);

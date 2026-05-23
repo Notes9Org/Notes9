@@ -120,6 +120,7 @@ interface User {
 interface UserProfile {
   first_name?: string | null
   last_name?: string | null
+  organization_id?: string | null
 }
 
 type SearchResultItem = {
@@ -398,6 +399,7 @@ export function AppSidebar() {
       setUserProfile({
         first_name: userProfileData.first_name ?? null,
         last_name: userProfileData.last_name ?? null,
+        organization_id: userProfileData.organization_id ?? null,
       })
 
       // Fetch projects for this organization (all statuses)
@@ -726,6 +728,24 @@ export function AppSidebar() {
                   </SidebarMenuItem>
                 );
               })}
+
+              {/* My Lab link - only visible when user belongs to an organization */}
+              {userProfile?.organization_id && (
+                <SidebarMenuItem>
+                  <SidebarMenuButton
+                    asChild
+                    isActive={mounted && (pathname === "/settings/organization" || pathname.startsWith("/settings/organization/"))}
+                    className="group transition-all duration-150 hover:bg-[color:color-mix(in_oklab,var(--background)_78%,var(--primary)_22%)] hover:text-sidebar-foreground active:scale-[0.985] active:bg-[color:color-mix(in_oklab,var(--background)_70%,var(--primary)_30%)] dark:hover:bg-sidebar-accent dark:hover:text-sidebar-accent-foreground dark:active:scale-[0.985] dark:active:bg-sidebar-accent/90 data-[active=true]:bg-transparent data-[active=true]:text-sidebar-foreground"
+                  >
+                    <Link href="/settings/organization" title={isIconMode ? "My Lab" : undefined}>
+                      <Users />
+                      <span className={cn(isIconMode && "hidden")}>
+                        <span className={cn("truncate", mounted && (pathname === "/settings/organization" || pathname.startsWith("/settings/organization/")) && "font-semibold")}>My Lab</span>
+                      </span>
+                    </Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              )}
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
