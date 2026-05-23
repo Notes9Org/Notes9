@@ -27,6 +27,10 @@ import Mention from "@tiptap/extension-mention"
 import { createProtocolSuggestion, ProtocolItem, ProtocolMention } from "./extensions/protocol-mention"
 import { createLabNoteSuggestion, LabNoteItem, LabNoteMention } from "./extensions/labnote-mention"
 import { createLiteratureSuggestion, LiteratureItem, LiteratureMention } from "./extensions/literature-mention"
+import Collaboration from "@tiptap/extension-collaboration"
+import CollaborationCursor from "@tiptap/extension-collaboration-cursor"
+import type { HocuspocusProvider } from "@hocuspocus/provider"
+import type * as Y from "yjs"
 
 import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
@@ -253,6 +257,16 @@ interface TiptapEditorProps {
   leadingToolbarSlot?: ReactNode
   /** Appended after the fullscreen control (e.g. lab notes new / print / export). */
   trailingToolbarSlot?: ReactNode
+  /** Yjs document instance for collaborative editing */
+  ydoc?: Y.Doc | null
+  /** Hocuspocus provider instance for WebSocket sync */
+  provider?: HocuspocusProvider | null
+  /** Whether collaboration mode is active */
+  collaborationEnabled?: boolean
+  /** Display name for the local user's cursor */
+  userName?: string
+  /** Color for the local user's cursor */
+  userColor?: string
 }
 
 // Extension to support background color for table cells
@@ -1388,6 +1402,11 @@ export function TiptapEditor({
   fullscreenMainStartInsetPx = 0,
   leadingToolbarSlot,
   trailingToolbarSlot,
+  ydoc,
+  provider,
+  collaborationEnabled,
+  userName,
+  userColor,
 }: TiptapEditorProps & {
   hideToolbar?: boolean
   /** Accepted for lab-notes compatibility; export UI is toolbar-driven. */
@@ -1689,6 +1708,7 @@ export function TiptapEditor({
         heading: {
           levels: [1, 2, 3],
         },
+        ...(collaborationEnabled && ydoc && provider ? { history: false } : {}),
       }),
       Placeholder.configure({
         placeholder,
@@ -1793,6 +1813,16 @@ export function TiptapEditor({
       // and rendered with the .mention-literature CSS class.
       Indent,
       Comment,
+      ...(collaborationEnabled && ydoc && provider ? [
+        Collaboration.configure({
+          document: ydoc,
+          field: 'default',
+        }),
+        CollaborationCursor.configure({
+          provider,
+          user: { name: userName ?? 'Anonymous', color: userColor ?? '#6B7280' },
+        }),
+      ] : []),
     ],
     content,
     editable,

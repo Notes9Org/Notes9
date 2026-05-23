@@ -6,12 +6,17 @@ import Link from "next/link"
 import { createClient } from "@/lib/supabase/client"
 import { PaperEditor, DEFAULT_PAPER_TEMPLATE } from "@/components/text-editor/paper-editor"
 import { usePaperAI } from "@/contexts/paper-ai-context"
+import { useCollaboration } from "@/lib/collaboration/use-collaboration"
+import { isCollaborationEnabled } from "@/lib/collaboration/config"
+import { getCollaboratorColor } from "@/lib/collaboration/colors"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 import { ArrowLeft, Loader2, Download, Upload } from "lucide-react"
 import { toast } from "sonner"
 import { SaveStatusIndicator } from "@/components/ui/save-status"
+import { ConnectionStatus } from "@/components/collaboration/connection-status"
+import { CollaboratorAvatars } from "@/components/collaboration/collaborator-avatars"
 import { useAutoSave } from "@/hooks/use-auto-save"
 import { PaperActions } from "./[id]/paper-actions"
 import { IS_PAPERS_MOCKED, getMockPaper, updateMockPaper } from "@/lib/papers-mock"
@@ -75,11 +80,34 @@ export function PaperWorkspace({ paperId, backLink, onPaperMutated, onPaperTitle
   const [titleInput, setTitleInput] = useState("")
   const [loading, setLoading] = useState(true)
   const [content, setContent] = useState("")
+  const [userName, setUserName] = useState("")
+  const [userId, setUserId] = useState("")
   const bibInputRef = useRef<HTMLInputElement>(null)
   const texInputRef = useRef<HTMLInputElement>(null)
   const editorRef = useRef<any>(null)
   const contentRef = useRef("")
   const paperAI = usePaperAI()
+
+  // Fetch current user info for collaboration
+  useEffect(() => {
+    const fetchUser = async () => {
+      const supabase = createClient()
+      const { data: { user } } = await supabase.auth.getUser()
+      if (user) {
+        setUserId(user.id)
+        setUserName(user.user_metadata?.full_name || user.email || "Anonymous")
+      }
+    }
+    void fetchUser()
+  }, [])
+
+  // Collaboration hook
+  const { provider, ydoc, status: collaborationStatus, collaborators } = useCollaboration({
+    paperId: id,
+    enabled: isCollaborationEnabled() && !loading && !!paper,
+  })
+
+  const collaborationConnected = collaborationStatus === "connected"
 
   useEffect(() => {
     const fetchPaper = async () => {
@@ -140,7 +168,7 @@ export function PaperWorkspace({ paperId, backLink, onPaperMutated, onPaperTitle
   const { status: saveStatus, debouncedSave } = useAutoSave({
     onSave: handleAutoSave,
     delay: 2000,
-    enabled: !loading && !!paper,
+    enabled: !loading && !!paper && !collaborationConnected,
   })
 
   const handleContentChange = useCallback(
@@ -373,7 +401,13 @@ export function PaperWorkspace({ paperId, backLink, onPaperMutated, onPaperTitle
           />
           <Badge variant={statusVariant(status)}>{status.replace("_", " ")}</Badge>
           <SaveStatusIndicator status={saveStatus} />
+          {isCollaborationEnabled() && (
+            <ConnectionStatus status={collaborationStatus} />
+          )}
         </div>
+        {isCollaborationEnabled() && (
+          <CollaboratorAvatars collaborators={collaborators} />
+        )}
         <div className="flex shrink-0 items-center gap-2">
           {/* Export dropdown */}
           <DropdownMenu>
@@ -532,6 +566,11 @@ export function PaperWorkspace({ paperId, backLink, onPaperMutated, onPaperTitle
             autoSave
             onAutoSave={handleAutoSave}
             onEditorReady={handleEditorReady}
+            ydoc={ydoc}
+            provider={provider}
+            collaborationEnabled={collaborationConnected}
+            userName={userName}
+            userColor={userId ? getCollaboratorColor(userId) : undefined}
           />
         </FileDropzone>
       </div>

@@ -2,6 +2,8 @@
 
 import { TiptapEditor } from "./tiptap-editor"
 import "@/styles/paper-numbering.css"
+import type { HocuspocusProvider } from "@hocuspocus/provider"
+import type * as Y from "yjs"
 
 const DEFAULT_PAPER_TEMPLATE = `
 <h1>Title</h1>
@@ -59,6 +61,16 @@ interface PaperEditorProps {
   /** Inline fullscreen title (when page title is covered) — same pattern as protocol design. */
   onDocumentTitleChange?: (value: string) => void
   onDocumentTitleCommit?: () => void | Promise<void>
+  /** Yjs document instance for collaborative editing */
+  ydoc?: Y.Doc | null
+  /** Hocuspocus provider instance for WebSocket sync */
+  provider?: HocuspocusProvider | null
+  /** Whether collaboration mode is active */
+  collaborationEnabled?: boolean
+  /** Display name for the local user's cursor */
+  userName?: string
+  /** Color for the local user's cursor */
+  userColor?: string
 }
 
 export function PaperEditor({
@@ -76,6 +88,11 @@ export function PaperEditor({
   onDismissInlineDiff,
   onDocumentTitleChange,
   onDocumentTitleCommit,
+  ydoc,
+  provider,
+  collaborationEnabled,
+  userName,
+  userColor,
 }: PaperEditorProps) {
   const initialContent = content && content.trim().length > 0 ? content : DEFAULT_PAPER_TEMPLATE
 
@@ -101,6 +118,11 @@ export function PaperEditor({
       inlineDiffHtml={inlineDiffHtml}
       onAcceptInlineDiff={onAcceptInlineDiff}
       onDismissInlineDiff={onDismissInlineDiff}
+      ydoc={ydoc}
+      provider={provider}
+      collaborationEnabled={collaborationEnabled}
+      userName={userName}
+      userColor={userColor}
     />
   )
 }

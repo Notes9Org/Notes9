@@ -20,6 +20,7 @@ import {
   ArrowUpRight,
 } from "lucide-react";
 import { TodoPanel } from "./todo-panel";
+import { OrgSetupCTA } from "@/components/org/org-setup-cta";
 
 export default async function DashboardPage() {
   const supabase = await createClient();
@@ -37,6 +38,14 @@ export default async function DashboardPage() {
     .select("*")
     .eq("id", user.id)
     .single();
+
+  // Check if user has completed org setup (has an org_members record)
+  const { data: orgMembership } = await supabase
+    .from("org_members")
+    .select("id")
+    .eq("user_id", user.id)
+    .eq("is_active", true)
+    .maybeSingle();
 
   // First, let's get simple counts for the stats
   const [
@@ -186,6 +195,9 @@ export default async function DashboardPage() {
           </CardContent>
         </Card>
       </div> */}
+
+      {/* Org Setup CTA */}
+      <OrgSetupCTA visible={!orgMembership} />
 
       {/* Quick Actions */}
       <Card className="min-w-0 overflow-hidden">
