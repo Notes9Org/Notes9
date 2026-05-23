@@ -17,13 +17,10 @@ import {
 import { cn } from "@/lib/utils"
 import { useContentDiffs } from "@/hooks/use-content-diffs"
 import { ContentDiffHistoryDialog } from "@/components/content-diff-history-dialog"
+import { htmlToDiffPlainText } from "@/lib/content-diff-plain-text"
 
 /** `diff` can overflow the call stack on very long strings; stats stay approximate when truncated. */
 const MAX_DIFF_TEXT_LEN = 200_000
-
-function stripHtmlTags(html: string): string {
-  return html.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim()
-}
 
 function bumpVersion(version: string): string {
   const parts = version.split(".")
@@ -96,8 +93,8 @@ export function ContentChangeApprovalBar(props: ContentChangeApprovalBarProps) {
   }, [isDirty])
 
   const diffResult = useMemo(() => {
-    let savedText = stripHtmlTags(savedContent)
-    let draftText = stripHtmlTags(draftContent)
+    let savedText = htmlToDiffPlainText(savedContent)
+    let draftText = htmlToDiffPlainText(draftContent)
     if (savedText.length > MAX_DIFF_TEXT_LEN) savedText = savedText.slice(0, MAX_DIFF_TEXT_LEN)
     if (draftText.length > MAX_DIFF_TEXT_LEN) draftText = draftText.slice(0, MAX_DIFF_TEXT_LEN)
     return diffWords(savedText, draftText)

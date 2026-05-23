@@ -23,7 +23,7 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet"
-import { ChevronLeft, Download, LayoutTemplate, List, X } from "lucide-react"
+import { ChevronLeft, Download, FileStack, List, X } from "lucide-react"
 import { ProtocolChangeApprovalBar } from "./protocol-change-approval"
 import { ProtocolSiblingsList } from "./protocol-siblings-list"
 // ProtocolAiSidechat + ProtocolLiteraturePanel are no longer mounted in edit mode.
@@ -624,7 +624,7 @@ export function ProtocolDesignMode({
                         : "No template — click to pick one"
                     }
                   >
-                    <LayoutTemplate className="h-4 w-4" />
+                    <FileStack className="h-4 w-4" />
                   </Button>
                   <NoteExportMenu
                     title={protocol.name}

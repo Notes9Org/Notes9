@@ -116,8 +116,8 @@ function TemplateStep({
           Choose a starting template
         </CardTitle>
         <CardDescription>
-          Pick an uploaded document template, a protocol from your library (letterhead only), or start blank. Manage
-          uploads under Protocols → Templates.
+          Pick an uploaded document template (from Protocols → Templates) or start blank. These are your
+          org&apos;s DOCX/PDF letterheads — not other protocols in the library.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">

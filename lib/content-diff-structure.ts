@@ -1,4 +1,5 @@
 import type { Change } from "diff"
+import { htmlToDiffPlainText } from "@/lib/content-diff-plain-text"
 import type { ContentDiffStructureHints } from "@/lib/db/schema"
 
 /** Max distinct section labels (excluding document title). */
@@ -54,7 +55,7 @@ function dfsBlocks(
     const trail = headingStack.map((h) => h.text).filter(Boolean)
     out.push({
       trail,
-      text: el.textContent || "",
+      text: htmlToDiffPlainText(el.innerHTML),
     })
   }
 

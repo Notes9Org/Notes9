@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { buildExportGoogleFontsLink } from '@/lib/export-formatting'
+import { prepareHtmlForExport } from '@/lib/print-export'
 
 export const runtime = 'nodejs'
 
@@ -56,13 +58,8 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Clean unsupported CSS color functions
-    const cleanedHtml = html
-      .replace(/lab\([^)]+\)/gi, '#808080')
-      .replace(/lch\([^)]+\)/gi, '#808080')
-      .replace(/oklab\([^)]+\)/gi, '#808080')
-      .replace(/oklch\([^)]+\)/gi, '#808080')
-      .replace(/color-mix\([^)]+\)/gi, '#808080')
+    const cleanedHtml = prepareHtmlForExport(html)
+    const googleFonts = buildExportGoogleFontsLink(cleanedHtml)
 
     // Build full HTML document
     const fullHtml = `<!DOCTYPE html>
@@ -70,9 +67,10 @@ export async function POST(request: NextRequest) {
 <head>
   <meta charset="utf-8" />
   <title>${title ?? 'Document'}</title>
+  ${googleFonts}
   <style>
     body {
-      font-family: Calibri, Arial, sans-serif;
+      font-family: Calibri, 'Segoe UI', sans-serif;
       font-size: 11pt;
       line-height: 1.5;
     }
@@ -82,7 +80,8 @@ export async function POST(request: NextRequest) {
     p { margin: 8pt 0; }
     table {
       border-collapse: collapse;
-      width: 100%;
+      width: 100% !important;
+      table-layout: auto !important;
       margin: 12pt 0;
     }
     th, td {
@@ -90,6 +89,8 @@ export async function POST(request: NextRequest) {
       padding: 6px;
       text-align: left;
       vertical-align: top;
+      width: auto !important;
+      min-width: 0 !important;
     }
     th {
       background-color: #e8e8e8;
@@ -103,11 +104,17 @@ export async function POST(request: NextRequest) {
       padding: 2px 4px;
     }
     pre {
-      font-family: 'Courier New', monospace;
-      background-color: #f5f5f5;
+      font-family: Consolas, 'Courier New', monospace;
+      background-color: #f3f4f6 !important;
+      color: #111827 !important;
       padding: 10px;
       margin: 10pt 0;
       white-space: pre-wrap;
+    }
+    pre code, code, kbd {
+      font-family: Consolas, 'Courier New', monospace;
+      background-color: #f3f4f6 !important;
+      color: #111827 !important;
     }
     blockquote {
       border-left: 3px solid #999;

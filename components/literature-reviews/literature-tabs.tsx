@@ -1,14 +1,27 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Search as SearchIcon, Database, Layers } from "lucide-react"
-import { SearchTab } from "@/components/literature-reviews/search-tab"
-import { StagingTab, type StagingLiteratureRow } from "@/components/literature-reviews/staging-tab"
+import {
+  Search as SearchIcon,
+  Database,
+  ChevronLeft,
+  ChevronRight,
+  X,
+  Loader2,
+} from "lucide-react"
+import {
+  LiteratureSearchForm,
+  SearchTab,
+} from "@/components/literature-reviews/search-tab"
 import { RepoTab } from "@/components/literature-reviews/repo-tab"
 import { PaperSearchSortMode, SearchPaper } from "@/types/paper-search"
 import { normalizeDoi } from "@/lib/literature-pdf-storage"
-import { savePaperToRepository, stagePaper } from "@/app/(app)/literature-reviews/actions"
+import {
+  removeStagingLiterature,
+  savePaperToRepository,
+  stagePaper,
+} from "@/app/(app)/literature-reviews/actions"
 import { toast } from "sonner"
 import { useRouter } from "next/navigation"
 import {
@@ -19,6 +32,16 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
 import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
 import {
@@ -29,6 +52,16 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { useLiteratureMentionRegister } from "@/contexts/literature-mention-context"
+import {
+  StagedPaperView,
+  mapRowToListItem,
+  type StagingLiteratureRow,
+  type StagingListItem,
+} from "@/components/literature-reviews/staged-paper-view"
+import { cn } from "@/lib/utils"
+
+const ACTIVE_TAB_KEY = "n9-litreview-active-tab"
+const OPENED_STAGED_IDS_KEY = "n9-litreview-opened-staged-ids"
 
 interface LiteratureReview {
   id: string
@@ -50,9 +83,8 @@ interface LiteratureTabsProps {
   stagedLiterature: StagingLiteratureRow[]
   projects: { id: string; name: string }[]
   experiments: { id: string; name: string; project_id: string }[]
-  /** Deep link from `/literature-reviews?project=…` — opens My Repository filtered to this project. */
   initialProjectId?: string | null
-  initialTab?: "search" | "staging" | "repo"
+  initialTab?: "search" | "repo"
 }
 
 export function LiteratureTabs({
@@ -65,15 +97,30 @@ export function LiteratureTabs({
 }: LiteratureTabsProps) {
   const router = useRouter()
 
+  const [topSection, setTopSection] = useState<"search" | "repo">(initialTab)
+
   const [query, setQuery] = useState("")
   const [searchSort, setSearchSort] = useState<PaperSearchSortMode>("relevance")
-  /** Publication lookback for &quot;Newest only&quot; sort (matches server default). */
   const RECENT_SORT_YEARS = 5
   const [openAccessOnlySearch, setOpenAccessOnlySearch] = useState(false)
   const [searchResults, setSearchResults] = useState<SearchPaper[]>([])
   const [isSearching, setIsSearching] = useState(false)
   const [hasSearched, setHasSearched] = useState(false)
   const [stagingPaperId, setStagingPaperId] = useState<string | null>(null)
+
+  const [activeInnerTab, setActiveInnerTab] = useState<string>("search")
+  /** Staged papers the user opened — used to focus Search results on a new search. */
+  const [openedStagedIds, setOpenedStagedIds] = useState<string[]>([])
+  const openedStagedIdsRef = useRef(openedStagedIds)
+  openedStagedIdsRef.current = openedStagedIds
+  const [tabsInitialized, setTabsInitialized] = useState(false)
+  /** Tabs opened before server refresh includes the new staged row. */
+  const [pendingOpenTabIds, setPendingOpenTabIds] = useState<string[]>([])
+  const [pendingTabTitles, setPendingTabTitles] = useState<Record<string, string>>({})
+  const pendingOpenTabIdsRef = useRef(pendingOpenTabIds)
+  pendingOpenTabIdsRef.current = pendingOpenTabIds
+  const [pendingCloseId, setPendingCloseId] = useState<string | null>(null)
+  const [isClosingTab, setIsClosingTab] = useState(false)
 
   const [pendingSavePaper, setPendingSavePaper] = useState<SearchPaper | null>(null)
   const [pendingLiteratureId, setPendingLiteratureId] = useState<string | null>(null)
@@ -82,6 +129,7 @@ export function LiteratureTabs({
   const [selectedExperimentId, setSelectedExperimentId] = useState<string>("")
   const [isSavingPaper, setIsSavingPaper] = useState(false)
   const [savingStagingLiteratureId, setSavingStagingLiteratureId] = useState<string | null>(null)
+  const [removeTargetId, setRemoveTargetId] = useState<string | null>(null)
 
   const repositoryReviews = useMemo(
     () =>
@@ -105,6 +153,65 @@ export function LiteratureTabs({
       return pid === lockedProjectId
     })
   }, [stagedLiterature, lockedProjectId])
+
+  const stagedItems = useMemo(
+    () => stagedLiteratureScoped.map(mapRowToListItem),
+    [stagedLiteratureScoped]
+  )
+
+  /** Stable key so tab-sync effect does not re-run on every parent refresh with same rows. */
+  const stagedItemIdsKey = useMemo(
+    () =>
+      stagedItems
+        .map((i) => i.id)
+        .sort()
+        .join("\u0000"),
+    [stagedItems]
+  )
+
+  const stagedById = useMemo(() => {
+    const m = new Map<string, StagingListItem>()
+    for (const item of stagedItems) m.set(item.id, item)
+    return m
+  }, [stagedItems])
+
+  /** All staged papers (+ pending) in the unified tab strip. */
+  const stripPaperIds = useMemo(() => {
+    const stagedIds = stagedItems.map((i) => i.id)
+    const pending = pendingOpenTabIds.filter((id) => !stagedIds.includes(id))
+    return [...stagedIds, ...pending]
+  }, [stagedItems, pendingOpenTabIds])
+
+  const showUnifiedTabStrip =
+    hasSearched || stripPaperIds.length > 0 || pendingOpenTabIds.length > 0
+
+  const resolvedActiveTab = useMemo(() => {
+    if (activeInnerTab === "search") {
+      if (hasSearched) return "search"
+      if (stripPaperIds.length > 0) return stripPaperIds[0]
+      return "search"
+    }
+    if (stripPaperIds.includes(activeInnerTab)) return activeInnerTab
+    if (pendingOpenTabIds.includes(activeInnerTab)) return activeInnerTab
+    if (hasSearched) return "search"
+    return stripPaperIds[0] ?? "search"
+  }, [activeInnerTab, hasSearched, stripPaperIds, pendingOpenTabIds])
+
+  type StagedPdfPatch = Pick<
+    StagingListItem,
+    "pdf_import_status" | "pdf_storage_path" | "pdf_file_name"
+  >
+
+  const [stagedPdfPatches, setStagedPdfPatches] = useState<Record<string, StagedPdfPatch>>({})
+
+  const stagedByIdMerged = useMemo(() => {
+    const m = new Map<string, StagingListItem>()
+    for (const item of stagedItems) {
+      const patch = stagedPdfPatches[item.id]
+      m.set(item.id, patch ? { ...item, ...patch } : item)
+    }
+    return m
+  }, [stagedItems, stagedPdfPatches])
 
   const registerLiteratureMentions = useLiteratureMentionRegister()
   const literatureMentionCandidates = useMemo(() => {
@@ -160,16 +267,236 @@ export function LiteratureTabs({
       setSelectedExperimentId("")
       return
     }
-
     if (!filteredExperiments.some((experiment) => experiment.id === selectedExperimentId)) {
       setSelectedExperimentId("")
     }
   }, [filteredExperiments, selectedExperimentId, projectIdForExperimentPicker])
 
+  useEffect(() => {
+    const savedActive = localStorage.getItem(ACTIVE_TAB_KEY)
+    const savedOpened = localStorage.getItem(OPENED_STAGED_IDS_KEY)
+    let opened: string[] = []
+    if (savedOpened) {
+      try {
+        opened = JSON.parse(savedOpened) as string[]
+      } catch {
+        /* ignore */
+      }
+    }
+    if (savedActive) setActiveInnerTab(savedActive)
+    if (opened.length > 0) setOpenedStagedIds(opened)
+    setTabsInitialized(true)
+  }, [])
+
+  useEffect(() => {
+    if (!tabsInitialized) return
+    localStorage.setItem(OPENED_STAGED_IDS_KEY, JSON.stringify(openedStagedIds))
+  }, [openedStagedIds, tabsInitialized])
+
+  useEffect(() => {
+    if (!tabsInitialized) return
+    if (showUnifiedTabStrip) {
+      localStorage.setItem(ACTIVE_TAB_KEY, resolvedActiveTab)
+    } else {
+      localStorage.setItem(ACTIVE_TAB_KEY, "search")
+    }
+  }, [resolvedActiveTab, tabsInitialized, showUnifiedTabStrip])
+
+  useEffect(() => {
+    if (!tabsInitialized) return
+    const validIds = new Set(stagedItems.map((i) => i.id))
+    const pending = pendingOpenTabIdsRef.current
+
+    setPendingOpenTabIds((prev) => {
+      const next = prev.filter((id) => !validIds.has(id))
+      return next.length === prev.length ? prev : next
+    })
+
+    setPendingTabTitles((prev) => {
+      const toRemove = Object.keys(prev).filter((id) => validIds.has(id))
+      if (toRemove.length === 0) return prev
+      const next = { ...prev }
+      for (const id of toRemove) delete next[id]
+      return next
+    })
+
+    setActiveInnerTab((current) => {
+      if (current === "search") return current
+      if (validIds.has(current) || pending.includes(current)) return current
+      if (stagedItems.length > 0) return stagedItems[0].id
+      return "search"
+    })
+  // Sync open tabs when the staged-id set changes (not on every row object refresh).
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [stagedItemIdsKey, tabsInitialized])
+
+  useEffect(() => {
+    setStagedPdfPatches((prev) => {
+      let changed = false
+      const next = { ...prev }
+      for (const id of Object.keys(next)) {
+        const row = stagedById.get(id)
+        if (row && row.pdf_import_status !== "pending") {
+          delete next[id]
+          changed = true
+        }
+      }
+      return changed ? next : prev
+    })
+  }, [stagedItemIdsKey, stagedById])
+
+  const pendingPdfImportIds = useMemo(() => {
+    const ids = new Set<string>()
+    for (const id of stripPaperIds) {
+      if (stagedByIdMerged.get(id)?.pdf_import_status === "pending") ids.add(id)
+    }
+    return [...ids]
+  }, [stripPaperIds, stagedByIdMerged])
+
+  useEffect(() => {
+    if (topSection !== "search" || pendingPdfImportIds.length === 0) return
+
+    let cancelled = false
+    let didRefreshList = false
+
+    const pollImportStatus = async () => {
+      for (const id of pendingPdfImportIds) {
+        if (cancelled) return
+        try {
+          const res = await fetch(`/api/literature/${id}/import-status`, { cache: "no-store" })
+          const data = (await res.json()) as {
+            pdf_import_status?: string
+            pdf_storage_path?: string | null
+            pdf_file_name?: string | null
+          }
+          if (!res.ok || !data.pdf_import_status) continue
+          if (data.pdf_import_status === "pending") continue
+
+          setStagedPdfPatches((prev) => ({
+            ...prev,
+            [id]: {
+              pdf_import_status: data.pdf_import_status ?? "none",
+              pdf_storage_path: data.pdf_storage_path ?? null,
+              pdf_file_name: data.pdf_file_name ?? null,
+            },
+          }))
+
+          if (data.pdf_import_status === "success" && !didRefreshList) {
+            didRefreshList = true
+            void router.refresh()
+          }
+        } catch {
+          /* ignore transient poll errors */
+        }
+      }
+    }
+
+    void pollImportStatus()
+    const interval = window.setInterval(() => void pollImportStatus(), 2000)
+    return () => {
+      cancelled = true
+      window.clearInterval(interval)
+    }
+  }, [topSection, pendingPdfImportIds, router])
+
+  const scrollTabsRef = useRef<HTMLDivElement>(null)
+  const [showLeftArrow, setShowLeftArrow] = useState(false)
+  const [showRightArrow, setShowRightArrow] = useState(false)
+
+  const checkScroll = useCallback(() => {
+    if (scrollTabsRef.current) {
+      const { scrollLeft, scrollWidth, clientWidth } = scrollTabsRef.current
+      setShowLeftArrow(scrollLeft > 0)
+      setShowRightArrow(scrollLeft < scrollWidth - clientWidth - 2)
+    }
+  }, [])
+
+  useEffect(() => {
+    checkScroll()
+    window.addEventListener("resize", checkScroll)
+    return () => window.removeEventListener("resize", checkScroll)
+  }, [stripPaperIds, checkScroll])
+
+  const scrollTabs = (direction: "left" | "right") => {
+    if (scrollTabsRef.current) {
+      const scrollAmount = 250
+      scrollTabsRef.current.scrollBy({
+        left: direction === "left" ? -scrollAmount : scrollAmount,
+        behavior: "smooth",
+      })
+    }
+  }
+
+  useEffect(() => {
+    if (resolvedActiveTab !== "search" && scrollTabsRef.current) {
+      const container = scrollTabsRef.current
+      const activeElement = container.querySelector(
+        `[data-value="${resolvedActiveTab}"]`
+      ) as HTMLElement
+      if (activeElement) {
+        const containerRect = container.getBoundingClientRect()
+        const activeRect = activeElement.getBoundingClientRect()
+        if (activeRect.left < containerRect.left || activeRect.right > containerRect.right) {
+          activeElement.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "center" })
+        }
+      }
+    }
+    checkScroll()
+  }, [resolvedActiveTab, checkScroll])
+
+  const markStagedPaperOpened = useCallback((literatureId: string) => {
+    setOpenedStagedIds((prev) => (prev.includes(literatureId) ? prev : [...prev, literatureId]))
+  }, [])
+
+  const syncTabsForSearchSession = useCallback(() => {
+    setActiveInnerTab("search")
+  }, [])
+
+  const openPaperTab = useCallback(
+    (literatureId: string, title?: string) => {
+      setPendingOpenTabIds((prev) =>
+        prev.includes(literatureId) ? prev : [...prev, literatureId]
+      )
+      if (title) {
+        setPendingTabTitles((prev) => ({ ...prev, [literatureId]: title }))
+      }
+      setTopSection("search")
+      markStagedPaperOpened(literatureId)
+      setActiveInnerTab(literatureId)
+    },
+    [markStagedPaperOpened]
+  )
+
+  const resolveStagedLiteratureId = useCallback(
+    (paper: SearchPaper): string | null => {
+      const nd = paper.doi ? normalizeDoi(paper.doi) : null
+      const pool = lockedProjectId
+        ? stagedLiterature.filter((row) => {
+            const r = row as { project_id?: string | null; project?: { id?: string } | null }
+            return (r.project_id ?? r.project?.id ?? null) === lockedProjectId
+          })
+        : stagedLiterature
+      const match = pool.find((row) => {
+        if (paper.pmid && row.pmid === paper.pmid) return true
+        if (nd && row.doi === nd) return true
+        if (
+          !paper.pmid &&
+          !nd &&
+          row.title === paper.title &&
+          row.publication_year === paper.year
+        )
+          return true
+        return false
+      })
+      return match ? String(match.id) : null
+    },
+    [stagedLiterature, lockedProjectId]
+  )
+
   const executePaperSearch = async (
     q: string,
     sort: PaperSearchSortMode,
-    openAccessOnly: boolean,
+    openAccessOnly: boolean
   ) => {
     setIsSearching(true)
     try {
@@ -202,6 +529,7 @@ export function LiteratureTabs({
     if (!q) return
     setHasSearched(true)
     await executePaperSearch(q, searchSort, openAccessOnlySearch)
+    syncTabsForSearchSession()
   }
 
   const handleSearchSortChange = (sort: PaperSearchSortMode) => {
@@ -223,21 +551,12 @@ export function LiteratureTabs({
   const isPaperStaged = (paperId: string) => {
     const paper = searchResults.find((p) => p.id === paperId)
     if (!paper) return false
-    const nd = paper.doi ? normalizeDoi(paper.doi) : null
-    const pool =
-      lockedProjectId != null
-        ? stagedLiterature.filter((row) => {
-            const r = row as { project_id?: string | null; project?: { id?: string } | null }
-            return (r.project_id ?? r.project?.id ?? null) === lockedProjectId
-          })
-        : stagedLiterature
-    return pool.some((row) => {
-      if (paper.pmid && row.pmid === paper.pmid) return true
-      if (nd && row.doi === nd) return true
-      if (!paper.pmid && !nd && row.title === paper.title && row.publication_year === paper.year)
-        return true
-      return false
-    })
+    return resolveStagedLiteratureId(paper) !== null
+  }
+
+  const handleOpenStaged = (paper: SearchPaper) => {
+    const id = resolveStagedLiteratureId(paper)
+    if (id) openPaperTab(id, paper.title)
   }
 
   const handleStagePaper = async (paper: SearchPaper) => {
@@ -245,21 +564,68 @@ export function LiteratureTabs({
     try {
       const result = await stagePaper(paper, { projectId: lockedProjectId })
       if (result.success) {
+        const rowId =
+          result.data && typeof result.data === "object" && "id" in result.data
+            ? String((result.data as { id: string }).id)
+            : resolveStagedLiteratureId(paper)
+        if (rowId) {
+          openPaperTab(rowId, paper.title)
+        }
         if (result.alreadyStaged) {
           toast.message("Already in staging")
         } else {
-          toast.success("Paper staged — downloading PDF from the search link")
+          toast.success("Paper staged — PDF import runs in the background")
         }
-        if ("warning" in result && result.warning) {
+        if ("warning" in result && typeof result.warning === "string" && result.warning) {
           toast.message(result.warning)
         }
-        router.refresh()
+        void router.refresh()
       } else {
         toast.error("error" in result ? result.error : "Failed to stage")
       }
     } finally {
       setStagingPaperId(null)
     }
+  }
+
+  const closeTabOnly = (id: string) => {
+    setOpenedStagedIds((prev) => prev.filter((t) => t !== id))
+    setPendingOpenTabIds((p) => p.filter((t) => t !== id))
+    setPendingTabTitles((titles) => {
+      const next = { ...titles }
+      delete next[id]
+      return next
+    })
+    setActiveInnerTab((current) => {
+      if (current !== id) return current
+      if (hasSearched) return "search"
+      const remaining = stagedItems.map((i) => i.id).filter((sid) => sid !== id)
+      return remaining[0] ?? "search"
+    })
+    setPendingCloseId(null)
+  }
+
+  const closeTabAndRemove = async (id: string) => {
+    setIsClosingTab(true)
+    try {
+      const result = await removeStagingLiterature(id)
+      if (!result.success) {
+        throw new Error("error" in result ? result.error : "Remove failed")
+      }
+      closeTabOnly(id)
+      toast.success("Removed from staging")
+      router.refresh()
+    } catch (e: unknown) {
+      toast.error(e instanceof Error ? e.message : "Failed to remove from staging")
+    } finally {
+      setIsClosingTab(false)
+      setPendingCloseId(null)
+    }
+  }
+
+  const handleCloseTabClick = (id: string, e: React.MouseEvent | React.KeyboardEvent) => {
+    e.stopPropagation()
+    setPendingCloseId(id)
   }
 
   const openSaveDialog = (paper: SearchPaper, literatureId?: string) => {
@@ -270,7 +636,6 @@ export function LiteratureTabs({
     setSaveDialogOpen(true)
   }
 
-  /** From staging: when opened with `?project=`, save straight to repository under that project (no dialog). */
   const handleSaveFromStaging = async (paper: SearchPaper, literatureId: string) => {
     if (lockedProjectId) {
       setSavingStagingLiteratureId(literatureId)
@@ -280,7 +645,7 @@ export function LiteratureTabs({
           experimentId: null,
           literatureId,
         })
-        if (result.success) {
+          if (result.success) {
           const pdfAttached = Boolean(result.data?.pdf_storage_path) && !result.warning
           toast.success(
             pdfAttached ? "Paper and PDF saved to repository" : "Paper saved to repository"
@@ -288,9 +653,14 @@ export function LiteratureTabs({
           if (result.warning) {
             toast.message(result.warning)
           }
+          if (activeInnerTab === literatureId) setActiveInnerTab("search")
           router.refresh()
         } else {
-          toast.error("error" in result && typeof result.error === "string" ? result.error : "Failed to save paper")
+          toast.error(
+            "error" in result && typeof result.error === "string"
+              ? result.error
+              : "Failed to save paper"
+          )
         }
       } catch (error) {
         toast.error("Failed to save paper")
@@ -322,6 +692,9 @@ export function LiteratureTabs({
         if (result.warning) {
           toast.message(result.warning)
         }
+        if (pendingLiteratureId && activeInnerTab === pendingLiteratureId) {
+          setActiveInnerTab("search")
+        }
         setSaveDialogOpen(false)
         setPendingSavePaper(null)
         setPendingLiteratureId(null)
@@ -337,65 +710,290 @@ export function LiteratureTabs({
     }
   }
 
-  const literatureDefaultTab = initialTab
+  const pendingCloseItem = pendingCloseId ? stagedByIdMerged.get(pendingCloseId) : null
+
+  const unifiedTabStrip = (
+    <div className="flex items-center justify-between gap-4 border-b">
+      <div className="relative group transition-all flex-1 overflow-hidden">
+        {showLeftArrow && (
+          <div className="absolute left-0 top-0 bottom-0 z-20 flex items-center bg-gradient-to-r from-background via-background/80 to-transparent pr-10 pointer-events-none">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8 rounded-full shadow-lg bg-background border pointer-events-auto hover:bg-muted ml-0.5 transform translate-y-[1.5px]"
+              onClick={() => scrollTabs("left")}
+            >
+              <ChevronLeft className="h-4 w-4" />
+            </Button>
+          </div>
+        )}
+
+        <div
+          ref={scrollTabsRef}
+          className="overflow-x-auto no-scrollbar scroll-smooth"
+          onScroll={checkScroll}
+        >
+          <TabsList className="bg-transparent h-auto p-0 flex items-center justify-start border-none flex-nowrap w-max min-w-full relative">
+            <div className="w-2 flex-shrink-0" />
+            {hasSearched && (
+              <TabsTrigger
+                value="search"
+                data-value="search"
+                className="data-[state=active]:bg-transparent data-[state=active]:border-b-2 data-[state=active]:border-[var(--n9-accent)] data-[state=active]:text-foreground rounded-none border-b-2 border-transparent px-4 py-2 bg-transparent text-muted-foreground transition-none shadow-none font-semibold shrink-0"
+              >
+                <SearchIcon className="h-4 w-4 mr-2" />
+                Search results
+              </TabsTrigger>
+            )}
+            {stripPaperIds.map((id) => {
+              const lit = stagedByIdMerged.get(id)
+              const tabTitle = lit?.title ?? pendingTabTitles[id]
+              if (!tabTitle) return null
+              return (
+                <TabsTrigger
+                  key={id}
+                  value={id}
+                  data-value={id}
+                  className="group relative data-[state=active]:bg-transparent data-[state=active]:border-b-2 data-[state=active]:border-[var(--n9-accent)] data-[state=active]:text-foreground rounded-none border-b-2 border-transparent px-4 py-2 bg-transparent text-muted-foreground transition-none shadow-none max-w-[220px] flex items-center gap-1 shrink-0"
+                >
+                  <span className="truncate text-sm font-semibold">{tabTitle}</span>
+                  <button
+                    type="button"
+                    onClick={(e) => handleCloseTabClick(id, e)}
+                    className="flex-shrink-0 p-1 rounded-md hover:bg-muted text-muted-foreground/60 hover:text-rose-500 transition-all opacity-0 group-hover:opacity-100 focus:opacity-100"
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                </TabsTrigger>
+              )
+            })}
+            <div className="w-10 flex-shrink-0" />
+          </TabsList>
+        </div>
+
+        {showRightArrow && (
+          <div className="absolute right-0 top-0 bottom-0 z-20 flex items-center bg-gradient-to-l from-background via-background/80 to-transparent pl-10 pointer-events-none">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8 rounded-full shadow-lg bg-background border pointer-events-auto hover:bg-muted mr-0.5 transform translate-y-[1.5px]"
+              onClick={() => scrollTabs("right")}
+            >
+              <ChevronRight className="h-4 w-4" />
+            </Button>
+          </div>
+        )}
+      </div>
+    </div>
+  )
 
   return (
-    <Tabs defaultValue={literatureDefaultTab} className="w-full">
-      <TabsList>
-        <TabsTrigger value="search" className="flex items-center gap-2">
+    <div className="w-full space-y-4">
+      <div className="inline-flex rounded-lg border border-border bg-muted/40 p-1">
+        <button
+          type="button"
+          onClick={() => setTopSection("search")}
+          className={cn(
+            "inline-flex items-center gap-2 rounded-md px-4 py-2 text-sm font-medium transition-colors",
+            topSection === "search"
+              ? "bg-background text-foreground shadow-sm"
+              : "text-muted-foreground hover:text-foreground"
+          )}
+        >
           <SearchIcon className="h-4 w-4" />
-          Search
-        </TabsTrigger>
-        <TabsTrigger value="staging" className="flex items-center gap-2">
-          <Layers className="h-4 w-4" />
-          Staging
-          {stagedLiteratureScoped.length > 0 && (
-            <span className="ml-1 bg-primary text-primary-foreground text-xs px-1.5 py-0.5 rounded-full">
-              {stagedLiteratureScoped.length}
+          Search & read
+          {stagedItems.length > 0 && (
+            <span
+              className="ml-0.5 rounded-full bg-primary/10 px-1.5 py-0 text-xs text-primary"
+              title={`${stagedItems.length} paper${stagedItems.length === 1 ? "" : "s"} in staging`}
+            >
+              {stagedItems.length}
             </span>
           )}
-        </TabsTrigger>
-        <TabsTrigger value="repo" className="flex items-center gap-2">
+        </button>
+        <button
+          type="button"
+          onClick={() => setTopSection("repo")}
+          className={cn(
+            "inline-flex items-center gap-2 rounded-md px-4 py-2 text-sm font-medium transition-colors",
+            topSection === "repo"
+              ? "bg-background text-foreground shadow-sm"
+              : "text-muted-foreground hover:text-foreground"
+          )}
+        >
           <Database className="h-4 w-4" />
           My Repository
-        </TabsTrigger>
-      </TabsList>
+        </button>
+      </div>
 
-      <TabsContent value="search" className="mt-6">
-        <SearchTab
-          query={query}
-          setQuery={setQuery}
-          searchResults={searchResults}
-          isSearching={isSearching}
-          hasSearched={hasSearched}
-          onSearch={handleSearch}
-          onStagePaper={handleStagePaper}
-          isPaperStaged={isPaperStaged}
-          isPaperStaging={(paperId) => stagingPaperId === paperId}
-          sortMode={searchSort}
-          onSortModeChange={handleSearchSortChange}
-          openAccessOnly={openAccessOnlySearch}
-          onOpenAccessOnlyChange={handleOpenAccessSearchChange}
-        />
-      </TabsContent>
+      {topSection === "search" ? (
+        <div className="space-y-6">
+          <LiteratureSearchForm
+            query={query}
+            setQuery={setQuery}
+            isSearching={isSearching}
+            onSearch={handleSearch}
+          />
 
-      <TabsContent value="staging" className="mt-6">
-        <StagingTab
-          stagedLiterature={stagedLiteratureScoped}
-          onSavePaper={handleSaveFromStaging}
-          savingLiteratureId={savingStagingLiteratureId}
-        />
-      </TabsContent>
+          {showUnifiedTabStrip ? (
+            <Tabs
+              value={resolvedActiveTab}
+              onValueChange={setActiveInnerTab}
+              className="w-full"
+            >
+              {unifiedTabStrip}
 
-      <TabsContent value="repo" className="mt-6">
-        <RepoTab
-          literatureReviews={repositoryReviews}
-          projects={projects}
-          experiments={experiments}
-          initialProjectFilterId={initialProjectId ?? undefined}
-          lockProjectFilter={Boolean(lockedProjectId)}
-        />
-      </TabsContent>
+              <div className="mt-6">
+                {hasSearched && (
+                  <TabsContent value="search" className="m-0 border-none p-0">
+                    <SearchTab
+                      query={query}
+                      setQuery={setQuery}
+                      searchResults={searchResults}
+                      isSearching={isSearching}
+                      hasSearched={hasSearched}
+                      onSearch={handleSearch}
+                      resultsOnly
+                      onStagePaper={handleStagePaper}
+                      onOpenStaged={handleOpenStaged}
+                      isPaperStaged={isPaperStaged}
+                      isPaperStaging={(paperId) => stagingPaperId === paperId}
+                      sortMode={searchSort}
+                      onSortModeChange={handleSearchSortChange}
+                      openAccessOnly={openAccessOnlySearch}
+                      onOpenAccessOnlyChange={handleOpenAccessSearchChange}
+                    />
+                  </TabsContent>
+                )}
+
+                {stripPaperIds.map((id) => {
+                  const lit = stagedByIdMerged.get(id)
+                  return (
+                    <TabsContent key={id} value={id} className="m-0 border-none p-0">
+                      {lit ? (
+                        <StagedPaperView
+                          lit={lit}
+                          onSavePaper={handleSaveFromStaging}
+                          savingLiteratureId={savingStagingLiteratureId}
+                          onRemove={() => setRemoveTargetId(lit.id)}
+                        />
+                      ) : (
+                        <div className="flex flex-col items-center justify-center gap-3 py-20 text-center">
+                          <Loader2 className="h-8 w-8 animate-spin text-[var(--n9-accent)]" />
+                          <p className="text-sm text-muted-foreground">Loading staged paper…</p>
+                        </div>
+                      )}
+                    </TabsContent>
+                  )
+                })}
+              </div>
+            </Tabs>
+          ) : (
+            <SearchTab
+              query={query}
+              setQuery={setQuery}
+              searchResults={searchResults}
+              isSearching={isSearching}
+              hasSearched={hasSearched}
+              onSearch={handleSearch}
+              resultsOnly
+              onStagePaper={handleStagePaper}
+              onOpenStaged={handleOpenStaged}
+              isPaperStaged={isPaperStaged}
+              isPaperStaging={(paperId) => stagingPaperId === paperId}
+              sortMode={searchSort}
+              onSortModeChange={handleSearchSortChange}
+              openAccessOnly={openAccessOnlySearch}
+              onOpenAccessOnlyChange={handleOpenAccessSearchChange}
+            />
+          )}
+        </div>
+      ) : (
+        <div className="mt-2">
+          <RepoTab
+            literatureReviews={repositoryReviews}
+            projects={projects}
+            experiments={experiments}
+            initialProjectFilterId={initialProjectId ?? undefined}
+            lockProjectFilter={Boolean(lockedProjectId)}
+          />
+        </div>
+      )}
+
+      <AlertDialog
+        open={Boolean(pendingCloseId)}
+        onOpenChange={(open) => {
+          if (!open) setPendingCloseId(null)
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Close staged paper tab?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {pendingCloseItem ? (
+                <>
+                  <strong>{pendingCloseItem.title}</strong> — close this tab only, or also remove
+                  the paper from staging (and delete its PDF).
+                </>
+              ) : null}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter className="flex-col gap-2 sm:flex-row sm:justify-end">
+            <AlertDialogCancel disabled={isClosingTab}>Cancel</AlertDialogCancel>
+            <Button
+              variant="outline"
+              disabled={isClosingTab}
+              onClick={() => pendingCloseId && closeTabOnly(pendingCloseId)}
+            >
+              Close tab
+            </Button>
+            <AlertDialogAction
+              onClick={(e) => {
+                e.preventDefault()
+                if (pendingCloseId) void closeTabAndRemove(pendingCloseId)
+              }}
+              disabled={isClosingTab}
+              className="bg-rose-50 text-rose-600 border border-rose-100 font-semibold hover:bg-rose-100 dark:bg-rose-900/20 dark:text-rose-400 dark:border-rose-900/10 dark:hover:bg-rose-900/30"
+            >
+              {isClosingTab ? "Removing…" : "Close & remove from staging"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog
+        open={Boolean(removeTargetId)}
+        onOpenChange={(open) => {
+          if (!open) setRemoveTargetId(null)
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Remove from staging?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {removeTargetId && stagedByIdMerged.get(removeTargetId) ? (
+                <>
+                  This removes <strong>{stagedByIdMerged.get(removeTargetId)!.title}</strong> from staging
+                  and deletes its stored PDF if any. This cannot be undone.
+                </>
+              ) : null}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isClosingTab}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(e) => {
+                e.preventDefault()
+                if (removeTargetId) void closeTabAndRemove(removeTargetId)
+              }}
+              disabled={isClosingTab}
+              className="bg-rose-50 text-rose-600 border border-rose-100 font-semibold hover:bg-rose-100 dark:bg-rose-900/20 dark:text-rose-400 dark:border-rose-900/10 dark:hover:bg-rose-900/30"
+            >
+              {isClosingTab ? "Removing…" : "Remove"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <Dialog
         open={saveDialogOpen}
@@ -413,8 +1011,8 @@ export function LiteratureTabs({
           <DialogHeader>
             <DialogTitle>Link paper to your research</DialogTitle>
             <DialogDescription>
-              Connect this paper to a project, and optionally to one of that project&apos;s experiments,
-              before saving it to your repository.
+              Connect this paper to a project, and optionally to one of that project&apos;s
+              experiments, before saving it to your repository.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
@@ -432,7 +1030,10 @@ export function LiteratureTabs({
                     id="link-project"
                     className="flex h-10 min-w-0 items-center overflow-hidden rounded-md border border-input bg-muted/40 px-3 text-sm"
                   >
-                    <span className="min-w-0 truncate font-medium text-foreground" title={lockedProjectName}>
+                    <span
+                      className="min-w-0 truncate font-medium text-foreground"
+                      title={lockedProjectName}
+                    >
                       {lockedProjectName}
                     </span>
                   </div>
@@ -501,6 +1102,6 @@ export function LiteratureTabs({
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </Tabs>
+    </div>
   )
 }

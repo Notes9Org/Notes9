@@ -4,7 +4,7 @@ import { SearchPaper } from '@/types/paper-search';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
-import { Download, ExternalLink, FileText, Lock, Unlock, ChevronDown, ChevronUp, Plus, Check, Database, X, Loader2 } from 'lucide-react';
+import { Download, ExternalLink, FileText, Lock, Unlock, ChevronDown, ChevronUp, Plus, Database, X, Loader2 } from 'lucide-react';
 import { useState } from 'react';
 import { formatLiteratureAbstractPlain } from '@/lib/literature-abstract-display';
 
@@ -38,6 +38,7 @@ function resolvePaperExternalUrl(paper: SearchPaper): string | null {
 interface PaperSearchCardProps {
   paper: SearchPaper;
   onStage?: (paper: SearchPaper) => void | Promise<void>;
+  onOpenStaged?: (paper: SearchPaper) => void;
   onSave?: (paper: SearchPaper) => Promise<void>;
   onSaveToRepository?: (paper: SearchPaper) => Promise<void>;
   onRemove?: (paperId: string) => void;
@@ -48,7 +49,7 @@ interface PaperSearchCardProps {
   compact?: boolean;
 }
 
-export function PaperSearchCard({ paper, onStage, onSave, onSaveToRepository, onRemove, isStaged = false, isSaving = false, isStaging = false, hideActions = false, compact = false }: PaperSearchCardProps) {
+export function PaperSearchCard({ paper, onStage, onOpenStaged, onSave, onSaveToRepository, onRemove, isStaged = false, isSaving = false, isStaging = false, hideActions = false, compact = false }: PaperSearchCardProps) {
   const [isExpanded, setIsExpanded] = useState(false);
   const abstractPlain = formatLiteratureAbstractPlain(paper.abstract);
 
@@ -234,18 +235,40 @@ export function PaperSearchCard({ paper, onStage, onSave, onSaveToRepository, on
               <>
                 <Button
                   variant={isStaged ? "secondary" : "default"}
-                  size="icon"
-                  onClick={() => void onStage(paper)}
-                  disabled={isStaged || isStaging}
-                  title={isStaged ? "Already staged" : isStaging ? "Staging…" : "Stage paper"}
-                  aria-label={isStaged ? "Already staged" : isStaging ? "Staging" : "Stage paper"}
+                  size="sm"
+                  onClick={() => {
+                    if (isStaged && onOpenStaged) {
+                      onOpenStaged(paper)
+                    } else {
+                      void onStage(paper)
+                    }
+                  }}
+                  disabled={isStaging}
+                  title={
+                    isStaged
+                      ? "View staged paper"
+                      : isStaging
+                        ? "Staging…"
+                        : "Stage paper"
+                  }
+                  aria-label={
+                    isStaged
+                      ? "View staged paper"
+                      : isStaging
+                        ? "Staging"
+                        : "Stage paper"
+                  }
+                  className="gap-1"
                 >
                   {isStaging ? (
                     <Loader2 size={14} className="animate-spin" />
                   ) : isStaged ? (
-                    <Check size={14} />
+                    "Staged"
                   ) : (
-                    <Plus size={14} />
+                    <>
+                      <Plus size={14} />
+                      Stage
+                    </>
                   )}
                 </Button>
                 {onSaveToRepository && (
