@@ -77,34 +77,8 @@ export function createDatabaseExtension(): Database {
         return new Uint8Array(binary);
       }
 
-      // No Yjs state found — check if there's HTML content to migrate
-      const paperResponse = await supabaseRequest(
-        `papers?id=eq.${paperId}&select=content`,
-        { headers: { Accept: "application/json" } }
-      );
-
-      const paperRows = (await paperResponse.json()) as Array<{ content: string | null }>;
-
-      if (paperRows.length > 0 && paperRows[0].content) {
-        const html = paperRows[0].content;
-        const ydoc = htmlToYDoc(html);
-        const state = Y.encodeStateAsUpdate(ydoc);
-        ydoc.destroy();
-
-        // Persist the migrated state (upsert)
-        await supabaseRequest("paper_yjs_documents", {
-          method: "POST",
-          headers: { Prefer: "resolution=merge-duplicates" },
-          body: {
-            paper_id: paperId,
-            yjs_state: `\\x${Buffer.from(state).toString("hex")}`,
-          },
-        });
-
-        return state;
-      }
-
-      // No existing content at all — return null (Hocuspocus creates empty doc)
+      // No Yjs state found — return null and let Hocuspocus create a fresh document.
+      // HTML migration from papers.content is skipped for now to avoid encoding issues.
       return null;
     },
 
