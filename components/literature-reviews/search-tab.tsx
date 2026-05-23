@@ -14,6 +14,53 @@ import {
 import { Search, Loader2, BookOpen, Database, Unlock } from 'lucide-react'
 import { PaperSearchCard } from './paper-search-card'
 
+interface LiteratureSearchFormProps {
+  query: string
+  setQuery: (query: string) => void
+  isSearching: boolean
+  onSearch: () => void
+}
+
+export function LiteratureSearchForm({
+  query,
+  setQuery,
+  isSearching,
+  onSearch,
+}: LiteratureSearchFormProps) {
+  const handleSearch = (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!query.trim()) return
+    onSearch()
+  }
+
+  return (
+    <form onSubmit={handleSearch} className="mx-auto max-w-3xl">
+      <div className="relative">
+        <span
+          className="pointer-events-none absolute left-3 top-1/2 flex -translate-y-1/2 text-muted-foreground"
+          aria-hidden
+        >
+          {isSearching ? (
+            <Loader2 className="h-4 w-4 animate-spin text-primary" />
+          ) : (
+            <Search className="h-4 w-4" />
+          )}
+        </span>
+        <Input
+          type="search"
+          placeholder="Search PubMed, Europe PMC, OpenAlex…"
+          className="h-11 w-full pl-10 text-base"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          disabled={isSearching}
+          enterKeyHint="search"
+          aria-label="Literature search query"
+        />
+      </div>
+    </form>
+  )
+}
+
 interface SearchTabProps {
   query: string
   setQuery: (query: string) => void
@@ -21,7 +68,10 @@ interface SearchTabProps {
   isSearching: boolean
   hasSearched: boolean
   onSearch: () => void
+  /** When true, omits the search form (parent renders it above the tab strip). */
+  resultsOnly?: boolean
   onStagePaper: (paper: SearchPaper) => void | Promise<void>
+  onOpenStaged?: (paper: SearchPaper) => void
   isPaperStaged: (paperId: string) => boolean
   isPaperStaging?: (paperId: string) => boolean
   sortMode: PaperSearchSortMode
@@ -37,7 +87,9 @@ export function SearchTab({
   isSearching,
   hasSearched,
   onSearch,
+  resultsOnly = false,
   onStagePaper,
+  onOpenStaged,
   isPaperStaged,
   isPaperStaging,
   sortMode,
@@ -45,12 +97,6 @@ export function SearchTab({
   openAccessOnly,
   onOpenAccessOnlyChange,
 }: SearchTabProps) {
-  const handleSearch = async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!query.trim()) return
-    onSearch()
-  }
-
   const exampleSearches = [
     'CRISPR gene editing in cancer therapy',
     'COVID-19 vaccine efficacy studies',
@@ -60,30 +106,14 @@ export function SearchTab({
 
   return (
     <div className="space-y-6">
-      <form onSubmit={handleSearch} className="mx-auto max-w-3xl">
-        <div className="relative">
-          <span
-            className="pointer-events-none absolute left-3 top-1/2 flex -translate-y-1/2 text-muted-foreground"
-            aria-hidden
-          >
-            {isSearching ? (
-              <Loader2 className="h-4 w-4 animate-spin text-primary" />
-            ) : (
-              <Search className="h-4 w-4" />
-            )}
-          </span>
-          <Input
-            type="search"
-            placeholder="Search PubMed, Europe PMC, OpenAlex…"
-            className="h-11 w-full pl-10 text-base"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            disabled={isSearching}
-            enterKeyHint="search"
-            aria-label="Literature search query"
-          />
-        </div>
-      </form>
+      {!resultsOnly && (
+        <LiteratureSearchForm
+          query={query}
+          setQuery={setQuery}
+          isSearching={isSearching}
+          onSearch={onSearch}
+        />
+      )}
 
       {!hasSearched && (
         <div className="flex flex-col items-center justify-center py-12 text-center">
@@ -216,6 +246,7 @@ export function SearchTab({
               <PaperSearchCard
                 paper={paper}
                 onStage={onStagePaper}
+                onOpenStaged={onOpenStaged}
                 isStaged={isPaperStaged(paper.id)}
                 isStaging={isPaperStaging?.(paper.id) ?? false}
               />

@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button"
 import { Plus, X } from 'lucide-react'
 import Link from 'next/link'
 import { LiteratureTabs } from '@/components/literature-reviews/literature-tabs'
-import type { StagingLiteratureRow } from "@/components/literature-reviews/staging-tab"
+import type { StagingLiteratureRow } from "@/components/literature-reviews/staged-paper-view"
 import { UploadLiteraturePdfDialog } from "@/components/literature-reviews/upload-literature-pdf-dialog"
 import { resolveInitialProjectIdParam } from "@/lib/url-project-param"
 import { SetPageBreadcrumb } from "@/components/layout/breadcrumb-context"
@@ -68,11 +68,13 @@ export default async function LiteratureReviewsPage({
     safeProjects.map((p) => p.id)
   )
   const initialTab =
-    sp.tab === "repo" || sp.tab === "staging" || sp.tab === "search"
-      ? sp.tab
-      : initialProjectId
-        ? "repo"
-        : "search"
+    sp.tab === "repo"
+      ? "repo"
+      : sp.tab === "staging" || sp.tab === "search"
+        ? "search"
+        : initialProjectId
+          ? "repo"
+          : "search"
   const scopedProject = initialProjectId
     ? safeProjects.find((p) => p.id === initialProjectId)
     : null

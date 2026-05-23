@@ -1,5 +1,6 @@
 'use server'
 
+import { after } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { revalidatePath } from "next/cache"
 import { tryImportPdfForPaper } from "@/lib/literature-pdf-import"
@@ -135,31 +136,30 @@ export async function stagePaper(
       return { success: false as const, error: insertError?.message ?? "Failed to stage paper" }
     }
 
-    const importResult = await tryImportPdfForPaper({
-      supabase,
-      userId: user.id,
-      literatureId: created.id,
-      paper,
-      matchSource: "staging_pubmed_import",
-    })
+    const literatureId = created.id
+    const userId = user.id
 
     revalidatePath("/literature-reviews")
 
-    let warning: string | null = null
-    if (!importResult.ok && importResult.reason === "fetch_failed" && "message" in importResult) {
-      warning = importResult.message ?? "Could not download the PDF from the search link."
-    } else if (!importResult.ok && importResult.reason === "no_open_access_pdf") {
-      warning =
-        "No downloadable PDF link on this search result (or it cannot be fetched here). Open the publisher PDF or upload the file."
-    }
+    // PDF fetch/upload can take many seconds — run after the action returns so staging feels instant.
+    after(async () => {
+      try {
+        const bgSupabase = await createClient()
+        await tryImportPdfForPaper({
+          supabase: bgSupabase,
+          userId,
+          literatureId,
+          paper,
+          matchSource: "staging_pubmed_import",
+        })
+      } catch (err) {
+        console.error("[stagePaper] background PDF import failed", err)
+      } finally {
+        revalidatePath("/literature-reviews")
+      }
+    })
 
-    const { data: refreshed } = await supabase
-      .from("literature_reviews")
-      .select("*")
-      .eq("id", created.id)
-      .single()
-
-    return { success: true as const, data: refreshed ?? created, warning, alreadyStaged: false as const }
+    return { success: true as const, data: created, alreadyStaged: false as const }
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : "Failed to stage paper"
     return { success: false as const, error: message }
