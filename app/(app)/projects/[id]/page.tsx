@@ -1,16 +1,10 @@
 import { redirect, notFound } from 'next/navigation'
-import Link from 'next/link'
 import { createClient } from "@/lib/supabase/server"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { SetPageBreadcrumb } from "@/components/layout/breadcrumb-context"
-import { Plus, FileText } from 'lucide-react'
 import { ProjectActions } from './project-actions'
 import { ProjectWorkspace } from './project-workspace'
-import { AddMemberDialog } from './add-member-dialog'
 import { HtmlContent } from '@/components/html-content'
 import { loadProjectWorkspaceProtocols } from "@/lib/project-workspace-protocols"
 import { CatalystSectionHero } from "@/components/catalyst/catalyst-section-hero"
@@ -184,6 +178,33 @@ export default async function ProjectDetailPage({
     experimentDataRes.count ?? experimentDataRows.length
   const orgProjects = orgProjectsRes.data ?? []
 
+  // ── About-card metadata ──────────────────────────────────────────────
+  const ownerName =
+    [project.created_by?.first_name, project.created_by?.last_name]
+      .filter(Boolean)
+      .join(" ")
+      .trim() || "—"
+  const startedLabel = project.start_date || project.created_at
+    ? new Date(project.start_date || project.created_at).toLocaleDateString(undefined, {
+        month: "short",
+        year: "numeric",
+      })
+    : "—"
+  const membersCount = project.project_members?.length ?? 0
+  const lastActivityLabel = (() => {
+    const iso = project.updated_at || project.created_at
+    if (!iso) return "—"
+    const diff = Date.now() - new Date(iso).getTime()
+    const m = Math.floor(diff / 60000)
+    if (m < 1) return "just now"
+    if (m < 60) return `${m}m ago`
+    const h = Math.floor(m / 60)
+    if (h < 24) return `${h}h ago`
+    const d = Math.floor(h / 24)
+    if (d < 7) return `${d}d ago`
+    return new Date(iso).toLocaleDateString()
+  })()
+
   return (
       <div className="space-y-5 md:space-y-6 pb-8">
         <SetPageBreadcrumb
@@ -198,30 +219,9 @@ export default async function ProjectDetailPage({
             currentProject={{ id: project.id, name: project.name }}
             projects={orgProjects}
           />
+          {/* Status / priority badges relocated to the "About this project"
+              card below — the header keeps only the action icons. */}
           <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
-            <Badge
-              variant={
-                project.status === "active"
-                  ? "default"
-                  : project.status === "completed"
-                  ? "secondary"
-                  : "outline"
-              }
-            >
-              {project.status}
-            </Badge>
-            {project.priority && (
-              <Badge
-                variant={
-                  project.priority === "critical" || project.priority === "high"
-                    ? "destructive"
-                    : "outline"
-                }
-              >
-                <span className="hidden sm:inline">{project.priority} priority</span>
-                <span className="sm:hidden">{project.priority}</span>
-              </Badge>
-            )}
             <ProjectActions
               project={{
                 id: project.id,
@@ -259,118 +259,67 @@ export default async function ProjectDetailPage({
           reportsCount={reportsCount}
         />
 
-        {project.description ? (
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-foreground">About this project</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <HtmlContent content={project.description} />
-            </CardContent>
-          </Card>
-        ) : null}
-
-        {/* Secondary surfaces: team + reports */}
-        <Tabs defaultValue="team" className="space-y-4">
-          <TabsList>
-            <TabsTrigger value="team">Team</TabsTrigger>
-            <TabsTrigger value="reports">Reports</TabsTrigger>
-          </TabsList>
-
-          <TabsContent value="team" className="space-y-4">
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <h2 className="text-lg font-semibold md:text-xl">Team Members</h2>
-              <AddMemberDialog
-                projectId={project.id}
-                existingMemberIds={
-                  (project.project_members ?? [])
-                    .map((m: any) => m.user_id)
-                    .filter(Boolean) as string[]
-                }
-              />
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-foreground">About this project</CardTitle>
+          </CardHeader>
+          <CardContent className="grid gap-6 md:grid-cols-[1fr_auto] md:gap-10">
+            <div className="min-w-0 space-y-3 text-sm leading-relaxed text-muted-foreground">
+              {project.description ? (
+                <HtmlContent content={project.description} />
+              ) : (
+                <p>No description yet.</p>
+              )}
             </div>
 
-            <div className="grid gap-4 md:grid-cols-2">
-              {project.project_members?.map((member: any) => (
-                <Card key={member.id}>
-                  <CardContent className="flex items-center gap-4 pt-6">
-                    <Avatar className="h-12 w-12">
-                      <AvatarFallback>
-                        {member.user?.first_name?.[0]}
-                        {member.user?.last_name?.[0]}
-                      </AvatarFallback>
-                    </Avatar>
-                    <div className="flex-1">
-                      <p className="font-medium">
-                        {member.user?.first_name} {member.user?.last_name}
-                      </p>
-                      <p className="text-sm text-muted-foreground">
-                        {member.user?.email}
-                      </p>
-                      <div className="flex items-center gap-2 mt-1">
-                        <Badge variant="outline" className="text-xs">
-                          {member.role}
-                        </Badge>
-                        <Badge variant="secondary" className="text-xs">
-                          {member.user?.role}
-                        </Badge>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
-          </TabsContent>
-
-          <TabsContent value="reports" className="space-y-4">
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <h2 className="text-lg font-semibold md:text-xl">Project Reports</h2>
-              <Button className="w-full sm:w-auto" asChild>
-                <Link href={`/reports?project=${id}`}>
-                  <Plus className="h-4 w-4 mr-2" />
-                  Generate Report
-                </Link>
-              </Button>
-            </div>
-
-            {reportsCount > 0 ? (
-              <div className="grid gap-3 md:grid-cols-2">
-                {reportsRows.map((r) => (
-                  <Card key={r.id}>
-                    <CardContent className="flex items-start gap-3 py-4">
-                      <FileText className="h-5 w-5 text-muted-foreground shrink-0 mt-0.5" />
-                      <div className="min-w-0 flex-1">
-                        <Link
-                          href={`/reports/${r.id}`}
-                          className="text-sm font-medium text-foreground hover:underline truncate block"
-                        >
-                          {r.title || "Untitled report"}
-                        </Link>
-                        <p className="text-xs text-muted-foreground mt-0.5">
-                          {new Date(r.created_at).toLocaleDateString()}
-                        </p>
-                      </div>
-                    </CardContent>
-                  </Card>
-                ))}
+            <div className="space-y-4 md:min-w-[260px]">
+              <div className="flex flex-wrap items-center gap-2">
+                <Badge
+                  variant={
+                    project.status === "active"
+                      ? "default"
+                      : project.status === "completed"
+                      ? "secondary"
+                      : "outline"
+                  }
+                >
+                  {project.status}
+                </Badge>
+                {project.priority && (
+                  <Badge
+                    variant={
+                      project.priority === "critical" || project.priority === "high"
+                        ? "destructive"
+                        : "outline"
+                    }
+                  >
+                    {project.priority} priority
+                  </Badge>
+                )}
               </div>
-            ) : (
-              <Card>
-                <CardContent className="flex flex-col items-center justify-center py-12">
-                  <FileText className="h-12 w-12 text-muted-foreground mb-4" />
-                  <p className="text-muted-foreground mb-4">No reports generated yet</p>
-                  <Button asChild>
-                    <Link href={`/reports?project=${id}`}>
-                      <Plus className="h-4 w-4 mr-2" />
-                      Create First Report
-                    </Link>
-                  </Button>
-                </CardContent>
-              </Card>
-            )}
-          </TabsContent>
 
-        </Tabs>
+              <dl className="space-y-0 text-sm">
+                <div className="flex items-center justify-between gap-4 border-b border-border/60 py-2">
+                  <dt className="text-muted-foreground">Owner</dt>
+                  <dd className="font-medium text-foreground">{ownerName}</dd>
+                </div>
+                <div className="flex items-center justify-between gap-4 border-b border-border/60 py-2">
+                  <dt className="text-muted-foreground">Started</dt>
+                  <dd className="font-medium text-foreground">{startedLabel}</dd>
+                </div>
+                <div className="flex items-center justify-between gap-4 border-b border-border/60 py-2">
+                  <dt className="text-muted-foreground">Members</dt>
+                  <dd className="font-medium text-foreground tabular-nums">{membersCount}</dd>
+                </div>
+                <div className="flex items-center justify-between gap-4 py-2">
+                  <dt className="text-muted-foreground">Last activity</dt>
+                  <dd className="font-medium text-foreground">{lastActivityLabel}</dd>
+                </div>
+              </dl>
+            </div>
+          </CardContent>
+        </Card>
+
       </div>
     )
 }

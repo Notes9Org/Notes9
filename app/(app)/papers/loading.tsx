@@ -1,10 +1,13 @@
-import { CatalystComposerSkeleton, TableListSkeleton } from "@/components/loading/page-skeletons"
+import {
+  CatalystComposerSkeleton,
+  PapersPageSkeleton,
+} from "@/components/loading/page-skeletons"
 
 export default function PapersLoading() {
   return (
     <div className="space-y-6 animate-pulse">
       <CatalystComposerSkeleton />
-      <TableListSkeleton showHeader={false} />
+      <PapersPageSkeleton />
     </div>
   )
 }

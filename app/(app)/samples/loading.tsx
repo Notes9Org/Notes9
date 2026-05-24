@@ -1,10 +1,9 @@
-import { CatalystComposerSkeleton, TableListSkeleton } from "@/components/loading/page-skeletons"
+import { CatalystListPageSkeleton } from "@/components/loading/page-skeletons"
 
 export default function SamplesLoading() {
   return (
     <div className="space-y-6 animate-pulse">
-      <CatalystComposerSkeleton />
-      <TableListSkeleton showHeader={false} />
+      <CatalystListPageSkeleton />
     </div>
   )
 }

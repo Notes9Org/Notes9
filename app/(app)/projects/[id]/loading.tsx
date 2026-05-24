@@ -10,7 +10,7 @@ export default function ProjectDetailLoading() {
     <div className="space-y-5 md:space-y-6 pb-8 animate-pulse">
       <BreadcrumbSkeleton />
       <ProjectHeaderRowSkeleton />
-      <CatalystComposerSkeleton maxWidth="max-w-4xl" height="h-14" />
+      <CatalystComposerSkeleton size="lg" />
       <ProjectWorkspaceGridSkeleton />
     </div>
   )

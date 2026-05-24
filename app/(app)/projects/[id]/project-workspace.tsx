@@ -3,14 +3,10 @@ import Link from "next/link"
 import type { LucideIcon } from "lucide-react"
 import {
   BookOpen,
-  ClipboardList,
   Database,
   FlaskConical,
-  TestTube,
-  NotebookPen,
   PenLine,
   BarChart3,
-  Plus,
   ArrowRight,
   Sparkles,
 } from "lucide-react"
@@ -73,20 +69,22 @@ const TONE_FG: Record<ModuleTone, string> = {
 
 function WorkspaceCard({
   href,
-  newHref,
   icon: Icon,
   tone = "default",
   name,
+  count,
   children,
 }: {
   href: string
-  newHref: string
   icon: LucideIcon
   tone?: ModuleTone
   name: string
+  /** Optional count/status pill shown top-right (e.g. 23, "7 active", "2 drafts"). */
+  count?: string | number
   children?: ReactNode
 }) {
   const isEmpty = !children
+  const hasCount = count !== undefined && count !== null && count !== "" && count !== 0
   return (
     <article className="flex h-full min-h-[180px] flex-col rounded-[calc(var(--radius)+6px)] border border-border bg-card p-4 shadow-[0_1px_2px_rgba(44,36,24,0.04)]">
       <header className="flex items-center gap-3">
@@ -97,9 +95,14 @@ function WorkspaceCard({
         >
           <Icon size={20} strokeWidth={1.75} />
         </span>
-        <h3 className="min-w-0 flex-1 text-right font-display text-[15px] font-semibold text-foreground">
+        <h3 className="min-w-0 flex-1 font-display text-[15px] font-semibold text-foreground">
           {name}
         </h3>
+        {hasCount && (
+          <span className="shrink-0 rounded-full border border-border bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground tabular-nums">
+            {count}
+          </span>
+        )}
       </header>
 
       <div className="mt-4 flex flex-1 flex-col justify-center gap-2">
@@ -114,19 +117,13 @@ function WorkspaceCard({
         )}
       </div>
 
-      <footer className="mt-4 flex items-center justify-between border-t border-border/80 pt-3">
+      <footer className="mt-4 flex items-center justify-end border-t border-border/80 pt-3">
         <Link
           href={href}
-          className="text-[13px] font-medium text-foreground/80 underline-offset-4 hover:text-foreground hover:underline"
+          className="group inline-flex items-center gap-1 text-[13px] font-medium text-foreground/80 transition-colors hover:text-foreground"
         >
           Open
-        </Link>
-        <Link
-          href={newHref}
-          aria-label={`Add to ${name}`}
-          className="inline-flex size-8 items-center justify-center rounded-lg border border-border text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-        >
-          <Plus size={16} aria-hidden />
+          <ArrowRight size={14} aria-hidden className="transition-transform group-hover:translate-x-0.5" />
         </Link>
       </footer>
     </article>
@@ -220,13 +217,16 @@ export function ProjectWorkspace({
         </div>
       ) : null}
 
-      <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
+      {/* Lab Notes, Protocols, and Samples cards intentionally removed — they
+          now live as sub-items under Experiments in the project sidebar, so
+          surfacing them as separate workspace cards was redundant. */}
+      <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
         <WorkspaceCard
           href={`/literature-reviews?project=${projectId}`}
-          newHref={`/literature-reviews/new?project=${projectId}`}
           icon={BookOpen}
           tone="default"
           name="Literature"
+          count={literatureCount}
         >
           {literatureCount > 0
             ? literature.slice(0, 3).map((l) => (
@@ -237,10 +237,10 @@ export function ProjectWorkspace({
 
         <WorkspaceCard
           href={`/experiments?project=${projectId}`}
-          newHref={`/experiments/new?project=${projectId}`}
           icon={FlaskConical}
           tone="accent"
           name="Experiments"
+          count={experimentsCount > 0 ? `${experimentsCount} active` : undefined}
         >
           {experimentsCount > 0
             ? experiments.slice(0, 3).map((e) => (
@@ -254,36 +254,6 @@ export function ProjectWorkspace({
         </WorkspaceCard>
 
         <WorkspaceCard
-          href={`/protocols?project=${projectId}`}
-          newHref={`/protocols/new?project=${projectId}`}
-          icon={ClipboardList}
-          tone="leaf"
-          name="Protocols"
-        >
-          {protocolCount > 0
-            ? protocols.slice(0, 3).map((p) => (
-                <PreviewLine key={p.id} text={p.name} />
-              ))
-            : null}
-        </WorkspaceCard>
-
-        <WorkspaceCard
-          href={`/lab-notes?project=${projectId}`}
-          newHref={`/lab-notes?project=${projectId}`}
-          icon={NotebookPen}
-          tone="neutral"
-          name="Lab Notes"
-        >
-          {labNotesCount > 0
-            ? labNotes.slice(0, 3).map((n) => (
-                <PreviewLine key={n.id} text={n.title || "Untitled note"} />
-              ))
-            : null}
-        </WorkspaceCard>
-      </div>
-
-      <div className="mt-4 grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
-        <WorkspaceCard
           href={`/experiments?project=${projectId}`}
           newHref={
             experiments[0]?.id
@@ -293,6 +263,7 @@ export function ProjectWorkspace({
           icon={Database}
           tone="leaf"
           name="Data"
+          count={dataFilesCount}
         >
           {dataFilesCount > 0
             ? dataFiles.slice(0, 3).map((f) => (
@@ -310,28 +281,11 @@ export function ProjectWorkspace({
         </WorkspaceCard>
 
         <WorkspaceCard
-          href={`/samples?project=${projectId}`}
-          newHref={`/samples?project=${projectId}`}
-          icon={TestTube}
-          tone="warm"
-          name="Samples"
-        >
-          {samplesCount > 0
-            ? samples.slice(0, 3).map((s) => (
-                <PreviewLine
-                  key={s.id}
-                  text={s.sample_type ? `${s.sample_code} · ${s.sample_type}` : s.sample_code}
-                />
-              ))
-            : null}
-        </WorkspaceCard>
-
-        <WorkspaceCard
           href={`/reports?project=${projectId}`}
-          newHref={`/reports?project=${projectId}`}
           icon={BarChart3}
           tone="neutral"
           name="Reports"
+          count={reportsCount}
         >
           {reportsCount > 0
             ? reports.slice(0, 3).map((r) => (
@@ -342,10 +296,10 @@ export function ProjectWorkspace({
 
         <WorkspaceCard
           href={`/papers?project=${projectId}`}
-          newHref={`/papers?project=${projectId}`}
           icon={PenLine}
           tone="accent"
           name="Writing"
+          count={papersCount > 0 ? `${papersCount} drafts` : undefined}
         >
           {papersCount > 0
             ? papers.slice(0, 3).map((p) => (

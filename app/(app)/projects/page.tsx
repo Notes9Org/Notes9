@@ -7,7 +7,6 @@ import Link from 'next/link'
 import { ProjectsPageContent } from './project-list'
 import { SetPageBreadcrumb } from "@/components/layout/breadcrumb-context"
 import { CatalystSectionHero } from "@/components/catalyst/catalyst-section-hero"
-import { DashboardGreeting } from "@/app/(app)/planner/dashboard-greeting"
 
 export default async function ProjectsPage() {
   const supabase = await createClient()
@@ -46,8 +45,6 @@ export default async function ProjectsPage() {
   return (
     <div className="flex flex-col gap-6 md:gap-8 pb-8">
       <SetPageBreadcrumb segments={[]} />
-
-      <DashboardGreeting name={greetingName} />
 
       <CatalystSectionHero size="sm" scope="lab" />
 

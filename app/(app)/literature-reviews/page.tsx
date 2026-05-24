@@ -9,7 +9,6 @@ import type { StagingLiteratureRow } from "@/components/literature-reviews/stage
 import { UploadLiteraturePdfDialog } from "@/components/literature-reviews/upload-literature-pdf-dialog"
 import { resolveInitialProjectIdParam } from "@/lib/url-project-param"
 import { SetPageBreadcrumb } from "@/components/layout/breadcrumb-context"
-import { CatalystSectionHero } from "@/components/catalyst/catalyst-section-hero"
 
 export default async function LiteratureReviewsPage({
   searchParams,
@@ -93,8 +92,6 @@ export default async function LiteratureReviewsPage({
       ) : (
         <SetPageBreadcrumb segments={[]} />
       )}
-
-      <CatalystSectionHero size="sm" scope="literature" />
 
       {/* Header: stacked on mobile */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">

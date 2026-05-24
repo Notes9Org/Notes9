@@ -1,11 +1,11 @@
 import { redirect } from "next/navigation"
 import { createClient } from "@/lib/supabase/server"
-import { PageHeading, PageSubheading } from "@/components/ui/page-heading"
+import { CatalystSectionHero } from "@/components/catalyst/catalyst-section-hero"
 import { DashboardScheduleTasks } from "./dashboard-schedule-tasks"
 import { DashboardWhiteboard } from "./dashboard-whiteboard"
 import { DashboardFirstRun } from "./dashboard-first-run"
 
-export default async function DashboardPage() {
+export default async function PlannerPage() {
   const supabase = await createClient()
 
   const {
@@ -55,23 +55,9 @@ export default async function DashboardPage() {
 
   const hasProjects = (projectsHeadRes.count ?? 0) > 0
 
-  const greetingName =
-    (user.user_metadata?.first_name as string | undefined) ||
-    (user.user_metadata?.full_name as string | undefined)?.split(" ")[0] ||
-    user.email?.split("@")[0] ||
-    "Researcher"
-
-  // `greetingName` is kept for future personalization (e.g. "Hi Sam, your week"),
-  // suppress the unused-variable warning while we ship the rename.
-  void greetingName
-
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-6 md:gap-8 pb-8 min-w-0">
-      {/* Planner page heading — distinct destination from Dashboard now. */}
-      <div className="flex flex-col gap-1">
-        <PageHeading>Planner</PageHeading>
-        <PageSubheading>Your week, your tasks, your whiteboard.</PageSubheading>
-      </div>
+      <CatalystSectionHero size="lg" scope="lab" />
 
       {/* When the user has no projects yet, the bench panels are empty and the
           user has no path forward — so we replace them with a teaching surface

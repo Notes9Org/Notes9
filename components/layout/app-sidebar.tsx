@@ -78,11 +78,27 @@ const navigation = APP_PRIMARY_NAV
  * but were not discoverable from the sidebar. When scoped, each link carries
  * `?project=<id>` forward so the project filter persists across navigations.
  */
-const PROJECT_SCOPED_NAV: { name: string; basePath: string; icon: typeof Folder }[] = [
-  { name: "Experiments", basePath: "/experiments", icon: FlaskConical },
-  { name: "Lab notes", basePath: "/lab-notes", icon: NotebookPen },
-  { name: "Protocols", basePath: "/protocols", icon: ClipboardInfoIcon as unknown as typeof Folder },
-  { name: "Samples", basePath: "/samples", icon: TestTube },
+type ProjectScopedNavItem = {
+  name: string
+  basePath: string
+  icon: typeof Folder
+  children?: { name: string; basePath: string; icon: typeof Folder }[]
+}
+
+// Lab notes / Protocols / Samples are nested UNDER Experiments — they only
+// exist in the context of an experiment, so the sidebar reflects that
+// hierarchy. Equipment and Literature stay top-level (project-wide resources).
+const PROJECT_SCOPED_NAV: ProjectScopedNavItem[] = [
+  {
+    name: "Experiments",
+    basePath: "/experiments",
+    icon: FlaskConical,
+    children: [
+      { name: "Lab notes", basePath: "/lab-notes", icon: NotebookPen },
+      { name: "Protocols", basePath: "/protocols", icon: ClipboardInfoIcon as unknown as typeof Folder },
+      { name: "Samples", basePath: "/samples", icon: TestTube },
+    ],
+  },
   { name: "Equipment", basePath: "/equipment", icon: Microscope },
   { name: "Literature", basePath: "/literature-reviews", icon: BookOpen },
 ]
@@ -619,6 +635,30 @@ export function AppSidebar() {
                             </span>
                           </Link>
                         </SidebarMenuButton>
+                        {item.children && item.children.length > 0 && (
+                          <SidebarMenuSub>
+                            {item.children.map((child) => {
+                              const ChildIcon = child.icon
+                              const childHref = `${child.basePath}?project=${scope.projectId}`
+                              const childActive =
+                                mounted &&
+                                (pathname === child.basePath ||
+                                  pathname.startsWith(child.basePath + "/"))
+                              return (
+                                <SidebarMenuSubItem key={child.basePath}>
+                                  <SidebarMenuSubButton asChild isActive={childActive}>
+                                    <Link href={childHref}>
+                                      <ChildIcon />
+                                      <span className={cn("truncate", childActive && "font-semibold")}>
+                                        {child.name}
+                                      </span>
+                                    </Link>
+                                  </SidebarMenuSubButton>
+                                </SidebarMenuSubItem>
+                              )
+                            })}
+                          </SidebarMenuSub>
+                        )}
                       </SidebarMenuItem>
                     )
                   })}
@@ -628,118 +668,6 @@ export function AppSidebar() {
           </>
         )}
 
-        {/* Projects section — flat list. Per-project drill-down lives on the
-            project page itself (the 7-card workspace), not in the sidebar. */}
-        {!isIconMode && (
-          <>
-            <SidebarSeparator />
-            {mounted ? (
-              <SidebarGroup>
-                <div className="flex h-8 shrink-0 items-center gap-2 rounded-md px-2 text-xs font-medium text-sidebar-foreground/70 outline-none">
-                  <span className="truncate flex-1">Recent Projects</span>
-                  <button
-                    title="Add Project"
-                    onClick={(e) => {
-                      e.preventDefault()
-                      router.push("/projects/new")
-                    }}
-                    className="flex aspect-square w-5 items-center justify-center rounded-md p-0 text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground transition-colors"
-                  >
-                    <Plus className="size-4" />
-                    <span className="sr-only">Add Project</span>
-                  </button>
-                </div>
-                <SidebarGroupContent>
-                  <SidebarMenu>
-                    {loading ? (
-                      Array.from({ length: 3 }).map((_, index) => (
-                        <SidebarMenuItem key={`sidebar-skeleton-${index}`}>
-                          <SidebarMenuSkeleton />
-                        </SidebarMenuItem>
-                      ))
-                    ) : projects.length === 0 ? (
-                      <SidebarMenuItem>
-                        <div className="flex flex-col gap-1.5 rounded-md px-2 py-1">
-                          <div className="text-xs text-sidebar-foreground/70 leading-snug">
-                            No active projects yet.
-                          </div>
-                          <Link
-                            href="/projects/new"
-                            className="inline-flex h-7 items-center gap-1.5 rounded-md px-2 text-xs font-medium text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground transition-colors active:scale-[0.98]"
-                          >
-                            <Plus className="size-3.5" aria-hidden />
-                            Create your first project
-                          </Link>
-                          {fetchError && (
-                            <button
-                              type="button"
-                              onClick={() => fetchData()}
-                              className="flex h-7 items-center justify-center rounded-md px-2 text-xs text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground transition-colors"
-                            >
-                              Try again
-                            </button>
-                          )}
-                        </div>
-                      </SidebarMenuItem>
-                    ) : (
-                      projects.map((project) => {
-                        const isActive = mounted && pathname === `/projects/${project.id}`
-                        const dotColor = projectDotColor(project.id)
-                        return (
-                          <SidebarMenuItem key={project.id}>
-                            <SidebarMenuButton
-                              asChild
-                              isActive={isActive}
-                              className="group min-w-0 gap-2.5 transition-all duration-150 hover:bg-[color:color-mix(in_oklab,var(--background)_78%,var(--primary)_22%)] hover:text-sidebar-foreground active:scale-[0.985] dark:hover:bg-sidebar-accent dark:hover:text-sidebar-accent-foreground"
-                            >
-                              <Link
-                                href={`/projects/${project.id}`}
-                                draggable
-                                onDragStart={(e) => {
-                                  e.dataTransfer.setData(
-                                    "application/json",
-                                    JSON.stringify({
-                                      type: "project",
-                                      id: project.id,
-                                      name: project.name,
-                                    })
-                                  )
-                                  e.dataTransfer.effectAllowed = "copy"
-                                }}
-                                className="w-full"
-                              >
-                                <span
-                                  aria-hidden
-                                  className="inline-block size-2 shrink-0 rounded-full"
-                                  style={{ background: dotColor }}
-                                />
-                                <span
-                                  className={cn(
-                                    "truncate min-w-0 flex-1",
-                                    isActive && "font-semibold"
-                                  )}
-                                >
-                                  {project.name}
-                                </span>
-                              </Link>
-                            </SidebarMenuButton>
-                          </SidebarMenuItem>
-                        )
-                      })
-                    )}
-                  </SidebarMenu>
-                </SidebarGroupContent>
-              </SidebarGroup>
-            ) : (
-              <SidebarGroup>
-                <div className="flex h-8 shrink-0 items-center rounded-md px-2 text-xs font-medium text-sidebar-foreground/70">
-                  Recent Projects
-                </div>
-              </SidebarGroup>
-            )}
-            <SidebarSeparator />
-          </>
-        )}
       </SidebarContent>
 
       {/* Footer with Catalyst and User Dropdown */}

@@ -1,11 +1,9 @@
 import type { ComponentType } from "react"
 import {
-  BarChart3,
   CalendarClock,
   Folder,
   Home,
   Network,
-  ScrollText,
   Sparkles,
 } from "lucide-react"
 
@@ -19,11 +17,12 @@ type NavIcon = ComponentType<{ className?: string }>
  *   - Planner   = self-organized workspace (schedule, tasks, whiteboard).
  */
 export const APP_PRIMARY_NAV: { name: string; href: string; icon: NavIcon }[] = [
+  // Writing (/papers) and Reports (/reports) intentionally omitted from the
+  // primary nav — they're surfaced as cards inside each project workspace.
+  // The routes still exist and are reachable from those cards.
   { name: "Dashboard", href: "/dashboard", icon: Home },
   { name: "Planner", href: "/planner", icon: CalendarClock },
   { name: "Projects", href: "/projects", icon: Folder },
   { name: "Catalyst", href: "/catalyst", icon: Sparkles },
   { name: "Research map", href: "/research-map", icon: Network },
-  { name: "Writing", href: "/papers", icon: ScrollText },
-  { name: "Reports", href: "/reports", icon: BarChart3 },
 ]

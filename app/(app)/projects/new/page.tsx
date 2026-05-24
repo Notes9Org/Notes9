@@ -4,7 +4,7 @@ import { useState } from "react"
 import { useRouter } from 'next/navigation'
 import { createClient } from "@/lib/supabase/client"
 import { useSmartBack } from "@/hooks/use-smart-back"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -109,13 +109,7 @@ export default function NewProjectPage() {
         </div>
 
         <Card>
-          <CardHeader>
-            <CardTitle>Project Details</CardTitle>
-            <CardDescription>
-              Enter the basic information about your research project
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
+          <CardContent className="pt-6">
             <form onSubmit={handleSubmit} className="space-y-6">
               <div className="space-y-2">
                 <Label htmlFor="name">Project Name *</Label>

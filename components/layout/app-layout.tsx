@@ -30,6 +30,7 @@ import { CatalystPanelStateProvider } from "@/contexts/catalyst-panel-state"
 
 const ROUTE_TITLES: { path: string; title: string }[] = [
   { path: "/dashboard", title: "Dashboard" },
+  { path: "/planner", title: "Planner" },
   { path: "/projects", title: "Projects" },
   { path: "/catalyst", title: "Catalyst" },
   { path: "/experiments", title: "Experiments" },

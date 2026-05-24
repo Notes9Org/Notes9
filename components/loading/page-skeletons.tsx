@@ -4,7 +4,7 @@ export function BreadcrumbSkeleton({ className }: { className?: string }) {
   return <div className={cn("h-4 w-40 bg-muted rounded-md", className)} />
 }
 
-/** Centered sparkle + greeting line (dashboard, projects list). */
+/** Centered sparkle + greeting line (dashboard). */
 export function CenteredGreetingSkeleton({ className }: { className?: string }) {
   return (
     <div
@@ -19,27 +19,74 @@ export function CenteredGreetingSkeleton({ className }: { className?: string }) 
   )
 }
 
-/** Fancy rounded composer (CatalystSectionHero). */
-export function CatalystComposerSkeleton({
+/** PageHeading + PageSubheading (planner, literature header, etc.). */
+export function PageHeadingSkeleton({
   className,
-  maxWidth = "max-w-3xl",
-  height = "h-12",
+  subtitle = true,
 }: {
   className?: string
-  maxWidth?: string
-  height?: string
+  subtitle?: boolean
 }) {
+  return (
+    <div className={cn("flex flex-col gap-1", className)}>
+      <div className="h-8 md:h-9 w-36 bg-muted rounded-md" />
+      {subtitle ? <div className="h-4 w-72 max-w-full bg-muted rounded-md" /> : null}
+    </div>
+  )
+}
+
+/** Vertical Catalyst composer (matches CatalystSectionHero). */
+export function CatalystComposerSkeleton({
+  className,
+  size = "sm",
+}: {
+  className?: string
+  size?: "sm" | "lg"
+}) {
+  const maxWidth = size === "lg" ? "max-w-4xl" : "max-w-3xl"
+  const minHeight = size === "lg" ? "min-h-[132px]" : "min-h-[112px]"
+
   return (
     <div className={cn("mx-auto w-full", maxWidth, className)}>
       <div
         className={cn(
-          "flex items-center gap-2 overflow-hidden rounded-2xl border border-border/70 bg-card pl-5 pr-2 shadow-sm",
-          height,
+          "flex flex-col overflow-hidden rounded-2xl border-2 border-violet-200/50 bg-violet-50/40 p-3 dark:border-violet-500/25 dark:bg-violet-500/5",
+          minHeight,
         )}
       >
-        <div className="h-4 flex-1 max-w-sm rounded-md bg-muted" />
-        <div className="size-9 shrink-0 rounded-full bg-muted" />
+        <div className="min-h-[44px] w-full rounded-md bg-muted/70" />
+        <div className="mt-2 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <div className="size-7 shrink-0 rounded-lg bg-muted" />
+            <div className="h-4 w-16 rounded-md bg-muted" />
+          </div>
+          <div className="size-9 shrink-0 rounded-full bg-muted" />
+        </div>
       </div>
+    </div>
+  )
+}
+
+/** Description line + view toggle / action buttons (list pages). */
+export function ResourceListToolbarSkeleton() {
+  return (
+    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+      <div className="h-4 w-full max-w-md bg-muted rounded-md" />
+      <div className="flex items-center gap-2 shrink-0">
+        <div className="h-8 w-16 bg-muted rounded-md" />
+        <div className="size-8 bg-muted rounded-md" />
+      </div>
+    </div>
+  )
+}
+
+/** ResourceFilterRow pill skeletons. */
+export function ResourceFilterRowSkeleton({ count = 2 }: { count?: number }) {
+  return (
+    <div className="flex flex-wrap gap-2">
+      {Array.from({ length: count }, (_, i) => (
+        <div key={i} className="h-8 w-28 bg-muted rounded-md" />
+      ))}
     </div>
   )
 }
@@ -94,7 +141,36 @@ export function ProjectWorkspaceGridSkeleton() {
   )
 }
 
-/** Schedule/tasks + whiteboard bench (dashboard). */
+/** Three-column lab overview (dashboard). */
+export function DashboardLabGridSkeleton() {
+  const card = (colClass: string) => (
+    <div
+      className={cn(
+        "flex h-72 flex-col rounded-xl border border-border bg-card",
+        colClass,
+      )}
+    >
+      <div className="border-b border-border px-6 py-4">
+        <div className="h-5 w-24 bg-muted rounded-md" />
+      </div>
+      <div className="flex flex-1 flex-col gap-3 p-6">
+        <div className="h-16 rounded-md bg-muted/60" />
+        <div className="h-10 rounded-md bg-muted/40" />
+        <div className="mt-auto h-8 w-28 bg-muted rounded-md" />
+      </div>
+    </div>
+  )
+
+  return (
+    <div className="grid flex-1 grid-cols-1 gap-4 md:gap-5 xl:grid-cols-12">
+      {card("xl:col-span-4")}
+      {card("xl:col-span-5")}
+      {card("xl:col-span-3")}
+    </div>
+  )
+}
+
+/** Schedule/tasks + whiteboard bench (planner). */
 export function DashboardBenchSkeleton() {
   const panel = (
     <div className="flex h-full min-h-[280px] flex-col overflow-hidden rounded-[calc(var(--radius)+4px)] border border-border bg-card">
@@ -112,8 +188,6 @@ export function DashboardBenchSkeleton() {
     </div>
   )
 
-  // Class strings here MUST stay in lock-step with the real Bench in
-  // app/(app)/dashboard/page.tsx so the skeleton lays out identically.
   return (
     <div className="grid flex-1 grid-cols-1 gap-4 md:gap-5 xl:grid-cols-12 xl:items-stretch min-h-[min(100%,calc(100dvh-17rem))]">
       <div className="flex min-h-[280px] flex-col xl:col-span-5">{panel}</div>
@@ -127,6 +201,43 @@ export function DashboardBenchSkeleton() {
         </div>
       </div>
     </div>
+  )
+}
+
+/** Equipment: toolbar, filters, status cards, table. */
+export function EquipmentPageSkeleton() {
+  return (
+    <>
+      <ResourceListToolbarSkeleton />
+      <ResourceFilterRowSkeleton count={3} />
+      <div className="grid gap-4 grid-cols-2 md:grid-cols-4">
+        {[1, 2, 3, 4].map((i) => (
+          <div key={i} className="rounded-xl border border-border bg-card p-4 space-y-2">
+            <div className="h-4 w-20 bg-muted rounded-md" />
+            <div className="h-7 w-12 bg-muted rounded-md" />
+          </div>
+        ))}
+      </div>
+      <TableListSkeleton showHeader={false} showFilters={false} />
+    </>
+  )
+}
+
+/** List pages with Catalyst + filters + table. */
+export function CatalystListPageSkeleton({
+  filterCount = 2,
+  rows = 5,
+}: {
+  filterCount?: number
+  rows?: number
+}) {
+  return (
+    <>
+      <CatalystComposerSkeleton />
+      <ResourceListToolbarSkeleton />
+      {filterCount > 0 ? <ResourceFilterRowSkeleton count={filterCount} /> : null}
+      <TableListSkeleton showHeader={false} showFilters={false} rows={rows} />
+    </>
   )
 }
 
@@ -181,15 +292,12 @@ export function TableListSkeleton({
   )
 }
 
-/** Literature reviews: hero + page title + tabs + grid. */
+/** Literature reviews: page title + tabs + grid (composer is separate). */
 export function LiteraturePageSkeleton() {
   return (
     <>
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <div className="h-8 w-52 bg-muted rounded-md" />
-          <div className="h-4 w-64 bg-muted rounded-md mt-2" />
-        </div>
+        <PageHeadingSkeleton />
         <div className="flex gap-2">
           <div className="h-9 w-28 bg-muted rounded-md" />
           <div className="h-9 w-32 bg-muted rounded-md" />
@@ -210,6 +318,31 @@ export function LiteraturePageSkeleton() {
               <div className="h-4 w-1/2 bg-muted rounded-md" />
             </div>
           ))}
+        </div>
+      </div>
+    </>
+  )
+}
+
+/** Papers workspace: tabs + split pane. */
+export function PapersPageSkeleton() {
+  return (
+    <>
+      <div className="flex gap-2 border-b border-border pb-2">
+        <div className="h-9 w-24 bg-muted rounded-md" />
+        <div className="h-9 w-28 bg-muted rounded-md" />
+      </div>
+      <div className="grid gap-4 lg:grid-cols-[minmax(0,280px)_1fr] min-h-[400px]">
+        <div className="rounded-lg border bg-card p-3 space-y-2">
+          {[1, 2, 3, 4, 5].map((i) => (
+            <div key={i} className="h-10 bg-muted/60 rounded-md" />
+          ))}
+        </div>
+        <div className="rounded-lg border bg-card p-6 space-y-3">
+          <div className="h-6 w-48 bg-muted rounded-md" />
+          <div className="h-4 w-full bg-muted rounded-md" />
+          <div className="h-4 w-5/6 bg-muted rounded-md" />
+          <div className="flex-1 min-h-[200px] bg-muted/30 rounded-md" />
         </div>
       </div>
     </>

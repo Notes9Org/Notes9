@@ -26,6 +26,8 @@ import {
 } from "lucide-react"
 import { TodoPanel } from "./todo-panel"
 import { OrgSetupCTA } from "@/components/org/org-setup-cta"
+import { CatalystSectionHero } from "@/components/catalyst/catalyst-section-hero"
+import { DashboardGreeting } from "@/app/(app)/planner/dashboard-greeting"
 import { DashboardFirstRun } from "./dashboard-first-run"
 
 /**
@@ -161,26 +163,13 @@ export default async function DashboardPage() {
     user.email?.split("@")[0] ||
     "Researcher"
 
-  const dateLabel = now.toLocaleDateString(undefined, {
-    weekday: "long",
-    month: "long",
-    day: "numeric",
-  })
-
-  const signals: string[] = []
-  if (activeExperiments.length > 0) signals.push(`${activeExperiments.length} experiment${activeExperiments.length === 1 ? "" : "s"} active`)
-  if (todayTasks.length > 0) signals.push(`${todayTasks.length} task${todayTasks.length === 1 ? "" : "s"} due today`)
-  if (recentlyEdited[0]) signals.push(`last edit ${relativeTime(recentlyEdited[0].updated_at)} in ${recentlyEdited[0].title}`)
-
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-6 md:gap-8 pb-8 min-w-0">
-      {/* Hero status row — date + lab-signal line. No card, just rhythm. */}
-      <div className="flex flex-col gap-1">
-        <PageHeading className="text-2xl md:text-3xl">{dateLabel}</PageHeading>
-        <p className="text-sm text-muted-foreground">
-          {greetingName}, {signals.length > 0 ? signals.join(" · ") : "your lab is quiet today."}
-        </p>
-      </div>
+      {/* Wish greeting ("Morning, <name>") — the dashboard is the one place
+          the personal greeting lives. */}
+      <DashboardGreeting name={greetingName} />
+      {/* Catalyst AI composer — purple-themed so it's clearly the AI assistant. */}
+      <CatalystSectionHero size="lg" scope="lab" />
 
       {/* Org Setup CTA */}
       <OrgSetupCTA visible={!orgMembership} />
