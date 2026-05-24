@@ -62,6 +62,7 @@ import {
   ResizablePanel,
   ResizableHandle,
 } from "@/components/ui/resizable"
+import { PageHeading } from "@/components/ui/page-heading"
 import { insertProtocolWithOptionalContext } from "@/lib/protocol-context-supabase"
 import { useToast } from "@/hooks/use-toast"
 import { recordRumEvent } from "@/lib/rum"
@@ -392,7 +393,7 @@ function NewProtocolForm() {
             </Link>
           </Button>
           <div className="min-w-0">
-            <h1 className="text-2xl font-bold tracking-tight md:text-3xl">Create New Protocol</h1>
+            <PageHeading>New Protocol</PageHeading>
             <p className="text-muted-foreground mt-1 text-sm">
               Step 1 of 2 — choose a template
             </p>
@@ -478,7 +479,7 @@ function NewProtocolForm() {
     const selectedExperiment = experiments.find((e) => e.id === formData.experiment_id)
 
     return (
-      <div className="flex flex-col h-[calc(100vh-120px)] min-h-[600px] gap-3">
+      <div className="flex flex-col h-[calc(100dvh-120px)] min-h-[600px] gap-3">
         {/* Page header */}
         <div className="flex items-center justify-between gap-3 shrink-0">
           <div className="flex items-center gap-3 min-w-0">
@@ -743,7 +744,7 @@ function NewProtocolForm() {
           </Link>
         </Button>
         <div className="min-w-0 flex-1">
-          <h1 className="text-2xl font-bold tracking-tight md:text-3xl">Create New Protocol</h1>
+          <PageHeading>New Protocol</PageHeading>
           <p className="text-muted-foreground mt-1 text-sm">Step 2 of 2 — fill in details</p>
         </div>
         <Button

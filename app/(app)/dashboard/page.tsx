@@ -1,16 +1,17 @@
-import { redirect } from 'next/navigation'
-import Link from "next/link";
-import { createClient } from "@/lib/supabase/server";
+import { redirect } from "next/navigation"
+import Link from "next/link"
+import { createClient } from "@/lib/supabase/server"
+import { PageHeading } from "@/components/ui/page-heading"
 import {
   Card,
   CardContent,
   CardDescription,
   CardHeader,
   CardTitle,
-} from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { Progress } from "@/components/ui/progress";
+} from "@/components/ui/card"
+import { Button } from "@/components/ui/button"
+import { Badge } from "@/components/ui/badge"
+import { Progress } from "@/components/ui/progress"
 import {
   FlaskConical,
   TestTube,
@@ -19,65 +20,130 @@ import {
   BookOpen,
   ArrowUpRight,
   Plus,
-} from "lucide-react";
-import { TodoPanel } from "./todo-panel";
-import { OrgSetupCTA } from "@/components/org/org-setup-cta";
+  ArrowRight,
+  ScrollText,
+  ClipboardList
+} from "lucide-react"
+import { TodoPanel } from "./todo-panel"
+import { OrgSetupCTA } from "@/components/org/org-setup-cta"
+import { DashboardFirstRun } from "./dashboard-first-run"
 
+/**
+ * Dashboard = lab status overview.
+ *
+ * This screen is the user's "what's happening in the lab" view — active
+ * experiments, recently edited content, today's events/tasks at a glance.
+ * Self-organized work (schedule, tasks, whiteboard) lives at `/planner`.
+ */
 export default async function DashboardPage() {
-  const supabase = await createClient();
+  const supabase = await createClient()
 
   const {
     data: { user },
-  } = await supabase.auth.getUser();
+  } = await supabase.auth.getUser()
   if (!user) {
-    redirect("/auth/login");
+    redirect("/auth/login")
   }
 
-  // Dashboard queries — fire in parallel. The previous version also fetched
-  // `profiles`, `projects`, `experiments`, `equipment`, `reports`, and the
-  // chat-researcher graph snapshot. None of them are rendered after we removed
-  // the stats cards and the relation-graph button, so they're dropped here to
-  // cut ~5 round-trips and a `chat_researcher_profiles.graph_data` blob from
-  // every dashboard hit.
-  const [recentExperimentsRes, recentNotesRes, dashboardTasksRes] =
-    await Promise.all([
-      supabase
-        .from("experiments")
-        .select(`
-          *,
-          project:projects(name),
-          assigned_to:profiles!experiments_assigned_to_fkey(first_name, last_name)
-        `)
-        .order("created_at", { ascending: false })
-        .limit(3),
-      supabase
-        .from("lab_notes")
-        .select(`
-          id,
-          title,
-          created_at,
-          updated_at,
-          note_type,
-          experiment_id,
-          experiment:experiments (
-            name,
-            project:projects ( name )
-          )
-        `)
-        .order("updated_at", { ascending: false })
-        .limit(3),
-      supabase
-        .from("dashboard_tasks")
-        .select("*")
-        .eq("user_id", user.id)
-        .order("completed", { ascending: true })
-        .order("due_at", { ascending: true, nullsFirst: false })
-        .order("created_at", { ascending: false }),
-    ])
+  const now = new Date()
+  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+  const todayEnd = new Date(todayStart.getTime() + 24 * 60 * 60 * 1000)
 
-  const recentExperiments = recentExperimentsRes.data
-  const recentNotes = recentNotesRes.data
-  const dashboardTasks = dashboardTasksRes.data
+  // Fan out the lab-signal queries in parallel. Each is small (LIMIT 5 or HEAD)
+  // and indexed by organization scope via RLS.
+  const [
+    projectsHeadRes,
+    activeExperimentsRes,
+    recentNotesRes,
+    recentPapersRes,
+    recentProtocolsRes,
+    todayTasksRes,
+    nextEventRes,
+  ] = await Promise.all([
+    supabase.from("projects").select("id", { count: "exact", head: true }).limit(1),
+    supabase
+      .from("experiments")
+      .select("id,name,status,updated_at,project_id")
+      .eq("status", "active")
+      .order("updated_at", { ascending: false })
+      .limit(3),
+    supabase
+      .from("lab_notes")
+      .select("id,title,updated_at,experiment_id")
+      .order("updated_at", { ascending: false })
+      .limit(5),
+    supabase
+      .from("papers")
+      .select("id,title,updated_at")
+      .order("updated_at", { ascending: false })
+      .limit(3),
+    supabase
+      .from("protocols")
+      .select("id,name,updated_at")
+      .order("updated_at", { ascending: false })
+      .limit(3),
+    supabase
+      .from("dashboard_tasks")
+      .select("id,title,due_at,completed")
+      .eq("user_id", user.id)
+      .eq("completed", false)
+      .gte("due_at", todayStart.toISOString())
+      .lt("due_at", todayEnd.toISOString())
+      .order("due_at", { ascending: true })
+      .limit(3),
+    supabase
+      .from("calendar_events")
+      .select("id,title,start_at")
+      .eq("user_id", user.id)
+      .gte("start_at", now.toISOString())
+      .order("start_at", { ascending: true })
+      .limit(1)
+      .maybeSingle(),
+  ])
+
+  const hasProjects = (projectsHeadRes.count ?? 0) > 0
+  if (!hasProjects) {
+    return (
+      <div className="flex min-h-0 flex-1 flex-col gap-6 md:gap-8 pb-8 min-w-0">
+        <DashboardFirstRun />
+      </div>
+    )
+  }
+
+  const activeExperiments = activeExperimentsRes.data ?? []
+  const recentNotes = recentNotesRes.data ?? []
+  const recentPapers = recentPapersRes.data ?? []
+  const recentProtocols = recentProtocolsRes.data ?? []
+  const todayTasks = todayTasksRes.data ?? []
+  const nextEvent = nextEventRes.data
+
+  // Merge cross-entity "recently edited" feed (last 5 across notes/papers/protocols).
+  type RecentItem = { kind: "note" | "paper" | "protocol"; id: string; title: string; updated_at: string; href: string }
+  const recentlyEdited: RecentItem[] = [
+    ...recentNotes.map((n) => ({
+      kind: "note" as const,
+      id: n.id,
+      title: n.title || "Untitled note",
+      updated_at: n.updated_at,
+      href: `/experiments/${n.experiment_id}?note=${n.id}`,
+    })),
+    ...recentPapers.map((p) => ({
+      kind: "paper" as const,
+      id: p.id,
+      title: p.title || "Untitled",
+      updated_at: p.updated_at,
+      href: `/papers/${p.id}`,
+    })),
+    ...recentProtocols.map((p) => ({
+      kind: "protocol" as const,
+      id: p.id,
+      title: p.name || "Untitled protocol",
+      updated_at: p.updated_at,
+      href: `/protocols/${p.id}`,
+    })),
+  ]
+    .sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime())
+    .slice(0, 5)
 
   // Check if user has completed org setup (has an org_members record)
   const { data: orgMembership } = await supabase
@@ -93,90 +159,33 @@ export default async function DashboardPage() {
     (user.user_metadata?.first_name as string | undefined) ||
     (user.user_metadata?.full_name as string | undefined)?.split(" ")[0] ||
     user.email?.split("@")[0] ||
-    "User"
+    "Researcher"
+
+  const dateLabel = now.toLocaleDateString(undefined, {
+    weekday: "long",
+    month: "long",
+    day: "numeric",
+  })
+
+  const signals: string[] = []
+  if (activeExperiments.length > 0) signals.push(`${activeExperiments.length} experiment${activeExperiments.length === 1 ? "" : "s"} active`)
+  if (todayTasks.length > 0) signals.push(`${todayTasks.length} task${todayTasks.length === 1 ? "" : "s"} due today`)
+  if (recentlyEdited[0]) signals.push(`last edit ${relativeTime(recentlyEdited[0].updated_at)} in ${recentlyEdited[0].title}`)
 
   return (
-    <div className="min-w-0 space-y-4 md:space-y-6 pb-6">
-      {/* Welcome Section — editorial display face (IBM Plex Serif) anchors the
-          arrival moment; the Familjen Grotesk body keeps the rest system-y. */}
-      <div>
-        <h1 className="font-display text-3xl font-medium tracking-tight md:text-4xl">
-          Hello, {greetingName}
-        </h1>
-        <p className="text-muted-foreground mt-1">
-          Here&apos;s what&apos;s happening in your laboratory today.
+    <div className="flex min-h-0 flex-1 flex-col gap-6 md:gap-8 pb-8 min-w-0">
+      {/* Hero status row — date + lab-signal line. No card, just rhythm. */}
+      <div className="flex flex-col gap-1">
+        <PageHeading className="text-2xl md:text-3xl">{dateLabel}</PageHeading>
+        <p className="text-sm text-muted-foreground">
+          {greetingName}, {signals.length > 0 ? signals.join(" · ") : "your lab is quiet today."}
         </p>
       </div>
-
-      {/* Stats Grid - Hidden for now */}
-      {/* <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium">
-              Active Projects
-            </CardTitle>
-            <FlaskConical className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{activeProjectsCount}</div>
-            <p className="text-xs text-muted-foreground">
-              Currently active or planning
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium">
-              Running Experiments
-            </CardTitle>
-            <TestTube className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{runningExperimentsCount}</div>
-            <p className="text-xs text-muted-foreground">
-              In progress or collecting data
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium">
-              Equipment Status
-            </CardTitle>
-            <Microscope className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              {equipmentAvailabilityPercentage}%
-            </div>
-            <p className="text-xs text-muted-foreground">
-              {availableEquipmentCount} of {totalEquipmentCount} available
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium">
-              Pending Reports
-            </CardTitle>
-            <FileText className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{pendingReportsCount}</div>
-            <p className="text-xs text-muted-foreground">
-              Draft reports to complete
-            </p>
-          </CardContent>
-        </Card>
-      </div> */}
 
       {/* Org Setup CTA */}
       <OrgSetupCTA visible={!orgMembership} />
 
-      <Card className="min-w-0 overflow-hidden">
+      <Card className="min-w-0 overflow-hidden mb-6">
         <CardHeader>
           <CardTitle>Quick Actions</CardTitle>
           <CardDescription>Common tasks to get you started.</CardDescription>
@@ -194,145 +203,140 @@ export default async function DashboardPage() {
         </CardContent>
       </Card>
 
-      {/* Recent Experiments & Notes */}
-      <div className="grid min-w-0 gap-4 md:grid-cols-2">
-        <Card className="min-w-0 overflow-hidden">
+      {/* Three-column lab signal grid. Stacks below md. */}
+      <div className="grid flex-1 grid-cols-1 gap-4 md:gap-5 xl:grid-cols-12">
+        {/* Today — 4 cols */}
+        <Card className="xl:col-span-4">
           <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <FlaskConical className="h-5 w-5" />
-              Recent Experiments
-            </CardTitle>
-            <CardDescription>
-              Track your ongoing laboratory work
-            </CardDescription>
+            <CardTitle className="text-base">Today</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            {recentExperiments && recentExperiments.length > 0 ? (
-              recentExperiments.map((exp) => (
-                <div key={exp.id} className="space-y-2">
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="space-y-1.5 flex-1 min-w-0">
-                      <p className="text-sm font-medium leading-none truncate">
-                        {exp.name}
-                      </p>
-                      <p className="text-xs text-muted-foreground break-words">
-                        {exp.project?.name || "No project"}
-                      </p>
-                      <p className="text-xs text-muted-foreground break-words">
-                        {exp.assigned_to
-                          ? `${exp.assigned_to.first_name} ${exp.assigned_to.last_name}`
-                          : "Unassigned"}
-                      </p>
-                    </div>
-                    <div className="flex items-center gap-2 shrink-0">
-                      <Badge
-                        variant={
-                          exp.status === "in_progress"
-                            ? "default"
-                            : exp.status === "data_collection"
-                            ? "secondary"
-                            : exp.status === "completed"
-                            ? "outline"
-                            : "outline"
-                        }
-                      >
-                        {exp.status?.replace("_", " ") || "planned"}
-                      </Badge>
-                      <Link href={`/experiments/${exp.id}`}>
-                        <Button variant="ghost" size="icon" aria-label="View experiment">
-                          <ArrowUpRight className="size-4" />
-                          <span className="sr-only">View experiment</span>
-                        </Button>
-                      </Link>
-                    </div>
-                  </div>
-                  <Progress value={exp.progress || 0} className="h-2" />
+            {nextEvent ? (
+              <div className="rounded-md border border-border bg-muted/30 p-3">
+                <div className="text-xs text-muted-foreground">Next up</div>
+                <div className="font-medium text-sm">{nextEvent.title}</div>
+                <div className="text-xs text-muted-foreground mt-0.5">
+                  {new Date(nextEvent.start_at).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })}
                 </div>
-              ))
-            ) : (
-              <div className="text-sm text-muted-foreground space-y-2">
-                <p>No recent experiments.</p>
-                <Link
-                  href="/experiments/new"
-                  className="inline-flex items-center gap-1 text-primary hover:underline"
-                >
-                  <Plus className="size-3.5" /> Start your first experiment
-                </Link>
               </div>
+            ) : (
+              <p className="text-sm text-muted-foreground">No events scheduled.</p>
             )}
+            <div>
+              <div className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2">Tasks</div>
+              {todayTasks.length > 0 ? (
+                <ul className="space-y-1.5">
+                  {todayTasks.map((task) => (
+                    <li key={task.id} className="flex items-start gap-2 text-sm">
+                      <ClipboardList className="size-3.5 mt-0.5 text-muted-foreground shrink-0" />
+                      <span className="line-clamp-2">{task.title}</span>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="text-sm text-muted-foreground">Nothing due today.</p>
+              )}
+            </div>
+            <Button asChild variant="ghost" size="sm" className="w-full justify-between">
+              <Link href="/planner">
+                Open Planner <ArrowRight className="size-3.5" />
+              </Link>
+            </Button>
           </CardContent>
         </Card>
 
-        <Card className="min-w-0 overflow-hidden">
+        {/* Active experiments — 5 cols */}
+        <Card className="xl:col-span-5">
           <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <BookOpen className="h-5 w-5" />
-              Recent Notes
-            </CardTitle>
-            <CardDescription>Your latest lab notes</CardDescription>
+            <CardTitle className="text-base">Active experiments</CardTitle>
           </CardHeader>
-          <CardContent className="space-y-4">
-            {recentNotes && recentNotes.length > 0 ? (
-              recentNotes.map((note: any) => (
-                <div
-                  key={note.id}
-                  className="pb-4 border-b last:border-0 last:pb-0"
-                >
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="space-y-1.5 flex-1 min-w-0">
-                      <p className="text-sm font-medium leading-none truncate">
-                        {note.title}
-                      </p>
-                      <p className="text-xs text-muted-foreground break-words">
-                        {note.experiment?.name || "No experiment"}
-                        {note.experiment?.project?.name &&
-                          ` · ${note.experiment.project.name}`}
-                      </p>
-                      <p className="text-xs text-muted-foreground">
-                        Updated {new Date(note.updated_at).toISOString().slice(0, 10)}
-                      </p>
-                    </div>
-                    <div className="flex items-center gap-2 shrink-0">
-                      {note.note_type && (
-                        <Badge variant="outline" className="text-xs">
-                          {note.note_type}
-                        </Badge>
-                      )}
-                      <Link
-                        href={
-                          note.experiment_id
-                            ? `/experiments/${note.experiment_id}?noteId=${note.id}`
-                            : `/lab-notes`
-                        }
-                      >
-                        <Button variant="ghost" size="icon" aria-label="View note">
-                          <ArrowUpRight className="size-4" />
-                          <span className="sr-only">View note</span>
-                        </Button>
-                      </Link>
-                    </div>
-                  </div>
-                </div>
-              ))
+          <CardContent>
+            {activeExperiments.length > 0 ? (
+              <ul className="space-y-2">
+                {activeExperiments.map((exp) => (
+                  <li key={exp.id}>
+                    <Link
+                      href={`/experiments/${exp.id}${exp.project_id ? `?project=${exp.project_id}` : ""}`}
+                      className="flex items-start gap-3 rounded-md border border-border bg-card p-3 hover:bg-muted/40 transition-colors"
+                    >
+                      <FlaskConical className="size-4 mt-0.5 text-primary shrink-0" />
+                      <div className="flex-1 min-w-0">
+                        <div className="font-medium text-sm line-clamp-1">{exp.name}</div>
+                        <div className="text-xs text-muted-foreground mt-0.5">
+                          Updated {relativeTime(exp.updated_at)}
+                        </div>
+                      </div>
+                      <Badge variant="secondary" className="text-2xs uppercase tracking-wide">{exp.status}</Badge>
+                    </Link>
+                  </li>
+                ))}
+              </ul>
             ) : (
-              <div className="text-sm text-muted-foreground space-y-2">
-                <p>No recent notes.</p>
-                <Link
-                  href="/lab-notes"
-                  className="inline-flex items-center gap-1 text-primary hover:underline"
-                >
-                  <Plus className="size-3.5" /> Write your first lab note
-                </Link>
-              </div>
+              <p className="text-sm text-muted-foreground">
+                No active experiments. <Link href="/experiments/new" className="underline underline-offset-2 hover:text-foreground">Start one →</Link>
+              </p>
+            )}
+            <Button asChild variant="ghost" size="sm" className="w-full justify-between mt-3">
+              <Link href="/experiments">
+                View all <ArrowRight className="size-3.5" />
+              </Link>
+            </Button>
+          </CardContent>
+        </Card>
+
+        {/* Recently edited — 3 cols */}
+        <Card className="xl:col-span-3">
+          <CardHeader>
+            <CardTitle className="text-base">Recently edited</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {recentlyEdited.length > 0 ? (
+              <ul className="space-y-2">
+                {recentlyEdited.map((item) => (
+                  <li key={`${item.kind}-${item.id}`}>
+                    <Link
+                      href={item.href}
+                      className="flex items-start gap-2 text-sm hover:text-foreground transition-colors"
+                    >
+                      <RecentIcon kind={item.kind} />
+                      <div className="flex-1 min-w-0">
+                        <div className="line-clamp-1">{item.title}</div>
+                        <div className="text-2xs text-muted-foreground mt-0.5">
+                          {relativeTime(item.updated_at)}
+                        </div>
+                      </div>
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="text-sm text-muted-foreground">Nothing yet.</p>
             )}
           </CardContent>
         </Card>
-      </div>
-
-      {/* To-Do Panel */}
-      <div className="grid min-w-0 gap-4">
-        <TodoPanel initialTasks={dashboardTasks ?? []} />
       </div>
     </div>
-  );
+  )
+}
+
+function RecentIcon({ kind }: { kind: "note" | "paper" | "protocol" }) {
+  const cls = "size-3.5 mt-0.5 shrink-0 text-muted-foreground"
+  if (kind === "note") return <FileText className={cls} />
+  if (kind === "paper") return <BookOpen className={cls} />
+  return <ScrollText className={cls} />
+}
+
+function relativeTime(iso: string): string {
+  const then = new Date(iso).getTime()
+  const diff = Date.now() - then
+  const minutes = Math.floor(diff / 60000)
+  if (minutes < 1) return "just now"
+  if (minutes < 60) return `${minutes}m ago`
+  const hours = Math.floor(minutes / 60)
+  if (hours < 24) return `${hours}h ago`
+  const days = Math.floor(hours / 24)
+  if (days < 7) return `${days}d ago`
+  const weeks = Math.floor(days / 7)
+  if (weeks < 5) return `${weeks}w ago`
+  return new Date(iso).toLocaleDateString()
 }

@@ -119,7 +119,7 @@ export function PaperWorkspace({ paperId, backLink, onPaperMutated, onPaperTitle
 
       if (error || !data) {
         toast.error("Paper not found")
-        router.push("/papers")
+        ;(() => { const pq = typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("project") : null; router.push(pq ? "/papers?project=" + pq : "/papers"); })()
         return
       }
 
@@ -466,7 +466,7 @@ export function PaperWorkspace({ paperId, backLink, onPaperMutated, onPaperTitle
         </div>
       </div>
 
-      <div style={{ height: "calc(100vh - 180px)" }}>
+      <div style={{ height: "calc(100dvh - 180px)" }}>
         <FileDropzone
           onFilesDrop={(files) => {
             const texFile = files.find(f => f.name.endsWith('.tex'))
@@ -536,7 +536,7 @@ export function PaperWorkspace({ paperId, backLink, onPaperMutated, onPaperTitle
               key={`collab-${id}`}
               content=""
               onChange={handleContentChange}
-              minHeight="calc(100vh - 180px)"
+              minHeight="calc(100dvh - 180px)"
               title={titleInput}
               onDocumentTitleChange={setTitleInput}
               onDocumentTitleCommit={() => void commitTitle()}
@@ -554,7 +554,7 @@ export function PaperWorkspace({ paperId, backLink, onPaperMutated, onPaperTitle
               key={`solo-${id}`}
               content={content}
               onChange={handleContentChange}
-              minHeight="calc(100vh - 180px)"
+              minHeight="calc(100dvh - 180px)"
               title={titleInput}
               onDocumentTitleChange={setTitleInput}
               onDocumentTitleCommit={() => void commitTitle()}

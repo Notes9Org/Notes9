@@ -32,6 +32,7 @@ export function usePinnedAutoScroll<E extends HTMLElement>(
 
   const pinnedRef = useRef(true);
   const lastScrollTopRef = useRef(0);
+  const lastScrollHeightRef = useRef(0);
   const [showJumpBottom, setShowJumpBottom] = useState(false);
 
   const measurePin = useCallback(() => {
@@ -41,6 +42,24 @@ export function usePinnedAutoScroll<E extends HTMLElement>(
     pinnedRef.current = distFromBottom <= tolerance;
     setShowJumpBottom(distFromBottom > 120);
   }, [scrollRef, tolerance]);
+
+  // Detect a session swap (scrollHeight shrinks dramatically) and re-pin so
+  // the new conversation starts at its bottom rather than inheriting the
+  // previous session's pin state.
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const current = el.scrollHeight;
+    const prev = lastScrollHeightRef.current;
+    if (prev > 0 && current < prev * 0.5) {
+      pinnedRef.current = true;
+      el.scrollTop = el.scrollHeight;
+      lastScrollTopRef.current = el.scrollHeight;
+      setShowJumpBottom(false);
+    }
+    lastScrollHeightRef.current = current;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, deps);
 
   /** Attach to the scroll container's `onScroll`. */
   const onScroll = useCallback(() => {

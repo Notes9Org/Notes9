@@ -121,7 +121,7 @@ export function ChangePasswordDialog({ children }: ChangePasswordDialogProps) {
       <DialogTrigger asChild>
         {children}
       </DialogTrigger>
-      <DialogContent className="sm:max-w-[425px]">
+      <DialogContent dialogSize="sm">
         <DialogHeader>
           <DialogTitle>Change Password</DialogTitle>
           <DialogDescription>

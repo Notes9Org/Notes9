@@ -43,12 +43,14 @@ interface ExperimentStepsTabProps {
   experimentId: string
 }
 
+// Status colors map to semantic tokens (--info / --primary / --destructive /
+// --warning) so theme changes ripple through without per-status overrides.
 const STATUS_CONFIG: Record<StepStatus, { label: string; icon: typeof Circle; color: string; bg: string }> = {
   pending: { label: "Pending", icon: Circle, color: "text-muted-foreground", bg: "bg-muted" },
-  in_progress: { label: "In Progress", icon: Loader2, color: "text-blue-600", bg: "bg-blue-50 dark:bg-blue-950/30" },
-  completed: { label: "Completed", icon: CheckCircle2, color: "text-green-600", bg: "bg-green-50 dark:bg-green-950/30" },
-  failed: { label: "Failed", icon: AlertCircle, color: "text-red-600", bg: "bg-red-50 dark:bg-red-950/30" },
-  skipped: { label: "Skipped", icon: SkipForward, color: "text-yellow-600", bg: "bg-yellow-50 dark:bg-yellow-950/30" },
+  in_progress: { label: "In Progress", icon: Loader2, color: "text-[var(--color-info)]", bg: "bg-[var(--color-info)]/10" },
+  completed: { label: "Completed", icon: CheckCircle2, color: "text-[var(--color-success)]", bg: "bg-[var(--color-success)]/10" },
+  failed: { label: "Failed", icon: AlertCircle, color: "text-destructive", bg: "bg-destructive/10" },
+  skipped: { label: "Skipped", icon: SkipForward, color: "text-[var(--color-warning)]", bg: "bg-[var(--color-warning)]/10" },
 }
 
 const CATEGORY_COLORS: Record<StepCategory, string> = {

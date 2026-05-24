@@ -10,6 +10,7 @@ import {
   RUM_APP_VERSION,
   buildRumConfig,
   extractSessionMetadata,
+  isRumConfigured,
   setRumClient,
 } from '@/lib/rum'
 import { createClient } from '@/lib/supabase/client'
@@ -29,6 +30,10 @@ export function RumProvider({ children }: { children: ReactNode }) {
     async function init() {
       try {
         if (process.env.NODE_ENV === 'development') return
+        if (!isRumConfigured()) {
+          console.warn('[RUM] Not configured — set NEXT_PUBLIC_CW_RUM_APP_ID and NEXT_PUBLIC_CW_RUM_IDENTITY_POOL_ID')
+          return
+        }
 
         const config = buildRumConfig()
 

@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { TextareaWithWordCount } from "@/components/ui/textarea-with-word-count"
+import { PageHeading } from "@/components/ui/page-heading"
 import {
   Select,
   SelectContent,
@@ -30,6 +31,7 @@ export default function NewProjectPage() {
   const [formData, setFormData] = useState({
     name: "",
     description: "",
+    status: "planning",
     priority: "medium",
     start_date: "",
     end_date: "",
@@ -63,7 +65,7 @@ export default function NewProjectPage() {
         .insert({
           name: formData.name,
           description: formData.description,
-          status: "planning",
+          status: formData.status,
           priority: formData.priority,
           start_date: formData.start_date || null,
           end_date: formData.end_date || null,
@@ -99,9 +101,9 @@ export default function NewProjectPage() {
             <ArrowLeft className="h-4 w-4" />
           </Button>
           <div className="min-w-0">
-            <h1 className="text-2xl font-bold tracking-tight md:text-3xl">Create New Project</h1>
+            <PageHeading>New Project</PageHeading>
             <p className="text-muted-foreground mt-1 text-sm">
-              Set up a new research initiative
+              Give your project a name and optional dates.
             </p>
           </div>
         </div>
@@ -142,24 +144,46 @@ export default function NewProjectPage() {
                 />
               </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="priority">Priority</Label>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="status">Status</Label>
+                  <Select
+                    value={formData.status}
+                    onValueChange={(value) =>
+                      setFormData({ ...formData, status: value })
+                    }
+                  >
+                    <SelectTrigger id="status">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="planning">Planning</SelectItem>
+                      <SelectItem value="active">Active</SelectItem>
+                      <SelectItem value="on_hold">On hold</SelectItem>
+                      <SelectItem value="completed">Completed</SelectItem>
+                      <SelectItem value="archived">Archived</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="priority">Priority</Label>
                   <Select
                     value={formData.priority}
                     onValueChange={(value) =>
                       setFormData({ ...formData, priority: value })
                     }
                   >
-                <SelectTrigger id="priority">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="low">Low</SelectItem>
-                  <SelectItem value="medium">Medium</SelectItem>
-                  <SelectItem value="high">High</SelectItem>
-                  <SelectItem value="critical">Critical</SelectItem>
-                </SelectContent>
-              </Select>
+                    <SelectTrigger id="priority">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="low">Low</SelectItem>
+                      <SelectItem value="medium">Medium</SelectItem>
+                      <SelectItem value="high">High</SelectItem>
+                      <SelectItem value="critical">Critical</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
 
               <div className="grid grid-cols-2 gap-4">

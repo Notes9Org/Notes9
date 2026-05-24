@@ -15,6 +15,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import { PageHeading } from "@/components/ui/page-heading"
 import { ArrowLeft } from 'lucide-react'
 import Link from 'next/link'
 import { DATE_ORDER_ERROR, isEndDateBeforeStartDate } from "@/lib/date-order"
@@ -87,7 +88,7 @@ export default function NewEquipmentPage() {
             </Link>
           </Button>
           <div className="min-w-0">
-            <h1 className="text-2xl font-bold tracking-tight text-foreground md:text-3xl">Add Equipment</h1>
+            <PageHeading>Add Equipment</PageHeading>
             <p className="text-muted-foreground mt-1 text-sm">
               Register new laboratory equipment
             </p>

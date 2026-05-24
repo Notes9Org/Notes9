@@ -8,6 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { ViewModeToggle } from "@/components/ui/view-mode-toggle"
 import { FileText, Grid3x3, List, ArrowUpRight } from "lucide-react"
 
 export interface PaperListItem {
@@ -146,30 +147,7 @@ export function PaperList({
     <>
       {!hideToolbar && (
         <div className="mb-4 flex justify-end">
-          <div className="inline-flex gap-1 rounded-lg border p-1">
-            <Button
-              variant={effectiveViewMode === "grid" ? "default" : "ghost"}
-              size="sm"
-              onClick={() => setViewMode("grid")}
-              className="gap-2"
-              aria-label="Switch to grid view"
-            >
-              <Grid3x3 className="h-4 w-4" />
-              Grid
-            </Button>
-            <Button
-              variant={isMobile ? "ghost" : effectiveViewMode === "table" ? "default" : "ghost"}
-              size="sm"
-              onClick={() => !isMobile && setViewMode("table")}
-              className="gap-2"
-              disabled={isMobile}
-              aria-disabled={isMobile}
-              aria-label="Switch to table view"
-            >
-              <List className="h-4 w-4" />
-              Table
-            </Button>
-          </div>
+          <ViewModeToggle value={viewMode} onChange={setViewMode} tableDisabled={isMobile} />
         </div>
       )}
 

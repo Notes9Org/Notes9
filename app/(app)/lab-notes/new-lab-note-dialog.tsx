@@ -32,12 +32,19 @@ type NewLabNoteDialogProps = {
   open: boolean
   onOpenChange: (open: boolean) => void
   onCreated?: () => void
+  /**
+   * Project to pre-select when the dialog opens. Pass the caller's current
+   * `?project=` scope so the user doesn't have to re-pick the project they're
+   * already filtered to.
+   */
+  defaultProjectId?: string | null
 }
 
 export function NewLabNoteDialog({
   open,
   onOpenChange,
   onCreated,
+  defaultProjectId = null,
 }: NewLabNoteDialogProps) {
   const router = useRouter()
   const { toast } = useToast()
@@ -123,11 +130,13 @@ export function NewLabNoteDialog({
 
   useEffect(() => {
     if (open) {
-      setSelectedProjectId("")
+      // Pre-select the project the user was scoped to when they clicked
+      // "+ New lab note", so they don't get bounced back to a global picker.
+      setSelectedProjectId(defaultProjectId ?? "")
       setSelectedExperimentId("")
       setTitle("")
     }
-  }, [open])
+  }, [open, defaultProjectId])
 
   const getUniqueDefaultTitle = async (experimentId: string): Promise<string> => {
     const { data } = await supabase
@@ -142,14 +151,9 @@ export function NewLabNoteDialog({
   }
 
   const handleCreate = async () => {
-    if (!selectedExperimentId?.trim()) {
-      toast({
-        title: "Select experiment",
-        description: "Please select a project and an experiment for this lab note.",
-        variant: "destructive",
-      })
-      return
-    }
+    // Submit button is already disabled when no experiment is selected; this
+    // is just a defensive no-op for keyboard / programmatic invocations.
+    if (!selectedExperimentId?.trim()) return
     setCreating(true)
     try {
       const { data: { user } } = await supabase.auth.getUser()
@@ -173,8 +177,12 @@ export function NewLabNoteDialog({
         title: "Lab note created",
         description: `"${noteTitle}" is linked to ${selectedExperiment?.name} in ${selectedProject?.name}.`,
       })
-      window.dispatchEvent(new CustomEvent("notes9:navigation-start", { detail: { label: selectedExperiment?.name || "Experiment", href: `/experiments/${selectedExperimentId}`, kind: "experiments" } }))
-      router.push(`/experiments/${selectedExperimentId}?tab=notes&noteId=${data.id}`)
+      // Carry the project scope through the redirect so the breadcrumb /
+      // back-button still know which project we came from.
+      const projectQs = selectedProjectId ? `&project=${selectedProjectId}` : ""
+      const targetHref = `/experiments/${selectedExperimentId}?tab=notes&noteId=${data.id}${projectQs}`
+      window.dispatchEvent(new CustomEvent("notes9:navigation-start", { detail: { label: selectedExperiment?.name || "Experiment", href: targetHref, kind: "experiments" } }))
+      router.push(targetHref)
     } catch (err: unknown) {
       const e = err as { code?: string; message?: string }
       toast({
@@ -189,7 +197,7 @@ export function NewLabNoteDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent dialogSize="sm">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Plus className="h-5 w-5" />

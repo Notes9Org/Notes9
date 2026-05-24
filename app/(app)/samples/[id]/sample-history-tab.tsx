@@ -274,7 +274,7 @@ export function SampleHistoryTab({ sampleId, initialTransfers, currentLocation }
               Add entry
             </Button>
           </DialogTrigger>
-          <DialogContent className="sm:max-w-lg">
+          <DialogContent>
             <DialogHeader>
               <DialogTitle>Add history entry</DialogTitle>
               <DialogDescription>

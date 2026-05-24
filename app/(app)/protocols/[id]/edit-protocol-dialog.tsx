@@ -112,7 +112,7 @@ export function EditProtocolDialog({ protocol }: EditProtocolDialogProps) {
           <Pencil className="h-4 w-4" />
         </Button>
       </DialogTrigger>
-      <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+      <DialogContent dialogSize="lg" className="max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Edit Protocol</DialogTitle>
           <DialogDescription>

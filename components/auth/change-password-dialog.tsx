@@ -128,7 +128,7 @@ export function ChangePasswordDialog({ open, onOpenChange }: ChangePasswordDialo
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[425px]">
+      <DialogContent dialogSize="sm">
         <DialogHeader>
           <DialogTitle>Change Password</DialogTitle>
           <DialogDescription>

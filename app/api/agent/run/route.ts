@@ -3,6 +3,7 @@ import {
   buildNotes9AgentRequestBody,
   type Notes9AgentHistoryItem,
 } from '@/lib/notes9-agent-request';
+import { verifyBearerToken } from "@/lib/verify-bearer-token";
 
 export const maxDuration = 300;
 
@@ -31,6 +32,14 @@ export async function POST(req: Request) {
       { status: 401 }
     );
   }
+  const _verifiedUser = await verifyBearerToken(token)
+  if (!_verifiedUser) {
+    return new Response(JSON.stringify({ error: "Unauthorized" }), {
+      status: 401,
+      headers: { "Content-Type": "application/json" },
+    })
+  }
+
 
   if (!NOTES9_API_BASE) {
     return NextResponse.json(

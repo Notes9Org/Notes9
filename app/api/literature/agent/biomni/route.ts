@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { verifyBearerToken } from "@/lib/verify-bearer-token"
 
 export const maxDuration = 60;
 
@@ -77,6 +78,14 @@ export async function POST(req: Request) {
       { status: 401 }
     );
   }
+  const _verifiedUser = await verifyBearerToken(token)
+  if (!_verifiedUser) {
+    return new Response(JSON.stringify({ error: "Unauthorized" }), {
+      status: 401,
+      headers: { "Content-Type": "application/json" },
+    })
+  }
+
 
   const query = typeof body.query === 'string' ? body.query : String(body.query ?? '');
   const session_id =

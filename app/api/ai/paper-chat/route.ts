@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { createClient } from '@/lib/supabase/server'
 
 export const maxDuration = 60
 
@@ -7,6 +8,20 @@ const NOTES9_API_BASE =
   ''
 const AI_SERVICE_URL = process.env.AI_SERVICE_URL?.replace(/\/$/, '') || ''
 const AI_SERVICE_BEARER_TOKEN = process.env.AI_SERVICE_BEARER_TOKEN || ''
+
+const MAX_PAPER_CONTENT_BYTES = 50 * 1024
+const MAX_MESSAGE_BYTES = 4 * 1024
+const INSERTABLE_START = '---INSERTABLE_START---'
+const INSERTABLE_END = '---INSERTABLE_END---'
+
+function byteLength(s: string): number {
+  return new TextEncoder().encode(s).length
+}
+
+function stripDelimiters(s: string): string {
+  if (!s) return s
+  return s.split(INSERTABLE_START).join('---INSERTABLE-STARTx---').split(INSERTABLE_END).join('---INSERTABLE-ENDx---')
+}
 
 function buildSystemPrompt(opts: {
   citationStyle?: string
@@ -33,7 +48,6 @@ RULES:
 6. Be specific - do not give generic advice, reference their actual content
 7. Keep responses focused and actionable`
 
-  // Citation style instructions
   if (citationStyle) {
     base += `\n\nCITATION STYLE INSTRUCTIONS:\n${citationStyle}
 When writing content that includes citations:
@@ -43,7 +57,6 @@ When writing content that includes citations:
 - Make inline citations clickable by formatting them consistently`
   }
 
-  // Smart insertion rules
   base += `
 
 SMART INSERTION RULES:
@@ -54,9 +67,9 @@ SMART INSERTION RULES:
 CRITICAL OUTPUT FORMAT RULE:
 When your response contains text that should be inserted into the paper, you MUST wrap ONLY the insertable content between these exact markers:
 
----INSERTABLE_START---
+${INSERTABLE_START}
 (the actual paper content to insert goes here - no commentary, no notes, no explanations)
----INSERTABLE_END---
+${INSERTABLE_END}
 
 Put any explanations, notes, caveats, or commentary OUTSIDE these markers (before or after).
 If your entire response is insertable content with no commentary, still wrap it in the markers.
@@ -67,6 +80,12 @@ If your response is purely conversational (e.g. answering a question, no content
 
 export async function POST(req: NextRequest) {
   try {
+    const supabase = await createClient()
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
     const body = await req.json()
     const { message, history, paperContent, paperTitle, sessionId, citationStylePrompt, mode } = body
 
@@ -74,37 +93,46 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Message is required' }, { status: 400 })
     }
 
-    const token = req.headers.get('Authorization')?.replace(/^Bearer\s+/i, '').trim()
+    if (typeof message !== 'string' || byteLength(message) > MAX_MESSAGE_BYTES) {
+      return NextResponse.json({ error: 'Message too large' }, { status: 413 })
+    }
+
+    if (paperContent && (typeof paperContent !== 'string' || byteLength(paperContent) > MAX_PAPER_CONTENT_BYTES)) {
+      return NextResponse.json({ error: 'Paper content too large' }, { status: 413 })
+    }
+
+    const safePaperContent = paperContent ? stripDelimiters(paperContent) : ''
+    const safeMessage = stripDelimiters(message)
 
     const systemPrompt = buildSystemPrompt({
       citationStyle: citationStylePrompt,
       mode,
     })
 
-    const paperContext = paperContent
-      ? `\n\n---\nPAPER TITLE: ${paperTitle || 'Untitled'}\n\nFULL PAPER CONTENT:\n${paperContent}\n---\n\n`
+    const paperContext = safePaperContent
+      ? `\n\n---\nPAPER TITLE: ${paperTitle ? String(paperTitle).slice(0, 200) : 'Untitled'}\n\nFULL PAPER CONTENT:\n${safePaperContent}\n---\n\n`
       : ''
 
-    const enrichedQuery = `${systemPrompt}${paperContext}User request: ${message}`
+    const enrichedQuery = `${systemPrompt}${paperContext}User request: ${safeMessage}`
 
     const chatHistory = (history || []).map((h: { role: string; content: string }) => ({
       role: h.role,
       content: h.content,
     }))
 
-    const useNotes9 = token && NOTES9_API_BASE
+    const sessionToken = (await supabase.auth.getSession()).data.session?.access_token
+    const useNotes9 = sessionToken && NOTES9_API_BASE
     const useAIService = AI_SERVICE_BEARER_TOKEN && AI_SERVICE_URL
 
     if (!useNotes9 && !useAIService) {
       return NextResponse.json(
-        { error: 'No AI service configured. Please sign in or configure AI_SERVICE_URL.' },
+        { error: 'No AI service configured.' },
         { status: 503 }
       )
     }
 
-    let assistantContent: string
     const apiUrl = useNotes9 ? `${NOTES9_API_BASE}/chat` : `${AI_SERVICE_URL}/chat`
-    const authHeader = useNotes9 ? `Bearer ${token}` : `Bearer ${AI_SERVICE_BEARER_TOKEN}`
+    const authHeader = useNotes9 ? `Bearer ${sessionToken}` : `Bearer ${AI_SERVICE_BEARER_TOKEN}`
 
     const response = await fetch(apiUrl, {
       method: 'POST',
@@ -123,11 +151,11 @@ export async function POST(req: NextRequest) {
     }
 
     const data = (await response.json()) as { content?: string }
-    assistantContent = typeof data.content === 'string' ? data.content : String(data.content ?? '')
+    const assistantContent = typeof data.content === 'string' ? data.content : String(data.content ?? '')
 
     return NextResponse.json({ text: assistantContent })
   } catch (error: any) {
     console.error('Paper chat error:', error)
-    return NextResponse.json({ error: error.message || 'Failed to process request' }, { status: 500 })
+    return NextResponse.json({ error: 'Failed to process request' }, { status: 500 })
   }
 }

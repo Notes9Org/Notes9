@@ -5,6 +5,7 @@ import { ProtocolsPageContent, type ProtocolsProjectContext } from "./protocols-
 import { resolveInitialProjectIdParam } from "@/lib/url-project-param"
 import { SetPageBreadcrumb } from "@/components/layout/breadcrumb-context"
 import { loadProjectWorkspaceProtocols } from "@/lib/project-workspace-protocols"
+import { CatalystSectionHero } from "@/components/catalyst/catalyst-section-hero"
 
 export default async function ProtocolsPage({
   searchParams,
@@ -97,6 +98,9 @@ export default async function ProtocolsPage({
       ) : (
         <SetPageBreadcrumb segments={[]} />
       )}
+
+      <CatalystSectionHero size="sm" scope="protocols" />
+
       <Suspense
         fallback={
           <div className="space-y-4 animate-pulse">

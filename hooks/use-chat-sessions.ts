@@ -317,16 +317,21 @@ export function useChatSessions(protocolId?: string) {
         return localProtocolSaveMessage(protocolId, sessionId, role, content, metadata) as ChatMessage | null;
       }
 
+      // Narrow dedup window to 5s. Two tabs sending the same message in the same
+      // multi-second window is the only realistic dupe path we need to defeat;
+      // a wider window blocks legitimate "regenerate" usage.
       const { data: existing } = await supabase
         .from('chat_messages')
         .select('id')
         .eq('session_id', sessionId)
         .eq('role', role)
         .eq('content', content)
-        .gte('created_at', new Date(Date.now() - 60_000).toISOString())
-        .limit(1);
+        .gte('created_at', new Date(Date.now() - 5_000).toISOString())
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
 
-      if (existing && existing.length > 0) {
+      if (existing) {
         return null;
       }
 

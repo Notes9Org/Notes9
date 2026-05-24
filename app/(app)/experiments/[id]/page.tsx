@@ -10,6 +10,7 @@ import Link from 'next/link'
 import { ExperimentActions } from './experiment-actions'
 import { ExperimentTabs } from './experiment-tabs'
 import { Badge } from '@/components/ui/badge'
+import { PageHeading } from "@/components/ui/page-heading"
 import { resolveInitialProjectIdParam } from "@/lib/url-project-param"
 
 
@@ -159,9 +160,9 @@ export default async function ExperimentDetailPage({
       {/* Header: stacked on mobile, row on desktop (matches project detail) */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
         <div className="min-w-0 space-y-2">
-          <h1 className="text-2xl font-bold tracking-tight md:text-3xl">
+          <PageHeading>
             {experiment.name}
-          </h1>
+          </PageHeading>
           <div className="flex flex-wrap items-center gap-2">
             <Badge
               variant={

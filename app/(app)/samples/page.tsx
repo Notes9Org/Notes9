@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation'
 import { createClient } from "@/lib/supabase/server"
 import { SamplesPageContent, SamplesEmptyState } from './samples-page-content'
+import { CatalystSectionHero } from "@/components/catalyst/catalyst-section-hero"
 
 export default async function SamplesPage() {
   const supabase = await createClient()
@@ -65,6 +66,7 @@ export default async function SamplesPage() {
 
   return (
     <div className="space-y-6">
+      <CatalystSectionHero size="sm" scope="samples" />
       {safeSamples.length > 0 ? (
         <SamplesPageContent samples={safeSamples} statusCount={statusCount} />
       ) : (

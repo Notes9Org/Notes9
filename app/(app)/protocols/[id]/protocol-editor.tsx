@@ -545,6 +545,10 @@ export function ProtocolEditor({
               {/* Must not be a <button>: TipTap renders TOC etc. with inner <button>s (invalid nesting + hydration error). */}
               <div className="min-h-0 flex-1 overflow-hidden text-left">
                 <TiptapEditor
+                  // Force a fresh editor when the user navigates to a different
+                  // protocol — without the key, ProseMirror reuses internal state
+                  // and the previous protocol's body bleeds in.
+                  key={protocol.id}
                   content={protocol.content ?? ""}
                   onChange={() => {}}
                   placeholder=""

@@ -1,3 +1,5 @@
+import { verifyBearerToken } from "@/lib/verify-bearer-token"
+
 /** Paper-analyzer SSE can run long on large batches; align with Vercel Pro max unless you use Fluid. */
 export const maxDuration = 300;
 
@@ -29,6 +31,15 @@ export async function POST(req: Request) {
 
   if (!token) {
     return new Response(JSON.stringify({ error: 'Authorization required. Provide Bearer token.' }), {
+      status: 401,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }
+
+  // Real JWT verification — `token` being non-empty is not authentication.
+  const _verifiedUser = await verifyBearerToken(token);
+  if (!_verifiedUser) {
+    return new Response(JSON.stringify({ error: 'Unauthorized' }), {
       status: 401,
       headers: { 'Content-Type': 'application/json' },
     });
@@ -72,6 +83,7 @@ export async function POST(req: Request) {
   }
 
   try {
+    const _upstreamStart = Date.now();
     const response = await fetch(UPSTREAM, {
       method: 'POST',
       headers: {
@@ -81,6 +93,7 @@ export async function POST(req: Request) {
       },
       body: JSON.stringify(forwardBody),
     });
+    console.log(JSON.stringify({ event: 'ai_upstream_complete', route: 'literature/compare-stream', duration_ms: Date.now() - _upstreamStart, status: response.status, sessionId: (forwardBody as { session_id?: string })?.session_id ?? null }));
 
     if (!response.ok) {
       const errText = await response.text();

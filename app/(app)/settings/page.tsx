@@ -19,6 +19,7 @@ import {
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { LogOut, Sun, Moon, Monitor, Loader2 } from 'lucide-react'
 import { ChangePasswordDialog } from "@/components/change-password-dialog"
+import { PageHeading } from "@/components/ui/page-heading"
 import { useToast } from "@/hooks/use-toast"
 import { USER_STORAGE_BUCKET, createProfileAvatarStoragePath } from "@/lib/user-storage-bucket"
 
@@ -223,7 +224,7 @@ export default function SettingsPage() {
   return (
       <div className="max-w-4xl mx-auto space-y-4 md:space-y-6">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight md:text-3xl">Settings</h1>
+          <PageHeading>Settings</PageHeading>
           <p className="text-muted-foreground mt-1 text-sm">
             Manage your account and preferences
           </p>
@@ -357,6 +358,21 @@ export default function SettingsPage() {
               </div>
 
               <div className="pt-6 border-t">
+                <h3 className="font-semibold mb-2">Two-factor authentication</h3>
+                <p className="text-sm text-muted-foreground mb-4">
+                  Add an extra layer of security with a TOTP authenticator app
+                  (Google Authenticator, 1Password, Authy). Requires re-signing
+                  in to enroll.
+                </p>
+                <div className="flex items-center gap-3">
+                  <Button variant="outline" disabled>
+                    Enable 2FA
+                  </Button>
+                  <span className="text-xs uppercase tracking-wide text-muted-foreground">Coming soon</span>
+                </div>
+              </div>
+
+              <div className="pt-6 border-t">
                 <h3 className="font-semibold mb-2">Legal & Privacy</h3>
                 <p className="text-sm text-muted-foreground mb-4">
                   View our terms and privacy policy
@@ -435,9 +451,7 @@ export default function SettingsPage() {
                     Receive email updates about your experiments
                   </p>
                 </div>
-                <Button variant="outline" size="sm" disabled title="Coming soon">
-                  Configure
-                </Button>
+                <span className="text-xs uppercase tracking-wide text-muted-foreground">Coming soon</span>
               </div>
 
               <div className="flex items-center justify-between">
@@ -447,9 +461,7 @@ export default function SettingsPage() {
                     Set your preferred dashboard layout
                   </p>
                 </div>
-                <Button variant="outline" size="sm" disabled title="Coming soon">
-                  Configure
-                </Button>
+                <span className="text-xs uppercase tracking-wide text-muted-foreground">Coming soon</span>
               </div>
             </CardContent>
           </Card>

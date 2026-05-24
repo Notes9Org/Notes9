@@ -4,12 +4,12 @@ import { cn } from '@/lib/utils';
 import type { ThinkingStage } from '@/hooks/use-agent-stream';
 
 const STAGE_LABEL: Record<ThinkingStage, string> = {
-  understanding: 'Reading question',
-  searching:     'Searching workspace',
-  analyzing:     'Analyzing evidence',
-  synthesizing:  'Synthesizing',
-  composing:     'Composing answer',
-  validating:    'Validating',
+  understanding: 'Reading your message',
+  searching:     'Searching your notes',
+  analyzing:     'Reviewing what I found',
+  synthesizing:  'Connecting the dots',
+  composing:     'Writing the answer',
+  validating:    'Double-checking',
   done:          'Done',
 };
 
@@ -36,7 +36,7 @@ export function AgentThinkingBar({
       {/* Pulsing dot */}
       <span
         className={cn(
-          'mt-[5px] shrink-0 size-1.5 rounded-full bg-muted-foreground/40',
+          'mt-[3px] shrink-0 size-2.5 rounded-full bg-muted-foreground/40',
           isStreaming && 'animate-pulse'
         )}
         aria-hidden

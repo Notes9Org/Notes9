@@ -331,7 +331,7 @@ export function CatalystInput({
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={handleKeyDown}
-              placeholder="How can I help you today?"
+              placeholder="Ask about your data, or type @ to reference a note, protocol, or paper."
               className="min-h-[52px] max-h-[200px] resize-none border-0 bg-transparent px-4 pt-4 pb-14 text-base focus-visible:ring-0 focus-visible:ring-offset-0"
               disabled={isLoading}
               maxLength={MAX_CHAT_CHARS}

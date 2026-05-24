@@ -16,6 +16,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import { PageHeading } from "@/components/ui/page-heading"
 import { ArrowLeft, Star } from 'lucide-react'
 import Link from 'next/link'
 import { toast } from "sonner"
@@ -180,7 +181,7 @@ function NewLiteratureReviewForm() {
             </Link>
           </Button>
           <div className="min-w-0">
-            <h1 className="text-2xl font-bold tracking-tight md:text-3xl">Add Literature Reference</h1>
+            <PageHeading>Add Literature Reference</PageHeading>
             <p className="text-muted-foreground mt-1 text-sm">
               Save a research paper or citation to your library
             </p>

@@ -2,28 +2,29 @@
 
 import { useState, useEffect, useMemo, useCallback } from "react"
 import Link from "next/link"
-import { usePathname, useRouter, useSearchParams } from "next/navigation"
+import { usePathname, useRouter } from "next/navigation"
 import Image from "next/image"
 import {
+  BookOpen,
+  ChevronDown,
+  ChevronLeft,
+  ChevronUp,
+  FlaskConical,
   Folder,
   FolderOpen,
-  FlaskConical,
-  TestTube,
   Microscope,
-  NotebookPen,
-  Settings,
-  Search,
-  Plus,
-  ChevronDown,
-  ChevronUp,
-  User2,
   MoreHorizontal,
+  NotebookPen,
   Package,
-  Users,
-  Sparkles,
-  ChevronLeft,
   PanelLeftClose,
   PanelLeftOpen,
+  Plus,
+  Search,
+  Settings,
+  TestTube,
+  User2,
+  Users,
+  X as XIcon,
 } from 'lucide-react'
 import {
   Sidebar,
@@ -64,31 +65,33 @@ import { cn } from "@/lib/utils"
 import { Notes9Brand } from "@/components/brand/notes9-brand"
 import { ClipboardInfoIcon } from "@/components/ui/clipboard-info-icon"
 import { APP_PRIMARY_NAV } from "@/lib/app-primary-nav"
+import { colorFromId as projectDotColor, useProjectScope } from "@/contexts/project-scope-context"
 import { toast } from "sonner"
 import { Button } from "../ui/button"
 
 const navigation = APP_PRIMARY_NAV
 
-interface LabNoteSummary {
-  id: string
-  title: string
-  experiment_id: string | null
-}
-
-interface ExperimentSummary {
-  id: string
-  name: string
-  project_id: string
-  lab_notes?: LabNoteSummary[]
-}
+/**
+ * Section nav rendered as nested children when a project is active in the URL
+ * (`?project=<id>` or `/projects/<id>`). These are the previously-orphaned
+ * "global" section pages that the IA #1 audit flagged — they exist as routes
+ * but were not discoverable from the sidebar. When scoped, each link carries
+ * `?project=<id>` forward so the project filter persists across navigations.
+ */
+const PROJECT_SCOPED_NAV: { name: string; basePath: string; icon: typeof Folder }[] = [
+  { name: "Experiments", basePath: "/experiments", icon: FlaskConical },
+  { name: "Lab notes", basePath: "/lab-notes", icon: NotebookPen },
+  { name: "Protocols", basePath: "/protocols", icon: ClipboardInfoIcon as unknown as typeof Folder },
+  { name: "Samples", basePath: "/samples", icon: TestTube },
+  { name: "Equipment", basePath: "/equipment", icon: Microscope },
+  { name: "Literature", basePath: "/literature-reviews", icon: BookOpen },
+]
 
 interface Project {
   id: string
   name: string
   status: string
   created_at?: string
-  experiment_count?: number
-  experiments?: ExperimentSummary[]
 }
 
 interface User {
@@ -117,26 +120,32 @@ type SearchResultItem = {
 
 export function AppSidebar() {
   const pathname = usePathname()
-  const searchParams = useSearchParams()
   const router = useRouter()
   const { setOpenMobile, isMobile, state, openMobile, open, setOpen } = useSidebar()
+  // Active-project context (URL `?project=` or `/projects/<id>` path). When set,
+  // we render a project chip + scoped section nav so the sidebar reflects ONE
+  // hierarchy instead of the two parallel ones the audit flagged.
+  const scope = useProjectScope()
   const [searchQuery, setSearchQuery] = useState("")
   const [projects, setProjects] = useState<Project[]>([])
   const [user, setUser] = useState<User | null>(null)
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null)
   const [loading, setLoading] = useState(true)
   const [mounted, setMounted] = useState(false)
-  const [openProjects, setOpenProjects] = useState<Record<string, boolean>>({})
-  const [openExperiments, setOpenExperiments] = useState<Record<string, boolean>>({})
   const [searchResults, setSearchResults] = useState<SearchResultItem[]>([])
   const [searchLoading, setSearchLoading] = useState(false)
+  const [searchError, setSearchError] = useState(false)
   const [fetchError, setFetchError] = useState(false)
   const supabase = useMemo(() => createClient(), [])
 
   const isIconMode = !open
 
-  const toggleSidebarOpen = () => {
+  const toggleSidebarOpen = (e?: React.MouseEvent<HTMLButtonElement>) => {
     setOpen(!open)
+    // Drop focus off the toggle button so the ghost-variant focus ring
+    // doesn't linger on the chrome (visible as a highlighted icon at the
+    // top of the sidebar after every click).
+    if (e?.currentTarget) e.currentTarget.blur()
   }
 
   // Prevent hydration mismatch by only activating after mount
@@ -148,17 +157,25 @@ export function AppSidebar() {
   useEffect(() => {
     if (!searchQuery.trim() || searchQuery.length < 2) {
       setSearchResults([])
+      setSearchError(false)
       return
     }
     const t = setTimeout(async () => {
       setSearchLoading(true)
+      setSearchError(false)
       try {
         const res = await fetch(`/api/search?q=${encodeURIComponent(searchQuery.trim())}`)
         const data = await res.json()
-        if (res.ok) setSearchResults(data.results ?? [])
-        else setSearchResults([])
-      } catch {
+        if (res.ok) {
+          setSearchResults(data.results ?? [])
+        } else {
+          setSearchResults([])
+          setSearchError(true)
+        }
+      } catch (err) {
+        console.error('Sidebar search failed', err)
         setSearchResults([])
+        setSearchError(true)
       } finally {
         setSearchLoading(false)
       }
@@ -196,185 +213,25 @@ export function AppSidebar() {
         return
       }
 
-      // Verify user has a profile with organization
-      const { data: userProfile, error: profileCheckError } = await supabase
+      // Profile + organization are guaranteed by the server-side
+      // ensureUserProfile() call in app/(app)/layout.tsx. We just read here.
+      const { data: userProfileData, error: profileCheckError } = await supabase
         .from("profiles")
         .select("id, organization_id, first_name, last_name")
         .eq("id", currentUser.id)
-        .single()
+        .maybeSingle()
 
-      let userProfileData = userProfile
-
-      if (profileCheckError || !userProfileData) {
-        // Log detailed error information
-        const errorInfo = profileCheckError ? {
-          message: profileCheckError.message,
-          details: profileCheckError.details,
-          hint: profileCheckError.hint,
-          code: profileCheckError.code,
-        } : { message: 'Profile not found', code: 'PGRST116' }
-
-        console.error("User profile not found or error:", errorInfo)
-        console.error("User ID:", currentUser.id)
-        console.error("User email:", currentUser.email)
-        console.error("Full error object:", profileCheckError)
-
-        // Try to create profile if it doesn't exist (error code PGRST116 = no rows returned)
-        const errorCode = profileCheckError?.code || (userProfileData ? null : 'PGRST116')
-        if (!userProfileData || errorCode === 'PGRST116') {
-          // Profile doesn't exist, try to create it
-          console.log("Profile not found, attempting to create...")
-
-          // Extract name from user metadata
-          let firstName = currentUser.user_metadata?.first_name ||
-            currentUser.user_metadata?.given_name ||
-            currentUser.user_metadata?.name?.split(' ')[0] ||
-            ''
-          let lastName = currentUser.user_metadata?.last_name ||
-            currentUser.user_metadata?.family_name ||
-            currentUser.user_metadata?.name?.split(' ').slice(1).join(' ') ||
-            ''
-
-          if (!firstName && !lastName && currentUser.user_metadata?.full_name) {
-            const nameParts = currentUser.user_metadata.full_name.split(' ')
-            firstName = nameParts[0] || ''
-            lastName = nameParts.slice(1).join(' ') || ''
-          }
-
-          if (!firstName) {
-            firstName = currentUser.email?.split('@')[0] || 'User'
-          }
-
-          // Create organization first (or find existing one)
-          let orgId: string | null = null
-
-          // Try to find existing organization by email
-          const { data: existingOrg } = await supabase
-            .from("organizations")
-            .select("id")
-            .eq("email", currentUser.email || '')
-            .single()
-
-          if (existingOrg) {
-            orgId = existingOrg.id
-            console.log("Found existing organization:", orgId)
-          } else {
-            // Create new organization
-            const userFullName = `${firstName} ${lastName}`.trim() || firstName
-            const { data: newOrg, error: orgError } = await supabase
-              .from("organizations")
-              .insert({
-                name: `${userFullName}'s Lab`,
-                email: currentUser.email || ''
-              })
-              .select()
-              .single()
-
-            if (orgError) {
-              console.error("Error creating organization:", {
-                message: orgError.message,
-                details: orgError.details,
-                hint: orgError.hint,
-                code: orgError.code
-              })
-              // If duplicate, try to fetch it
-              if (orgError.message?.includes('duplicate') || orgError.code === '23505') {
-                const { data: dupOrg } = await supabase
-                  .from("organizations")
-                  .select("id")
-                  .eq("email", currentUser.email || '')
-                  .single()
-                orgId = dupOrg?.id || null
-              } else {
-                toast.error("Failed to set up account. Please try signing out and back in.")
-                setLoading(false)
-                return
-              }
-            } else {
-              orgId = newOrg?.id || null
-              console.log("Created new organization:", orgId)
-            }
-          }
-
-          if (!orgId) {
-            console.error("Could not get or create organization")
-            toast.error("Failed to set up account. Please try signing out and back in.")
-            setLoading(false)
-            return
-          }
-
-          // Create profile
-          const { error: createProfileError } = await supabase
-            .from("profiles")
-            .insert({
-              id: currentUser.id,
-              email: currentUser.email || '',
-              first_name: firstName || 'User',
-              last_name: lastName || '',
-              role: currentUser.user_metadata?.role || 'researcher',
-              organization_id: orgId
-            })
-
-          if (createProfileError) {
-            console.error("Error creating profile:", {
-              message: createProfileError.message,
-              details: createProfileError.details,
-              hint: createProfileError.hint,
-              code: createProfileError.code
-            })
-
-            // If profile already exists (race condition), fetch it
-            if (createProfileError.message?.includes('duplicate') || createProfileError.code === '23505') {
-              const { data: existingProfile } = await supabase
-                .from("profiles")
-                .select("id, organization_id, first_name, last_name")
-                .eq("id", currentUser.id)
-                .single()
-
-              if (existingProfile?.organization_id) {
-                // Profile exists, continue
-                console.log("Profile already exists, continuing...")
-              } else {
-                toast.error("Failed to set up account. Please try signing out and back in.")
-                setLoading(false)
-                return
-              }
-            } else {
-              toast.error("Failed to set up account. Please try signing out and back in.")
-              setLoading(false)
-              return
-            }
-          } else {
-            console.log("Profile created successfully")
-          }
-
-          // Retry fetching profile
-          const { data: retryProfile } = await supabase
-            .from("profiles")
-            .select("id, organization_id, first_name, last_name")
-            .eq("id", currentUser.id)
-            .single()
-
-          if (!retryProfile || !retryProfile.organization_id) {
-            console.error("Profile still missing after creation attempt")
-            toast.error("Account setup incomplete. Please contact support.")
-            setLoading(false)
-            return
-          }
-
-          // Update userProfileData for rest of function
-          userProfileData = retryProfile
-        } else {
-          console.error("Unexpected profile error:", errorInfo)
-          toast.error("Profile setup incomplete. Please contact support.")
-          setLoading(false)
-          return
-        }
+      if (profileCheckError) {
+        console.error("Sidebar profile read failed:", profileCheckError)
+        toast.error("Could not load your workspace. Try refreshing.")
+        setFetchError(true)
+        setLoading(false)
+        return
       }
 
       if (!userProfileData?.organization_id) {
-        console.error("User profile missing organization_id")
-        toast.error("Organization not set up. Showing empty workspace.")
+        // The layout's ensureUserProfile() reports its own failure to server
+        // logs; here we just show an empty workspace.
         setProjects([])
         setLoading(false)
         return
@@ -400,62 +257,9 @@ export function AppSidebar() {
         setFetchError(true)
         setProjects([])
       } else {
-        const projectIds = (projectsData || []).map((p) => p.id)
-
-        // Fetch experiments for these projects
-        let experimentsData: ExperimentSummary[] = []
-        if (projectIds.length > 0) {
-          const { data: exps, error: expsError } = await supabase
-            .from("experiments")
-            .select("id, name, project_id")
-            .in("project_id", projectIds)
-
-          if (expsError) throw expsError
-          experimentsData = exps || []
-        }
-
-        // Fetch lab notes for these experiments
-        const experimentIds = experimentsData.map((e) => e.id)
-        let labNotesData: LabNoteSummary[] = []
-        if (experimentIds.length > 0) {
-          const { data: notes, error: notesError } = await supabase
-            .from("lab_notes")
-            .select("id, title, experiment_id")
-            .in("experiment_id", experimentIds)
-            .order("created_at", { ascending: false })
-
-          if (notesError) throw notesError
-          labNotesData = notes || []
-        }
-
-        // Group lab notes into experiments
-        const expMap: Record<string, ExperimentSummary> = {}
-        experimentsData.forEach((exp) => {
-          expMap[exp.id] = { ...exp, lab_notes: [] }
-        })
-        labNotesData.forEach((note) => {
-          const exp = note.experiment_id ? expMap[note.experiment_id] : null
-          if (exp) {
-            exp.lab_notes = exp.lab_notes || []
-            exp.lab_notes.push(note)
-          }
-        })
-
-        // Group experiments into projects
-        const projMap: Record<string, Project> = {}
-        projectsData?.forEach((proj) => {
-          projMap[proj.id] = { ...proj, experiment_count: 0, experiments: [] }
-        })
-        Object.values(expMap).forEach((exp) => {
-          const proj = projMap[exp.project_id]
-          if (proj) {
-            proj.experiments = proj.experiments || []
-            proj.experiments.push(exp)
-            proj.experiment_count = (proj.experiment_count || 0) + 1
-          }
-        })
-
-        setProjects(Object.values(projMap))
+        // Sidebar shows a flat list now — experiments + lab-note drill-down lives
+        // on the project page, so we don't fetch or assemble that tree here.
+        setProjects((projectsData ?? []) as Project[])
       }
 
     } catch (error) {
@@ -528,10 +332,9 @@ export function AppSidebar() {
     <Sidebar
       variant="sidebar"
       collapsible="icon"
-      // The primitive already paints `border-r` on the left sidebar;
-      // we keep just a soft outer glow on top of it instead of a second
-      // hard line to avoid the visually doubled seam.
-      className="transition-all duration-200 ease-in-out"
+      // Border is drawn by the resize divider + main inset; skip the primitive's
+      // `border-r` so we don't get a double seam / gap before the handle.
+      className="border-r-0 transition-all duration-200 ease-in-out [&_[data-slot=sidebar-container]]:border-r-0"
     >
       {/* Header with Workspace Dropdown */}
       <SidebarHeader
@@ -545,23 +348,25 @@ export function AppSidebar() {
             {isIconMode ? (
               // Icon mode: logo + expand stacked, same width as nav icons (no horizontal gap)
               <div className="flex w-full flex-col items-center gap-1">
-                <SidebarMenuButton size="lg" className="h-9 w-9 p-0 [&>span]:hidden">
-                  <div className="flex aspect-square size-8 items-center justify-center rounded-lg overflow-hidden">
-                    <Image
-                      src="/notes9-logo-mark-transparent.png"
-                      alt="Notes9 Logo"
-                      width={32}
-                      height={32}
-                      className="size-8 object-contain dark:invert dark:brightness-125"
-                    />
-                  </div>
+                <SidebarMenuButton asChild size="lg" className="h-9 w-9 p-0 [&>span]:hidden">
+                  <Link href="/dashboard" aria-label="Notes9 — go to dashboard">
+                    <div className="flex aspect-square size-8 items-center justify-center rounded-lg overflow-hidden">
+                      <Image
+                        src="/notes9-logo-mark-transparent.png"
+                        alt="Notes9 Logo"
+                        width={32}
+                        height={32}
+                        className="size-8 object-contain dark:invert dark:brightness-125"
+                      />
+                    </div>
+                  </Link>
                 </SidebarMenuButton>
 
                 <Button
                   variant="ghost"
                   size="icon"
                   className="size-8 text-muted-foreground shrink-0"
-                  onClick={toggleSidebarOpen}
+                  onClick={(e) => toggleSidebarOpen(e)}
                   aria-label="Expand sidebar"
                 >
                   <PanelLeftOpen className="size-4" />
@@ -571,15 +376,18 @@ export function AppSidebar() {
               // Normal mode: Logo and text with collapse button on the right
               <div className="flex items-center gap-2">
                 <SidebarMenuButton
+                  asChild
                   size="lg"
                   className="h-auto min-h-12 flex-1 min-w-0 overflow-visible py-2"
                 >
-                  <Notes9Brand
-                    showIcon
-                    iconClassName="h-6 w-6"
-                    textClassName="h-5 w-auto"
-                    withTagline
-                  />
+                  <Link href="/dashboard" aria-label="Notes9 — go to dashboard">
+                    <Notes9Brand
+                      showIcon
+                      iconClassName="h-6 w-6"
+                      textClassName="h-5 w-auto"
+                      withTagline
+                    />
+                  </Link>
                 </SidebarMenuButton>
 
                 {/* Collapse Button - hidden on mobile where sidebar is a sheet overlay */}
@@ -588,7 +396,7 @@ export function AppSidebar() {
                     variant="ghost"
                     size="icon"
                     className="size-8 sm:size-9 text-muted-foreground shrink-0"
-                    onClick={toggleSidebarOpen}
+                    onClick={(e) => toggleSidebarOpen(e)}
                     aria-label="Collapse sidebar"
                   >
                     <PanelLeftClose className="h-4 w-4" />
@@ -617,7 +425,11 @@ export function AppSidebar() {
                   <Search className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 select-none text-muted-foreground" />
                   <SidebarInput
                     placeholder="Search..."
-                    className="pl-9"
+                    className={cn(
+                      "pl-9",
+                      searchQuery.length === 0 &&
+                        "caret-transparent selection:bg-transparent",
+                    )}
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
                     onKeyDown={(e) => {
@@ -631,10 +443,21 @@ export function AppSidebar() {
                 align="start"
                 sideOffset={4}
                 onOpenAutoFocus={(e) => e.preventDefault()}
+                // The popover is controlled by `searchQuery.length >= 2`, so it
+                // closes whenever the user clears the search or navigates via
+                // a result. Without this, Radix's default close-focus runs on
+                // every close and yanks the cursor BACK into the search input
+                // — making "I clicked anywhere else" feel like "focus snapped
+                // back to search again."
+                onCloseAutoFocus={(e) => e.preventDefault()}
               >
                 {searchLoading ? (
                   <div className="px-3 py-4 text-center text-sm text-muted-foreground">
                     Searching...
+                  </div>
+                ) : searchError ? (
+                  <div className="px-3 py-4 text-center text-sm text-muted-foreground">
+                    Search unavailable. Try again.
                   </div>
                 ) : searchResults.length === 0 ? (
                   <div className="px-3 py-4 text-center text-sm text-muted-foreground">
@@ -696,15 +519,7 @@ export function AppSidebar() {
                 const Icon = item.icon
                 const pathMatches =
                   pathname === item.href || pathname.startsWith(item.href + "/")
-                const hasProjectScope =
-                  (searchParams.get("project")?.trim() ?? "") !== ""
-                const suppressActiveForProjectDeepLink =
-                  hasProjectScope &&
-                  (item.href === "/literature-reviews" ||
-                    item.href === "/protocols" ||
-                    item.href === "/experiments")
-                const isActive =
-                  mounted && pathMatches && !suppressActiveForProjectDeepLink
+                const isActive = mounted && pathMatches
 
                 return (
                   <SidebarMenuItem key={item.name}>
@@ -713,7 +528,7 @@ export function AppSidebar() {
                       isActive={isActive}
                       className="group transition-all duration-150 hover:bg-[color:color-mix(in_oklab,var(--background)_78%,var(--primary)_22%)] hover:text-sidebar-foreground active:scale-[0.985] active:bg-[color:color-mix(in_oklab,var(--background)_70%,var(--primary)_30%)] dark:hover:bg-sidebar-accent dark:hover:text-sidebar-accent-foreground dark:active:scale-[0.985] dark:active:bg-sidebar-accent/90 data-[active=true]:bg-transparent data-[active=true]:text-sidebar-foreground"
                     >
-                      <Link href={item.href} title={isIconMode ? item.name : undefined}>
+                      <Link href={item.href} aria-label={isIconMode ? item.name : undefined}>
                         <Icon />
                         <span className={cn(isIconMode && "hidden")}>
                           <span className={cn("truncate", isActive && "font-semibold")}>{item.name}</span>
@@ -745,234 +560,180 @@ export function AppSidebar() {
           </SidebarGroupContent>
         </SidebarGroup>
 
-        {/* Projects section and separator: only show when expanded (not in icon mode) */}
+        {/* Project-scoped section nav. Renders ONLY when a project is active
+            in the URL — gives the previously-orphaned global section pages
+            (lab-notes, experiments, protocols, samples, equipment, literature)
+            a discoverable home inside the project hierarchy. Each href carries
+            the project param forward so back-nav stays scoped. */}
+        {scope.projectId && !isIconMode && (
+          <>
+            <SidebarSeparator />
+            <SidebarGroup className="px-2">
+              <div className="mb-1 flex items-center gap-2 rounded-md bg-muted/40 px-2 py-1.5 text-xs">
+                <span
+                  className="inline-block size-2 shrink-0 rounded-full"
+                  style={{ backgroundColor: scope.projectColor ?? "var(--n9-accent)" }}
+                  aria-hidden
+                />
+                <Link
+                  href={`/projects/${scope.projectId}`}
+                  className="truncate font-medium text-sidebar-foreground hover:underline"
+                  title={scope.projectName ?? "Project"}
+                >
+                  {scope.projectName ?? "Project"}
+                </Link>
+                <button
+                  type="button"
+                  onClick={() => {
+                    // Drop the scope by navigating to the path without ?project=.
+                    // If we're on /projects/<id>/..., go to /dashboard instead so
+                    // the path-derived scope also clears.
+                    const url = new URL(window.location.href)
+                    url.searchParams.delete("project")
+                    const target = pathname?.startsWith("/projects/") ? "/dashboard" : `${url.pathname}${url.search}`
+                    router.push(target)
+                  }}
+                  className="ml-auto rounded p-0.5 text-muted-foreground hover:bg-muted hover:text-foreground"
+                  title="Clear project scope"
+                  aria-label="Clear project scope"
+                >
+                  <XIcon className="size-3" />
+                </button>
+              </div>
+              <SidebarGroupContent>
+                <SidebarMenu>
+                  {PROJECT_SCOPED_NAV.map((item) => {
+                    const Icon = item.icon
+                    const href = `${item.basePath}?project=${scope.projectId}`
+                    const isActive =
+                      mounted &&
+                      (pathname === item.basePath ||
+                        pathname.startsWith(item.basePath + "/"))
+                    return (
+                      <SidebarMenuItem key={item.basePath}>
+                        <SidebarMenuButton asChild isActive={isActive} size="sm">
+                          <Link href={href}>
+                            <Icon />
+                            <span className={cn("truncate", isActive && "font-semibold")}>
+                              {item.name}
+                            </span>
+                          </Link>
+                        </SidebarMenuButton>
+                      </SidebarMenuItem>
+                    )
+                  })}
+                </SidebarMenu>
+              </SidebarGroupContent>
+            </SidebarGroup>
+          </>
+        )}
+
+        {/* Projects section — flat list. Per-project drill-down lives on the
+            project page itself (the 7-card workspace), not in the sidebar. */}
         {!isIconMode && (
           <>
             <SidebarSeparator />
             {mounted ? (
-              <Collapsible defaultOpen={true} className="group/collapsible">
-                <SidebarGroup>
-                  <div className="flex h-8 shrink-0 items-center gap-2 rounded-md px-2 text-xs font-medium text-sidebar-foreground/70 outline-none ring-sidebar-ring focus-visible:ring-2 [&>svg]:size-4 [&>svg]:shrink-0">
-                    <CollapsibleTrigger className="flex min-w-0 flex-1 items-center gap-2 text-left hover:text-sidebar-foreground transition-colors">
-                      <span className="truncate">Recent Projects</span>
-                      <ChevronDown className="size-4 shrink-0 transition-transform duration-200 group-data-[state=open]/collapsible:rotate-180" />
-                    </CollapsibleTrigger>
-                    <button
-                      title="Add Project"
-                      onClick={(e) => {
-                        e.preventDefault()
-                        e.stopPropagation()
-                        router.push("/projects/new")
-                      }}
-                      className="flex aspect-square w-5 items-center justify-center rounded-md p-0 text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground transition-colors"
-                    >
-                      <Plus className="size-4" />
-                      <span className="sr-only">Add Project</span>
-                    </button>
-                  </div>
-                  <CollapsibleContent>
-                    <SidebarGroupContent>
-                      <SidebarMenu>
-                        {loading ? (
-                          Array.from({ length: 3 }).map((_, index) => (
-                            <SidebarMenuItem key={`sidebar-skeleton-${index}`}>
-                              <SidebarMenuSkeleton showIcon />
-                            </SidebarMenuItem>
-                          ))
-                        ) : projects.length === 0 ? (
-                          <SidebarMenuItem>
-                            <div className="flex flex-col gap-1 rounded-md px-2 py-1">
-                              <div className="flex h-8 items-center text-xs text-sidebar-foreground/70">
-                                No active projects
-                              </div>
-                              {fetchError && (
-                                <button
-                                  type="button"
-                                  onClick={() => fetchData()}
-                                  className="flex h-7 items-center justify-center rounded-md px-2 text-xs text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground transition-colors"
+              <SidebarGroup>
+                <div className="flex h-8 shrink-0 items-center gap-2 rounded-md px-2 text-xs font-medium text-sidebar-foreground/70 outline-none">
+                  <span className="truncate flex-1">Recent Projects</span>
+                  <button
+                    title="Add Project"
+                    onClick={(e) => {
+                      e.preventDefault()
+                      router.push("/projects/new")
+                    }}
+                    className="flex aspect-square w-5 items-center justify-center rounded-md p-0 text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground transition-colors"
+                  >
+                    <Plus className="size-4" />
+                    <span className="sr-only">Add Project</span>
+                  </button>
+                </div>
+                <SidebarGroupContent>
+                  <SidebarMenu>
+                    {loading ? (
+                      Array.from({ length: 3 }).map((_, index) => (
+                        <SidebarMenuItem key={`sidebar-skeleton-${index}`}>
+                          <SidebarMenuSkeleton />
+                        </SidebarMenuItem>
+                      ))
+                    ) : projects.length === 0 ? (
+                      <SidebarMenuItem>
+                        <div className="flex flex-col gap-1.5 rounded-md px-2 py-1">
+                          <div className="text-xs text-sidebar-foreground/70 leading-snug">
+                            No active projects yet.
+                          </div>
+                          <Link
+                            href="/projects/new"
+                            className="inline-flex h-7 items-center gap-1.5 rounded-md px-2 text-xs font-medium text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground transition-colors active:scale-[0.98]"
+                          >
+                            <Plus className="size-3.5" aria-hidden />
+                            Create your first project
+                          </Link>
+                          {fetchError && (
+                            <button
+                              type="button"
+                              onClick={() => fetchData()}
+                              className="flex h-7 items-center justify-center rounded-md px-2 text-xs text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground transition-colors"
+                            >
+                              Try again
+                            </button>
+                          )}
+                        </div>
+                      </SidebarMenuItem>
+                    ) : (
+                      projects.map((project) => {
+                        const isActive = mounted && pathname === `/projects/${project.id}`
+                        const dotColor = projectDotColor(project.id)
+                        return (
+                          <SidebarMenuItem key={project.id}>
+                            <SidebarMenuButton
+                              asChild
+                              isActive={isActive}
+                              className="group min-w-0 gap-2.5 transition-all duration-150 hover:bg-[color:color-mix(in_oklab,var(--background)_78%,var(--primary)_22%)] hover:text-sidebar-foreground active:scale-[0.985] dark:hover:bg-sidebar-accent dark:hover:text-sidebar-accent-foreground"
+                            >
+                              <Link
+                                href={`/projects/${project.id}`}
+                                draggable
+                                onDragStart={(e) => {
+                                  e.dataTransfer.setData(
+                                    "application/json",
+                                    JSON.stringify({
+                                      type: "project",
+                                      id: project.id,
+                                      name: project.name,
+                                    })
+                                  )
+                                  e.dataTransfer.effectAllowed = "copy"
+                                }}
+                                className="w-full"
+                              >
+                                <span
+                                  aria-hidden
+                                  className="inline-block size-2 shrink-0 rounded-full"
+                                  style={{ background: dotColor }}
+                                />
+                                <span
+                                  className={cn(
+                                    "truncate min-w-0 flex-1",
+                                    isActive && "font-semibold"
+                                  )}
                                 >
-                                  Try again
-                                </button>
-                              )}
-                            </div>
+                                  {project.name}
+                                </span>
+                              </Link>
+                            </SidebarMenuButton>
                           </SidebarMenuItem>
-                        ) : (
-                          projects.map((project) => {
-                            const isProjectOpen = openProjects[project.id] ?? false
-                            return (
-                              <SidebarMenuItem key={project.id}>
-                                <div className="flex h-8 w-full min-w-0 items-center gap-2 rounded-md p-2 transition-colors">
-                                  <button
-                                    type="button"
-                                    className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground transition-colors [&>svg]:size-4"
-                                    onClick={() =>
-                                      setOpenProjects((prev) => ({
-                                        ...prev,
-                                        [project.id]: !isProjectOpen,
-                                      }))
-                                    }
-                                    aria-label={isProjectOpen ? "Collapse project" : "Expand project"}
-                                  >
-                                    {isProjectOpen ? (
-                                      <FolderOpen className="size-4" />
-                                    ) : (
-                                      <Folder className="size-4" />
-                                    )}
-                                  </button>
-                                  <SidebarMenuButton
-                                    asChild
-                                    isActive={mounted && pathname === `/projects/${project.id}`}
-                                    className="group min-w-0 flex-1 gap-2 pl-0 transition-all duration-150 hover:bg-[color:color-mix(in_oklab,var(--background)_78%,var(--primary)_22%)] hover:text-sidebar-foreground active:scale-[0.985] active:bg-[color:color-mix(in_oklab,var(--background)_70%,var(--primary)_30%)] dark:hover:bg-sidebar-accent dark:hover:text-sidebar-accent-foreground dark:active:scale-[0.985] dark:active:bg-sidebar-accent/90 data-[active=true]:bg-transparent data-[active=true]:text-sidebar-foreground"
-                                  >
-                                    <Link
-                                      href={`/projects/${project.id}`}
-                                      draggable
-                                      onDragStart={(e) => {
-                                        e.dataTransfer.setData('application/json', JSON.stringify({
-                                          type: 'project',
-                                          id: project.id,
-                                          name: project.name
-                                        }));
-                                        e.dataTransfer.effectAllowed = 'copy';
-                                      }}
-                                      onClick={(e) => e.stopPropagation()}
-                                      className="w-full"
-                                    >
-                                      <span
-                                        className={cn(
-                                          "truncate",
-                                          mounted && pathname === `/projects/${project.id}` && "font-semibold"
-                                        )}
-                                      >
-                                        {project.name}
-                                      </span>
-                                    </Link>
-                                  </SidebarMenuButton>
-                                  <button
-                                    type="button"
-                                    className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground transition-colors"
-                                    onClick={() =>
-                                      setOpenProjects((prev) => ({
-                                        ...prev,
-                                        [project.id]: !isProjectOpen,
-                                      }))
-                                    }
-                                    aria-label={isProjectOpen ? "Collapse project" : "Expand project"}
-                                  >
-                                    <ChevronDown
-                                      className={cn(
-                                        "size-4 transition-transform duration-200",
-                                        isProjectOpen ? "rotate-180" : "rotate-0"
-                                      )}
-                                    />
-                                  </button>
-                                </div>
-
-                                {isProjectOpen && project.experiments && project.experiments.length > 0 && (
-                                  <div className="ml-6 mt-2 space-y-1 border-l border-border/50 pl-3">
-                                    {project.experiments.map((exp) => {
-                                      const isExpOpen = openExperiments[exp.id] ?? false
-                                      return (
-                                        <div key={exp.id}>
-                                          <div className="flex w-full min-w-0 items-center gap-2">
-                                            <button
-                                              className="shrink-0 rounded-md p-1.5 text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground transition-colors [&>svg]:size-4"
-                                              onClick={() =>
-                                                setOpenExperiments((prev) => ({
-                                                  ...prev,
-                                                  [exp.id]: !isExpOpen,
-                                                }))
-                                              }
-                                              aria-label={isExpOpen ? "Collapse experiment" : "Expand experiment"}
-                                            >
-                                              <FlaskConical
-                                                className={cn(
-                                                  "size-4 transition-transform",
-                                                  isExpOpen ? "rotate-12 text-sidebar-accent-foreground" : "-rotate-12"
-                                                )}
-                                              />
-                                            </button>
-                                            <button
-                                              onClick={() => {
-                                                window.dispatchEvent(new CustomEvent("notes9:navigation-start", { detail: { label: exp.name, href: `/experiments/${exp.id}`, kind: "experiments" } }))
-                                                router.push(`/experiments/${exp.id}`)
-                                              }}
-                                              draggable
-                                              onDragStart={(e) => {
-                                                e.stopPropagation();
-                                                e.dataTransfer.setData('application/json', JSON.stringify({
-                                                  type: 'experiment',
-                                                  id: exp.id,
-                                                  name: exp.name
-                                                }));
-                                                e.dataTransfer.effectAllowed = 'copy';
-                                              }}
-                                              className={cn(
-                                                "group min-w-0 flex-1 rounded-md px-2 py-1.5 text-left text-sm truncate cursor-grab active:cursor-grabbing transition-all duration-150",
-                                                pathname === `/experiments/${exp.id}`
-                                                  ? "text-sidebar-foreground"
-                                                  : "text-sidebar-foreground/70 hover:bg-[color:color-mix(in_oklab,var(--background)_78%,var(--primary)_22%)] hover:text-sidebar-foreground active:scale-[0.985] active:bg-[color:color-mix(in_oklab,var(--background)_70%,var(--primary)_30%)] dark:hover:bg-sidebar-accent dark:hover:text-sidebar-accent-foreground dark:active:scale-[0.985] dark:active:bg-sidebar-accent/90"
-                                              )}
-                                            >
-                                              <span className={cn("truncate", pathname === `/experiments/${exp.id}` && "font-semibold")}>
-                                                {exp.name}
-                                              </span>
-                                            </button>
-                                          </div>
-
-                                          {isExpOpen && exp.lab_notes && exp.lab_notes.length > 0 && (
-                                            <div className="ml-6 mt-1 space-y-0.5">
-                                              {exp.lab_notes.map((note) => (
-                                                <button
-                                                  key={note.id}
-                                                  onClick={() => {
-                                                    window.dispatchEvent(new CustomEvent("notes9:navigation-start", { detail: { label: note.title || exp.name, href: `/experiments/${exp.id}?tab=notes&noteId=${note.id}`, kind: "notes" } }))
-                                                    router.push(`/experiments/${exp.id}?tab=notes&noteId=${note.id}`)
-                                                  }}
-                                                  draggable
-                                                  onDragStart={(e) => {
-                                                    e.stopPropagation();
-                                                    e.dataTransfer.setData('application/json', JSON.stringify({
-                                                      type: 'lab_note',
-                                                      id: note.id,
-                                                      name: note.title || 'Untitled note',
-                                                      experimentId: exp.id
-                                                    }));
-                                                    e.dataTransfer.effectAllowed = 'copy';
-                                                  }}
-                                                  className={cn(
-                                                    "group flex w-full min-w-0 items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs truncate cursor-grab active:cursor-grabbing transition-all duration-150 [&>svg]:size-4 [&>svg]:shrink-0",
-                                                    pathname.startsWith(`/experiments/${exp.id}`)
-                                                      ? "text-sidebar-foreground"
-                                                      : "text-sidebar-foreground/70 hover:bg-[color:color-mix(in_oklab,var(--background)_78%,var(--primary)_22%)] hover:text-sidebar-foreground active:scale-[0.985] active:bg-[color:color-mix(in_oklab,var(--background)_70%,var(--primary)_30%)] dark:hover:bg-sidebar-accent dark:hover:text-sidebar-accent-foreground dark:active:scale-[0.985] dark:active:bg-sidebar-accent/90"
-                                                  )}
-                                                >
-                                                  <NotebookPen className="size-4 shrink-0" />
-                                                  <span className={cn("min-w-0 truncate", pathname.startsWith(`/experiments/${exp.id}`) && "font-semibold")}>
-                                                    {note.title || "Untitled note"}
-                                                  </span>
-                                                </button>
-                                              ))}
-                                            </div>
-                                          )}
-                                        </div>
-                                      )
-                                    })}
-                                  </div>
-                                )}
-                              </SidebarMenuItem>
-                            )
-                          })
-                        )}
-                      </SidebarMenu>
-                    </SidebarGroupContent>
-                  </CollapsibleContent>
-                </SidebarGroup>
-              </Collapsible>
+                        )
+                      })
+                    )}
+                  </SidebarMenu>
+                </SidebarGroupContent>
+              </SidebarGroup>
             ) : (
               <SidebarGroup>
                 <div className="flex h-8 shrink-0 items-center rounded-md px-2 text-xs font-medium text-sidebar-foreground/70">
-                  Active Projects
+                  Recent Projects
                 </div>
               </SidebarGroup>
             )}
@@ -1008,7 +769,10 @@ export function AppSidebar() {
                     <div className="flex aspect-square size-8 shrink-0 items-center justify-center rounded-lg bg-sidebar-accent text-sidebar-accent-foreground">
                       <span className="text-xs font-semibold">{getUserInitials()}</span>
                     </div>
-                    <span className="min-w-0 flex-1 truncate text-left text-sm font-semibold">
+                    <span
+                      className="min-w-0 flex-1 truncate text-left text-sm font-semibold"
+                      title={getUserDisplayName()}
+                    >
                       {getUserDisplayName()}
                     </span>
                     <ChevronUp

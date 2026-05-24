@@ -663,6 +663,7 @@ export function ProtocolDesignMode({
                 <CardContent className="flex min-h-0 min-w-0 flex-1 flex-col space-y-3 overflow-hidden px-4 sm:px-6">
                   <div className="relative min-h-0 min-w-0 flex-1 overflow-hidden">
                     <TiptapEditor
+                      key={protocol.id}
                       content={draftContent}
                       onChange={setDraftContent}
                       placeholder="Draft your protocol… In Protocol (header): drag papers from Literature or type @ to attach from the filtered list."
@@ -710,7 +711,7 @@ export function ProtocolDesignMode({
     </div>
 
       <Dialog open={templateDialogOpen} onOpenChange={setTemplateDialogOpen}>
-        <DialogContent className="max-h-[min(90dvh,85vh)] w-[calc(100vw-1rem)] max-w-3xl overflow-y-auto p-4 sm:p-6">
+        <DialogContent dialogSize="lg" className="max-h-[min(90dvh,85vh)] w-[calc(100vw-1rem)] overflow-y-auto p-4 sm:p-6">
           <DialogHeader>
             <DialogTitle>Change template</DialogTitle>
             <DialogDescription>

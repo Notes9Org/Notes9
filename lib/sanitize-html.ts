@@ -43,6 +43,10 @@ const ALLOWED_ATTR = [
 
 export function sanitizeHtml(input: string | null | undefined): string {
   if (!input) return ""
+  // Next.js renders `"use client"` components once on the server during RSC.
+  // DOMPurify v3 has no `.sanitize` without a `window`, so we bail on the SSR
+  // pass and let the client's `useMemo` re-run once hydration mounts.
+  if (typeof window === "undefined") return ""
   return DOMPurify.sanitize(input, {
     ALLOWED_TAGS,
     ALLOWED_ATTR,

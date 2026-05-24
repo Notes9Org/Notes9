@@ -187,7 +187,7 @@ export function AgentStreamReply({
             ) : (
               /* No content yet — standalone cursor */
               <span
-                className="inline-block w-[3px] h-[1em] bg-foreground/70 rounded-sm animate-cursor-blink translate-y-[2px]"
+                className="inline-block h-4 w-1 bg-foreground/70 rounded-sm animate-cursor-blink translate-y-[2px]"
                 aria-hidden
               />
             )}

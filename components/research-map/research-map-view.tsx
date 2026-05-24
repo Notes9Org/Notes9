@@ -48,6 +48,8 @@ import {
 import { cn } from "@/lib/utils"
 import { recordRumEvent } from "@/lib/rum"
 import { Loader2 } from "lucide-react"
+import Link from "next/link"
+import { Button } from "@/components/ui/button"
 import { toast } from "sonner"
 
 const nodeTypes = { researchEntity: ResearchEntityNode }
@@ -527,7 +529,7 @@ function ResearchMapCanvas() {
     setHighlightNodes(null)
     setHighlightEdges(null)
     requestAnimationFrame(() => {
-      fitView({ padding: 0.2, duration: 200 })
+      fitView({ padding: 0.2, duration: 350 })
     })
   }, [rawPayload, debouncedQuery, setNodes, setEdges, fitView])
 
@@ -562,7 +564,7 @@ function ResearchMapCanvas() {
               // Dim non-relevant edges aggressively so the active path
               // really stands out; soft 0.85 baseline keeps idle graphs
               // calm without disappearing.
-              opacity: he && !he.has(e.id) ? 0.08 : 0.95,
+              opacity: he && !he.has(e.id) ? 0.18 : 0.95,
               strokeWidth: isSel ? 3.2 : isNodeConnected ? 2.8 : inComp ? 2.4 : 1.4,
               strokeDasharray: isNodeConnected && !isSel ? "6 4" : undefined,
             },
@@ -639,14 +641,16 @@ function ResearchMapCanvas() {
           </div>
         )}
         {isEmpty && (
-          <div className="pointer-events-none absolute inset-0 z-[5] flex flex-col items-center justify-center text-center px-6">
+          <div className="absolute inset-0 z-[5] flex flex-col items-center justify-center text-center px-6 pointer-events-none">
             <div className="font-display text-xl font-medium text-foreground">
               Your research map is empty
             </div>
-            <p className="mt-2 max-w-sm text-sm text-muted-foreground">
-              Add projects, experiments, lab notes, literature, writing, or
-              reports and they&apos;ll appear here connected by relationship.
+            <p className="mt-2 max-w-md text-sm text-muted-foreground">
+              Create a project, then add experiments, lab notes, protocols, and papers — they&apos;ll appear here connected by relationship.
             </p>
+            <Button asChild variant="outline" size="sm" className="mt-4 pointer-events-auto">
+              <Link href="/projects/new">Create your first project</Link>
+            </Button>
           </div>
         )}
         <div className="absolute inset-0 min-h-0">

@@ -146,7 +146,7 @@ export function ReportDetailView({ report }: ReportDetailViewProps) {
       }
       toast.success("Report deleted")
       setDeleteOpen(false)
-      router.push("/reports")
+      ;(() => { const pq = typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("project") : null; router.push(pq ? "/reports?project=" + pq : "/reports"); })()
       router.refresh()
     } finally {
       setIsDeleting(false)
@@ -160,7 +160,7 @@ export function ReportDetailView({ report }: ReportDetailViewProps) {
       <div className="flex items-start justify-between gap-4">
         <div className="space-y-2">
           <div className="flex items-center gap-2">
-            <Button variant="ghost" size="icon-sm" className="shrink-0" onClick={() => router.push("/reports")} title="Back to reports">
+            <Button variant="ghost" size="icon-sm" className="shrink-0" onClick={() => (() => { const pq = typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("project") : null; router.push(pq ? "/reports?project=" + pq : "/reports"); })()} title="Back to reports">
               <ArrowLeft className="h-4 w-4" />
             </Button>
             <h1 className="text-2xl font-bold tracking-tight">{report.title}</h1>
@@ -244,6 +244,7 @@ export function ReportDetailView({ report }: ReportDetailViewProps) {
         <CardContent className="pt-6">
           {content || report.content ? (
             <TiptapEditor
+              key={report.id}
               content={content}
               onChange={handleContentChange}
               placeholder="Start writing your report..."

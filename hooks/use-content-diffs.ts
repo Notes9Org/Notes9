@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useCallback } from "react"
+import { useState, useCallback, useEffect } from "react"
 import { diffWords } from "diff"
 import { createClient } from "@/lib/supabase/client"
 import { buildStoredSegments } from "@/lib/content-diff-segments"
@@ -45,6 +45,15 @@ export function useContentDiffs(
   const [diffs, setDiffs] = useState<ContentDiff[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+
+  // Reset cached history when the record we're tracking changes — otherwise
+  // switching from note A to note B briefly shows A's history in the History
+  // dialog until the new fetch lands.
+  useEffect(() => {
+    setDiffs([])
+    setError(null)
+    setLoading(false)
+  }, [recordId, recordType])
 
   const loadDiffs = useCallback(async () => {
     if (!recordId) return

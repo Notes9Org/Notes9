@@ -18,6 +18,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Alert, AlertDescription } from "@/components/ui/alert"
+import { PageHeading } from "@/components/ui/page-heading"
 import { ArrowLeft, FlaskConical, Link2, Package, TestTube } from "lucide-react"
 import { SampleContextPicker, type SampleLinkOption } from "../sample-context-picker"
 import { parseTagInput } from "@/lib/sample-molecular"
@@ -259,7 +260,7 @@ function NewSamplePageInner() {
           <ArrowLeft className="h-4 w-4" />
         </Button>
         <div className="min-w-0">
-          <h1 className="text-2xl font-bold tracking-tight md:text-3xl">Add New Sample</h1>
+          <PageHeading>Add New Sample</PageHeading>
           <p className="mt-1 text-sm text-muted-foreground">
             Register sample metadata, storage, provenance, and linked research context.
           </p>

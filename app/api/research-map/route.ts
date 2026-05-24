@@ -188,7 +188,7 @@ export async function GET(req: NextRequest) {
             label: n.title || "Untitled note",
             href: expId
               ? `/experiments/${expId}?tab=notes&noteId=${n.id}`
-              : `/lab-notes`,
+              : `/lab-notes?noteId=${n.id}`,
             meta: { note_type: n.note_type ?? null },
           })
         }
@@ -632,7 +632,7 @@ export async function GET(req: NextRequest) {
             label: n.title || "Untitled note",
             href: expId
               ? `/experiments/${expId}?tab=notes&noteId=${n.id}`
-              : `/lab-notes`,
+              : `/lab-notes?noteId=${n.id}`,
             meta: { note_type: n.note_type ?? null },
           })
         }

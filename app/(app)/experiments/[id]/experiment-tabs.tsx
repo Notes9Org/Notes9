@@ -1,6 +1,7 @@
 'use client'
 
-import { useId, useState, useEffect } from 'react'
+import { useId, useState, useEffect, useCallback } from 'react'
+import { useRouter, useSearchParams, usePathname } from 'next/navigation'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -71,21 +72,28 @@ function formatDuration(startDate: string | null | undefined, endDate: string | 
 }
 
 export function ExperimentTabs({ experiment, initialTab, experimentPageHref }: ExperimentTabsProps) {
-  const [mounted, setMounted] = useState(false)
+  const [tab, setTab] = useState(initialTab)
   const baseId = useId()
+  const router = useRouter()
+  const pathname = usePathname()
+  const searchParams = useSearchParams()
 
   useEffect(() => {
-    setMounted(true)
-  }, [])
+    setTab(initialTab)
+  }, [initialTab])
 
-  if (!mounted) {
-    return <div className="min-h-[400px]" /> // Fallback with similar height to avoid jump
-  }
+  const handleTabChange = useCallback((next: string) => {
+    setTab(next)
+    const params = new URLSearchParams(searchParams?.toString() ?? '')
+    params.set('tab', next)
+    router.replace(`${pathname}?${params.toString()}`, { scroll: false })
+  }, [router, pathname, searchParams])
 
   return (
     <Tabs
       id={`experiment-tabs-${baseId}`}
-      defaultValue={initialTab}
+      value={tab}
+      onValueChange={handleTabChange}
       className="flex min-h-0 flex-1 flex-col gap-4"
     >
       <TabsList>
@@ -140,16 +148,19 @@ export function ExperimentTabs({ experiment, initialTab, experimentPageHref }: E
         <div className="grid gap-4 grid-cols-1 md:grid-cols-2">
           <Card>
             <CardHeader>
-              <CardTitle className="text-foreground">Equipment Reserved</CardTitle>
+              <div className="flex items-center gap-2">
+                <CardTitle className="text-foreground">Equipment Reserved</CardTitle>
+                <span className="rounded-full border border-border bg-muted px-2 py-0.5 text-2xs font-medium uppercase tracking-wide text-muted-foreground">
+                  Coming soon
+                </span>
+              </div>
               <CardDescription>Laboratory equipment for this experiment</CardDescription>
             </CardHeader>
             <CardContent>
               <div className="text-center py-8">
-                <p className="text-sm text-muted-foreground mb-4">No equipment reservations yet</p>
-                <Button variant="outline" size="sm" disabled>
-                  <Plus className="h-4 w-4 mr-2" />
-                  Reserve Equipment
-                </Button>
+                <p className="text-sm text-muted-foreground">
+                  Reserve instruments and track equipment usage per experiment. We&apos;re building this next.
+                </p>
               </div>
             </CardContent>
           </Card>

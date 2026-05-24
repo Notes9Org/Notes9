@@ -397,7 +397,7 @@ export function ProtocolTemplatesPanel() {
       )}
 
       <Dialog open={!!preview} onOpenChange={(o) => !o && setPreview(null)}>
-        <DialogContent className="max-w-lg">
+        <DialogContent>
           <DialogHeader>
             <DialogTitle>{preview?.name ?? "Template preview"}</DialogTitle>
           </DialogHeader>

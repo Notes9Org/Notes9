@@ -4,6 +4,7 @@ import {
   ReportsPageClient,
   type ReportRow,
 } from './reports-page-client'
+import { CatalystSectionHero } from "@/components/catalyst/catalyst-section-hero"
 
 export default async function ReportsPage() {
   const supabase = await createClient()
@@ -56,6 +57,7 @@ export default async function ReportsPage() {
 
   return (
     <div className="space-y-4 md:space-y-6">
+      <CatalystSectionHero size="sm" scope="reports" />
       <ReportsPageClient
         reports={(reports ?? []) as ReportRow[]}
         projects={safeProjects}

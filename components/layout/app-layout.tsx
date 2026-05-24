@@ -1,14 +1,15 @@
 "use client"
 
-import { ReactNode, useState, useEffect, useRef, useCallback } from "react"
-import { usePathname } from "next/navigation"
+import { ReactNode, Suspense, useState, useEffect, useRef, useCallback } from "react"
+import { usePathname, useRouter } from "next/navigation"
 import Link from "next/link"
 import { AppSidebar } from "./app-sidebar"
 import { RightSidebar } from "./right-sidebar"
 import { AppTour, requestPageHelp } from "@/components/tour/app-tour"
 import { BreadcrumbProvider, useBreadcrumb } from "./breadcrumb-context"
-import { PaperAIProvider, usePaperAI } from "@/contexts/paper-ai-context"
+import { PaperAIProvider } from "@/contexts/paper-ai-context"
 import { LiteratureMentionProvider } from "@/contexts/literature-mention-context"
+import { ProjectScopeProvider, useProjectScope } from "@/contexts/project-scope-context"
 import { HeaderAiProvider, useHeaderAi } from "./header-ai-context"
 import { Button } from "@/components/ui/button"
 import { ResizeHandle } from "@/components/ui/resize-handle"
@@ -16,15 +17,21 @@ import { SidebarProvider, SidebarInset, useSidebar } from "@/components/ui/sideb
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet"
 import { useResizable } from "@/hooks/use-resizable"
 import { cn } from "@/lib/utils"
-import { Menu, X, Sparkles, ChevronRight, Sun, Moon, CircleHelp, Flag } from 'lucide-react'
+import { Menu, X, Sparkles, MessageSquare, ChevronRight, Sun, Moon, CircleHelp, Flag } from 'lucide-react'
 import { PageTransition } from "./page-transition"
 import { useTheme } from "next-themes"
 import { useMediaQuery } from "@/hooks/use-media-query"
 import { ReportIssueDialog } from "./report-issue-dialog"
+import {
+  CATALYST_OPEN_EVENT,
+  type CatalystLaunchDetail,
+} from "@/lib/catalyst-launch"
+import { CatalystPanelStateProvider } from "@/contexts/catalyst-panel-state"
 
 const ROUTE_TITLES: { path: string; title: string }[] = [
   { path: "/dashboard", title: "Dashboard" },
   { path: "/projects", title: "Projects" },
+  { path: "/catalyst", title: "Catalyst" },
   { path: "/experiments", title: "Experiments" },
   { path: "/lab-notes", title: "Lab Notes" },
   { path: "/samples", title: "Samples" },
@@ -55,12 +62,26 @@ export function shortenLabel(label: string, maxLen: number = MOBILE_BREADCRUMB_M
 function HeaderTitle() {
   const pathname = usePathname()
   const { segments } = useBreadcrumb()
+  const { projectId, projectName, projectColor } = useProjectScope()
   const isMobile = useMediaQuery("(max-width: 768px)")
   const scrollRef = useRef<HTMLElement>(null)
   const [scrollState, setScrollState] = useState({ canScrollLeft: false, canScrollRight: false })
   const fallbackTitle = getHeaderTitle(pathname ?? "")
 
   const filtered = segments.filter((s) => s.label !== "Dashboard")
+
+  // When in project scope, render a small project-color dot before the breadcrumb.
+  // Only show it if the first crumb is the project (avoids double-rendering).
+  const showProjectDot =
+    Boolean(projectId && projectColor) &&
+    (filtered.length === 0 || filtered[0]?.label === projectName)
+  const ProjectDot = showProjectDot ? (
+    <span
+      aria-hidden
+      className="inline-block size-2 rounded-full shrink-0"
+      style={{ background: projectColor ?? undefined }}
+    />
+  ) : null
 
   const updateScrollState = useCallback(() => {
     const el = scrollRef.current
@@ -99,8 +120,9 @@ function HeaderTitle() {
 
   if (filtered.length === 0) {
     return (
-      <h1 className="text-base sm:text-lg font-semibold truncate min-w-0">
-        {fallbackTitle}
+      <h1 className="flex items-center gap-2 text-base sm:text-lg font-semibold truncate min-w-0">
+        {ProjectDot}
+        <span className="truncate">{fallbackTitle}</span>
       </h1>
     )
   }
@@ -127,6 +149,7 @@ function HeaderTitle() {
           aria-label={`Breadcrumb: ${fullPathAria}`}
           className="flex flex-nowrap items-center gap-1.5 text-sm text-muted-foreground min-w-0 flex-1 overflow-x-auto overflow-y-hidden scroll-smooth hide-scrollbar"
         >
+          {ProjectDot && <span className="shrink-0">{ProjectDot}</span>}
           {filtered.map((seg, i) => (
             <span key={seg.href ?? `${seg.label}-${i}`} className="inline-flex items-center gap-1.5 shrink-0">
               {i > 0 && <ChevronRight className="size-3.5 shrink-0" aria-hidden />}
@@ -153,6 +176,7 @@ function HeaderTitle() {
   // Desktop: full breadcrumb path
   return (
     <nav aria-label="breadcrumb" className="flex flex-nowrap items-center gap-1.5 text-sm text-muted-foreground sm:gap-2.5 min-w-0 overflow-hidden">
+      {ProjectDot}
       {filtered.map((seg, i) => (
         <span key={seg.href ?? `${seg.label}-${i}`} className="inline-flex items-center gap-1.5 shrink-0 min-w-0">
           {i > 0 && <ChevronRight className="size-3.5 shrink-0" aria-hidden />}
@@ -189,46 +213,66 @@ function MobileMenuButton() {
   )
 }
 
-function AIToggleButton({ onClick }: { onClick: () => void }) {
-  const paperAI = usePaperAI()
-  const isPaper = paperAI?.isActive
-
-  return (
-    <Button
-      id="tour-ai-toggle"
-      variant="ghost"
-      size="icon"
-      className="size-8 sm:size-9"
-      onClick={onClick}
-      aria-label={isPaper ? "Write with AI" : "Open AI assistant"}
-    >
-      <Sparkles className="size-4" />
-    </Button>
-  )
-}
-
 export function AppLayout({ children }: AppLayoutProps) {
   return (
     <BreadcrumbProvider>
-      <PaperAIProvider>
-        <LiteratureMentionProvider>
-          <HeaderAiProvider>
-            <AppLayoutBody>{children}</AppLayoutBody>
-          </HeaderAiProvider>
-        </LiteratureMentionProvider>
-      </PaperAIProvider>
+      <Suspense fallback={null}>
+        <ProjectScopeProvider>
+          <PaperAIProvider>
+            <LiteratureMentionProvider>
+              <HeaderAiProvider>
+                <AppLayoutBody>{children}</AppLayoutBody>
+              </HeaderAiProvider>
+            </LiteratureMentionProvider>
+          </PaperAIProvider>
+        </ProjectScopeProvider>
+      </Suspense>
     </BreadcrumbProvider>
   )
 }
 
 function AppLayoutBody({ children }: AppLayoutProps) {
   const pathname = usePathname()
+  const router = useRouter()
   const { registration: headerAi } = useHeaderAi()
   const { setTheme, resolvedTheme } = useTheme()
-  const [rightSidebarOpen, setRightSidebarOpen] = useState(false)
   const [themeMounted, setThemeMounted] = useState(false)
   const isMobile = useMediaQuery("(max-width: 768px)")
   const isTablet = useMediaQuery("(max-width: 1024px)")
+  const isCatalystRoute = (pathname ?? "").startsWith("/catalyst")
+
+  // Catalyst side-panel (right drawer). Default closed on app load; once the
+  // user opens it, the state lives at the layout level so it persists across
+  // route changes until they close it again.
+  const [catalystOpen, setCatalystOpen] = useState(false)
+  const [catalystLaunch, setCatalystLaunch] = useState<CatalystLaunchDetail | null>(
+    null,
+  )
+
+  // The right column is a single slot. When protocol-AI is registered AND open,
+  // it wins; otherwise Catalyst takes the slot. Opening one closes the other.
+  const protocolAiVisible = !!headerAi?.active && !!headerAi?.isOpen
+  const catalystVisible = catalystOpen && !protocolAiVisible
+
+  const handleCatalystToggle = useCallback(() => {
+    if (catalystVisible) {
+      setCatalystOpen(false)
+      return
+    }
+    if (headerAi?.active && headerAi.isOpen) {
+      headerAi.onToggle()
+    }
+    setCatalystOpen(true)
+  }, [catalystVisible, headerAi])
+
+  const handleProtocolToggle = useCallback(() => {
+    if (!headerAi) return
+    // About to open protocol AI? Close Catalyst first so the slot is free.
+    if (!headerAi.isOpen && catalystOpen) {
+      setCatalystOpen(false)
+    }
+    headerAi.onToggle()
+  }, [headerAi, catalystOpen])
 
   const toggleTheme = () => {
     setTheme(resolvedTheme === "dark" ? "light" : "dark")
@@ -238,42 +282,54 @@ function AppLayoutBody({ children }: AppLayoutProps) {
     setThemeMounted(true)
   }, [])
 
-  // Close right sidebar on mobile by default
   useEffect(() => {
-    if (isMobile) {
-      setRightSidebarOpen(false)
+    const openCatalystFromEvent = (event: Event) => {
+      const detail =
+        (event as CustomEvent<CatalystLaunchDetail>).detail ?? ({} as CatalystLaunchDetail)
+
+      if ((pathname ?? "").startsWith("/catalyst")) {
+        const params = new URLSearchParams()
+        if (detail.query) params.set("q", detail.query)
+        if (detail.scope) params.set("scope", detail.scope)
+        if (detail.projectId) params.set("project", detail.projectId)
+        const qs = params.toString()
+        router.push(qs ? `/catalyst?${qs}` : "/catalyst")
+        return
+      }
+
+      if (headerAi?.active && headerAi.isOpen) {
+        headerAi.onToggle()
+      }
+      setCatalystLaunch(detail)
+      setCatalystOpen(true)
     }
-  }, [isMobile])
 
-  useEffect(() => {
-    if (headerAi?.active) {
-      setRightSidebarOpen(false)
+    const openCatalystPanelOnly = () => {
+      openCatalystFromEvent(new CustomEvent(CATALYST_OPEN_EVENT, { detail: {} }))
     }
-  }, [headerAi?.active])
 
-  useEffect(() => {
-    const openSidebar = () => setRightSidebarOpen(true)
-    const closeSidebar = () => setRightSidebarOpen(false)
-
-    window.addEventListener("notes9:tour-open-ai-sidebar", openSidebar)
-    window.addEventListener("notes9:tour-close-ai-sidebar", closeSidebar)
+    window.addEventListener(CATALYST_OPEN_EVENT, openCatalystFromEvent)
+    window.addEventListener("notes9:tour-open-ai-sidebar", openCatalystPanelOnly)
 
     return () => {
-      window.removeEventListener("notes9:tour-open-ai-sidebar", openSidebar)
-      window.removeEventListener("notes9:tour-close-ai-sidebar", closeSidebar)
+      window.removeEventListener(CATALYST_OPEN_EVENT, openCatalystFromEvent)
+      window.removeEventListener("notes9:tour-open-ai-sidebar", openCatalystPanelOnly)
     }
-  }, [])
+  }, [pathname, router, headerAi])
 
   // Left sidebar: open/collapsed drives column width; when open, width is resizable. Start open (expanded) so sidebar comes open when the app loads.
   const [sidebarOpen, setSidebarOpen] = useState(true)
 
   // When switching to mobile, ensure the sidebar is in expanded (open) mode
-  // so the Sheet overlay shows full content instead of the collapsed icon-only view
+  // so the Sheet overlay shows full content instead of the collapsed icon-only
+  // view. Only fires on the isMobile transition — `sidebarOpen` deliberately
+  // stays out of the deps so user-initiated closes aren't immediately undone.
   useEffect(() => {
-    if (isMobile && !sidebarOpen) {
-      setSidebarOpen(true)
+    if (isMobile) {
+      setSidebarOpen((current) => (current ? current : true))
     }
-  }, [isMobile, sidebarOpen])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isMobile])
   const leftSidebar = useResizable({
     initialWidth: isMobile ? 0 : isTablet ? 240 : 280,
     minWidth: 200,
@@ -283,8 +339,9 @@ function AppLayoutBody({ children }: AppLayoutProps) {
   /** Must match `--sidebar-width-icon` (3rem) so the icon rail fills the column with no dead space */
   const collapsedSidebarWidthPx = 48
   const leftColumnWidth = sidebarOpen ? leftSidebar.width : collapsedSidebarWidthPx
+  const showLeftResizeHandle =
+    sidebarOpen && leftSidebar.width > collapsedSidebarWidthPx
 
-  // Right sidebar resizing
   const rightSidebar = useResizable({
     initialWidth: isTablet ? 340 : 380,
     minWidth: 300,
@@ -297,7 +354,7 @@ function AppLayoutBody({ children }: AppLayoutProps) {
       <SidebarProvider defaultOpen={!isMobile} open={sidebarOpen} onOpenChange={setSidebarOpen}>
         <AppTour />
         <div
-        className="flex h-screen w-full overflow-hidden bg-background"
+        className="flex h-screen w-full gap-0 overflow-hidden bg-background"
         style={{
           '--sidebar-width': `${leftColumnWidth}px`,
           '--sidebar-width-icon': '3rem',
@@ -305,7 +362,7 @@ function AppLayoutBody({ children }: AppLayoutProps) {
       >
         {/* Left Sidebar - Desktop: inline resizable panel, Mobile: uses Sidebar's built-in Sheet */}
         {!isMobile ? (
-          <div className="flex shrink-0 h-full min-h-0">
+          <div className="flex h-full min-h-0 shrink-0">
             <div
               data-sidebar-container
               data-resizing={leftSidebar.isResizing ? 'true' : undefined}
@@ -322,12 +379,12 @@ function AppLayoutBody({ children }: AppLayoutProps) {
             >
               <AppSidebar />
             </div>
-            {sidebarOpen && leftSidebar.width > collapsedSidebarWidthPx && (
+            {showLeftResizeHandle && (
               <ResizeHandle
                 onMouseDown={leftSidebar.handleMouseDown}
                 isResizing={leftSidebar.isResizing}
                 position="right"
-                className="z-[121] shrink-0"
+                className="z-[121]"
               />
             )}
           </div>
@@ -336,8 +393,20 @@ function AppLayoutBody({ children }: AppLayoutProps) {
           <AppSidebar />
         )}
 
-          <SidebarInset className="flex flex-col overflow-hidden flex-1 min-w-0">
-            <header className="h-12 sm:h-14 border-b border-border/45 bg-[var(--n9-header-bg)] flex items-center justify-between px-3 sm:px-4 shrink-0 backdrop-blur-md">
+          <SidebarInset
+            className={cn(
+              "flex min-w-0 flex-1 flex-col overflow-hidden",
+              !isMobile && !showLeftResizeHandle && "border-l border-border",
+            )}
+          >
+            <a
+              href="#main"
+              className="sr-only focus:not-sr-only focus:absolute focus:top-2 focus:left-2 focus:z-[200] focus:rounded-md focus:bg-background focus:px-3 focus:py-2 focus:text-sm focus:font-medium focus:shadow-md focus:ring-2 focus:ring-ring"
+            >
+              Skip to main content
+            </a>
+            {!isCatalystRoute && (
+            <header className="flex h-12 shrink-0 items-center justify-between border-b border-border/45 bg-[var(--n9-header-bg)] px-3 backdrop-blur-md sm:h-14 sm:px-4">
               <div className="flex items-center gap-2 min-w-0 flex-1 truncate">
                 <MobileMenuButton />
                 <div className="min-w-0 flex-1 truncate">
@@ -375,38 +444,63 @@ function AppLayoutBody({ children }: AppLayoutProps) {
                   <Moon className="size-4" />
                 )}
               </Button>
-              {/* AI / Right sidebar toggle */}
-                {headerAi?.active ? (
+              {headerAi?.active ? (
                   <Button
-                    id="tour-ai-toggle"
                     type="button"
                     variant={headerAi.isOpen ? "secondary" : "ghost"}
                     size="icon"
                     className="size-8 sm:size-9"
-                    onClick={headerAi.onToggle}
+                    onClick={handleProtocolToggle}
                     aria-label={headerAi.ariaLabel ?? "Toggle protocol AI"}
                     title={headerAi.title ?? "Toggle protocol AI"}
                   >
                     <Sparkles className="size-4" />
                   </Button>
-                ) : !rightSidebarOpen ? (
-                  <AIToggleButton onClick={() => setRightSidebarOpen(true)} />
                 ) : null}
+              <Button
+                id="tour-ai-toggle"
+                type="button"
+                variant={catalystVisible ? "secondary" : "ghost"}
+                size="icon"
+                className="size-8 sm:size-9"
+                onClick={handleCatalystToggle}
+                aria-label={catalystVisible ? "Close Catalyst" : "Ask Catalyst"}
+                title={catalystVisible ? "Close Catalyst" : "Ask Catalyst"}
+              >
+                {/* MessageSquare (not Sparkles) so this stays visually distinct
+                    when the protocol-AI Sparkles button also appears next to it. */}
+                <MessageSquare className="size-4" />
+              </Button>
             </div>
           </header>
+            )}
 
-          {/* Main Content — flex column so routes can use h-full / flex-1 (e.g. research map) */}
-          <main className="flex min-h-0 flex-1 flex-col overflow-auto p-3 sm:p-4 md:p-6 min-w-0">
+          <main
+            id="main"
+            className={cn(
+              "flex min-h-0 flex-1 flex-col min-w-0",
+              isCatalystRoute
+                ? "overflow-hidden p-0"
+                : "overflow-auto p-3 sm:p-4 md:p-6"
+            )}
+          >
             {/* h-full lets nested routes use h-full / percentage heights reliably (e.g. protocol design mode) */}
-            <PageTransition>{children}</PageTransition>
+            <CatalystPanelStateProvider isOpen={catalystVisible}>
+              <PageTransition>{children}</PageTransition>
+            </CatalystPanelStateProvider>
           </main>
         </SidebarInset>
 
-        {/* Right Sidebar - Sheet on mobile, panel on desktop */}
-        {headerAi?.active ? (
-          /* Protocol AI panel occupies the right sidebar slot */
+        {/* Right Sidebar - Sheet on mobile, panel on desktop.
+            One slot, two possible occupants: protocol-AI (when registered &
+            open) takes priority; otherwise Catalyst when the user has opened
+            it from the header.
+            Suppressed entirely on /catalyst — the route already mounts the
+            same RightSidebar as the page, so a second instance here would
+            duplicate the chat. */}
+        {!isCatalystRoute && protocolAiVisible ? (
           isMobile ? (
-            <Sheet open={headerAi.isOpen} onOpenChange={(open) => { if (!open && headerAi.isOpen) headerAi.onToggle() }}>
+            <Sheet open={headerAi!.isOpen} onOpenChange={(open) => { if (!open && headerAi!.isOpen) headerAi!.onToggle() }}>
               <SheetContent
                 side="right"
                 showCloseButton={false}
@@ -416,42 +510,10 @@ function AppLayoutBody({ children }: AppLayoutProps) {
                 <SheetHeader className="sr-only">
                   <SheetTitle>Protocol AI</SheetTitle>
                 </SheetHeader>
-                {headerAi.panel}
+                {headerAi!.panel}
               </SheetContent>
             </Sheet>
           ) : (
-            headerAi.isOpen && (
-              <div className="relative z-[120] flex h-full min-h-0 shrink-0">
-                <ResizeHandle
-                  onMouseDown={rightSidebar.handleMouseDown}
-                  isResizing={rightSidebar.isResizing}
-                  position="left"
-                />
-                <div
-                  className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden border-l border-border"
-                  style={{ width: rightSidebar.width, minWidth: 0 }}
-                >
-                  {headerAi.panel}
-                </div>
-              </div>
-            )
-          )
-        ) : isMobile ? (
-          <Sheet open={rightSidebarOpen} onOpenChange={setRightSidebarOpen}>
-            <SheetContent
-              side="right"
-              showCloseButton={false}
-              overlayClassName="z-[120]"
-              className="z-[120] w-full max-w-full p-0 data-[state=open]:duration-300 data-[state=closed]:duration-200"
-            >
-              <SheetHeader className="sr-only">
-                <SheetTitle>AI Assistant</SheetTitle>
-              </SheetHeader>
-              <RightSidebar onClose={() => setRightSidebarOpen(false)} />
-            </SheetContent>
-          </Sheet>
-        ) : (
-          rightSidebarOpen && (
             <div className="relative z-[120] flex h-full min-h-0 shrink-0">
               <ResizeHandle
                 onMouseDown={rightSidebar.handleMouseDown}
@@ -459,14 +521,52 @@ function AppLayoutBody({ children }: AppLayoutProps) {
                 position="left"
               />
               <div
-                className="flex h-full min-h-0 flex-col overflow-hidden border-l border-border"
+                className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden border-l border-border"
                 style={{ width: rightSidebar.width, minWidth: 0 }}
               >
-                <RightSidebar onClose={() => setRightSidebarOpen(false)} />
+                {headerAi!.panel}
               </div>
             </div>
           )
-        )}
+        ) : catalystVisible ? (
+          isMobile ? (
+            <Sheet open onOpenChange={(open) => { if (!open) setCatalystOpen(false) }}>
+              <SheetContent
+                side="right"
+                showCloseButton={false}
+                overlayClassName="z-[120]"
+                className="z-[120] flex h-full max-h-dvh min-h-0 w-full max-w-full flex-col gap-0 overflow-hidden p-0 data-[state=open]:duration-300 data-[state=closed]:duration-200"
+              >
+                <SheetHeader className="sr-only">
+                  <SheetTitle>Catalyst</SheetTitle>
+                </SheetHeader>
+                <RightSidebar
+                  onClose={() => setCatalystOpen(false)}
+                  pendingLaunch={catalystLaunch}
+                  onPendingLaunchConsumed={() => setCatalystLaunch(null)}
+                />
+              </SheetContent>
+            </Sheet>
+          ) : (
+            <div className="relative z-[120] flex h-full min-h-0 shrink-0">
+              <ResizeHandle
+                onMouseDown={rightSidebar.handleMouseDown}
+                isResizing={rightSidebar.isResizing}
+                position="left"
+              />
+              <div
+                className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden border-l border-border"
+                style={{ width: rightSidebar.width, minWidth: 0 }}
+              >
+                <RightSidebar
+                  onClose={() => setCatalystOpen(false)}
+                  pendingLaunch={catalystLaunch}
+                  onPendingLaunchConsumed={() => setCatalystLaunch(null)}
+                />
+              </div>
+            </div>
+          )
+        ) : null}
         </div>
       </SidebarProvider>
     </>

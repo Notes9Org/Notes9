@@ -5,6 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
+import { PageHeading } from "@/components/ui/page-heading"
 import { SetPageBreadcrumb } from "@/components/layout/breadcrumb-context"
 import { ArrowLeft, Calendar, Dna, FlaskConical, Link2, MapPin, Package, ShieldAlert, Thermometer } from 'lucide-react'
 import Link from 'next/link'
@@ -265,9 +266,9 @@ export default async function SampleDetailPage({
           </Button>
           <div className="min-w-0 space-y-1">
             <div className="flex flex-wrap items-center gap-2">
-              <h1 className="text-2xl font-bold tracking-tight text-foreground md:text-3xl">
+              <PageHeading>
                 {sample.sample_code}
-              </h1>
+              </PageHeading>
               <Badge variant={getStatusColor(sample.status)}>
                 {sample.status}
               </Badge>

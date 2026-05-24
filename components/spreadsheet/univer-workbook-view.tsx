@@ -370,7 +370,11 @@ export function UniverWorkbookView({
       cleanup?.()
       disposed = true
     }
-  }, [instanceKey, variant, readOnly, fileName, dataRevision, canAttemptMount, isDark])
+    // `isDark` intentionally excluded — including it caused a full Univer
+    // destroy+recreate on every theme toggle, wiping unsaved in-memory edits.
+    // Dark-mode appearance updates apply on the next legitimate remount.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [instanceKey, variant, readOnly, fileName, dataRevision, canAttemptMount])
 
   useEffect(() => {
     if (variant === "embed") {

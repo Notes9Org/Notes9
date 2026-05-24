@@ -23,6 +23,7 @@ import { cn } from '@/lib/utils';
 import { extractToolCards } from '@/lib/chat-tool-parts';
 import type { ToolCard } from '@/hooks/use-agent-stream';
 import { usePinnedAutoScroll } from '@/hooks/use-pinned-auto-scroll';
+import { recordRumEvent } from '@/lib/rum';
 
 interface CatalystChatProps {
   open: boolean;
@@ -48,6 +49,7 @@ export function CatalystChat({ open, onOpenChange }: CatalystChatProps) {
   const currentSessionRef = useRef<string | null>(null);
   const hasLoadedSessionRef = useRef<string | null>(null);
   const supabaseTokenRef = useRef<string | null>(null);
+  const prevUserIdRef = useRef<string | null>(null);
   const submitInFlightRef = useRef(false);
 
   const supabase = createClient();
@@ -55,9 +57,19 @@ export function CatalystChat({ open, onOpenChange }: CatalystChatProps) {
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       supabaseTokenRef.current = session?.access_token ?? null;
+      prevUserIdRef.current = session?.user?.id ?? null;
     });
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      supabaseTokenRef.current = session?.access_token ?? null;
+      const nextToken = session?.access_token ?? null;
+      const nextUserId = session?.user?.id ?? null;
+      const userChanged = prevUserIdRef.current !== null && nextUserId !== prevUserIdRef.current;
+      const signedOut = nextUserId === null;
+      if (signedOut || userChanged) {
+        currentSessionRef.current = null;
+        hasLoadedSessionRef.current = null;
+      }
+      supabaseTokenRef.current = nextToken;
+      prevUserIdRef.current = nextUserId;
     });
     return () => subscription.unsubscribe();
   }, [supabase]);
@@ -320,6 +332,13 @@ export function CatalystChat({ open, onOpenChange }: CatalystChatProps) {
     const messageText = input;
     setInput('');
 
+    try {
+      if (typeof window !== 'undefined' && !window.sessionStorage.getItem('n9_first_chat_sent')) {
+        recordRumEvent('user_first_chat', {});
+        window.sessionStorage.setItem('n9_first_chat_sent', '1');
+      }
+    } catch {}
+
     // Sending a new message is an explicit "I want to see what comes next"
     // signal — re-pin so the user's own message + the streamed reply scroll
     // into view even if they were previously reading earlier history.
@@ -507,6 +526,7 @@ export function CatalystChat({ open, onOpenChange }: CatalystChatProps) {
                 size="icon"
                 className="size-8"
                 onClick={() => setShowHistory(!showHistory)}
+                aria-label={showHistory ? "Hide chat history" : "Show chat history"}
               >
                 {showHistory ? (
                   <PanelLeftClose className="size-4" />
@@ -605,8 +625,18 @@ export function CatalystChat({ open, onOpenChange }: CatalystChatProps) {
                         <Avatar className="size-8 shrink-0">
                           <AvatarFallback className="bg-destructive/10 text-destructive text-xs">!</AvatarFallback>
                         </Avatar>
-                        <div className="rounded-lg px-4 py-2.5 text-sm bg-destructive/10 text-destructive border border-destructive/20">
-                          Something went wrong. Please try again.
+                        <div className="flex flex-wrap items-center gap-2">
+                          <div className="rounded-lg px-4 py-2.5 text-sm bg-destructive/10 text-destructive border border-destructive/20">
+                            Something went wrong. Please try again.
+                          </div>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={handleRegenerate}
+                            className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                          >
+                            Retry
+                          </Button>
                         </div>
                       </div>
                     )}
@@ -624,7 +654,7 @@ export function CatalystChat({ open, onOpenChange }: CatalystChatProps) {
                         </Avatar>
                         <div className="flex items-center px-4 py-2.5 text-sm">
                           <span
-                            className="inline-block w-[3px] h-[1em] bg-foreground/70 rounded-sm animate-cursor-blink translate-y-[1px]"
+                            className="inline-block h-4 w-1 bg-foreground/70 rounded-sm animate-cursor-blink translate-y-[1px]"
                             aria-hidden
                           />
                         </div>
@@ -685,16 +715,16 @@ export function CatalystChat({ open, onOpenChange }: CatalystChatProps) {
                     value={input}
                     onChange={handleInputChange}
                     onKeyDown={handleKeyDown}
-                    placeholder="Ask Catalyst anything... (Enter to send, Shift+Enter for new line)"
+                    placeholder="Ask about your data, or type @ to reference a note, protocol, or paper."
                     className="min-h-[44px] max-h-[200px] resize-none"
                     disabled={isLoading}
                   />
                   {isLoading ? (
-                    <Button type="button" size="icon" variant="outline" onClick={stop}>
+                    <Button type="button" size="icon" variant="outline" onClick={stop} aria-label="Stop generating">
                       <Square className="size-4" />
                     </Button>
                   ) : (
-                    <Button type="submit" size="icon" disabled={!input.trim()}>
+                    <Button type="submit" size="icon" disabled={!input.trim()} aria-label="Send message">
                       <Send className="size-4" />
                     </Button>
                   )}

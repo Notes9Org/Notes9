@@ -1,12 +1,20 @@
 import { redirect } from 'next/navigation'
 import { createClient } from "@/lib/supabase/server"
-import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { Plus, X } from 'lucide-react'
+import {
+  Empty,
+  EmptyHeader,
+  EmptyMedia,
+  EmptyTitle,
+  EmptyDescription,
+  EmptyContent,
+} from "@/components/ui/empty"
+import { FlaskConical, Plus, X } from 'lucide-react'
 import Link from 'next/link'
 import { ExperimentsPageContent } from './experiment-list'
 import { SetPageBreadcrumb } from "@/components/layout/breadcrumb-context"
 import { resolveInitialProjectIdParam } from "@/lib/url-project-param"
+import { CatalystSectionHero } from "@/components/catalyst/catalyst-section-hero"
 
 export default async function ExperimentsPage({
   searchParams,
@@ -67,6 +75,9 @@ export default async function ExperimentsPage({
         ) : (
           <SetPageBreadcrumb segments={[]} />
         )}
+
+        <CatalystSectionHero size="sm" scope="experiments" />
+
         {experiments && experiments.length > 0 ? (
           <ExperimentsPageContent
             experiments={experiments}
@@ -88,7 +99,7 @@ export default async function ExperimentsPage({
                     </Link>
                   </Button>
                 ) : null}
-                <Button id="tour-create-experiment" asChild size="icon" variant="ghost" className="shrink-0 size-8 rounded-md text-muted-foreground hover:bg-muted hover:text-foreground transition-colors" aria-label="New experiment">
+                <Button id="tour-create-experiment" asChild size="sm" className="gap-2">
                   <Link
                     href={
                       projectContext
@@ -97,13 +108,24 @@ export default async function ExperimentsPage({
                     }
                   >
                     <Plus className="size-4" />
+                    New experiment
                   </Link>
                 </Button>
               </div>
             </div>
-            <Card>
-              <CardContent className="flex flex-col items-center justify-center py-12">
-                <p className="text-muted-foreground mb-4">No experiments yet</p>
+            <Empty className="border border-dashed">
+              <EmptyHeader>
+                <EmptyMedia variant="icon">
+                  <FlaskConical aria-hidden />
+                </EmptyMedia>
+                <EmptyTitle>No experiments yet</EmptyTitle>
+                <EmptyDescription>
+                  {projectContext
+                    ? `Run your first experiment in ${projectContext.name} — link protocols, capture samples, and write lab notes from one place.`
+                    : "An experiment is where you record what you ran, link the protocol and samples used, and capture lab notes alongside the results."}
+                </EmptyDescription>
+              </EmptyHeader>
+              <EmptyContent>
                 <Button id="tour-create-experiment-empty" asChild>
                   <Link
                     href={
@@ -113,11 +135,11 @@ export default async function ExperimentsPage({
                     }
                   >
                     <Plus className="h-4 w-4 mr-2" />
-                    Create First Experiment
+                    New experiment
                   </Link>
                 </Button>
-              </CardContent>
-            </Card>
+              </EmptyContent>
+            </Empty>
           </>
         )}
       </div>

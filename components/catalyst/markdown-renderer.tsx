@@ -4,6 +4,7 @@ import * as React from 'react';
 import { useMemo } from 'react';
 import { cn } from '@/lib/utils';
 import { markdownToHtml } from '@/lib/markdown-to-html';
+import { sanitizeHtml } from '@/lib/sanitize-html';
 import type { CitationsManifest } from '@/hooks/use-agent-stream';
 import '@/styles/html-content.css';
 
@@ -134,7 +135,14 @@ export function MarkdownRenderer({
   const html = useMemo(() => {
     const raw = markdownToHtml(content);
     if (!raw) return '';
-    return postProcessHtml(raw, citationsManifest);
+    // `marked` v15+ ships without a built-in sanitizer, so raw HTML inside the
+    // model's markdown response (e.g. <script>, <iframe>, onerror handlers
+    // smuggled in via a malicious literature abstract or RAG chunk) would
+    // execute verbatim under the user's session. Run DOMPurify before the
+    // dangerouslySetInnerHTML sink. sanitizeHtml is a no-op on SSR; the
+    // client useMemo re-runs on hydration so the live render is always safe.
+    const processed = postProcessHtml(raw, citationsManifest);
+    return sanitizeHtml(processed);
   }, [content, citationsManifest]);
 
   if (!html) return null;

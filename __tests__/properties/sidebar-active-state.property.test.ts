@@ -7,46 +7,26 @@ import * as fc from "fast-check"
 const navigation = [
   { name: "Dashboard", href: "/dashboard" },
   { name: "Projects", href: "/projects" },
-  { name: "Experiments", href: "/experiments" },
-  { name: "Lab Notes", href: "/lab-notes" },
-  { name: "Samples", href: "/samples" },
-  { name: "Equipment", href: "/equipment" },
-  { name: "Protocols", href: "/protocols" },
-  { name: "Literature", href: "/literature-reviews" },
+  { name: "Catalyst", href: "/catalyst" },
   { name: "Research map", href: "/research-map" },
   { name: "Writing", href: "/papers" },
+  { name: "Reports", href: "/reports" },
 ]
-
-/**
- * Routes that suppress active state when a `?project=` query param is present.
- * These are the project-scoped deep link routes from app-sidebar.tsx.
- */
-const projectScopedHrefs = ["/experiments", "/literature-reviews", "/protocols"]
 
 /**
  * Replicates the isActive logic from AppSidebar:
  *
  *   const pathMatches = pathname === item.href || pathname.startsWith(item.href + "/")
- *   const hasProjectScope = (searchParams.get("project")?.trim() ?? "") !== ""
- *   const suppressActiveForProjectDeepLink =
- *     hasProjectScope &&
- *     (item.href === "/literature-reviews" ||
- *      item.href === "/protocols" ||
- *      item.href === "/experiments")
- *   const isActive = mounted && pathMatches && !suppressActiveForProjectDeepLink
+ *   const isActive = mounted && pathMatches
  */
 function computeIsActive(
   pathname: string,
   itemHref: string,
-  projectParam: string | null,
   mounted: boolean
 ): boolean {
   const pathMatches =
     pathname === itemHref || pathname.startsWith(itemHref + "/")
-  const hasProjectScope = (projectParam?.trim() ?? "") !== ""
-  const suppressActiveForProjectDeepLink =
-    hasProjectScope && projectScopedHrefs.includes(itemHref)
-  return mounted && pathMatches && !suppressActiveForProjectDeepLink
+  return mounted && pathMatches
 }
 
 /**
@@ -54,8 +34,7 @@ function computeIsActive(
  *
  * For any navigation item in the sidebar and any current pathname, the item
  * should be marked as active if and only if the pathname equals the item's
- * href or starts with {href}/, and the URL does not contain a project query
- * parameter for experiment/literature/protocol routes.
+ * href or starts with {href}/.
  *
  * **Validates: Requirements 15.1, 15.2**
  */
@@ -71,23 +50,21 @@ describe("Property 19: Sidebar active state matches current pathname", () => {
     pathSegment.map((s) => "/" + s)
   )
 
-  const uuidArb = fc.uuid()
-
-  it("when pathname exactly matches item.href, item is active (no project param, mounted)", () => {
+  it("when pathname exactly matches item.href, item is active (mounted)", () => {
     fc.assert(
       fc.property(navItemArb, (item) => {
-        const isActive = computeIsActive(item.href, item.href, null, true)
+        const isActive = computeIsActive(item.href, item.href, true)
         expect(isActive).toBe(true)
       }),
       { numRuns: 100 }
     )
   })
 
-  it("when pathname starts with item.href + '/', item is active (no project param, mounted)", () => {
+  it("when pathname starts with item.href + '/', item is active (mounted)", () => {
     fc.assert(
       fc.property(navItemArb, subPath.filter((s) => s.length > 0), (item, sub) => {
         const pathname = item.href + sub
-        const isActive = computeIsActive(pathname, item.href, null, true)
+        const isActive = computeIsActive(pathname, item.href, true)
         expect(isActive).toBe(true)
       }),
       { numRuns: 100 }
@@ -98,40 +75,9 @@ describe("Property 19: Sidebar active state matches current pathname", () => {
     fc.assert(
       fc.property(navItemArb, navItemArb, (currentItem, otherItem) => {
         fc.pre(currentItem.href !== otherItem.href)
-        // Ensure the pathname doesn't accidentally start with otherItem.href
         fc.pre(!currentItem.href.startsWith(otherItem.href + "/"))
-        const isActive = computeIsActive(currentItem.href, otherItem.href, null, true)
+        const isActive = computeIsActive(currentItem.href, otherItem.href, true)
         expect(isActive).toBe(false)
-      }),
-      { numRuns: 100 }
-    )
-  })
-
-  it("project-scoped routes suppress active state when ?project= is present", () => {
-    const projectScopedItemArb = fc.constantFrom(
-      ...navigation.filter((n) => projectScopedHrefs.includes(n.href))
-    )
-
-    fc.assert(
-      fc.property(projectScopedItemArb, uuidArb, (item, projectId) => {
-        // Even though pathname matches, the project param suppresses active state
-        const isActive = computeIsActive(item.href, item.href, projectId, true)
-        expect(isActive).toBe(false)
-      }),
-      { numRuns: 100 }
-    )
-  })
-
-  it("non-project-scoped routes are NOT suppressed even with ?project= param", () => {
-    const nonProjectScopedItemArb = fc.constantFrom(
-      ...navigation.filter((n) => !projectScopedHrefs.includes(n.href))
-    )
-
-    fc.assert(
-      fc.property(nonProjectScopedItemArb, uuidArb, (item, projectId) => {
-        // Non-scoped routes (dashboard, projects, samples, etc.) stay active
-        const isActive = computeIsActive(item.href, item.href, projectId, true)
-        expect(isActive).toBe(true)
       }),
       { numRuns: 100 }
     )
@@ -140,26 +86,8 @@ describe("Property 19: Sidebar active state matches current pathname", () => {
   it("before mount (mounted=false), no item is ever active — prevents hydration mismatch", () => {
     fc.assert(
       fc.property(navItemArb, (item) => {
-        const isActive = computeIsActive(item.href, item.href, null, false)
+        const isActive = computeIsActive(item.href, item.href, false)
         expect(isActive).toBe(false)
-      }),
-      { numRuns: 100 }
-    )
-  })
-
-  it("empty project param string does not suppress active state", () => {
-    const projectScopedItemArb = fc.constantFrom(
-      ...navigation.filter((n) => projectScopedHrefs.includes(n.href))
-    )
-
-    fc.assert(
-      fc.property(projectScopedItemArb, (item) => {
-        // Empty string or whitespace-only project param should not suppress
-        const isActiveEmpty = computeIsActive(item.href, item.href, "", true)
-        expect(isActiveEmpty).toBe(true)
-
-        const isActiveWhitespace = computeIsActive(item.href, item.href, "   ", true)
-        expect(isActiveWhitespace).toBe(true)
       }),
       { numRuns: 100 }
     )

@@ -9,6 +9,7 @@ import type {
 } from '@/lib/agent-stream-types';
 import { buildNotes9AgentRequestBody } from '@/lib/notes9-agent-request';
 import { splitSseBuffer, parseSseDataJson } from '@/lib/sse-event-blocks';
+import { recordRumEvent } from '@/lib/rum';
 import {
   extractSseTokenPiece,
   mergeTokenBufferIntoAssistantRaw,
@@ -662,10 +663,12 @@ export function useAgentStream() {
         return { donePayload, error: null };
       } catch (err) {
         if ((err as Error).name === 'AbortError') {
+          recordRumEvent('agent_stream_aborted', {});
           setState((s) => ({ ...s, isStreaming: false }));
           return { donePayload: null, error: null };
         }
         const errMsg = err instanceof Error ? err.message : 'Agent stream failed';
+        recordRumEvent('agent_stream_error', { message: errMsg });
         setState((s) => ({
           ...s,
           error: errMsg,

@@ -289,7 +289,7 @@ export function SampleQcTab({ sampleId, initialRecords }: SampleQcTabProps) {
               Record QC
             </Button>
           </DialogTrigger>
-          <DialogContent className="sm:max-w-lg">
+          <DialogContent>
             <DialogHeader>
               <DialogTitle>Record QC measurement</DialogTitle>
               <DialogDescription>

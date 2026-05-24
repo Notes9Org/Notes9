@@ -35,6 +35,7 @@ import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
+import { sanitizeHtml } from "@/lib/sanitize-html"
 import {
   Bold,
   Italic,
@@ -464,7 +465,7 @@ function CommentSidebar({ editor, open, onClose }: { editor: any; open: boolean;
         <h3 className="font-semibold text-sm flex items-center gap-2">
           <MessageSquare className="h-4 w-4" /> Comments
         </h3>
-        <Button variant="ghost" size="icon" className="h-8 w-8" onClick={onClose}>
+        <Button variant="ghost" size="icon" className="h-8 w-8" onClick={onClose} aria-label="Close comments panel">
           <X className="h-4 w-4" />
         </Button>
       </div>
@@ -2080,10 +2081,11 @@ export function TiptapEditor({
     header.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.376 3.622a1 1 0 0 1 3.002 3.002L7.368 18.635a2 2 0 0 1-.855.506l-2.872.838a.5.5 0 0 1-.62-.62l.838-2.872a2 2 0 0 1 .506-.855z"/></svg><span>AI Suggestion</span><span class="diff-badge">Insert</span>`
     widget.appendChild(header)
 
-    // Body — render the HTML content
+    // Body — render the HTML content. AI-generated diff HTML is sanitized
+    // before insertion to prevent XSS via injected <script>/event handlers.
     const body = document.createElement('div')
     body.className = 'inline-diff-body'
-    body.innerHTML = inlineDiffHtml
+    body.innerHTML = sanitizeHtml(inlineDiffHtml)
     widget.appendChild(body)
 
     // Actions bar
@@ -4421,7 +4423,7 @@ export function TiptapEditor({
           style={
             panelEmbed || fillParentHeight || editorRegionFullscreen
               ? { minHeight: 0, maxHeight: "100%" }
-              : { minHeight, maxHeight: "calc(100vh - 300px)" }
+              : { minHeight, maxHeight: "calc(100dvh - 300px)" }
           }
         >
           {/* Editor Content - add right padding to prevent text from going under TOC */}
@@ -4430,7 +4432,7 @@ export function TiptapEditor({
             style={
               panelEmbed || fillParentHeight || editorRegionFullscreen
                 ? { minHeight: 0, maxHeight: "100%" }
-                : { minHeight, maxHeight: "calc(100vh - 300px)" }
+                : { minHeight, maxHeight: "calc(100dvh - 300px)" }
             }
             ref={(node) => setEditorContainer(node)}
           >
@@ -4716,7 +4718,7 @@ export function TiptapEditor({
         />
 
         <Dialog open={linkDialogOpen} onOpenChange={setLinkDialogOpen}>
-          <DialogContent className="max-w-md">
+          <DialogContent dialogSize="sm">
             <DialogHeader>
               <DialogTitle>{editor?.isActive("link") ? "Edit link" : "Insert link"}</DialogTitle>
               <DialogDescription>
@@ -4767,7 +4769,7 @@ export function TiptapEditor({
               if (!open) setMathEdit(null)
             }}
           >
-            <DialogContent className="max-w-lg">
+            <DialogContent>
               <DialogHeader>
                 <DialogTitle>Edit equation (LaTeX)</DialogTitle>
                 <DialogDescription>
@@ -4796,7 +4798,7 @@ export function TiptapEditor({
         )}
 
         <Dialog open={imageInsertDialogOpen} onOpenChange={setImageInsertDialogOpen}>
-          <DialogContent className="max-w-lg">
+          <DialogContent>
             <DialogHeader>
               <DialogTitle>Insert image</DialogTitle>
               <DialogDescription>
@@ -4859,7 +4861,7 @@ export function TiptapEditor({
 
         {/* Citation Selection Modal */}
         <Dialog open={citationModalOpen} onOpenChange={setCitationModalOpen}>
-          <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+          <DialogContent dialogSize="md" className="max-h-[80vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle>Select Citations</DialogTitle>
               <DialogDescription>
@@ -4937,7 +4939,7 @@ export function TiptapEditor({
 
         {/* Bibliography Generation Modal */}
         <Dialog open={bibliographyModalOpen} onOpenChange={setBibliographyModalOpen}>
-          <DialogContent className="max-w-4xl max-h-[85vh] overflow-hidden flex flex-col">
+          <DialogContent dialogSize="lg" className="max-h-[85vh] overflow-hidden flex flex-col">
             <DialogHeader>
               <DialogTitle>Generate Bibliography</DialogTitle>
               <DialogDescription>

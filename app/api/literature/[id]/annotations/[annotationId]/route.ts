@@ -29,6 +29,10 @@ export async function PATCH(
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
+    // Ownership scope — without `.eq("created_by", user.id)` any authenticated
+    // user could PATCH any annotation by guessing its id. RLS may also cover
+    // this at the DB layer; defense-in-depth keeps the route safe even if a
+    // future migration relaxes the policy.
     const { data, error } = await supabase
       .from("literature_pdf_annotations")
       .update({
@@ -39,11 +43,16 @@ export async function PATCH(
         anchor: payload.anchor ?? null,
       })
       .eq("id", annotationId)
+      .eq("created_by", user.id)
       .select("*")
-      .single()
+      .maybeSingle()
 
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 500 })
+    }
+    if (!data) {
+      // 404 (no row matched) is preferable to leaking "exists but not yours".
+      return NextResponse.json({ error: "Annotation not found" }, { status: 404 })
     }
 
     return NextResponse.json({ annotation: data })
@@ -69,13 +78,19 @@ export async function DELETE(
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    const { error } = await supabase
+    // Ownership scope (see PATCH above).
+    const { data, error } = await supabase
       .from("literature_pdf_annotations")
       .delete()
       .eq("id", annotationId)
+      .eq("created_by", user.id)
+      .select("id")
 
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 500 })
+    }
+    if (!data || data.length === 0) {
+      return NextResponse.json({ error: "Annotation not found" }, { status: 404 })
     }
 
     return NextResponse.json({ success: true })

@@ -6,10 +6,15 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from "react"
 import { usePathname } from "next/navigation"
+
+function serializeSegments(s: BreadcrumbSegment[]): string {
+  return s.map((seg) => `${seg.label}|${seg.href ?? ''}`).join('')
+}
 
 export type BreadcrumbSegment = { label: string; href?: string }
 
@@ -51,9 +56,46 @@ export function useBreadcrumb() {
 /** Call from pages to set the path shown in the header. Omit "Dashboard" — it is filtered out. */
 export function SetPageBreadcrumb({ segments }: { segments: BreadcrumbSegment[] }) {
   const { setSegments } = useBreadcrumb()
+  const lastKeyRef = useRef<string | null>(null)
+  // Equality-guarded sync. Most callers pass inline array literals that fail
+  // referential equality every render; without this guard, every parent
+  // render would call setSegments → context-value change → AppLayoutBody +
+  // every breadcrumb consumer re-renders. We compare serialized content so
+  // an identical breadcrumb is a no-op.
   useEffect(() => {
+    const key = serializeSegments(segments)
+    if (lastKeyRef.current === key) return
+    lastKeyRef.current = key
     setSegments(segments)
-    return () => setSegments([])
   }, [segments, setSegments])
+  return null
+}
+
+/**
+ * Section-page convenience: prepends a passed-in project context to the breadcrumb,
+ * yielding `● Project ▸ Section [▸ Item]`. The caller passes scope explicitly to
+ * avoid a circular import between this file and `contexts/project-scope-context`.
+ */
+export function SetScopedBreadcrumb({
+  scope,
+  sectionSegments,
+}: {
+  scope: { projectId: string | null; projectName: string | null }
+  sectionSegments: BreadcrumbSegment[]
+}) {
+  const { setSegments } = useBreadcrumb()
+  const lastKeyRef = useRef<string | null>(null)
+  useEffect(() => {
+    const merged: BreadcrumbSegment[] = scope.projectId && scope.projectName
+      ? [
+          { label: scope.projectName, href: `/projects/${scope.projectId}` },
+          ...sectionSegments,
+        ]
+      : sectionSegments
+    const key = serializeSegments(merged)
+    if (lastKeyRef.current === key) return
+    lastKeyRef.current = key
+    setSegments(merged)
+  }, [scope.projectId, scope.projectName, sectionSegments, setSegments])
   return null
 }

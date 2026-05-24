@@ -5,6 +5,14 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import { useMediaQuery } from "@/hooks/use-media-query"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
+import {
+  Empty,
+  EmptyHeader,
+  EmptyMedia,
+  EmptyTitle,
+  EmptyDescription,
+  EmptyContent,
+} from "@/components/ui/empty"
 import { Plus, FileText, Grid3x3, List, PenBox, X } from "lucide-react"
 import Link from "next/link"
 import { ProtocolList } from "./protocol-list"
@@ -15,6 +23,7 @@ import {
   ResourceFilterRow,
   ResourceListFilter,
 } from "@/components/ui/resource-list-filters"
+import { ViewModeToggle } from "@/components/ui/view-mode-toggle"
 
 export type ProtocolsProjectContext = {
   id: string
@@ -159,38 +168,12 @@ export function ProtocolsPageContent({
             </Button>
           ) : null}
           {mainTab === "library" ? (
-            <div className="inline-flex gap-1 rounded-lg border p-1">
-              <Button
-                variant={viewMode === "grid" ? "default" : "ghost"}
-                size="sm"
-                onClick={() => setViewMode("grid")}
-                className="gap-2"
-              >
-                <Grid3x3 className="h-4 w-4" />
-                Grid
-              </Button>
-              <Button
-                variant={isMobile ? "ghost" : viewMode === "table" ? "default" : "ghost"}
-                size="sm"
-                onClick={() => !isMobile && setViewMode("table")}
-                className="gap-2"
-                disabled={isMobile}
-                aria-disabled={isMobile}
-              >
-                <List className="h-4 w-4" />
-                Table
-              </Button>
-            </div>
+            <ViewModeToggle value={viewMode} onChange={setViewMode} tableDisabled={isMobile} />
           ) : null}
-          <Button
-            asChild
-            size="icon"
-            variant="ghost"
-            className="size-8 rounded-md text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
-            aria-label="New protocol"
-          >
+          <Button asChild size="sm" className="gap-2" aria-label="New protocol">
             <Link href={newProtocolHref}>
               <Plus className="size-4" />
+              New protocol
             </Link>
           </Button>
         </div>
@@ -289,18 +272,26 @@ export function ProtocolsPageContent({
               </CardContent>
             </Card>
           ) : scopedProtocols.length === 0 ? (
-            <Card>
-              <CardContent className="flex flex-col items-center justify-center py-12">
-                <FileText className="h-12 w-12 text-muted-foreground mb-4" />
-                <p className="text-muted-foreground mb-4">No protocols in your library yet</p>
+            <Empty className="border border-dashed">
+              <EmptyHeader>
+                <EmptyMedia variant="icon">
+                  <FileText aria-hidden />
+                </EmptyMedia>
+                <EmptyTitle>No protocols in your library</EmptyTitle>
+                <EmptyDescription>
+                  Protocols are reusable procedures you link to experiments. Build one once, version
+                  it as your method evolves, and reference it from every experiment that runs it.
+                </EmptyDescription>
+              </EmptyHeader>
+              <EmptyContent>
                 <Button asChild>
                   <Link href={newProtocolHref}>
                     <Plus className="h-4 w-4 mr-2" />
-                    Create first protocol
+                    New protocol
                   </Link>
                 </Button>
-              </CardContent>
-            </Card>
+              </EmptyContent>
+            </Empty>
           ) : (
             <p className="py-10 text-center text-sm text-muted-foreground">
               No protocols match the selected filters.

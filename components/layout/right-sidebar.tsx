@@ -42,6 +42,10 @@ import {
   ChevronDown,
   ChevronLeft,
   X,
+  Menu,
+  Sun,
+  Moon,
+  CircleHelp,
   Mic,
   BookOpen,
   FlaskConical,
@@ -77,6 +81,9 @@ import { toast } from 'sonner';
 import { createClient } from '@/lib/supabase/client';
 import { useResizable } from '@/hooks/use-resizable';
 import { ResizeHandle } from '@/components/ui/resize-handle';
+import { useSidebar } from '@/components/ui/sidebar';
+import { useTheme } from 'next-themes';
+import { requestPageHelp } from '@/components/tour/app-tour';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -105,6 +112,8 @@ import {
   type CatalystMentionKind,
   catalystMentionPath,
 } from '@/lib/catalyst-mention-types';
+import { isLikelyUuid } from '@/lib/url-project-param';
+import type { CatalystLaunchDetail } from '@/lib/catalyst-launch';
 import { useLiteratureMentionCandidates } from '@/contexts/literature-mention-context';
 import { useLiteratureAgentStream } from '@/hooks/use-literature-agent-stream';
 import type { LiteratureAgentDonePayload } from '@/lib/literature-agent-types';
@@ -371,9 +380,26 @@ function sortLiteratureCandidates(
 
 interface RightSidebarProps {
   onClose?: () => void;
+  /** `page` = dedicated /catalyst route (full main column). `panel` = right drawer. */
+  variant?: 'panel' | 'page';
+  initialSessionId?: string;
+  /** Seed composer when opened from a section hero or external launch event. */
+  pendingLaunch?: CatalystLaunchDetail | null;
+  onPendingLaunchConsumed?: () => void;
 }
 
-export function RightSidebar({ onClose }: RightSidebarProps = {}) {
+export function RightSidebar({
+  onClose,
+  variant = 'panel',
+  initialSessionId,
+  pendingLaunch = null,
+  onPendingLaunchConsumed,
+}: RightSidebarProps = {}) {
+  const isPageVariant = variant === 'page';
+  const { setOpenMobile, isMobile } = useSidebar();
+  const { setTheme, resolvedTheme } = useTheme();
+  const [themeMounted, setThemeMounted] = useState(false);
+  const [displayName, setDisplayName] = useState('');
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -413,8 +439,9 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
   const [mounted, setMounted] = useState(false);
   const [isDraggingContext, setIsDraggingContext] = useState(false);
   const [contextLoading, setContextLoading] = useState(false);
-  const [isExpanded, setIsExpanded] = useState(false);
+  const [isExpanded, setIsExpanded] = useState(isPageVariant);
   const [expandedHistoryOpen, setExpandedHistoryOpen] = useState(true);
+  const initialSessionLoadedRef = useRef<string | null>(null);
   const [showAllPastChats, setShowAllPastChats] = useState(false);
   /** When set, show main Catalyst chat instead of the paper Writing panel (paper context stays registered). */
   const [paperUiSuppressed, setPaperUiSuppressed] = useState(false);
@@ -423,6 +450,10 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
   const wasOnLiteratureRouteRef = useRef(false);
   /** When true, stay on General/Notes9 even while URL is under /literature-reviews (no redirect). */
   const suppressLiteratureAutoModeRef = useRef(false);
+  /** Guards against rapid double-Enter / double-click duplicating the same
+   *  message before `isLoading` has had a chance to flip. The window is small
+   *  (~ms) but real on slow machines and reliable on Enter-key auto-repeat. */
+  const submitInFlightRef = useRef(false);
   const historySidebar = useResizable({
     initialWidth: 224,
     minWidth: 208,
@@ -435,21 +466,27 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
     if (!composer) return;
     composer.style.height = 'auto';
     const plain = composer.innerText ?? '';
+    const emptyHeight = isPageVariant ? '120px' : '52px';
     if (reset || !plain.trim()) {
-      composer.style.height = '52px';
+      composer.style.height = emptyHeight;
       return;
     }
     composer.style.height = `${Math.min(composer.scrollHeight, 300)}px`;
-  }, []);
+  }, [isPageVariant]);
 
   // Cursor-like UI States
   // If messages.length === 0 => "New Chat View" (Input at top/center, Past Chats at bottom)
   // If messages.length > 0 => "Active Chat View" (Messages take space, Input at bottom)
 
-  const supabase = createClient();
+  // Stable client reference — without this, every render creates a new client
+  // object, and the seven downstream `useEffect`s that depend on `supabase`
+  // re-fire on every keystroke (re-subscribing realtime listeners, re-loading
+  // sessions, etc.). The memo holds the client for the lifetime of the panel.
+  const supabase = useMemo(() => createClient(), []);
 
   useEffect(() => {
     setMounted(true);
+    setThemeMounted(true);
   }, []);
 
   const supabaseTokenRef = useRef<string | null>(null);
@@ -470,7 +507,24 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
   useEffect(() => {
     const loadUserId = async () => {
       const { data: { user } } = await supabase.auth.getUser();
-      if (user) setUserId(user.id);
+      if (!user) return;
+      setUserId(user.id);
+      const meta = user.user_metadata ?? {};
+      const fromMeta =
+        (meta.first_name as string | undefined)?.trim() ||
+        (meta.full_name as string | undefined)?.split(/\s+/)[0] ||
+        '';
+      if (fromMeta) {
+        setDisplayName(fromMeta);
+        return;
+      }
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('first_name, last_name')
+        .eq('id', user.id)
+        .maybeSingle();
+      const fromProfile = profile?.first_name?.trim() || profile?.last_name?.trim() || '';
+      setDisplayName(fromProfile || user.email?.split('@')[0] || '');
     };
     loadUserId();
   }, [supabase]);
@@ -1119,11 +1173,12 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
   }, [input, isLoading, resizeInput]);
 
   useEffect(() => {
+    if (isPageVariant) return;
     if (previousPathnameRef.current !== pathname && isExpanded) {
       setIsExpanded(false);
     }
     previousPathnameRef.current = pathname;
-  }, [pathname, isExpanded]);
+  }, [pathname, isExpanded, isPageVariant]);
 
   const uploadFile = useCallback(async (file: File): Promise<Attachment | null> => {
     try {
@@ -1236,6 +1291,13 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    // Drop second-and-later fires until the first send has finished kicking
+    // off its async work (createSession, then streaming start). Without this,
+    // a quick keyboard repeat on Enter or a fast double-click duplicates the
+    // message before `isLoading` flips to true via the streaming hook.
+    if (submitInFlightRef.current) return;
+    submitInFlightRef.current = true;
+    try {
     const litEl = literatureEditableRef.current;
     const literaturePlain =
       agentMode === 'literature' && isLiteratureRoute && litEl
@@ -1489,6 +1551,11 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
     }
     if (text.trim()) parts.push({ type: 'text', text });
     await sendMessage({ parts });
+    } finally {
+      // Always release the in-flight guard so future submits can fire — even
+      // if an early-return above bailed out, the try/finally ensures release.
+      submitInFlightRef.current = false;
+    }
   };
 
   const handleEditMessage = useCallback(
@@ -2014,8 +2081,9 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
                 .map((p) => p.text!)
                 .join('');
             }
-          } catch {
-            // keep original text
+          } catch (err) {
+            console.warn('Session history parse failure', err);
+            text = '[message could not be displayed]';
           }
         }
         return {
@@ -2041,9 +2109,93 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
     });
   }
 
+  useEffect(() => {
+    if (!isPageVariant || !initialSessionId || !mounted) return;
+    if (initialSessionLoadedRef.current === initialSessionId) return;
+    initialSessionLoadedRef.current = initialSessionId;
+    loadSession(initialSessionId);
+  }, [isPageVariant, initialSessionId, mounted]);
+
+  const applyCatalystLaunch = useCallback(
+    (launch: { query?: string; projectId?: string }) => {
+      const q = launch.query?.trim();
+      if (q) {
+        setInput(q);
+        // The composer is a contentEditable <div>, not a controlled input, so
+        // we also have to seed its textContent — otherwise React state and
+        // character count update but the visible field stays empty.
+        requestAnimationFrame(() => {
+          if (inputRef.current) {
+            inputRef.current.textContent = q;
+            // Drop caret at the end so the user can keep typing.
+            const range = document.createRange();
+            range.selectNodeContents(inputRef.current);
+            range.collapse(false);
+            const sel = window.getSelection();
+            sel?.removeAllRanges();
+            sel?.addRange(range);
+          }
+          inputRef.current?.focus();
+          resizeInput();
+        });
+      }
+      const projectId = launch.projectId?.trim();
+      if (projectId && isLikelyUuid(projectId)) {
+        supabase
+          .from('projects')
+          .select('name')
+          .eq('id', projectId)
+          .maybeSingle()
+          .then(({ data }) => {
+            if (!data?.name) return;
+            setSelectedMentions((prev) =>
+              prev.some((m) => m.kind === 'project' && m.id === projectId)
+                ? prev
+                : [...prev, { kind: 'project', id: projectId, title: data.name }],
+            );
+          });
+      }
+    },
+    [resizeInput, supabase],
+  );
+
+  useEffect(() => {
+    if (!isPageVariant) return;
+    const q = searchParams.get('q')?.trim();
+    const projectId = searchParams.get('project')?.trim();
+    applyCatalystLaunch({
+      query: q || undefined,
+      projectId: projectId && isLikelyUuid(projectId) ? projectId : undefined,
+    });
+  }, [isPageVariant, searchParams, applyCatalystLaunch]);
+
+  useEffect(() => {
+    if (isPageVariant || !pendingLaunch || !mounted) return;
+    applyCatalystLaunch({
+      query: pendingLaunch.query,
+      projectId: pendingLaunch.projectId,
+    });
+    onPendingLaunchConsumed?.();
+  }, [
+    isPageVariant,
+    pendingLaunch,
+    mounted,
+    applyCatalystLaunch,
+    onPendingLaunchConsumed,
+  ]);
+
   // --- Render Components ---
 
-  const renderCursorInput = () => {
+  const catalystHeroComposerShell = cn(
+    'rounded-2xl border border-border/70 bg-card',
+    'shadow-[0_1px_2px_rgba(44,36,24,0.04),0_8px_28px_-8px_rgba(44,36,24,0.12)]',
+    'transition-[border-color,box-shadow] duration-200',
+    'focus-within:border-[color:color-mix(in_srgb,var(--n9-accent)_35%,var(--border))]',
+    'focus-within:shadow-[0_1px_2px_rgba(44,36,24,0.05),0_12px_32px_-8px_rgba(44,36,24,0.14),0_0_0_3px_color-mix(in_srgb,var(--n9-accent)_12%,transparent)]',
+  );
+
+  const renderCursorInput = (opts?: { heroStyle?: boolean }) => {
+    const heroStyle = opts?.heroStyle ?? false;
     const canSendLiterature =
       agentMode === 'literature' &&
       isLiteratureRoute &&
@@ -2154,10 +2306,16 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
     return (
     <>
     <div className="group/input relative flex flex-col w-full">
-      <div className={cn(
-        "rounded-xl border bg-card/50 shadow-sm focus-within:ring-1 focus-within:ring-ring/50 focus-within:border-ring transition-all overflow-hidden",
-        isDraggingContext && "ring-2 ring-primary border-primary bg-primary/5"
-      )} id="tour-ai-chat">
+      <div
+        className={cn(
+          'overflow-hidden transition-all',
+          heroStyle
+            ? catalystHeroComposerShell
+            : 'rounded-xl border bg-card/50 shadow-sm focus-within:border-ring focus-within:ring-1 focus-within:ring-ring/50',
+          isDraggingContext && 'border-primary bg-primary/5 ring-2 ring-primary',
+        )}
+        id="tour-ai-chat"
+      >
         <FileDropzone
           onFilesDrop={() => {}}
           onNonFileDrop={handleNonFileDrop}
@@ -2167,12 +2325,25 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
         >
           <div
             ref={inputRef}
+            role="textbox"
+            aria-multiline="true"
+            aria-label="Message Catalyst"
+            aria-disabled={isLoading || contextLoading}
             contentEditable={!isLoading && !contextLoading}
             suppressContentEditableWarning
             onInput={handleTextareaChange}
             onKeyDown={handleKeyDown}
-            data-placeholder="Ask Caty anything. Use @ to tag notes, experiments, projects, protocols, and literature."
-            className="w-full min-h-[68px] resize-none bg-transparent px-4 py-2.5 text-sm focus:outline-none scrollbar-hide empty:before:pointer-events-none empty:before:text-muted-foreground/60 empty:before:content-[attr(data-placeholder)]"
+            data-placeholder={
+              heroStyle
+                ? 'Ask Catalyst anything. Type @ to reference a note, experiment, or paper.'
+                : 'Ask Catalyst anything. Use @ to tag notes, experiments, projects, protocols, and literature.'
+            }
+            className={cn(
+              'w-full resize-none bg-transparent focus-visible:outline-2 focus-visible:outline-ring/40 focus-visible:outline-offset-2 scrollbar-hide empty:before:pointer-events-none empty:before:text-muted-foreground/60 empty:before:content-[attr(data-placeholder)]',
+              heroStyle
+                ? 'min-h-[120px] px-5 py-4 text-[15px] leading-relaxed'
+                : 'min-h-[68px] px-4 py-2.5 text-sm',
+            )}
           />
         </FileDropzone>
         {mentionOpenForInput && filteredGlobalMentions.length > 0 && (
@@ -2403,12 +2574,32 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
     ? 'Ask about papers, compare findings, and cross-check cited source passages. Use @ to link papers or drop literature rows into the composer.'
     : 'Your intelligent research assistant. Ask anything about your lab notes, experiments, or protocols.';
 
+  const layoutExpanded = isPageVariant || isExpanded;
+
+  const timeGreeting = (() => {
+    const hour = new Date().getHours();
+    if (hour >= 5 && hour < 12) return 'Good morning';
+    if (hour >= 12 && hour < 17) return 'Good afternoon';
+    if (hour >= 17 && hour < 21) return 'Good evening';
+    const day = new Date().toLocaleDateString('en-US', { weekday: 'long' });
+    return `Happy ${day}`;
+  })();
+
+  const toggleTheme = () => {
+    setTheme(resolvedTheme === 'dark' ? 'light' : 'dark');
+  };
+
   return (
     <div className={cn(
-      "flex flex-col bg-background border-l border-border/45 min-h-0 overflow-hidden shadow-[-2px_0_18px_-16px_rgba(44,36,24,0.22)] dark:shadow-[-2px_0_18px_-16px_rgba(0,0,0,0.45)]",
-      isExpanded
-        ? "fixed top-0 right-0 bottom-0 left-[var(--sidebar-width,0px)] z-[120] w-auto h-full transition-none"
-        : "h-full w-full min-w-0 transition-none"
+      "flex flex-col bg-background min-h-0 overflow-hidden transition-none",
+      isPageVariant
+        ? "h-full w-full min-w-0"
+        : cn(
+            "border-l border-border/45 shadow-[-2px_0_18px_-16px_rgba(44,36,24,0.22)] dark:shadow-[-2px_0_18px_-16px_rgba(0,0,0,0.45)]",
+            isExpanded
+              ? "fixed top-0 right-0 bottom-0 left-[var(--sidebar-width,0px)] z-[120] w-auto h-full"
+              : "h-full w-full min-w-0"
+          )
     )}>
       {/* Hidden File Input */}
       <input ref={fileInputRef} type="file" multiple accept={ALLOWED_TYPES.join(',')} className="hidden" onChange={handleFileSelect} disabled={isLoading || isUploading} />
@@ -2433,10 +2624,24 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
         />
       ) : (
         <>
-          {/* Header: Tab-like Navigation (History + New Chat hidden when maximized; left sidebar has them) */}
+          {/* Header: page route uses app chrome; panel uses compact history controls */}
             <header className="h-12 sm:h-14 flex items-center justify-between px-2 sm:px-4 border-b border-border/40 shrink-0 bg-[color:var(--n9-header-bg)]/80 backdrop-blur-md z-10 text-xs select-none">
-            <div className="flex items-center gap-1 overflow-hidden">
-              {isExpanded && !expandedHistoryOpen && (
+            <div className="flex items-center gap-1 overflow-hidden min-w-0">
+              {isPageVariant && isMobile ? (
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="size-8 shrink-0 sm:size-9"
+                  onClick={() => setOpenMobile(true)}
+                  aria-label="Open navigation"
+                >
+                  <Menu className="size-4" />
+                </Button>
+              ) : null}
+              {isPageVariant ? (
+                <span className="truncate px-1 text-sm font-semibold text-foreground">Catalyst</span>
+              ) : null}
+              {!isPageVariant && layoutExpanded && !expandedHistoryOpen && (
                 <Button
                   variant="ghost"
                   size="icon"
@@ -2447,7 +2652,7 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
                     <History className="size-4" />
                 </Button>
               )}
-              {!isExpanded && (
+              {!isPageVariant && !layoutExpanded && (
                 <>
                   <ScrollArea className="w-full whitespace-nowrap scrollbar-hide">
                     <div className="flex items-center gap-1">
@@ -2538,20 +2743,78 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
               )}
             </div>
 
-            <div className="flex items-center gap-1 pl-2">
-              <Button variant="ghost" size="icon" className="size-8 sm:size-9 text-muted-foreground" onClick={() => setIsExpanded(!isExpanded)}>
-                  {isExpanded ? <Minimize2 className="size-4" /> : <Maximize2 className="size-4" />}
-                </Button>
-                <Button variant="ghost" size="icon" className="size-8 sm:size-9 text-muted-foreground" onClick={() => onClose?.()}>
-                  <X className="size-4" />
-                </Button>
+            <div className="flex items-center gap-1 pl-2 shrink-0">
+              {isPageVariant ? (
+                <>
+                  {layoutExpanded && !expandedHistoryOpen ? (
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="size-8 sm:size-9 text-muted-foreground"
+                      onClick={() => setExpandedHistoryOpen(true)}
+                      aria-label="Show chat history"
+                    >
+                      <History className="size-4" />
+                    </Button>
+                  ) : null}
+                  <Button
+                    variant="secondary"
+                    className="hidden h-8 text-muted-foreground sm:inline-flex sm:h-9"
+                    onClick={handleNewChat}
+                    aria-label="New chat"
+                  >
+                    <Plus className="size-4" />
+                    <span>New chat</span>
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="size-8 text-muted-foreground sm:size-9"
+                    onClick={() => requestPageHelp(pathname ?? '/catalyst')}
+                    aria-label="Help: tour this page"
+                    title="Help: short tour for this page"
+                  >
+                    <CircleHelp className="size-4" />
+                  </Button>
+                  <Button
+                    id="tour-theme-toggle"
+                    variant="ghost"
+                    size="icon"
+                    className="size-8 sm:size-9"
+                    onClick={toggleTheme}
+                    aria-label={
+                      themeMounted && resolvedTheme === 'dark'
+                        ? 'Switch to light mode'
+                        : 'Switch to dark mode'
+                    }
+                  >
+                    {!themeMounted ? (
+                      <Moon className="size-4" />
+                    ) : resolvedTheme === 'dark' ? (
+                      <Sun className="size-4" />
+                    ) : (
+                      <Moon className="size-4" />
+                    )}
+                  </Button>
+                </>
+              ) : (
+                <>
+                  <Button variant="ghost" size="icon" className="size-8 sm:size-9 text-muted-foreground" onClick={() => setIsExpanded(!isExpanded)}>
+                    {isExpanded ? <Minimize2 className="size-4" /> : <Maximize2 className="size-4" />}
+                  </Button>
+                  <Button variant="ghost" size="icon" className="size-8 sm:size-9 text-muted-foreground" onClick={() => onClose?.()}>
+                    <X className="size-4" />
+                  </Button>
+                </>
+              )}
             </div>
           </header>
 
           {/* When full screen: left = conversation list, right = chat. Otherwise: single column. */}
-          <div className={cn("flex-1 flex min-h-0 overflow-hidden", isExpanded ? "flex-row" : "flex-col")}>
-            {/* Full-screen only: left sidebar with previous conversations (lab-notes-style, toggleable) */}
-            {isExpanded && expandedHistoryOpen && (
+          <div className={cn("flex-1 flex min-h-0 overflow-hidden", layoutExpanded ? "flex-row" : "flex-col")}>
+            {/* Full-screen / page route: left sidebar with previous conversations */}
+            {layoutExpanded && expandedHistoryOpen && (
               <>
                 <aside
                   className="flex-shrink-0 flex flex-col overflow-hidden border-r border-border bg-sidebar transition-[width] duration-200 ease-in-out min-h-0"
@@ -2651,36 +2914,59 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
             {/* Main chat area (narrow: only this; full screen: right side) */}
             <div className="flex-1 flex flex-col min-h-0 min-w-0 overflow-hidden">
               {messages.length === 0 ? (
-                // --- Empty State: input at bottom; full screen = compact bar, narrow = full input card ---
-                <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
-                <div className="flex-1 flex flex-col items-center justify-center px-4">
-                    <div className="relative mb-3 flex justify-center">
-                      <IceMascot
-                        className="w-16 shrink-0 rounded-full"
-                        options={{ src: "/notes9-mascot-ui.png" }}
-                        aria-label="Catalyst AI"
-                      />
-                    </div>
-                    <h2 className="text-lg font-bold tracking-tight bg-gradient-to-r from-orange-500 to-pink-600 bg-clip-text text-transparent">
-                      Catalyst AI
-                    </h2>
-                    {emptyStateSubheading ? (
-                      <h3 className="text-sm font-semibold tracking-tight bg-gradient-to-r from-orange-500 to-pink-600 bg-clip-text text-transparent">
-                        {emptyStateSubheading}
-                      </h3>
-                    ) : null}
-                    <p className="text-muted-foreground text-center max-w-xs text-sm">
-                      {emptyStateDescription}
-                    </p>
-                  </div>
-
-                  {/* Input at bottom (General, model, textarea) */}
-                  <div className="flex-shrink-0 p-4 bg-background/95 backdrop-blur border-t">
-                    <div className="max-w-3xl mx-auto min-w-0">
-                      {renderCursorInput()}
+                isPageVariant ? (
+                  <div className="relative min-h-0 flex-1 overflow-hidden">
+                    <div className="absolute inset-0 flex items-center justify-center px-4 py-6 sm:px-6">
+                      <div className="flex w-full max-w-3xl flex-col items-center gap-5 sm:gap-6">
+                        <div className="space-y-2 text-center">
+                          <div className="flex justify-center">
+                            <IceMascot
+                              className="w-12 shrink-0 rounded-full sm:w-14"
+                              options={{ src: '/notes9-mascot-ui.png' }}
+                              aria-label="Catalyst AI"
+                            />
+                          </div>
+                          <h1 className="text-2xl font-semibold tracking-tight text-foreground sm:text-[1.75rem]">
+                            {timeGreeting}
+                            {displayName ? `, ${displayName}` : ''}
+                          </h1>
+                          {emptyStateSubheading ? (
+                            <p className="text-sm text-muted-foreground">{emptyStateSubheading}</p>
+                          ) : null}
+                        </div>
+                        <div className="w-full min-w-0">
+                          {renderCursorInput({ heroStyle: true })}
+                        </div>
+                      </div>
                     </div>
                   </div>
-                </div>
+                ) : (
+                  <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+                    <div className="flex flex-1 flex-col items-center justify-center px-4">
+                      <div className="relative mb-3 flex justify-center">
+                        <IceMascot
+                          className="w-16 shrink-0 rounded-full"
+                          options={{ src: '/notes9-mascot-ui.png' }}
+                          aria-label="Catalyst AI"
+                        />
+                      </div>
+                      <h2 className="bg-gradient-to-r from-orange-500 to-pink-600 bg-clip-text text-lg font-bold tracking-tight text-transparent">
+                        Catalyst AI
+                      </h2>
+                      {emptyStateSubheading ? (
+                        <h3 className="bg-gradient-to-r from-orange-500 to-pink-600 bg-clip-text text-sm font-semibold tracking-tight text-transparent">
+                          {emptyStateSubheading}
+                        </h3>
+                      ) : null}
+                      <p className="max-w-xs text-center text-sm text-muted-foreground">
+                        {emptyStateDescription}
+                      </p>
+                    </div>
+                    <div className="flex-shrink-0 border-t bg-background/95 p-4 backdrop-blur">
+                      <div className="mx-auto min-w-0 max-w-3xl">{renderCursorInput()}</div>
+                    </div>
+                  </div>
+                )
               ) : (
                 // --- Active Chat View ---
                 <div className="flex min-h-0 flex-1 flex-col overflow-hidden relative">

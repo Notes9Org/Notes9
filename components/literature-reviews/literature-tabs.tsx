@@ -24,6 +24,7 @@ import {
 } from "@/app/(app)/literature-reviews/actions"
 import { toast } from "sonner"
 import { useRouter } from "next/navigation"
+import { recordRumEvent } from "@/lib/rum"
 import {
   Dialog,
   DialogContent,
@@ -353,6 +354,11 @@ export function LiteratureTabs({
     return [...ids]
   }, [stripPaperIds, stagedByIdMerged])
 
+  const pollErrorCountRef = useRef(0)
+  const importStartedAtRef = useRef<Record<string, number>>({})
+  const pollWarningShownRef = useRef(false)
+  const pollStoppedRef = useRef(false)
+
   useEffect(() => {
     if (topSection !== "search" || pendingPdfImportIds.length === 0) return
 
@@ -360,6 +366,8 @@ export function LiteratureTabs({
     let didRefreshList = false
 
     const pollImportStatus = async () => {
+      if (pollStoppedRef.current) return
+      let anyError = false
       for (const id of pendingPdfImportIds) {
         if (cancelled) return
         try {
@@ -369,7 +377,7 @@ export function LiteratureTabs({
             pdf_storage_path?: string | null
             pdf_file_name?: string | null
           }
-          if (!res.ok || !data.pdf_import_status) continue
+          if (!res.ok || !data.pdf_import_status) { anyError = true; continue }
           if (data.pdf_import_status === "pending") continue
 
           setStagedPdfPatches((prev) => ({
@@ -381,13 +389,37 @@ export function LiteratureTabs({
             },
           }))
 
-          if (data.pdf_import_status === "success" && !didRefreshList) {
-            didRefreshList = true
-            void router.refresh()
+          if (data.pdf_import_status === "success") {
+            const startedAt = importStartedAtRef.current[id]
+            if (typeof startedAt === "number") {
+              recordRumEvent("literature_pdf_import_completed", {
+                literatureId: id,
+                durationMs: Date.now() - startedAt,
+              })
+              delete importStartedAtRef.current[id]
+            }
+            if (!didRefreshList) {
+              didRefreshList = true
+              void router.refresh()
+            }
           }
-        } catch {
-          /* ignore transient poll errors */
+        } catch (err) {
+          anyError = true
+          console.error("Literature import-status poll failed", err)
         }
+      }
+      if (anyError) {
+        pollErrorCountRef.current += 1
+        if (pollErrorCountRef.current >= 3 && !pollWarningShownRef.current) {
+          pollWarningShownRef.current = true
+          toast.warning("PDF import status check failed — retrying")
+        }
+        if (pollErrorCountRef.current >= 10 && !pollStoppedRef.current) {
+          pollStoppedRef.current = true
+          toast.error("Import status unavailable, please refresh")
+        }
+      } else {
+        pollErrorCountRef.current = 0
       }
     }
 
@@ -569,6 +601,8 @@ export function LiteratureTabs({
             ? String((result.data as { id: string }).id)
             : resolveStagedLiteratureId(paper)
         if (rowId) {
+          importStartedAtRef.current[rowId] = Date.now()
+          recordRumEvent("literature_pdf_import_started", { literatureId: rowId })
           openPaperTab(rowId, paper.title)
         }
         if (result.alreadyStaged) {

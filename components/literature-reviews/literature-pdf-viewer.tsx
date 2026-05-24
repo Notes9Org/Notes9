@@ -956,7 +956,7 @@ export const LiteraturePdfViewer = forwardRef<LiteraturePdfViewerHandle, Literat
       </div>
 
       <Dialog open={composerState.open} onOpenChange={(open) => setComposerState((current) => ({ ...current, open, content: open ? current.content : "" }))}>
-        <DialogContent className="flex max-h-[92vh] w-[min(99vw,1440px)] max-w-[min(99vw,1440px)] flex-col overflow-hidden">
+        <DialogContent dialogSize="xl" className="flex max-h-[92vh] flex-col overflow-hidden">
           <DialogHeader>
             <DialogTitle>Add note</DialogTitle>
           </DialogHeader>

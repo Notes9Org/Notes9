@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation"
 import Link from "next/link"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { FileText, Plus, Trash2, ArrowUpRight } from "lucide-react"
+import { FileText, Plus, Trash2, ArrowUpRight, Sparkles } from "lucide-react"
 import {
   Table,
   TableBody,
@@ -30,6 +30,7 @@ import {
   ResourceFilterRow,
   ResourceListFilter,
 } from "@/components/ui/resource-list-filters"
+import { PageHeading } from "@/components/ui/page-heading"
 import { ReportGeneratorDialog } from "./report-generator-dialog"
 import { createClient } from "@/lib/supabase/client"
 import { toast } from "sonner"
@@ -143,20 +144,28 @@ export function ReportsPageClient({ reports: initialReports, projects, experimen
     }
   }
 
+  // Title block shared by both states. The "Generate" action is intentionally
+  // NOT here — the empty state shows a single prominent CTA in its card, and
+  // the populated state appends the header action below. This avoids two
+  // identical "Generate" buttons rendering on the same screen.
+  const titleBlock = (
+    <div>
+      <PageHeading>
+        Reports &amp; Analytics
+      </PageHeading>
+      <p className="text-muted-foreground mt-1 text-sm">
+        View and generate research reports
+      </p>
+    </div>
+  )
+
   // Header matches every other top-level list page (Experiments, Projects, …).
   const pageHeader = (
     <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight text-foreground md:text-3xl">
-          Reports &amp; Analytics
-        </h1>
-        <p className="text-muted-foreground mt-1 text-sm">
-          View and generate research reports
-        </p>
-      </div>
+      {titleBlock}
       <Button onClick={() => setDialogOpen(true)} className="w-full sm:w-auto">
-        <Plus className="h-4 w-4 mr-2" />
-        Generate report
+        <Sparkles className="h-4 w-4 mr-2" />
+        Generate AI report
       </Button>
     </div>
   )
@@ -164,14 +173,18 @@ export function ReportsPageClient({ reports: initialReports, projects, experimen
   if (reports.length === 0) {
     return (
       <div className="space-y-6">
-        {pageHeader}
+        {/* Empty state: title only — the single CTA lives in the card below. */}
+        {titleBlock}
         <Card>
-          <CardContent className="flex flex-col items-center justify-center py-12">
+          <CardContent className="flex flex-col items-center justify-center py-12 px-6 text-center">
             <FileText className="h-12 w-12 text-muted-foreground mb-4" />
-            <p className="text-muted-foreground mb-4">No reports generated yet</p>
+            <p className="text-foreground font-medium mb-1">No reports generated yet</p>
+            <p className="text-sm text-muted-foreground max-w-md mb-6">
+              Describe what you want to understand and Catalyst will pull your experiment data into a structured analysis.
+            </p>
             <Button onClick={() => setDialogOpen(true)}>
-              <Plus className="h-4 w-4 mr-2" />
-              Generate first report
+              <Sparkles className="h-4 w-4 mr-2" />
+              Generate first AI report
             </Button>
           </CardContent>
         </Card>
@@ -208,12 +221,6 @@ export function ReportsPageClient({ reports: initialReports, projects, experimen
             allLabel="All experiments"
           />
         )}
-        <div className="flex items-end ml-auto">
-          <Button onClick={() => setDialogOpen(true)} size="sm">
-            <Plus className="h-4 w-4 mr-2" />
-            New report
-          </Button>
-        </div>
       </ResourceFilterRow>
 
       {filtered.length === 0 ? (

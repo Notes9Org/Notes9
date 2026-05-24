@@ -64,6 +64,7 @@ export function EditProjectDialog({ project, asMenuItem = false, open: controlle
   // Form state
   const [name, setName] = useState(project.name)
   const [description, setDescription] = useState(project.description || "")
+  const [status, setStatus] = useState(project.status || "planning")
   const [priority, setPriority] = useState(project.priority || "medium")
   const [startDate, setStartDate] = useState(project.start_date || "")
   const [endDate, setEndDate] = useState(project.end_date || "")
@@ -74,6 +75,7 @@ export function EditProjectDialog({ project, asMenuItem = false, open: controlle
     if (open) {
       setName(project.name)
       setDescription(project.description || "")
+      setStatus(project.status || "planning")
       setPriority(project.priority || "medium")
       setStartDate(project.start_date || "")
       setEndDate(project.end_date || "")
@@ -106,6 +108,7 @@ export function EditProjectDialog({ project, asMenuItem = false, open: controlle
         .update({
           name: name.trim(),
           description: description.trim() || null,
+          status,
           priority,
           start_date: startDate || null,
           end_date: endDate || null,
@@ -149,7 +152,7 @@ export function EditProjectDialog({ project, asMenuItem = false, open: controlle
           </Button>
         </DialogTrigger>
       ) : null)}
-      <DialogContent className="sm:max-w-[600px] max-h-[90vh] overflow-y-auto" onKeyDown={handleKeyDown}>
+      <DialogContent dialogSize="md" className="max-h-[90vh] overflow-y-auto" onKeyDown={handleKeyDown}>
         <DialogHeader>
           <DialogTitle>Edit Project</DialogTitle>
           <DialogDescription>
@@ -176,20 +179,37 @@ export function EditProjectDialog({ project, asMenuItem = false, open: controlle
             />
           </div>
 
-          {/* Priority */}
-          <div className="space-y-2">
-            <Label htmlFor="priority">Priority</Label>
-            <Select value={priority} onValueChange={setPriority} disabled={isSaving}>
-              <SelectTrigger id="priority">
-                <SelectValue placeholder="Select priority" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="low">Low</SelectItem>
-                <SelectItem value="medium">Medium</SelectItem>
-                <SelectItem value="high">High</SelectItem>
-                <SelectItem value="critical">Critical</SelectItem>
-              </SelectContent>
-            </Select>
+          {/* Status + Priority */}
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="status">Status</Label>
+              <Select value={status} onValueChange={setStatus} disabled={isSaving}>
+                <SelectTrigger id="status">
+                  <SelectValue placeholder="Select status" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="planning">Planning</SelectItem>
+                  <SelectItem value="active">Active</SelectItem>
+                  <SelectItem value="on_hold">On hold</SelectItem>
+                  <SelectItem value="completed">Completed</SelectItem>
+                  <SelectItem value="archived">Archived</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="priority">Priority</Label>
+              <Select value={priority} onValueChange={setPriority} disabled={isSaving}>
+                <SelectTrigger id="priority">
+                  <SelectValue placeholder="Select priority" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="low">Low</SelectItem>
+                  <SelectItem value="medium">Medium</SelectItem>
+                  <SelectItem value="high">High</SelectItem>
+                  <SelectItem value="critical">Critical</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
           </div>
 
           {/* Dates */}

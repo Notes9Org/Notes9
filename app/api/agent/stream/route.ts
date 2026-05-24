@@ -2,6 +2,7 @@ import {
   buildNotes9AgentRequestBody,
   type Notes9AgentHistoryItem,
 } from '@/lib/notes9-agent-request';
+import { verifyBearerToken } from "@/lib/verify-bearer-token";
 
 export const maxDuration = 300;
 // Node runtime buffers a passed-through ReadableStream until a flush threshold
@@ -41,6 +42,14 @@ export async function POST(req: Request) {
       { status: 401, headers: { 'Content-Type': 'application/json' } }
     );
   }
+  const _verifiedUser = await verifyBearerToken(token)
+  if (!_verifiedUser) {
+    return new Response(JSON.stringify({ error: "Unauthorized" }), {
+      status: 401,
+      headers: { "Content-Type": "application/json" },
+    })
+  }
+
 
   if (!NOTES9_API_BASE) {
     return new Response(
@@ -56,6 +65,7 @@ export async function POST(req: Request) {
     // cleared in `finally` so it cannot abort the streaming body afterward.
     const _ctrl = new AbortController();
     const _timeout = setTimeout(() => _ctrl.abort(), 90_000);
+    const _upstreamStart = Date.now();
     let response: Response;
     try {
       response = await fetch(`${NOTES9_API_BASE}/notes9/stream`, {
@@ -70,6 +80,7 @@ export async function POST(req: Request) {
     } finally {
       clearTimeout(_timeout);
     }
+    console.log(JSON.stringify({ event: 'ai_upstream_complete', route: 'agent/stream', duration_ms: Date.now() - _upstreamStart, status: response.status, sessionId: (upstreamBody as { session_id?: string })?.session_id ?? null }));
 
     if (!response.ok) {
       const errText = await response.text();

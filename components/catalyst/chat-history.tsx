@@ -33,10 +33,10 @@ export function ChatHistory({
       {sessions.length === 0 && (
         <div className="flex flex-col items-center justify-center py-6 border-b border-border/50 bg-muted/5">
           <div className="relative mb-2">
-            <div className="absolute inset-0 animate-pulse rounded-full bg-gradient-to-r from-orange-400 to-pink-500 opacity-20 blur-xl" />
-            <Sparkles className="relative size-4 text-orange-500" />
+            <div className="absolute inset-0 animate-pulse rounded-full bg-primary/15 blur-xl" />
+            <Sparkles className="relative size-4 text-primary" />
           </div>
-          <span className="text-xs font-semibold bg-gradient-to-r from-orange-500 to-pink-600 bg-clip-text text-transparent">
+          <span className="text-xs font-semibold text-primary">
             Catalyst AI
           </span>
         </div>

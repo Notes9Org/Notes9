@@ -1,3 +1,5 @@
+import { verifyBearerToken } from "@/lib/verify-bearer-token"
+
 /** Long Biomni design-mode runs can exceed 120s; 300s matches typical Vercel Pro serverless max (raise on Fluid/self-host if needed). */
 export const maxDuration = 300;
 
@@ -49,6 +51,15 @@ export async function POST(req: Request) {
     });
   }
 
+  // Real JWT verification — `token` being non-empty is not authentication.
+  const _verifiedUser = await verifyBearerToken(token);
+  if (!_verifiedUser) {
+    return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+      status: 401,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }
+
   const query = typeof body.query === 'string' ? body.query : String(body.query ?? '');
   const session_id =
     typeof body.session_id === 'string' ? body.session_id : String(body.session_id ?? '');
@@ -93,6 +104,7 @@ export async function POST(req: Request) {
   }
 
   try {
+    const _upstreamStart = Date.now();
     const response = await fetch(UPSTREAM, {
       method: 'POST',
       headers: {
@@ -102,6 +114,7 @@ export async function POST(req: Request) {
       },
       body: JSON.stringify(forwardBody),
     });
+    console.log(JSON.stringify({ event: 'ai_upstream_complete', route: 'literature/biomni-stream', duration_ms: Date.now() - _upstreamStart, status: response.status, sessionId: (forwardBody as { session_id?: string })?.session_id ?? null }));
 
     if (!response.ok) {
       const errText = await response.text();

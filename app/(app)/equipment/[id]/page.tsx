@@ -13,6 +13,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
+import { PageHeading } from "@/components/ui/page-heading"
 import { ArrowLeft, Microscope, MapPin, Calendar, AlertTriangle } from 'lucide-react'
 import Link from 'next/link'
 import { EquipmentActions } from './equipment-actions'
@@ -95,9 +96,9 @@ export default async function EquipmentDetailPage({
             </Button>
             <div className="min-w-0 space-y-1">
               <div className="flex flex-wrap items-center gap-2">
-                <h1 className="text-2xl font-bold tracking-tight text-foreground md:text-3xl">
+                <PageHeading>
                   {equipment.name}
-                </h1>
+                </PageHeading>
                 <Badge
                   variant={
                     equipment.status === "available"

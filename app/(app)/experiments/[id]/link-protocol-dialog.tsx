@@ -133,7 +133,7 @@ export function LinkProtocolDialog({
           </Button>
         )}
       </DialogTrigger>
-      <DialogContent className="sm:max-w-[425px]">
+      <DialogContent dialogSize="sm">
         <DialogHeader>
           <DialogTitle>Link Protocol</DialogTitle>
           <DialogDescription>

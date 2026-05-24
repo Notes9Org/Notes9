@@ -13,6 +13,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
+import { PageHeading } from "@/components/ui/page-heading"
 import { ArrowLeft, CheckCircle, Pencil, X } from 'lucide-react'
 import Link from 'next/link'
 import { ProtocolActions } from './protocol-actions'
@@ -196,9 +197,9 @@ export default async function ProtocolDetailPage({
                 </p>
               ) : null}
               <div className="flex flex-wrap items-center gap-2">
-                <h1 className="text-2xl font-bold tracking-tight text-foreground md:text-3xl">
+                <PageHeading>
                   {protocol.name}
-                </h1>
+                </PageHeading>
                 <Badge variant="outline">v{protocol.version}</Badge>
                 {protocol.is_active ? (
                   <Badge variant="default" className="gap-1">

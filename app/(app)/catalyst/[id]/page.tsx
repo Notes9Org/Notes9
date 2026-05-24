@@ -1,11 +1,11 @@
-import { CatalystChat } from '@/components/catalyst/catalyst-page';
+import { CatalystFullPage } from "@/components/catalyst/catalyst-full-page"
 
 export default async function CatalystSessionPage({
   params,
 }: {
-  params: Promise<{ id: string }>;
+  params: Promise<{ id: string }>
 }) {
-  const { id } = await params;
-  return <CatalystChat sessionId={id} />;
+  const { id } = await params
+  return <CatalystFullPage sessionId={id} />
 }
 

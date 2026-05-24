@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
 import { useMediaQuery } from "@/hooks/use-media-query"
 import { useRouter, useSearchParams } from "next/navigation"
 import { resolveInitialProjectIdParam } from "@/lib/url-project-param"
@@ -10,13 +10,22 @@ import { NewLabNoteDialog } from "@/app/(app)/lab-notes/new-lab-note-dialog"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { Loader2, Plus, Grid3x3, List, NotebookPen } from "lucide-react"
-import { Card, CardContent } from "@/components/ui/card"
+import {
+  Empty,
+  EmptyHeader,
+  EmptyMedia,
+  EmptyTitle,
+  EmptyDescription,
+  EmptyContent,
+} from "@/components/ui/empty"
 import { useBreadcrumb } from "@/components/layout/breadcrumb-context"
+import { CatalystSectionHero } from "@/components/catalyst/catalyst-section-hero"
 import {
   FILTER_ALL,
   ResourceFilterRow,
   ResourceListFilter,
 } from "@/components/ui/resource-list-filters"
+import { ViewModeToggle } from "@/components/ui/view-mode-toggle"
 
 type LabNote = {
   id: string
@@ -34,7 +43,6 @@ export default function LabNotesPage() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const supabase = createClient()
-  const appliedProjectFromUrl = useRef(false)
   const { setSegments } = useBreadcrumb()
 
   const [notes, setNotes] = useState<LabNote[]>([])
@@ -119,29 +127,34 @@ export default function LabNotesPage() {
         }) || []
 
       setNotes(normalized)
-      setSelectedNote(normalized[0] || null)
+      const noteIdParam = searchParams.get("noteId")
+      const preferred = noteIdParam
+        ? normalized.find((n: { id: string }) => n.id === noteIdParam)
+        : undefined
+      setSelectedNote(preferred ?? normalized[0] ?? null)
     } catch (err: any) {
       setError(err.message || "Failed to load lab notes.")
     } finally {
       setIsLoading(false)
     }
-  }, [supabase])
+  }, [supabase, searchParams])
 
   useEffect(() => {
     fetchNotes()
   }, [fetchNotes])
 
+  // Keep the project filter in sync with the URL `?project=` param. Previously
+  // this used a one-shot ref guard that prevented re-sync on back-navigation,
+  // so users who went `/projects/A → /lab-notes?project=A → /lab-notes/X → ←`
+  // landed on the global list. Now we re-apply whenever the URL changes; we
+  // only fall back to "all" if the URL has no project param (explicit reset).
   useEffect(() => {
-    if (appliedProjectFromUrl.current) return
     const raw = searchParams.get("project")
     const resolved = resolveInitialProjectIdParam(
       raw ?? undefined,
       projectOptions.map((o) => o.value)
     )
-    if (resolved) {
-      appliedProjectFromUrl.current = true
-      setProjectFilter(resolved)
-    }
+    setProjectFilter(resolved ?? FILTER_ALL)
   }, [searchParams, projectOptions])
 
   useEffect(() => {
@@ -231,43 +244,22 @@ export default function LabNotesPage() {
 
   return (
     <div className="space-y-6">
+      <CatalystSectionHero size="sm" scope="lab-notes" />
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <p className="text-muted-foreground">
           Access and manage lab notes across your experiments.
         </p>
         <div className="flex items-center gap-2 shrink-0">
-          <div className="inline-flex gap-1 rounded-lg border p-1">
-            <Button
-              variant={viewMode === "grid" ? "default" : "ghost"}
-              size="sm"
-              onClick={() => setViewMode("grid")}
-              className="gap-2"
-              aria-label="Switch to grid view"
-            >
-              <Grid3x3 className="h-4 w-4" />
-              Grid
-            </Button>
-            <Button
-              variant={isMobile ? "ghost" : viewMode === "table" ? "default" : "ghost"}
-              size="sm"
-              onClick={() => !isMobile && setViewMode("table")}
-              className="gap-2"
-              disabled={isMobile}
-              aria-disabled={isMobile}
-              aria-label="Switch to table view"
-            >
-              <List className="h-4 w-4" />
-              Table
-            </Button>
-          </div>
+          <ViewModeToggle value={viewMode} onChange={setViewMode} tableDisabled={isMobile} />
           <Button
-            size="icon"
-            variant="ghost"
+            size="sm"
             onClick={handleNewNote}
-            className="size-8 rounded-md text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
-            aria-label="New lab note"
+            className="gap-2"
+            aria-label="New lab note — choose project and experiment"
+            title="New lab note — choose project and experiment"
           >
             <Plus className="size-4" />
+            New lab note
           </Button>
         </div>
       </div>
@@ -302,16 +294,24 @@ export default function LabNotesPage() {
           <span>Loading lab notes...</span>
         </div>
       ) : notes.length === 0 ? (
-        <Card>
-          <CardContent className="flex flex-col items-center justify-center py-12">
-            <NotebookPen className="h-12 w-12 text-muted-foreground mb-4" />
-            <p className="text-muted-foreground mb-4">No lab notes yet</p>
+        <Empty className="border border-dashed">
+          <EmptyHeader>
+            <EmptyMedia variant="icon">
+              <NotebookPen aria-hidden />
+            </EmptyMedia>
+            <EmptyTitle>No lab notes yet</EmptyTitle>
+            <EmptyDescription>
+              Lab notes capture what happened in an experiment — observations, deviations from the
+              protocol, snapshots of results. Each note lives under an experiment in a project.
+            </EmptyDescription>
+          </EmptyHeader>
+          <EmptyContent>
             <Button onClick={handleNewNote}>
               <NotebookPen className="h-4 w-4 mr-2" />
-              Create First Lab Note
+              New lab note
             </Button>
-          </CardContent>
-        </Card>
+          </EmptyContent>
+        </Empty>
       ) : filteredNotes.length === 0 ? (
         <div className="flex flex-col items-center gap-3 py-10 text-center text-sm text-muted-foreground">
           <p>No lab notes match the selected filters.</p>
@@ -343,6 +343,7 @@ export default function LabNotesPage() {
         open={newNoteDialogOpen}
         onOpenChange={setNewNoteDialogOpen}
         onCreated={handleNewNoteCreated}
+        defaultProjectId={projectFilter !== FILTER_ALL ? projectFilter : null}
       />
     </div>
   )

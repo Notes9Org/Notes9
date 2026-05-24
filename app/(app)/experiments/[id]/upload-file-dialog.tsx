@@ -365,7 +365,7 @@ export function UploadFileDialog({ experimentId, onUploadComplete }: UploadFileD
           Upload Files
         </Button>
       </DialogTrigger>
-      <DialogContent className="sm:max-w-[600px] max-h-[90vh] overflow-y-auto">
+      <DialogContent dialogSize="md" className="max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Upload Data Files</DialogTitle>
           <DialogDescription>

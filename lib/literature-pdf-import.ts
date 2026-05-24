@@ -426,11 +426,71 @@ export async function importLiteraturePdfFromRemote(params: {
  * Links we can attempt from the server (same href as the search card PDF button).
  * EuropePMC / EBI often return `http://`; we upgrade known hosts to `https` before fetch.
  */
+const PDF_HOSTNAME_ALLOWLIST: ReadonlyArray<string> = [
+  "pubmed.ncbi.nlm.nih.gov",
+  "www.ncbi.nlm.nih.gov",
+  "ncbi.nlm.nih.gov",
+  "pmc.ncbi.nlm.nih.gov",
+  "europepmc.org",
+  "www.ebi.ac.uk",
+  "ebi.ac.uk",
+  "www.biorxiv.org",
+  "www.medrxiv.org",
+  "biorxiv.org",
+  "medrxiv.org",
+  "arxiv.org",
+  "www.arxiv.org",
+  "www.nature.com",
+  "www.science.org",
+  "www.cell.com",
+  "www.pnas.org",
+  "pubs.acs.org",
+  "onlinelibrary.wiley.com",
+  "link.springer.com",
+  "www.tandfonline.com",
+  "journals.plos.org",
+  "elifesciences.org",
+  "www.frontiersin.org",
+  "academic.oup.com",
+  "www.thelancet.com",
+  "jamanetwork.com",
+  "ashpublications.org",
+]
+
+function hostnameIsBlocked(hostname: string): boolean {
+  const h = hostname.toLowerCase()
+  if (h === "localhost") return true
+  if (h === "metadata.google.internal") return true
+  if (/^169\.254\./.test(h)) return true
+  if (/^127\./.test(h)) return true
+  if (/^10\./.test(h)) return true
+  if (/^192\.168\./.test(h)) return true
+  if (/^172\.(1[6-9]|2\d|3[0-1])\./.test(h)) return true
+  if (h === "::1") return true
+  if (/^fc/.test(h) || /^fd/.test(h)) return true
+  return false
+}
+
+function hostnameIsAllowed(hostname: string): boolean {
+  const h = hostname.toLowerCase()
+  if (PDF_HOSTNAME_ALLOWLIST.includes(h)) return true
+  return PDF_HOSTNAME_ALLOWLIST.some(
+    (allowed) => h.endsWith("." + allowed)
+  )
+}
+
 function shouldTrySearchCardPdfUrl(url: string): boolean {
   const u = url.trim()
   if (!/^https?:\/\//i.test(u)) return false
   const lower = u.toLowerCase()
   if (lower.includes("sciencedirect.com") && lower.includes("pdfft")) return false
+  try {
+    const parsed = new URL(u)
+    if (hostnameIsBlocked(parsed.hostname)) return false
+    if (!hostnameIsAllowed(parsed.hostname)) return false
+  } catch {
+    return false
+  }
   return true
 }
 

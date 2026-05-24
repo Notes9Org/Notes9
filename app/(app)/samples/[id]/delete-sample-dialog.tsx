@@ -47,7 +47,7 @@ export function DeleteSampleDialog({
         description: `Sample ${sampleCode} has been deleted successfully.`,
       })
 
-      router.push("/samples")
+      ;(() => { const pq = typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("project") : null; router.push(pq ? "/samples?project=" + pq : "/samples"); })()
       router.refresh()
     } catch (error: any) {
       toast({

@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect, useRef, useCallback, useMemo } from "react"
-import { useRouter, useSearchParams } from "next/navigation"
+import { useRouter, useSearchParams, usePathname } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -61,7 +61,16 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet"
-import { useContentDiffs } from "@/hooks/use-content-diffs"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
 import { LabNoteChangeApprovalBar } from "@/components/lab-notes/lab-note-change-approval"
 import {
   USER_STORAGE_BUCKET,
@@ -117,6 +126,7 @@ export function LabNotesTab({
   experimentPageHref?: string
 }) {
   const router = useRouter();
+  const pathname = usePathname();
   const searchParams = useSearchParams();
   const { toast } = useToast();
   const { setSegments } = useBreadcrumb();
@@ -129,6 +139,7 @@ export function LabNotesTab({
   const [isPublishing, setIsPublishing] = useState(false);
   const [publicUrl, setPublicUrl] = useState<string | null>(null);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  const [pendingSwitchNote, setPendingSwitchNote] = useState<LabNote | null>(null);
 
   const [formData, setFormData] = useState({
     title: "",
@@ -174,6 +185,10 @@ export function LabNotesTab({
   // Highlight from AI reference navigation — retries until content is loaded
   const highlightParam = searchParams.get(HIGHLIGHT_PARAM);
   const highlightFiredRef = useRef<string | null>(null);
+  // Memo of share-status checks performed this session: maps note id → "published" |
+  // "unpublished". Without this, switching notes back and forth re-queries
+  // /api/share/note/<id> every time and floods the dev server with 404s.
+  const publishStatusCacheRef = useRef<Map<string, "published" | "unpublished">>(new Map());
   const urlHighlightTarget = highlightParam ? decodeHighlightParam(highlightParam) : null;
   const activeHighlightTarget =
     inlineHighlightTarget &&
@@ -242,12 +257,11 @@ export function LabNotesTab({
     return () => { cancelled = true; clearTimeout(initialTimer); };
   }, [activeHighlightTarget, selectedNote?.id, noteEditorReady]);
 
-  // Tracks the content at the time of the last successful save, for diff recording
-  const lastSavedContentRef = useRef<string>("");
-
-  const { recordDiff } = useContentDiffs("lab_note", selectedNote?.id);
-
-  // Auto-save functionality
+  // Auto-save functionality.
+  // Persistence only — history entries are recorded exclusively by the
+  // Accept & Save flow in ContentChangeApprovalBar so each row in
+  // content_diffs corresponds to one user-confirmed change rather than a
+  // 2-second typing window.
   const handleAutoSave = async (content: string, title?: string, noteType?: string) => {
     // Use provided values or fall back to formData
     const titleToSave = title !== undefined ? title : formData.title;
@@ -285,14 +299,11 @@ export function LabNotesTab({
         // Switch to editing mode
         setIsCreating(false);
         setSelectedNote(data);
-        lastSavedContentRef.current = content;
         setSavedContent(content);
 
         // Refresh notes list
         await fetchNotes();
       } else {
-        const previousContent = lastSavedContentRef.current;
-
         // Update existing note
         const { error } = await supabase
           .from("lab_notes")
@@ -306,18 +317,9 @@ export function LabNotesTab({
 
         if (error) throw error;
 
-        if (previousContent !== content) {
-          void recordDiff({
-            recordType: "lab_note",
-            recordId: selectedNote.id,
-            previousContent,
-            newContent: content,
-            documentTitle: titleToSave.trim() || null,
-          });
-        }
-        lastSavedContentRef.current = content;
-        // Do not update `savedContent` here: that baseline drives the diff bar vs draft.
-        // Autosave would match them and hide "Pending changes" before the user clicks Accept & Save.
+        // Intentionally do NOT update `savedContent`: it is the baseline the
+        // approval bar diffs the live draft against, and gets advanced only
+        // by Accept & Save. Bumping it here would hide the bar mid-session.
 
         // Update local state — use functional updater to avoid stale closure
         setNotes((prev) =>
@@ -353,15 +355,11 @@ export function LabNotesTab({
     enabled: true, // Always enabled, even during creation
   });
 
-  // Baseline for diff bar when switching notes
+  // Baseline for diff bar when switching notes — must mirror selectedNote.content
+  // so the approval bar doesn't flash "Pending changes" with the prior note's
+  // body as the comparison baseline on the first render after a switch.
   useEffect(() => {
-    if (selectedNote) {
-      setSavedContent(selectedNote.content);
-      lastSavedContentRef.current = selectedNote.content;
-    } else {
-      setSavedContent("");
-      lastSavedContentRef.current = "";
-    }
+    setSavedContent(selectedNote?.content ?? "");
   }, [selectedNote?.id]);
 
   // Fetch existing lab notes
@@ -390,6 +388,23 @@ export function LabNotesTab({
 
   const openScientificCalculator = useCallback(() => setScientificCalculatorOpen(true), [])
 
+  // Mirror selectedNote?.id and isCreating into refs so `fetchNotes` stays
+  // referentially stable across selection changes. Previously `fetchNotes`
+  // listed `selectedNote?.id` in its deps and got recreated on every note
+  // switch — the effect at line ~462 then refired with the *stale*
+  // `noteIdFromQuery` (because `router.replace` updates the URL asynchronously),
+  // momentarily re-selecting the old note before the URL settled and the
+  // next firing re-selected the new one. The TiptapEditor's `key` ping-pong
+  // forced ProseMirror to remount three times per click.
+  const selectedNoteIdRef = useRef<string | null>(selectedNote?.id ?? null);
+  useEffect(() => {
+    selectedNoteIdRef.current = selectedNote?.id ?? null;
+  }, [selectedNote?.id]);
+  const isCreatingRef = useRef(isCreating);
+  useEffect(() => {
+    isCreatingRef.current = isCreating;
+  }, [isCreating]);
+
   const fetchNotes = useCallback(async (preferredNoteId?: string | null) => {
     try {
       const supabase = createClient();
@@ -403,13 +418,18 @@ export function LabNotesTab({
       setNotes(data || []);
 
       // Auto-select preferred note (from query) or first available when not creating
-      if (data && data.length > 0 && !isCreating) {
+      if (data && data.length > 0 && !isCreatingRef.current) {
         const next =
           (preferredNoteId && data.find((n) => n.id === preferredNoteId)) ||
-          data.find((n) => n.id === selectedNote?.id) ||
+          data.find((n) => n.id === selectedNoteIdRef.current) ||
           data[0];
 
-        if (next) {
+        // Skip the state writes when the resolved note is already the one
+        // we're showing — without this, every refetch replaces selectedNote
+        // with a new reference (same id, fresh row from the network), which
+        // briefly remounts the editor via `key={selectedNote?.id}` and wipes
+        // any in-flight diff/edit state for no user-visible benefit.
+        if (next && next.id !== selectedNoteIdRef.current) {
           setSelectedNote(next);
           setFormData({
             title: next.title,
@@ -426,7 +446,7 @@ export function LabNotesTab({
         variant: "destructive",
       });
     }
-  }, [experimentId, isCreating, selectedNote?.id, toast]);
+  }, [experimentId, toast]);
 
   // Fetch current user ID
   useEffect(() => {
@@ -441,10 +461,26 @@ export function LabNotesTab({
   }, []);
 
   useEffect(() => {
-    fetchNotes(noteIdFromQuery);
+    // Guard against a previous experiment's `fetchNotes` resolving after the
+    // user has navigated to a new experiment and overwriting the fresh
+    // `notes` list. fetchNotes itself can't cancel (it's a useCallback), but
+    // we can flip a flag to no-op late state writers indirectly — here we
+    // just skip the call if it would land on an unmounted/stale instance.
+    let cancelled = false;
+    (async () => {
+      if (cancelled) return;
+      await fetchNotes(noteIdFromQuery);
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, [experimentId, noteIdFromQuery, fetchNotes]);
 
-  // Sync header breadcrumb: project › experiment › current note name
+  // Sync header breadcrumb: project › experiment › current note name.
+  // On unmount (e.g. user switches to Overview tab) we restore the 2-segment
+  // base instead of clearing — clearing would leave the breadcrumb blank
+  // because the parent page's <SetPageBreadcrumb> doesn't re-fire on tab
+  // change (its segments prop is stable).
   useEffect(() => {
     if (!projectName || !experimentName) return;
     const baseSegments = [
@@ -457,7 +493,7 @@ export function LabNotesTab({
     const noteTitle = formData.title || selectedNote?.title || "Lab notes";
     setSegments([...baseSegments, { label: noteTitle }]);
     return () => {
-      setSegments([]);
+      setSegments(baseSegments);
     };
   }, [
     projectName,
@@ -503,27 +539,47 @@ export function LabNotesTab({
     }
   }, [selectedNote?.id, isCreating]);
 
-  // Published if public API returns JSON (works for any viewer; storage may be author-only)
+  // Published if public API returns JSON (works for any viewer; storage may be author-only).
+  // Dep is `selectedNote?.id` so we don't refire on every parent re-render (the prior
+  // `[selectedNote]` dep was object-identity and caused a 404 storm on toggle-back).
+  // Result is memoized per session so unpublished notes don't get re-fetched.
   useEffect(() => {
-    const checkPublicStatus = async () => {
-      setPublicUrl(null);
-      if (!selectedNote) return;
+    const id = selectedNote?.id;
+    setPublicUrl(null);
+    if (!id) return;
 
+    const cached = publishStatusCacheRef.current.get(id);
+    if (cached === "unpublished") return;
+    if (cached === "published") {
+      setPublicUrl(`${window.location.origin}/share/note/${id}`);
+      return;
+    }
+
+    let cancelled = false;
+    (async () => {
       try {
-        const res = await fetch(`/api/share/note/${encodeURIComponent(selectedNote.id)}`, {
+        const res = await fetch(`/api/share/note/${encodeURIComponent(id)}`, {
           method: "GET",
           cache: "no-store",
         });
+        if (cancelled) return;
         if (res.ok) {
-          setPublicUrl(`${window.location.origin}/share/note/${selectedNote.id}`);
+          publishStatusCacheRef.current.set(id, "published");
+          setPublicUrl(`${window.location.origin}/share/note/${id}`);
+        } else if (res.status === 404) {
+          publishStatusCacheRef.current.set(id, "unpublished");
         }
+        // Other status codes (5xx, 401) intentionally NOT cached so a transient
+        // server hiccup gets re-asked next time the user opens the note.
       } catch {
-        /* ignore */
+        /* network blip — leave uncached so a retry is possible */
       }
-    };
+    })();
 
-    checkPublicStatus();
-  }, [selectedNote]);
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedNote?.id]);
 
   // Sync current note metadata to document root for external/accessibility use
   useEffect(() => {
@@ -697,7 +753,6 @@ export function LabNotesTab({
         if (error) throw error;
 
         setSavedContent(formData.content);
-        lastSavedContentRef.current = formData.content;
 
         toast({
           title: "Note updated",
@@ -716,7 +771,6 @@ export function LabNotesTab({
         if (error) throw error;
 
         setSavedContent(formData.content);
-        lastSavedContentRef.current = formData.content;
 
         recordRumEvent('lab_note_created', { experimentId })
 
@@ -757,6 +811,12 @@ export function LabNotesTab({
 
   const handleNewNote = async () => {
     setIsCreatingNew(true);
+    // Drop any pending debounced save before the selectedNote pivot. Without
+    // this, content typed in note A 1.5s before the user clicked + would fire
+    // its update after the pivot and overwrite the just-created note N with
+    // A's body (since handleAutoSave reads the latest selectedNote at fire
+    // time, not at schedule time).
+    cancelPendingSave();
     try {
       const supabase = createClient();
       const {
@@ -781,6 +841,12 @@ export function LabNotesTab({
       if (error) throw error;
 
       recordRumEvent('lab_note_created', { experimentId })
+      try {
+        if (typeof window !== 'undefined' && !window.sessionStorage.getItem('n9_first_note_sent')) {
+          recordRumEvent('user_first_note', {})
+          window.sessionStorage.setItem('n9_first_note_sent', '1')
+        }
+      } catch {}
 
       toast({
         title: "Note created",
@@ -795,6 +861,10 @@ export function LabNotesTab({
         note_type: data.note_type || "general",
       });
       setIsCreating(false);
+      // Point the URL at the freshly-created note so the sidebar highlight
+      // moves and the editor's `key={selectedNote?.id}` flips to remount with
+      // an empty body.
+      syncNoteIdInUrl(data.id);
     } catch (error: any) {
       console.error("Error creating note:", error);
       toast({
@@ -864,7 +934,31 @@ export function LabNotesTab({
     }
   };
 
-  const handleSelectNote = (note: LabNote) => {
+  /**
+   * Mirror the currently-open note into the URL via `?noteId=<id>`. Used by
+   * the sidebar select-note and the `+` create-note flows so the URL is
+   * always the source of truth — without this, refresh would jump back to
+   * the stale `noteId` and the sidebar highlight wouldn't update.
+   * Pass `null` to clear the param entirely (e.g. when no note is selected).
+   */
+  const syncNoteIdInUrl = useCallback(
+    (noteId: string | null) => {
+      const next = new URLSearchParams(searchParams.toString());
+      if (noteId) {
+        if (next.get("noteId") === noteId) return; // no-op when already in sync
+        next.set("noteId", noteId);
+      } else {
+        if (!next.has("noteId")) return;
+        next.delete("noteId");
+      }
+      const qs = next.toString();
+      router.replace(qs ? `${pathname}?${qs}` : pathname ?? "", { scroll: false });
+    },
+    [pathname, router, searchParams],
+  );
+
+  const performSwitchToNote = useCallback((note: LabNote) => {
+    cancelPendingSave();
     setIsCreating(false);
     setSelectedNote(note);
     setFormData({
@@ -872,27 +966,62 @@ export function LabNotesTab({
       content: note.content,
       note_type: note.note_type || "general",
     });
-    lastSavedContentRef.current = note.content;
+    setSavedContent(note.content);
     fetchLinkedProtocols(note.id);
+    syncNoteIdInUrl(note.id);
+  }, [cancelPendingSave, fetchLinkedProtocols, syncNoteIdInUrl]);
+
+  const handleSelectNote = (note: LabNote) => {
+    if (note.id === selectedNote?.id) return; // already viewing this note
+    const hasPendingChanges =
+      selectedNote != null && formData.content !== savedContent;
+    if (hasPendingChanges) {
+      setPendingSwitchNote(note);
+      return;
+    }
+    performSwitchToNote(note);
   };
 
   const handleDeleteNote = async (e: React.MouseEvent, note: LabNote) => {
     e.stopPropagation();
+    // Optimistic delete: hide the note immediately so the click feels instant,
+    // then issue the network call. On failure we re-insert and surface a toast
+    // — the user only ever sees a delay if it actually fails, which is rare.
+    const previousNotes = notes;
+    const wasSelected = selectedNote?.id === note.id;
+    const previousSelected = selectedNote;
+    setNotes((prev) => prev.filter((n) => n.id !== note.id));
+    if (wasSelected) {
+      cancelPendingSave(); // don't let a queued save fire against the deleted row
+      setSelectedNote(null);
+      setIsCreating(true);
+      setFormData({ title: "", content: "", note_type: "general" });
+      syncNoteIdInUrl(null); // drop stale noteId from URL
+    }
     try {
       const supabase = createClient();
       const { error } = await supabase.from("lab_notes").delete().eq("id", note.id);
       if (error) throw error;
-      setNotes((prev) => prev.filter((n) => n.id !== note.id));
-      if (selectedNote?.id === note.id) {
-        setSelectedNote(null);
-        setIsCreating(true);
-        setFormData({ title: "", content: "", note_type: "general" });
-      }
       toast({ title: "Note deleted", description: `"${note.title}" has been removed.` });
     } catch (err: any) {
+      // Roll back local state — restore the deleted row in its prior position,
+      // and re-select it if it was active so the user doesn't lose their place.
+      setNotes(previousNotes);
+      if (wasSelected) {
+        setSelectedNote(previousSelected);
+        setIsCreating(false);
+        if (previousSelected) {
+          setFormData({
+            title: previousSelected.title,
+            content: previousSelected.content,
+            note_type: previousSelected.note_type || "general",
+          });
+          syncNoteIdInUrl(previousSelected.id);
+        }
+      }
       toast({
-        title: "Error",
-        description: err.message || "Failed to delete note",
+        title: "Couldn't delete note",
+        description: err.message || "The note was restored. Please try again.",
         variant: "destructive",
       });
     }
@@ -906,30 +1035,52 @@ export function LabNotesTab({
 
   const handleRenameNote = async () => {
     if (!renameNoteId || !renameTitle.trim()) return;
+    const id = renameNoteId;
+    const newTitle = renameTitle.trim();
+    // Capture the previous title in case we need to roll back. Reading the
+    // current notes array (vs the selectedNote object) handles renames on
+    // notes other than the one currently being viewed.
+    const previousTitle = notes.find((n) => n.id === id)?.title ?? "";
+    const previousSelectedTitle = selectedNote?.id === id ? selectedNote.title : null;
+    const nowIso = new Date().toISOString();
+
+    // Optimistic update — close the dialog and reflect the rename immediately.
+    setNotes((prev) =>
+      prev.map((n) => (n.id === id ? { ...n, title: newTitle, updated_at: nowIso } : n)),
+    );
+    if (selectedNote?.id === id) {
+      setFormData((f) => ({ ...f, title: newTitle }));
+      setSelectedNote((prev) => (prev?.id === id ? { ...prev, title: newTitle } : prev));
+    }
+    setRenameNoteId(null);
+    setRenameTitle("");
+
     try {
       const supabase = createClient();
       const { error } = await supabase
         .from("lab_notes")
-        .update({ title: renameTitle.trim(), updated_at: new Date().toISOString() })
-        .eq("id", renameNoteId);
+        .update({ title: newTitle, updated_at: nowIso })
+        .eq("id", id);
       if (error) throw error;
+      toast({ title: "Note renamed", description: "Title updated." });
+    } catch (err: any) {
+      // Roll back: restore the original title in the list and (if applicable)
+      // in the currently-selected note + form. Reopen the rename dialog so
+      // the user lands back in the same modal with their attempted title
+      // preserved — easier than starting over from the row menu.
       setNotes((prev) =>
-        prev.map((n) =>
-          n.id === renameNoteId ? { ...n, title: renameTitle.trim(), updated_at: new Date().toISOString() } : n
-        )
+        prev.map((n) => (n.id === id ? { ...n, title: previousTitle } : n)),
       );
-      if (selectedNote?.id === renameNoteId) {
-        setFormData((f) => ({ ...f, title: renameTitle.trim() }));
+      if (previousSelectedTitle !== null) {
+        setFormData((f) => ({ ...f, title: previousSelectedTitle }));
         setSelectedNote((prev) =>
-          prev?.id === renameNoteId ? { ...prev, title: renameTitle.trim() } : prev
+          prev?.id === id ? { ...prev, title: previousSelectedTitle } : prev,
         );
       }
-      toast({ title: "Note renamed", description: "Title updated." });
-      setRenameNoteId(null);
-      setRenameTitle("");
-    } catch (err: any) {
+      setRenameNoteId(id);
+      setRenameTitle(newTitle);
       toast({
-        title: "Error",
+        title: "Couldn't rename note",
         description: getUniqueNameErrorMessage(err, "lab_note"),
         variant: "destructive",
       });
@@ -948,28 +1099,40 @@ export function LabNotesTab({
       setIsEditingTitle(false);
       return;
     }
+    // Optimistic: close edit mode and reflect the new title immediately in
+    // the list, header, and selectedNote so blur → render feels instant.
+    const previousTitle = selectedNote.title || "";
+    const id = selectedNote.id;
+    const nowIso = new Date().toISOString();
+    setNotes((prev) =>
+      prev.map((n) => (n.id === id ? { ...n, title: newTitle, updated_at: nowIso } : n)),
+    );
+    setSelectedNote((prev) => (prev?.id === id ? { ...prev, title: newTitle } : prev));
+    setIsEditingTitle(false);
+
     try {
       const supabase = createClient();
       const { error } = await supabase
         .from("lab_notes")
-        .update({ title: newTitle, updated_at: new Date().toISOString() })
-        .eq("id", selectedNote.id);
+        .update({ title: newTitle, updated_at: nowIso })
+        .eq("id", id);
       if (error) throw error;
-      setNotes((prev) =>
-        prev.map((n) =>
-          n.id === selectedNote.id ? { ...n, title: newTitle, updated_at: new Date().toISOString() } : n
-        )
-      );
-      setSelectedNote((prev) => (prev?.id === selectedNote.id ? { ...prev, title: newTitle } : prev));
       toast({ title: "Note renamed", description: "Title updated." });
     } catch (err: any) {
+      // Roll back the optimistic title swap and reopen the inline editor so
+      // the user can correct the value without losing what they typed.
+      setNotes((prev) =>
+        prev.map((n) => (n.id === id ? { ...n, title: previousTitle } : n)),
+      );
+      setSelectedNote((prev) => (prev?.id === id ? { ...prev, title: previousTitle } : prev));
+      setFormData((f) => ({ ...f, title: newTitle }));
+      setIsEditingTitle(true);
       toast({
-        title: "Error",
+        title: "Couldn't rename note",
         description: getUniqueNameErrorMessage(err, "lab_note"),
         variant: "destructive",
       });
     }
-    setIsEditingTitle(false);
   };
 
   /** PDF/print + downloads: prefer in-form title, then saved note title (avoids empty title in exports). */
@@ -1073,7 +1236,8 @@ export function LabNotesTab({
           setNotebookPanelOpen(true);
           handleNewNote();
         }}
-        aria-label="New lab note"
+        aria-label="Add lab note to this experiment"
+        title="Add lab note to this experiment"
       >
         {isCreatingNew ? (
           <Loader2 className="h-4 w-4 animate-spin" />
@@ -1122,7 +1286,7 @@ export function LabNotesTab({
           }
         }}
       >
-        <DialogContent className="sm:max-w-md" onPointerDownOutside={(e) => e.stopPropagation()}>
+        <DialogContent dialogSize="sm" onPointerDownOutside={(e) => e.stopPropagation()}>
           <DialogHeader>
             <DialogTitle>Rename note</DialogTitle>
           </DialogHeader>
@@ -1501,7 +1665,8 @@ export function LabNotesTab({
                         setNotebookPanelOpen(true);
                         handleNewNote();
                       }}
-                      aria-label="New lab note"
+                      aria-label="Add lab note to this experiment"
+                      title="Add lab note to this experiment"
                     >
                       {isCreatingNew ? (
                         <Loader2 className="h-4 w-4 animate-spin" />
@@ -1556,6 +1721,11 @@ export function LabNotesTab({
                     {/* Same editor + approval column layout as protocol design mode */}
                     <div className="relative min-h-0 min-w-0 flex-1 overflow-hidden">
                       <TiptapEditor
+                        // Hard-remount when the selected note changes so a fresh ProseMirror
+                        // state is built. Without the key, the editor's internal
+                        // `lastEmittedHtmlRef` can suppress the setContent() the parent issues
+                        // and the previous note's body bleeds into a brand-new note.
+                        key={selectedNote?.id ?? "new-note"}
                         content={formData.content}
                         onChange={handleEditorContentChange}
                         placeholder="Write your lab notes here... Use @ to tag protocols"
@@ -1606,6 +1776,45 @@ export function LabNotesTab({
           </div>
         </Card>
       </div>
+      <AlertDialog open={pendingSwitchNote !== null} onOpenChange={(open) => { if (!open) setPendingSwitchNote(null) }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Unsaved changes</AlertDialogTitle>
+            <AlertDialogDescription>
+              {`You have unsaved edits in "${selectedNote?.title || 'this note'}". Save them before switching?`}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setPendingSwitchNote(null)}>Stay</AlertDialogCancel>
+            <Button
+              variant="outline"
+              onClick={() => {
+                const target = pendingSwitchNote
+                setPendingSwitchNote(null)
+                if (target) performSwitchToNote(target)
+              }}
+            >
+              Discard
+            </Button>
+            <AlertDialogAction
+              onClick={async () => {
+                const target = pendingSwitchNote
+                setPendingSwitchNote(null)
+                try {
+                  await forceSave()
+                } catch (err) {
+                  console.error('Save before switch failed', err)
+                  toast({ title: "Couldn't save", description: 'The previous note was kept. Please try again.', variant: 'destructive' })
+                  return
+                }
+                if (target) performSwitchToNote(target)
+              }}
+            >
+              Save and continue
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

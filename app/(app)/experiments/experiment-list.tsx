@@ -15,6 +15,7 @@ import {
   ResourceFilterRow,
   ResourceListFilter,
 } from "@/components/ui/resource-list-filters"
+import { ViewModeToggle } from "@/components/ui/view-mode-toggle"
 import { CATALYST_MENTION_DRAG_MIME } from "@/lib/catalyst-mention-types"
 
 export type ExperimentsProjectContext = { id: string; name: string }
@@ -87,14 +88,25 @@ export function ExperimentsPageContent({
       .sort((a, b) => a.label.localeCompare(b.label))
   }, [baseExperiments])
 
+  // Hard-coded enum so empty statuses still show up in the filter dropdown
+  // with a `(0)` count. Add `data-derived` once a real workflow extends these.
+  const EXPERIMENT_STATUSES = [
+    "planned",
+    "in_progress",
+    "completed",
+    "failed",
+    "paused",
+  ] as const
+
   const statusOptions = useMemo(() => {
-    const s = new Set<string>()
+    const counts = new Map<string, number>()
     for (const e of baseExperiments) {
-      if (e.status) s.add(e.status)
+      if (e.status) counts.set(e.status, (counts.get(e.status) ?? 0) + 1)
     }
-    return Array.from(s)
-      .sort()
-      .map((value) => ({ value, label: value.replace(/_/g, " ") }))
+    return EXPERIMENT_STATUSES.map((value) => ({
+      value,
+      label: `${value.replace(/_/g, " ")} (${counts.get(value) ?? 0})`,
+    }))
   }, [baseExperiments])
 
   const filteredExperiments = useMemo(() => {
@@ -126,30 +138,7 @@ export function ExperimentsPageContent({
               </Link>
             </Button>
           ) : null}
-          <div className="inline-flex gap-1 rounded-lg border p-1">
-            <Button
-              variant={viewMode === "grid" ? "default" : "ghost"}
-              size="sm"
-              onClick={() => setViewMode("grid")}
-              className="gap-2"
-              aria-label="Switch to grid view"
-            >
-              <Grid3x3 className="h-4 w-4" />
-              Grid
-            </Button>
-            <Button
-              variant={isMobile ? "ghost" : viewMode === "table" ? "default" : "ghost"}
-              size="sm"
-              onClick={() => !isMobile && setViewMode("table")}
-              className="gap-2"
-              disabled={isMobile}
-              aria-disabled={isMobile}
-              aria-label="Switch to table view"
-            >
-              <List className="h-4 w-4" />
-              Table
-            </Button>
-          </div>
+          <ViewModeToggle value={viewMode} onChange={setViewMode} tableDisabled={isMobile} />
           <Button id="tour-create-experiment" asChild size="icon" variant="ghost" className="size-8 rounded-md text-muted-foreground hover:bg-muted hover:text-foreground transition-colors" aria-label="New experiment">
             <Link href={newExperimentHref}>
               <Plus className="size-4" />

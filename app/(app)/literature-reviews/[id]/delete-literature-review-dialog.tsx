@@ -46,7 +46,7 @@ export function DeleteLiteratureReviewDialog({
         description: `"${literatureTitle}" has been deleted successfully.`,
       })
 
-      router.push("/literature-reviews")
+      ;(() => { const pq = typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("project") : null; router.push(pq ? "/literature-reviews?project=" + pq : "/literature-reviews"); })()
       
       setTimeout(() => {
         window.location.href = "/literature-reviews"

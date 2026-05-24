@@ -82,7 +82,7 @@ export function AddStepDialog({ open, onOpenChange, onSave, editingStep }: AddSt
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-lg">
+      <DialogContent>
         <DialogHeader>
           <DialogTitle>{editingStep ? "Edit Step" : "Add Step"}</DialogTitle>
         </DialogHeader>

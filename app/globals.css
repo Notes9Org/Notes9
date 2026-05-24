@@ -22,7 +22,6 @@
   --font-size-3xl: 2.125rem;
   --font-size-4xl: 2.5rem;
   --font-size-5xl: 3rem;
-  --radius: 0.625rem;
   --background: #faf7f2;
   --foreground: #2c2418;
   --card: #fffdfa;
@@ -58,7 +57,7 @@
   --sidebar-accent-foreground: #3e3223;
   --sidebar-border: #e6ddd1;
   --sidebar-ring: #c88a67;
-  --highlight: #ffff00;
+  --highlight: #f4d65f;
   --n9-accent: #965034;
   --n9-accent-hover: #7e3a1b;
   --n9-accent-light: #fcf2eb;
@@ -316,18 +315,7 @@
 }
 
 *[role="checkbox"] {
-  border-color: #BC9F81;
-}
-
-body {
-  background-color: var(--background);
-  color: var(--foreground);
-  font-family: var(--font-family-body);
-  font-feature-settings:
-   
-    "rlig" 1,
-   
-    "calt" 1;
+  border-color: var(--border);
 }
 
 .font-heading {
@@ -429,7 +417,8 @@ body {
   width: 12px;
   height: 12px;
   background-color: transparent;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='%233b82f6' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M7.9 20A9 9 0 1 0 4 16.1L2 22Z'/%3E%3C/svg%3E");
+  /* Brand burnt-sienna (#965034) instead of generic blue; URL-encoded `#` = %23. */
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='%23965034' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M7.9 20A9 9 0 1 0 4 16.1L2 22Z'/%3E%3C/svg%3E");
   background-size: contain;
   background-repeat: no-repeat;
   vertical-align: middle;
@@ -474,23 +463,22 @@ mark {
   max-width: calc(100vw - 32px) !important;
   border-radius: 12px !important;
 
-  /* Researcher / Sci-Trek styling (Light mode slate) */
-  background: #f8fafc !important;
-  color: #0f172a !important;
-  border: 1px solid #cbd5e1 !important;
-  box-shadow: 0 25px 50px -12px rgba(15, 23, 42, 0.25), 0 0 0 1px rgba(15, 23, 42, 0.05) !important;
+  /* Notes9 brand palette — warm cream / burnt sienna */
+  background: var(--card) !important;
+  color: var(--foreground) !important;
+  border: 1px solid var(--border) !important;
+  box-shadow: 0 25px 50px -12px rgba(150, 80, 52, 0.22), 0 0 0 1px rgba(150, 80, 52, 0.06) !important;
 
   padding: 24px !important;
-  z-index: 1000000000 !important;
+  z-index: 9999 !important;
   font-family: var(--font-sans) !important;
 }
 
 .dark .driverjs-theme-researcher {
-  /* Dark mode deep slate */
-  background: #0f172a !important;
-  color: #f8fafc !important;
-  border: 1px solid #334155 !important;
-  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.1) !important;
+  background: var(--card) !important;
+  color: var(--foreground) !important;
+  border: 1px solid var(--border) !important;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.55), 0 0 0 1px rgba(245, 240, 232, 0.06) !important;
 }
 
 /* Hide the arrow entirely */
@@ -1083,12 +1071,12 @@ body > [data-radix-popper-content-wrapper] {
   opacity: 0.55 !important;
 }
 .n9-seqviz-theme .la-vz-selection-edge {
-  stroke: #0284c7 !important;       /* sky-600 — visible boundary in both modes */
+  stroke: var(--n9-accent) !important;     /* brand burnt-sienna selection edge */
   stroke-width: 2 !important;
   stroke-opacity: 1 !important;
 }
 .dark .n9-seqviz-theme .la-vz-selection-edge {
-  stroke: #38bdf8 !important;       /* sky-400 in dark mode                    */
+  stroke: var(--n9-accent) !important;     /* same in dark — token resolves per theme */
 }
 
 /* ─── Non-sequence labels: light in dark mode ──────────────────────────────
@@ -1110,8 +1098,8 @@ body > [data-radix-popper-content-wrapper] {
 .dark .n9-seqviz-theme .la-vz-handle-label tspan,
 .dark .n9-seqviz-theme .la-vz-cut-site-text,
 .dark .n9-seqviz-theme .la-vz-translation-amino-acid-label {
-  fill: #f1f5f9 !important;
-  color: #f1f5f9 !important;
+  fill: var(--foreground) !important;
+  color: var(--foreground) !important;
 }
 
 /* ─── Sequence bases: adaptive contrast via blend mode ─────────────────────
@@ -1214,10 +1202,47 @@ body > [data-radix-popper-content-wrapper] {
 @media (prefers-reduced-motion: reduce) {
   .animate-page-transition,
   .animate-flow-pipeline,
-  .animate-cursor-blink {
+  .animate-cursor-blink,
+  .animate-shimmer,
+  .animate-pulse,
+  .animate-spin,
+  .animate-bounce,
+  .animate-ping,
+  .loader-mascot-float,
+  .loader-orbit,
+  .loader-scan,
+  .loader-search-swing,
+  .loader-scan-line,
+  .loader-block-rise,
+  .loader-book-tilt,
+  .loader-testtube,
+  .loader-pipette,
+  .loader-droplet,
+  .loader-carousel-track,
+  .loader-microscope,
+  .loader-research-icon,
+  .loader-writing-grow-1,
+  .loader-writing-grow-2,
+  .loader-writing-grow-3,
+  .tour-mascot-animate,
+  .rag-chunk-highlight,
+  .pdf-rag-highlight {
     animation: none !important;
   }
+  .notes9-md--streaming > p:last-child::after,
+  .notes9-md--streaming > h1:last-child::after,
+  .notes9-md--streaming > h2:last-child::after,
+  .notes9-md--streaming > h3:last-child::after,
+  .notes9-md--streaming > h4:last-child::after,
+  .notes9-md--streaming > blockquote:last-child > p:last-child::after,
+  .notes9-md--streaming > ul:last-child > li:last-child::after,
+  .notes9-md--streaming > ol:last-child > li:last-child::after {
+    animation: none !important;
+    opacity: 0.7;
+  }
 }
+
+/* Section hero composer — Tailwind in catalyst-section-hero.tsx */
 
 /* Streaming markdown cursor — injected inline via ::after on the last rendered element */
 .notes9-md--streaming > p:last-child::after,

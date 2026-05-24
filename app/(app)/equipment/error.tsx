@@ -1,5 +1,9 @@
 "use client"
 
+import { useEffect } from "react"
+import { usePathname } from "next/navigation"
+import { recordRumEvent } from "@/lib/rum"
+
 export default function EquipmentError({
   error,
   reset,
@@ -7,8 +11,12 @@ export default function EquipmentError({
   error: Error & { digest?: string }
   reset: () => void
 }) {
+  const pathname = usePathname()
+  useEffect(() => {
+    recordRumEvent('page_error', { message: error.message, digest: error.digest, route: pathname })
+  }, [error, pathname])
   return (
-    <div className="flex flex-col items-center justify-center h-64 gap-4">
+    <div className="flex flex-col items-center justify-center min-h-[50vh] gap-4">
       <p className="text-destructive">{error.message || "Something went wrong loading equipment."}</p>
       <button
         onClick={reset}

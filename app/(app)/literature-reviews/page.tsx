@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation'
 import { createClient } from "@/lib/supabase/server"
 import { Button } from "@/components/ui/button"
+import { PageHeading } from "@/components/ui/page-heading"
 import { Plus, X } from 'lucide-react'
 import Link from 'next/link'
 import { LiteratureTabs } from '@/components/literature-reviews/literature-tabs'
@@ -8,6 +9,7 @@ import type { StagingLiteratureRow } from "@/components/literature-reviews/stage
 import { UploadLiteraturePdfDialog } from "@/components/literature-reviews/upload-literature-pdf-dialog"
 import { resolveInitialProjectIdParam } from "@/lib/url-project-param"
 import { SetPageBreadcrumb } from "@/components/layout/breadcrumb-context"
+import { CatalystSectionHero } from "@/components/catalyst/catalyst-section-hero"
 
 export default async function LiteratureReviewsPage({
   searchParams,
@@ -91,10 +93,13 @@ export default async function LiteratureReviewsPage({
       ) : (
         <SetPageBreadcrumb segments={[]} />
       )}
+
+      <CatalystSectionHero size="sm" scope="literature" />
+
       {/* Header: stacked on mobile */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight text-foreground md:text-3xl">Literature Reviews</h1>
+          <PageHeading>Literature Reviews</PageHeading>
           <p className="text-muted-foreground mt-1 text-sm">
             Search papers and manage your reference library
           </p>
