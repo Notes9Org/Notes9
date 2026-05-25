@@ -28,7 +28,6 @@ import { createProtocolSuggestion, ProtocolItem, ProtocolMention } from "./exten
 import { createLabNoteSuggestion, LabNoteItem, LabNoteMention } from "./extensions/labnote-mention"
 import { createLiteratureSuggestion, LiteratureItem, LiteratureMention } from "./extensions/literature-mention"
 import Collaboration from "@tiptap/extension-collaboration"
-import CollaborationCursor from "@tiptap/extension-collaboration-cursor"
 import type { HocuspocusProvider } from "@hocuspocus/provider"
 import type * as Y from "yjs"
 
@@ -1815,16 +1814,11 @@ export function TiptapEditor({
       Comment,
       ...(collaborationEnabled && ydoc && provider ? [
         Collaboration.configure({
-          document: ydoc,
-          field: 'default',
-        }),
-        CollaborationCursor.configure({
-          provider,
-          user: { name: userName ?? 'Anonymous', color: userColor ?? '#6B7280' },
+          fragment: ydoc.getXmlFragment('default'),
         }),
       ] : []),
     ],
-    content,
+    ...(!(collaborationEnabled && ydoc && provider) ? { content } : {}),
     editable,
     onUpdate: ({ editor }) => {
       onChange?.(editor.getHTML())

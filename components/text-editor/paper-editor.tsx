@@ -94,7 +94,9 @@ export function PaperEditor({
   userName,
   userColor,
 }: PaperEditorProps) {
-  const initialContent = content && content.trim().length > 0 ? content : DEFAULT_PAPER_TEMPLATE
+  const initialContent = collaborationEnabled
+    ? undefined
+    : (content && content.trim().length > 0 ? content : DEFAULT_PAPER_TEMPLATE)
 
   return (
     <TiptapEditor

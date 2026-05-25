@@ -48,24 +48,63 @@ async function supabaseRequest(
 /**
  * Creates and returns a configured Hocuspocus Database extension instance.
  *
- * Uses the Supabase REST API (PostgREST) instead of a direct PostgreSQL connection.
- * Requires SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY environment variables.
+ * - `fetch`: Loads HTML from `papers.content` and converts to Yjs state on first connection.
+ * - `store`: Renders Yjs doc to HTML and saves back to `papers.content`.
  *
- * - `fetch`: Loads Yjs binary state from `paper_yjs_documents` by paper ID.
- *   If no Yjs state exists but `papers.content` has HTML, converts it to Yjs
- *   state (first-time migration).
- * - `store`: Upserts Yjs binary state into `paper_yjs_documents`, renders the
- *   Yjs document to HTML, and updates `papers.content` and `papers.updated_at`.
+ * Note: We skip the paper_yjs_documents table for now (bytea encoding issues with REST API).
+ * The Yjs state lives in memory while the server is running. HTML is the persistence layer.
  */
 export function createDatabaseExtension(): Database {
   return new Database({
-    async fetch() {
-      // Database persistence disabled temporarily — return null to use in-memory only
+    async fetch({ documentName }) {
+      const paperId = documentName;
+
+      try {
+        // Load HTML content from papers table
+        const paperResponse = await supabaseRequest(
+          `papers?id=eq.${paperId}&select=content`,
+          { headers: { Accept: "application/json" } }
+        );
+
+        const paperRows = (await paperResponse.json()) as Array<{ content: string | null }>;
+
+        if (paperRows.length > 0 && paperRows[0].content) {
+          const html = paperRows[0].content;
+          const ydoc = htmlToYDoc(html);
+          const state = Y.encodeStateAsUpdate(ydoc);
+          ydoc.destroy();
+          return state;
+        }
+      } catch (error) {
+        console.error("[fetch] Error loading document:", error);
+      }
+
+      // No content found — return null (Hocuspocus creates empty doc)
       return null;
     },
 
-    async store() {
-      // Database persistence disabled temporarily — edits stay in memory only
+    async store({ documentName, state }) {
+      const paperId = documentName;
+
+      try {
+        // Render Yjs doc to HTML and save to papers.content
+        const ydoc = new Y.Doc();
+        Y.applyUpdate(ydoc, state);
+        const html = yDocToHtml(ydoc);
+        ydoc.destroy();
+
+        if (html) {
+          await supabaseRequest(`papers?id=eq.${paperId}`, {
+            method: "PATCH",
+            body: {
+              content: html,
+              updated_at: new Date().toISOString(),
+            },
+          });
+        }
+      } catch (error) {
+        console.error("[store] Error saving document:", error);
+      }
     },
   });
 }

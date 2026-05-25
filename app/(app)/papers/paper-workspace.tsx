@@ -108,6 +108,9 @@ export function PaperWorkspace({ paperId, backLink, onPaperMutated, onPaperTitle
   })
 
   const collaborationConnected = collaborationStatus === "connected"
+  // Pass collaborationEnabled=true as soon as we have ydoc+provider (even while connecting)
+  // so the editor initializes with the Collaboration extension from the start
+  const collaborationReady = !!(ydoc && provider)
 
   useEffect(() => {
     const fetchPaper = async () => {
@@ -556,22 +559,38 @@ export function PaperWorkspace({ paperId, backLink, onPaperMutated, onPaperTitle
           activeClassName="ring-4 ring-primary ring-inset bg-primary/5 rounded-xl"
           className="h-full"
         >
-          <PaperEditor
-            content={content}
-            onChange={handleContentChange}
-            minHeight="calc(100vh - 180px)"
-            title={titleInput}
-            onDocumentTitleChange={setTitleInput}
-            onDocumentTitleCommit={() => void commitTitle()}
-            autoSave
-            onAutoSave={handleAutoSave}
-            onEditorReady={handleEditorReady}
-            ydoc={ydoc}
-            provider={provider}
-            collaborationEnabled={collaborationConnected}
-            userName={userName}
-            userColor={userId ? getCollaboratorColor(userId) : undefined}
-          />
+          {collaborationReady ? (
+            <PaperEditor
+              key={`collab-${id}`}
+              content=""
+              onChange={handleContentChange}
+              minHeight="calc(100vh - 180px)"
+              title={titleInput}
+              onDocumentTitleChange={setTitleInput}
+              onDocumentTitleCommit={() => void commitTitle()}
+              autoSave
+              onAutoSave={handleAutoSave}
+              onEditorReady={handleEditorReady}
+              ydoc={ydoc}
+              provider={provider}
+              collaborationEnabled={true}
+              userName={userName}
+              userColor={userId ? getCollaboratorColor(userId) : undefined}
+            />
+          ) : (
+            <PaperEditor
+              key={`solo-${id}`}
+              content={content}
+              onChange={handleContentChange}
+              minHeight="calc(100vh - 180px)"
+              title={titleInput}
+              onDocumentTitleChange={setTitleInput}
+              onDocumentTitleCommit={() => void commitTitle()}
+              autoSave
+              onAutoSave={handleAutoSave}
+              onEditorReady={handleEditorReady}
+            />
+          )}
         </FileDropzone>
       </div>
 
