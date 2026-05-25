@@ -42,14 +42,14 @@ import {
   PanelLeft,
   PanelRight,
   Sparkles,
+  FilePlus,
+  Upload,
+  Loader2,
 } from "lucide-react"
 import Link from "next/link"
 import { TiptapEditor } from "@/components/text-editor/tiptap-editor"
 import { NoteExportMenu } from "@/components/note-export-menu"
-import {
-  ProtocolTemplatePicker,
-  type ProtocolTemplateChoice,
-} from "@/components/protocols/protocol-template-picker"
+import { type ProtocolTemplateChoice } from "@/components/protocols/protocol-template-picker"
 import { buildProtocolDraftHtmlFromExtracted } from "@/lib/build-protocol-draft-from-template"
 import {
   ProtocolLiteraturePanel,
@@ -103,9 +103,45 @@ function TemplateStep({
   organizationId: string | null
   onContinue: (choice: ProtocolTemplateChoice) => void
 }) {
-  const [selected, setSelected] = useState<ProtocolTemplateChoice | "unset">("unset")
-
-  const ready = selected !== "unset"
+  const [uploading, setUploading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  
+  const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    
+    setUploading(true)
+    setError(null)
+    
+    try {
+      const formData = new FormData()
+      formData.append("file", file)
+      
+      const res = await fetch("/api/protocol-templates/upload", {
+        method: "POST",
+        body: formData
+      })
+      const data = await res.json()
+      
+      if (!res.ok) {
+        throw new Error(data.error || "Upload failed")
+      }
+      
+      onContinue({
+        kind: "document",
+        id: data.template.id,
+        name: data.template.name,
+        extracted: data.template.extracted
+      })
+    } catch (err: any) {
+      setError(err.message)
+    } finally {
+      setUploading(false)
+      if (e.target) {
+        e.target.value = ""
+      }
+    }
+  }
 
   return (
     <Card>
@@ -114,30 +150,48 @@ function TemplateStep({
           <span className="flex h-6 w-6 items-center justify-center rounded-full bg-primary text-primary-foreground text-xs font-bold shrink-0">
             1
           </span>
-          Choose a starting template
+          Choose how to start
         </CardTitle>
         <CardDescription>
-          Pick an uploaded document template (from Protocols → Templates) or start blank. These are your
-          org&apos;s DOCX/PDF letterheads — not other protocols in the library.
+          Create a blank protocol from scratch or upload a document (.docx or .pdf) to use as a starting point.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
-        <ProtocolTemplatePicker
-          organizationId={organizationId}
-          onSelect={(c) => setSelected(c)}
-          selected={selected === "unset" ? null : selected}
-        />
-
-        <div className="flex justify-end">
-          <Button
-            onClick={() => ready && onContinue(selected)}
-            disabled={!ready}
-            className="gap-2"
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <button
+            type="button"
+            onClick={() => onContinue({ kind: "blank" })}
+            className="relative flex w-full flex-col gap-2 rounded-lg border-2 border-border p-4 text-left transition-all hover:border-primary/50 hover:bg-accent/40"
           >
-            Continue
-            <ArrowRight className="h-4 w-4" />
-          </Button>
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-muted">
+              <FilePlus className="h-5 w-5 text-muted-foreground" />
+            </div>
+            <div className="mt-2 min-w-0">
+              <p className="font-semibold text-foreground">Blank protocol</p>
+              <p className="mt-1 text-sm text-muted-foreground">Start from scratch with an empty editor.</p>
+            </div>
+          </button>
+          
+          <label className={"relative flex w-full cursor-pointer flex-col gap-2 rounded-lg border-2 border-border p-4 text-left transition-all hover:border-primary/50 hover:bg-accent/40" + (uploading ? " opacity-50 pointer-events-none" : "")}>
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-muted">
+              {uploading ? (
+                <Loader2 className="h-5 w-5 animate-spin text-primary" />
+              ) : (
+                <Upload className="h-5 w-5 text-primary" />
+              )}
+            </div>
+            <div className="mt-2 min-w-0">
+              <p className="font-semibold text-foreground">
+                {uploading ? "Uploading..." : "Upload document"}
+              </p>
+              <p className="mt-1 text-sm text-muted-foreground">Upload a .docx or .pdf file.</p>
+            </div>
+            <input type="file" className="hidden" accept=".docx,.pdf" onChange={handleUpload} disabled={uploading} />
+          </label>
         </div>
+        {error && (
+          <p className="text-sm text-destructive">{error}</p>
+        )}
       </CardContent>
     </Card>
   )
@@ -346,7 +400,7 @@ function NewProtocolForm() {
         .eq("id", user.id)
         .single()
 
-      const { error: insertError, contextSaved } = await insertProtocolWithOptionalContext(
+      const { data: protocolData, error: insertError, contextSaved } = await insertProtocolWithOptionalContext(
         supabase,
         {
           organization_id: profile?.organization_id,
@@ -364,6 +418,14 @@ function NewProtocolForm() {
       )
 
       if (insertError) throw insertError
+
+      if (protocolData && formData.experiment_id) {
+        // Link it in the junction table so it appears in the experiment's Protocols tab
+        await supabase.from("experiment_protocols").insert({
+          experiment_id: formData.experiment_id,
+          protocol_id: (protocolData as any).id,
+        })
+      }
 
       if (!contextSaved) {
         toast({
@@ -395,7 +457,7 @@ function NewProtocolForm() {
           <div className="min-w-0">
             <PageHeading>New Protocol</PageHeading>
             <p className="text-muted-foreground mt-1 text-sm">
-              Step 1 of 2 — choose a template
+              Step 1 of 2 — choose how to start
             </p>
           </div>
         </div>
@@ -407,28 +469,30 @@ function NewProtocolForm() {
   // ─── Step 2: Form + optional design mode ───────────────────────────────────
   const contextHeaderContent = (
     <div className="grid min-w-0 grid-cols-1 gap-4 sm:grid-cols-2">
-      <div className="min-w-0 space-y-2">
-        <Label htmlFor="project_id">
-          Project <span className="text-destructive">*</span>
-        </Label>
-        <Select
-          value={formData.project_id}
-          onValueChange={(value) =>
-            setFormData((prev) => ({ ...prev, project_id: value, experiment_id: "" }))
-          }
-        >
-          <SelectTrigger id="project_id">
-            <SelectValue placeholder="Select a project" />
-          </SelectTrigger>
-          <SelectContent>
-            {projects.map((p) => (
-              <SelectItem key={p.id} value={p.id}>
-                {p.name}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
+      {!returnProjectId && (
+        <div className="min-w-0 space-y-2">
+          <Label htmlFor="project_id">
+            Project <span className="text-destructive">*</span>
+          </Label>
+          <Select
+            value={formData.project_id}
+            onValueChange={(value) =>
+              setFormData((prev) => ({ ...prev, project_id: value, experiment_id: "" }))
+            }
+          >
+            <SelectTrigger id="project_id">
+              <SelectValue placeholder="Select a project" />
+            </SelectTrigger>
+            <SelectContent>
+              {projects.map((p) => (
+                <SelectItem key={p.id} value={p.id}>
+                  {p.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      )}
 
       <div className="min-w-0 space-y-2">
         <Label htmlFor="experiment_id">
@@ -853,7 +917,7 @@ function NewProtocolForm() {
                   Context <span className="text-destructive">*</span>
                 </p>
                 <p className="text-xs text-muted-foreground mt-0.5">
-                  Both project and experiment are required to link literature to this protocol.
+                  Link this protocol to an experiment in your project to organize your work.
                 </p>
               </div>
               {contextHeaderContent}

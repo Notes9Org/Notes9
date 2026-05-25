@@ -25,15 +25,18 @@ export function buildProtocolDraftHtmlFromExtracted(params: {
     parts.push("</div>")
   }
 
-  const useSections =
-    extracted.sectionHeadings.length > 0
-      ? extracted.sectionHeadings
-      : [{ slug: "procedure", title: "Procedure", order: 0 }]
+  if (extracted.fullHtml) {
+    parts.push(extracted.fullHtml)
+  } else {
+    const useSections =
+      extracted.sectionHeadings.length > 0
+        ? extracted.sectionHeadings
+        : [{ slug: "procedure", title: "Procedure", order: 0 }]
 
-  for (const sec of useSections) {
-    parts.push(`<h2>${escapeHtml(sec.title)}</h2>`)
-    if (sec.slug === "approval_signatories") {
-      parts.push(`
+    for (const sec of useSections) {
+      parts.push(`<h2>${escapeHtml(sec.title)}</h2>`)
+      if (sec.slug === "approval_signatories") {
+        parts.push(`
 <table class="min-w-[280px] border-collapse text-sm">
 <tbody>
 <tr><td class="border border-border px-2 py-1 font-medium">Prepared by</td><td class="border border-border px-2 py-1">&nbsp;</td><td class="border border-border px-2 py-1">Date</td><td class="border border-border px-2 py-1">&nbsp;</td></tr>
@@ -42,10 +45,11 @@ export function buildProtocolDraftHtmlFromExtracted(params: {
 </tbody>
 </table>
 <p class="text-xs text-muted-foreground mt-2">Add electronic signatures (e.g. DocuSign) as required by your organization.</p>`)
-    } else {
-      parts.push(
-        `<p><em>Add ${escapeHtml(sec.title.toLowerCase())} content here.</em></p>`
-      )
+      } else {
+        parts.push(
+          `<p><em>Add ${escapeHtml(sec.title.toLowerCase())} content here.</em></p>`
+        )
+      }
     }
   }
 

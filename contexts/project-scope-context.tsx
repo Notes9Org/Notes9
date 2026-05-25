@@ -30,6 +30,7 @@ export type ProjectScope = {
   projectName: string | null
   projectColor: string | null
   loading: boolean
+  clearScope: () => void
 }
 
 const ProjectScopeContext = createContext<ProjectScope | null>(null)
@@ -49,7 +50,27 @@ export function ProjectScopeProvider({ children }: { children: ReactNode }) {
   const queryProjectId = rawProject && isLikelyUuid(rawProject) ? rawProject : null
   // Query param wins (so a section page under /projects/<a> can still scope to
   // <b> via ?project=<b>); fall back to the path-derived id on /projects/<id>.
-  const projectId = queryProjectId ?? projectIdFromPath(pathname)
+  const currentProjectId = queryProjectId ?? projectIdFromPath(pathname)
+  const [persistedProjectId, setPersistedProjectId] = useState<string | null>(null)
+
+  useEffect(() => {
+    // Only access localStorage on the client
+    try {
+      const saved = localStorage.getItem("n9_last_project_id")
+      if (saved) setPersistedProjectId(saved)
+    } catch (e) {}
+  }, [])
+
+  useEffect(() => {
+    if (currentProjectId) {
+      try {
+        localStorage.setItem("n9_last_project_id", currentProjectId)
+      } catch (e) {}
+      setPersistedProjectId(currentProjectId)
+    }
+  }, [currentProjectId])
+
+  const projectId = currentProjectId ?? persistedProjectId
 
   const [projectName, setProjectName] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
@@ -85,12 +106,20 @@ export function ProjectScopeProvider({ children }: { children: ReactNode }) {
     }
   }, [projectId, supabase])
 
+  const clearScope = () => {
+    try {
+      localStorage.removeItem("n9_last_project_id")
+    } catch (e) {}
+    setPersistedProjectId(null)
+  }
+
   const value = useMemo<ProjectScope>(
     () => ({
       projectId,
       projectName,
       projectColor: projectId ? colorFromId(projectId) : null,
       loading,
+      clearScope,
     }),
     [projectId, projectName, loading]
   )
@@ -105,7 +134,7 @@ export function ProjectScopeProvider({ children }: { children: ReactNode }) {
 export function useProjectScope(): ProjectScope {
   const ctx = useContext(ProjectScopeContext)
   if (!ctx) {
-    return { projectId: null, projectName: null, projectColor: null, loading: false }
+    return { projectId: null, projectName: null, projectColor: null, loading: false, clearScope: () => {} }
   }
   return ctx
 }

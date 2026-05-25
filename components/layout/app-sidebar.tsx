@@ -25,6 +25,9 @@ import {
   User2,
   Users,
   X as XIcon,
+  Database,
+  FileText,
+  FileEdit,
 } from 'lucide-react'
 import {
   Sidebar,
@@ -97,10 +100,13 @@ const PROJECT_SCOPED_NAV: ProjectScopedNavItem[] = [
       { name: "Lab notes", basePath: "/lab-notes", icon: NotebookPen },
       { name: "Protocols", basePath: "/protocols", icon: ClipboardInfoIcon as unknown as typeof Folder },
       { name: "Samples", basePath: "/samples", icon: TestTube },
+      { name: "Data", basePath: "/data", icon: Database },
+      { name: "Reports", basePath: "/reports", icon: FileText },
     ],
   },
   { name: "Equipment", basePath: "/equipment", icon: Microscope },
   { name: "Literature", basePath: "/literature-reviews", icon: BookOpen },
+  { name: "Writing", basePath: "/papers", icon: FileEdit },
 ]
 
 interface Project {
@@ -601,6 +607,9 @@ export function AppSidebar() {
                 <button
                   type="button"
                   onClick={() => {
+                    // Clear the persisted project scope
+                    scope.clearScope()
+                    
                     // Drop the scope by navigating to the path without ?project=.
                     // If we're on /projects/<id>/..., go to /dashboard instead so
                     // the path-derived scope also clears.

@@ -16,8 +16,10 @@ export type ProtocolTemplateExtracted = {
   sectionHeadings: ProtocolTemplateSectionHeading[]
   logos: ProtocolTemplateLogo[]
   warnings?: string[]
-  /** Optional HTML from DOCX for debugging / preview (not inserted into protocol body) */
+  /** Optional HTML from DOCX for debugging / preview */
   _previewHtmlLength?: number
+  /** The full HTML extracted from the document to retain text and tables */
+  fullHtml?: string
 }
 
 export const PROTOCOL_TEMPLATE_MAX_FILE_BYTES = 15 * 1024 * 1024

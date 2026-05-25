@@ -10,8 +10,9 @@ import { HtmlContent } from '@/components/html-content'
 import { LabNotesTab } from './lab-notes-tab'
 import { DataFilesTab } from './data-files-tab'
 import { LinkProtocolDialog } from './link-protocol-dialog'
-import { ProtocolCard } from './protocol-card'
+import { ProtocolTableRow } from './protocol-table-row'
 import { ExperimentStepsTab } from './experiment-steps-tab'
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import Link from 'next/link'
 
 interface ProtocolRef {
@@ -209,10 +210,22 @@ export function ExperimentTabs({ experiment, initialTab, experimentPageHref }: E
         </div>
 
         {experiment.protocols && experiment.protocols.length > 0 ? (
-          <div className="space-y-4">
-            {experiment.protocols.map((protocolLink) => (
-              <ProtocolCard key={protocolLink.id} protocolLink={protocolLink} />
-            ))}
+          <div className="rounded-md border bg-card">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Protocol Name</TableHead>
+                  <TableHead>Version</TableHead>
+                  <TableHead>Added Date</TableHead>
+                  <TableHead className="text-right">Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {experiment.protocols.map((protocolLink) => (
+                  <ProtocolTableRow key={protocolLink.id} protocolLink={protocolLink} />
+                ))}
+              </TableBody>
+            </Table>
           </div>
         ) : (
           <Card>
@@ -238,28 +251,39 @@ export function ExperimentTabs({ experiment, initialTab, experimentPageHref }: E
           </Button>
         </div>
         {experiment.samples && experiment.samples.length > 0 ? (
-          <div className="space-y-2">
-            {experiment.samples.map((sample) => (
-              <Card key={sample.id}>
-                <CardHeader className="py-3">
-                  <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-                    <div className="min-w-0 space-y-1">
-                      <CardTitle className="text-base font-semibold">
-                        {sample.sample_code ?? sample.name ?? "Sample"}
-                      </CardTitle>
-                      <CardDescription className="text-xs sm:text-sm">
-                        {sample.sample_type}
-                        {sample.status ? ` · ${sample.status.replace(/_/g, " ")}` : ""}
-                        {sample.storage_location ? ` · ${sample.storage_location}` : ""}
-                      </CardDescription>
-                    </div>
-                    <Button asChild variant="secondary" size="sm" className="shrink-0">
-                      <Link href={`/samples/${sample.id}`}>View</Link>
-                    </Button>
-                  </div>
-                </CardHeader>
-              </Card>
-            ))}
+          <div className="rounded-md border bg-card">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Sample Name / Code</TableHead>
+                  <TableHead>Type</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead>Location</TableHead>
+                  <TableHead className="text-right">Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {experiment.samples.map((sample) => (
+                  <TableRow key={sample.id}>
+                    <TableCell className="font-medium">
+                      {sample.sample_code ?? sample.name ?? "Sample"}
+                    </TableCell>
+                    <TableCell>{sample.sample_type}</TableCell>
+                    <TableCell>
+                      {sample.status ? sample.status.replace(/_/g, " ") : "—"}
+                    </TableCell>
+                    <TableCell>
+                      {sample.storage_location || "—"}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <Button asChild variant="ghost" size="sm">
+                        <Link href={`/samples/${sample.id}`}>View</Link>
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
           </div>
         ) : (
           <Card>

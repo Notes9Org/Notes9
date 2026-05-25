@@ -105,5 +105,6 @@ export async function extractProtocolTemplateFromDocx(params: {
     logos,
     warnings: warnings.length ? warnings : undefined,
     _previewHtmlLength: html.length,
+    fullHtml: html,
   }
 }

@@ -16,8 +16,6 @@ import {
 import { Plus, FileText, Grid3x3, List, PenBox, X } from "lucide-react"
 import Link from "next/link"
 import { ProtocolList } from "./protocol-list"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { ProtocolTemplatesPanel } from "@/components/protocols/protocol-templates-panel"
 import {
   FILTER_ALL,
   ResourceFilterRow,
@@ -66,22 +64,7 @@ export function ProtocolsPageContent({
   const router = useRouter()
   const pathname = usePathname()
   const searchParams = useSearchParams()
-  const mainTab = searchParams.get("tab") === "templates" ? "templates" : "library"
   const selectForDesign = searchParams.get("selectForDesign") === "1"
-
-  const setMainTab = useCallback(
-    (value: string) => {
-      const params = new URLSearchParams(searchParams.toString())
-      if (value === "templates") {
-        params.set("tab", "templates")
-      } else {
-        params.delete("tab")
-      }
-      const q = params.toString()
-      router.push(q ? `${pathname}?${q}` : pathname)
-    },
-    [pathname, router, searchParams]
-  )
 
   const isMobile = useMediaQuery("(max-width: 768px)")
   const [viewMode, setViewMode] = useState<"grid" | "table">("table")
@@ -159,17 +142,7 @@ export function ProtocolsPageContent({
           Standard Operating Procedures library
         </p>
         <div className="flex items-center gap-2 shrink-0 self-end sm:self-auto">
-          {projectContext ? (
-            <Button asChild variant="outline" size="sm" className="gap-2">
-              <Link href="/protocols">
-                <X className="h-4 w-4" />
-                Remove project filter
-              </Link>
-            </Button>
-          ) : null}
-          {mainTab === "library" ? (
-            <ViewModeToggle value={viewMode} onChange={setViewMode} tableDisabled={isMobile} />
-          ) : null}
+          <ViewModeToggle value={viewMode} onChange={setViewMode} tableDisabled={isMobile} />
           <Button asChild size="sm" className="gap-2" aria-label="New protocol">
             <Link href={newProtocolHref}>
               <Plus className="size-4" />
@@ -196,18 +169,8 @@ export function ProtocolsPageContent({
         </Card>
       ) : null}
 
-      <Tabs value={mainTab} onValueChange={setMainTab} className="space-y-4">
-        <TabsList className="h-9 w-fit">
-          <TabsTrigger value="library" className="text-sm">
-            Library
-          </TabsTrigger>
-          <TabsTrigger value="templates" className="text-sm">
-            Templates
-          </TabsTrigger>
-        </TabsList>
-
-        <TabsContent value="library" className="mt-0 space-y-6 focus-visible:outline-none">
-          <ResourceFilterRow>
+      <div className="space-y-6">
+        <ResourceFilterRow>
             <ResourceListFilter
               label="Category"
               value={categoryFilter}
@@ -297,12 +260,7 @@ export function ProtocolsPageContent({
               No protocols match the selected filters.
             </p>
           )}
-        </TabsContent>
-
-        <TabsContent value="templates" className="mt-0 focus-visible:outline-none">
-          <ProtocolTemplatesPanel />
-        </TabsContent>
-      </Tabs>
+      </div>
     </div>
   )
 }

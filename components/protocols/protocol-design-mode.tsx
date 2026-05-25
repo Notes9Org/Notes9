@@ -73,6 +73,7 @@ interface ProtocolDesignModeProps {
   onExitDesignMode?: () => void
   onContextChange?: (projectId: string | null, experimentId: string | null) => void
   onProtocolNameChange?: (name: string) => void
+  onProtocolNameCommit?: (name: string) => void
 }
 
 interface ProtocolContextItem {
@@ -98,6 +99,7 @@ export function ProtocolDesignMode({
   onExitDesignMode,
   onContextChange,
   onProtocolNameChange,
+  onProtocolNameCommit,
 }: ProtocolDesignModeProps) {
   const { toast } = useToast()
 
@@ -295,7 +297,10 @@ export function ProtocolDesignMode({
             type="text"
             value={protocol.name}
             onChange={(e) => onProtocolNameChange?.(e.target.value)}
-            onBlur={() => setIsEditingTitle(false)}
+            onBlur={() => {
+              setIsEditingTitle(false)
+              onProtocolNameCommit?.(protocol.name)
+            }}
             onKeyDown={(e) => {
               if (e.key === "Enter") {
                 e.preventDefault()
@@ -536,7 +541,10 @@ export function ProtocolDesignMode({
                           type="text"
                           value={protocol.name}
                           onChange={(e) => onProtocolNameChange?.(e.target.value)}
-                          onBlur={() => setIsEditingTitle(false)}
+                          onBlur={() => {
+                            setIsEditingTitle(false)
+                            onProtocolNameCommit?.(protocol.name)
+                          }}
                           onKeyDown={(e) => {
                             if (e.key === "Enter") {
                               e.preventDefault()

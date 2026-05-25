@@ -384,6 +384,21 @@ export function ProtocolEditor({
             onExitDesignMode={() => router.push(viewHref)}
             onContextChange={handleContextChange}
             onProtocolNameChange={(name) => setFormData((c) => ({ ...c, name }))}
+            onProtocolNameCommit={async (name) => {
+              try {
+                const supabase = createClient()
+                const { error } = await updateProtocolWithOptionalContext(supabase, protocol.id, { name })
+                if (error) throw error
+                toast({ title: "Name updated" })
+                router.refresh()
+              } catch (e: unknown) {
+                toast({
+                  title: "Couldn't update name",
+                  description: e instanceof Error ? e.message : "Unknown error",
+                  variant: "destructive"
+                })
+              }
+            }}
           />
         </div>
       </div>

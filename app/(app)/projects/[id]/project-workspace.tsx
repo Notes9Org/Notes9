@@ -254,10 +254,14 @@ export function ProjectWorkspace({
         </WorkspaceCard>
 
         <WorkspaceCard
-          href={`/experiments?project=${projectId}`}
+          href={
+            experiments[0]?.id
+              ? `/experiments/${experiments[0].id}?project=${projectId}&tab=data`
+              : `/experiments?project=${projectId}`
+          }
           newHref={
             experiments[0]?.id
-              ? `/experiments/${experiments[0].id}?project=${projectId}`
+              ? `/experiments/${experiments[0].id}?project=${projectId}&tab=data`
               : `/experiments/new?project=${projectId}`
           }
           icon={Database}
@@ -271,7 +275,7 @@ export function ProjectWorkspace({
                   key={f.id}
                   href={
                     f.experiment_id
-                      ? `/experiments/${f.experiment_id}?project=${projectId}`
+                      ? `/experiments/${f.experiment_id}?project=${projectId}&tab=data`
                       : `/experiments?project=${projectId}`
                   }
                   text={f.file_name}

@@ -177,62 +177,71 @@ export function ExperimentStepsTab({ experimentId }: ExperimentStepsTabProps) {
           </CardContent>
         </Card>
       ) : (
-        <div className="space-y-0">
-          {steps.map((step, index) => {
-            const statusCfg = STATUS_CONFIG[step.status]
-            const StatusIcon = statusCfg.icon
-            const isLast = index === steps.length - 1
+        <div className="rounded-md border bg-card overflow-hidden">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b bg-muted/50 text-left">
+                <th className="h-10 px-4 font-medium text-muted-foreground w-16">Step</th>
+                <th className="h-10 px-4 font-medium text-muted-foreground">Title</th>
+                <th className="h-10 px-4 font-medium text-muted-foreground">Type</th>
+                <th className="h-10 px-4 font-medium text-muted-foreground">Category</th>
+                <th className="h-10 px-4 font-medium text-muted-foreground">Duration</th>
+                <th className="h-10 px-4 font-medium text-muted-foreground">Status</th>
+                <th className="h-10 px-4 font-medium text-muted-foreground text-right w-[150px]">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {steps.map((step, index) => {
+                const statusCfg = STATUS_CONFIG[step.status]
+                const StatusIcon = statusCfg.icon
+                const isLast = index === steps.length - 1
 
-            return (
-              <div key={step.id}>
-                <Card className={cn(
-                  "border-l-4 transition-all hover:shadow-md",
-                  CATEGORY_COLORS[step.category] || "border-l-gray-400"
-                )}>
-                  <CardContent className="py-4 px-5">
-                    <div className="flex items-start gap-4">
-                      {/* Step number + status icon */}
-                      <div className="flex flex-col items-center gap-1 pt-0.5">
-                        <div className={cn(
-                          "flex items-center justify-center w-8 h-8 rounded-full text-xs font-semibold",
-                          statusCfg.bg, statusCfg.color
-                        )}>
-                          {step.status === "completed" ? (
-                            <CheckCircle2 className="h-4 w-4" />
-                          ) : (
-                            step.order
-                          )}
-                        </div>
-                      </div>
-
-                      {/* Content */}
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 mb-1">
-                          <h4 className="font-medium text-sm">{step.title}</h4>
-                          <Badge variant="outline" className="text-2xs px-1.5 py-0">
-                            {step.step_type}
-                          </Badge>
-                          <Badge variant="outline" className={cn("text-2xs px-1.5 py-0", statusCfg.color)}>
-                            <StatusIcon className={cn("h-3 w-3 mr-1", step.status === "in_progress" && "animate-spin")} />
-                            {statusCfg.label}
-                          </Badge>
-                        </div>
-                        {step.description && (
-                          <p className="text-xs text-muted-foreground line-clamp-2">{step.description}</p>
+                return (
+                  <tr key={step.id} className="border-b last:border-0 transition-colors hover:bg-muted/30">
+                    <td className="p-4 align-middle">
+                      <div className={cn(
+                        "flex items-center justify-center w-8 h-8 rounded-full text-xs font-semibold",
+                        statusCfg.bg, statusCfg.color
+                      )}>
+                        {step.status === "completed" ? (
+                          <CheckCircle2 className="h-4 w-4" />
+                        ) : (
+                          step.order
                         )}
-                        <div className="flex items-center gap-3 mt-2">
-                          <span className="text-2xs text-muted-foreground">{step.category}</span>
-                          {step.duration_minutes && (
-                            <span className="text-2xs text-muted-foreground flex items-center gap-1">
-                              <Clock className="h-3 w-3" />
-                              {formatDuration(step.duration_minutes)}
-                            </span>
-                          )}
-                        </div>
                       </div>
-
-                      {/* Actions */}
-                      <div className="flex items-center gap-1">
+                    </td>
+                    <td className="p-4 align-middle">
+                      <div className="font-medium">{step.title}</div>
+                      {step.description && (
+                        <div className="text-xs text-muted-foreground mt-1 line-clamp-1">
+                          {step.description}
+                        </div>
+                      )}
+                    </td>
+                    <td className="p-4 align-middle">
+                      <Badge variant="outline" className="text-2xs px-1.5 py-0 font-normal">
+                        {step.step_type}
+                      </Badge>
+                    </td>
+                    <td className="p-4 align-middle">
+                      <span className="text-xs text-muted-foreground">{step.category}</span>
+                    </td>
+                    <td className="p-4 align-middle">
+                      {step.duration_minutes ? (
+                        <span className="text-xs text-muted-foreground flex items-center gap-1">
+                          <Clock className="h-3 w-3" />
+                          {formatDuration(step.duration_minutes)}
+                        </span>
+                      ) : "—"}
+                    </td>
+                    <td className="p-4 align-middle">
+                      <Badge variant="outline" className={cn("text-2xs px-1.5 py-0 font-normal", statusCfg.color)}>
+                        <StatusIcon className={cn("h-3 w-3 mr-1", step.status === "in_progress" && "animate-spin")} />
+                        {statusCfg.label}
+                      </Badge>
+                    </td>
+                    <td className="p-4 align-middle text-right">
+                      <div className="flex items-center justify-end gap-1">
                         <Button
                           variant="ghost" size="icon" className="h-7 w-7"
                           disabled={index === 0}
@@ -281,19 +290,12 @@ export function ExperimentStepsTab({ experimentId }: ExperimentStepsTabProps) {
                           </DropdownMenuContent>
                         </DropdownMenu>
                       </div>
-                    </div>
-                  </CardContent>
-                </Card>
-
-                {/* Connector arrow */}
-                {!isLast && (
-                  <div className="flex justify-center py-1">
-                    <ArrowDown className="h-4 w-4 text-muted-foreground/40" />
-                  </div>
-                )}
-              </div>
-            )
-          })}
+                    </td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
         </div>
       )}
 
