@@ -14,6 +14,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
+import { Checkbox } from "@/components/ui/checkbox"
 import {
   AlertDialog,
   AlertDialogAction,
@@ -78,6 +79,8 @@ export function DataFilesTab({ experimentId }: { experimentId: string }) {
   const [previewOpen, setPreviewOpen] = useState(false)
   const [previewFile, setPreviewFile] = useState<ExperimentFile | null>(null)
   const [creatingEmpty, setCreatingEmpty] = useState(false)
+  const [selectedIds, setSelectedIds] = useState<string[]>([])
+  const [isDeletingBulk, setIsDeletingBulk] = useState(false)
 
   const openPreview = (file: ExperimentFile) => {
     setPreviewFile(file)
@@ -170,6 +173,56 @@ export function DataFilesTab({ experimentId }: { experimentId: string }) {
         description: error.message || "Failed to delete file",
         variant: "destructive",
       })
+    }
+  }
+
+  const handleBulkDelete = async () => {
+    if (selectedIds.length === 0) return
+    setIsDeletingBulk(true)
+    
+    try {
+      const supabase = createClient()
+      const filesToDelete = files.filter(f => selectedIds.includes(f.id))
+
+      for (const file of filesToDelete) {
+        const storagePath = resolveExperimentDataStoragePath(file)
+        if (storagePath) {
+          await supabase.storage.from(USER_STORAGE_BUCKET).remove([storagePath])
+        }
+        await supabase.from('experiment_data').delete().eq('id', file.id)
+      }
+
+      toast({
+        title: "Files deleted",
+        description: `${selectedIds.length} files have been deleted successfully.`,
+      })
+      
+      setSelectedIds([])
+      fetchFiles()
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to delete files",
+        variant: "destructive",
+      })
+    } finally {
+      setIsDeletingBulk(false)
+    }
+  }
+
+  const toggleSelectAll = (checked: boolean) => {
+    if (checked) {
+      setSelectedIds(files.map(f => f.id))
+    } else {
+      setSelectedIds([])
+    }
+  }
+
+  const toggleSelect = (id: string, checked: boolean) => {
+    if (checked) {
+      setSelectedIds(prev => [...prev, id])
+    } else {
+      setSelectedIds(prev => prev.filter(i => i !== id))
     }
   }
 
@@ -368,6 +421,18 @@ export function DataFilesTab({ experimentId }: { experimentId: string }) {
             </CardDescription>
           </div>
           <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
+            {selectedIds.length > 0 && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={handleBulkDelete}
+                disabled={isDeletingBulk}
+                className="bg-rose-50 text-rose-600 border border-rose-100 font-semibold hover:bg-rose-100 dark:bg-rose-900/20 dark:text-rose-400 dark:border-rose-900/10 dark:hover:bg-rose-900/30 w-full sm:w-auto"
+              >
+                {isDeletingBulk ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Trash2 className="mr-2 h-4 w-4" />}
+                Delete Selected ({selectedIds.length})
+              </Button>
+            )}
             <Button
               type="button"
               variant="secondary"
@@ -397,6 +462,13 @@ export function DataFilesTab({ experimentId }: { experimentId: string }) {
             <Table>
               <TableHeader>
                 <TableRow>
+                  <TableHead className="w-[48px]">
+                    <Checkbox 
+                      checked={files.length > 0 && selectedIds.length === files.length ? true : selectedIds.length > 0 ? "indeterminate" : false}
+                      onCheckedChange={toggleSelectAll}
+                      aria-label="Select all"
+                    />
+                  </TableHead>
                   <TableHead className="w-[50px]">Type</TableHead>
                   <TableHead className="min-w-[200px]">File Name</TableHead>
                   <TableHead className="min-w-[120px]">Data Type</TableHead>
@@ -409,6 +481,13 @@ export function DataFilesTab({ experimentId }: { experimentId: string }) {
               <TableBody>
                 {files.map((file) => (
                   <TableRow key={file.id}>
+                    <TableCell>
+                      <Checkbox 
+                        checked={selectedIds.includes(file.id)}
+                        onCheckedChange={(checked) => toggleSelect(file.id, checked === true)}
+                        aria-label={`Select file ${file.file_name}`}
+                      />
+                    </TableCell>
                     <TableCell>
                       {getFileIcon(file)}
                     </TableCell>

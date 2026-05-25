@@ -118,12 +118,14 @@ export function LabNotesTab({
   projectName,
   projectId,
   experimentPageHref,
+  experiment,
 }: {
   experimentId: string
   experimentName?: string
   projectName?: string
   projectId?: string
   experimentPageHref?: string
+  experiment: any
 }) {
   const router = useRouter();
   const pathname = usePathname();
@@ -370,6 +372,11 @@ export function LabNotesTab({
   const editorProtocols = useMemo(
     () => availableProtocols.map((p) => ({ id: p.id, name: p.name, version: p.version })),
     [availableProtocols],
+  )
+
+  const editorSamples = useMemo(
+    () => (experiment.samples || []).map((s: any) => ({ id: s.id, name: s.name, sample_code: s.sample_code })),
+    [experiment.samples]
   )
 
   // Stable editor callbacks — also recreated on every render previously, which
@@ -1735,6 +1742,7 @@ export function LabNotesTab({
                         showAITools={true}
                         showAiWritingDropdown={false}
                         protocols={editorProtocols}
+                        samples={editorSamples}
                         hideExportControls
                         exportIncludeCommentsInPdf
                         enableMath

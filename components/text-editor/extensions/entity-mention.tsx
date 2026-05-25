@@ -11,16 +11,19 @@ import {
 } from "react"
 import { cn } from "@/lib/utils"
 import Mention from "@tiptap/extension-mention"
+import { FileText, FlaskConical } from "lucide-react"
 
-export interface ProtocolItem {
+export interface EntityItem {
     id: string
     name: string
+    type: "protocol" | "sample"
     version?: string | null
+    sample_code?: string | null
 }
 
 interface MentionListProps {
-    items: ProtocolItem[]
-    command: (item: { id: string; label: string }) => void
+    items: EntityItem[]
+    command: (item: { id: string; label: string; type: string }) => void
 }
 
 interface MentionListRef {
@@ -34,7 +37,7 @@ const MentionList = forwardRef<MentionListRef, MentionListProps>(
         const selectItem = (index: number) => {
             const item = props.items[index]
             if (item) {
-                props.command({ id: item.id, label: item.name })
+                props.command({ id: item.id, label: item.name || item.sample_code || "Unnamed", type: item.type })
             }
         }
 
@@ -88,17 +91,27 @@ const MentionList = forwardRef<MentionListRef, MentionListProps>(
                                 index === selectedIndex && "bg-accent"
                             )}
                         >
-                            <span className="font-medium">{item.name}</span>
-                            {item.version && (
-                                <span className="text-xs text-muted-foreground">
+                            {item.type === "protocol" ? (
+                                <FileText className="h-4 w-4 text-blue-500 shrink-0" />
+                            ) : (
+                                <FlaskConical className="h-4 w-4 text-emerald-500 shrink-0" />
+                            )}
+                            <span className="font-medium truncate">{item.name || item.sample_code || "Unnamed"}</span>
+                            {item.type === "protocol" && item.version && (
+                                <span className="text-xs text-muted-foreground shrink-0 border rounded px-1">
                                     v{item.version}
+                                </span>
+                            )}
+                            {item.type === "sample" && item.sample_code && (
+                                <span className="text-xs text-muted-foreground shrink-0 border rounded px-1">
+                                    {item.sample_code}
                                 </span>
                             )}
                         </button>
                     ))
                 ) : (
                     <div className="px-3 py-2 text-sm text-muted-foreground">
-                        No protocols linked. Add protocols above first.
+                        No matches found.
                     </div>
                 )}
             </div>
@@ -108,17 +121,25 @@ const MentionList = forwardRef<MentionListRef, MentionListProps>(
 
 MentionList.displayName = "MentionList"
 
-// Create suggestion config that uses a ref to access current protocols
-export function createProtocolSuggestion(
-    protocolsRef: MutableRefObject<ProtocolItem[]>
+// Create suggestion config that uses a ref to access current entities
+export function createEntitySuggestion(
+    entitiesRef: MutableRefObject<EntityItem[]>
 ) {
     return {
         items: ({ query }: { query: string }) => {
-            const protocols = protocolsRef.current
-            return protocols
-                .filter((item) =>
-                    item.name.toLowerCase().includes(query.toLowerCase())
-                )
+            const entities = entitiesRef.current
+            return entities
+                .filter((item) => {
+                    try {
+                        if (!item) return false;
+                        const n = item.name || item.sample_code || "Unnamed";
+                        const q = query || "";
+                        return String(n).toLowerCase().includes(String(q).toLowerCase());
+                    } catch (e) {
+                        console.error("Mention filter error:", e);
+                        return false;
+                    }
+                })
                 .slice(0, 5)
         },
 
@@ -179,40 +200,47 @@ export function createProtocolSuggestion(
 }
 
 // Create a custom Mention extension that renders as clickable links
-export const ProtocolMention = Mention.extend({
-    name: "protocolMention",
+export const EntityMention = Mention.extend({
+    name: "entityMention",
 
     parseHTML() {
         return [
             {
-                tag: `a[data-protocol-id]`,
+                tag: `a[data-entity-id]`,
             },
+            {
+                tag: `a[data-protocol-id]`, // Legacy support
+            }
         ]
     },
 
     renderHTML({ node, HTMLAttributes }: { node: any; HTMLAttributes: any }) {
+        const entityType = node.attrs.type || "protocol" // Fallback for legacy
+        const href = entityType === "protocol" ? `/protocols/${node.attrs.id}` : `/samples/${node.attrs.id}`
+        
         return [
             "a",
             {
                 ...HTMLAttributes,
-                href: `/protocols/${node.attrs.id}`,
-                "data-protocol-id": node.attrs.id,
-                class: "mention-protocol",
+                href: href,
+                "data-entity-id": node.attrs.id,
+                "data-entity-type": entityType,
+                class: `mention-${entityType}`,
             },
             `@${node.attrs.label ?? node.attrs.id}`,
         ]
     },
 })
 
-// Configure the Protocol Mention extension with the ref-based suggestion
-export function createProtocolMentionExtension(
-    protocolsRef: MutableRefObject<ProtocolItem[]>
+// Configure the Entity Mention extension with the ref-based suggestion
+export function createEntityMentionExtension(
+    entitiesRef: MutableRefObject<EntityItem[]>
 ) {
-    return ProtocolMention.configure({
+    return EntityMention.configure({
         HTMLAttributes: {
-            class: "mention-protocol",
+            class: "mention-entity",
         },
-        suggestion: createProtocolSuggestion(protocolsRef),
+        suggestion: createEntitySuggestion(entitiesRef),
         renderLabel({ node }: { node: any }) {
             return `@${node.attrs.label ?? node.attrs.id}`
         },

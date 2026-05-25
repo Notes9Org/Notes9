@@ -71,6 +71,7 @@ interface ProtocolDesignModeProps {
   }
   onSaved: () => void
   onExitDesignMode?: () => void
+  samples?: { id: string; name: string; sample_code: string | null }[]
   onContextChange?: (projectId: string | null, experimentId: string | null) => void
   onProtocolNameChange?: (name: string) => void
   onProtocolNameCommit?: (name: string) => void
@@ -97,6 +98,7 @@ export function ProtocolDesignMode({
   protocol,
   onSaved,
   onExitDesignMode,
+  samples,
   onContextChange,
   onProtocolNameChange,
   onProtocolNameCommit,
@@ -674,10 +676,11 @@ export function ProtocolDesignMode({
                       key={protocol.id}
                       content={draftContent}
                       onChange={setDraftContent}
-                      placeholder="Draft your protocol… In Protocol (header): drag papers from Literature or type @ to attach from the filtered list."
+                      placeholder="Write your protocol here... Use @ to tag protocols or samples"
                       title={protocol.name}
                       minHeight="100%"
                       fillParentHeight
+                      samples={samples}
                       fullscreenWorkspaceRef={protocolDesignWorkspaceRef}
                       leadingToolbarSlot={protocolFullscreenToolbarLeading}
                       trailingToolbarSlot={protocolFullscreenToolbarTrailing}

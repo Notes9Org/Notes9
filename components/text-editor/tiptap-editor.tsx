@@ -24,7 +24,7 @@ import { Underline } from "@tiptap/extension-underline"
 import { Subscript } from "@tiptap/extension-subscript"
 import { Superscript } from "@tiptap/extension-superscript"
 import Mention from "@tiptap/extension-mention"
-import { createProtocolSuggestion, ProtocolItem, ProtocolMention } from "./extensions/protocol-mention"
+import { createEntitySuggestion, EntityItem, EntityMention } from "./extensions/entity-mention"
 import { createLabNoteSuggestion, LabNoteItem, LabNoteMention } from "./extensions/labnote-mention"
 import { createLiteratureSuggestion, LiteratureItem, LiteratureMention } from "./extensions/literature-mention"
 import Collaboration from "@tiptap/extension-collaboration"
@@ -202,7 +202,8 @@ interface TiptapEditorProps {
   title?: string
   autoSave?: boolean
   onAutoSave?: (content: string) => Promise<void>
-  protocols?: ProtocolItem[]
+  protocols?: EntityItem[]
+  samples?: EntityItem[]
   labNotes?: LabNoteItem[]
   literatureItems?: LiteratureItem[]
   /** Enable KaTeX math equation support (inline & block) */
@@ -1397,6 +1398,7 @@ export function TiptapEditor({
   title = "document",
   hideToolbar = false,
   protocols = [],
+  samples = [],
   labNotes = [],
   literatureItems = [],
   enableMath = false,
@@ -1698,15 +1700,21 @@ export function TiptapEditor({
     }, [clearInterimFromEditor]),
   })
 
-  // Use ref for protocols so the mention extension always has access to current protocols
-  const protocolsRef = useRef<ProtocolItem[]>(protocols)
-  const labNotesRef = useRef<LabNoteItem[]>(labNotes)
-  const literatureRef = useRef<LiteratureItem[]>(literatureItems)
+  // Use ref for entities so the mention extension always has access to current entities
+  const entitiesRef = useRef<EntityItem[]>([
+    ...(protocols || []).map(p => ({ ...p, type: "protocol" as const })),
+    ...(samples || []).map(s => ({ ...s, type: "sample" as const }))
+  ])
+  const labNotesRef = useRef<LabNoteItem[]>(labNotes || [])
+  const literatureRef = useRef<LiteratureItem[]>(literatureItems || [])
 
   // Keep the refs in sync with props
   useEffect(() => {
-    protocolsRef.current = protocols
-  }, [protocols])
+    entitiesRef.current = [
+      ...(protocols || []).map(p => ({ ...p, type: "protocol" as const })),
+      ...(samples || []).map(s => ({ ...s, type: "sample" as const }))
+    ]
+  }, [protocols, samples])
 
   useEffect(() => {
     labNotesRef.current = labNotes
@@ -1806,11 +1814,11 @@ export function TiptapEditor({
       SimpleShape,
       SpreadsheetEmbed,
       Alignment,
-      ProtocolMention.configure({
+      EntityMention.configure({
         HTMLAttributes: {
-          class: "mention-protocol",
+          class: "mention-entity",
         },
-        suggestion: createProtocolSuggestion(protocolsRef),
+        suggestion: createEntitySuggestion(entitiesRef),
         renderLabel({ node }: { node: any }) {
           return `@${node.attrs.label ?? node.attrs.id}`
         },

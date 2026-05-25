@@ -3,6 +3,7 @@
 import { useState } from "react"
 import { createClient } from "@/lib/supabase/client"
 import { TableRow, TableCell } from "@/components/ui/table"
+import { Checkbox } from "@/components/ui/checkbox"
 import { Button } from "@/components/ui/button"
 import { FileText, Loader2, Trash2 } from "lucide-react"
 import Link from "next/link"
@@ -23,9 +24,11 @@ interface ProtocolTableRowProps {
     added_at?: string | null
     protocol: ProtocolRef | ProtocolRef[]
   }
+  selected?: boolean
+  onSelect?: (checked: boolean) => void
 }
 
-export function ProtocolTableRow({ protocolLink }: ProtocolTableRowProps) {
+export function ProtocolTableRow({ protocolLink, selected, onSelect }: ProtocolTableRowProps) {
   const protocol = Array.isArray(protocolLink.protocol)
     ? protocolLink.protocol[0]
     : protocolLink.protocol
@@ -64,6 +67,13 @@ export function ProtocolTableRow({ protocolLink }: ProtocolTableRowProps) {
 
   return (
     <TableRow>
+      <TableCell>
+        <Checkbox
+          checked={selected}
+          onCheckedChange={(checked) => onSelect?.(checked === true)}
+          aria-label={`Select protocol ${protocol.name}`}
+        />
+      </TableCell>
       <TableCell className="font-medium">
         {protocol.name}
         {protocol.description && (

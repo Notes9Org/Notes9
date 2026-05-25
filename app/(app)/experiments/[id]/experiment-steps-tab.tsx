@@ -10,6 +10,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
+import { Checkbox } from "@/components/ui/checkbox"
 import {
   Plus,
   MoreVertical,
@@ -79,6 +80,8 @@ export function ExperimentStepsTab({ experimentId }: ExperimentStepsTabProps) {
   const [dialogOpen, setDialogOpen] = useState(false)
   const [editingStep, setEditingStep] = useState<ExperimentStep | null>(null)
   const [isLoading, setIsLoading] = useState(true)
+  const [selectedIds, setSelectedIds] = useState<string[]>([])
+  const [isDeletingBulk, setIsDeletingBulk] = useState(false)
 
   const refresh = useCallback(async () => {
     const list = await getSteps(experimentId)
@@ -105,8 +108,36 @@ export function ExperimentStepsTab({ experimentId }: ExperimentStepsTabProps) {
 
   const handleDelete = useCallback(async (stepId: string) => {
     await deleteStep(experimentId, stepId)
+    setSelectedIds((prev) => prev.filter(id => id !== stepId))
     await refresh()
   }, [experimentId, refresh])
+
+  const handleBulkDelete = useCallback(async () => {
+    if (selectedIds.length === 0) return
+    setIsDeletingBulk(true)
+    for (const stepId of selectedIds) {
+      await deleteStep(experimentId, stepId)
+    }
+    setSelectedIds([])
+    setIsDeletingBulk(false)
+    await refresh()
+  }, [experimentId, selectedIds, refresh])
+
+  const toggleSelectAll = useCallback((checked: boolean) => {
+    if (checked) {
+      setSelectedIds(steps.map(s => s.id))
+    } else {
+      setSelectedIds([])
+    }
+  }, [steps])
+
+  const toggleSelect = useCallback((id: string, checked: boolean) => {
+    if (checked) {
+      setSelectedIds(prev => [...prev, id])
+    } else {
+      setSelectedIds(prev => prev.filter(i => i !== id))
+    }
+  }, [])
 
   const handleMove = useCallback(async (stepId: string, direction: "up" | "down") => {
     const idx = steps.findIndex((s) => s.id === stepId)
@@ -139,10 +170,24 @@ export function ExperimentStepsTab({ experimentId }: ExperimentStepsTabProps) {
               : "Design your experiment as a sequence of steps"}
           </p>
         </div>
-        <Button onClick={() => { setEditingStep(null); setDialogOpen(true) }} size="sm">
-          <Plus className="h-4 w-4 mr-2" />
-          Add Step
-        </Button>
+        <div className="flex items-center gap-2">
+          {selectedIds.length > 0 && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={handleBulkDelete}
+              disabled={isDeletingBulk}
+              className="bg-rose-50 text-rose-600 border border-rose-100 font-semibold hover:bg-rose-100 dark:bg-rose-900/20 dark:text-rose-400 dark:border-rose-900/10 dark:hover:bg-rose-900/30"
+            >
+              {isDeletingBulk ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Trash2 className="mr-2 h-4 w-4" />}
+              Delete Selected ({selectedIds.length})
+            </Button>
+          )}
+          <Button onClick={() => { setEditingStep(null); setDialogOpen(true) }} size="sm">
+            <Plus className="h-4 w-4 mr-2" />
+            Add Step
+          </Button>
+        </div>
       </div>
 
       {/* Progress bar */}
@@ -181,6 +226,13 @@ export function ExperimentStepsTab({ experimentId }: ExperimentStepsTabProps) {
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b bg-muted/50 text-left">
+                <th className="h-10 px-4 w-[48px]">
+                  <Checkbox 
+                    checked={steps.length > 0 && selectedIds.length === steps.length ? true : selectedIds.length > 0 ? "indeterminate" : false}
+                    onCheckedChange={toggleSelectAll}
+                    aria-label="Select all"
+                  />
+                </th>
                 <th className="h-10 px-4 font-medium text-muted-foreground w-16">Step</th>
                 <th className="h-10 px-4 font-medium text-muted-foreground">Title</th>
                 <th className="h-10 px-4 font-medium text-muted-foreground">Type</th>
@@ -198,6 +250,13 @@ export function ExperimentStepsTab({ experimentId }: ExperimentStepsTabProps) {
 
                 return (
                   <tr key={step.id} className="border-b last:border-0 transition-colors hover:bg-muted/30">
+                    <td className="p-4 align-middle">
+                      <Checkbox 
+                        checked={selectedIds.includes(step.id)}
+                        onCheckedChange={(checked) => toggleSelect(step.id, checked === true)}
+                        aria-label={`Select step ${step.title}`}
+                      />
+                    </td>
                     <td className="p-4 align-middle">
                       <div className={cn(
                         "flex items-center justify-center w-8 h-8 rounded-full text-xs font-semibold",

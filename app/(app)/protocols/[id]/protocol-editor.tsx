@@ -79,6 +79,7 @@ export function ProtocolEditor({
   const [isSavingContext, setIsSavingContext] = useState(false)
   const [projects, setProjects] = useState<ProjectOption[]>([])
   const [experiments, setExperiments] = useState<ExperimentOption[]>([])
+  const [samples, setSamples] = useState<{id: string, name: string, sample_code: string | null}[]>([])
   const [isLoadingExperiments, setIsLoadingExperiments] = useState(false)
   const [savedContext, setSavedContext] = useState({
     project_id: protocol.project_id ?? "",
@@ -193,6 +194,32 @@ export function ProtocolEditor({
     // Intentionally omit formData.experiment_id: clearing it inside this effect
     // would otherwise trigger an infinite refetch loop.
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [formData.project_id])
+
+  useEffect(() => {
+    if (!formData.project_id) {
+      setSamples([])
+      return
+    }
+
+    let cancelled = false
+    const run = async () => {
+      const supabase = createClient()
+      const { data } = await supabase
+        .from("samples")
+        .select("id, name, sample_code")
+        .eq("project_id", formData.project_id)
+        .order("name")
+      
+      if (!cancelled) {
+        setSamples((data as any) || [])
+      }
+    }
+
+    void run()
+    return () => {
+      cancelled = true
+    }
   }, [formData.project_id])
 
   // Highlight from AI reference navigation — retries until content is loaded
@@ -380,6 +407,7 @@ export function ProtocolEditor({
         <div className="flex-1 min-w-0 min-h-0 flex flex-col">
           <ProtocolDesignMode
             protocol={designProtocol}
+            samples={samples}
             onSaved={() => router.refresh()}
             onExitDesignMode={() => router.push(viewHref)}
             onContextChange={handleContextChange}
@@ -574,6 +602,7 @@ export function ProtocolEditor({
                   hideToolbar
                   showAITools={false}
                   showAiWritingDropdown={false}
+                  samples={samples}
                   className="min-h-0 flex-1 border-0 shadow-none"
                   onEditorReady={(ed) => { protocolEditorRef.current = ed; setProtocolEditorReady(!!ed) }}
                 />

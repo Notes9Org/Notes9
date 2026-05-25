@@ -13,6 +13,10 @@ import { LinkProtocolDialog } from './link-protocol-dialog'
 import { ProtocolTableRow } from './protocol-table-row'
 import { ExperimentStepsTab } from './experiment-steps-tab'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { Checkbox } from "@/components/ui/checkbox"
+import { useToast } from "@/hooks/use-toast"
+import { createClient } from "@/lib/supabase/client"
+import { Loader2, Trash2 } from "lucide-react"
 import Link from 'next/link'
 
 interface ProtocolRef {
@@ -73,9 +77,126 @@ function formatDuration(startDate: string | null | undefined, endDate: string | 
 }
 
 export function ExperimentTabs({ experiment, initialTab, experimentPageHref }: ExperimentTabsProps) {
+  const router = useRouter()
+  const { toast } = useToast()
+  
+  // States for bulk selection
+  const [selectedProtocolIds, setSelectedProtocolIds] = useState<string[]>([])
+  const [isUnlinkingProtocolsBulk, setIsUnlinkingProtocolsBulk] = useState(false)
+  
+  const [selectedSampleIds, setSelectedSampleIds] = useState<string[]>([])
+  const [isUnlinkingSamplesBulk, setIsUnlinkingSamplesBulk] = useState(false)
+
+  // Bulk actions for protocols
+  const handleBulkUnlinkProtocols = async () => {
+    if (selectedProtocolIds.length === 0) return
+    setIsUnlinkingProtocolsBulk(true)
+    
+    try {
+      const supabase = createClient()
+      const { error } = await supabase
+        .from("experiment_protocols")
+        .delete()
+        .in("id", selectedProtocolIds)
+      
+      if (error) throw error
+
+      toast({
+        title: "Success",
+        description: "Protocols unlinked successfully",
+      })
+
+      setSelectedProtocolIds([])
+      router.refresh()
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to unlink protocols",
+        variant: "destructive",
+      })
+    } finally {
+      setIsUnlinkingProtocolsBulk(false)
+    }
+  }
+
+  const toggleSelectAllProtocols = (checked: boolean) => {
+    if (checked) {
+      setSelectedProtocolIds(experiment.protocols.map(p => p.id))
+    } else {
+      setSelectedProtocolIds([])
+    }
+  }
+
+  const toggleSelectProtocol = (id: string, checked: boolean) => {
+    if (checked) {
+      setSelectedProtocolIds(prev => [...prev, id])
+    } else {
+      setSelectedProtocolIds(prev => prev.filter(i => i !== id))
+    }
+  }
+
+  // Bulk actions for samples
+  const handleBulkRemoveSamples = async () => {
+    if (selectedSampleIds.length === 0) return
+    setIsUnlinkingSamplesBulk(true)
+    
+    try {
+      const supabase = createClient()
+      
+      // Delete from experiment_samples join table
+      const { error: joinError } = await supabase
+        .from("experiment_samples")
+        .delete()
+        .eq("experiment_id", experiment.id)
+        .in("sample_id", selectedSampleIds)
+        
+      if (joinError) throw joinError
+
+      // Also set experiment_id = null for legacy samples
+      const { error: legacyError } = await supabase
+        .from("samples")
+        .update({ experiment_id: null })
+        .eq("experiment_id", experiment.id)
+        .in("id", selectedSampleIds)
+
+      if (legacyError) throw legacyError
+
+      toast({
+        title: "Success",
+        description: "Samples removed from experiment successfully",
+      })
+
+      setSelectedSampleIds([])
+      router.refresh()
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to remove samples",
+        variant: "destructive",
+      })
+    } finally {
+      setIsUnlinkingSamplesBulk(false)
+    }
+  }
+
+  const toggleSelectAllSamples = (checked: boolean) => {
+    if (checked) {
+      setSelectedSampleIds(experiment.samples.map(s => s.id))
+    } else {
+      setSelectedSampleIds([])
+    }
+  }
+
+  const toggleSelectSample = (id: string, checked: boolean) => {
+    if (checked) {
+      setSelectedSampleIds(prev => [...prev, id])
+    } else {
+      setSelectedSampleIds(prev => prev.filter(i => i !== id))
+    }
+  }
+
   const [tab, setTab] = useState(initialTab)
   const baseId = useId()
-  const router = useRouter()
   const pathname = usePathname()
   const searchParams = useSearchParams()
 
@@ -201,7 +322,19 @@ export function ExperimentTabs({ experiment, initialTab, experimentPageHref }: E
               Protocols provide detailed procedures and methods for this experiment
             </p>
           </div>
-          <div className="w-full sm:w-auto">
+          <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
+            {selectedProtocolIds.length > 0 && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={handleBulkUnlinkProtocols}
+                disabled={isUnlinkingProtocolsBulk}
+                className="bg-rose-50 text-rose-600 border border-rose-100 font-semibold hover:bg-rose-100 dark:bg-rose-900/20 dark:text-rose-400 dark:border-rose-900/10 dark:hover:bg-rose-900/30 w-full sm:w-auto"
+              >
+                {isUnlinkingProtocolsBulk ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Trash2 className="mr-2 h-4 w-4" />}
+                Unlink Selected ({selectedProtocolIds.length})
+              </Button>
+            )}
             <LinkProtocolDialog
               experimentId={experiment.id}
               linkedProtocolIds={experiment.protocols.map((p) => normalizeProtocol(p.protocol).id)}
@@ -214,6 +347,13 @@ export function ExperimentTabs({ experiment, initialTab, experimentPageHref }: E
             <Table>
               <TableHeader>
                 <TableRow>
+                  <TableHead className="w-[48px]">
+                    <Checkbox 
+                      checked={experiment.protocols.length > 0 && selectedProtocolIds.length === experiment.protocols.length ? true : selectedProtocolIds.length > 0 ? "indeterminate" : false}
+                      onCheckedChange={toggleSelectAllProtocols}
+                      aria-label="Select all protocols"
+                    />
+                  </TableHead>
                   <TableHead>Protocol Name</TableHead>
                   <TableHead>Version</TableHead>
                   <TableHead>Added Date</TableHead>
@@ -222,7 +362,12 @@ export function ExperimentTabs({ experiment, initialTab, experimentPageHref }: E
               </TableHeader>
               <TableBody>
                 {experiment.protocols.map((protocolLink) => (
-                  <ProtocolTableRow key={protocolLink.id} protocolLink={protocolLink} />
+                  <ProtocolTableRow 
+                    key={protocolLink.id} 
+                    protocolLink={protocolLink}
+                    selected={selectedProtocolIds.includes(protocolLink.id)}
+                    onSelect={(checked) => toggleSelectProtocol(protocolLink.id, checked)}
+                  />
                 ))}
               </TableBody>
             </Table>
@@ -243,18 +388,39 @@ export function ExperimentTabs({ experiment, initialTab, experimentPageHref }: E
           <p className="text-sm text-muted-foreground">
             Samples linked to this experiment ({experiment.samples?.length ?? 0})
           </p>
-          <Button asChild size="sm" variant="outline" className="w-full sm:w-auto shrink-0">
-            <Link href={`/samples/new?experiment=${experiment.id}`}>
-              <Plus className="mr-2 h-4 w-4" />
-              New sample for this experiment
-            </Link>
-          </Button>
+          <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center shrink-0">
+            {selectedSampleIds.length > 0 && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={handleBulkRemoveSamples}
+                disabled={isUnlinkingSamplesBulk}
+                className="bg-rose-50 text-rose-600 border border-rose-100 font-semibold hover:bg-rose-100 dark:bg-rose-900/20 dark:text-rose-400 dark:border-rose-900/10 dark:hover:bg-rose-900/30 w-full sm:w-auto"
+              >
+                {isUnlinkingSamplesBulk ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Trash2 className="mr-2 h-4 w-4" />}
+                Remove Selected ({selectedSampleIds.length})
+              </Button>
+            )}
+            <Button asChild size="sm" variant="outline" className="w-full sm:w-auto">
+              <Link href={`/samples/new?experiment=${experiment.id}`}>
+                <Plus className="mr-2 h-4 w-4" />
+                New sample for this experiment
+              </Link>
+            </Button>
+          </div>
         </div>
         {experiment.samples && experiment.samples.length > 0 ? (
           <div className="rounded-md border bg-card">
             <Table>
               <TableHeader>
                 <TableRow>
+                  <TableHead className="w-[48px]">
+                    <Checkbox 
+                      checked={experiment.samples.length > 0 && selectedSampleIds.length === experiment.samples.length ? true : selectedSampleIds.length > 0 ? "indeterminate" : false}
+                      onCheckedChange={toggleSelectAllSamples}
+                      aria-label="Select all samples"
+                    />
+                  </TableHead>
                   <TableHead>Sample Name / Code</TableHead>
                   <TableHead>Type</TableHead>
                   <TableHead>Status</TableHead>
@@ -265,6 +431,13 @@ export function ExperimentTabs({ experiment, initialTab, experimentPageHref }: E
               <TableBody>
                 {experiment.samples.map((sample) => (
                   <TableRow key={sample.id}>
+                    <TableCell>
+                      <Checkbox 
+                        checked={selectedSampleIds.includes(sample.id)}
+                        onCheckedChange={(checked) => toggleSelectSample(sample.id, checked === true)}
+                        aria-label={`Select sample ${sample.sample_code ?? sample.name}`}
+                      />
+                    </TableCell>
                     <TableCell className="font-medium">
                       {sample.sample_code ?? sample.name ?? "Sample"}
                     </TableCell>
@@ -311,6 +484,7 @@ export function ExperimentTabs({ experiment, initialTab, experimentPageHref }: E
           projectName={experiment.project}
           projectId={experiment.projectId}
           experimentPageHref={experimentPageHref}
+          experiment={experiment}
         />
       </TabsContent>
     </Tabs>
