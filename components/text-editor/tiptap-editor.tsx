@@ -1840,11 +1840,21 @@ export function TiptapEditor({
     editable,
     onUpdate: ({ editor }) => {
       onChange?.(editor.getHTML())
+      setToolbarSyncTick((current) => current + 1)
     },
     onSelectionUpdate: ({ editor }) => {
       setToolbarSyncTick((current) => current + 1)
       if (editor.state.selection.empty) {
         setIsCommenting(false)
+      }
+    },
+    // Catches storedMarks changes (font/color/size set on a collapsed selection
+    // — i.e. cursor-only, no selected text) that don't fire onUpdate or
+    // onSelectionUpdate. Without this, the toolbar labels lag behind reality
+    // whenever the menu stays open across multiple attribute tweaks.
+    onTransaction: ({ transaction }) => {
+      if (transaction.storedMarksSet) {
+        setToolbarSyncTick((current) => current + 1)
       }
     },
     onCreate: () => {

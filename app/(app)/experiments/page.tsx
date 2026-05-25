@@ -9,7 +9,7 @@ import {
   EmptyDescription,
   EmptyContent,
 } from "@/components/ui/empty"
-import { FlaskConical, Plus, X } from 'lucide-react'
+import { FlaskConical, Plus } from 'lucide-react'
 import Link from 'next/link'
 import { ExperimentsPageContent } from './experiment-list'
 import { SetPageBreadcrumb } from "@/components/layout/breadcrumb-context"
@@ -91,14 +91,6 @@ export default async function ExperimentsPage({
                 Manage and track all experimental procedures
               </p>
               <div className="flex items-center gap-2">
-                {projectContext ? (
-                  <Button asChild variant="outline" size="sm" className="gap-2">
-                    <Link href="/experiments">
-                      <X className="h-4 w-4" />
-                      Remove project filter
-                    </Link>
-                  </Button>
-                ) : null}
                 <Button id="tour-create-experiment" asChild size="sm" className="gap-2">
                   <Link
                     href={

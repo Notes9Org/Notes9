@@ -181,8 +181,8 @@ export default async function ExperimentDetailPage({
           {projectFromUrl ? (
             <Button asChild variant="outline" size="sm" className="gap-2">
               <Link href={`/experiments/${experiment.id}`}>
-                <X className="h-4 w-4" />
-                Remove project filter
+                {/* <X className="h-4 w-4" /> */}
+                {/* Remove project filter */}
               </Link>
             </Button>
           ) : null}

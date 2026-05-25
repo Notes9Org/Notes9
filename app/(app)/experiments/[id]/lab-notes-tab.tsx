@@ -1218,8 +1218,6 @@ export function LabNotesTab({
           status={autoSaveStatus}
           lastSaved={lastSaved}
           variant="icon"
-          onClick={handleSave}
-          disabled={isSaving || !formData.title.trim()}
         />
       </div>
     </div>
@@ -1650,8 +1648,6 @@ export function LabNotesTab({
                         status={autoSaveStatus}
                         lastSaved={lastSaved}
                         variant="icon"
-                        onClick={handleSave}
-                        disabled={isSaving || !formData.title.trim()}
                       />
                     </div>
                   </div>
@@ -1758,8 +1754,13 @@ export function LabNotesTab({
                         draftContent={formData.content}
                         noteId={selectedNote?.id ?? null}
                         onAccept={async (newContent) => {
-                          await forceSave();
-                          // Align diff baseline with draft after explicit accept (autosave does not update this).
+                          // Mirror the prior cloud-button behavior: cancel the
+                          // pending debounced auto-save, run the full handleSave
+                          // flow (title validation, toast, list refresh, router
+                          // refresh), then advance the diff baseline so the
+                          // approval bar collapses to "No pending changes".
+                          cancelPendingSave();
+                          await handleSave();
                           setSavedContent(newContent);
                         }}
                         onReject={() => {

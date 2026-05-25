@@ -8,7 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { FlaskConical, User, ArrowUpRight, Grid3x3, List, Plus, X } from 'lucide-react'
+import { FlaskConical, User, ArrowUpRight, Grid3x3, List, Plus } from 'lucide-react'
 import { HtmlContentTruncated } from '@/components/html-content'
 import {
   FILTER_ALL,
@@ -130,14 +130,6 @@ export function ExperimentsPageContent({
           Manage and track all experimental procedures
         </p>
         <div className="flex items-center gap-2 shrink-0">
-          {projectContext ? (
-            <Button asChild variant="outline" size="sm" className="gap-2">
-              <Link href="/experiments">
-                <X className="h-4 w-4" />
-                Remove project filter
-              </Link>
-            </Button>
-          ) : null}
           <ViewModeToggle value={viewMode} onChange={setViewMode} tableDisabled={isMobile} />
           <Button id="tour-create-experiment" asChild size="icon" variant="ghost" className="size-8 rounded-md text-muted-foreground hover:bg-muted hover:text-foreground transition-colors" aria-label="New experiment">
             <Link href={newExperimentHref}>
