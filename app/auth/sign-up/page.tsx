@@ -19,7 +19,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import Link from "next/link"
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { useState, useEffect } from "react"
 import { Separator } from "@/components/ui/separator"
 import { Notes9Brand } from "@/components/brand/notes9-brand"
@@ -35,6 +35,8 @@ export default function SignUpPage() {
   const [emailError, setEmailError] = useState<string | null>(null)
   const [checkingEmail, setCheckingEmail] = useState(false)
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const inviteToken = searchParams.get("token")
 
   // Check if email exists when user stops typing
   useEffect(() => {
@@ -109,8 +111,10 @@ export default function SignUpPage() {
         password,
         options: {
           emailRedirectTo:
-            process.env.NEXT_PUBLIC_DEV_SUPABASE_REDIRECT_URL ||
-            `${window.location.origin}/dashboard`,
+            inviteToken
+              ? `${window.location.origin}/auth/callback?token=${encodeURIComponent(inviteToken)}`
+              : process.env.NEXT_PUBLIC_DEV_SUPABASE_REDIRECT_URL ||
+                `${window.location.origin}/dashboard`,
           data: {
             first_name: firstName,
             last_name: lastName,
@@ -160,10 +164,14 @@ export default function SignUpPage() {
     setError(null)
 
     try {
+      const callbackUrl = inviteToken
+        ? `${window.location.origin}/auth/callback?token=${encodeURIComponent(inviteToken)}`
+        : `${window.location.origin}/auth/callback`
+
       const { error } = await supabase.auth.signInWithOAuth({
         provider,
         options: {
-          redirectTo: `${window.location.origin}/auth/callback`,
+          redirectTo: callbackUrl,
           scopes: provider === 'google' 
             ? 'email profile' 
             : 'email openid profile',
@@ -367,7 +375,7 @@ export default function SignUpPage() {
                 <div className="mt-4 text-center text-sm">
                   Already have an account?{" "}
                   <Link
-                    href="/auth/login"
+                    href={inviteToken ? `/auth/login?token=${encodeURIComponent(inviteToken)}` : "/auth/login"}
                     className="underline underline-offset-4 hover:text-primary"
                   >
                     Sign in

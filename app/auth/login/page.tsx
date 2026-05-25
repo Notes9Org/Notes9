@@ -28,6 +28,7 @@ function LoginForm() {
 
   const router = useRouter()
   const searchParams = useSearchParams()
+  const inviteToken = searchParams.get("token")
 
   // Pre-fill email if coming from sign-up page
   useEffect(() => {
@@ -73,7 +74,12 @@ function LoginForm() {
         throw error
       }
 
-      router.push("/dashboard")
+      // If invitation token is present, redirect to invite acceptance page
+      if (inviteToken) {
+        router.push(`/auth/invite?token=${encodeURIComponent(inviteToken)}`)
+      } else {
+        router.push("/dashboard")
+      }
     } catch (error: unknown) {
       setError(error instanceof Error ? error.message : "An error occurred")
     } finally {
@@ -87,10 +93,14 @@ function LoginForm() {
     setError(null)
 
     try {
+      const callbackUrl = inviteToken
+        ? `${window.location.origin}/auth/callback?token=${encodeURIComponent(inviteToken)}`
+        : `${window.location.origin}/auth/callback`
+
       const { error } = await supabase.auth.signInWithOAuth({
         provider,
         options: {
-          redirectTo: `${window.location.origin}/auth/callback`,
+          redirectTo: callbackUrl,
           scopes: provider === 'google'
             ? 'email profile'
             : 'email openid profile',
@@ -274,7 +284,7 @@ function LoginForm() {
                 <div className="mt-4 text-center text-sm">
                   Don't have an account?{" "}
                   <Link
-                    href="/auth/sign-up"
+                    href={inviteToken ? `/auth/sign-up?token=${encodeURIComponent(inviteToken)}` : "/auth/sign-up"}
                     className="underline underline-offset-4 hover:text-primary"
                   >
                     Sign up

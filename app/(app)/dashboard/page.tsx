@@ -21,6 +21,7 @@ import {
   Plus,
 } from "lucide-react";
 import { TodoPanel } from "./todo-panel";
+import { OrgSetupCTA } from "@/components/org/org-setup-cta";
 
 export default async function DashboardPage() {
   const supabase = await createClient();
@@ -77,6 +78,14 @@ export default async function DashboardPage() {
   const recentExperiments = recentExperimentsRes.data
   const recentNotes = recentNotesRes.data
   const dashboardTasks = dashboardTasksRes.data
+
+  // Check if user has completed org setup (has an org_members record)
+  const { data: orgMembership } = await supabase
+    .from("org_members")
+    .select("id")
+    .eq("user_id", user.id)
+    .eq("is_active", true)
+    .maybeSingle();
 
   // First-name lives in user_metadata too; avoid an extra profiles round-trip
   // just for the greeting.
@@ -163,6 +172,9 @@ export default async function DashboardPage() {
           </CardContent>
         </Card>
       </div> */}
+
+      {/* Org Setup CTA */}
+      <OrgSetupCTA visible={!orgMembership} />
 
       <Card className="min-w-0 overflow-hidden">
         <CardHeader>
