@@ -213,7 +213,7 @@ export default async function DashboardPage() {
       {/* Org Setup CTA */}
       <OrgSetupCTA visible={!orgMembership} />
 
-      {/* Middle row: Workspace (Planner features) */}
+      {/* Middle row: Workspace & Signals */}
       <div className="grid grid-cols-1 gap-4 md:gap-5 xl:grid-cols-12 min-h-[380px] xl:items-stretch">
         <div className="flex min-h-[350px] flex-col xl:col-span-6 min-w-0">
           <DashboardScheduleTasks
@@ -221,14 +221,6 @@ export default async function DashboardPage() {
             initialTasks={tasks}
           />
         </div>
-        <div className="flex min-h-[350px] flex-col xl:col-span-6 min-w-0">
-          <DashboardWhiteboard initialNotes={whiteboardNotes} />
-        </div>
-      </div>
-
-      {/* Bottom row: Lab signals (Status features) */}
-      <div className="grid grid-cols-1 gap-4 md:gap-5 xl:grid-cols-12">
-        {/* Active experiments — 6 cols */}
         <Card className="xl:col-span-6 flex flex-col">
           <CardHeader>
             <CardTitle className="text-base">Active experiments</CardTitle>
@@ -242,7 +234,7 @@ export default async function DashboardPage() {
                       href={`/experiments/${exp.id}${exp.project_id ? `?project=${exp.project_id}` : ""}`}
                       className="flex items-start gap-3 rounded-md border border-border bg-card p-3 hover:bg-muted/40 transition-colors"
                     >
-                      <FlaskConical className="size-4 mt-0.5 text-primary shrink-0" />
+                      <Plus className="size-4 mt-0.5 text-primary shrink-0" />
                       <div className="flex-1 min-w-0">
                         <div className="font-medium text-sm line-clamp-1">{exp.name}</div>
                         <div className="text-xs text-muted-foreground mt-0.5">
