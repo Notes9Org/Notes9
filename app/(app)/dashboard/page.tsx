@@ -258,6 +258,14 @@ export default async function DashboardPage() {
             </Button>
           </CardContent>
         </Card>
+      </div>
+
+      {/* Bottom row: Whiteboard & Recently edited */}
+      <div className="grid grid-cols-1 gap-4 md:gap-5 xl:grid-cols-12">
+        {/* Whiteboard — 6 cols */}
+        <div className="flex min-h-[350px] flex-col xl:col-span-6 min-w-0">
+          <DashboardWhiteboard initialNotes={whiteboardNotes} />
+        </div>
 
         {/* Recently edited — 6 cols */}
         <Card className="xl:col-span-6 flex flex-col">
