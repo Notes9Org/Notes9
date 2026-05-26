@@ -223,10 +223,10 @@ export default async function DashboardPage() {
       <OrgSetupCTA visible={!orgMembership} />
 
       {/* Dashboard 2x2 Grid */}
-      <div className="grid grid-cols-1 gap-4 md:gap-5 xl:grid-cols-2 xl:items-stretch">
+      <div className="grid grid-cols-1 gap-4 md:gap-5 xl:grid-cols-2 auto-rows-[400px]">
         
         {/* Top Left: Schedule */}
-        <div className="flex min-h-[380px] flex-col min-w-0">
+        <div className="flex flex-col min-w-0 h-full">
           <DashboardScheduleTasks
             initialEvents={events}
             initialTasks={tasks}
@@ -238,7 +238,7 @@ export default async function DashboardPage() {
           <CardHeader>
             <CardTitle className="text-base">Recent projects & experiments</CardTitle>
           </CardHeader>
-          <CardContent className="flex-1 flex flex-col">
+          <CardContent className="flex-1 flex flex-col overflow-y-auto min-h-0 pr-2">
             {activeWorkItems.length > 0 ? (
               <ul className="space-y-2 flex-1">
                 {activeWorkItems.map((item) => (
@@ -282,7 +282,7 @@ export default async function DashboardPage() {
         </Card>
 
         {/* Bottom Left: Whiteboard */}
-        <div className="flex min-h-[380px] flex-col min-w-0">
+        <div className="flex flex-col min-w-0 h-full">
           <DashboardWhiteboard initialNotes={whiteboardNotes} />
         </div>
 
@@ -291,7 +291,7 @@ export default async function DashboardPage() {
           <CardHeader>
             <CardTitle className="text-base">Recently edited</CardTitle>
           </CardHeader>
-          <CardContent className="flex-1">
+          <CardContent className="flex-1 overflow-y-auto min-h-0 pr-2">
             {recentlyEdited.length > 0 ? (
               <ul className="space-y-2">
                 {recentlyEdited.map((item) => (
