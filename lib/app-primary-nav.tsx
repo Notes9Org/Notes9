@@ -1,6 +1,6 @@
 import type { ComponentType } from "react"
 import {
-  CalendarClock,
+  BookOpen,
   Folder,
   Home,
   Network,
@@ -22,6 +22,7 @@ export const APP_PRIMARY_NAV: { name: string; href: string; icon: NavIcon }[] = 
   // The routes still exist and are reachable from those cards.
   { name: "Dashboard", href: "/dashboard", icon: Home },
   { name: "Projects", href: "/projects", icon: Folder },
+  { name: "Literature", href: "/literature-reviews", icon: BookOpen },
   { name: "Catalyst", href: "/catalyst", icon: Sparkles },
   { name: "Research map", href: "/research-map", icon: Network },
 ]

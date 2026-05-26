@@ -8,7 +8,7 @@ import { BubbleMenu } from "@tiptap/react/menus"
 import { StarterKit } from "@tiptap/starter-kit"
 import { Placeholder } from "@tiptap/extension-placeholder"
 import { Link } from "@tiptap/extension-link"
-import { Image } from "@tiptap/extension-image"
+import { ResizableImage } from "./extensions/resizable-image"
 import { Highlight } from "@tiptap/extension-highlight"
 import { TextStyle, FontFamily, FontSize } from "@tiptap/extension-text-style"
 import { Color } from "@tiptap/extension-color"
@@ -80,8 +80,6 @@ import {
   Pipette,
   Paintbrush,
   ImagePlus,
-  Square,
-  Circle,
   ArrowRight,
   Check,
 } from "lucide-react"
@@ -148,7 +146,7 @@ import {
 import { ChemicalFormula, formatChemicalFormula } from "./extensions/chemical-formula"
 import { ChemistryHighlight } from "./extensions/chemistry-highlight"
 import { RagHighlight } from "./extensions/rag-highlight"
-import { SimpleShape, type SimpleShapeVariant } from "./extensions/simple-shape"
+import { SimpleShape } from "./extensions/simple-shape"
 import { SpreadsheetEmbed } from "./extensions/spreadsheet-embed"
 // @ts-ignore - CSS import for KaTeX math rendering
 import "katex/dist/katex.min.css"
@@ -322,6 +320,7 @@ interface CommentItem {
   createdAt: number
   content: string
   pos: number
+  kind: "text" | "image"
 }
 
 // Standalone helper functions for persisting table state
@@ -429,10 +428,21 @@ function CommentSidebar({ editor, open, onClose }: { editor: any; open: boolean;
     if (!editor) return
     const items: CommentItem[] = []
     editor.state.doc.descendants((node: any, pos: number) => {
+      if (node.type.name === "image" && node.attrs.commentId && node.attrs.commentContent) {
+        if (!items.find((c) => c.id === node.attrs.commentId && c.pos === pos)) {
+          items.push({
+            id: node.attrs.commentId,
+            author: node.attrs.commentAuthor || "Unknown",
+            createdAt: node.attrs.commentCreatedAt || Date.now(),
+            content: node.attrs.commentContent,
+            text: node.attrs.alt?.trim() ? `[Image: ${node.attrs.alt}]` : "[Image]",
+            pos,
+            kind: "image",
+          })
+        }
+      }
       node.marks.forEach((mark: any) => {
         if (mark.type.name === "comment") {
-          // Changed deduplication: only skip if the SAME comment (same ID) is at the SAME position (node overlap)
-          // This allows copied blocks with same ID to show up multiple times in sidebar
           if (!items.find((c) => c.id === mark.attrs.id && c.pos === pos)) {
             items.push({
               id: mark.attrs.id,
@@ -441,6 +451,7 @@ function CommentSidebar({ editor, open, onClose }: { editor: any; open: boolean;
               content: mark.attrs.content,
               text: node.textContent,
               pos,
+              kind: "text",
             })
           }
         }
@@ -479,7 +490,11 @@ function CommentSidebar({ editor, open, onClose }: { editor: any; open: boolean;
               key={`${comment.id}-${comment.pos}`}
               className="p-3 rounded-lg border border-border bg-card hover:border-primary/50 transition-colors cursor-pointer group"
               onClick={() => {
-                editor.commands.focus(comment.pos)
+                if (comment.kind === "image") {
+                  editor.chain().focus().setNodeSelection(comment.pos).run()
+                } else {
+                  editor.commands.focus(comment.pos)
+                }
                 const dom = editor.view.nodeDOM(comment.pos)
                 if (dom) {
                   const el = dom instanceof Element ? dom : dom.parentElement
@@ -1264,7 +1279,6 @@ export const Comment = Mark.create<CommentOptions>({
   },
 
   addCommands() {
-    console.log("Comment extension addCommands called");
     return {
       setComment:
         (attributes: any) =>
@@ -1285,18 +1299,30 @@ export const Comment = Mark.create<CommentOptions>({
         (id: string) =>
           ({ tr, state, dispatch }: { tr: any; state: any; dispatch: any }) => {
             const { doc } = state;
+            let changed = false;
             doc.descendants((node: any, pos: number) => {
+              if (node.type.name === "image" && node.attrs.commentId === id) {
+                tr.setNodeMarkup(pos, undefined, {
+                  ...node.attrs,
+                  commentId: null,
+                  commentAuthor: null,
+                  commentContent: null,
+                  commentCreatedAt: null,
+                });
+                changed = true;
+              }
               node.marks.forEach((mark: any) => {
                 if (mark.type.name === this.name && mark.attrs.id === id) {
                   tr.removeMark(pos, pos + node.nodeSize, mark.type);
+                  changed = true;
                 }
               });
             });
-            if (dispatch) {
+            if (changed && dispatch) {
               dispatch(tr);
               return true;
             }
-            return false;
+            return changed;
           },
     };
   },
@@ -1756,7 +1782,9 @@ export function TiptapEditor({
           class: "text-primary underline cursor-pointer",
         },
       }),
-      Image.configure({
+      ResizableImage.configure({
+        inline: false,
+        allowBase64: true,
         HTMLAttributes: {
           class: "max-w-full h-auto rounded-lg",
         },
@@ -2174,7 +2202,9 @@ export function TiptapEditor({
 
     const handleClick = (e: MouseEvent) => {
       const target = e.target as HTMLElement
-      const commentEl = target.closest('.comment-mark') as HTMLElement | null
+      const commentEl =
+        (target.closest('.comment-mark') as HTMLElement | null) ??
+        (target.closest('[data-image-comment]') as HTMLElement | null)
 
       if (commentEl) {
         const content = commentEl.getAttribute('data-content')
@@ -2462,17 +2492,6 @@ export function TiptapEditor({
   const insertScientificSymbol = useCallback((symbol: string) => {
     if (!editor) return
     editor.chain().focus().insertContent(symbol).run()
-    setToolbarClusterMenu(null)
-  }, [editor])
-
-  const insertSimpleShape = useCallback((variant: SimpleShapeVariant) => {
-    if (!editor) return
-    const attrs =
-      variant === "line"
-        ? { variant, width: 220, height: 72 }
-        : { variant, width: 220, height: 120 }
-
-    editor.chain().focus().insertContent({ type: "simpleShape", attrs }).run()
     setToolbarClusterMenu(null)
   }, [editor])
 
@@ -3410,6 +3429,16 @@ export function TiptapEditor({
 
   const applyTextAlign = (alignment: "left" | "center" | "right" | "justify") => {
     editor.chain().focus().run()
+    if (editor.isActive("image")) {
+      const imageAlign =
+        alignment === "justify" || alignment === "left"
+          ? "left"
+          : alignment === "right"
+            ? "right"
+            : "center"
+      editor.commands.setImageAlign(imageAlign)
+      return
+    }
     updateAlignmentInSelection(
       ["paragraph", "heading", "tableCell", "tableHeader"],
       (attrs) => ({ ...attrs, textAlign: alignment })
@@ -3424,12 +3453,13 @@ export function TiptapEditor({
     )
   }
 
-  const currentTextAlign =
-    editor.getAttributes("paragraph").textAlign ||
-    editor.getAttributes("heading").textAlign ||
-    editor.getAttributes("tableCell").textAlign ||
-    editor.getAttributes("tableHeader").textAlign ||
-    "left"
+  const currentTextAlign = editor.isActive("image")
+    ? (editor.getAttributes("image").align as string) || "center"
+    : editor.getAttributes("paragraph").textAlign ||
+      editor.getAttributes("heading").textAlign ||
+      editor.getAttributes("tableCell").textAlign ||
+      editor.getAttributes("tableHeader").textAlign ||
+      "left"
 
   const currentVerticalAlign =
     editor.getAttributes("tableCell").verticalAlign ||
@@ -3793,20 +3823,6 @@ export function TiptapEditor({
             <DropdownMenuShortcut>{shortcutText.insert}</DropdownMenuShortcut>
           </DropdownMenuItem>
           <DropdownMenuSeparator />
-          <DropdownMenuLabel className="text-xs text-muted-foreground">Shapes</DropdownMenuLabel>
-          <DropdownMenuItem onClick={() => insertSimpleShape("rectangle")}>
-            <Square className="mr-2 h-4 w-4" />
-            Rectangle
-          </DropdownMenuItem>
-          <DropdownMenuItem onClick={() => insertSimpleShape("ellipse")}>
-            <Circle className="mr-2 h-4 w-4" />
-            Ellipse
-          </DropdownMenuItem>
-          <DropdownMenuItem onClick={() => insertSimpleShape("line")}>
-            <ArrowRight className="mr-2 h-4 w-4" />
-            Line
-          </DropdownMenuItem>
-          <DropdownMenuSeparator />
           <DropdownMenuLabel className="text-xs text-muted-foreground">Arrows</DropdownMenuLabel>
           <DropdownMenuItem onClick={() => insertArrowSymbol("→")}>
             <ArrowRight className="mr-2 h-4 w-4" />
@@ -3834,10 +3850,6 @@ export function TiptapEditor({
           >
             <MessageSquare className="mr-2 h-4 w-4" />
             Comments
-          </DropdownMenuItem>
-          <DropdownMenuItem onClick={() => void handleSpreadsheetPicker()}>
-            <Sheet className="mr-2 h-4 w-4" />
-            Spreadsheet
           </DropdownMenuItem>
           <DropdownMenuItem onClick={handleFilePicker}>
             <FileInput className="mr-2 h-4 w-4" />
@@ -4473,8 +4485,12 @@ export function TiptapEditor({
               pluginKey="comment-input"
               editor={editor}
               shouldShow={({ editor }) => {
-                const show = !editor.isActive('comment') && !editor.state.selection.empty;
-                return show;
+                if (editor.isActive("comment")) return false
+                if (editor.isActive("image")) {
+                  const attrs = editor.getAttributes("image")
+                  return !attrs.commentId
+                }
+                return !editor.state.selection.empty
               }}
               className="z-[200]"
             >
@@ -4500,7 +4516,11 @@ export function TiptapEditor({
                     onKeyDown={(e) => {
                       if (e.key === 'Enter') {
                         if (commentText.trim()) {
-                          editor.chain().focus().setComment({ author: "You", content: commentText }).run();
+                          if (editor.isActive("image")) {
+                            editor.chain().focus().setImageComment({ author: "You", content: commentText.trim() }).run()
+                          } else {
+                            editor.chain().focus().setComment({ author: "You", content: commentText.trim() }).run()
+                          }
                           setCommentText("");
                           setIsCommenting(false);
                         }
@@ -4512,7 +4532,11 @@ export function TiptapEditor({
                   />
                   <Button size="sm" className="h-7 px-2" onClick={() => {
                     if (commentText.trim()) {
-                      editor.chain().focus().setComment({ author: "You", content: commentText }).run();
+                      if (editor.isActive("image")) {
+                        editor.chain().focus().setImageComment({ author: "You", content: commentText.trim() }).run()
+                      } else {
+                        editor.chain().focus().setComment({ author: "You", content: commentText.trim() }).run()
+                      }
                       setCommentText("");
                       setIsCommenting(false);
                     }

@@ -1,13 +1,7 @@
 import Link from "next/link";
 import { Building2 } from "lucide-react";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { DashboardLabSection } from "@/components/org/dashboard-lab-section";
 
 interface OrgSetupCTAProps {
   visible: boolean;
@@ -17,22 +11,23 @@ export function OrgSetupCTA({ visible }: OrgSetupCTAProps) {
   if (!visible) return null;
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <Building2 className="h-5 w-5" />
-          Use Notes9 for my lab
-        </CardTitle>
-        <CardDescription>
-          Set up your lab organization to invite team members, manage roles, and
-          collaborate on research together.
-        </CardDescription>
-      </CardHeader>
-      <CardContent>
-        <Link href="/org/setup">
-          <Button className="cursor-pointer">Get Started</Button>
-        </Link>
-      </CardContent>
-    </Card>
+    <DashboardLabSection
+      eyebrow="New here?"
+      title="Set up My Lab"
+      description="Create your lab organization to invite teammates, manage roles, and keep everyone on the same research workspace."
+    >
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex items-start gap-3 text-sm text-muted-foreground">
+          <Building2 className="mt-0.5 size-5 shrink-0 text-primary" aria-hidden />
+          <p className="max-w-xl">
+            Most research teams start here — it only takes a minute, and you can
+            invite collaborators right after.
+          </p>
+        </div>
+        <Button asChild className="shrink-0 cursor-pointer">
+          <Link href="/org/setup">Create my lab</Link>
+        </Button>
+      </div>
+    </DashboardLabSection>
   );
 }

@@ -24,6 +24,7 @@ import { cn } from "@/lib/utils"
 import {
   exportSegmentsPlain,
   joinAddedExcerpts,
+  formatUnchangedSegment,
   joinRemovedExcerpts,
   resolveDiffDisplay,
 } from "@/lib/content-diff-segments"
@@ -271,19 +272,24 @@ function DiffEntry({ diff }: { diff: ContentDiff }) {
       {expanded && resolved.kind === "segments" && (
         <div className="border-t border-border/40 bg-muted/10 px-3 pb-3 pt-2">
           <p className="mb-1.5 text-2xs font-medium uppercase tracking-wide text-muted-foreground">
-            Word-level diff · removed / added (unchanged runs shown as ···)
+            Word-level diff · removed / added (unchanged text shown when stored)
           </p>
           <div className="max-h-[min(45vh,14rem)] overflow-y-auto rounded border border-border/40 bg-background p-2 sm:max-h-48">
             <p className="font-mono text-micro leading-relaxed whitespace-pre-wrap break-words">
               {resolved.segments.map((seg, i) => {
                 if (seg.k === "_") {
+                  const unchanged = formatUnchangedSegment(seg)
+                  const title =
+                    typeof seg.n === "number"
+                      ? `${seg.n} characters unchanged`
+                      : "Unchanged"
                   return (
                     <span
                       key={i}
-                      className="inline text-muted-foreground/70"
-                      title={`${seg.n} characters unchanged`}
+                      className="inline text-muted-foreground/80 whitespace-pre-wrap"
+                      title={title}
                     >
-                      ···
+                      {unchanged}
                     </span>
                   )
                 }

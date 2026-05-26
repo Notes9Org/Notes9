@@ -28,7 +28,7 @@ import type { Editor } from "@tiptap/react"
 import { NoteExportMenu, NotePrintButton } from "@/components/note-export-menu"
 import { useToast } from "@/hooks/use-toast"
 import { useAutoSave } from "@/hooks/use-auto-save"
-import { SaveStatusIndicator } from "@/components/ui/save-status"
+import { useContentDiffs } from "@/hooks/use-content-diffs"
 import {
   Plus,
   NotebookPen,
@@ -151,6 +151,9 @@ export function LabNotesTab({
 
   /** Last persisted note body — drives the bottom diff bar (like protocol design mode). */
   const [savedContent, setSavedContent] = useState("");
+  /** Baseline for content_diffs — advanced on each recorded history row (auto-save + accept). */
+  const historyBaselineRef = useRef("");
+  const { recordDiff } = useContentDiffs("lab_note", selectedNote?.id ?? null);
 
   // Linked protocols state
   const [linkedProtocols, setLinkedProtocols] = useState<LinkedProtocol[]>([]);
@@ -259,11 +262,21 @@ export function LabNotesTab({
     return () => { cancelled = true; clearTimeout(initialTimer); };
   }, [activeHighlightTarget, selectedNote?.id, noteEditorReady]);
 
-  // Auto-save functionality.
-  // Persistence only — history entries are recorded exclusively by the
-  // Accept & Save flow in ContentChangeApprovalBar so each row in
-  // content_diffs corresponds to one user-confirmed change rather than a
-  // 2-second typing window.
+  const recordLabNoteHistory = useCallback(
+    async (noteId: string, previousContent: string, newContent: string) => {
+      if (previousContent === newContent) return
+      const ok = await recordDiff({
+        recordType: "lab_note",
+        recordId: noteId,
+        previousContent,
+        newContent,
+      })
+      if (ok) historyBaselineRef.current = newContent
+    },
+    [recordDiff],
+  )
+
+  // Auto-save: persist to DB and append a content_diffs row for each saved revision.
   const handleAutoSave = async (content: string, title?: string, noteType?: string) => {
     // Use provided values or fall back to formData
     const titleToSave = title !== undefined ? title : formData.title;
@@ -302,6 +315,7 @@ export function LabNotesTab({
         setIsCreating(false);
         setSelectedNote(data);
         setSavedContent(content);
+        await recordLabNoteHistory(data.id, historyBaselineRef.current, content);
 
         // Refresh notes list
         await fetchNotes();
@@ -319,9 +333,11 @@ export function LabNotesTab({
 
         if (error) throw error;
 
+        await recordLabNoteHistory(selectedNote.id, historyBaselineRef.current, content);
+
         // Intentionally do NOT update `savedContent`: it is the baseline the
         // approval bar diffs the live draft against, and gets advanced only
-        // by Accept & Save. Bumping it here would hide the bar mid-session.
+        // by Accept & Save.
 
         // Update local state — use functional updater to avoid stale closure
         setNotes((prev) =>
@@ -345,8 +361,6 @@ export function LabNotesTab({
   };
 
   const {
-    status: autoSaveStatus,
-    lastSaved,
     debouncedSave,
     forceSave,
     cancelPendingSave,
@@ -361,7 +375,9 @@ export function LabNotesTab({
   // so the approval bar doesn't flash "Pending changes" with the prior note's
   // body as the comparison baseline on the first render after a switch.
   useEffect(() => {
-    setSavedContent(selectedNote?.content ?? "");
+    const baseline = selectedNote?.content ?? "";
+    setSavedContent(baseline);
+    historyBaselineRef.current = baseline;
   }, [selectedNote?.id]);
 
   // Fetch existing lab notes
@@ -1221,11 +1237,6 @@ export function LabNotesTab({
             </div>
           )}
         </div>
-        <SaveStatusIndicator
-          status={autoSaveStatus}
-          lastSaved={lastSaved}
-          variant="icon"
-        />
       </div>
     </div>
   ) : undefined;
@@ -1321,6 +1332,7 @@ export function LabNotesTab({
         <Card className="flex h-full min-h-0 flex-col gap-0 py-0">
           <div
             ref={labNotesFullscreenShellRef}
+            data-editor-workspace-shell=""
             className="flex h-full min-h-0 min-w-0 flex-1 flex-row items-stretch overflow-hidden"
           >
             {/* Notes list - inside card, left side (hidden on mobile; use Sheet instead) */}
@@ -1651,11 +1663,6 @@ export function LabNotesTab({
                           </div>
                         )}
                       </div>
-                      <SaveStatusIndicator
-                        status={autoSaveStatus}
-                        lastSaved={lastSaved}
-                        variant="icon"
-                      />
                     </div>
                   </div>
                   <div className="flex items-center gap-1 shrink-0">
@@ -1770,6 +1777,7 @@ export function LabNotesTab({
                           cancelPendingSave();
                           await handleSave();
                           setSavedContent(newContent);
+                          historyBaselineRef.current = newContent;
                         }}
                         onReject={() => {
                           cancelPendingSave();

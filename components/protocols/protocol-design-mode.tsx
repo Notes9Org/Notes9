@@ -10,6 +10,7 @@ import {
 import type { Editor } from "@tiptap/react"
 import { createClient } from "@/lib/supabase/client"
 import { useToast } from "@/hooks/use-toast"
+import { useContentDiffs } from "@/hooks/use-content-diffs"
 import { TiptapEditor } from "@/components/text-editor/tiptap-editor"
 import { NoteExportMenu } from "@/components/note-export-menu"
 import { Button } from "@/components/ui/button"
@@ -107,6 +108,8 @@ export function ProtocolDesignMode({
 
   const [draftContent, setDraftContent] = useState(protocol.content)
   const [savedContent, setSavedContent] = useState(protocol.content)
+  const historyBaselineRef = useRef(protocol.content)
+  const { recordDiff } = useContentDiffs("protocol", protocol.id)
   const [currentVersion, setCurrentVersion] = useState(protocol.version)
   const [isEditingTitle, setIsEditingTitle] = useState(false)
   const titleInputRef = useRef<HTMLInputElement>(null)
@@ -165,6 +168,7 @@ export function ProtocolDesignMode({
   useEffect(() => {
     setDraftContent(protocol.content)
     setSavedContent(protocol.content)
+    historyBaselineRef.current = protocol.content
     setCurrentVersion(protocol.version)
     const dt = protocol.document_template_id ?? null
     setDraftDocumentTemplateId(dt)
@@ -173,6 +177,27 @@ export function ProtocolDesignMode({
     setDraftTemplateLabel(label)
     setSavedTemplateLabel(label)
   }, [protocol.id, protocol.content, protocol.version, protocol.document_template_id, protocol.document_template])
+
+  // Record change history as the user edits (debounced), aligned with lab note auto-save cadence.
+  useEffect(() => {
+    const baseline = historyBaselineRef.current
+    if (draftContent === baseline) return
+
+    const timer = window.setTimeout(() => {
+      void (async () => {
+        const ok = await recordDiff({
+          recordType: "protocol",
+          recordId: protocol.id,
+          previousContent: baseline,
+          newContent: draftContent,
+          documentTitle: protocol.name || null,
+        })
+        if (ok) historyBaselineRef.current = draftContent
+      })()
+    }, 2000)
+
+    return () => window.clearTimeout(timer)
+  }, [draftContent, protocol.id, protocol.name, recordDiff])
 
   const templateMetaDirty =
     (draftDocumentTemplateId ?? null) !== (savedDocumentTemplateId ?? null)
@@ -233,6 +258,7 @@ export function ProtocolDesignMode({
 
       onSaved()
       setSavedContent(newContent)
+      historyBaselineRef.current = newContent
       setSavedDocumentTemplateId(draftDocumentTemplateId)
       setSavedTemplateLabel(draftTemplateLabel)
       setCurrentVersion(newVersion)
@@ -413,6 +439,7 @@ export function ProtocolDesignMode({
         <Card className="flex h-full min-h-0 flex-col gap-0 py-0">
           <div
             ref={protocolDesignWorkspaceRef}
+            data-editor-workspace-shell=""
             className="flex h-full min-h-0 min-w-0 flex-1 flex-row items-stretch overflow-hidden"
           >
             {/* Siblings list — desktop column. Collapses to width 0 when hidden. */}

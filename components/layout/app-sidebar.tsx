@@ -5,7 +5,6 @@ import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
 import Image from "next/image"
 import {
-  BookOpen,
   ChevronDown,
   ChevronLeft,
   ChevronUp,
@@ -22,7 +21,6 @@ import {
   Settings,
   TestTube,
   User2,
-  Users,
   X as XIcon,
   Database,
   FileText,
@@ -88,7 +86,7 @@ type ProjectScopedNavItem = {
 }
 
 // Lab notes / Protocols / Samples / Data are nested under Experiments.
-// Reports sit after Literature (project-wide, not under a single experiment).
+// Literature is top-level nav (see APP_PRIMARY_NAV) — not project-scoped in the sidebar.
 const PROJECT_SCOPED_NAV: ProjectScopedNavItem[] = [
   {
     name: "Experiments",
@@ -101,7 +99,6 @@ const PROJECT_SCOPED_NAV: ProjectScopedNavItem[] = [
       { name: "Data", basePath: "/data", icon: Database },
     ],
   },
-  { name: "Literature", basePath: "/literature-reviews", icon: BookOpen },
   { name: "Reports", basePath: "/reports", icon: FileText },
   { name: "Writing", basePath: "/papers", icon: FileEdit },
 ]
@@ -558,30 +555,13 @@ export function AppSidebar() {
                 );
               })}
 
-              {/* My Lab link - only visible when user belongs to an organization */}
-              {userProfile?.organization_id && (
-                <SidebarMenuItem>
-                  <SidebarMenuButton
-                    asChild
-                    isActive={mounted && (pathname === "/settings/organization" || pathname.startsWith("/settings/organization/"))}
-                    className="group transition-all duration-150 hover:bg-[color:color-mix(in_oklab,var(--background)_78%,var(--primary)_22%)] hover:text-sidebar-foreground active:scale-[0.985] active:bg-[color:color-mix(in_oklab,var(--background)_70%,var(--primary)_30%)] dark:hover:bg-sidebar-accent dark:hover:text-sidebar-accent-foreground dark:active:scale-[0.985] dark:active:bg-sidebar-accent/90 data-[active=true]:bg-transparent data-[active=true]:text-sidebar-foreground"
-                  >
-                    <Link href="/settings/organization" title={isIconMode ? "My Lab" : undefined}>
-                      <Users />
-                      <span className={cn(isIconMode && "hidden")}>
-                        <span className={cn("truncate", mounted && (pathname === "/settings/organization" || pathname.startsWith("/settings/organization/")) && "font-semibold")}>My Lab</span>
-                      </span>
-                    </Link>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              )}
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
 
         {/* Project-scoped section nav. Renders ONLY when a project is active
             in the URL — gives the previously-orphaned global section pages
-            (lab-notes, experiments, protocols, samples, equipment, literature)
+            (lab-notes, experiments, protocols, samples, reports, writing)
             a discoverable home inside the project hierarchy. Each href carries
             the project param forward so back-nav stays scoped. */}
         {scope.projectId && !isIconMode && (

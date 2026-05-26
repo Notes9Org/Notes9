@@ -193,7 +193,7 @@ function TabsContent({
   return (
     <TabsPrimitive.Content
       className={cn(
-        'mt-2 ring-offset-background focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:ring-offset-2',
+        'mt-2 w-full min-w-0 ring-offset-background focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:ring-offset-2',
         className
       )}
       {...props}

@@ -14,6 +14,11 @@ import {
   ScrollText,
 } from "lucide-react"
 import { OrgSetupCTA } from "@/components/org/org-setup-cta"
+import {
+  DashboardMyLab,
+  type DashboardLabSummary,
+} from "@/components/org/dashboard-my-lab"
+import { isOrgAdmin, type OrgMember as OrgMemberPerm } from "@/lib/org/permissions"
 import { CatalystSectionHero } from "@/components/catalyst/catalyst-section-hero"
 import { DashboardGreeting } from "./dashboard-greeting"
 import { DashboardFirstRun } from "./dashboard-first-run"
@@ -142,13 +147,113 @@ export default async function DashboardPage() {
     .sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime())
     .slice(0, 5)
 
-  // Check if user has completed org setup (has an org_members record)
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("organization_id")
+    .eq("id", user.id)
+    .single()
+
   const { data: orgMembership } = await supabase
     .from("org_members")
     .select("id")
     .eq("user_id", user.id)
     .eq("is_active", true)
-    .maybeSingle();
+    .maybeSingle()
+
+  let labSummary: DashboardLabSummary | null = null
+  const orgId = profile?.organization_id
+
+  if (orgMembership && orgId) {
+    const [orgRes, membersRes, memberCountRes, invitationsRes, rolesRes] =
+      await Promise.all([
+      supabase
+        .from("organizations")
+        .select("id, name, type")
+        .eq("id", orgId)
+        .single(),
+      supabase
+        .from("org_members")
+        .select(
+          `id, user_id, role_id, is_active, joined_at,
+           profiles:user_id (id, first_name, last_name, email),
+           org_roles:role_id (id, name, is_system_role)`,
+        )
+        .eq("organization_id", orgId)
+        .eq("is_active", true)
+        .order("joined_at", { ascending: true })
+        .limit(6),
+      supabase
+        .from("org_members")
+        .select("id", { count: "exact", head: true })
+        .eq("organization_id", orgId)
+        .eq("is_active", true),
+      supabase
+        .from("org_invitations")
+        .select("id", { count: "exact", head: true })
+        .eq("organization_id", orgId)
+        .eq("status", "pending"),
+      supabase
+        .from("org_roles")
+        .select("id, name")
+        .eq("organization_id", orgId)
+        .order("name"),
+    ])
+
+    if (orgRes.data) {
+      const members = membersRes.data ?? []
+      const rawForAdmin: OrgMemberPerm[] = members.map((m) => {
+        const row = m as {
+          user_id: string
+          role_id: string | null
+          is_active: boolean
+          org_roles: { is_system_role: boolean; name: string } | null
+        }
+        return {
+          user_id: row.user_id,
+          role_id: row.role_id,
+          is_active: row.is_active,
+          role: row.org_roles
+            ? {
+                is_system_role: row.org_roles.is_system_role,
+                name: row.org_roles.name,
+              }
+            : null,
+        }
+      })
+
+      labSummary = {
+        organization: orgRes.data,
+        memberCount: memberCountRes.count ?? members.length,
+        pendingInviteCount: invitationsRes.count ?? 0,
+        previewMembers: members.map((m) => {
+          const row = m as {
+            id: string
+            profiles: {
+              first_name: string | null
+              last_name: string | null
+              email: string | null
+            } | null
+            org_roles: { name: string } | null
+          }
+          const name = row.profiles
+            ? `${row.profiles.first_name ?? ""} ${row.profiles.last_name ?? ""}`.trim() ||
+              row.profiles.email ||
+              "Unknown"
+            : "Unknown"
+          return {
+            id: row.id,
+            name,
+            roleName: row.org_roles?.name ?? "Member",
+          }
+        }),
+        isAdmin: isOrgAdmin(rawForAdmin, user.id),
+        inviteRoles: (rolesRes.data ?? []).map((r) => ({
+          id: r.id,
+          name: r.name,
+        })),
+      }
+    }
+  }
 
   // First-name lives in user_metadata too; avoid an extra profiles round-trip
   // just for the greeting.
@@ -171,9 +276,6 @@ export default async function DashboardPage() {
         
         <DashboardQuickActions userId={user.id} />
       </div>
-
-      {/* Org Setup CTA */}
-      <OrgSetupCTA visible={!orgMembership} />
 
       {/* Dashboard 2x2 Grid */}
       <div className="grid grid-cols-1 gap-4 md:gap-5 xl:grid-cols-2 auto-rows-[400px]">
@@ -225,6 +327,13 @@ export default async function DashboardPage() {
           </CardContent>
         </Card>
       </div>
+
+      {/* My Lab — bottom of dashboard, easy to spot for new users */}
+      {labSummary ? (
+        <DashboardMyLab lab={labSummary} />
+      ) : (
+        <OrgSetupCTA visible={!orgMembership} />
+      )}
     </div>
   )
 }

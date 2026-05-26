@@ -79,7 +79,7 @@ export function useContentDiffs(
   }, [recordId, recordType])
 
   const recordDiff = useCallback(
-    async (input: RecordDiffInput): Promise<void> => {
+    async (input: RecordDiffInput): Promise<boolean> => {
       const {
         recordType: rt,
         recordId: rid,
@@ -87,11 +87,11 @@ export function useContentDiffs(
         newContent,
         documentTitle,
       } = input
-      if (!rid || previousContent === newContent) return
+      if (!rid || previousContent === newContent) return false
 
       const prevText = htmlToDiffPlainText(previousContent)
       const nextText = htmlToDiffPlainText(newContent)
-      if (prevText === nextText) return
+      if (prevText === nextText) return false
 
       const parts = diffWords(prevText, nextText)
       let wordsAdded = 0
@@ -119,7 +119,7 @@ export function useContentDiffs(
         const {
           data: { user },
         } = await supabase.auth.getUser()
-        if (!user) return
+        if (!user) return false
 
         const { error: err } = await supabase.from("content_diffs").insert({
           record_type: rt,
@@ -133,11 +133,15 @@ export function useContentDiffs(
         })
         if (err) {
           console.warn("[useContentDiffs] recordDiff insert error:", err)
-          return
+          setError("Failed to save change history")
+          return false
         }
         await loadDiffs()
+        return true
       } catch (e) {
         console.warn("[useContentDiffs] recordDiff error:", e)
+        setError("Failed to save change history")
+        return false
       }
     },
     [loadDiffs]

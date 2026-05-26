@@ -136,16 +136,52 @@
 }
 
 /* Images */
+.ProseMirror .resizable-image {
+  margin: 1rem 0;
+}
+
+.ProseMirror .resizable-image-host {
+  display: flex;
+  width: 100%;
+  margin: 1rem 0;
+}
+
+.ProseMirror .resizable-image-host--left {
+  justify-content: flex-start;
+}
+
+.ProseMirror .resizable-image-host--center {
+  justify-content: center;
+}
+
+.ProseMirror .resizable-image-host--right {
+  justify-content: flex-end;
+}
+
 .ProseMirror img {
   max-width: 100%;
   height: auto;
   border-radius: 0.5rem;
-  margin: 1rem 0;
-  display: block;
 }
 
 .ProseMirror img.ProseMirror-selectednode {
-  outline: 2px solid var(--primary);
+  outline: none;
+}
+
+/* Image node views: no selection box — corner handles only */
+.ProseMirror .node-image {
+  display: contents;
+}
+
+.ProseMirror .resizable-image.ProseMirror-selectednode,
+.ProseMirror .node-image.ProseMirror-selectednode {
+  outline: none;
+  box-shadow: none;
+}
+
+.ProseMirror .resizable-image__img--selected {
+  outline: none;
+  box-shadow: none;
 }
 
 /* Tables */
@@ -203,7 +239,7 @@
 }
 
 /* Selection */
-.ProseMirror .ProseMirror-selectednode {
+.ProseMirror .ProseMirror-selectednode:not(.resizable-image):not(.node-image) {
   outline: 2px solid var(--primary);
   border-radius: 0.25rem;
 }

@@ -3,15 +3,31 @@
 import { Node, mergeAttributes } from "@tiptap/core"
 import { NodeViewWrapper, ReactNodeViewRenderer } from "@tiptap/react"
 import { useCallback, useEffect, useRef, useState } from "react"
+import { createPortal } from "react-dom"
 import { Expand, FileSpreadsheet, Minimize } from "lucide-react"
 import { UniverWorkbookView } from "@/components/spreadsheet/univer-workbook-view"
 import { scheduleMicrotask } from "@/components/spreadsheet/spreadsheet-univer-shared"
+
+/** Above notes/protocol side panels (z-120) and TipTap region fullscreen (z-110); below modals (z-130+). */
+const SPREADSHEET_FULLSCREEN_Z_INDEX = 125
+
+const EMBED_PLACEHOLDER_MIN_H = 320
+
+function findFullscreenRegionElement(root: HTMLElement | null): HTMLElement | null {
+  if (!root) return null
+  const shell = root.closest("[data-editor-workspace-shell]")
+  if (shell instanceof HTMLElement) return shell
+  const sidebarInset = root.closest('[data-slot="sidebar-inset"]')
+  const main = sidebarInset?.querySelector(":scope > main")
+  return main instanceof HTMLElement ? main : null
+}
 
 function SpreadsheetEmbedView({ node, updateAttributes }: { node: any; updateAttributes: (attrs: Record<string, unknown>) => void }) {
   const updateAttributesRef = useRef(updateAttributes)
   updateAttributesRef.current = updateAttributes
   const rootRef = useRef<HTMLDivElement | null>(null)
   const [isFullscreen, setIsFullscreen] = useState(false)
+  const [portalMounted, setPortalMounted] = useState(false)
   const [regionStyle, setRegionStyle] = useState<React.CSSProperties | undefined>(
     undefined,
   )
@@ -25,17 +41,13 @@ function SpreadsheetEmbedView({ node, updateAttributes }: { node: any; updateAtt
   }
   const instanceKey = instanceKeyRef.current
 
-  const getMainRegion = useCallback((): HTMLElement | null => {
-    const root = rootRef.current
-    if (!root) return null
-    const sidebarInset = root.closest('[data-slot="sidebar-inset"]')
-    if (!sidebarInset) return null
-    return sidebarInset.querySelector(":scope > main")
+  useEffect(() => {
+    setPortalMounted(true)
   }, [])
 
   const syncRegionBounds = useCallback(() => {
     if (!isFullscreen) return
-    const region = getMainRegion()
+    const region = findFullscreenRegionElement(rootRef.current)
     if (!region) return
     const rect = region.getBoundingClientRect()
     setRegionStyle({
@@ -44,10 +56,10 @@ function SpreadsheetEmbedView({ node, updateAttributes }: { node: any; updateAtt
       left: `${Math.round(rect.left)}px`,
       width: `${Math.round(rect.width)}px`,
       height: `${Math.round(rect.height)}px`,
-      zIndex: 80,
+      zIndex: SPREADSHEET_FULLSCREEN_Z_INDEX,
       margin: 0,
     })
-  }, [getMainRegion, isFullscreen])
+  }, [isFullscreen])
 
   useEffect(() => {
     if (!isFullscreen) {
@@ -63,6 +75,15 @@ function SpreadsheetEmbedView({ node, updateAttributes }: { node: any; updateAtt
       window.removeEventListener("scroll", syncRegionBounds, true)
     }
   }, [isFullscreen, syncRegionBounds])
+
+  useEffect(() => {
+    if (!isFullscreen) return
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setIsFullscreen(false)
+    }
+    window.addEventListener("keydown", onKeyDown)
+    return () => window.removeEventListener("keydown", onKeyDown)
+  }, [isFullscreen])
 
   const toggleFullscreen = useCallback(() => {
     setIsFullscreen((prev) => !prev)
@@ -80,69 +101,107 @@ function SpreadsheetEmbedView({ node, updateAttributes }: { node: any; updateAtt
     [],
   )
 
-  return (
-    <NodeViewWrapper
-      ref={rootRef}
-      className={
-        isFullscreen
-          ? "h-full w-full overflow-hidden rounded-xl border border-border bg-card shadow-lg"
-          : "my-4 overflow-hidden rounded-xl border border-border/70 bg-card/70 shadow-sm"
-      }
-      style={regionStyle}
-      contentEditable={false}
-      data-drag-handle
+  const sheetPanel = (
+    <div
+      data-spreadsheet-embed-root
+      className="flex h-full min-h-0 flex-col overflow-hidden rounded-[inherit]"
     >
       <div
-        data-spreadsheet-embed-root
-        className="flex h-full min-h-0 flex-col overflow-hidden rounded-[inherit]"
+        className={
+          isFullscreen
+            ? "flex items-center gap-2 border-b border-border bg-muted px-3 py-2 text-sm font-medium text-foreground"
+            : "flex items-center gap-2 border-b border-border/60 bg-muted/45 px-3 py-2 text-sm font-medium text-foreground"
+        }
       >
-        <div
-          className={
-            isFullscreen
-              ? "flex items-center gap-2 border-b border-border bg-muted px-3 py-2 text-sm font-medium text-foreground"
-              : "flex items-center gap-2 border-b border-border/60 bg-muted/45 px-3 py-2 text-sm font-medium text-foreground"
-          }
+        <FileSpreadsheet className="h-4 w-4 shrink-0 text-emerald-600" />
+        <span className="truncate flex-1">{node.attrs.fileName || "Spreadsheet"}</span>
+        <button
+          type="button"
+          className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-border/70 bg-background/80 text-muted-foreground transition-colors hover:text-foreground"
+          onClick={(event) => {
+            event.preventDefault()
+            event.stopPropagation()
+            toggleFullscreen()
+          }}
+          aria-label={isFullscreen ? "Exit fullscreen" : "Enter fullscreen"}
+          title={isFullscreen ? "Exit fullscreen (Esc)" : "Fullscreen"}
         >
-          <FileSpreadsheet className="h-4 w-4 shrink-0 text-emerald-600" />
-          <span className="truncate flex-1">{node.attrs.fileName || "Spreadsheet"}</span>
-          <button
-            type="button"
-            className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-border/70 bg-background/80 text-muted-foreground transition-colors hover:text-foreground"
-            onClick={(event) => {
-              event.preventDefault()
-              event.stopPropagation()
-              void toggleFullscreen()
-            }}
-            aria-label={isFullscreen ? "Exit fullscreen" : "Enter fullscreen"}
-            title={isFullscreen ? "Exit fullscreen" : "Fullscreen"}
-          >
-            {isFullscreen ? <Minimize className="h-4 w-4" /> : <Expand className="h-4 w-4" />}
-          </button>
-        </div>
-
-        <div
-          className="min-h-0 flex-1"
-          onMouseDown={stopEditorBubbling}
-          onClick={stopEditorBubbling}
-          onBeforeInput={stopEditorBubbling}
-          onInput={stopEditorBubbling}
-          onKeyDown={stopEditorBubbling}
-          onKeyUp={stopEditorBubbling}
-        >
-          <UniverWorkbookView
-            instanceKey={instanceKey}
-            variant="embed"
-            workbookEncoded={node.attrs.workbookData}
-            fileName={node.attrs.fileName}
-            onPersistEncoded={(enc) =>
-              scheduleMicrotask(() => {
-                updateAttributesRef.current({ workbookData: enc })
-              })
-            }
-          />
-        </div>
+          {isFullscreen ? <Minimize className="h-4 w-4" /> : <Expand className="h-4 w-4" />}
+        </button>
       </div>
-    </NodeViewWrapper>
+
+      <div
+        className="min-h-0 flex-1"
+        onMouseDown={stopEditorBubbling}
+        onClick={stopEditorBubbling}
+        onBeforeInput={stopEditorBubbling}
+        onInput={stopEditorBubbling}
+        onKeyDown={stopEditorBubbling}
+        onKeyUp={stopEditorBubbling}
+      >
+        <UniverWorkbookView
+          instanceKey={instanceKey}
+          variant="embed"
+          workbookEncoded={node.attrs.workbookData}
+          fileName={node.attrs.fileName}
+          onPersistEncoded={(enc) =>
+            scheduleMicrotask(() => {
+              updateAttributesRef.current({ workbookData: enc })
+            })
+          }
+        />
+      </div>
+    </div>
+  )
+
+  const fullscreenPortal =
+    isFullscreen && portalMounted && regionStyle
+      ? createPortal(
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-label={`${node.attrs.fileName || "Spreadsheet"} fullscreen`}
+            className="flex flex-col overflow-hidden rounded-xl border border-border bg-card shadow-2xl"
+            style={regionStyle}
+            onMouseDown={stopEditorBubbling}
+            onClick={stopEditorBubbling}
+          >
+            {sheetPanel}
+          </div>,
+          document.body,
+        )
+      : null
+
+  return (
+    <>
+      <NodeViewWrapper
+        ref={rootRef}
+        className={
+          isFullscreen
+            ? "my-4 overflow-hidden rounded-xl border border-dashed border-border/60 bg-muted/25"
+            : "my-4 overflow-hidden rounded-xl border border-border/70 bg-card/70 shadow-sm"
+        }
+        style={
+          isFullscreen
+            ? { minHeight: EMBED_PLACEHOLDER_MIN_H }
+            : undefined
+        }
+        contentEditable={false}
+        data-drag-handle
+      >
+        {isFullscreen ? (
+          <div
+            className="flex items-center justify-center text-xs text-muted-foreground"
+            style={{ minHeight: EMBED_PLACEHOLDER_MIN_H }}
+          >
+            Spreadsheet open in fullscreen — press Esc or minimize to return
+          </div>
+        ) : (
+          sheetPanel
+        )}
+      </NodeViewWrapper>
+      {fullscreenPortal}
+    </>
   )
 }
 

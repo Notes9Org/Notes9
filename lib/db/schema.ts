@@ -28,7 +28,8 @@ export interface ChatMessage {
 export type ContentDiffSegment =
   | { k: '+'; v: string }
   | { k: '-'; v: string }
-  | { k: '_'; n: number };
+  | { k: '_'; n: number }
+  | { k: '_'; v: string };
 
 /**
  * Stored in `content_diffs.structure_hints` JSON (compact: title once, sections without repeated title).
