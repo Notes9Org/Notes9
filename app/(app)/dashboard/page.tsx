@@ -13,10 +13,11 @@ import {
   FlaskConical,
   FileText,
   BookOpen,
+  FolderOpen,
+  FlaskConical,
   ArrowRight,
   ScrollText,
   Plus,
-  FolderOpen,
 } from "lucide-react"
 import { OrgSetupCTA } from "@/components/org/org-setup-cta"
 import { CatalystSectionHero } from "@/components/catalyst/catalyst-section-hero"
@@ -125,6 +126,15 @@ export default async function DashboardPage() {
   const whiteboardNotes = whiteboardNotesRes.data ?? []
   const recentProjects = recentProjectsRes.data ?? []
 
+  type ActiveWork = 
+    | { type: "experiment", id: string, name: string, status: string, updated_at: string, project_id: string | null }
+    | { type: "project", id: string, name: string, updated_at: string }
+
+  const activeWorkItems: ActiveWork[] = [
+    ...activeExperiments.map((e) => ({ ...e, type: "experiment" as const })),
+    ...recentProjects.map((p) => ({ ...p, type: "project" as const })),
+  ].sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime()).slice(0, 4)
+
   // Merge cross-entity "recently edited" feed (last 5).
   type RecentItem = { kind: "project" | "note" | "paper" | "protocol"; id: string; title: string; updated_at: string; href: string }
   const recentlyEdited: RecentItem[] = [
@@ -223,37 +233,46 @@ export default async function DashboardPage() {
         </div>
         <Card className="xl:col-span-6 flex flex-col">
           <CardHeader>
-            <CardTitle className="text-base">Active experiments</CardTitle>
+            <CardTitle className="text-base">Recent projects & experiments</CardTitle>
           </CardHeader>
           <CardContent className="flex-1 flex flex-col">
-            {activeExperiments.length > 0 ? (
+            {activeWorkItems.length > 0 ? (
               <ul className="space-y-2 flex-1">
-                {activeExperiments.map((exp) => (
-                  <li key={exp.id}>
+                {activeWorkItems.map((item) => (
+                  <li key={`${item.type}-${item.id}`}>
                     <Link
-                      href={`/experiments/${exp.id}${exp.project_id ? `?project=${exp.project_id}` : ""}`}
+                      href={item.type === "experiment" ? `/experiments/${item.id}${item.project_id ? `?project=${item.project_id}` : ""}` : `/projects/${item.id}`}
                       className="flex items-start gap-3 rounded-md border border-border bg-card p-3 hover:bg-muted/40 transition-colors"
                     >
-                      <Plus className="size-4 mt-0.5 text-primary shrink-0" />
+                      {item.type === "experiment" ? (
+                        <FlaskConical className="size-4 mt-0.5 text-primary shrink-0" />
+                      ) : (
+                        <FolderOpen className="size-4 mt-0.5 text-primary shrink-0" />
+                      )}
                       <div className="flex-1 min-w-0">
-                        <div className="font-medium text-sm line-clamp-1">{exp.name}</div>
+                        <div className="font-medium text-sm line-clamp-1">{item.name}</div>
                         <div className="text-xs text-muted-foreground mt-0.5">
-                          Updated {relativeTime(exp.updated_at)}
+                          Updated {relativeTime(item.updated_at)}
                         </div>
                       </div>
-                      <Badge variant="secondary" className="text-2xs uppercase tracking-wide shrink-0">{exp.status}</Badge>
+                      {item.type === "experiment" ? (
+                        <Badge variant="secondary" className="text-2xs uppercase tracking-wide shrink-0">{item.status}</Badge>
+                      ) : (
+                        <Badge variant="outline" className="text-2xs uppercase tracking-wide shrink-0">Project</Badge>
+                      )}
                     </Link>
                   </li>
                 ))}
               </ul>
             ) : (
               <p className="text-sm text-muted-foreground flex-1">
-                No active experiments. <Link href="/experiments/new" className="underline underline-offset-2 hover:text-foreground">Start one →</Link>
+                No active work. <Link href="/experiments/new" className="underline underline-offset-2 hover:text-foreground">Start one →</Link>
               </p>
             )}
             <Button asChild variant="ghost" size="sm" className="w-full justify-between mt-3">
-              <Link href="/experiments">
-                View all <ArrowRight className="size-3.5" />
+              <Link href="/projects" className="text-muted-foreground hover:text-foreground">
+                View all projects
+                <ArrowRight className="size-4 opacity-50" />
               </Link>
             </Button>
           </CardContent>
