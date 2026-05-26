@@ -188,22 +188,22 @@ export default async function DashboardPage() {
         <ActivitySummary />
         
         {/* Compact quick-action buttons — inline, no card chrome */}
-        <div className="mx-auto flex w-full max-w-3xl items-center justify-center gap-2 px-4">
+        <div className="mx-auto flex w-full max-w-3xl items-center justify-center gap-3 px-4">
           <Link href="/projects/new">
-            <Button variant="ghost" size="sm" className="gap-1.5 text-xs text-muted-foreground hover:text-foreground">
-              <Plus className="size-3.5" />
+            <Button variant="ghost" size="sm" className="gap-2 text-sm font-medium text-foreground/80 hover:text-foreground hover:bg-muted/60">
+              <Plus className="size-4 opacity-70" />
               Project
             </Button>
           </Link>
           <Link href="/experiments/new">
-            <Button variant="ghost" size="sm" className="gap-1.5 text-xs text-muted-foreground hover:text-foreground">
-              <Plus className="size-3.5" />
+            <Button variant="ghost" size="sm" className="gap-2 text-sm font-medium text-foreground/80 hover:text-foreground hover:bg-muted/60">
+              <Plus className="size-4 opacity-70" />
               Experiment
             </Button>
           </Link>
           <Link href="/samples/new">
-            <Button variant="ghost" size="sm" className="gap-1.5 text-xs text-muted-foreground hover:text-foreground">
-              <Plus className="size-3.5" />
+            <Button variant="ghost" size="sm" className="gap-2 text-sm font-medium text-foreground/80 hover:text-foreground hover:bg-muted/60">
+              <Plus className="size-4 opacity-70" />
               Sample
             </Button>
           </Link>
