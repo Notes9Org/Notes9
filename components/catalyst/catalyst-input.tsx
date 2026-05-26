@@ -38,15 +38,19 @@ interface CatalystInputProps {
 }
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
+// Kept in sync with the backend allowlist (agents/contracts/request.py
+// SUPPORTED_FILE_MIME_TYPES). Images + PDF go to the model natively; CSV/
+// XLSX/DOCX are parsed to text server-side. Types not supported by the
+// backend are omitted so the UI never accepts a file the agent will drop.
 const ALLOWED_TYPES = [
   'image/jpeg',
   'image/png',
   'image/gif',
   'image/webp',
   'application/pdf',
-  'text/plain',
   'text/csv',
-  'application/json',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', // .xlsx
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document', // .docx
 ];
 const MAX_CHAT_CHARS = 4096;
 

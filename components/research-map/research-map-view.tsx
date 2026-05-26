@@ -155,6 +155,7 @@ const KINDS: ResearchMapNodeKind[] = [
   "lab_note",
   "paper",
   "report",
+  "sample",
 ]
 
 /** Tables whose changes affect the research map graph (requires Realtime enabled in Supabase). */
@@ -376,6 +377,7 @@ function ResearchMapCanvas() {
     lab_note: true,
     paper: true,
     report: true,
+    sample: true,
   })
   const [labelQuery, setLabelQuery] = useState("")
   const [debouncedQuery, setDebouncedQuery] = useState("")

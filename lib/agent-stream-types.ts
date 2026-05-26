@@ -61,6 +61,15 @@ export interface GroundingResource {
   /** Where the excerpt came from inside the source — e.g. `pdf_extracted_text`,
    * `abstract`. Display-only hint; safe to ignore. */
   excerpt_source?: string | null;
+  /** How the source was obtained. `exact` = fetched by ID/name or returned by a
+   * structured SQL query — NOT a similarity score, so the UI must not render it
+   * as "N% match". `semantic` = vector retrieval (relevance is a real cosine
+   * score). Absent → treat as semantic. */
+  match_kind?: string | null;
+  /** Display number, e.g. "3" or "3.2" (ADR-0006). Base is per document; the
+   * ".N" sub-number distinguishes distinct passages of the same document.
+   * Render verbatim; absent → fall back to list position. */
+  cite_label?: string | null;
 }
 
 /** @deprecated Use GroundingResource; kept for imports that still say Citation */

@@ -18,6 +18,7 @@ import {
 import { parseNotes9AssistantStoredContent } from '@/lib/notes9-chat-format';
 import type { Vote } from '@/lib/db/schema';
 import type { ThinkingPayload, RagChunksPayload, DonePayload } from '@/lib/agent-stream-types';
+import type { CitationsManifest } from '@/hooks/use-agent-stream';
 
 interface CatalystMessagesProps {
   messages: UIMessage[];
@@ -36,6 +37,7 @@ interface CatalystMessagesProps {
     ragChunks: RagChunksPayload | null;
     streamedAnswer: string;
     donePayload: DonePayload | null;
+    citationsManifest?: CitationsManifest | null;
     error: string | null;
     isStreaming: boolean;
   } | null;

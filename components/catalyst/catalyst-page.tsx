@@ -749,6 +749,9 @@ export function CatalystChat({ sessionId }: CatalystChatProps) {
                       ragChunks: agentStream.ragChunks,
                       streamedAnswer: agentStream.streamedAnswer,
                       donePayload: agentStream.donePayload,
+                      // Forward the citation manifest so inline [N] chips resolve
+                      // to their source (was dropped here → chips never rendered).
+                      citationsManifest: agentStream.citationsManifest,
                       error: agentStream.error,
                       isStreaming: agentStream.isStreaming,
                     }

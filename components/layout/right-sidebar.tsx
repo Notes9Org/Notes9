@@ -67,7 +67,7 @@ import {
   parseLiteratureAssistantStoredContent,
   serializeLiteratureAssistantStoredContent,
 } from '@/lib/literature-assistant-stored';
-import { useAgentStream } from '@/hooks/use-agent-stream';
+import { useAgentStream, type AgentFileAttachment } from '@/hooks/use-agent-stream';
 import { usePinnedAutoScroll } from '@/hooks/use-pinned-auto-scroll';
 import { deleteTrailingMessages } from '@/app/(app)/catalyst/actions';
 import { MessageEditor } from '@/components/catalyst/message-editor';
@@ -356,13 +356,18 @@ function mergeUniqueTags(
 }
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024;
+// Kept in sync with the backend allowlist (agents/contracts/request.py).
+// Images + PDF go to the model natively; CSV/XLSX/DOCX are parsed to text
+// server-side. text/plain is omitted (the backend does not support it).
 const ALLOWED_TYPES = [
   'image/jpeg',
   'image/png',
   'image/gif',
   'image/webp',
   'application/pdf',
-  'text/plain',
+  'text/csv',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', // .xlsx
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document', // .docx
 ];
 const MAX_CHAT_CHARS = 4096;
 const MAX_LITERATURE_TAGS = 4;
@@ -1502,15 +1507,28 @@ export function RightSidebar({
       }));
 
       setNotes9Loading(true);
+      const fileAttachments = (attachments ?? [])
+        .slice(0, 5) // mirror backend MAX_FILE_ATTACHMENTS_PER_REQUEST
+        .map((a) => ({
+          url: a.url,
+          name: a.name,
+          content_type: a.contentType,
+          size: a.size ?? 0,
+        }));
       const { donePayload, error } = await agentStream.runStream(
         {
           query: text,
           session_id: sessionId,
           history,
+          file_attachments:
+            fileAttachments.length > 0
+              ? (fileAttachments as unknown as AgentFileAttachment[])
+              : undefined,
           options: buildNotes9StreamOptions(requestTags),
         },
         token
       );
+      if (fileAttachments.length > 0) setAttachments([]);
       setNotes9Loading(false);
 
       if (donePayload) {
@@ -2316,6 +2334,28 @@ export function RightSidebar({
         )}
         id="tour-ai-chat"
       >
+        {(attachments.length > 0 || uploadQueue.length > 0) && (
+          <div className="flex flex-wrap gap-2 px-3 pt-2">
+            {attachments.map((a) => (
+              <PreviewAttachment
+                key={a.url || a.name}
+                attachment={a}
+                onRemove={() =>
+                  setAttachments((prev) =>
+                    prev.filter((x) => (x.url || x.name) !== (a.url || a.name)),
+                  )
+                }
+              />
+            ))}
+            {uploadQueue.map((name) => (
+              <PreviewAttachment
+                key={`uploading-${name}`}
+                attachment={{ name, url: '', contentType: '', size: 0 }}
+                isUploading
+              />
+            ))}
+          </div>
+        )}
         <FileDropzone
           onFilesDrop={() => {}}
           onNonFileDrop={handleNonFileDrop}
@@ -2419,6 +2459,18 @@ export function RightSidebar({
               /{MAX_CHAT_CHARS}
             </span>
 
+            <Button
+              type="button"
+              size="icon"
+              variant="ghost"
+              className="size-7 text-muted-foreground transition-colors hover:text-primary"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={isLoading || isUploading}
+              aria-label="Attach file"
+              title="Attach a file (image, PDF, DOCX, XLSX, CSV)"
+            >
+              <Paperclip className="size-4" />
+            </Button>
             {isLoading ? (
               <Button
                 type="button"

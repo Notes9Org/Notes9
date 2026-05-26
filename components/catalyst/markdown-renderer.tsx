@@ -43,8 +43,11 @@ interface MarkdownRendererProps {
 }
 
 // `[N]` matcher used by the citation chip post-processor. Limited to 1-3 digit
-// numerics so it does not eat bracketed text like [optional] or [Note].
-const CITATION_BRACKET_RE = /\[(\d{1,3})\]/g;
+// numerics so it does not eat bracketed text like [optional] or [Note]. Also
+// matches hierarchical sub-citations `[3.2]` (ADR-0006): distinct statements of
+// the same source. The chip displays the full label but resolves the manifest
+// by its BASE (`3.2` -> source `3`).
+const CITATION_BRACKET_RE = /\[(\d{1,3}(?:\.\d{1,3})?)\]/g;
 
 function escapeHtmlAttr(value: string): string {
   return value
@@ -84,7 +87,13 @@ function postProcessHtml(html: string, manifest?: CitationsManifest | null): str
     if (i % 2 !== 0) continue;
     segments[i] = segments[i].replace(CITATION_BRACKET_RE, (_full, nStr: string) => {
       const n = nStr;
-      const entry = manifest && manifest.manifest ? manifest.manifest[n] : undefined;
+      // The manifest is keyed by the full display label ("3" or "3.2", ADR-0006),
+      // so a sub-citation resolves directly. Fall back to the base ("3.2"→"3")
+      // for safety if only the document-level key is present.
+      const entry =
+        manifest && manifest.manifest
+          ? manifest.manifest[n] ?? manifest.manifest[n.split('.')[0]]
+          : undefined;
       const name = entry?.source_name || '';
       const token = (entry as { token?: string } | undefined)?.token || '';
       const sType = entry?.source_type || '';

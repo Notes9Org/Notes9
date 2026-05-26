@@ -18,6 +18,7 @@ const ALL_KINDS: ResearchMapNodeKind[] = [
   "lab_note",
   "paper",
   "report",
+  "sample",
 ]
 
 function parseIncludeTypes(raw: string | null): Set<ResearchMapNodeKind> {
@@ -421,6 +422,74 @@ export async function GET(req: NextRequest) {
           }
         }
       }
+
+      // Samples linked to this project's experiments (samples.experiment_id)
+      // and to the project via the sample_projects junction.
+      if (includeTypes.has("sample")) {
+        const sampleRows = new Map<
+          string,
+          { id: string; sample_code: string | null; experiment_id: string | null }
+        >()
+        if (experimentIds.length > 0) {
+          const { data: byExp } = await supabase
+            .from("samples")
+            .select("id, sample_code, experiment_id")
+            .in("experiment_id", experimentIds)
+            .limit(400)
+          for (const s of byExp ?? []) sampleRows.set(s.id, s)
+        }
+        const { data: spLinks } = await supabase
+          .from("sample_projects")
+          .select("sample_id")
+          .eq("project_id", projectId)
+          .limit(400)
+        const linkedSampleIds = (spLinks ?? [])
+          .map((l) => l.sample_id)
+          .filter((x): x is string => Boolean(x))
+        const missing = linkedSampleIds.filter((id) => !sampleRows.has(id))
+        for (const batch of chunkArray(missing, CHUNK)) {
+          if (batch.length === 0) continue
+          const { data: extra } = await supabase
+            .from("samples")
+            .select("id, sample_code, experiment_id")
+            .in("id", batch)
+          for (const s of extra ?? []) sampleRows.set(s.id, s)
+        }
+        for (const s of sampleRows.values()) {
+          addNode({
+            id: nodeId("sample", s.id),
+            kind: "sample",
+            label: s.sample_code || "Untitled sample",
+            href: `/samples/${s.id}`,
+            meta: {},
+          })
+          if (
+            includeTypes.has("experiment") &&
+            s.experiment_id &&
+            experimentIds.includes(s.experiment_id)
+          ) {
+            queueEdge({
+              id: `experiment_sample:${s.experiment_id}:${s.id}`,
+              source: nodeId("experiment", s.experiment_id),
+              target: nodeId("sample", s.id),
+              kind: "experiment_has_sample",
+              label: "Sample",
+            })
+          }
+        }
+        if (includeTypes.has("project")) {
+          for (const sid of linkedSampleIds) {
+            if (!sampleRows.has(sid)) continue
+            queueEdge({
+              id: `project_sample:${projectRow.id}:${sid}`,
+              source: nodeId("project", projectRow.id),
+              target: nodeId("sample", sid),
+              kind: "project_has_sample",
+              label: "Sample",
+            })
+          }
+        }
+      }
     } else {
       // Fetch all org projects first so empty projects always appear in the map
       const { data: allOrgProjects } = await supabase
@@ -778,6 +847,83 @@ export async function GET(req: NextRequest) {
               target: nodeId("report", r.id),
               kind: "project_contains_report",
               label: "Report",
+            })
+          }
+        }
+      }
+
+      // Samples — org-wide. Linked to experiments (samples.experiment_id) and
+      // to projects via the sample_projects junction. RLS limits visibility.
+      if (includeTypes.has("sample")) {
+        const includedExpIds = new Set(allExperiments.map((e) => e.id))
+        const sampleRows = new Map<
+          string,
+          { id: string; sample_code: string | null; experiment_id: string | null }
+        >()
+        for (const chunk of chunkArray([...includedExpIds], CHUNK)) {
+          if (chunk.length === 0) continue
+          const { data: byExp } = await supabase
+            .from("samples")
+            .select("id, sample_code, experiment_id")
+            .in("experiment_id", chunk)
+          for (const s of byExp ?? []) sampleRows.set(s.id, s)
+        }
+        const sampleProjectPairs: Array<{ sample_id: string; project_id: string }> = []
+        for (const chunk of chunkArray([...projectIdSet], CHUNK)) {
+          if (chunk.length === 0) continue
+          const { data: spLinks } = await supabase
+            .from("sample_projects")
+            .select("sample_id, project_id")
+            .in("project_id", chunk)
+          for (const l of spLinks ?? []) {
+            if (l.sample_id && l.project_id) {
+              sampleProjectPairs.push({ sample_id: l.sample_id, project_id: l.project_id })
+            }
+          }
+        }
+        const missing = [...new Set(sampleProjectPairs.map((p) => p.sample_id))].filter(
+          (id) => !sampleRows.has(id),
+        )
+        for (const chunk of chunkArray(missing, CHUNK)) {
+          if (chunk.length === 0) continue
+          const { data: extra } = await supabase
+            .from("samples")
+            .select("id, sample_code, experiment_id")
+            .in("id", chunk)
+          for (const s of extra ?? []) sampleRows.set(s.id, s)
+        }
+        for (const s of sampleRows.values()) {
+          addNode({
+            id: nodeId("sample", s.id),
+            kind: "sample",
+            label: s.sample_code || "Untitled sample",
+            href: `/samples/${s.id}`,
+            meta: {},
+          })
+          if (
+            includeTypes.has("experiment") &&
+            s.experiment_id &&
+            includedExpIds.has(s.experiment_id)
+          ) {
+            queueEdge({
+              id: `experiment_sample:${s.experiment_id}:${s.id}`,
+              source: nodeId("experiment", s.experiment_id),
+              target: nodeId("sample", s.id),
+              kind: "experiment_has_sample",
+              label: "Sample",
+            })
+          }
+        }
+        if (includeTypes.has("project")) {
+          for (const pair of sampleProjectPairs) {
+            if (!sampleRows.has(pair.sample_id)) continue
+            if (!projectIdSet.has(pair.project_id)) continue
+            queueEdge({
+              id: `project_sample:${pair.project_id}:${pair.sample_id}`,
+              source: nodeId("project", pair.project_id),
+              target: nodeId("sample", pair.sample_id),
+              kind: "project_has_sample",
+              label: "Sample",
             })
           }
         }

@@ -33,6 +33,10 @@ export async function POST(req: Request) {
           })
         : undefined,
     scope: rest.scope && typeof rest.scope === 'object' ? rest.scope : undefined,
+    // Forward uploaded files + tagged records to the agent (were silently
+    // dropped here, so attachments never reached the backend).
+    file_attachments: Array.isArray(rest.file_attachments) ? rest.file_attachments : undefined,
+    attachments: Array.isArray(rest.attachments) ? rest.attachments : undefined,
   });
   const token = headerToken;
 

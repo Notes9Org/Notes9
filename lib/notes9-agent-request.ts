@@ -43,7 +43,10 @@ export type Notes9FileAttachment = {
     | 'image/png'
     | 'image/gif'
     | 'image/webp'
-    | 'application/pdf';
+    | 'application/pdf'
+    | 'text/csv'
+    | 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    | 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
   size: number;
 };
 

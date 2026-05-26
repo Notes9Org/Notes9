@@ -20,6 +20,9 @@ const ALLOWED_MIME_TYPES = [
   'text/plain',
   'text/csv',
   'text/markdown',
+  // Office documents (parsed to text server-side by the agent)
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', // .xlsx
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document', // .docx
   // Data
   'application/json',
 ];

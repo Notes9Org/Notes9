@@ -193,6 +193,8 @@ export function kindLabel(kind: ResearchMapNodeKind): string {
       return "Writing"
     case "report":
       return "Report"
+    case "sample":
+      return "Sample"
     default:
       return kind
   }
