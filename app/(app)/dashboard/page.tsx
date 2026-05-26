@@ -1,41 +1,36 @@
 import { redirect } from "next/navigation"
 import Link from "next/link"
 import { createClient } from "@/lib/supabase/server"
-import { PageHeading } from "@/components/ui/page-heading"
 import {
   Card,
   CardContent,
-  CardDescription,
   CardHeader,
   CardTitle,
 } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { Progress } from "@/components/ui/progress"
 import {
   FlaskConical,
-  TestTube,
-  Microscope,
   FileText,
   BookOpen,
-  ArrowUpRight,
-  Plus,
   ArrowRight,
   ScrollText,
-  ClipboardList
+  Plus,
+  FolderOpen,
 } from "lucide-react"
-import { TodoPanel } from "./todo-panel"
 import { OrgSetupCTA } from "@/components/org/org-setup-cta"
 import { CatalystSectionHero } from "@/components/catalyst/catalyst-section-hero"
-import { DashboardGreeting } from "@/app/(app)/planner/dashboard-greeting"
+import { DashboardGreeting } from "./dashboard-greeting"
 import { DashboardFirstRun } from "./dashboard-first-run"
+import { DashboardScheduleTasks } from "./dashboard-schedule-tasks"
+import { DashboardWhiteboard } from "./dashboard-whiteboard"
+import { ActivitySummary } from "./activity-summary"
 
 /**
- * Dashboard = lab status overview.
+ * Dashboard = Unified lab workspace.
  *
- * This screen is the user's "what's happening in the lab" view — active
- * experiments, recently edited content, today's events/tasks at a glance.
- * Self-organized work (schedule, tasks, whiteboard) lives at `/planner`.
+ * This screen is the user's primary view — schedule, tasks, whiteboard,
+ * active experiments, and recently edited content.
  */
 export default async function DashboardPage() {
   const supabase = await createClient()
@@ -48,25 +43,26 @@ export default async function DashboardPage() {
   }
 
   const now = new Date()
-  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate())
-  const todayEnd = new Date(todayStart.getTime() + 24 * 60 * 60 * 1000)
+  const dayStart = new Date(now.getTime() - 36 * 60 * 60 * 1000)
+  const dayEnd = new Date(now.getTime() + 36 * 60 * 60 * 1000)
 
-  // Fan out the lab-signal queries in parallel. Each is small (LIMIT 5 or HEAD)
-  // and indexed by organization scope via RLS.
+  // Fan out the lab-signal queries in parallel.
   const [
     projectsHeadRes,
     activeExperimentsRes,
     recentNotesRes,
     recentPapersRes,
     recentProtocolsRes,
-    todayTasksRes,
-    nextEventRes,
+    allTasksRes,
+    allEventsRes,
+    whiteboardNotesRes,
+    recentProjectsRes,
   ] = await Promise.all([
     supabase.from("projects").select("id", { count: "exact", head: true }).limit(1),
     supabase
       .from("experiments")
       .select("id,name,status,updated_at,project_id")
-      .eq("status", "active")
+      .eq("status", "in_progress")
       .order("updated_at", { ascending: false })
       .limit(3),
     supabase
@@ -86,21 +82,29 @@ export default async function DashboardPage() {
       .limit(3),
     supabase
       .from("dashboard_tasks")
-      .select("id,title,due_at,completed")
+      .select("*")
       .eq("user_id", user.id)
-      .eq("completed", false)
-      .gte("due_at", todayStart.toISOString())
-      .lt("due_at", todayEnd.toISOString())
-      .order("due_at", { ascending: true })
-      .limit(3),
+      .order("completed", { ascending: true })
+      .order("due_at", { ascending: true, nullsFirst: false })
+      .order("created_at", { ascending: false }),
     supabase
       .from("calendar_events")
-      .select("id,title,start_at")
+      .select("*")
       .eq("user_id", user.id)
-      .gte("start_at", now.toISOString())
-      .order("start_at", { ascending: true })
-      .limit(1)
-      .maybeSingle(),
+      .gte("start_at", dayStart.toISOString())
+      .lt("start_at", dayEnd.toISOString())
+      .order("start_at", { ascending: true }),
+    supabase
+      .from("whiteboard_notes")
+      .select("*")
+      .eq("user_id", user.id)
+      .is("project_id", null)
+      .order("created_at", { ascending: true }),
+    supabase
+      .from("projects")
+      .select("id,name,updated_at")
+      .order("updated_at", { ascending: false })
+      .limit(3),
   ])
 
   const hasProjects = (projectsHeadRes.count ?? 0) > 0
@@ -116,12 +120,21 @@ export default async function DashboardPage() {
   const recentNotes = recentNotesRes.data ?? []
   const recentPapers = recentPapersRes.data ?? []
   const recentProtocols = recentProtocolsRes.data ?? []
-  const todayTasks = todayTasksRes.data ?? []
-  const nextEvent = nextEventRes.data
+  const tasks = allTasksRes.data ?? []
+  const events = allEventsRes.data ?? []
+  const whiteboardNotes = whiteboardNotesRes.data ?? []
+  const recentProjects = recentProjectsRes.data ?? []
 
-  // Merge cross-entity "recently edited" feed (last 5 across notes/papers/protocols).
-  type RecentItem = { kind: "note" | "paper" | "protocol"; id: string; title: string; updated_at: string; href: string }
+  // Merge cross-entity "recently edited" feed (last 5).
+  type RecentItem = { kind: "project" | "note" | "paper" | "protocol"; id: string; title: string; updated_at: string; href: string }
   const recentlyEdited: RecentItem[] = [
+    ...recentProjects.map((p) => ({
+      kind: "project" as const,
+      id: p.id,
+      title: p.name || "Untitled project",
+      updated_at: p.updated_at,
+      href: `/projects/${p.id}`,
+    })),
     ...recentNotes.map((n) => ({
       kind: "note" as const,
       id: n.id,
@@ -165,83 +178,64 @@ export default async function DashboardPage() {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-6 md:gap-8 pb-8 min-w-0">
-      {/* Wish greeting ("Morning, <name>") — the dashboard is the one place
-          the personal greeting lives. */}
+      {/* Wish greeting ("Morning, <name>") */}
       <DashboardGreeting name={greetingName} />
-      {/* Catalyst AI composer — purple-themed so it's clearly the AI assistant. */}
+      {/* Catalyst AI composer */}
       <CatalystSectionHero size="lg" scope="lab" />
+
+      {/* AI-generated one-liner summarising recent lab activity */}
+      <div className="mt-2 flex flex-col gap-3">
+        <ActivitySummary />
+        
+        {/* Compact quick-action buttons — inline, no card chrome */}
+        <div className="mx-auto flex w-full max-w-3xl items-center justify-center gap-2 px-4">
+          <Link href="/projects/new">
+            <Button variant="ghost" size="sm" className="gap-1.5 text-xs text-muted-foreground hover:text-foreground">
+              <Plus className="size-3.5" />
+              Project
+            </Button>
+          </Link>
+          <Link href="/experiments/new">
+            <Button variant="ghost" size="sm" className="gap-1.5 text-xs text-muted-foreground hover:text-foreground">
+              <Plus className="size-3.5" />
+              Experiment
+            </Button>
+          </Link>
+          <Link href="/samples/new">
+            <Button variant="ghost" size="sm" className="gap-1.5 text-xs text-muted-foreground hover:text-foreground">
+              <Plus className="size-3.5" />
+              Sample
+            </Button>
+          </Link>
+        </div>
+      </div>
 
       {/* Org Setup CTA */}
       <OrgSetupCTA visible={!orgMembership} />
 
-      <Card className="min-w-0 overflow-hidden mb-6">
-        <CardHeader>
-          <CardTitle>Quick Actions</CardTitle>
-          <CardDescription>Common tasks to get you started.</CardDescription>
-        </CardHeader>
-        <CardContent className="flex flex-wrap gap-2">
-          <Link href="/projects/new">
-            <Button variant="outline">Create New Project</Button>
-          </Link>
-          <Link href="/experiments/new">
-            <Button variant="outline">Add Experiment</Button>
-          </Link>
-          <Link href="/samples/new">
-            <Button variant="outline">Record Sample</Button>
-          </Link>
-        </CardContent>
-      </Card>
+      {/* Middle row: Workspace (Planner features) */}
+      <div className="grid grid-cols-1 gap-4 md:gap-5 xl:grid-cols-12 min-h-[380px] xl:items-stretch">
+        <div className="flex min-h-[350px] flex-col xl:col-span-6 min-w-0">
+          <DashboardScheduleTasks
+            initialEvents={events}
+            initialTasks={tasks}
+          />
+        </div>
+        <div className="flex min-h-[350px] flex-col xl:col-span-6 min-w-0">
+          <DashboardWhiteboard initialNotes={whiteboardNotes} />
+        </div>
+      </div>
 
-      {/* Three-column lab signal grid. Stacks below md. */}
-      <div className="grid flex-1 grid-cols-1 gap-4 md:gap-5 xl:grid-cols-12">
-        {/* Today — 4 cols */}
-        <Card className="xl:col-span-4">
-          <CardHeader>
-            <CardTitle className="text-base">Today</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {nextEvent ? (
-              <div className="rounded-md border border-border bg-muted/30 p-3">
-                <div className="text-xs text-muted-foreground">Next up</div>
-                <div className="font-medium text-sm">{nextEvent.title}</div>
-                <div className="text-xs text-muted-foreground mt-0.5">
-                  {new Date(nextEvent.start_at).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })}
-                </div>
-              </div>
-            ) : (
-              <p className="text-sm text-muted-foreground">No events scheduled.</p>
-            )}
-            <div>
-              <div className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2">Tasks</div>
-              {todayTasks.length > 0 ? (
-                <ul className="space-y-1.5">
-                  {todayTasks.map((task) => (
-                    <li key={task.id} className="flex items-start gap-2 text-sm">
-                      <ClipboardList className="size-3.5 mt-0.5 text-muted-foreground shrink-0" />
-                      <span className="line-clamp-2">{task.title}</span>
-                    </li>
-                  ))}
-                </ul>
-              ) : (
-                <p className="text-sm text-muted-foreground">Nothing due today.</p>
-              )}
-            </div>
-            <Button asChild variant="ghost" size="sm" className="w-full justify-between">
-              <Link href="/planner">
-                Open Planner <ArrowRight className="size-3.5" />
-              </Link>
-            </Button>
-          </CardContent>
-        </Card>
-
-        {/* Active experiments — 5 cols */}
-        <Card className="xl:col-span-5">
+      {/* Bottom row: Lab signals (Status features) */}
+      <div className="grid grid-cols-1 gap-4 md:gap-5 xl:grid-cols-12">
+        {/* Active experiments — 6 cols */}
+        <Card className="xl:col-span-6 flex flex-col">
           <CardHeader>
             <CardTitle className="text-base">Active experiments</CardTitle>
           </CardHeader>
-          <CardContent>
+          <CardContent className="flex-1 flex flex-col">
             {activeExperiments.length > 0 ? (
-              <ul className="space-y-2">
+              <ul className="space-y-2 flex-1">
                 {activeExperiments.map((exp) => (
                   <li key={exp.id}>
                     <Link
@@ -255,13 +249,13 @@ export default async function DashboardPage() {
                           Updated {relativeTime(exp.updated_at)}
                         </div>
                       </div>
-                      <Badge variant="secondary" className="text-2xs uppercase tracking-wide">{exp.status}</Badge>
+                      <Badge variant="secondary" className="text-2xs uppercase tracking-wide shrink-0">{exp.status}</Badge>
                     </Link>
                   </li>
                 ))}
               </ul>
             ) : (
-              <p className="text-sm text-muted-foreground">
+              <p className="text-sm text-muted-foreground flex-1">
                 No active experiments. <Link href="/experiments/new" className="underline underline-offset-2 hover:text-foreground">Start one →</Link>
               </p>
             )}
@@ -273,12 +267,12 @@ export default async function DashboardPage() {
           </CardContent>
         </Card>
 
-        {/* Recently edited — 3 cols */}
-        <Card className="xl:col-span-3">
+        {/* Recently edited — 6 cols */}
+        <Card className="xl:col-span-6 flex flex-col">
           <CardHeader>
             <CardTitle className="text-base">Recently edited</CardTitle>
           </CardHeader>
-          <CardContent>
+          <CardContent className="flex-1">
             {recentlyEdited.length > 0 ? (
               <ul className="space-y-2">
                 {recentlyEdited.map((item) => (
@@ -308,11 +302,18 @@ export default async function DashboardPage() {
   )
 }
 
-function RecentIcon({ kind }: { kind: "note" | "paper" | "protocol" }) {
+function RecentIcon({ kind }: { kind: "project" | "note" | "paper" | "protocol" }) {
   const cls = "size-3.5 mt-0.5 shrink-0 text-muted-foreground"
-  if (kind === "note") return <FileText className={cls} />
-  if (kind === "paper") return <BookOpen className={cls} />
-  return <ScrollText className={cls} />
+  switch (kind) {
+    case "project":
+      return <FolderOpen className={cls} />
+    case "note":
+      return <FileText className={cls} />
+    case "paper":
+      return <BookOpen className={cls} />
+    default:
+      return <ScrollText className={cls} />
+  }
 }
 
 function relativeTime(iso: string): string {
