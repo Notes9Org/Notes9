@@ -66,10 +66,12 @@ export function ProjectScopeProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(false)
   const cache = useRef<Map<string, { pId: string | null, pName: string | null, eId: string | null, eName: string | null }>>(new Map())
 
-  // We derive the target URL to resolve based on whether a ?project param is forcing a scope
-  // If ?project is present, we resolve `/projects/[id]` to get the project name.
-  // Otherwise we resolve the actual pathname.
-  const pathToResolve = queryProjectId ? `/projects/${queryProjectId}` : pathname
+  // We derive the target URL to resolve based on whether an entity ID is present in the path.
+  // If the pathname has an entity ID (e.g. /experiments/1234), we want to resolve the pathname
+  // to get both the experiment and its parent project.
+  // If it's a top-level list (e.g. /experiments), we fall back to the query param.
+  const hasEntityId = /^\/(projects|experiments|lab-notes|protocols|samples|data|reports|equipment|papers|literature-reviews)\/([^/?#]+)/.test(pathname)
+  const pathToResolve = hasEntityId ? pathname : (queryProjectId ? `/projects/${queryProjectId}` : pathname)
 
   useEffect(() => {
     if (!pathToResolve) {
@@ -91,7 +93,7 @@ export function ProjectScopeProvider({ children }: { children: ReactNode }) {
     let cancelled = false
     setLoading(true)
 
-    fetch(`/api/resolve-scope?path=${encodeURIComponent(pathToResolve)}`)
+    fetch(`/api/resolve-scope?path=${encodeURIComponent(pathToResolve)}&fallback=${queryProjectId || ''}`)
       .then(res => res.json())
       .then(data => {
         if (cancelled) return

@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server"
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url)
   const path = searchParams.get("path")
+  const fallback = searchParams.get("fallback")
   if (!path) return NextResponse.json({ error: "No path provided" }, { status: 400 })
 
   const match = path.match(/^\/(projects|experiments|lab-notes|protocols|samples|data|reports|equipment|papers|literature-reviews)\/([^/?#]+)/)
@@ -62,6 +63,11 @@ export async function GET(req: NextRequest) {
       }
     }
 
+    if (!projectId && fallback) {
+      // Fallback to the query parameter if the path didn't yield a project
+      projectId = fallback
+    }
+
     if (projectId) {
       const { data: proj } = await supabase.from("projects").select("name").eq("id", projectId).single()
       if (proj) projectName = proj.name
@@ -70,5 +76,6 @@ export async function GET(req: NextRequest) {
     console.error("Resolve scope failed", err)
   }
 
+  console.log("RESOLVE SCOPE:", { path, type, id, projectId, projectName, experimentId, experimentName })
   return NextResponse.json({ projectId, projectName, experimentId, experimentName })
 }
