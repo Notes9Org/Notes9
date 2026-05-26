@@ -641,6 +641,7 @@ export function AppSidebar() {
                             <Icon />
                             <span className={cn("truncate", isActive && "font-semibold")}>
                               {item.name}
+                              {item.name === "Experiments" && scope.experimentName ? ` / ${scope.experimentName}` : ""}
                             </span>
                           </Link>
                         </SidebarMenuButton>

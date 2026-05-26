@@ -29,6 +29,8 @@ export type ProjectScope = {
   projectId: string | null
   projectName: string | null
   projectColor: string | null
+  experimentId: string | null
+  experimentName: string | null
   loading: boolean
   clearScope: () => void
 }
@@ -48,9 +50,6 @@ export function ProjectScopeProvider({ children }: { children: ReactNode }) {
   const pathname = usePathname()
   const rawProject = searchParams?.get("project") ?? null
   const queryProjectId = rawProject && isLikelyUuid(rawProject) ? rawProject : null
-  // Query param wins (so a section page under /projects/<a> can still scope to
-  // <b> via ?project=<b>); fall back to the path-derived id on /projects/<id>.
-  const currentProjectId = queryProjectId ?? projectIdFromPath(pathname)
   const [persistedProjectId, setPersistedProjectId] = useState<string | null>(null)
 
   useEffect(() => {
@@ -61,50 +60,72 @@ export function ProjectScopeProvider({ children }: { children: ReactNode }) {
     } catch (e) {}
   }, [])
 
-  useEffect(() => {
-    if (currentProjectId) {
-      try {
-        localStorage.setItem("n9_last_project_id", currentProjectId)
-      } catch (e) {}
-      setPersistedProjectId(currentProjectId)
-    }
-  }, [currentProjectId])
-
-  const projectId = currentProjectId ?? persistedProjectId
-
   const [projectName, setProjectName] = useState<string | null>(null)
+  const [experimentId, setExperimentId] = useState<string | null>(null)
+  const [experimentName, setExperimentName] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
-  const cache = useRef<Map<string, string>>(new Map())
-  const supabase = useMemo(() => createClient(), [])
+  const cache = useRef<Map<string, { pId: string | null, pName: string | null, eId: string | null, eName: string | null }>>(new Map())
+
+  // We derive the target URL to resolve based on whether a ?project param is forcing a scope
+  // If ?project is present, we resolve `/projects/[id]` to get the project name.
+  // Otherwise we resolve the actual pathname.
+  const pathToResolve = queryProjectId ? `/projects/${queryProjectId}` : pathname
 
   useEffect(() => {
-    if (!projectId) {
+    if (!pathToResolve) {
       setProjectName(null)
+      setExperimentId(null)
+      setExperimentName(null)
       return
     }
-    const cached = cache.current.get(projectId)
+
+    const cached = cache.current.get(pathToResolve)
     if (cached) {
-      setProjectName(cached)
+      if (cached.pId) setPersistedProjectId(cached.pId)
+      setProjectName(cached.pName)
+      setExperimentId(cached.eId)
+      setExperimentName(cached.eName)
       return
     }
+
     let cancelled = false
     setLoading(true)
-    supabase
-      .from("projects")
-      .select("name")
-      .eq("id", projectId)
-      .maybeSingle()
-      .then(({ data }) => {
+
+    fetch(`/api/resolve-scope?path=${encodeURIComponent(pathToResolve)}`)
+      .then(res => res.json())
+      .then(data => {
         if (cancelled) return
-        const name = data?.name ?? null
-        if (name) cache.current.set(projectId, name)
-        setProjectName(name)
+        const pId = data.projectId || null
+        const pName = data.projectName || null
+        const eId = data.experimentId || null
+        const eName = data.experimentName || null
+
+        cache.current.set(pathToResolve, { pId, pName, eId, eName })
+        if (pId) setPersistedProjectId(pId)
+        setProjectName(pName)
+        setExperimentId(eId)
+        setExperimentName(eName)
         setLoading(false)
       })
+      .catch(err => {
+        console.error(err)
+        if (!cancelled) setLoading(false)
+      })
+
     return () => {
       cancelled = true
     }
-  }, [projectId, supabase])
+  }, [pathToResolve])
+
+  useEffect(() => {
+    if (persistedProjectId) {
+      try {
+        localStorage.setItem("n9_last_project_id", persistedProjectId)
+      } catch (e) {}
+    }
+  }, [persistedProjectId])
+
+  const projectId = persistedProjectId
 
   const clearScope = () => {
     try {
@@ -118,10 +139,12 @@ export function ProjectScopeProvider({ children }: { children: ReactNode }) {
       projectId,
       projectName,
       projectColor: projectId ? colorFromId(projectId) : null,
+      experimentId,
+      experimentName,
       loading,
       clearScope,
     }),
-    [projectId, projectName, loading]
+    [projectId, projectName, experimentId, experimentName, loading]
   )
 
   return (
@@ -134,7 +157,7 @@ export function ProjectScopeProvider({ children }: { children: ReactNode }) {
 export function useProjectScope(): ProjectScope {
   const ctx = useContext(ProjectScopeContext)
   if (!ctx) {
-    return { projectId: null, projectName: null, projectColor: null, loading: false, clearScope: () => {} }
+    return { projectId: null, projectName: null, projectColor: null, experimentId: null, experimentName: null, loading: false, clearScope: () => {} }
   }
   return ctx
 }
