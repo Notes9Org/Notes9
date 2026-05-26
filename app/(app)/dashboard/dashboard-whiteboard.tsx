@@ -428,13 +428,20 @@ export function DashboardWhiteboard({
     })
   }
 
+  const sizesRef = useRef(sizes)
+  useEffect(() => {
+    sizesRef.current = sizes
+  }, [sizes])
+
   useEffect(() => {
     if (!drag) return
     function move(e: globalThis.MouseEvent) {
       const rect = canvasRef.current?.getBoundingClientRect()
       if (!rect) return
-      const x = Math.max(0, Math.min(rect.width - 180, e.clientX - rect.left - drag!.ox))
-      const y = Math.max(0, Math.min(rect.height - 110, e.clientY - rect.top - drag!.oy))
+      const noteW = sizesRef.current[drag!.id]?.w || 180
+      const noteH = sizesRef.current[drag!.id]?.h || 110
+      const x = Math.max(0, Math.min(rect.width - noteW, e.clientX - rect.left - drag!.ox))
+      const y = Math.max(0, Math.min(rect.height - noteH, e.clientY - rect.top - drag!.oy))
       setNotes((curr) => curr.map((n) => (n.id === drag!.id ? { ...n, x, y } : n)))
     }
     function up() {
@@ -546,7 +553,7 @@ export function DashboardWhiteboard({
     <article 
       className={cn(
         "flex min-h-0 flex-col overflow-hidden rounded-[calc(var(--radius)+4px)] border border-border bg-card transition-all",
-        isFullscreen ? "fixed inset-4 z-[9999] shadow-2xl h-auto" : "h-full"
+        isFullscreen ? "fixed inset-4 z-[9999] shadow-2xl" : "h-full"
       )}
     >
       <header className="flex items-center justify-between gap-2 px-4 py-3 border-b border-border">
