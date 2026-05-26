@@ -825,25 +825,10 @@ export function DashboardWhiteboard({
         <div className="h-full rounded-[calc(var(--radius)+4px)] border border-border border-dashed bg-muted/20 flex flex-col items-center justify-center text-muted-foreground/50 transition-all">
           <Shapes size={24} className="mb-2 opacity-50" />
           <span className="text-sm">Fullscreen mode active</span>
-          <button 
-            type="button" 
-            onClick={() => setIsFullscreen(false)} 
-            className="mt-2 text-xs underline hover:text-foreground transition-colors"
-          >
-            Restore
-          </button>
         </div>
         {createPortal(
           <div className="fixed inset-0 z-[9999] bg-background/80 backdrop-blur-sm p-4 sm:p-8 flex flex-col">
             {content}
-            <button 
-              type="button" 
-              onClick={() => setIsFullscreen(false)} 
-              className="absolute top-6 right-6 sm:top-10 sm:right-10 p-2 bg-background/50 hover:bg-background rounded-full border border-border/50 text-muted-foreground hover:text-foreground transition-all z-50"
-              aria-label="Close fullscreen"
-            >
-              <Minimize2 size={20} />
-            </button>
           </div>,
           document.body
         )}
