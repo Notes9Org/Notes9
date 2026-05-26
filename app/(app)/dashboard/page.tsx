@@ -222,15 +222,19 @@ export default async function DashboardPage() {
       {/* Org Setup CTA */}
       <OrgSetupCTA visible={!orgMembership} />
 
-      {/* Middle row: Workspace & Signals */}
-      <div className="grid grid-cols-1 gap-4 md:gap-5 xl:grid-cols-12 min-h-[380px] xl:items-stretch">
-        <div className="flex min-h-[350px] flex-col xl:col-span-6 min-w-0">
+      {/* Dashboard 2x2 Grid */}
+      <div className="grid grid-cols-1 gap-4 md:gap-5 xl:grid-cols-2 xl:items-stretch">
+        
+        {/* Top Left: Schedule */}
+        <div className="flex min-h-[380px] flex-col min-w-0">
           <DashboardScheduleTasks
             initialEvents={events}
             initialTasks={tasks}
           />
         </div>
-        <Card className="xl:col-span-6 flex flex-col min-w-0">
+
+        {/* Top Right: Active Work */}
+        <Card className="flex flex-col min-w-0">
           <CardHeader>
             <CardTitle className="text-base">Recent projects & experiments</CardTitle>
           </CardHeader>
@@ -276,17 +280,14 @@ export default async function DashboardPage() {
             </Button>
           </CardContent>
         </Card>
-      </div>
 
-      {/* Bottom row: Whiteboard & Recently edited */}
-      <div className="grid grid-cols-1 gap-4 md:gap-5 xl:grid-cols-12">
-        {/* Whiteboard — 6 cols */}
-        <div className="flex min-h-[350px] flex-col xl:col-span-6 min-w-0">
+        {/* Bottom Left: Whiteboard */}
+        <div className="flex min-h-[380px] flex-col min-w-0">
           <DashboardWhiteboard initialNotes={whiteboardNotes} />
         </div>
 
-        {/* Recently edited — 6 cols */}
-        <Card className="xl:col-span-6 flex flex-col min-w-0">
+        {/* Bottom Right: Recently Edited */}
+        <Card className="flex flex-col min-w-0">
           <CardHeader>
             <CardTitle className="text-base">Recently edited</CardTitle>
           </CardHeader>
