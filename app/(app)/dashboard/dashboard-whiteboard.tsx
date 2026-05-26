@@ -4,10 +4,7 @@ import {
   useCallback,
   useEffect,
   useMemo,
-  useRef,
-  useState,
   useTransition,
-  type PointerEvent,
   type MouseEvent,
 } from "react"
 import { createPortal } from "react-dom"
@@ -134,7 +131,7 @@ export function DashboardWhiteboard({
     })
     ro.observe(canvasRef.current)
     return () => ro.disconnect()
-  }, [])
+  }, [isFullscreen])
 
   // The drag effect re-runs only when `drag` changes — so the `up` handler's
   // closure can't reach the latest `notes`. Mirror notes into a ref each
@@ -350,7 +347,7 @@ export function DashboardWhiteboard({
     if (!marquee) return
     const startX = marquee.x
     const startY = marquee.y
-    function move(ev: globalThis.PointerEvent) {
+    function move(ev: globalThis.MouseEvent) {
       const rect = canvasRef.current?.getBoundingClientRect()
       if (!rect) return
       const cx = ev.clientX - rect.left
@@ -386,11 +383,11 @@ export function DashboardWhiteboard({
         return null
       })
     }
-    window.addEventListener("pointermove", move)
-    window.addEventListener("pointerup", up)
+    window.addEventListener("mousemove", move)
+    window.addEventListener("mouseup", up)
     return () => {
-      window.removeEventListener("pointermove", move)
-      window.removeEventListener("pointerup", up)
+      window.removeEventListener("mousemove", move)
+      window.removeEventListener("mouseup", up)
     }
   }, [marquee])
 
@@ -414,12 +411,10 @@ export function DashboardWhiteboard({
     [selected.size],
   )
 
-  function startDrag(e: PointerEvent<HTMLDivElement>, note: WhiteboardNote) {
+  function startDrag(e: MouseEvent<HTMLDivElement>, note: WhiteboardNote) {
     if ((e.target as HTMLElement).closest("button, textarea, a, input")) {
       return
     }
-    // Prevent default to disable native drag-and-drop or touch panning interruptions
-    e.preventDefault()
     
     const rect = canvasRef.current?.getBoundingClientRect()
     if (!rect) return
@@ -437,7 +432,7 @@ export function DashboardWhiteboard({
 
   useEffect(() => {
     if (!drag) return
-    function move(e: globalThis.PointerEvent) {
+    function move(e: globalThis.MouseEvent) {
       const rect = canvasRef.current?.getBoundingClientRect()
       if (!rect) return
       const noteW = sizesRef.current[drag!.id]?.w || 180
@@ -453,18 +448,17 @@ export function DashboardWhiteboard({
       }
       setDrag(null)
     }
-    window.addEventListener("pointermove", move)
-    window.addEventListener("pointerup", up)
+    window.addEventListener("mousemove", move)
+    window.addEventListener("mouseup", up)
     return () => {
-      window.removeEventListener("pointermove", move)
-      window.removeEventListener("pointerup", up)
+      window.removeEventListener("mousemove", move)
+      window.removeEventListener("mouseup", up)
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [drag])
 
   useEffect(() => {
     if (!resizing) return
-    function move(e: globalThis.PointerEvent) {
+    function move(e: globalThis.MouseEvent) {
       const w = Math.max(120, resizing!.startW + (e.clientX - resizing!.startX))
       const h = Math.max(80, resizing!.startH + (e.clientY - resizing!.startY))
       setSizes((curr) => {
@@ -474,11 +468,11 @@ export function DashboardWhiteboard({
       })
     }
     function up() { setResizing(null) }
-    window.addEventListener("pointermove", move)
-    window.addEventListener("pointerup", up)
+    window.addEventListener("mousemove", move)
+    window.addEventListener("mouseup", up)
     return () => {
-      window.removeEventListener("pointermove", move)
-      window.removeEventListener("pointerup", up)
+      window.removeEventListener("mousemove", move)
+      window.removeEventListener("mouseup", up)
     }
   }, [resizing])
 
@@ -554,8 +548,8 @@ export function DashboardWhiteboard({
   const content = (
     <article 
       className={cn(
-        "flex min-h-0 flex-col overflow-hidden rounded-[calc(var(--radius)+4px)] border border-border bg-card transition-all",
-        isFullscreen ? "fixed inset-4 z-[9999] shadow-2xl" : "h-full"
+        "flex min-h-0 flex-col overflow-hidden bg-card transition-all",
+        isFullscreen ? "w-full h-full shadow-2xl rounded-2xl border-2 border-border" : "rounded-[calc(var(--radius)+4px)] border border-border h-full"
       )}
     >
       <header className="flex items-center justify-between gap-2 px-4 py-3 border-b border-border">
@@ -639,7 +633,7 @@ export function DashboardWhiteboard({
       {/* Canvas */}
       <div
         ref={canvasRef}
-        onPointerDown={startMarquee}
+        onMouseDown={startMarquee}
         className="relative flex-1 overflow-hidden m-3 rounded-md border border-border"
         style={{
           background: `radial-gradient(circle, color-mix(in srgb, var(--foreground) 9%, transparent) 1px, transparent 1px) 0 0 / 22px 22px, var(--muted)`,
@@ -650,17 +644,14 @@ export function DashboardWhiteboard({
         ) : null}
 
         {notes.map((n) => {
-          const isSelected = selected.has(n.id)
           return (
             <div
               key={n.id}
               role="group"
               aria-label={`${n.tag ?? "Note"}: ${n.body ? n.body.slice(0, 60) : "empty"}`}
-              onPointerDown={(e) => startDrag(e, n)}
+              onMouseDown={(e) => startDrag(e, n)}
+              onDragStart={(e) => e.preventDefault()}
               onClick={(e) => {
-                // Clicks on inner inputs already short-circuited via closest()
-                // in startDrag; here we only care about plain note-body clicks
-                // for selection.
                 if ((e.target as HTMLElement).closest("textarea, button, input")) return
                 toggleSelect(n.id, e.shiftKey)
               }}
@@ -670,24 +661,24 @@ export function DashboardWhiteboard({
               }}
               className={cn(
                 "group absolute select-none flex flex-col overflow-hidden",
-                drag?.id === n.id ? "z-20 cursor-grabbing" : "z-10 cursor-grab",
-                isSelected && "z-20",
+                drag?.id === n.id ? "cursor-grabbing" : "cursor-grab",
               )}
               style={{
                 left: Math.max(0, Math.min(n.x, bounds.w === Infinity ? n.x : bounds.w - (sizes[n.id]?.w || 180))),
                 top: Math.max(0, Math.min(n.y, bounds.h === Infinity ? n.y : bounds.h - (sizes[n.id]?.h || 110))),
                 width: sizes[n.id]?.w || 180,
                 height: sizes[n.id]?.h || 110,
+                zIndex: selected.has(n.id) || drag?.id === n.id ? 10 : 1,
                 borderRadius: 6,
                 background: NOTE_BG[n.kind],
                 boxShadow:
                   drag?.id === n.id
                     ? "0 10px 26px color-mix(in srgb, var(--foreground) 22%, transparent), 0 1px 0 rgba(0,0,0,0.05)"
-                    : isSelected
+                    : selected.has(n.id)
                       ? `0 0 0 2px var(--ring), 0 6px 14px color-mix(in srgb, var(--foreground) 14%, transparent), 0 1px 0 rgba(0,0,0,0.05)`
                       : "0 6px 14px color-mix(in srgb, var(--foreground) 12%, transparent), 0 1px 0 rgba(0,0,0,0.05)",
                 padding: "10px 12px 12px",
-                transform: isSelected ? "scale(1.02)" : undefined,
+                transform: selected.has(n.id) ? "scale(1.02)" : undefined,
                 transition: "transform 100ms ease, box-shadow 120ms ease",
               }}
             >
@@ -841,13 +832,17 @@ export function DashboardWhiteboard({
           </button>
         </div>
         {createPortal(
-          <>
-            <div 
-              className="fixed inset-0 z-[9998] bg-background/80 backdrop-blur-sm"
-              onClick={() => setIsFullscreen(false)}
-            />
+          <div className="fixed inset-0 z-[9999] bg-background/80 backdrop-blur-sm p-4 sm:p-8 flex flex-col">
             {content}
-          </>,
+            <button 
+              type="button" 
+              onClick={() => setIsFullscreen(false)} 
+              className="absolute top-6 right-6 sm:top-10 sm:right-10 p-2 bg-background/50 hover:bg-background rounded-full border border-border/50 text-muted-foreground hover:text-foreground transition-all z-50"
+              aria-label="Close fullscreen"
+            >
+              <Minimize2 size={20} />
+            </button>
+          </div>,
           document.body
         )}
       </>
