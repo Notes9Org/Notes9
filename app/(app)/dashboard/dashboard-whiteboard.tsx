@@ -9,6 +9,7 @@ import {
   useTransition,
   type MouseEvent,
 } from "react"
+import { createPortal } from "react-dom"
 import { Shapes, Type, Trash2, X, Sparkles, Maximize2, Minimize2 } from "lucide-react"
 import {
   AlertDialog,
@@ -541,11 +542,11 @@ export function DashboardWhiteboard({
     })
   }
 
-  return (
+  const content = (
     <article 
       className={cn(
         "flex min-h-0 flex-col overflow-hidden rounded-[calc(var(--radius)+4px)] border border-border bg-card transition-all",
-        isFullscreen ? "fixed inset-2 z-50 shadow-2xl h-auto" : "h-full"
+        isFullscreen ? "fixed inset-4 z-[9999] shadow-2xl h-auto" : "h-full"
       )}
     >
       <header className="flex items-center justify-between gap-2 px-4 py-3 border-b border-border">
@@ -815,6 +816,36 @@ export function DashboardWhiteboard({
       </AlertDialog>
     </article>
   )
+
+  if (isFullscreen && typeof document !== 'undefined') {
+    return (
+      <>
+        <div className="h-full rounded-[calc(var(--radius)+4px)] border border-border border-dashed bg-muted/20 flex flex-col items-center justify-center text-muted-foreground/50 transition-all">
+          <Shapes size={24} className="mb-2 opacity-50" />
+          <span className="text-sm">Fullscreen mode active</span>
+          <button 
+            type="button" 
+            onClick={() => setIsFullscreen(false)} 
+            className="mt-2 text-xs underline hover:text-foreground transition-colors"
+          >
+            Restore
+          </button>
+        </div>
+        {createPortal(
+          <>
+            <div 
+              className="fixed inset-0 z-[9998] bg-background/80 backdrop-blur-sm"
+              onClick={() => setIsFullscreen(false)}
+            />
+            {content}
+          </>,
+          document.body
+        )}
+      </>
+    )
+  }
+
+  return content
 }
 
 function EmptyWhiteboard({ onAdd }: { onAdd: () => void }) {
