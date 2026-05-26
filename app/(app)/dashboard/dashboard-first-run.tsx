@@ -1,80 +1,92 @@
 import Link from "next/link"
+import { FlaskConical, NotebookPen, TestTube, ClipboardList, ArrowRight } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { PageHeading, PageSubheading } from "@/components/ui/page-heading"
-import { ArrowRight, FolderPlus, Upload, Compass } from "lucide-react"
+import {
+  Empty,
+  EmptyHeader,
+  EmptyMedia,
+  EmptyTitle,
+  EmptyDescription,
+  EmptyContent,
+} from "@/components/ui/empty"
 
 /**
- * First-run Dashboard for users with no projects yet. Shows three deliberate
- * paths forward (create, import, learn) instead of an empty grid of cards.
+ * First-run dashboard surface — rendered in place of Schedule/Tasks/Whiteboard
+ * when the user has zero projects. The bench panels are useless without a
+ * project to ground them, so this teaches the entity hierarchy upfront and
+ * routes the user to the canonical first action: create a project.
  *
- * The four entity-hierarchy rows that used to live here moved INTO the
- * new-project flow, where they're contextual rather than abstract.
+ * The four item rows mirror the entities the user will see inside a project
+ * workspace — this is the same vocabulary they'll encounter once they create
+ * one, so the mental model is primed before they get there.
  */
 export function DashboardFirstRun() {
   return (
-    <div className="flex flex-col gap-8 max-w-4xl mx-auto w-full pt-4 md:pt-12">
-      <div className="flex flex-col gap-2 text-center">
-        <PageHeading className="font-display text-3xl md:text-5xl">
-          Welcome to Notes9
-        </PageHeading>
-        <PageSubheading className="text-center md:text-base">
-          Your lab notebook of record. Projects keep your experiments, notes,
-          protocols, samples, and papers in one place.
-        </PageSubheading>
-      </div>
+    <Empty className="border border-dashed bg-muted/20">
+      <EmptyHeader>
+        <EmptyMedia variant="icon">
+          <FlaskConical aria-hidden />
+        </EmptyMedia>
+        <EmptyTitle>Start with a project</EmptyTitle>
+        <EmptyDescription>
+          Projects are the home for your research. Each one holds the experiments you run, the
+          samples and protocols you use, and the lab notes you write — all in one place.
+        </EmptyDescription>
+      </EmptyHeader>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-        <Button
-          asChild
-          size="lg"
-          className="h-auto py-6 flex-col items-start gap-2 text-left"
-        >
+      <EmptyContent className="max-w-md">
+        <ul className="flex w-full flex-col gap-2 text-left text-sm">
+          <HierarchyRow
+            icon={<FlaskConical className="size-4" aria-hidden />}
+            title="Experiments"
+            description="What you ran, when, and with which protocol."
+          />
+          <HierarchyRow
+            icon={<NotebookPen className="size-4" aria-hidden />}
+            title="Lab notes"
+            description="Observations and results, attached to an experiment."
+          />
+          <HierarchyRow
+            icon={<TestTube className="size-4" aria-hidden />}
+            title="Samples"
+            description="Reagents, cells, constructs — linked from experiments."
+          />
+          <HierarchyRow
+            icon={<ClipboardList className="size-4" aria-hidden />}
+            title="Protocols"
+            description="Reusable procedures, versioned over time."
+          />
+        </ul>
+
+        <Button asChild size="lg" className="gap-2">
           <Link href="/projects/new">
-            <div className="flex items-center gap-2 w-full">
-              <FolderPlus className="size-4" />
-              <span className="font-semibold">Create your first project</span>
-            </div>
-            <span className="text-xs opacity-80 font-normal whitespace-normal">
-              The home for your experiments, notes, and data.
-            </span>
+            Create your first project
+            <ArrowRight className="size-4" aria-hidden />
           </Link>
         </Button>
+      </EmptyContent>
+    </Empty>
+  )
+}
 
-        <Button
-          asChild
-          size="lg"
-          variant="outline"
-          className="h-auto py-6 flex-col items-start gap-2 text-left"
-        >
-          <Link href="/settings?tab=import">
-            <div className="flex items-center gap-2 w-full">
-              <Upload className="size-4" />
-              <span className="font-semibold">Import existing work</span>
-            </div>
-            <span className="text-xs opacity-80 font-normal whitespace-normal">
-              Bring in notebooks, papers, or protocols from elsewhere.
-            </span>
-          </Link>
-        </Button>
-
-        <Button
-          asChild
-          size="lg"
-          variant="ghost"
-          className="h-auto py-6 flex-col items-start gap-2 text-left"
-        >
-          <Link href="/catalyst">
-            <div className="flex items-center gap-2 w-full">
-              <Compass className="size-4" />
-              <span className="font-semibold">Take the 60-second tour</span>
-              <ArrowRight className="size-3.5 ml-auto opacity-60" />
-            </div>
-            <span className="text-xs opacity-80 font-normal whitespace-normal">
-              See how Catalyst connects experiments, notes, and papers.
-            </span>
-          </Link>
-        </Button>
+function HierarchyRow({
+  icon,
+  title,
+  description,
+}: {
+  icon: React.ReactNode
+  title: string
+  description: string
+}) {
+  return (
+    <li className="flex items-start gap-3 rounded-lg border border-border/60 bg-background/60 px-3 py-2.5">
+      <span className="mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-md bg-muted text-foreground">
+        {icon}
+      </span>
+      <div className="min-w-0 flex-1">
+        <p className="text-sm font-medium leading-tight text-foreground">{title}</p>
+        <p className="mt-0.5 text-xs leading-snug text-muted-foreground">{description}</p>
       </div>
-    </div>
+    </li>
   )
 }
