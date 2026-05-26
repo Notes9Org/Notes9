@@ -3,7 +3,7 @@
 import { useState } from "react"
 import { useRouter } from 'next/navigation'
 import { createClient } from "@/lib/supabase/client"
-import { useSmartBack } from "@/hooks/use-smart-back"
+import { useCreatePageNav } from "@/hooks/use-create-page-nav"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -24,7 +24,10 @@ import { DATE_ORDER_ERROR, isEndDateBeforeStartDate } from "@/lib/date-order"
 
 export default function NewProjectPage() {
   const router = useRouter()
-  const handleBack = useSmartBack("/projects")
+  const { handleBack } = useCreatePageNav({
+    pageLabel: "New Project",
+    listFallbackPath: "/projects",
+  })
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   

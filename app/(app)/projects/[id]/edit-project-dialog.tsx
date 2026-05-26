@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import React, { useState } from "react"
 import { createClient } from "@/lib/supabase/client"
 import { usePreventSpaceMenuClose } from "@/hooks/use-prevent-space-menu-close"
 import { Button } from "@/components/ui/button"
@@ -71,7 +71,7 @@ export function EditProjectDialog({ project, asMenuItem = false, open: controlle
   const hasInvalidDateOrder = isEndDateBeforeStartDate(startDate, endDate)
 
   // Reset form when dialog opens
-  useEffect(() => {
+  React.useEffect(() => {
     if (open) {
       setName(project.name)
       setDescription(project.description || "")

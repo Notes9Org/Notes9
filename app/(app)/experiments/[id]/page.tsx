@@ -209,8 +209,8 @@ export default async function ExperimentDetailPage({
           initialTab={initialTab}
           experimentPageHref={
             useProjectScopedHeader && projectFromUrl
-              ? `/experiments/${experiment.id}?project=${projectFromUrl}`
-              : `/experiments/${experiment.id}`
+              ? `/experiments/${experiment.id}?project=${projectFromUrl}&experiment=${experiment.id}`
+              : `/experiments/${experiment.id}?experiment=${experiment.id}`
           }
         />
       </div>

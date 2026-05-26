@@ -21,7 +21,6 @@ export const APP_PRIMARY_NAV: { name: string; href: string; icon: NavIcon }[] = 
   // primary nav — they're surfaced as cards inside each project workspace.
   // The routes still exist and are reachable from those cards.
   { name: "Dashboard", href: "/dashboard", icon: Home },
-  { name: "Planner", href: "/planner", icon: CalendarClock },
   { name: "Projects", href: "/projects", icon: Folder },
   { name: "Catalyst", href: "/catalyst", icon: Sparkles },
   { name: "Research map", href: "/research-map", icon: Network },

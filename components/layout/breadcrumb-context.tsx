@@ -63,6 +63,8 @@ export function SetPageBreadcrumb({ segments }: { segments: BreadcrumbSegment[] 
   // every breadcrumb consumer re-renders. We compare serialized content so
   // an identical breadcrumb is a no-op.
   useEffect(() => {
+    // Empty segments → header auto-builds from pathname (protocols, samples, etc.)
+    if (segments.length === 0) return
     const key = serializeSegments(segments)
     if (lastKeyRef.current === key) return
     lastKeyRef.current = key

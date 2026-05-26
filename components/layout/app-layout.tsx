@@ -1,7 +1,7 @@
 "use client"
 
 import { ReactNode, Suspense, useState, useEffect, useRef, useCallback } from "react"
-import { usePathname, useRouter } from "next/navigation"
+import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import Link from "next/link"
 import { AppSidebar } from "./app-sidebar"
 import { RightSidebar } from "./right-sidebar"
@@ -27,31 +27,11 @@ import {
   type CatalystLaunchDetail,
 } from "@/lib/catalyst-launch"
 import { CatalystPanelStateProvider } from "@/contexts/catalyst-panel-state"
-
-const ROUTE_TITLES: { path: string; title: string }[] = [
-  { path: "/dashboard", title: "Dashboard" },
-  { path: "/planner", title: "Planner" },
-  { path: "/projects", title: "Projects" },
-  { path: "/catalyst", title: "Catalyst" },
-  { path: "/experiments", title: "Experiments" },
-  { path: "/lab-notes", title: "Lab Notes" },
-  { path: "/samples", title: "Samples" },
-  { path: "/equipment", title: "Equipment" },
-  { path: "/protocols", title: "Protocols" },
-  { path: "/literature-reviews", title: "Literature" },
-  { path: "/papers", title: "Writing" },
-  { path: "/research-map", title: "Research map" },
-  { path: "/settings", title: "Settings" },
-  { path: "/", title: "Dashboard" },
-]
-
-function getHeaderTitle(pathname: string): string {
-  if (!pathname) return "Notes9"
-  for (const { path, title } of ROUTE_TITLES) {
-    if (path === pathname || (path !== "/" && pathname.startsWith(path + "/"))) return title
-  }
-  return "Notes9"
-}
+import {
+  buildBreadcrumbsFromPathname,
+  getHeaderTitleFromPath,
+  resolveHeaderBreadcrumbs,
+} from "@/lib/breadcrumb-from-path"
 
 export const MOBILE_BREADCRUMB_MAX_LABEL_LENGTH = 18
 
@@ -62,14 +42,22 @@ export function shortenLabel(label: string, maxLen: number = MOBILE_BREADCRUMB_M
 
 function HeaderTitle() {
   const pathname = usePathname()
+  const searchParams = useSearchParams()
   const { segments } = useBreadcrumb()
   const { projectId, projectName, projectColor } = useProjectScope()
   const isMobile = useMediaQuery("(max-width: 768px)")
   const scrollRef = useRef<HTMLElement>(null)
   const [scrollState, setScrollState] = useState({ canScrollLeft: false, canScrollRight: false })
-  const fallbackTitle = getHeaderTitle(pathname ?? "")
 
-  const filtered = segments.filter((s) => s.label !== "Dashboard")
+  const pageSegments = segments.filter(
+    (s) => s.label !== "Dashboard" || s.href === "/dashboard",
+  )
+  const autoSegments = buildBreadcrumbsFromPathname(pathname ?? "", searchParams, {
+    projectId,
+    projectName,
+  })
+  const filtered = resolveHeaderBreadcrumbs(autoSegments, pageSegments)
+  const fallbackTitle = getHeaderTitleFromPath(pathname ?? "")
 
   // When in project scope, render a small project-color dot before the breadcrumb.
   // Only show it if the first crumb is the project (avoids double-rendering).
@@ -411,7 +399,15 @@ function AppLayoutBody({ children }: AppLayoutProps) {
               <div className="flex items-center gap-2 min-w-0 flex-1 truncate">
                 <MobileMenuButton />
                 <div className="min-w-0 flex-1 truncate">
-                  <HeaderTitle />
+                  <Suspense
+                    fallback={
+                      <h1 className="flex min-w-0 items-center gap-2 truncate text-base font-semibold sm:text-lg">
+                        <span className="truncate">Notes9</span>
+                      </h1>
+                    }
+                  >
+                    <HeaderTitle />
+                  </Suspense>
                 </div>
               </div>
 

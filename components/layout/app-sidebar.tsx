@@ -12,7 +12,6 @@ import {
   FlaskConical,
   Folder,
   FolderOpen,
-  Microscope,
   MoreHorizontal,
   NotebookPen,
   Package,
@@ -88,9 +87,8 @@ type ProjectScopedNavItem = {
   children?: { name: string; basePath: string; icon: typeof Folder }[]
 }
 
-// Lab notes / Protocols / Samples are nested UNDER Experiments — they only
-// exist in the context of an experiment, so the sidebar reflects that
-// hierarchy. Equipment and Literature stay top-level (project-wide resources).
+// Lab notes / Protocols / Samples / Data are nested under Experiments.
+// Reports sit after Literature (project-wide, not under a single experiment).
 const PROJECT_SCOPED_NAV: ProjectScopedNavItem[] = [
   {
     name: "Experiments",
@@ -101,11 +99,10 @@ const PROJECT_SCOPED_NAV: ProjectScopedNavItem[] = [
       { name: "Protocols", basePath: "/protocols", icon: ClipboardInfoIcon as unknown as typeof Folder },
       { name: "Samples", basePath: "/samples", icon: TestTube },
       { name: "Data", basePath: "/data", icon: Database },
-      { name: "Reports", basePath: "/reports", icon: FileText },
     ],
   },
-  { name: "Equipment", basePath: "/equipment", icon: Microscope },
   { name: "Literature", basePath: "/literature-reviews", icon: BookOpen },
+  { name: "Reports", basePath: "/reports", icon: FileText },
   { name: "Writing", basePath: "/papers", icon: FileEdit },
 ]
 
@@ -615,6 +612,7 @@ export function AppSidebar() {
                     // the path-derived scope also clears.
                     const url = new URL(window.location.href)
                     url.searchParams.delete("project")
+                    url.searchParams.delete("experiment")
                     const target = pathname?.startsWith("/projects/") ? "/dashboard" : `${url.pathname}${url.search}`
                     router.push(target)
                   }}
@@ -629,7 +627,7 @@ export function AppSidebar() {
                 <SidebarMenu>
                   {PROJECT_SCOPED_NAV.map((item) => {
                     const Icon = item.icon
-                    const href = `${item.basePath}?project=${scope.projectId}`
+                    const href = `${item.basePath}${scope.scopedQueryString}`
                     const isActive =
                       mounted &&
                       (pathname === item.basePath ||
@@ -641,7 +639,9 @@ export function AppSidebar() {
                             <Icon />
                             <span className={cn("truncate", isActive && "font-semibold")}>
                               {item.name}
-                              {item.name === "Experiments" && scope.experimentName ? ` / ${scope.experimentName}` : ""}
+                              {item.name === "Experiments" && scope.experimentName
+                                ? ` / ${scope.experimentName}`
+                                : ""}
                             </span>
                           </Link>
                         </SidebarMenuButton>
@@ -649,7 +649,7 @@ export function AppSidebar() {
                           <SidebarMenuSub>
                             {item.children.map((child) => {
                               const ChildIcon = child.icon
-                              const childHref = `${child.basePath}?project=${scope.projectId}`
+                              const childHref = `${child.basePath}${scope.scopedQueryString}`
                               const childActive =
                                 mounted &&
                                 (pathname === child.basePath ||

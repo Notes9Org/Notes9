@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useState, Suspense } from "react"
 import { useSearchParams, useRouter } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
 import { Button } from "@/components/ui/button"
@@ -33,7 +33,7 @@ type PageState =
   | { kind: "accepting" }
   | { kind: "success"; roleName: string }
 
-export default function InviteAcceptPage() {
+function InviteAcceptContent() {
   const searchParams = useSearchParams()
   const router = useRouter()
   const { toast } = useToast()
@@ -332,5 +332,19 @@ export default function InviteAcceptPage() {
         </div>
       </div>
     </div>
+  )
+}
+
+export default function InviteAcceptPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex min-h-screen w-full items-center justify-center p-6 bg-background">
+          <Spinner className="h-8 w-8" />
+        </div>
+      }
+    >
+      <InviteAcceptContent />
+    </Suspense>
   )
 }

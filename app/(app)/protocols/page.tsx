@@ -3,7 +3,6 @@ import { redirect } from "next/navigation"
 import { createClient } from "@/lib/supabase/server"
 import { ProtocolsPageContent, type ProtocolsProjectContext } from "./protocols-page-content"
 import { resolveInitialProjectIdParam } from "@/lib/url-project-param"
-import { SetPageBreadcrumb } from "@/components/layout/breadcrumb-context"
 import { loadProjectWorkspaceProtocols } from "@/lib/project-workspace-protocols"
 import { CatalystSectionHero } from "@/components/catalyst/catalyst-section-hero"
 
@@ -88,17 +87,6 @@ export default async function ProtocolsPage({
 
   return (
     <div className="space-y-6">
-      {projectContext ? (
-        <SetPageBreadcrumb
-          segments={[
-            { label: projectContext.name, href: `/projects/${projectContext.id}` },
-            { label: "Protocols" },
-          ]}
-        />
-      ) : (
-        <SetPageBreadcrumb segments={[]} />
-      )}
-
       <CatalystSectionHero size="sm" scope="protocols" />
 
       <Suspense

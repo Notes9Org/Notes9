@@ -1,5 +1,7 @@
 "use client"
 
+import { useMemo } from "react"
+import { usePathname } from "next/navigation"
 import { useRouter } from "next/navigation"
 import { Check, ChevronDown, Plus } from "lucide-react"
 import {
@@ -11,6 +13,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { colorFromId } from "@/contexts/project-scope-context"
+import { sortByRecentProjectOrder } from "@/lib/recent-projects"
 import { cn } from "@/lib/utils"
 
 export type ProjectPickerItem = {
@@ -26,7 +29,13 @@ type Props = {
 
 export function ProjectPicker({ currentProject, projects }: Props) {
   const router = useRouter()
+  const pathname = usePathname()
   const currentColor = colorFromId(currentProject.id)
+
+  const sortedProjects = useMemo(
+    () => sortByRecentProjectOrder(projects),
+    [projects, pathname],
+  )
 
   return (
     <DropdownMenu>
@@ -56,10 +65,10 @@ export function ProjectPicker({ currentProject, projects }: Props) {
         <DropdownMenuLabel className="font-mono text-[10px] uppercase tracking-[0.08em] text-muted-foreground">
           Switch project
         </DropdownMenuLabel>
-        {projects.length === 0 ? (
+        {sortedProjects.length === 0 ? (
           <DropdownMenuItem disabled>No other projects yet</DropdownMenuItem>
         ) : (
-          projects.map((p) => {
+          sortedProjects.map((p) => {
             const isCurrent = p.id === currentProject.id
             return (
               <DropdownMenuItem

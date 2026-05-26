@@ -121,7 +121,7 @@ export default async function ProjectDetailPage({
         .from("projects")
         .select("id, name, status")
         .eq("organization_id", project.organization_id)
-        .order("name", { ascending: true })
+        .order("updated_at", { ascending: false })
     : Promise.resolve({ data: [] as { id: string; name: string; status: string }[] })
 
   const [
@@ -263,16 +263,8 @@ export default async function ProjectDetailPage({
           <CardHeader>
             <CardTitle className="text-foreground">About this project</CardTitle>
           </CardHeader>
-          <CardContent className="grid gap-6 md:grid-cols-[1fr_auto] md:gap-10">
-            <div className="min-w-0 space-y-3 text-sm leading-relaxed text-muted-foreground">
-              {project.description ? (
-                <HtmlContent content={project.description} />
-              ) : (
-                <p>No description yet.</p>
-              )}
-            </div>
-
-            <div className="space-y-4 md:min-w-[260px]">
+          <CardContent className="grid gap-6 md:grid-cols-[minmax(220px,260px)_minmax(0,1fr)] md:items-start md:gap-8">
+            <div className="space-y-4 md:min-w-0">
               <div className="flex flex-wrap items-center gap-2">
                 <Badge
                   variant={
@@ -299,23 +291,33 @@ export default async function ProjectDetailPage({
               </div>
 
               <dl className="space-y-0 text-sm">
-                <div className="flex items-center justify-between gap-4 border-b border-border/60 py-2">
+                <div className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-0 border-b border-border/60 py-2">
                   <dt className="text-muted-foreground">Owner</dt>
-                  <dd className="font-medium text-foreground">{ownerName}</dd>
+                  <dd className="text-right font-medium text-foreground">{ownerName}</dd>
                 </div>
-                <div className="flex items-center justify-between gap-4 border-b border-border/60 py-2">
+                <div className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-0 border-b border-border/60 py-2">
                   <dt className="text-muted-foreground">Started</dt>
-                  <dd className="font-medium text-foreground">{startedLabel}</dd>
+                  <dd className="text-right font-medium text-foreground">{startedLabel}</dd>
                 </div>
-                <div className="flex items-center justify-between gap-4 border-b border-border/60 py-2">
+                <div className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-0 border-b border-border/60 py-2">
                   <dt className="text-muted-foreground">Members</dt>
-                  <dd className="font-medium text-foreground tabular-nums">{membersCount}</dd>
+                  <dd className="text-right font-medium text-foreground tabular-nums">
+                    {membersCount}
+                  </dd>
                 </div>
-                <div className="flex items-center justify-between gap-4 py-2">
+                <div className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-0 py-2">
                   <dt className="text-muted-foreground">Last activity</dt>
-                  <dd className="font-medium text-foreground">{lastActivityLabel}</dd>
+                  <dd className="text-right font-medium text-foreground">{lastActivityLabel}</dd>
                 </div>
               </dl>
+            </div>
+
+            <div className="min-w-0 max-w-xl justify-self-end space-y-2 text-xs leading-relaxed text-muted-foreground md:pl-2">
+              {project.description ? (
+                <HtmlContent content={project.description} className="text-xs" />
+              ) : (
+                <p className="italic">No description yet.</p>
+              )}
             </div>
           </CardContent>
         </Card>

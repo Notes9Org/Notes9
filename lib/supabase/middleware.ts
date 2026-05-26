@@ -39,23 +39,52 @@ export async function updateSession(request: NextRequest) {
           )
         },
       },
+      global: {
+        fetch: (url, options) => {
+          const controller = new AbortController()
+          const timeoutId = setTimeout(() => controller.abort(), 2000)
+          return fetch(url, {
+            ...options,
+            signal: controller.signal,
+          })
+            .catch((err) => {
+              if (err.name === "AbortError") {
+                return new Response(JSON.stringify({ error: "Request Timeout" }), {
+                  status: 408,
+                  statusText: "Request Timeout",
+                  headers: { "Content-Type": "application/json" },
+                })
+              }
+              throw err
+            })
+            .finally(() => clearTimeout(timeoutId))
+        },
+      },
     }
   )
-
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
 
   // Define public routes that don't require authentication
   const publicRoutes = ["/", "/about", "/pricing", "/docs", "/platform", "/resources", "/terms", "/privacy", "/survey", "/auth/invite"]
   const isPublicRoute = publicRoutes.some(route => request.nextUrl.pathname === route)
   const isAuthRoute = request.nextUrl.pathname.startsWith("/auth")
 
-  if (
-    !user &&
-    !isAuthRoute &&
-    !isPublicRoute
-  ) {
+  // If it's a public or auth route, we don't need to verify the user session in middleware.
+  // This avoids slow database roundtrips and connection timeouts on non-protected pages.
+  if (isAuthRoute || isPublicRoute) {
+    return supabaseResponse
+  }
+
+  let user = null
+  try {
+    const {
+      data: { user: fetchedUser },
+    } = await supabase.auth.getUser()
+    user = fetchedUser
+  } catch (error) {
+    console.error("Middleware failed to fetch user from Supabase (connection timeout or offline):", error)
+  }
+
+  if (!user) {
     const url = request.nextUrl.clone()
     url.pathname = "/auth/login"
     return NextResponse.redirect(url)

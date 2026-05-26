@@ -66,6 +66,7 @@ import { PageHeading } from "@/components/ui/page-heading"
 import { insertProtocolWithOptionalContext } from "@/lib/protocol-context-supabase"
 import { useToast } from "@/hooks/use-toast"
 import { recordRumEvent } from "@/lib/rum"
+import { useCreatePageNav } from "@/hooks/use-create-page-nav"
 
 const PROTOCOL_CATEGORIES = [
   "Sample Preparation",
@@ -337,6 +338,11 @@ function NewProtocolForm() {
     ? `/protocols?project=${returnProjectId}`
     : "/protocols"
 
+  const { backHref, handleBack } = useCreatePageNav({
+    pageLabel: "New Protocol",
+    listFallbackPath: protocolsListHref,
+  })
+
   const isFormValid =
     formData.name.trim() &&
     formData.content.trim() &&
@@ -450,7 +456,7 @@ function NewProtocolForm() {
       <div className="space-y-4 md:space-y-6">
         <div className="flex items-center gap-3">
           <Button variant="ghost" size="icon" asChild className="shrink-0">
-            <Link href={protocolsListHref}>
+            <Link href={backHref}>
               <ArrowLeft className="h-4 w-4" />
             </Link>
           </Button>
@@ -548,7 +554,7 @@ function NewProtocolForm() {
         <div className="flex items-center justify-between gap-3 shrink-0">
           <div className="flex items-center gap-3 min-w-0">
             <Button variant="ghost" size="icon" asChild className="shrink-0">
-              <Link href={protocolsListHref}>
+              <Link href={backHref}>
                 <ArrowLeft className="h-4 w-4" />
               </Link>
             </Button>
@@ -803,7 +809,7 @@ function NewProtocolForm() {
       {/* Header */}
       <div className="flex items-center gap-3">
         <Button variant="ghost" size="icon" asChild className="shrink-0">
-          <Link href={protocolsListHref}>
+          <Link href={backHref}>
             <ArrowLeft className="h-4 w-4" />
           </Link>
         </Button>
@@ -1043,7 +1049,7 @@ function NewProtocolForm() {
               <Button
                 type="button"
                 variant="outline"
-                onClick={() => router.push(protocolsListHref)}
+                onClick={handleBack}
                 data-navigate
                 disabled={isLoading}
               >

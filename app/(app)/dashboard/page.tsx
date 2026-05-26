@@ -7,16 +7,11 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
 import {
-  FlaskConical,
   FileText,
   BookOpen,
   FolderOpen,
-  ArrowRight,
   ScrollText,
-  Plus,
 } from "lucide-react"
 import { OrgSetupCTA } from "@/components/org/org-setup-cta"
 import { CatalystSectionHero } from "@/components/catalyst/catalyst-section-hero"
@@ -24,6 +19,8 @@ import { DashboardGreeting } from "./dashboard-greeting"
 import { DashboardFirstRun } from "./dashboard-first-run"
 import { DashboardScheduleTasks } from "./dashboard-schedule-tasks"
 import { DashboardWhiteboard } from "./dashboard-whiteboard"
+import { DashboardRecentWork } from "./dashboard-recent-work"
+import { DashboardQuickActions } from "./dashboard-quick-actions"
 import { ActivitySummary } from "./activity-summary"
 
 /**
@@ -56,7 +53,6 @@ export default async function DashboardPage() {
     allTasksRes,
     allEventsRes,
     whiteboardNotesRes,
-    recentProjectsRes,
   ] = await Promise.all([
     supabase.from("projects").select("id", { count: "exact", head: true }).limit(1),
     supabase
@@ -100,11 +96,6 @@ export default async function DashboardPage() {
       .eq("user_id", user.id)
       .is("project_id", null)
       .order("created_at", { ascending: true }),
-    supabase
-      .from("projects")
-      .select("id,name,updated_at")
-      .order("updated_at", { ascending: false })
-      .limit(3),
   ])
 
   const hasProjects = (projectsHeadRes.count ?? 0) > 0
@@ -123,27 +114,9 @@ export default async function DashboardPage() {
   const tasks = allTasksRes.data ?? []
   const events = allEventsRes.data ?? []
   const whiteboardNotes = whiteboardNotesRes.data ?? []
-  const recentProjects = recentProjectsRes.data ?? []
-
-  type ActiveWork = 
-    | { type: "experiment", id: string, name: string, status: string, updated_at: string, project_id: string | null }
-    | { type: "project", id: string, name: string, updated_at: string }
-
-  const activeWorkItems: ActiveWork[] = [
-    ...activeExperiments.map((e) => ({ ...e, type: "experiment" as const })),
-    ...recentProjects.map((p) => ({ ...p, type: "project" as const })),
-  ].sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime()).slice(0, 4)
-
   // Merge cross-entity "recently edited" feed (last 5).
   type RecentItem = { kind: "project" | "note" | "paper" | "protocol"; id: string; title: string; updated_at: string; href: string }
   const recentlyEdited: RecentItem[] = [
-    ...recentProjects.map((p) => ({
-      kind: "project" as const,
-      id: p.id,
-      title: p.name || "Untitled project",
-      updated_at: p.updated_at,
-      href: `/projects/${p.id}`,
-    })),
     ...recentNotes.map((n) => ({
       kind: "note" as const,
       id: n.id,
@@ -196,27 +169,7 @@ export default async function DashboardPage() {
       <div className="mt-2 flex flex-col gap-3">
         <ActivitySummary />
         
-        {/* Compact quick-action buttons — inline, no card chrome */}
-        <div className="mx-auto flex w-full max-w-3xl items-center justify-center gap-3 px-4">
-          <Link href="/projects/new">
-            <Button variant="ghost" size="sm" className="gap-2 text-sm font-medium text-foreground/80 hover:text-foreground hover:bg-muted/60">
-              <Plus className="size-4 opacity-70" />
-              Project
-            </Button>
-          </Link>
-          <Link href="/experiments/new">
-            <Button variant="ghost" size="sm" className="gap-2 text-sm font-medium text-foreground/80 hover:text-foreground hover:bg-muted/60">
-              <Plus className="size-4 opacity-70" />
-              Experiment
-            </Button>
-          </Link>
-          <Link href="/samples/new">
-            <Button variant="ghost" size="sm" className="gap-2 text-sm font-medium text-foreground/80 hover:text-foreground hover:bg-muted/60">
-              <Plus className="size-4 opacity-70" />
-              Sample
-            </Button>
-          </Link>
-        </div>
+        <DashboardQuickActions userId={user.id} />
       </div>
 
       {/* Org Setup CTA */}
@@ -233,53 +186,8 @@ export default async function DashboardPage() {
           />
         </div>
 
-        {/* Top Right: Active Work */}
-        <Card className="flex flex-col min-w-0">
-          <CardHeader>
-            <CardTitle className="text-base">Recent projects & experiments</CardTitle>
-          </CardHeader>
-          <CardContent className="flex-1 flex flex-col overflow-y-auto min-h-0 pr-2">
-            {activeWorkItems.length > 0 ? (
-              <ul className="space-y-2 flex-1">
-                {activeWorkItems.map((item) => (
-                  <li key={`${item.type}-${item.id}`}>
-                    <Link
-                      href={item.type === "experiment" ? `/experiments/${item.id}${item.project_id ? `?project=${item.project_id}` : ""}` : `/projects/${item.id}`}
-                      className="flex items-start gap-3 rounded-md border border-border bg-card p-3 hover:bg-muted/40 transition-colors"
-                    >
-                      {item.type === "experiment" ? (
-                        <FlaskConical className="size-4 mt-0.5 text-primary shrink-0" />
-                      ) : (
-                        <FolderOpen className="size-4 mt-0.5 text-primary shrink-0" />
-                      )}
-                      <div className="flex-1 min-w-0">
-                        <div className="font-medium text-sm line-clamp-1">{item.name}</div>
-                        <div className="text-xs text-muted-foreground mt-0.5">
-                          Updated {relativeTime(item.updated_at)}
-                        </div>
-                      </div>
-                      {item.type === "experiment" ? (
-                        <Badge variant="secondary" className="text-2xs uppercase tracking-wide shrink-0">{item.status}</Badge>
-                      ) : (
-                        <Badge variant="outline" className="text-2xs uppercase tracking-wide shrink-0">Project</Badge>
-                      )}
-                    </Link>
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <p className="text-sm text-muted-foreground flex-1">
-                No active work. <Link href="/experiments/new" className="underline underline-offset-2 hover:text-foreground">Start one →</Link>
-              </p>
-            )}
-            <Button asChild variant="ghost" size="sm" className="w-full justify-between mt-3">
-              <Link href="/projects" className="text-muted-foreground hover:text-foreground">
-                View all projects
-                <ArrowRight className="size-4 opacity-50" />
-              </Link>
-            </Button>
-          </CardContent>
-        </Card>
+        {/* Top Right: recently opened projects + in-progress experiments */}
+        <DashboardRecentWork activeExperiments={activeExperiments} />
 
         {/* Bottom Left: Whiteboard */}
         <div className="flex flex-col min-w-0 h-full">

@@ -47,6 +47,7 @@ import {
 } from "@/components/ui/select"
 import { cn } from "@/lib/utils"
 import { recordRumEvent } from "@/lib/rum"
+import { sortByRecentProjectOrder } from "@/lib/recent-projects"
 import { Loader2 } from "lucide-react"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
@@ -424,7 +425,7 @@ function ResearchMapCanvas() {
       .select("id, name")
       .eq("organization_id", profile.organization_id)
       .order("name")
-    if (!pErr) setProjects(data ?? [])
+    if (!pErr) setProjects(sortByRecentProjectOrder(data ?? []))
   }, [supabase])
 
   useEffect(() => {

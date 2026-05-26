@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect, useMemo } from "react"
-import { useRouter } from "next/navigation"
+import { useRouter, usePathname } from "next/navigation"
 import { useMediaQuery } from "@/hooks/use-media-query"
 import Link from "next/link"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -17,6 +17,7 @@ import {
 } from "@/components/ui/resource-list-filters"
 import { ViewModeToggle } from "@/components/ui/view-mode-toggle"
 import { CATALYST_MENTION_DRAG_MIME } from "@/lib/catalyst-mention-types"
+import { sortByRecentProjectOrder } from "@/lib/recent-projects"
 
 // Format date consistently to avoid hydration mismatch between server/client locales
 const formatDate = (dateStr: string): string => {
@@ -44,6 +45,7 @@ interface Project {
 
 /** Client wrapper: single-line header (description + Grid/Table toggle + New button) + list */
 export function ProjectsPageContent({ projects }: { projects: Project[] }) {
+  const pathname = usePathname()
   const isMobile = useMediaQuery("(max-width: 768px)")
   const [viewMode, setViewMode] = useState<"grid" | "table">("table")
   const [statusFilter, setStatusFilter] = useState(FILTER_ALL)
@@ -81,12 +83,13 @@ export function ProjectsPageContent({ projects }: { projects: Project[] }) {
   }, [projects])
 
   const filteredProjects = useMemo(() => {
-    return projects.filter((p) => {
+    const filtered = projects.filter((p) => {
       if (statusFilter !== FILTER_ALL && p.status !== statusFilter) return false
       if (priorityFilter !== FILTER_ALL && (p.priority || "") !== priorityFilter) return false
       return true
     })
-  }, [projects, statusFilter, priorityFilter])
+    return sortByRecentProjectOrder(filtered)
+  }, [projects, statusFilter, priorityFilter, pathname])
 
   return (
     <div className="space-y-6">

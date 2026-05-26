@@ -33,6 +33,27 @@ export async function createClient() {
           }
         },
       },
+      global: {
+        fetch: (url, options) => {
+          const controller = new AbortController()
+          const timeoutId = setTimeout(() => controller.abort(), 2000)
+          return fetch(url, {
+            ...options,
+            signal: controller.signal,
+          })
+            .catch((err) => {
+              if (err.name === "AbortError") {
+                return new Response(JSON.stringify({ error: "Request Timeout" }), {
+                  status: 408,
+                  statusText: "Request Timeout",
+                  headers: { "Content-Type": "application/json" },
+                })
+              }
+              throw err
+            })
+            .finally(() => clearTimeout(timeoutId))
+        },
+      },
     }
   )
 }

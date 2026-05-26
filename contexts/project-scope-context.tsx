@@ -10,8 +10,8 @@ import {
   type ReactNode,
 } from "react"
 import { usePathname, useSearchParams } from "next/navigation"
-import { createClient } from "@/lib/supabase/client"
 import { isLikelyUuid } from "@/lib/url-project-param"
+import { recordRecentProject } from "@/lib/recent-projects"
 
 /**
  * Pull a likely-UUID project id out of `/projects/<id>(/...)` paths so the
@@ -25,6 +25,13 @@ function projectIdFromPath(pathname: string | null): string | null {
   return candidate && isLikelyUuid(candidate) ? candidate : null
 }
 
+function experimentIdFromPath(pathname: string | null): string | null {
+  if (!pathname) return null
+  const match = pathname.match(/^\/experiments\/([^/?#]+)/)
+  const candidate = match?.[1]
+  return candidate && isLikelyUuid(candidate) ? candidate : null
+}
+
 export type ProjectScope = {
   projectId: string | null
   projectName: string | null
@@ -33,45 +40,84 @@ export type ProjectScope = {
   experimentName: string | null
   loading: boolean
   clearScope: () => void
+  /** `?project=…&experiment=…` for project-scoped sidebar links */
+  scopedQueryString: string
 }
 
 const ProjectScopeContext = createContext<ProjectScope | null>(null)
 
+const ENTITY_PATH_RE =
+  /^\/(projects|experiments|lab-notes|protocols|samples|data|reports|equipment|papers|literature-reviews)\/([^/?#]+)/
+
 /**
- * Reads `?project=<id>` from the URL and resolves it to a project name once,
- * caching the result so every section page can render `● Project ▸ Section`
- * in the breadcrumb without each page re-fetching.
- *
- * Color is derived deterministically from the project id so the breadcrumb
- * dot stays stable even before the projects table loads.
+ * Reads `?project=<id>` and `?experiment=<id>` from the URL and resolves names
+ * once, caching the result so breadcrumbs and the sidebar stay in sync.
  */
 export function ProjectScopeProvider({ children }: { children: ReactNode }) {
   const searchParams = useSearchParams()
   const pathname = usePathname()
   const rawProject = searchParams?.get("project") ?? null
+  const rawExperiment = searchParams?.get("experiment") ?? null
   const queryProjectId = rawProject && isLikelyUuid(rawProject) ? rawProject : null
+  const queryExperimentId =
+    rawExperiment && isLikelyUuid(rawExperiment) ? rawExperiment : null
+
   const [persistedProjectId, setPersistedProjectId] = useState<string | null>(null)
+  const [persistedExperimentId, setPersistedExperimentId] = useState<string | null>(
+    null,
+  )
 
   useEffect(() => {
-    // Only access localStorage on the client
     try {
-      const saved = localStorage.getItem("n9_last_project_id")
-      if (saved) setPersistedProjectId(saved)
-    } catch (e) {}
+      const savedProject = localStorage.getItem("n9_last_project_id")
+      const savedExperiment = localStorage.getItem("n9_last_experiment_id")
+      if (savedProject) setPersistedProjectId(savedProject)
+      if (savedExperiment) setPersistedExperimentId(savedExperiment)
+    } catch {
+      /* ignore */
+    }
   }, [])
 
   const [projectName, setProjectName] = useState<string | null>(null)
   const [experimentId, setExperimentId] = useState<string | null>(null)
   const [experimentName, setExperimentName] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
-  const cache = useRef<Map<string, { pId: string | null, pName: string | null, eId: string | null, eName: string | null }>>(new Map())
+  const cache = useRef<
+    Map<
+      string,
+      {
+        pId: string | null
+        pName: string | null
+        eId: string | null
+        eName: string | null
+      }
+    >
+  >(new Map())
 
-  // We derive the target URL to resolve based on whether an entity ID is present in the path.
-  // If the pathname has an entity ID (e.g. /experiments/1234), we want to resolve the pathname
-  // to get both the experiment and its parent project.
-  // If it's a top-level list (e.g. /experiments), we fall back to the query param.
-  const hasEntityId = /^\/(projects|experiments|lab-notes|protocols|samples|data|reports|equipment|papers|literature-reviews)\/([^/?#]+)/.test(pathname)
-  const pathToResolve = hasEntityId ? pathname : (queryProjectId ? `/projects/${queryProjectId}` : pathname)
+  const pathProjectId = projectIdFromPath(pathname)
+  const pathExperimentId = experimentIdFromPath(pathname)
+  const hasEntityId = ENTITY_PATH_RE.test(pathname ?? "")
+
+  const pathToResolve = useMemo(() => {
+    if (hasEntityId) return pathname
+    if (pathExperimentId) return pathname
+    if (queryExperimentId) return `/experiments/${queryExperimentId}`
+    if (queryProjectId) return `/projects/${queryProjectId}`
+    if (persistedExperimentId) return `/experiments/${persistedExperimentId}`
+    if (persistedProjectId) return `/projects/${persistedProjectId}`
+    return pathname
+  }, [
+    hasEntityId,
+    pathname,
+    pathExperimentId,
+    queryExperimentId,
+    queryProjectId,
+    persistedExperimentId,
+    persistedProjectId,
+  ])
+
+  const resolveFallbackProjectId =
+    queryProjectId ?? pathProjectId ?? persistedProjectId ?? ""
 
   useEffect(() => {
     if (!pathToResolve) {
@@ -81,9 +127,11 @@ export function ProjectScopeProvider({ children }: { children: ReactNode }) {
       return
     }
 
-    const cached = cache.current.get(pathToResolve)
+    const cacheKey = `${pathToResolve}|${resolveFallbackProjectId}`
+    const cached = cache.current.get(cacheKey)
     if (cached) {
       if (cached.pId) setPersistedProjectId(cached.pId)
+      if (cached.eId) setPersistedExperimentId(cached.eId)
       setProjectName(cached.pName)
       setExperimentId(cached.eId)
       setExperimentName(cached.eName)
@@ -93,23 +141,30 @@ export function ProjectScopeProvider({ children }: { children: ReactNode }) {
     let cancelled = false
     setLoading(true)
 
-    fetch(`/api/resolve-scope?path=${encodeURIComponent(pathToResolve)}&fallback=${queryProjectId || ''}`)
-      .then(res => res.json())
-      .then(data => {
+    const params = new URLSearchParams({
+      path: pathToResolve,
+      fallback: resolveFallbackProjectId,
+    })
+    if (queryExperimentId) params.set("experiment", queryExperimentId)
+
+    fetch(`/api/resolve-scope?${params.toString()}`)
+      .then((res) => res.json())
+      .then((data) => {
         if (cancelled) return
         const pId = data.projectId || null
         const pName = data.projectName || null
-        const eId = data.experimentId || null
+        const eId = data.experimentId || queryExperimentId || null
         const eName = data.experimentName || null
 
-        cache.current.set(pathToResolve, { pId, pName, eId, eName })
+        cache.current.set(cacheKey, { pId, pName, eId, eName })
         if (pId) setPersistedProjectId(pId)
+        if (eId) setPersistedExperimentId(eId)
         setProjectName(pName)
         setExperimentId(eId)
         setExperimentName(eName)
         setLoading(false)
       })
-      .catch(err => {
+      .catch((err) => {
         console.error(err)
         if (!cancelled) setLoading(false)
       })
@@ -117,36 +172,75 @@ export function ProjectScopeProvider({ children }: { children: ReactNode }) {
     return () => {
       cancelled = true
     }
-  }, [pathToResolve])
+  }, [pathToResolve, resolveFallbackProjectId, queryExperimentId])
 
   useEffect(() => {
-    if (persistedProjectId) {
-      try {
+    try {
+      if (persistedProjectId) {
         localStorage.setItem("n9_last_project_id", persistedProjectId)
-      } catch (e) {}
+      }
+      if (persistedExperimentId) {
+        localStorage.setItem("n9_last_experiment_id", persistedExperimentId)
+      }
+    } catch {
+      /* ignore */
     }
-  }, [persistedProjectId])
+  }, [persistedProjectId, persistedExperimentId])
 
-  const projectId = persistedProjectId
+  const activeProjectId =
+    pathProjectId ?? queryProjectId ?? persistedProjectId
+
+  useEffect(() => {
+    if (activeProjectId) recordRecentProject(activeProjectId)
+  }, [activeProjectId])
+
+  const projectId =
+    queryProjectId ?? pathProjectId ?? persistedProjectId
 
   const clearScope = () => {
     try {
       localStorage.removeItem("n9_last_project_id")
-    } catch (e) {}
+      localStorage.removeItem("n9_last_experiment_id")
+    } catch {
+      /* ignore */
+    }
     setPersistedProjectId(null)
+    setPersistedExperimentId(null)
+    setExperimentId(null)
+    setExperimentName(null)
   }
+
+  const scopedQueryString = useMemo(() => {
+    const params = new URLSearchParams()
+    if (projectId) params.set("project", projectId)
+    const activeExperiment =
+      experimentId ?? queryExperimentId ?? persistedExperimentId
+    if (activeExperiment) params.set("experiment", activeExperiment)
+    const qs = params.toString()
+    return qs ? `?${qs}` : ""
+  }, [projectId, experimentId, queryExperimentId, persistedExperimentId])
 
   const value = useMemo<ProjectScope>(
     () => ({
       projectId,
       projectName,
       projectColor: projectId ? colorFromId(projectId) : null,
-      experimentId,
+      experimentId: experimentId ?? queryExperimentId ?? persistedExperimentId,
       experimentName,
       loading,
       clearScope,
+      scopedQueryString,
     }),
-    [projectId, projectName, experimentId, experimentName, loading]
+    [
+      projectId,
+      projectName,
+      experimentId,
+      queryExperimentId,
+      persistedExperimentId,
+      experimentName,
+      loading,
+      scopedQueryString,
+    ],
   )
 
   return (
@@ -159,7 +253,16 @@ export function ProjectScopeProvider({ children }: { children: ReactNode }) {
 export function useProjectScope(): ProjectScope {
   const ctx = useContext(ProjectScopeContext)
   if (!ctx) {
-    return { projectId: null, projectName: null, projectColor: null, experimentId: null, experimentName: null, loading: false, clearScope: () => {} }
+    return {
+      projectId: null,
+      projectName: null,
+      projectColor: null,
+      experimentId: null,
+      experimentName: null,
+      loading: false,
+      clearScope: () => {},
+      scopedQueryString: "",
+    }
   }
   return ctx
 }

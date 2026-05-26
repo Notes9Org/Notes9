@@ -4,7 +4,7 @@ import { useState, useEffect, Suspense, useRef } from "react"
 import { useRouter, useSearchParams } from 'next/navigation'
 import { createClient } from "@/lib/supabase/client"
 import { resolveInitialProjectIdParam } from "@/lib/url-project-param"
-import { useSmartBack } from "@/hooks/use-smart-back"
+import { useCreatePageNav } from "@/hooks/use-create-page-nav"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -28,7 +28,10 @@ import { toast } from "sonner"
 
 function NewExperimentForm() {
   const router = useRouter()
-  const handleBack = useSmartBack("/experiments")
+  const { handleBack } = useCreatePageNav({
+    pageLabel: "New Experiment",
+    listFallbackPath: "/experiments",
+  })
   const searchParams = useSearchParams()
   const appliedProjectFromUrlRef = useRef(false)
   

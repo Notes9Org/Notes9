@@ -51,8 +51,12 @@ function Tabs({
 
 function TabsList({
   className,
+  scrollable = true,
   ...props
-}: React.ComponentProps<typeof TabsPrimitive.List>) {
+}: React.ComponentProps<typeof TabsPrimitive.List> & {
+  /** When false, omits overflow scroll and chevron controls. */
+  scrollable?: boolean
+}) {
   const ctx = React.useContext(TabsContext)
   const localScrollRef = React.useRef<HTMLDivElement>(null)
   const scrollRef = ctx?.scrollContainerRef ?? localScrollRef
@@ -83,6 +87,7 @@ function TabsList({
   }
 
   React.useEffect(() => {
+    if (!scrollable) return
     const el = scrollRef.current
     if (!el) return
 
@@ -92,11 +97,11 @@ function TabsList({
 
     window.addEventListener('resize', run)
     return () => window.removeEventListener('resize', run)
-  }, [])
+  }, [scrollable])
 
   // Center the default/initial active tab on first load when list overflows
   React.useEffect(() => {
-    if (!ctx) return
+    if (!scrollable || !ctx) return
     const el = scrollRef.current
     if (!el) return
     const id = requestAnimationFrame(() => {
@@ -105,7 +110,21 @@ function TabsList({
       })
     })
     return () => cancelAnimationFrame(id)
-  }, [ctx])
+  }, [ctx, scrollable])
+
+  const list = (
+    <TabsPrimitive.List
+      className={cn(
+        'inline-flex min-w-max h-9 items-center bg-muted rounded-md p-1 gap-1',
+        className
+      )}
+      {...props}
+    />
+  )
+
+  if (!scrollable) {
+    return list
+  }
 
   return (
     <div className="relative">
@@ -146,13 +165,7 @@ function TabsList({
         onScroll={checkScroll}
         className="overflow-x-auto scroll-smooth hide-scrollbar"
       >
-        <TabsPrimitive.List
-          className={cn(
-            'inline-flex min-w-max h-9 items-center bg-muted rounded-md p-1 gap-1',
-            className
-          )}
-          {...props}
-        />
+        {list}
       </div>
     </div>
   )
