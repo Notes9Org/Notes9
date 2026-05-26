@@ -14,7 +14,6 @@ import {
   FileText,
   BookOpen,
   FolderOpen,
-  FlaskConical,
   ArrowRight,
   ScrollText,
   Plus,
