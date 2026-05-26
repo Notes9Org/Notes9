@@ -230,7 +230,7 @@ export default async function DashboardPage() {
             initialTasks={tasks}
           />
         </div>
-        <Card className="xl:col-span-6 flex flex-col">
+        <Card className="xl:col-span-6 flex flex-col min-w-0">
           <CardHeader>
             <CardTitle className="text-base">Recent projects & experiments</CardTitle>
           </CardHeader>
@@ -286,7 +286,7 @@ export default async function DashboardPage() {
         </div>
 
         {/* Recently edited — 6 cols */}
-        <Card className="xl:col-span-6 flex flex-col">
+        <Card className="xl:col-span-6 flex flex-col min-w-0">
           <CardHeader>
             <CardTitle className="text-base">Recently edited</CardTitle>
           </CardHeader>
