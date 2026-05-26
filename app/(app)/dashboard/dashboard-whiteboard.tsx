@@ -7,6 +7,7 @@ import {
   useRef,
   useState,
   useTransition,
+  type PointerEvent,
   type MouseEvent,
 } from "react"
 import { createPortal } from "react-dom"
@@ -349,7 +350,7 @@ export function DashboardWhiteboard({
     if (!marquee) return
     const startX = marquee.x
     const startY = marquee.y
-    function move(ev: globalThis.MouseEvent) {
+    function move(ev: globalThis.PointerEvent) {
       const rect = canvasRef.current?.getBoundingClientRect()
       if (!rect) return
       const cx = ev.clientX - rect.left
@@ -385,11 +386,11 @@ export function DashboardWhiteboard({
         return null
       })
     }
-    window.addEventListener("mousemove", move)
-    window.addEventListener("mouseup", up)
+    window.addEventListener("pointermove", move)
+    window.addEventListener("pointerup", up)
     return () => {
-      window.removeEventListener("mousemove", move)
-      window.removeEventListener("mouseup", up)
+      window.removeEventListener("pointermove", move)
+      window.removeEventListener("pointerup", up)
     }
   }, [marquee])
 
@@ -413,12 +414,13 @@ export function DashboardWhiteboard({
     [selected.size],
   )
 
-  function startDrag(e: MouseEvent<HTMLDivElement>, note: WhiteboardNote) {
-    // closest() so a click on the X-button's SVG child (or any nested icon)
-    // still recognizes the interactive target and doesn't initiate a drag.
+  function startDrag(e: PointerEvent<HTMLDivElement>, note: WhiteboardNote) {
     if ((e.target as HTMLElement).closest("button, textarea, a, input")) {
       return
     }
+    // Prevent default to disable native drag-and-drop or touch panning interruptions
+    e.preventDefault()
+    
     const rect = canvasRef.current?.getBoundingClientRect()
     if (!rect) return
     setDrag({
@@ -435,7 +437,7 @@ export function DashboardWhiteboard({
 
   useEffect(() => {
     if (!drag) return
-    function move(e: globalThis.MouseEvent) {
+    function move(e: globalThis.PointerEvent) {
       const rect = canvasRef.current?.getBoundingClientRect()
       if (!rect) return
       const noteW = sizesRef.current[drag!.id]?.w || 180
@@ -451,18 +453,18 @@ export function DashboardWhiteboard({
       }
       setDrag(null)
     }
-    window.addEventListener("mousemove", move)
-    window.addEventListener("mouseup", up)
+    window.addEventListener("pointermove", move)
+    window.addEventListener("pointerup", up)
     return () => {
-      window.removeEventListener("mousemove", move)
-      window.removeEventListener("mouseup", up)
+      window.removeEventListener("pointermove", move)
+      window.removeEventListener("pointerup", up)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [drag])
 
   useEffect(() => {
     if (!resizing) return
-    function move(e: globalThis.MouseEvent) {
+    function move(e: globalThis.PointerEvent) {
       const w = Math.max(120, resizing!.startW + (e.clientX - resizing!.startX))
       const h = Math.max(80, resizing!.startH + (e.clientY - resizing!.startY))
       setSizes((curr) => {
@@ -472,11 +474,11 @@ export function DashboardWhiteboard({
       })
     }
     function up() { setResizing(null) }
-    window.addEventListener("mousemove", move)
-    window.addEventListener("mouseup", up)
+    window.addEventListener("pointermove", move)
+    window.addEventListener("pointerup", up)
     return () => {
-      window.removeEventListener("mousemove", move)
-      window.removeEventListener("mouseup", up)
+      window.removeEventListener("pointermove", move)
+      window.removeEventListener("pointerup", up)
     }
   }, [resizing])
 
@@ -637,7 +639,7 @@ export function DashboardWhiteboard({
       {/* Canvas */}
       <div
         ref={canvasRef}
-        onMouseDown={startMarquee}
+        onPointerDown={startMarquee}
         className="relative flex-1 overflow-hidden m-3 rounded-md border border-border"
         style={{
           background: `radial-gradient(circle, color-mix(in srgb, var(--foreground) 9%, transparent) 1px, transparent 1px) 0 0 / 22px 22px, var(--muted)`,
@@ -654,7 +656,7 @@ export function DashboardWhiteboard({
               key={n.id}
               role="group"
               aria-label={`${n.tag ?? "Note"}: ${n.body ? n.body.slice(0, 60) : "empty"}`}
-              onMouseDown={(e) => startDrag(e, n)}
+              onPointerDown={(e) => startDrag(e, n)}
               onClick={(e) => {
                 // Clicks on inner inputs already short-circuited via closest()
                 // in startDrag; here we only care about plain note-body clicks
