@@ -49,6 +49,20 @@ export async function POST(req: NextRequest) {
       )
     }
 
+    // 1b. Bind the invitation to the authenticated user's email. Without this,
+    // anyone holding/guessing a token could accept an invite addressed to
+    // someone else and join that org under their own account. Same generic
+    // error to avoid leaking whether a token exists.
+    if (
+      !user.email ||
+      invitation.email.trim().toLowerCase() !== user.email.trim().toLowerCase()
+    ) {
+      return NextResponse.json(
+        { error: "Invalid or expired invitation" },
+        { status: 400 }
+      )
+    }
+
     // 2. Verify invitation status is "pending" or "sent"
     if (invitation.status !== "pending" && invitation.status !== "sent") {
       return NextResponse.json(

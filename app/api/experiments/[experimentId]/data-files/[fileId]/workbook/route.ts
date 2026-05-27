@@ -128,8 +128,47 @@ export async function PATCH(request: Request, { params }: RouteParams) {
   return NextResponse.json({ ok: true, snapshot_updated_at: now, file_size })
 }
 
+/**
+ * SSRF allowlist for server-side fetches of stored file URLs. Permits only
+ * https to the configured Supabase host (or any *.supabase.co), and rejects
+ * IP-literal / private / loopback / link-local hosts.
+ */
+function isSafeStorageUrl(raw: string): boolean {
+  let u: URL
+  try {
+    u = new URL(raw)
+  } catch {
+    return false
+  }
+  if (u.protocol !== "https:") return false
+
+  const host = u.hostname.toLowerCase()
+
+  // Block obvious internal targets (IP literals + localhost).
+  if (
+    host === "localhost" ||
+    host === "[::1]" ||
+    /^\d{1,3}(\.\d{1,3}){3}$/.test(host) || // any IPv4 literal (incl. 169.254/10/172.16-31/192.168/127)
+    host.startsWith("[") // IPv6 literal
+  ) {
+    return false
+  }
+
+  const configured = (() => {
+    try {
+      return process.env.NEXT_PUBLIC_SUPABASE_URL
+        ? new URL(process.env.NEXT_PUBLIC_SUPABASE_URL).hostname.toLowerCase()
+        : null
+    } catch {
+      return null
+    }
+  })()
+
+  return host.endsWith(".supabase.co") || (configured !== null && host === configured)
+}
+
 /** Backfill snapshot from public file URL (server-side fetch). */
-export async function POST(request: Request, { params }: RouteParams) {
+export async function POST(_request: Request, { params }: RouteParams) {
   const { experimentId, fileId } = await params
   const supabase = await createClient()
   const {
@@ -154,6 +193,14 @@ export async function POST(request: Request, { params }: RouteParams) {
   }
   if (!row.file_url || !row.file_name) {
     return NextResponse.json({ error: "No file to parse" }, { status: 400 })
+  }
+
+  // SSRF guard: `file_url` is row data that could have been written during
+  // import. Before fetching it server-side, require https and constrain the
+  // host to Supabase storage; reject private/loopback/link-local targets so a
+  // crafted URL can't reach internal services or cloud metadata (169.254.x).
+  if (!isSafeStorageUrl(row.file_url)) {
+    return NextResponse.json({ error: "Unsupported file URL" }, { status: 400 })
   }
 
   const res = await fetch(row.file_url)

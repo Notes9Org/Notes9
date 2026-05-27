@@ -509,6 +509,20 @@ export function RightSidebar({
     []
   );
 
+  // Tagged records must be forwarded as top-level `attachments`, NOT only as
+  // `options.tags`. The backend preflights `request.attachments` (eager
+  // fetch_full_records) so the note/paper/protocol body is in the LLM's first
+  // turn; `options.tags` is a legacy annotation the backend ignores. Without
+  // this, a tagged note never reaches the agent and it falls back to a title
+  // search. Kinds map 1:1 to the AgentAttachment union.
+  const tagsToAttachments = useCallback(
+    (tags: Array<{ kind: CatalystMentionKind; id: string; title: string }>) =>
+      tags.length > 0
+        ? tags.map((t) => ({ kind: t.kind, id: t.id, title: t.title }))
+        : undefined,
+    []
+  );
+
   useEffect(() => {
     const loadUserId = async () => {
       const { data: { user } } = await supabase.auth.getUser();
@@ -1522,6 +1536,7 @@ export function RightSidebar({
           query: text,
           session_id: sessionId,
           history,
+          attachments: tagsToAttachments(requestTags),
           file_attachments:
             fileAttachments.length > 0
               ? (fileAttachments as unknown as AgentFileAttachment[])
@@ -1701,6 +1716,7 @@ export function RightSidebar({
             query: newContent,
             session_id: sid,
             history,
+            attachments: tagsToAttachments(requestTags),
             options: buildNotes9StreamOptions(requestTags),
           },
           token
@@ -1853,6 +1869,7 @@ export function RightSidebar({
           query,
           session_id: sid,
           history,
+          attachments: tagsToAttachments(requestTags),
           options: buildNotes9StreamOptions(requestTags),
         },
         token

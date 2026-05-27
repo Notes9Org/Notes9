@@ -66,6 +66,17 @@ export async function GET(req: NextRequest) {
   const id = match[2]
   const supabase = await createClient()
 
+  // Require an authenticated session. Without this, anyone could resolve
+  // project/experiment names from IDs (org-structure enumeration). RLS limits
+  // *which* rows are returned, but the endpoint itself must not be anonymous.
+  const {
+    data: { user },
+    error: authError,
+  } = await supabase.auth.getUser()
+  if (authError || !user) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+  }
+
   let projectId: string | null = null
   let projectName: string | null = null
   let experimentId: string | null = null

@@ -791,13 +791,24 @@ export function LiteratureTabs({
                   className="group relative data-[state=active]:bg-transparent data-[state=active]:border-b-2 data-[state=active]:border-[var(--n9-accent)] data-[state=active]:text-foreground rounded-none border-b-2 border-transparent px-4 py-2 bg-transparent text-muted-foreground transition-none shadow-none max-w-[220px] flex items-center gap-1 shrink-0"
                 >
                   <span className="truncate text-sm font-semibold">{tabTitle}</span>
-                  <button
-                    type="button"
+                  {/* role=button span, NOT a <button>: TabsTrigger already
+                      renders a <button>, and a nested button is invalid HTML
+                      (React hydration error). Span keeps click + keyboard. */}
+                  <span
+                    role="button"
+                    tabIndex={0}
+                    aria-label="Close tab"
                     onClick={(e) => handleCloseTabClick(id, e)}
-                    className="flex-shrink-0 p-1 rounded-md hover:bg-muted text-muted-foreground/60 hover:text-rose-500 transition-all opacity-0 group-hover:opacity-100 focus:opacity-100"
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault()
+                        handleCloseTabClick(id, e)
+                      }
+                    }}
+                    className="flex-shrink-0 p-1 rounded-md hover:bg-muted text-muted-foreground/60 hover:text-rose-500 transition-all opacity-0 group-hover:opacity-100 focus:opacity-100 cursor-pointer"
                   >
                     <X className="h-3 w-3" />
-                  </button>
+                  </span>
                 </TabsTrigger>
               )
             })}

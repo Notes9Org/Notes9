@@ -923,13 +923,31 @@ export function LabNotesTab({
 
       setLinkedProtocols(mapped);
     } catch (error: any) {
-      console.error("Error fetching linked protocols:", error);
-      setLinkedProtocols([]);
-      toast({
-        title: "Couldn't load linked protocols",
-        description: error?.message ?? "Try refreshing the page.",
-        variant: "destructive",
+      // A Supabase PostgrestError logs as "{}" via console.error(obj) because
+      // its fields are non-enumerable; pull them out so the cause is visible.
+      const code = error?.code ?? null;
+      const message = error?.message ?? null;
+      const details = error?.details ?? null;
+      const hint = error?.hint ?? null;
+      console.error("Error fetching linked protocols:", {
+        noteId,
+        code,
+        message,
+        details,
+        hint,
       });
+      setLinkedProtocols([]);
+      // Only surface a toast for a *real* failure. An empty error object (no
+      // code/message — e.g. an RLS-filtered embed or aborted request on note
+      // switch) is benign and was previously spamming a destructive toast on
+      // every note open.
+      if (code || message) {
+        toast({
+          title: "Couldn't load linked protocols",
+          description: message ?? "Try refreshing the page.",
+          variant: "destructive",
+        });
+      }
     }
   };
 
