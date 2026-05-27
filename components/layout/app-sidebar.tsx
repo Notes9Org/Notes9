@@ -68,6 +68,8 @@ import { APP_PRIMARY_NAV } from "@/lib/app-primary-nav"
 import { colorFromId as projectDotColor, useProjectScope } from "@/contexts/project-scope-context"
 import { toast } from "sonner"
 import { Button } from "../ui/button"
+import { NewLabNoteDialog } from "@/app/(app)/lab-notes/new-lab-note-dialog"
+import { withFromDashboard } from "@/lib/from-dashboard"
 
 const navigation = APP_PRIMARY_NAV
 
@@ -152,6 +154,7 @@ export function AppSidebar() {
   const [searchLoading, setSearchLoading] = useState(false)
   const [searchError, setSearchError] = useState(false)
   const [fetchError, setFetchError] = useState(false)
+  const [labNoteOpen, setLabNoteOpen] = useState(false)
   const supabase = useMemo(() => createClient(), [])
 
   const isIconMode = !open
@@ -523,6 +526,66 @@ export function AppSidebar() {
           </SidebarGroupContent>
         </SidebarGroup>
 
+        {/* Global Create Button - Hidden in icon mode */}
+        <SidebarGroup className={cn(isIconMode && "hidden", "pt-0 pb-1")}>
+          <SidebarGroupContent className="px-2">
+            <SidebarMenu>
+              <SidebarMenuItem>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <SidebarMenuButton className="w-full justify-start gap-2 bg-[#e4ecd9] text-[#4f5f42] hover:bg-[#d6e3c7] hover:text-[#3d4a35] dark:bg-[#3d4a35] dark:text-[#e4ecd9] dark:hover:bg-[#4f5f42] transition-colors font-semibold shadow-sm">
+                      <Plus className="size-4 shrink-0" />
+                      <span>Create new...</span>
+                    </SidebarMenuButton>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent className="w-56 rounded-lg ml-2" side="right" align="start">
+                    <DropdownMenuItem asChild>
+                      <Link href={withFromDashboard("/projects/new")} className="cursor-pointer">
+                        <FolderOpen className="mr-2 size-4" />
+                        <span>Project</span>
+                      </Link>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem asChild>
+                      <Link href={withFromDashboard("/experiments/new")} className="cursor-pointer">
+                        <FlaskConical className="mr-2 size-4" />
+                        <span>Experiment</span>
+                      </Link>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem asChild>
+                      <Link href={withFromDashboard("/samples/new")} className="cursor-pointer">
+                        <TestTube className="mr-2 size-4" />
+                        <span>Sample</span>
+                      </Link>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem asChild>
+                      <Link href={withFromDashboard(scope.projectId ? `/protocols/new?project=${scope.projectId}` : "/protocols/new")} className="cursor-pointer">
+                        <ClipboardInfoIcon className="mr-2 size-4" />
+                        <span>Protocol</span>
+                      </Link>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onSelect={() => setLabNoteOpen(true)} className="cursor-pointer">
+                      <NotebookPen className="mr-2 size-4" />
+                      <span>Lab note</span>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem asChild>
+                      <Link href={withFromDashboard("/papers/new")} className="cursor-pointer">
+                        <FileEdit className="mr-2 size-4" />
+                        <span>Writing</span>
+                      </Link>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem asChild>
+                      <Link href={withFromDashboard(scope.projectId ? `/reports?project=${scope.projectId}&new=true` : "/reports?new=true")} className="cursor-pointer">
+                        <FileText className="mr-2 size-4" />
+                        <span>Report</span>
+                      </Link>
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </SidebarMenuItem>
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+
         {/* Main Navigation - icons only when collapsed; align centered in icon mode */}
         <SidebarGroup
           className={cn(
@@ -732,6 +795,12 @@ export function AppSidebar() {
           </SidebarMenuItem>
         </SidebarMenu>
       </SidebarFooter>
+
+      <NewLabNoteDialog
+        open={labNoteOpen}
+        onOpenChange={setLabNoteOpen}
+        defaultProjectId={scope.projectId}
+      />
     </Sidebar>
   );
 }

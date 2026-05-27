@@ -69,6 +69,7 @@ const TONE_FG: Record<ModuleTone, string> = {
 
 function WorkspaceCard({
   href,
+  newHref,
   icon: Icon,
   tone = "default",
   name,
@@ -76,6 +77,7 @@ function WorkspaceCard({
   children,
 }: {
   href: string
+  newHref?: string
   icon: LucideIcon
   tone?: ModuleTone
   name: string
@@ -117,7 +119,17 @@ function WorkspaceCard({
         )}
       </div>
 
-      <footer className="mt-4 flex items-center justify-end border-t border-border/80 pt-3">
+      <footer className="mt-4 flex items-center justify-between border-t border-border/80 pt-3">
+        {newHref ? (
+          <Link
+            href={newHref}
+            className="inline-flex items-center gap-1 text-[13px] font-medium text-emerald-600 hover:text-emerald-700 dark:text-emerald-500 dark:hover:text-emerald-400"
+          >
+            + New
+          </Link>
+        ) : (
+          <div />
+        )}
         <Link
           href={href}
           className="group inline-flex items-center gap-1 text-[13px] font-medium text-foreground/80 transition-colors hover:text-foreground"
@@ -223,6 +235,7 @@ export function ProjectWorkspace({
       <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
         <WorkspaceCard
           href={`/literature-reviews?project=${projectId}`}
+          newHref={`/literature-reviews/new?project=${projectId}`}
           icon={BookOpen}
           tone="default"
           name="Literature"
@@ -237,6 +250,7 @@ export function ProjectWorkspace({
 
         <WorkspaceCard
           href={`/experiments?project=${projectId}`}
+          newHref={`/experiments/new?project=${projectId}`}
           icon={FlaskConical}
           tone="accent"
           name="Experiments"
@@ -286,6 +300,7 @@ export function ProjectWorkspace({
 
         <WorkspaceCard
           href={`/reports?project=${projectId}`}
+          newHref={`/reports?project=${projectId}&new=true`}
           icon={BarChart3}
           tone="neutral"
           name="Reports"
@@ -300,6 +315,7 @@ export function ProjectWorkspace({
 
         <WorkspaceCard
           href={`/papers?project=${projectId}`}
+          newHref={`/papers/new?project=${projectId}`}
           icon={PenLine}
           tone="accent"
           name="Writing"

@@ -73,6 +73,19 @@ export function ReportsPageClient({ reports: initialReports, projects, experimen
   const [deleteTarget, setDeleteTarget] = useState<{ id: string; title: string } | null>(null)
   const [isDeleting, setIsDeleting] = useState(false)
 
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search)
+      if (params.get("new") === "true") {
+        setDialogOpen(true)
+        // Clean up url parameters without reloading
+        const proj = params.get("project")
+        const cleanUrl = window.location.pathname + (proj ? `?project=${proj}` : "")
+        router.replace(cleanUrl)
+      }
+    }
+  }, [router])
+
   const projectOptions = useMemo(() => {
     const m = new Map<string, string>()
     for (const r of reports) {

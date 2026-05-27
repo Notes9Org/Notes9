@@ -25,7 +25,6 @@ import { DashboardFirstRun } from "./dashboard-first-run"
 import { DashboardScheduleTasks } from "./dashboard-schedule-tasks"
 import { DashboardWhiteboard } from "./dashboard-whiteboard"
 import { DashboardRecentWork } from "./dashboard-recent-work"
-import { DashboardQuickActions } from "./dashboard-quick-actions"
 import { ActivitySummary } from "./activity-summary"
 
 /**
@@ -273,8 +272,6 @@ export default async function DashboardPage() {
       {/* AI-generated one-liner summarising recent lab activity */}
       <div className="mt-2 flex flex-col gap-3">
         <ActivitySummary />
-        
-        <DashboardQuickActions userId={user.id} />
       </div>
 
       {/* Dashboard 2x2 Grid */}

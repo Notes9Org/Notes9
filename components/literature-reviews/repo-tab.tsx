@@ -550,33 +550,26 @@ export function RepoTab({
         </div>
 
         <div className="flex min-w-0 flex-col gap-3 lg:flex-row lg:flex-wrap lg:items-center">
-          {lockProjectFilter && initialProjectFilterId ? (
-            <div className="flex h-9 w-full min-w-0 items-center rounded-md border border-input bg-muted/40 px-3 text-sm text-foreground lg:w-[180px]">
-              <span className="truncate">
-                {projects.find((p) => p.id === initialProjectFilterId)?.name ?? "Project"}
-              </span>
-            </div>
-          ) : (
-            <Select
-              value={selectedProjectId}
-              onValueChange={(value) => {
-                setSelectedProjectId(value);
-                setSelectedExperimentId("all");
-              }}
-            >
-              <SelectTrigger className="w-full lg:w-[180px]">
-                <SelectValue placeholder="Project" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All projects</SelectItem>
-                {projects.map((project) => (
-                  <SelectItem key={project.id} value={project.id}>
-                    {project.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          )}
+          <Select
+            value={lockProjectFilter && initialProjectFilterId ? initialProjectFilterId : selectedProjectId}
+            onValueChange={(value) => {
+              setSelectedProjectId(value);
+              setSelectedExperimentId("all");
+            }}
+            disabled={lockProjectFilter && !!initialProjectFilterId}
+          >
+            <SelectTrigger className="w-full lg:w-[180px]">
+              <SelectValue placeholder="Project" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All projects</SelectItem>
+              {projects.map((project) => (
+                <SelectItem key={project.id} value={project.id}>
+                  {project.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
 
           <Select
             value={selectedExperimentId}

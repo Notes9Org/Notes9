@@ -30,6 +30,11 @@ function NewPaperPageInner() {
   const [isCreating, setIsCreating] = useState(false)
 
   useEffect(() => {
+    if (typeof window !== "undefined") {
+      const p = new URLSearchParams(window.location.search).get("project")
+      if (p) setProjectId(p)
+    }
+
     const fetchProjects = async () => {
       const supabase = createClient()
       const { data } = await supabase

@@ -155,8 +155,10 @@ export function UniverWorkbookView({
     let cleanup: (() => void) | null = null
     let saveTimer: ReturnType<typeof setTimeout> | null = null
     let mountHost: HTMLDivElement | null = null
+    let resizeObserver: ResizeObserver | null = null
 
     const mount = async () => {
+      if (disposed) return
       if (!containerRef.current) return
 
       const encProp = workbookEncodedPropRef.current
@@ -364,10 +366,48 @@ export function UniverWorkbookView({
       }
     }
 
-    void mount()
+    const startMountAttempt = () => {
+      if (disposed) return
+      if (!containerRef.current) return
+
+      const width = containerRef.current.clientWidth
+      const height = containerRef.current.clientHeight
+
+      if (width > 0 && height > 0) {
+        if (resizeObserver) {
+          resizeObserver.disconnect()
+          resizeObserver = null
+        }
+        void mount()
+      } else {
+        if (!resizeObserver && typeof ResizeObserver !== "undefined") {
+          resizeObserver = new ResizeObserver((entries) => {
+            for (const entry of entries) {
+              const { width: w, height: h } = entry.contentRect
+              if (w > 0 && h > 0) {
+                if (resizeObserver) {
+                  resizeObserver.disconnect()
+                  resizeObserver = null
+                }
+                void mount()
+              }
+            }
+          })
+          resizeObserver.observe(containerRef.current)
+        } else if (typeof ResizeObserver === "undefined") {
+          // Fallback if ResizeObserver is somehow absent (e.g. SSR/old environments)
+          void mount()
+        }
+      }
+    }
+
+    startMountAttempt()
 
     return () => {
       cleanup?.()
+      if (resizeObserver) {
+        resizeObserver.disconnect()
+      }
       disposed = true
     }
     // `isDark` intentionally excluded — including it caused a full Univer
