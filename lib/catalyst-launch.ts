@@ -9,10 +9,19 @@ export type CatalystSectionScope =
   | "writing"
   | "reports"
 
+export type CatalystLaunchAttachment = {
+  url: string
+  name: string
+  contentType: string
+  size?: number
+}
+
 export type CatalystLaunchDetail = {
   query?: string
   scope?: CatalystSectionScope
   projectId?: string
+  attachments?: CatalystLaunchAttachment[]
+  webSearch?: boolean
 }
 
 export const CATALYST_OPEN_EVENT = "notes9:open-catalyst"

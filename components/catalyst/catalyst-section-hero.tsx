@@ -1,15 +1,27 @@
 "use client"
 
-import { useState, useTransition, type FormEvent, type KeyboardEvent } from "react"
+import { useState, useTransition, useCallback, useRef, type FormEvent, type KeyboardEvent } from "react"
 import { usePathname, useRouter } from "next/navigation"
-import { ArrowUp, Sparkles } from "lucide-react"
+import { ArrowUp, Paperclip, Mic, X, FileText, ImageIcon, Globe } from "lucide-react"
+import { Switch } from "@/components/ui/switch"
 import { AnimatePresence, motion } from "framer-motion"
 import { useProjectScope } from "@/contexts/project-scope-context"
 import { useCatalystPanelState } from "@/contexts/catalyst-panel-state"
-import { openCatalystPanel, type CatalystSectionScope } from "@/lib/catalyst-launch"
+import { openCatalystPanel, type CatalystSectionScope, type CatalystLaunchAttachment } from "@/lib/catalyst-launch"
 import { cn } from "@/lib/utils"
+import { toast } from "sonner"
+import { useAwsTranscribe } from "@/hooks/use-aws-transcribe"
+import { VoiceWaveform } from "@/components/text-editor/voice-waveform"
 
 export type { CatalystSectionScope } from "@/lib/catalyst-launch"
+
+const MAX_FILE_SIZE = 10 * 1024 * 1024
+const ALLOWED_TYPES = [
+  "image/jpeg", "image/png", "image/gif", "image/webp",
+  "application/pdf", "text/csv",
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+]
 
 // Purple "AI" treatment so the composer reads unmistakably as the Catalyst AI
 // feature (distinct from the app's burnt-sienna brand).
@@ -37,19 +49,62 @@ export function CatalystSectionHero({
   formPlacement = "inline",
 }: Props) {
   const [input, setInput] = useState("")
+  const [webSearchEnabled, setWebSearchEnabled] = useState(false)
+  const [attachments, setAttachments] = useState<CatalystLaunchAttachment[]>([])
+  const [uploadQueue, setUploadQueue] = useState<string[]>([])
   const [, startTransition] = useTransition()
   const router = useRouter()
   const pathname = usePathname()
+  const fileInputRef = useRef<HTMLInputElement>(null)
   const { projectId, projectName } = useProjectScope()
   const { isOpen: catalystPanelOpen } = useCatalystPanelState()
 
+  const { start: startMic, stop: stopMic, isListening, getWaveformData } = useAwsTranscribe({
+    onFinal: (text) => setInput((prev) => (prev ? `${prev} ${text}` : text).trimStart()),
+    onInterim: () => {},
+    onError: (err) => toast.error(err),
+  })
+
+  const uploadFile = useCallback(async (file: File): Promise<CatalystLaunchAttachment | null> => {
+    if (file.size > MAX_FILE_SIZE) { toast.error(`${file.name} is too large (max 10 MB)`); return null }
+    if (!ALLOWED_TYPES.includes(file.type)) { toast.error(`${file.name} type not supported`); return null }
+    try {
+      const fd = new FormData()
+      fd.append("file", file)
+      const res = await fetch("/api/files/upload", { method: "POST", body: fd })
+      if (!res.ok) { const d = await res.json(); throw new Error(d.error || "Upload failed") }
+      const d = await res.json()
+      return { url: d.url, name: d.pathname, contentType: d.contentType, size: d.size }
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Upload failed")
+      return null
+    }
+  }, [])
+
+  const handleFileSelect = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || [])
+    if (!files.length) return
+    setUploadQueue(files.map((f) => f.name))
+    const results = await Promise.all(files.map(uploadFile))
+    setAttachments((prev) => [...prev, ...results.filter((r): r is CatalystLaunchAttachment => r !== null)])
+    setUploadQueue([])
+    if (fileInputRef.current) fileInputRef.current.value = ""
+  }, [uploadFile])
+
   function dispatchAsk(text: string) {
     const query = text.trim()
-    if (!query) return
+    if (!query && attachments.length === 0 && uploadQueue.length === 0) return
     startTransition(() => {
-      const launch = { query, scope, projectId: projectId ?? undefined }
+      const launch = {
+        query: query || undefined,
+        scope,
+        projectId: projectId ?? undefined,
+        attachments: attachments.length > 0 ? attachments : undefined,
+        webSearch: webSearchEnabled || undefined,
+      }
       if (pathname?.startsWith("/catalyst")) {
-        const params = new URLSearchParams({ q: query })
+        const params = new URLSearchParams()
+        if (query) params.set("q", query)
         if (scope) params.set("scope", scope)
         if (projectId) params.set("project", projectId)
         router.push(`/catalyst?${params.toString()}`)
@@ -58,6 +113,7 @@ export function CatalystSectionHero({
       openCatalystPanel(launch)
     })
     setInput("")
+    setAttachments([])
   }
 
   function handleSubmit(e: FormEvent) {
@@ -72,7 +128,8 @@ export function CatalystSectionHero({
     }
   }
 
-  const canSend = input.trim().length > 0
+  const canSend = input.trim().length > 0 || attachments.length > 0
+  const isUploading = uploadQueue.length > 0
   const minBoxHeight = size === "lg" ? "min-h-[132px]" : "min-h-[112px]"
   const contentWidth = cn("mx-auto w-full", size === "lg" ? "max-w-4xl" : "max-w-3xl")
   const effectivePlaceholder = projectName
@@ -85,6 +142,41 @@ export function CatalystSectionHero({
       aria-label="Ask Catalyst"
       className={cn(composerShell, minBoxHeight)}
     >
+      {/* Attachment chips */}
+      {(attachments.length > 0 || uploadQueue.length > 0) && (
+        <div className="flex flex-wrap gap-1.5 mb-2">
+          {attachments.map((att, i) => {
+            const isImage = att.contentType?.startsWith("image/")
+            return (
+              <span
+                key={att.url}
+                className="inline-flex items-center gap-1 rounded-lg border border-violet-200 bg-violet-100/60 px-2 py-0.5 text-xs text-violet-800 dark:border-violet-500/30 dark:bg-violet-500/15 dark:text-violet-300 max-w-[180px]"
+              >
+                {isImage ? <ImageIcon className="size-3 shrink-0" /> : <FileText className="size-3 shrink-0" />}
+                <span className="truncate">{att.name}</span>
+                <button
+                  type="button"
+                  onClick={() => setAttachments((prev) => prev.filter((_, idx) => idx !== i))}
+                  className="ml-0.5 shrink-0 opacity-60 hover:opacity-100"
+                  aria-label={`Remove ${att.name}`}
+                >
+                  <X className="size-2.5" />
+                </button>
+              </span>
+            )
+          })}
+          {uploadQueue.map((name) => (
+            <span
+              key={name}
+              className="inline-flex items-center gap-1 rounded-lg border border-violet-200 bg-violet-100/60 px-2 py-0.5 text-xs text-violet-600 dark:border-violet-500/30 dark:bg-violet-500/15 animate-pulse max-w-[180px]"
+            >
+              <FileText className="size-3 shrink-0" />
+              <span className="truncate">{name}</span>
+            </span>
+          ))}
+        </div>
+      )}
+
       <textarea
         value={input}
         onChange={(e) => setInput(e.target.value)}
@@ -99,34 +191,78 @@ export function CatalystSectionHero({
         )}
       />
 
+      {/* Hidden file input */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        multiple
+        accept={ALLOWED_TYPES.join(",")}
+        className="hidden"
+        onChange={handleFileSelect}
+        disabled={isUploading}
+      />
+
       <div className="mt-2 flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <span
-            aria-hidden
-            className="flex size-7 items-center justify-center rounded-lg bg-violet-600 text-white shadow-sm"
-          >
-            <Sparkles className="size-4" strokeWidth={2} />
-          </span>
-          <span className="font-display text-sm font-semibold text-violet-700 dark:text-violet-300">
-            Catalyst
+        <div className="flex items-center gap-1.5">
+          <Globe className={cn("size-3.5 shrink-0 transition-colors", webSearchEnabled ? "text-violet-600 dark:text-violet-400" : "text-muted-foreground")} aria-hidden />
+          <Switch
+            checked={webSearchEnabled}
+            onCheckedChange={setWebSearchEnabled}
+            aria-label="Web search"
+            className="data-[state=checked]:bg-violet-600"
+          />
+          <span className={cn("text-xs transition-colors select-none", webSearchEnabled ? "text-violet-700 dark:text-violet-300 font-medium" : "text-muted-foreground")}>
+            Web
           </span>
         </div>
 
-        <button
-          type="submit"
-          disabled={!canSend}
-          aria-label={
-            projectName ? `Send to Catalyst (scoped to ${projectName})` : "Send to Catalyst"
-          }
-          className={cn(
-            "inline-flex size-9 shrink-0 items-center justify-center rounded-full transition-all",
-            canSend
-              ? "bg-violet-600 text-white shadow-sm hover:bg-violet-700 active:scale-[0.96]"
-              : "bg-muted text-muted-foreground cursor-not-allowed",
-          )}
-        >
-          <ArrowUp className="size-4" strokeWidth={2.25} aria-hidden />
-        </button>
+        <div className="flex items-center gap-1">
+          {/* Mic button + waveform */}
+          <div className="inline-flex items-center gap-1">
+            <button
+              type="button"
+              onClick={() => isListening ? stopMic() : startMic()}
+              aria-label={isListening ? "Stop dictation" : "Dictate message"}
+              className={cn(
+                "inline-flex size-7 shrink-0 items-center justify-center rounded-full transition-all",
+                isListening
+                  ? "bg-red-100 text-red-500 dark:bg-red-500/20"
+                  : "text-muted-foreground hover:text-foreground hover:bg-muted",
+              )}
+            >
+              <Mic className="size-3.5" aria-hidden />
+            </button>
+            {isListening && <VoiceWaveform getWaveformData={getWaveformData} />}
+          </div>
+
+          {/* Paperclip */}
+          <button
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={isUploading}
+            aria-label="Attach file"
+            className="inline-flex size-7 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-all hover:text-foreground hover:bg-muted disabled:opacity-40"
+          >
+            <Paperclip className="size-3.5" aria-hidden />
+          </button>
+
+          {/* Send */}
+          <button
+            type="submit"
+            disabled={!canSend || isUploading}
+            aria-label={
+              projectName ? `Send to Catalyst (scoped to ${projectName})` : "Send to Catalyst"
+            }
+            className={cn(
+              "inline-flex size-9 shrink-0 items-center justify-center rounded-full transition-all",
+              canSend && !isUploading
+                ? "bg-violet-600 text-white shadow-sm hover:bg-violet-700 active:scale-[0.96]"
+                : "bg-muted text-muted-foreground cursor-not-allowed",
+            )}
+          >
+            <ArrowUp className="size-4" strokeWidth={2.25} aria-hidden />
+          </button>
+        </div>
       </div>
     </form>
   )

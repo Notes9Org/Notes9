@@ -142,6 +142,8 @@ import {
   literatureMessageMarkdownToPlainForModel,
   segmentsToLiteratureMessageMarkdown,
 } from '@/lib/literature-chat-editable';
+import { useAwsTranscribe } from '@/hooks/use-aws-transcribe';
+import { VoiceWaveform } from '@/components/text-editor/voice-waveform';
 
 /** Unwrap stringified JSON parts to plain text (handles double/triple wrapping). Used so request body always sends plain text. */
 function normalizeMessageContentToPlainText(raw: string): string {
@@ -369,7 +371,6 @@ const ALLOWED_TYPES = [
   'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', // .xlsx
   'application/vnd.openxmlformats-officedocument.wordprocessingml.document', // .docx
 ];
-const MAX_CHAT_CHARS = 4096;
 const MAX_LITERATURE_TAGS = 4;
 
 function sortLiteratureCandidates(
@@ -411,6 +412,26 @@ export function RightSidebar({
   const paperAI = usePaperAI();
   const [input, setInput] = useState('');
   const [agentMode] = useState<CatalystAgentMode>('notes9');
+  const { start: startMic, stop: stopMic, isListening: micListening, getWaveformData } = useAwsTranscribe({
+    onFinal: (text) => {
+      const cur = inputRef.current?.innerText ?? '';
+      const next = (cur ? `${cur} ${text}` : text).trimStart();
+      setInput(next);
+      // Sync the contentEditable DOM so handleSubmit reads the correct text
+      requestAnimationFrame(() => {
+        if (!inputRef.current) return;
+        inputRef.current.innerText = next;
+        const range = document.createRange();
+        range.selectNodeContents(inputRef.current);
+        range.collapse(false);
+        window.getSelection()?.removeAllRanges();
+        window.getSelection()?.addRange(range);
+        resizeInput();
+      });
+    },
+    onInterim: () => {},
+    onError: () => {},
+  });
   const [taggedLiterature, setTaggedLiterature] = useState<Array<{ id: string; title: string }>>([]);
   const [mentionOpen, setMentionOpen] = useState(false);
   const [mentionFilter, setMentionFilter] = useState('');
@@ -1350,7 +1371,7 @@ export function RightSidebar({
     const text =
       agentMode === 'literature' && isLiteratureRoute
         ? literaturePlain
-        : (inputRef.current?.innerText ?? input).trim();
+        : (inputRef.current?.innerText?.trim() || input).trim();
     const mentionsBefore =
       agentMode === 'literature' && isLiteratureRoute && litEl
         ? getMentionsFromLiteratureEditable(litEl)
@@ -2154,7 +2175,7 @@ export function RightSidebar({
   }, [isPageVariant, initialSessionId, mounted]);
 
   const applyCatalystLaunch = useCallback(
-    (launch: { query?: string; projectId?: string }) => {
+    (launch: { query?: string; projectId?: string; attachments?: Array<{ url: string; name: string; contentType: string; size?: number }>; webSearch?: boolean }) => {
       const q = launch.query?.trim();
       if (q) {
         setInput(q);
@@ -2192,6 +2213,12 @@ export function RightSidebar({
             );
           });
       }
+      if (launch.attachments && launch.attachments.length > 0) {
+        setAttachments((prev) => [...prev, ...launch.attachments!]);
+      }
+      if (launch.webSearch !== undefined) {
+        setWebSearchEnabled(launch.webSearch);
+      }
     },
     [resizeInput, supabase],
   );
@@ -2211,6 +2238,8 @@ export function RightSidebar({
     applyCatalystLaunch({
       query: pendingLaunch.query,
       projectId: pendingLaunch.projectId,
+      attachments: pendingLaunch.attachments,
+      webSearch: pendingLaunch.webSearch,
     });
     onPendingLaunchConsumed?.();
   }, [
@@ -2260,11 +2289,7 @@ export function RightSidebar({
                   if (!ie.inputType?.startsWith('insert')) return;
                   const ed = literatureEditableRef.current;
                   if (!ed) return;
-                  if (
-                    getPlainTextFromLiteratureEditable(ed).length >= MAX_CHAT_CHARS
-                  ) {
-                    e.preventDefault();
-                  }
+                  // No character limit enforced here
                 }}
                 onInput={() => {
                   const ed = literatureEditableRef.current;
@@ -2473,10 +2498,20 @@ export function RightSidebar({
           </div>
 
           <div className="flex h-9 shrink-0 items-center justify-end gap-1">
-            <span className="mr-1 hidden text-micro text-muted-foreground sm:inline">
-              {input.length}
-              /{MAX_CHAT_CHARS}
-            </span>
+            <div className="inline-flex items-center gap-1 mr-1">
+              <Button
+                type="button"
+                size="icon"
+                variant="ghost"
+                className={cn("size-7 text-muted-foreground transition-colors hover:text-primary", micListening && "text-red-500 hover:text-red-600")}
+                onClick={() => micListening ? stopMic() : startMic()}
+                aria-label={micListening ? "Stop dictation" : "Start dictation"}
+                title={micListening ? "Stop dictation" : "Dictate message"}
+              >
+                <Mic className="size-4" />
+              </Button>
+              {micListening && <VoiceWaveform getWaveformData={getWaveformData} />}
+            </div>
 
             <Button
               type="button"
@@ -3075,10 +3110,17 @@ export function RightSidebar({
                         const literatureSources = hasLitRefs
                           ? literatureParsed!.refs
                           : null;
-                        const notes9Sources =
-                          notes9Parsed && notes9Parsed.resources.length > 0
-                            ? notes9Parsed.resources
-                            : null;
+                        const notes9Sources = (() => {
+                          if (!notes9Parsed || notes9Parsed.resources.length === 0) return null;
+                          const body = notes9Parsed.bodyMarkdown;
+                          // Only surface resources whose [N] marker is present in the response text.
+                          // The backend always sends every retrieved document; suppress any that
+                          // weren't actually cited so the user doesn't see irrelevant citations.
+                          const cited = notes9Parsed.resources.filter((_, i) =>
+                            new RegExp(`\\[${i + 1}\\]`).test(body)
+                          );
+                          return cited.length > 0 ? cited : null;
+                        })();
                         const userLiteratureMarkdown =
                           message.role === 'user' &&
                           ((agentMode === 'literature' && isLiteratureRoute) ||

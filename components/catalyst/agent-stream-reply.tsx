@@ -71,10 +71,18 @@ export function AgentStreamReply({
 }: AgentStreamReplyProps) {
   const displayAnswer =
     donePayload?.content ?? donePayload?.answer ?? streamedAnswer;
-  const grounding =
+  const rawGrounding =
     donePayload?.resources?.length
       ? donePayload.resources
       : donePayload?.citations ?? [];
+
+  // Only surface resources whose [N] marker is present in the answer text.
+  // The backend always forwards every retrieved document; suppress any that
+  // weren't actually cited so irrelevant context doesn't appear to the user.
+  const body = displayAnswer ?? '';
+  const grounding = rawGrounding.filter((_, i) =>
+    new RegExp(`\\[${i + 1}\\]`).test(body)
+  );
 
   const mergedCitationItems = mergeGroundingAndRagItems(grounding, ragChunks?.chunks);
   const hasCitationPanel = mergedCitationItems.length > 0;

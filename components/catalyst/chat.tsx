@@ -12,11 +12,12 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { Send, Square, Sparkles, PanelLeftClose, PanelLeft, Globe, ChevronDown } from 'lucide-react';
+import { Send, Square, Sparkles, PanelLeftClose, PanelLeft, Globe, ChevronDown, Paperclip, Mic } from 'lucide-react';
 import { Switch } from '@/components/ui/switch';
 import { useChatSessions } from '@/hooks/use-chat-sessions';
 import { ChatHistory } from './chat-history';
 import { ChatMessage } from './chat-message';
+import { PreviewAttachment, type Attachment } from './preview-attachment';
 import { createClient } from '@/lib/supabase/client';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
@@ -24,6 +25,16 @@ import { extractToolCards } from '@/lib/chat-tool-parts';
 import type { ToolCard } from '@/hooks/use-agent-stream';
 import { usePinnedAutoScroll } from '@/hooks/use-pinned-auto-scroll';
 import { recordRumEvent } from '@/lib/rum';
+import { useAwsTranscribe } from '@/hooks/use-aws-transcribe';
+import { VoiceWaveform } from '@/components/text-editor/voice-waveform';
+import { toast } from 'sonner';
+
+const ALLOWED_ATTACHMENT_TYPES = [
+  'image/jpeg', 'image/png', 'image/gif', 'image/webp',
+  'application/pdf', 'text/csv',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+];
 
 interface CatalystChatProps {
   open: boolean;
@@ -42,7 +53,9 @@ export function CatalystChat({ open, onOpenChange }: CatalystChatProps) {
   const [isRegenerating, setIsRegenerating] = useState(false);
   const [savedMessageIds, setSavedMessageIds] = useState<Set<string>>(new Set());
   const [webSearchEnabled, setWebSearchEnabled] = useState(false);
-
+  const [attachments, setAttachments] = useState<Attachment[]>([]);
+  const [uploadQueue, setUploadQueue] = useState<string[]>([]);
+  const [messageAttachments, setMessageAttachments] = useState<Map<string, Attachment[]>>(new Map());
 
   const prevStatusRef = useRef<string>('ready');
   const webSearchEnabledRef = useRef(false);
@@ -51,6 +64,9 @@ export function CatalystChat({ open, onOpenChange }: CatalystChatProps) {
   const supabaseTokenRef = useRef<string | null>(null);
   const prevUserIdRef = useRef<string | null>(null);
   const submitInFlightRef = useRef(false);
+  const pendingAttachmentsRef = useRef<Attachment[]>([]);
+  const prevMessageCountRef = useRef(0);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const supabase = createClient();
 
@@ -111,6 +127,50 @@ export function CatalystChat({ open, onOpenChange }: CatalystChatProps) {
     id: 'catalyst-modal',
     transport,
   });
+
+  // Assign pending attachments to the newest user message after each send
+  useEffect(() => {
+    if (pendingAttachmentsRef.current.length === 0) return;
+    if (messages.length <= prevMessageCountRef.current) return;
+    const newUserMsg = [...messages].reverse().find((m) => m.role === 'user');
+    if (newUserMsg) {
+      setMessageAttachments((prev) => new Map(prev).set(newUserMsg.id, pendingAttachmentsRef.current));
+      pendingAttachmentsRef.current = [];
+    }
+    prevMessageCountRef.current = messages.length;
+  }, [messages]);
+
+  const { start: startMic, stop: stopMic, isListening: micListening, getWaveformData } = useAwsTranscribe({
+    onFinal: (text) => setInput((prev) => (prev ? `${prev} ${text}` : text).trimStart()),
+    onInterim: () => {},
+    onError: (err) => toast.error(err),
+  });
+
+  const uploadFile = useCallback(async (file: File): Promise<Attachment | null> => {
+    if (file.size > 10 * 1024 * 1024) { toast.error(`${file.name} is too large (max 10MB)`); return null; }
+    if (!ALLOWED_ATTACHMENT_TYPES.includes(file.type)) { toast.error(`${file.name} type not supported`); return null; }
+    try {
+      const fd = new FormData();
+      fd.append('file', file);
+      const res = await fetch('/api/files/upload', { method: 'POST', body: fd });
+      if (!res.ok) { const d = await res.json(); throw new Error(d.error || 'Upload failed'); }
+      const d = await res.json();
+      return { url: d.url, name: d.pathname, contentType: d.contentType, size: d.size };
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Upload failed');
+      return null;
+    }
+  }, []);
+
+  const handleFileSelect = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
+    if (!files.length) return;
+    setUploadQueue(files.map((f) => f.name));
+    const results = await Promise.all(files.map(uploadFile));
+    setAttachments((prev) => [...prev, ...results.filter((r): r is Attachment => r !== null)]);
+    setUploadQueue([]);
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  }, [uploadFile]);
 
   const scrollViewportRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -325,7 +385,7 @@ export function CatalystChat({ open, onOpenChange }: CatalystChatProps) {
 
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!input.trim() || isLoading) return;
+    if ((!input.trim() && attachments.length === 0) || isLoading) return;
     if (submitInFlightRef.current) return;
     submitInFlightRef.current = true;
 
@@ -345,7 +405,6 @@ export function CatalystChat({ open, onOpenChange }: CatalystChatProps) {
     repinMessages();
 
     try {
-      // Create session if none exists
       let sessionId = currentSessionRef.current;
       if (!sessionId) {
         sessionId = await createSession();
@@ -354,7 +413,13 @@ export function CatalystChat({ open, onOpenChange }: CatalystChatProps) {
         hasLoadedSessionRef.current = sessionId;
       }
 
-      // Let AI SDK handle the message - it will be saved when streaming completes
+      // Capture attachments before clearing state
+      const currentAttachments = [...attachments];
+      if (currentAttachments.length > 0) {
+        pendingAttachmentsRef.current = currentAttachments;
+        setAttachments([]);
+      }
+
       await sendMessage({ text: messageText });
     } finally {
       submitInFlightRef.current = false;
@@ -607,6 +672,7 @@ export function CatalystChat({ open, onOpenChange }: CatalystChatProps) {
                             key={message.id}
                             role={message.role as 'user' | 'assistant'}
                             content={getMessageContent(message)}
+                            attachments={messageAttachments.get(message.id)}
                             sources={getMessageSources(message)}
                             thinking={getMessageThinking(message)}
                             toolCards={getMessageToolCards(message)}
@@ -680,55 +746,76 @@ export function CatalystChat({ open, onOpenChange }: CatalystChatProps) {
 
               {/* Input Area */}
               <div className="border-t p-4 shrink-0 space-y-2">
+                {/* Web search + status row */}
                 <div className="flex items-center justify-between px-0.5">
                   <div className="flex items-center gap-2 text-xs text-muted-foreground">
                     {isLoading && webSearchEnabled && (
                       <span className="flex items-center gap-1.5 animate-pulse">
-                        <Globe className="size-3 shrink-0" />
-                        <span>Searching the web...</span>
+                        <Globe className="size-3 shrink-0" /><span>Searching…</span>
                       </span>
                     )}
                   </div>
                   <div className="flex items-center gap-2">
-                    <span className={cn(
-                      "text-xs transition-colors",
-                      webSearchEnabled ? "text-primary font-medium" : "text-muted-foreground"
-                    )}>
+                    <span className={cn("text-xs transition-colors", webSearchEnabled ? "text-primary font-medium" : "text-muted-foreground")}>
                       Web Search
                     </span>
-                    <Globe className={cn(
-                      "size-3.5 shrink-0 transition-colors",
-                      webSearchEnabled ? "text-primary" : "text-muted-foreground"
-                    )} aria-hidden />
-                    <Switch
-                      checked={webSearchEnabled}
-                      onCheckedChange={setWebSearchEnabled}
-                      disabled={isLoading}
-                      aria-label="Toggle web search"
-                      className="transition-transform active:scale-95"
-                    />
+                    <Globe className={cn("size-3.5 shrink-0 transition-colors", webSearchEnabled ? "text-primary" : "text-muted-foreground")} aria-hidden />
+                    <Switch checked={webSearchEnabled} onCheckedChange={setWebSearchEnabled} disabled={isLoading} aria-label="Toggle web search" className="transition-transform active:scale-95" />
                   </div>
                 </div>
-                <form onSubmit={onSubmit} className="flex gap-2">
+
+                {/* Attachment previews */}
+                {(attachments.length > 0 || uploadQueue.length > 0) && (
+                  <div className="flex flex-wrap gap-2">
+                    {attachments.map((att, i) => (
+                      <PreviewAttachment key={att.url} attachment={att} compact onRemove={() => setAttachments((p) => p.filter((_, idx) => idx !== i))} />
+                    ))}
+                    {uploadQueue.map((name) => (
+                      <PreviewAttachment key={name} attachment={{ url: '', name, contentType: '' }} compact isUploading />
+                    ))}
+                  </div>
+                )}
+
+                {/* Composer */}
+                <div className="relative rounded-xl border border-border bg-background focus-within:border-primary/50 focus-within:shadow-sm transition-all">
                   <Textarea
                     ref={textareaRef}
                     value={input}
                     onChange={handleInputChange}
                     onKeyDown={handleKeyDown}
-                    placeholder="Ask about your data, or type @ to reference a note, protocol, or paper."
-                    className="min-h-[44px] max-h-[200px] resize-none"
+                    placeholder="Ask about your data…"
+                    className="min-h-[52px] max-h-[200px] resize-none border-0 bg-transparent px-3 pt-3 pb-11 text-sm focus-visible:ring-0 focus-visible:ring-offset-0"
                     disabled={isLoading}
                   />
-                  {isLoading ? (
-                    <Button type="button" size="icon" variant="outline" onClick={stop} aria-label="Stop generating">
-                      <Square className="size-4" />
-                    </Button>
-                  ) : (
-                    <Button type="submit" size="icon" disabled={!input.trim()} aria-label="Send message">
-                      <Send className="size-4" />
-                    </Button>
-                  )}
-                </form>
+                  {/* Hidden file input */}
+                  <input ref={fileInputRef} type="file" multiple accept={ALLOWED_ATTACHMENT_TYPES.join(',')} className="hidden" onChange={handleFileSelect} disabled={isLoading || uploadQueue.length > 0} />
+
+                  {/* Bottom toolbar */}
+                  <div className="absolute bottom-0 left-0 right-0 flex items-center justify-between px-2 py-1.5">
+                    <div className="flex items-center gap-0.5">
+                      <Button type="button" variant="ghost" size="icon" className="size-7 text-muted-foreground hover:text-foreground" onClick={() => fileInputRef.current?.click()} disabled={isLoading || uploadQueue.length > 0} aria-label="Attach file">
+                        <Paperclip className="size-3.5" />
+                      </Button>
+                      <div className="inline-flex items-center gap-1">
+                        <Button type="button" variant="ghost" size="icon" className={cn("size-7 text-muted-foreground hover:text-foreground", micListening && "text-red-500 hover:text-red-600")} onClick={() => micListening ? stopMic() : startMic()} disabled={isLoading} aria-label={micListening ? "Stop dictation" : "Dictate"}>
+                          <Mic className="size-3.5" />
+                        </Button>
+                        {micListening && <VoiceWaveform getWaveformData={getWaveformData} />}
+                      </div>
+                    </div>
+                    <div>
+                      {isLoading ? (
+                        <Button type="button" size="icon" variant="outline" className="size-7 rounded-full" onClick={stop} aria-label="Stop">
+                          <Square className="size-3" />
+                        </Button>
+                      ) : (
+                        <Button type="button" size="icon" className="size-7 rounded-full bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-40" disabled={!input.trim() && attachments.length === 0} onClick={(e) => onSubmit(e)} aria-label="Send">
+                          <Send className="size-3.5" />
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
