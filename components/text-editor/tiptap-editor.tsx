@@ -156,7 +156,11 @@ import {
   isSpreadsheetFile,
   readSpreadsheetWorkbook,
 } from "@/lib/spreadsheet-workbook"
-import { looksLikeMarkdown, markdownToHtml } from "@/lib/markdown-to-editor-html"
+import {
+  isEditorNativeClipboardHtml,
+  resolveClipboardPaste,
+} from "@/lib/clipboard-to-editor-html"
+import { markdownToHtml } from "@/lib/markdown-to-editor-html"
 import {
   type CitationMetadata,
   CITATION_STYLE_OPTIONS,
@@ -2014,12 +2018,22 @@ export function TiptapEditor({
         const clipboard = event.clipboardData
         const html = clipboard?.getData("text/html")?.trim()
         const text = clipboard?.getData("text/plain") ?? ""
-        if (!html && looksLikeMarkdown(text)) {
-          event.preventDefault()
-          void insertMarkdownText(text)
-          return true
+
+        if (html && isEditorNativeClipboardHtml(html)) {
+          return false
         }
-        return false
+
+        if (!html && !text.trim()) {
+          return false
+        }
+
+        event.preventDefault()
+        void (async () => {
+          const resolved = await resolveClipboardPaste({ html, plain: text })
+          if (!resolved || !editor) return
+          editor.chain().focus().insertContent(sanitizeHtml(resolved)).run()
+        })()
+        return true
       },
       handleDOMEvents: {
         dragover: (_view, ev) => {

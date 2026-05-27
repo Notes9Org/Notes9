@@ -720,7 +720,9 @@ export function RightSidebar({
 
         const icon = document.createElement('span');
         icon.className = 'inline-flex h-3.5 w-3.5 shrink-0 items-center justify-center';
-        icon.innerHTML = mentionIconMarkup(item.kind);
+        const svgDoc = new DOMParser().parseFromString(mentionIconMarkup(item.kind), 'image/svg+xml');
+        const svgEl = svgDoc.documentElement;
+        if (svgEl && svgEl.nodeName !== 'parsererror') icon.appendChild(svgEl);
         chip.appendChild(icon);
 
         const label = document.createElement('span');

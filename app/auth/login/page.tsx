@@ -19,6 +19,22 @@ import { InteractiveParticles } from "@/components/ui/interactive-particles"
 import { Notes9Brand } from "@/components/brand/notes9-brand"
 import { Eye, EyeOff, FlaskConical } from "lucide-react"
 
+/** Only allow in-app relative paths (same rules as auth/callback). */
+function safeNextPath(raw: string | null): string {
+  if (!raw) return "/dashboard"
+  if (!raw.startsWith("/") || raw.startsWith("//")) return "/dashboard"
+  if (raw.includes("\\")) return "/dashboard"
+  try {
+    const probe = new URL(raw, "http://localhost")
+    if (probe.origin !== "http://localhost") return "/dashboard"
+    return probe.pathname + probe.search + probe.hash
+  } catch {
+    return "/dashboard"
+  }
+}
+
+const SIGN_IN_TIMEOUT_MS = 30_000
+
 function LoginForm() {
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
@@ -29,6 +45,7 @@ function LoginForm() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const inviteToken = searchParams.get("token")
+  const nextPath = safeNextPath(searchParams.get("next"))
 
   // Pre-fill email if coming from sign-up page
   useEffect(() => {
@@ -60,11 +77,15 @@ function LoginForm() {
     setError(null)
 
     try {
-      // Single attempt; if Supabase says invalid credentials, show wrong password/email
-      const { error } = await supabase.auth.signInWithPassword({
-        email,
-        password,
+      const signInPromise = supabase.auth.signInWithPassword({ email, password })
+      const timeoutPromise = new Promise<never>((_, reject) => {
+        setTimeout(
+          () => reject(new Error("Sign-in timed out. Check your connection and try again.")),
+          SIGN_IN_TIMEOUT_MS,
+        )
       })
+
+      const { error } = await Promise.race([signInPromise, timeoutPromise])
 
       if (error) {
         if (error.message.includes('Invalid login credentials')) {
@@ -74,12 +95,14 @@ function LoginForm() {
         throw error
       }
 
-      // If invitation token is present, redirect to invite acceptance page
-      if (inviteToken) {
-        router.push(`/auth/invite?token=${encodeURIComponent(inviteToken)}`)
-      } else {
-        router.push("/dashboard")
-      }
+      // Sync session cookies to the server before navigating into (app) routes.
+      router.refresh()
+
+      const destination = inviteToken
+        ? `/auth/invite?token=${encodeURIComponent(inviteToken)}`
+        : nextPath
+
+      router.push(destination)
     } catch (error: unknown) {
       setError(error instanceof Error ? error.message : "An error occurred")
     } finally {

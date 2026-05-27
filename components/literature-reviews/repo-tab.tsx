@@ -401,12 +401,14 @@ export function RepoTab({
   }, [literatureReviews]);
 
   const clearFilters = () => {
-    if (!lockProjectFilter) {
-      setSelectedProjectId("all");
-    }
     setSelectedExperimentId("all");
     setSelectedStatus("all");
     setSearchQuery("");
+    if (lockProjectFilter || initialProjectFilterId) {
+      router.push("/literature-reviews?tab=repo");
+      return;
+    }
+    setSelectedProjectId("all");
   };
 
   const visibleIds = filteredLiteratureReviews?.map((lit) => lit.id) || [];

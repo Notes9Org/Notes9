@@ -2,7 +2,7 @@ import { redirect } from 'next/navigation'
 import { createClient } from "@/lib/supabase/server"
 import { Button } from "@/components/ui/button"
 import { PageHeading } from "@/components/ui/page-heading"
-import { Plus, X } from 'lucide-react'
+import { Plus } from 'lucide-react'
 import Link from 'next/link'
 import { LiteratureTabs } from '@/components/literature-reviews/literature-tabs'
 import type { StagingLiteratureRow } from "@/components/literature-reviews/staged-paper-view"
@@ -102,14 +102,6 @@ export default async function LiteratureReviewsPage({
           </p>
         </div>
         <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
-          {initialProjectId ? (
-            <Button asChild variant="outline" className="w-full sm:w-auto">
-              <Link href="/literature-reviews">
-                <X className="h-4 w-4 mr-2" />
-                Remove project filter
-              </Link>
-            </Button>
-          ) : null}
           <UploadLiteraturePdfDialog
             literatureReviews={(literatureReviews ?? []) as any}
             projects={safeProjects}

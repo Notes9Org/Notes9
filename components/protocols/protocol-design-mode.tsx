@@ -239,7 +239,7 @@ export function ProtocolDesignMode({
       })
       if (upErr) throw upErr
 
-      await supabase.from("audit_log").insert({
+      supabase.from("audit_log").insert({
         table_name: "protocols",
         record_id: protocol.id,
         action: "update",
@@ -254,7 +254,7 @@ export function ProtocolDesignMode({
           document_template_id: draftDocumentTemplateId,
         },
         user_id: user.id,
-      })
+      }).then(({ error }) => { if (error) console.warn("[audit_log]", error.message) })
 
       onSaved()
       setSavedContent(newContent)

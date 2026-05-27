@@ -42,7 +42,7 @@ export async function updateSession(request: NextRequest) {
       global: {
         fetch: (url, options) => {
           const controller = new AbortController()
-          const timeoutId = setTimeout(() => controller.abort(), 2000)
+          const timeoutId = setTimeout(() => controller.abort(), 10000)
           return fetch(url, {
             ...options,
             signal: controller.signal,
@@ -85,9 +85,19 @@ export async function updateSession(request: NextRequest) {
   }
 
   if (!user) {
-    const url = request.nextUrl.clone()
-    url.pathname = "/auth/login"
-    return NextResponse.redirect(url)
+    const loginUrl = new URL("/auth/login", request.url)
+    const returnPath =
+      request.nextUrl.pathname +
+      request.nextUrl.search +
+      request.nextUrl.hash
+    if (
+      returnPath &&
+      returnPath !== "/auth/login" &&
+      !returnPath.startsWith("/auth/login?")
+    ) {
+      loginUrl.searchParams.set("next", returnPath)
+    }
+    return NextResponse.redirect(loginUrl)
   }
 
   return supabaseResponse
