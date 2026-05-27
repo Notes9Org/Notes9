@@ -1,7 +1,7 @@
 import { redirect, notFound } from "next/navigation"
 import { createClient } from "@/lib/supabase/server"
 import { SetPageBreadcrumb } from "@/components/layout/breadcrumb-context"
-import { ReportDetailView } from "./report-detail-view"
+import { ReportDetailClient } from "./report-detail-client"
 import type { ReportRow } from "../reports-page-client"
 
 export default async function ReportDetailPage({
@@ -40,14 +40,14 @@ export default async function ReportDetailPage({
       : report.title
 
   return (
-    <div className="space-y-6">
+    <div className="flex h-full min-h-0 w-full flex-1 flex-col overflow-hidden">
       <SetPageBreadcrumb
         segments={[
           { label: "Reports", href: "/reports" },
           { label: titleShort },
         ]}
       />
-      <ReportDetailView report={report as ReportRow & { content: string | null }} />
+      <ReportDetailClient activeReport={report as ReportRow & { content: string | null }} />
     </div>
   )
 }
