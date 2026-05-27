@@ -48,10 +48,14 @@ function publicationYearFromBib(entry: BibEntry, title: string, journal: string)
   return y != null ? String(y) : ""
 }
 
+import type { ReactNode } from "react"
+
 export type PaperWorkspaceProps = {
   paperId: string
   /** When set, show a back control to return to the writing hub (or elsewhere). */
   backLink?: { href: string }
+  /** Optional extra controls to render to the right of the back link (e.g. sidebar toggle) */
+  leftControls?: ReactNode
   /** Called after delete or status change so parent lists/tabs can refresh. */
   onPaperMutated?: () => void
   /** Called when the paper title is saved so hub tabs / lists can update without a full refetch. */
@@ -71,7 +75,7 @@ function statusVariant(status: string): "default" | "outline" | "success" {
   }
 }
 
-export function PaperWorkspace({ paperId, backLink, onPaperMutated, onPaperTitleUpdated }: PaperWorkspaceProps) {
+export function PaperWorkspace({ paperId, backLink, leftControls, onPaperMutated, onPaperTitleUpdated }: PaperWorkspaceProps) {
   const router = useRouter()
   const id = paperId
 
@@ -361,6 +365,7 @@ export function PaperWorkspace({ paperId, backLink, onPaperMutated, onPaperTitle
               </Link>
             </Button>
           ) : null}
+          {leftControls}
           <Input
             value={titleInput}
             onChange={(e) => setTitleInput(e.target.value)}

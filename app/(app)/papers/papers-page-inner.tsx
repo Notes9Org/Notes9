@@ -1,27 +1,30 @@
 "use client"
 
-import { useCallback, useEffect, useState } from "react"
-import { useSearchParams } from "next/navigation"
+import { useCallback, useEffect, useState, useMemo } from "react"
+import { useSearchParams, useRouter } from "next/navigation"
 import Link from "next/link"
 import { createClient } from "@/lib/supabase/client"
 import { Button } from "@/components/ui/button"
-import { LayoutList, Plus } from "lucide-react"
+import { Plus } from "lucide-react"
 import { PaperList, type PaperListItem } from "./paper-list"
-import { PaperWorkspace } from "./paper-workspace"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { SetPageBreadcrumb } from "@/components/layout/breadcrumb-context"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
+import { ResourceFilterRow, ResourceListFilter, FILTER_ALL } from "@/components/ui/resource-list-filters"
+import { useProjectScope } from "@/contexts/project-scope-context"
 
-const LIBRARY_TAB = "__library__"
+interface PapersPageInnerProps {
+  projects?: { id: string; name: string }[]
+}
 
-export function PapersPageInner() {
+export function PapersPageInner({ projects = [] }: PapersPageInnerProps = {}) {
   const searchParams = useSearchParams()
-  const openParam = searchParams.get("open")
+  const router = useRouter()
   const [papers, setPapers] = useState<PaperListItem[]>([])
   const [loading, setLoading] = useState(true)
   const [fetchError, setFetchError] = useState<string | null>(null)
-  const [activeTab, setActiveTab] = useState<string>(LIBRARY_TAB)
   const [viewMode, setViewMode] = useState<"grid" | "table">("table")
+  const { projectId, projectName } = useProjectScope()
+  const [projectFilter, setProjectFilter] = useState(projectId || FILTER_ALL)
 
   const fetchPapers = useCallback(async () => {
     const supabase = createClient()
@@ -37,8 +40,7 @@ export function PapersPageInner() {
 
     const fullSelect = `
       *,
-      project:projects(id, name),
-      created_by_profile:profiles!papers_created_by_fkey(first_name, last_name)
+      project:projects(id, name)
     `
 
     let { data, error } = await supabase
@@ -65,51 +67,45 @@ export function PapersPageInner() {
       return
     }
 
-    let list = (data as PaperListItem[]) || []
-
-    if (openParam && !list.some((p) => p.id === openParam)) {
-      const { data: one, error: oneErr } = await supabase
-        .from("papers")
-        .select("*")
-        .eq("id", openParam)
-        .eq("created_by", user.id)
-        .maybeSingle()
-      if (!oneErr && one) {
-        list = [{ ...(one as PaperListItem) }, ...list]
-      }
-    }
+    const list = (data as PaperListItem[]) || []
 
     setFetchError(null)
     setPapers(list)
     setLoading(false)
-  }, [openParam])
-
-  useEffect(() => {
-    void fetchPapers()
-  }, [fetchPapers])
-
-  useEffect(() => {
-    const open = searchParams.get("open")
-    if (open && papers.some((p) => p.id === open)) {
-      setActiveTab(open)
-    }
-  }, [searchParams, papers])
-
-  useEffect(() => {
-    if (activeTab === LIBRARY_TAB) return
-    if (papers.length > 0 && !papers.some((p) => p.id === activeTab)) {
-      setActiveTab(LIBRARY_TAB)
-    }
-  }, [papers, activeTab])
-
-  const handlePaperMutated = useCallback(() => {
-    void fetchPapers()
-    setActiveTab(LIBRARY_TAB)
-  }, [fetchPapers])
-
-  const handlePaperTitleUpdated = useCallback((paperId: string, nextTitle: string) => {
-    setPapers((prev) => prev.map((p) => (p.id === paperId ? { ...p, title: nextTitle } : p)))
   }, [])
+
+  useEffect(() => {
+    void fetchPapers()
+  }, [fetchPapers])
+
+  useEffect(() => {
+    if (projectId) {
+      setProjectFilter(projectId)
+    }
+  }, [projectId])
+
+  const projectOptions = useMemo(() => {
+    const opts = projects && projects.length > 0 
+      ? projects.map((p) => ({ value: p.id, label: p.name }))
+      : Array.from(
+          new Map(
+            papers
+              .filter((p) => p.project?.id && p.project?.name)
+              .map((p) => [p.project!.id, p.project!.name])
+          ).entries()
+        ).map(([value, label]) => ({ value, label }))
+
+    if (projectId && projectName && !opts.some((o) => o.value === projectId)) {
+      opts.push({ value: projectId, label: projectName })
+    }
+
+    return opts.sort((a, b) => a.label.localeCompare(b.label))
+  }, [papers, projects, projectId, projectName])
+
+  const filteredPapers = useMemo(() => {
+    if (projectFilter === FILTER_ALL) return papers
+    return papers.filter((p) => p.project?.id === projectFilter)
+  }, [papers, projectFilter])
 
   return (
     <div className="space-y-6">
@@ -131,10 +127,10 @@ export function PapersPageInner() {
 
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <p className="text-muted-foreground">
-          Draft and export research papers—switch documents from the tabs below, like your other workspace lists.
+          Draft and export research papers with project-based filtering.
         </p>
         <Button asChild className="shrink-0">
-          <Link href="/papers/new">
+          <Link href={projectFilter !== FILTER_ALL ? `/papers/new?project=${projectFilter}` : "/papers/new"}>
             <Plus className="mr-2 h-4 w-4" />
             New Paper
           </Link>
@@ -143,47 +139,30 @@ export function PapersPageInner() {
 
       {loading ? (
         <div className="text-sm text-muted-foreground">Loading...</div>
-      ) : papers.length === 0 ? (
-        <PaperList papers={[]} />
       ) : (
-        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-          <TabsList className="mb-4 w-full justify-start gap-1">
-            <TabsTrigger value={LIBRARY_TAB} className="shrink-0 gap-1.5">
-              <LayoutList className="h-3.5 w-3.5" />
-              All papers
-            </TabsTrigger>
-            {papers.map((paper) => (
-              <TabsTrigger
-                key={paper.id}
-                value={paper.id}
-                className="max-w-[200px] shrink truncate sm:max-w-[240px]"
-                title={paper.title}
-              >
-                <span className="truncate">{paper.title}</span>
-              </TabsTrigger>
-            ))}
-          </TabsList>
-
-          <TabsContent value={LIBRARY_TAB} className="mt-0 focus-visible:outline-none">
-            <PaperList
-              papers={papers}
-              viewMode={viewMode}
-              setViewMode={setViewMode}
-              onSelectPaper={(p) => setActiveTab(p.id)}
-            />
-          </TabsContent>
-
-          {papers.map((paper) => (
-            <TabsContent key={paper.id} value={paper.id} className="mt-0 focus-visible:outline-none">
-              <PaperWorkspace
-                paperId={paper.id}
-                onPaperMutated={handlePaperMutated}
-                onPaperTitleUpdated={handlePaperTitleUpdated}
+        <>
+          <ResourceFilterRow>
+            {projectOptions.length > 0 && (
+              <ResourceListFilter
+                label="Project"
+                value={projectFilter}
+                onValueChange={setProjectFilter}
+                options={projectOptions}
+                allLabel="All projects"
               />
-            </TabsContent>
-          ))}
-        </Tabs>
+            )}
+          </ResourceFilterRow>
+          <PaperList
+            papers={filteredPapers}
+            viewMode={viewMode}
+            setViewMode={setViewMode}
+            onSelectPaper={(p) => router.push(`/papers/${p.id}`)}
+            onDeleted={fetchPapers}
+            isFiltered={projectFilter !== FILTER_ALL}
+          />
+        </>
       )}
     </div>
   )
 }
+

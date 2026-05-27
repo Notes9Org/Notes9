@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation"
 import Link from "next/link"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
+import { Checkbox } from "@/components/ui/checkbox"
 import { FileText, Plus, Trash2, ArrowUpRight, Sparkles } from "lucide-react"
 import {
   Table,
@@ -34,6 +35,7 @@ import { PageHeading } from "@/components/ui/page-heading"
 import { ReportGeneratorDialog } from "./report-generator-dialog"
 import { createClient } from "@/lib/supabase/client"
 import { toast } from "sonner"
+import { useProjectScope } from "@/contexts/project-scope-context"
 
 export type ReportRow = {
   id: string
@@ -66,11 +68,14 @@ function formatDate(dateStr: string): string {
 export function ReportsPageClient({ reports: initialReports, projects, experiments, userId }: ReportsPageClientProps) {
   const router = useRouter()
   const supabase = useMemo(() => createClient(), [])
+  const { projectId, projectName } = useProjectScope()
   const [reports, setReports] = useState(initialReports)
   const [dialogOpen, setDialogOpen] = useState(false)
-  const [projectFilter, setProjectFilter] = useState(FILTER_ALL)
+  const [projectFilter, setProjectFilter] = useState(projectId || FILTER_ALL)
   const [experimentFilter, setExperimentFilter] = useState(FILTER_ALL)
   const [deleteTarget, setDeleteTarget] = useState<{ id: string; title: string } | null>(null)
+  const [selectedIds, setSelectedIds] = useState<string[]>([])
+  const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false)
   const [isDeleting, setIsDeleting] = useState(false)
 
   useEffect(() => {
@@ -86,17 +91,32 @@ export function ReportsPageClient({ reports: initialReports, projects, experimen
     }
   }, [router])
 
+  useEffect(() => {
+    if (projectId) {
+      setProjectFilter(projectId)
+    }
+  }, [projectId])
+
   const projectOptions = useMemo(() => {
+    if (projects && projects.length > 0) {
+      return projects.map((p) => ({ value: p.id, label: p.name })).sort((a, b) => a.label.localeCompare(b.label))
+    }
     const m = new Map<string, string>()
     for (const r of reports) {
       if (r.project?.id && r.project?.name) m.set(r.project.id, r.project.name)
     }
+    if (projectId && projectName) {
+      m.set(projectId, projectName)
+    }
     return Array.from(m.entries())
       .map(([value, label]) => ({ value, label }))
       .sort((a, b) => a.label.localeCompare(b.label))
-  }, [reports])
+  }, [reports, projects, projectId, projectName])
 
   const experimentOptions = useMemo(() => {
+    if (experiments && experiments.length > 0) {
+      return experiments.map((e) => ({ value: e.id, label: e.name, project_id: e.project_id })).sort((a, b) => a.label.localeCompare(b.label))
+    }
     const m = new Map<string, { label: string; project_id: string | null }>()
     for (const r of reports) {
       if (r.experiment?.id && r.experiment?.name) {
@@ -105,8 +125,8 @@ export function ReportsPageClient({ reports: initialReports, projects, experimen
     }
     return Array.from(m.entries()).map(([value, v]) => ({
       value, label: v.label, project_id: v.project_id,
-    }))
-  }, [reports])
+    })).sort((a, b) => a.label.localeCompare(b.label))
+  }, [reports, experiments])
 
   useEffect(() => {
     if (projectFilter === FILTER_ALL) return
@@ -157,6 +177,41 @@ export function ReportsPageClient({ reports: initialReports, projects, experimen
     }
   }
 
+  const visibleIds = filtered.map((r) => r.id)
+  const allVisibleSelected = visibleIds.length > 0 && visibleIds.every((id) => selectedIds.includes(id))
+  const someVisibleSelected = visibleIds.some((id) => selectedIds.includes(id)) && !allVisibleSelected
+
+  const toggleSelected = (id: string, checked: boolean) => {
+    setSelectedIds((current) =>
+      checked ? [...current, id] : current.filter((selectedId) => selectedId !== id)
+    )
+  }
+
+  const toggleSelectAllVisible = (checked: boolean) => {
+    setSelectedIds((current) => {
+      if (checked) return Array.from(new Set([...current, ...visibleIds]))
+      return current.filter((id) => !visibleIds.includes(id))
+    })
+  }
+
+  const confirmBulkDelete = async () => {
+    if (selectedIds.length === 0) return
+    setIsDeleting(true)
+    try {
+      const { error } = await supabase.from("reports").delete().in("id", selectedIds)
+      if (error) {
+        toast.error(`Failed to delete: ${error.message}`)
+        return
+      }
+      setReports((prev) => prev.filter((r) => !selectedIds.includes(r.id)))
+      toast.success(`${selectedIds.length} reports deleted`)
+      setSelectedIds([])
+      setBulkDeleteOpen(false)
+    } finally {
+      setIsDeleting(false)
+    }
+  }
+
   // Title block shared by both states. The "Generate" action is intentionally
   // NOT here — the empty state shows a single prominent CTA in its card, and
   // the populated state appends the header action below. This avoids two
@@ -183,34 +238,7 @@ export function ReportsPageClient({ reports: initialReports, projects, experimen
     </div>
   )
 
-  if (reports.length === 0) {
-    return (
-      <div className="space-y-6">
-        {/* Empty state: title only — the single CTA lives in the card below. */}
-        {titleBlock}
-        <Card>
-          <CardContent className="flex flex-col items-center justify-center py-12 px-6 text-center">
-            <FileText className="h-12 w-12 text-muted-foreground mb-4" />
-            <p className="text-foreground font-medium mb-1">No reports generated yet</p>
-            <p className="text-sm text-muted-foreground max-w-md mb-6">
-              Describe what you want to understand and Catalyst will pull your experiment data into a structured analysis.
-            </p>
-            <Button onClick={() => setDialogOpen(true)}>
-              <Sparkles className="h-4 w-4 mr-2" />
-              Generate first AI report
-            </Button>
-          </CardContent>
-        </Card>
-        <ReportGeneratorDialog
-          open={dialogOpen}
-          onOpenChange={setDialogOpen}
-          projects={projects ?? []}
-          experiments={experiments ?? []}
-          userId={userId ?? ""}
-        />
-      </div>
-    )
-  }
+
 
   return (
     <div className="space-y-6">
@@ -237,17 +265,55 @@ export function ReportsPageClient({ reports: initialReports, projects, experimen
       </ResourceFilterRow>
 
       {filtered.length === 0 ? (
-        <p className="text-sm text-muted-foreground py-6 text-center">No reports match the selected filters.</p>
+        <Card>
+          <CardContent className="flex flex-col items-center justify-center py-12 px-6 text-center">
+            <FileText className="h-12 w-12 text-muted-foreground mb-4" />
+            <p className="text-foreground font-medium mb-1">
+              {reports.length === 0 ? "No reports generated yet" : "No reports match the selected filters"}
+            </p>
+            <p className="text-sm text-muted-foreground max-w-md mb-6">
+              {reports.length === 0 
+                ? "Describe what you want to understand and Catalyst will pull your experiment data into a structured analysis."
+                : "Try clearing your filters or generate a new report for this project."}
+            </p>
+            <Button onClick={() => setDialogOpen(true)}>
+              <Sparkles className="h-4 w-4 mr-2" />
+              {reports.length === 0 ? "Generate first AI report" : "Generate AI report"}
+            </Button>
+          </CardContent>
+        </Card>
       ) : (
-        <div className="relative w-full overflow-auto">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead className="min-w-[300px]">Report</TableHead>
-                <TableHead className="min-w-[120px]">Created</TableHead>
-                <TableHead className="text-right min-w-[100px]">Actions</TableHead>
-              </TableRow>
-            </TableHeader>
+        <div className="space-y-4">
+          {selectedIds.length > 0 && (
+            <div className="flex items-center">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setBulkDeleteOpen(true)}
+                className="bg-rose-50 text-rose-600 border border-rose-100 font-semibold hover:bg-rose-100 dark:bg-rose-900/20 dark:text-rose-400 dark:border-rose-900/10 dark:hover:bg-rose-900/30"
+              >
+                <Trash2 className="mr-2 h-4 w-4" />
+                Delete Selected ({selectedIds.length})
+              </Button>
+            </div>
+          )}
+          <div className="relative w-full overflow-auto">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="w-[48px]">
+                    <Checkbox
+                      checked={allVisibleSelected ? true : someVisibleSelected ? "indeterminate" : false}
+                      onCheckedChange={(checked) => toggleSelectAllVisible(checked === true)}
+                      aria-label="Select all visible reports"
+                      className="data-[state=checked]:bg-rose-50 data-[state=checked]:text-rose-600 data-[state=checked]:border-rose-200 dark:data-[state=checked]:bg-rose-950/30 dark:data-[state=checked]:text-rose-400 dark:data-[state=checked]:border-rose-900/30"
+                    />
+                  </TableHead>
+                  <TableHead className="min-w-[300px]">Report</TableHead>
+                  <TableHead className="min-w-[120px]">Created</TableHead>
+                  <TableHead className="text-right min-w-[100px]">Actions</TableHead>
+                </TableRow>
+              </TableHeader>
             <TableBody>
               {filtered.map((report) => (
                 <TableRow
@@ -255,6 +321,14 @@ export function ReportsPageClient({ reports: initialReports, projects, experimen
                   className="cursor-pointer"
                   onClick={() => router.push(`/reports/${report.id}`)}
                 >
+                  <TableCell onClick={(e) => e.stopPropagation()}>
+                    <Checkbox
+                      checked={selectedIds.includes(report.id)}
+                      onCheckedChange={(checked) => toggleSelected(report.id, checked === true)}
+                      aria-label={`Select ${report.title}`}
+                      className="data-[state=checked]:bg-rose-50 data-[state=checked]:text-rose-600 data-[state=checked]:border-rose-200 dark:data-[state=checked]:bg-rose-950/30 dark:data-[state=checked]:text-rose-400 dark:data-[state=checked]:border-rose-900/30"
+                    />
+                  </TableCell>
                   <TableCell className="font-medium text-foreground">
                     <div className="flex items-center gap-2">
                       <FileText className="h-4 w-4 text-primary shrink-0" />
@@ -287,6 +361,7 @@ export function ReportsPageClient({ reports: initialReports, projects, experimen
             </TableBody>
           </Table>
         </div>
+        </div>
       )}
 
       <ReportGeneratorDialog
@@ -315,6 +390,27 @@ export function ReportsPageClient({ reports: initialReports, projects, experimen
             <AlertDialogCancel disabled={isDeleting}>Cancel</AlertDialogCancel>
             <AlertDialogAction
               onClick={confirmDelete}
+              disabled={isDeleting}
+              className={buttonVariants({ variant: "destructive" })}
+            >
+              {isDeleting ? "Deleting..." : "Delete"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={bulkDeleteOpen} onOpenChange={setBulkDeleteOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete {selectedIds.length} reports?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will permanently delete the selected reports. This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isDeleting}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={confirmBulkDelete}
               disabled={isDeleting}
               className={buttonVariants({ variant: "destructive" })}
             >

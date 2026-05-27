@@ -51,6 +51,10 @@ function NewPaperPageInner() {
       toast.error("Please enter a paper title")
       return
     }
+    if (!projectId) {
+      toast.error("Please select a project")
+      return
+    }
 
     setIsCreating(true)
     try {
@@ -64,7 +68,7 @@ function NewPaperPageInner() {
           title: title.trim(),
           content: "",
           status: "draft",
-          project_id: projectId || null,
+          project_id: projectId,
           created_by: user.id,
         })
         .select("id")
@@ -73,7 +77,7 @@ function NewPaperPageInner() {
       if (error) throw error
 
       toast.success("Paper created")
-      router.push(`/papers?open=${data.id}`)
+      router.push(`/papers/${data.id}`)
     } catch (error: unknown) {
       console.error("Error creating paper:", error)
       const msg =
@@ -118,7 +122,7 @@ function NewPaperPageInner() {
 
           <div className="space-y-2.5">
             <Label htmlFor="project" className="text-base">
-              Project (optional)
+              Project <span className="text-destructive">*</span>
             </Label>
             <Select value={projectId} onValueChange={setProjectId}>
               <SelectTrigger className="h-11 w-full text-base md:text-base">
@@ -148,7 +152,7 @@ function NewPaperPageInner() {
               size="lg"
               className="text-base"
               onClick={handleCreate}
-              disabled={isCreating}
+              disabled={isCreating || !projectId}
             >
               {isCreating ? "Creating..." : "Create Paper"}
             </Button>

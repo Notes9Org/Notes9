@@ -155,6 +155,7 @@ export function AppSidebar() {
   const [searchError, setSearchError] = useState(false)
   const [fetchError, setFetchError] = useState(false)
   const [labNoteOpen, setLabNoteOpen] = useState(false)
+  const [isProjectExpanded, setIsProjectExpanded] = useState(true)
   const supabase = useMemo(() => createClient(), [])
 
   const isIconMode = !open
@@ -599,127 +600,139 @@ export function AppSidebar() {
                 const pathMatches =
                   pathname === item.href || pathname.startsWith(item.href + "/")
                 const isActive = mounted && pathMatches
+                const isProjectItemWithScope = item.name === "Projects" && scope.projectId;
+                const ActiveIcon = isProjectItemWithScope ? (isProjectExpanded ? FolderOpen : Folder) : Icon;
 
-                return (
-                  <SidebarMenuItem key={item.name}>
-                    <SidebarMenuButton
-                      asChild
-                      isActive={isActive}
-                      className="group transition-all duration-150 hover:bg-[color:color-mix(in_oklab,var(--background)_78%,var(--primary)_22%)] hover:text-sidebar-foreground active:scale-[0.985] active:bg-[color:color-mix(in_oklab,var(--background)_70%,var(--primary)_30%)] dark:hover:bg-sidebar-accent dark:hover:text-sidebar-accent-foreground dark:active:scale-[0.985] dark:active:bg-sidebar-accent/90 data-[active=true]:bg-transparent data-[active=true]:text-sidebar-foreground"
-                    >
-                      <Link href={item.href} aria-label={isIconMode ? item.name : undefined}>
-                        <Icon />
-                        <span className={cn(isIconMode && "hidden")}>
-                          <span className={cn("truncate", isActive && "font-semibold")}>{item.name}</span>
-                        </span>
-                      </Link>
-                    </SidebarMenuButton>
-                  </SidebarMenuItem>
-                );
+                    return (
+                      <SidebarMenuItem key={item.name}>
+                        <SidebarMenuButton
+                          asChild
+                          isActive={isActive}
+                          className="group transition-all duration-150 hover:bg-[color:color-mix(in_oklab,var(--background)_78%,var(--primary)_22%)] hover:text-sidebar-foreground active:scale-[0.985] active:bg-[color:color-mix(in_oklab,var(--background)_70%,var(--primary)_30%)] dark:hover:bg-sidebar-accent dark:hover:text-sidebar-accent-foreground dark:active:scale-[0.985] dark:active:bg-sidebar-accent/90 data-[active=true]:bg-transparent data-[active=true]:text-sidebar-foreground"
+                        >
+                          {isProjectItemWithScope && !isIconMode ? (
+                            <div className="flex items-center w-full">
+                              <div
+                                role="button"
+                                tabIndex={0}
+                                onClick={(e) => {
+                                  e.preventDefault();
+                                  e.stopPropagation();
+                                  setIsProjectExpanded(!isProjectExpanded);
+                                }}
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter' || e.key === ' ') {
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                    setIsProjectExpanded(!isProjectExpanded);
+                                  }
+                                }}
+                                className="shrink-0 rounded-sm hover:bg-sidebar-accent p-0.5 -ml-0.5 transition-colors cursor-pointer text-sidebar-foreground z-20"
+                                aria-label={isProjectExpanded ? "Collapse project menu" : "Expand project menu"}
+                              >
+                                <ActiveIcon className="size-4" />
+                              </div>
+                              <Link
+                                href={`/projects/${scope.projectId}`}
+                                className="flex-1 flex items-center min-w-0 pr-6 h-full"
+                              >
+                                <span className={cn("truncate", isActive && "font-semibold")}>
+                                  {item.name} / {scope.projectName}
+                                </span>
+                              </Link>
+                            </div>
+                          ) : (
+                            <Link
+                              href={item.href}
+                              aria-label={isIconMode ? item.name : undefined}
+                              className="flex-1 flex items-center pr-6"
+                            >
+                              <ActiveIcon />
+                              <span className={cn(isIconMode && "hidden", "flex-1 flex items-center")}>
+                                <span className={cn("truncate", isActive && "font-semibold")}>
+                                  {item.name}
+                                </span>
+                              </span>
+                            </Link>
+                          )}
+                        </SidebarMenuButton>
+
+                        {isProjectItemWithScope && !isIconMode && (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.preventDefault();
+                              scope.clearScope();
+                              const url = new URL(window.location.href);
+                              url.searchParams.delete("project");
+                              url.searchParams.delete("experiment");
+                              const target = pathname?.startsWith("/projects/") ? "/dashboard" : `${url.pathname}${url.search}`;
+                              router.push(target);
+                            }}
+                            className="absolute right-2 top-1.5 z-10 rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
+                            title="Clear project scope"
+                            aria-label="Clear project scope"
+                          >
+                            <XIcon className="size-3.5" />
+                          </button>
+                        )}
+
+                        {isProjectItemWithScope && !isIconMode && isProjectExpanded && (
+                          <SidebarMenuSub>
+                            {PROJECT_SCOPED_NAV.map((scopedItem) => {
+                              const ScopedIcon = scopedItem.icon;
+                              const scopedHref = `${scopedItem.basePath}${scope.scopedQueryString}`;
+                              const isScopedActive = mounted && (pathname === scopedItem.basePath || pathname.startsWith(scopedItem.basePath + "/"));
+
+                              return (
+                                <SidebarMenuSubItem key={scopedItem.basePath}>
+                                  <SidebarMenuSubButton asChild isActive={isScopedActive}>
+                                    <Link href={scopedHref}>
+                                      <ScopedIcon />
+                                      <span className={cn("truncate", isScopedActive && "font-semibold")}>
+                                        {scopedItem.name}
+                                        {scopedItem.name === "Experiments" && scope.experimentName
+                                          ? ` / ${scope.experimentName}`
+                                          : ""}
+                                      </span>
+                                    </Link>
+                                  </SidebarMenuSubButton>
+
+                                  {scopedItem.children && scopedItem.children.length > 0 && (
+                                    <SidebarMenuSub className="pl-4 pr-0 mr-0 mt-1 border-l border-border/40">
+                                      {scopedItem.children.map((child) => {
+                                        const ChildIcon = child.icon;
+                                        const childHref = `${child.basePath}${scope.scopedQueryString}`;
+                                        const childActive = mounted && (pathname === child.basePath || pathname.startsWith(child.basePath + "/"));
+                                        return (
+                                          <SidebarMenuSubItem key={child.basePath}>
+                                            <SidebarMenuSubButton asChild isActive={childActive} size="sm">
+                                              <Link href={childHref}>
+                                                <ChildIcon />
+                                                <span className={cn("truncate", childActive && "font-semibold")}>
+                                                  {child.name}
+                                                </span>
+                                              </Link>
+                                            </SidebarMenuSubButton>
+                                          </SidebarMenuSubItem>
+                                        );
+                                      })}
+                                    </SidebarMenuSub>
+                                  )}
+                                </SidebarMenuSubItem>
+                              );
+                            })}
+                          </SidebarMenuSub>
+                        )}
+                      </SidebarMenuItem>
+                    );
               })}
 
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
 
-        {/* Project-scoped section nav. Renders ONLY when a project is active
-            in the URL — gives the previously-orphaned global section pages
-            (lab-notes, experiments, protocols, samples, reports, writing)
-            a discoverable home inside the project hierarchy. Each href carries
-            the project param forward so back-nav stays scoped. */}
-        {scope.projectId && !isIconMode && (
-          <>
-            <SidebarSeparator />
-            <SidebarGroup className="px-2">
-              <div className="mb-1 flex items-center gap-2 rounded-md bg-muted/40 px-2 py-1.5 text-xs">
-                <span
-                  className="inline-block size-2 shrink-0 rounded-full"
-                  style={{ backgroundColor: scope.projectColor ?? "var(--n9-accent)" }}
-                  aria-hidden
-                />
-                <Link
-                  href={`/projects/${scope.projectId}`}
-                  className="truncate font-medium text-sidebar-foreground hover:underline"
-                  title={scope.projectName ?? "Project"}
-                >
-                  {scope.projectName ?? "Project"}
-                </Link>
-                <button
-                  type="button"
-                  onClick={() => {
-                    // Clear the persisted project scope
-                    scope.clearScope()
-                    
-                    // Drop the scope by navigating to the path without ?project=.
-                    // If we're on /projects/<id>/..., go to /dashboard instead so
-                    // the path-derived scope also clears.
-                    const url = new URL(window.location.href)
-                    url.searchParams.delete("project")
-                    url.searchParams.delete("experiment")
-                    const target = pathname?.startsWith("/projects/") ? "/dashboard" : `${url.pathname}${url.search}`
-                    router.push(target)
-                  }}
-                  className="ml-auto rounded p-0.5 text-muted-foreground hover:bg-muted hover:text-foreground"
-                  title="Clear project scope"
-                  aria-label="Clear project scope"
-                >
-                  <XIcon className="size-3" />
-                </button>
-              </div>
-              <SidebarGroupContent>
-                <SidebarMenu>
-                  {PROJECT_SCOPED_NAV.map((item) => {
-                    const Icon = item.icon
-                    const href = `${item.basePath}${scope.scopedQueryString}`
-                    const isActive =
-                      mounted &&
-                      (pathname === item.basePath ||
-                        pathname.startsWith(item.basePath + "/"))
-                    return (
-                      <SidebarMenuItem key={item.basePath}>
-                        <SidebarMenuButton asChild isActive={isActive} size="sm">
-                          <Link href={href}>
-                            <Icon />
-                            <span className={cn("truncate", isActive && "font-semibold")}>
-                              {item.name}
-                              {item.name === "Experiments" && scope.experimentName
-                                ? ` / ${scope.experimentName}`
-                                : ""}
-                            </span>
-                          </Link>
-                        </SidebarMenuButton>
-                        {item.children && item.children.length > 0 && (
-                          <SidebarMenuSub>
-                            {item.children.map((child) => {
-                              const ChildIcon = child.icon
-                              const childHref = `${child.basePath}${scope.scopedQueryString}`
-                              const childActive =
-                                mounted &&
-                                (pathname === child.basePath ||
-                                  pathname.startsWith(child.basePath + "/"))
-                              return (
-                                <SidebarMenuSubItem key={child.basePath}>
-                                  <SidebarMenuSubButton asChild isActive={childActive}>
-                                    <Link href={childHref}>
-                                      <ChildIcon />
-                                      <span className={cn("truncate", childActive && "font-semibold")}>
-                                        {child.name}
-                                      </span>
-                                    </Link>
-                                  </SidebarMenuSubButton>
-                                </SidebarMenuSubItem>
-                              )
-                            })}
-                          </SidebarMenuSub>
-                        )}
-                      </SidebarMenuItem>
-                    )
-                  })}
-                </SidebarMenu>
-              </SidebarGroupContent>
-            </SidebarGroup>
-          </>
-        )}
+
 
       </SidebarContent>
 

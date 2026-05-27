@@ -8,8 +8,11 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { Checkbox } from "@/components/ui/checkbox"
+import { toast } from "sonner"
+import { createClient } from "@/lib/supabase/client"
 import { ViewModeToggle } from "@/components/ui/view-mode-toggle"
-import { FileText, Grid3x3, List, ArrowUpRight } from "lucide-react"
+import { FileText, Grid3x3, List, ArrowUpRight, Trash2 } from "lucide-react"
 
 export interface PaperListItem {
   id: string
@@ -41,6 +44,8 @@ type PaperListProps = {
   viewMode?: "grid" | "table"
   setViewMode?: (mode: "grid" | "table") => void
   hideToolbar?: boolean
+  isFiltered?: boolean
+  onDeleted?: () => void
 }
 
 export function PaperList({
@@ -49,6 +54,8 @@ export function PaperList({
   viewMode: controlledView,
   setViewMode: setControlledView,
   hideToolbar,
+  isFiltered,
+  onDeleted,
 }: PaperListProps) {
   const isMobile = useMediaQuery("(max-width: 768px)")
   const [internalView, setInternalView] = useState<"grid" | "table">("table")
@@ -65,9 +72,13 @@ export function PaperList({
       <Card>
         <CardContent className="flex flex-col items-center justify-center py-12">
           <FileText className="mb-4 h-12 w-12 text-muted-foreground/50" />
-          <h3 className="mb-1 text-lg font-medium">No papers yet</h3>
+          <h3 className="mb-1 text-lg font-medium">
+            {isFiltered ? "No papers match the selected filters" : "No papers yet"}
+          </h3>
           <p className="text-sm text-muted-foreground">
-            Create your first research paper to get started.
+            {isFiltered 
+              ? "Try clearing your filters or select a different project."
+              : "Create your first research paper to get started."}
           </p>
         </CardContent>
       </Card>
@@ -161,12 +172,8 @@ export function PaperList({
 
       {effectiveViewMode === "table" && (
         <Card>
-          <CardHeader>
-            <CardTitle className="text-foreground">All papers</CardTitle>
-            <CardDescription>Your writing documents</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <PaperTableView papers={papers} onSelectPaper={onSelectPaper} />
+          <CardContent className="pt-6">
+            <PaperTableView papers={papers} onSelectPaper={onSelectPaper} onDeleted={onDeleted} />
           </CardContent>
         </Card>
       )}
@@ -178,59 +185,130 @@ const formatDate = (dateStr: string): string => {
   return new Date(dateStr).toISOString().split('T')[0]
 }
 
-function PaperTableView({ papers, onSelectPaper }: { papers: PaperListItem[]; onSelectPaper?: (paper: PaperListItem) => void }) {
+function PaperTableView({ papers, onSelectPaper, onDeleted }: { papers: PaperListItem[]; onSelectPaper?: (paper: PaperListItem) => void, onDeleted?: () => void }) {
   const router = useRouter()
+  const [selectedIds, setSelectedIds] = useState<string[]>([])
+  const [isDeleting, setIsDeleting] = useState(false)
+
+  const visibleIds = papers.map((p) => p.id)
+  const allVisibleSelected = visibleIds.length > 0 && visibleIds.every((id) => selectedIds.includes(id))
+  const someVisibleSelected = visibleIds.some((id) => selectedIds.includes(id)) && !allVisibleSelected
+
+  const toggleSelected = (id: string, checked: boolean) => {
+    setSelectedIds((current) =>
+      checked ? [...current, id] : current.filter((selectedId) => selectedId !== id)
+    )
+  }
+
+  const toggleSelectAllVisible = (checked: boolean) => {
+    setSelectedIds((current) => {
+      if (checked) return Array.from(new Set([...current, ...visibleIds]))
+      return current.filter((id) => !visibleIds.includes(id))
+    })
+  }
+
+  const confirmBulkDelete = async () => {
+    if (selectedIds.length === 0) return
+    if (!confirm(`Are you sure you want to delete ${selectedIds.length} papers?`)) return
+    setIsDeleting(true)
+    try {
+      const supabase = createClient()
+      const { error } = await supabase.from("papers").delete().in("id", selectedIds)
+      if (error) {
+        toast.error(`Failed to delete: ${error.message}`)
+        return
+      }
+      toast.success(`${selectedIds.length} papers deleted`)
+      setSelectedIds([])
+      onDeleted?.()
+    } finally {
+      setIsDeleting(false)
+    }
+  }
+
   return (
-    <div className="relative w-full overflow-auto">
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead className="min-w-[300px]">Title</TableHead>
-            <TableHead className="min-w-[120px]">Created</TableHead>
-            <TableHead className="text-right min-w-[100px]">Actions</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {papers.map((paper) => (
-            <TableRow
-              key={paper.id}
-              className="cursor-pointer"
-              onClick={() => onSelectPaper ? onSelectPaper(paper) : router.push(`/papers/${paper.id}`)}
-            >
-              <TableCell className="font-medium text-foreground">
-                <div className="flex items-center gap-2">
-                  <FileText className="h-4 w-4 shrink-0 text-primary" />
-                  <span className="truncate">{paper.title}</span>
-                </div>
-              </TableCell>
-              <TableCell className="text-muted-foreground">
-                {formatDate(paper.created_at)}
-              </TableCell>
-              <TableCell className="text-right">
-                {onSelectPaper ? (
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      onSelectPaper(paper)
-                    }}
-                  >
-                    <ArrowUpRight className="h-4 w-4" />
-                  </Button>
-                ) : (
-                  <Button variant="ghost" size="sm" asChild onClick={(e: React.MouseEvent) => e.stopPropagation()}>
-                    <Link href={`/papers/${paper.id}`}>
-                      <ArrowUpRight className="h-4 w-4" />
-                    </Link>
-                  </Button>
-                )}
-              </TableCell>
+    <div className="space-y-4">
+      {selectedIds.length > 0 && (
+        <div className="flex items-center">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={confirmBulkDelete}
+            disabled={isDeleting}
+            className="bg-rose-50 text-rose-600 border border-rose-100 font-semibold hover:bg-rose-100 dark:bg-rose-900/20 dark:text-rose-400 dark:border-rose-900/10 dark:hover:bg-rose-900/30"
+          >
+            <Trash2 className="mr-2 h-4 w-4" />
+            Delete Selected ({selectedIds.length})
+          </Button>
+        </div>
+      )}
+      <div className="relative w-full overflow-auto">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead className="w-[48px]">
+                <Checkbox
+                  checked={allVisibleSelected ? true : someVisibleSelected ? "indeterminate" : false}
+                  onCheckedChange={(checked) => toggleSelectAllVisible(checked === true)}
+                  aria-label="Select all papers"
+                  className="data-[state=checked]:bg-rose-50 data-[state=checked]:text-rose-600 data-[state=checked]:border-rose-200 dark:data-[state=checked]:bg-rose-950/30 dark:data-[state=checked]:text-rose-400 dark:data-[state=checked]:border-rose-900/30"
+                />
+              </TableHead>
+              <TableHead className="min-w-[300px]">Title</TableHead>
+              <TableHead className="min-w-[120px]">Created</TableHead>
+              <TableHead className="text-right min-w-[100px]">Actions</TableHead>
             </TableRow>
-          ))}
-        </TableBody>
-      </Table>
+          </TableHeader>
+          <TableBody>
+            {papers.map((paper) => (
+              <TableRow
+                key={paper.id}
+                className="cursor-pointer"
+                onClick={() => onSelectPaper ? onSelectPaper(paper) : router.push(`/papers/${paper.id}`)}
+              >
+                <TableCell onClick={(e) => e.stopPropagation()}>
+                  <Checkbox
+                    checked={selectedIds.includes(paper.id)}
+                    onCheckedChange={(checked) => toggleSelected(paper.id, checked === true)}
+                    aria-label={`Select ${paper.title}`}
+                    className="data-[state=checked]:bg-rose-50 data-[state=checked]:text-rose-600 data-[state=checked]:border-rose-200 dark:data-[state=checked]:bg-rose-950/30 dark:data-[state=checked]:text-rose-400 dark:data-[state=checked]:border-rose-900/30"
+                  />
+                </TableCell>
+                <TableCell className="font-medium text-foreground">
+                  <div className="flex items-center gap-2">
+                    <FileText className="h-4 w-4 shrink-0 text-primary" />
+                    <span className="truncate">{paper.title}</span>
+                  </div>
+                </TableCell>
+                <TableCell className="text-muted-foreground">
+                  {formatDate(paper.created_at)}
+                </TableCell>
+                <TableCell className="text-right">
+                  {onSelectPaper ? (
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        onSelectPaper(paper)
+                      }}
+                    >
+                      <ArrowUpRight className="h-4 w-4" />
+                    </Button>
+                  ) : (
+                    <Button variant="ghost" size="sm" asChild onClick={(e: React.MouseEvent) => e.stopPropagation()}>
+                      <Link href={`/papers/${paper.id}`}>
+                        <ArrowUpRight className="h-4 w-4" />
+                      </Link>
+                    </Button>
+                  )}
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </div>
     </div>
   )
 }
