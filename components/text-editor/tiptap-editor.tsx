@@ -148,6 +148,7 @@ import { ChemistryHighlight } from "./extensions/chemistry-highlight"
 import { RagHighlight } from "./extensions/rag-highlight"
 import { SimpleShape } from "./extensions/simple-shape"
 import { SpreadsheetEmbed } from "./extensions/spreadsheet-embed"
+import { VoiceWaveform } from "./voice-waveform"
 // @ts-ignore - CSS import for KaTeX math rendering
 import "katex/dist/katex.min.css"
 import {
@@ -1706,7 +1707,7 @@ export function TiptapEditor({
     lastInterimTextRef.current = ""
   }, [])
 
-  const { start: startAwsTranscribe, stop: stopAwsTranscribe, isListening } = useAwsTranscribe({
+  const { start: startAwsTranscribe, stop: stopAwsTranscribe, isListening, getWaveformData } = useAwsTranscribe({
     onInterim: useCallback((text: string) => {
       const ed = editorRef.current
       if (!ed) return
@@ -3958,19 +3959,22 @@ export function TiptapEditor({
         <TooltipContent>Insert spreadsheet</TooltipContent>
       </Tooltip>
 
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={isListening ? stopSpeechToText : startSpeechToText}
-            className={cn("h-8 w-8 rounded-lg p-0 shrink-0", isListening && "bg-accent")}
-          >
-            {isListening ? <Loader2 className="h-4 w-4 animate-spin" /> : <Mic className="h-4 w-4" />}
-          </Button>
-        </TooltipTrigger>
-        <TooltipContent>{isListening ? "Stop dictation" : "Start dictation"}</TooltipContent>
-      </Tooltip>
+      <div className="inline-flex items-center gap-1">
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={isListening ? stopSpeechToText : startSpeechToText}
+              className={cn("h-8 w-8 rounded-lg p-0 shrink-0", isListening && "bg-accent text-red-500")}
+            >
+              <Mic className="h-4 w-4" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>{isListening ? "Stop dictation" : "Start dictation"}</TooltipContent>
+        </Tooltip>
+        {isListening && <VoiceWaveform getWaveformData={getWaveformData} />}
+      </div>
 
       <DropdownMenu modal={false} open={toolbarClusterMenu === "align"} onOpenChange={handleToolbarClusterChange("align")}>
         <Tooltip>
