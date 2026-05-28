@@ -10,7 +10,6 @@ import {
   Panel,
   ReactFlow,
   ReactFlowProvider,
-  getSmoothStepPath,
   useEdgesState,
   useNodesState,
   useReactFlow,
@@ -22,10 +21,11 @@ import {
 import "@xyflow/react/dist/style.css"
 import { useRouter } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
-import type {
+import {
   ResearchMapNodeKind,
   ResearchMapResponse,
 } from "@/lib/research-map-types"
+import { useProjectScope } from "@/contexts/project-scope-context"
 import {
   layoutResearchMap,
   RESEARCH_NODE_DIM,
@@ -76,16 +76,37 @@ function LabelledEdge({
   label,
   selected,
 }: EdgeProps) {
-  const [edgePath, labelX, labelY] = getSmoothStepPath({
-    sourceX,
-    sourceY,
-    sourcePosition,
-    targetX,
-    targetY,
-    targetPosition,
-    borderRadius: 12,
-    offset: 18,
-  })
+  const dagrePoints = (data?.points as { x: number; y: number }[]) || []
+  
+  // Replace Dagre's center-based start/end points with ReactFlow's precise handle positions
+  const points = dagrePoints.length >= 2
+    ? [
+        { x: sourceX, y: sourceY },
+        ...dagrePoints.slice(1, -1),
+        { x: targetX, y: targetY }
+      ]
+    : [
+        { x: sourceX, y: sourceY },
+        { x: targetX, y: targetY }
+      ]
+
+  let edgePath = `M ${points[0].x} ${points[0].y}`
+  for (let i = 1; i < points.length; i++) {
+    const prev = points[i - 1]
+    const cur = points[i]
+    // Orthogonal routing: step exactly halfway between the X coordinates.
+    // This perfectly routes vertical segments down the "alley" between ranks!
+    const midX = (prev.x + cur.x) / 2
+    edgePath += ` L ${midX} ${prev.y} L ${midX} ${cur.y} L ${cur.x} ${cur.y}`
+  }
+
+  // Label at the true midpoint of the edge (the middle vertical segment)
+  const midIndex = Math.floor(points.length / 2)
+  const prevToMid = points[midIndex === 0 ? 0 : midIndex - 1]
+  const midPoint = points[midIndex]
+  const labelX = (prevToMid.x + midPoint.x) / 2
+  const labelY = (prevToMid.y + midPoint.y) / 2
+
   const text = (label as string) || (data?.humanLabel as string)
   const baseStroke = (data?.baseStroke as string) || "#9ca3af"
   // Style-driven flag — the highlight controller bumps strokeWidth on the
@@ -367,8 +388,11 @@ function ResearchMapCanvas() {
   const { fitView, getEdges } = useReactFlow()
   const supabase = useMemo(() => createClient(), [])
 
+  const { projectId: activeProjectId } = useProjectScope()
   const [projects, setProjects] = useState<{ id: string; name: string }[]>([])
-  const [projectId, setProjectId] = useState<string | "all">("all")
+  const [projectId, setProjectId] = useState<string | "all">(activeProjectId || "all")
+  const [experiments, setExperiments] = useState<{ id: string; name: string; project_id: string }[]>([])
+  const [experimentId, setExperimentId] = useState<string | "all">("all")
   const [include, setInclude] = useState<Record<ResearchMapNodeKind, boolean>>({
     project: true,
     experiment: true,
@@ -428,6 +452,13 @@ function ResearchMapCanvas() {
       .eq("organization_id", profile.organization_id)
       .order("name")
     if (!pErr) setProjects(sortByRecentProjectOrder(data ?? []))
+    
+    const { data: exps } = await supabase
+      .from("experiments")
+      .select("id, name, project_id")
+      .order("updated_at", { ascending: false })
+      .limit(300)
+    if (exps) setExperiments(exps)
   }, [supabase])
 
   useEffect(() => {
@@ -438,6 +469,17 @@ function ResearchMapCanvas() {
     const on = KINDS.filter((k) => include[k])
     return on.length === KINDS.length ? "" : on.join(",")
   }, [include])
+
+  const availableExperiments = useMemo(() => {
+    if (projectId === "all") return experiments
+    return experiments.filter(e => e.project_id === projectId)
+  }, [experiments, projectId])
+
+  useEffect(() => {
+    if (experimentId !== "all" && !availableExperiments.some(e => e.id === experimentId)) {
+      setExperimentId("all")
+    }
+  }, [availableExperiments, experimentId])
 
   const fetchMap = useCallback(
     async (options?: { showLoadingOverlay?: boolean }) => {
@@ -450,6 +492,7 @@ function ResearchMapCanvas() {
       try {
         const params = new URLSearchParams()
         if (projectId !== "all") params.set("projectId", projectId)
+        if (experimentId !== "all") params.set("experimentId", experimentId)
         if (includeTypesParam) params.set("includeTypes", includeTypesParam)
         const res = await fetch(`/api/research-map?${params.toString()}`)
         if (!res.ok) {
@@ -478,7 +521,7 @@ function ResearchMapCanvas() {
         if (showLoadingOverlay) setLoading(false)
       }
     },
-    [projectId, includeTypesParam, include, setNodes, setEdges],
+    [projectId, experimentId, includeTypesParam, include, setNodes, setEdges],
   )
 
   useEffect(() => {
@@ -525,9 +568,9 @@ function ResearchMapCanvas() {
       return
     }
     const { nodes: n0, edges: e0 } = mapApiToFlow(rawPayload, debouncedQuery)
-    const laid = layoutResearchMap(n0, e0, "LR")
+    const { nodes: laid, edges: laidEdges } = layoutResearchMap(n0, e0, "LR")
     setNodes(laid)
-    setEdges(e0)
+    setEdges(laidEdges)
     setSelectedEdgeId(null)
     setHighlightNodes(null)
     setHighlightEdges(null)
@@ -727,6 +770,22 @@ function ResearchMapCanvas() {
                 {projects.map((p) => (
                   <SelectItem key={p.id} value={p.id}>
                     {p.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Select
+              value={experimentId}
+              onValueChange={(v) => setExperimentId(v as typeof experimentId)}
+            >
+              <SelectTrigger className="h-8 w-[min(160px,40vw)] shrink-0 text-xs">
+                <SelectValue placeholder="Experiment" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All experiments</SelectItem>
+                {availableExperiments.map((e) => (
+                  <SelectItem key={e.id} value={e.id}>
+                    {e.name}
                   </SelectItem>
                 ))}
               </SelectContent>

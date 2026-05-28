@@ -61,6 +61,7 @@ export async function GET(req: NextRequest) {
 
   const url = new URL(req.url)
   const projectId = url.searchParams.get("projectId")
+  const experimentId = url.searchParams.get("experimentId")
   const includeTypes = parseIncludeTypes(url.searchParams.get("includeTypes"))
 
   const { data: profile, error: profileError } = await supabase
@@ -129,12 +130,18 @@ export async function GET(req: NextRequest) {
         })
       }
 
-      const { data: experiments } = await supabase
+      let expQuery = supabase
         .from("experiments")
         .select("id, name, status, project_id")
         .eq("project_id", projectId)
-        .order("updated_at", { ascending: false })
-        .limit(400)
+      
+      if (experimentId) {
+        expQuery = expQuery.eq("id", experimentId)
+      } else {
+        expQuery = expQuery.order("updated_at", { ascending: false }).limit(400)
+      }
+
+      const { data: experiments } = await expQuery
 
       const expList = experiments ?? []
       const experimentIds = expList.map((e) => e.id)
@@ -163,17 +170,15 @@ export async function GET(req: NextRequest) {
       let notesQuery = supabase
         .from("lab_notes")
         .select("id, title, note_type, experiment_id, project_id")
-        .eq("project_id", projectId)
-        .limit(400)
 
-      if (experimentIds.length > 0) {
-        notesQuery = supabase
-          .from("lab_notes")
-          .select("id, title, note_type, experiment_id, project_id")
-          .or(
-            `project_id.eq.${projectId},experiment_id.in.(${experimentIds.join(",")})`,
-          )
+      if (experimentId) {
+        notesQuery = notesQuery.eq("experiment_id", experimentId).limit(400)
+      } else if (experimentIds.length > 0) {
+        notesQuery = notesQuery
+          .or(`project_id.eq.${projectId},experiment_id.in.(${experimentIds.join(",")})`)
           .limit(400)
+      } else {
+        notesQuery = notesQuery.eq("project_id", projectId).limit(400)
       }
 
       const { data: notes } = await notesQuery
@@ -225,17 +230,15 @@ export async function GET(req: NextRequest) {
       let litQuery = supabase
         .from("literature_reviews")
         .select("id, title, status, project_id, experiment_id")
-        .eq("project_id", projectId)
-        .limit(400)
 
-      if (experimentIds.length > 0) {
-        litQuery = supabase
-          .from("literature_reviews")
-          .select("id, title, status, project_id, experiment_id")
-          .or(
-            `project_id.eq.${projectId},experiment_id.in.(${experimentIds.join(",")})`,
-          )
+      if (experimentId) {
+        litQuery = litQuery.eq("experiment_id", experimentId).limit(400)
+      } else if (experimentIds.length > 0) {
+        litQuery = litQuery
+          .or(`project_id.eq.${projectId},experiment_id.in.(${experimentIds.join(",")})`)
           .limit(400)
+      } else {
+        litQuery = litQuery.eq("project_id", projectId).limit(400)
       }
 
       const { data: literature } = await litQuery
@@ -349,7 +352,7 @@ export async function GET(req: NextRequest) {
       }
 
       // Papers (writing section) linked to this project
-      if (includeTypes.has("paper")) {
+      if (includeTypes.has("paper") && !experimentId) {
         const { data: paperRows } = await supabase
           .from("papers")
           .select("id, title, status, project_id")
@@ -381,16 +384,21 @@ export async function GET(req: NextRequest) {
       // whichever edges land in the included-types set so the researcher sees
       // every connection without the noise of a hub-only graph.
       if (includeTypes.has("report")) {
-        const { data: reportRows } = await supabase
+        let repQuery = supabase
           .from("reports")
           .select("id, title, status, report_type, project_id, experiment_id")
-          .or(
+
+        if (experimentId) {
+          repQuery = repQuery.eq("experiment_id", experimentId).order("updated_at", { ascending: false }).limit(200)
+        } else {
+          repQuery = repQuery.or(
             experimentIds.length > 0
               ? `project_id.eq.${projectId},experiment_id.in.(${experimentIds.join(",")})`
-              : `project_id.eq.${projectId}`,
-          )
-          .order("updated_at", { ascending: false })
-          .limit(200)
+              : `project_id.eq.${projectId}`
+          ).order("updated_at", { ascending: false }).limit(200)
+        }
+        
+        const { data: reportRows } = await repQuery
         for (const r of reportRows ?? []) {
           addNode({
             id: nodeId("report", r.id),
@@ -504,31 +512,48 @@ export async function GET(req: NextRequest) {
         projectIdSet.add(p.id)
       }
 
-      const { data: experiments } = await supabase
+      let expQuery = supabase
         .from("experiments")
         .select("id, name, status, project_id")
-        .order("updated_at", { ascending: false })
-        .limit(400)
 
+      if (experimentId) {
+        expQuery = expQuery.eq("id", experimentId)
+      } else {
+        expQuery = expQuery.order("updated_at", { ascending: false }).limit(400)
+      }
+
+      const { data: experiments } = await expQuery
       const expList = experiments ?? []
       const experimentIdSet = new Set(expList.map((e) => e.id))
 
-      const { data: litOrg } = await supabase
+      let litOrgQuery = supabase
         .from("literature_reviews")
         .select("id, title, status, project_id, experiment_id")
         .eq("organization_id", orgId)
-        .order("updated_at", { ascending: false })
-        .limit(350)
+      
+      if (experimentId) {
+        litOrgQuery = litOrgQuery.eq("experiment_id", experimentId)
+      } else {
+        litOrgQuery = litOrgQuery.order("updated_at", { ascending: false }).limit(350)
+      }
+
+      const { data: litOrg } = await litOrgQuery
 
       for (const l of litOrg ?? []) {
         if (l.experiment_id) experimentIdSet.add(l.experiment_id)
       }
 
-      const { data: notesOrg } = await supabase
+      let notesOrgQuery = supabase
         .from("lab_notes")
         .select("id, title, note_type, experiment_id, project_id")
-        .order("updated_at", { ascending: false })
-        .limit(400)
+      
+      if (experimentId) {
+        notesOrgQuery = notesOrgQuery.eq("experiment_id", experimentId)
+      } else {
+        notesOrgQuery = notesOrgQuery.order("updated_at", { ascending: false }).limit(400)
+      }
+
+      const { data: notesOrg } = await notesOrgQuery
 
       for (const n of notesOrg ?? []) {
         if (n.experiment_id) experimentIdSet.add(n.experiment_id)
@@ -779,7 +804,7 @@ export async function GET(req: NextRequest) {
       }
 
       // Papers (writing section) — RLS ensures only user's own papers are returned
-      if (includeTypes.has("paper")) {
+      if (includeTypes.has("paper") && !experimentId) {
         const { data: paperRows } = await supabase
           .from("papers")
           .select("id, title, status, project_id")
@@ -810,11 +835,17 @@ export async function GET(req: NextRequest) {
       // user can see; we still gate edges on whether the parent node was
       // included (via project_id / experiment_id presence in the graph).
       if (includeTypes.has("report")) {
-        const { data: reportRows } = await supabase
+        let repOrgQuery = supabase
           .from("reports")
           .select("id, title, status, report_type, project_id, experiment_id")
-          .order("updated_at", { ascending: false })
-          .limit(300)
+          
+        if (experimentId) {
+          repOrgQuery = repOrgQuery.eq("experiment_id", experimentId).order("updated_at", { ascending: false }).limit(300)
+        } else {
+          repOrgQuery = repOrgQuery.order("updated_at", { ascending: false }).limit(300)
+        }
+        
+        const { data: reportRows } = await repOrgQuery
         const includedExpIds = new Set(allExperiments.map((e) => e.id))
         for (const r of reportRows ?? []) {
           addNode({
