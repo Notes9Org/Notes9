@@ -1762,6 +1762,19 @@ export function LabNotesTab({
                         open={scientificCalculatorOpen}
                         onOpenChange={setScientificCalculatorOpen}
                         getEditor={() => noteEditorRef.current}
+                        onSaveToHistory={selectedNote ? (resultText) => {
+                          // Record the calculator result as a dedicated content_diff
+                          // entry with a [Calculator] tag in the summary.
+                          const noteId = selectedNote.id
+                          if (!noteId) return
+                          void recordDiff({
+                            recordType: "lab_note",
+                            recordId: noteId,
+                            previousContent: formData.content,
+                            newContent: formData.content + `\n<p>[Calculator] ${resultText.split("\n")[0]}</p>`,
+                            documentTitle: formData.title || null,
+                          })
+                        } : undefined}
                       />
                     </div>
                     {(selectedNote || isCreating) && !!formData.title.trim() && (

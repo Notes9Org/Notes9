@@ -1,2 +1,2 @@
 export { ScientificCalculatorSheet } from "./scientific-calculator-sheet"
-export type { CalculatorModeId } from "./calc-types"
+export type { CalculatorModeId, CalcHistoryEntry } from "./calc-types"

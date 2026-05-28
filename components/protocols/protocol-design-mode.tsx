@@ -721,6 +721,17 @@ export function ProtocolDesignMode({
                       open={scientificCalculatorOpen}
                       onOpenChange={setScientificCalculatorOpen}
                       getEditor={() => protocolEditorRef.current}
+                      onSaveToHistory={(resultText) => {
+                        // Record the calculator result as a dedicated content_diff
+                        // entry with a [Calculator] tag in the summary.
+                        void recordDiff({
+                          recordType: "protocol",
+                          recordId: protocol.id,
+                          previousContent: draftContent,
+                          newContent: draftContent + `\n<p>[Calculator] ${resultText.split("\n")[0]}</p>`,
+                          documentTitle: protocol.name || null,
+                        })
+                      }}
                     />
                   </div>
 
