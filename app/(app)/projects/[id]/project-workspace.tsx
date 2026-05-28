@@ -243,7 +243,7 @@ export function ProjectWorkspace({
         >
           {literatureCount > 0
             ? literature.slice(0, 3).map((l) => (
-                <PreviewLine key={l.id} text={l.title} />
+                <PreviewLine key={l.id} href={`/literature-reviews/${l.id}`} text={l.title} />
               ))
             : null}
         </WorkspaceCard>
@@ -308,7 +308,7 @@ export function ProjectWorkspace({
         >
           {reportsCount > 0
             ? reports.slice(0, 3).map((r) => (
-                <PreviewLine key={r.id} text={r.title || "Untitled report"} />
+                <PreviewLine key={r.id} href={`/reports/${r.id}`} text={r.title || "Untitled report"} />
               ))
             : null}
         </WorkspaceCard>
@@ -323,7 +323,7 @@ export function ProjectWorkspace({
         >
           {papersCount > 0
             ? papers.slice(0, 3).map((p) => (
-                <PreviewLine key={p.id} text={p.title || "Untitled draft"} />
+                <PreviewLine key={p.id} href={`/papers/${p.id}`} text={p.title || "Untitled draft"} />
               ))
             : null}
         </WorkspaceCard>
