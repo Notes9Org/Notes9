@@ -257,7 +257,7 @@ export default async function ProjectDetailPage({
           <CardHeader>
             <CardTitle className="text-foreground">About this project</CardTitle>
           </CardHeader>
-          <CardContent className="grid gap-6 md:grid-cols-[minmax(220px,260px)_minmax(0,1fr)] md:items-start md:gap-8">
+          <CardContent className="grid gap-6 md:grid-cols-[minmax(280px,340px)_minmax(0,1fr)] md:items-start md:gap-8">
             <div className="space-y-4 md:min-w-0">
               <div className="flex flex-wrap items-center gap-2">
                 <Badge
@@ -306,9 +306,9 @@ export default async function ProjectDetailPage({
               </dl>
             </div>
 
-            <div className="min-w-0 max-w-xl justify-self-end space-y-2 text-xs leading-relaxed text-muted-foreground md:pl-2">
+            <div className="min-w-0 space-y-2 text-sm leading-relaxed text-muted-foreground md:pl-2">
               {project.description ? (
-                <HtmlContent content={project.description} className="text-xs" />
+                <HtmlContent content={project.description} className="text-sm" />
               ) : (
                 <p className="italic">No description yet.</p>
               )}
