@@ -117,7 +117,32 @@ export function resolveHeaderBreadcrumbs(
   const merged =
     dashboardCrumb && !pageHasDashboard ? [dashboardCrumb, ...page] : [...page]
 
-  return dedupeSegments(merged.length > 0 ? merged : auto)
+  const deduped = dedupeSegments(merged.length > 0 ? merged : auto)
+
+  // Enrich with icons from default routes if missing
+  return deduped.map((segment) => {
+    if (segment.icon) return segment
+
+    // 1. Try exact match by href
+    if (segment.href) {
+      const exactMatch = APP_ROUTE_CRUMBS.find((c) => c.path === segment.href)
+      if (exactMatch?.icon) return { ...segment, icon: exactMatch.icon }
+    }
+
+    // 2. Try match by label
+    const labelMatch = APP_ROUTE_CRUMBS.find((c) => c.title === segment.label)
+    if (labelMatch?.icon) return { ...segment, icon: labelMatch.icon }
+
+    // 3. Try prefix match by href (for dynamic IDs like /projects/123)
+    if (segment.href) {
+      const prefixMatch = APP_ROUTE_CRUMBS.find((c) =>
+        segment.href!.startsWith(`${c.path}/`),
+      )
+      if (prefixMatch?.icon) return { ...segment, icon: prefixMatch.icon }
+    }
+
+    return segment
+  })
 }
 
 export function buildBreadcrumbsFromPathname(
