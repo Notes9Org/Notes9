@@ -28,7 +28,78 @@ import {
   validatePdfBuffer,
 } from "@/lib/literature-pdf-storage"
 import { extractFirstPdfFromTarGz } from "@/lib/pmc-oa-package-pdf"
+import {
+  callCatalyst,
+  CatalystHttpError,
+  CatalystUnavailableError,
+} from "@/lib/catalyst-client"
 import type { SupabaseClient } from "@supabase/supabase-js"
+
+export class PdfContentVerificationFailedError extends Error {
+  constructor(
+    public readonly confidence: number,
+    public readonly triedUrls: string[]
+  ) {
+    super(
+      `PDF content did not match the paper title (confidence ${confidence.toFixed(2)}). ` +
+        `Tried ${triedUrls.length} candidate URL${triedUrls.length === 1 ? "" : "s"}.`
+    )
+    this.name = "PdfContentVerificationFailedError"
+  }
+}
+
+type PdfVerifyAttempt = {
+  url: string
+  status?: number
+  fetched_bytes?: number
+  confidence?: number
+  extracted_snippet?: string | null
+  error?: string | null
+}
+
+type PdfVerifyResponse = {
+  verified_url: string | null
+  confidence: number
+  threshold: number
+  extracted_title?: string | null
+  tried: PdfVerifyAttempt[]
+}
+
+/**
+ * Call the catalyst verifier. Returns null on any failure (network, missing
+ * config, 5xx) — the caller treats that as "verification unavailable, fall
+ * back to legacy magic-byte check".
+ */
+async function verifyPdfCandidatesViaCatalyst(params: {
+  candidateUrls: string[]
+  expectedTitle: string
+  accessToken: string
+  threshold?: number
+}): Promise<PdfVerifyResponse | null> {
+  try {
+    return await callCatalyst<
+      {
+        candidate_urls: string[]
+        expected_title: string
+        threshold?: number
+      },
+      PdfVerifyResponse
+    >(
+      "/literature/pdf/verify",
+      {
+        candidate_urls: params.candidateUrls,
+        expected_title: params.expectedTitle,
+        ...(params.threshold != null ? { threshold: params.threshold } : {}),
+      },
+      params.accessToken,
+      { timeoutMs: 30_000 }
+    )
+  } catch (e) {
+    if (e instanceof CatalystUnavailableError) return null
+    if (e instanceof CatalystHttpError) return null
+    return null
+  }
+}
 
 /** Shown in User-Agent for NCBI/PMC polite use — must be a reachable contact URL. */
 const NOTES9_CONTACT = process.env.NOTES9_CONTACT_URL ?? "https://notes9.com"
@@ -352,16 +423,54 @@ export async function importLiteraturePdfFromRemote(params: {
   oaPackageTgzUrl?: string | null
   matchSource: PdfMatchSource
   catalogNote?: string
+  /**
+   * Title to verify the downloaded PDF against. When set together with
+   * `accessToken`, the catalyst /literature/pdf/verify endpoint is called
+   * before download. If verification fails (confidence < threshold), this
+   * function throws `PdfContentVerificationFailedError` and no PDF is stored.
+   * Pass null / undefined to keep the legacy "trust the URL" behavior.
+   */
+  expectedTitle?: string | null
+  /** Supabase access token used for the catalyst verify call. */
+  accessToken?: string | null
+  /** Optional override; defaults to catalyst's server-side default (0.55). */
+  verifyThreshold?: number
 }) {
   if (params.pdfUrls.length === 0 && !params.oaPackageTgzUrl) {
     throw new Error("No PDF URLs to try")
   }
 
+  // Content verification (Phase 3 of snuggly-meandering-pinwheel).
+  // When the expected title and an access token are provided, route the
+  // candidate URLs through catalyst first so we only download PDFs that
+  // demonstrably match the paper.
+  let verifyResult: PdfVerifyResponse | null = null
+  let pdfUrlsToTry = params.pdfUrls
+  const expectedTitle = params.expectedTitle?.trim()
+  if (expectedTitle && params.accessToken && params.pdfUrls.length > 0) {
+    verifyResult = await verifyPdfCandidatesViaCatalyst({
+      candidateUrls: params.pdfUrls,
+      expectedTitle,
+      accessToken: params.accessToken,
+      ...(params.verifyThreshold != null ? { threshold: params.verifyThreshold } : {}),
+    })
+    if (verifyResult) {
+      if (!verifyResult.verified_url) {
+        throw new PdfContentVerificationFailedError(
+          verifyResult.confidence,
+          verifyResult.tried.map((t) => t.url)
+        )
+      }
+      // Restrict the download to the URL that verified.
+      pdfUrlsToTry = [verifyResult.verified_url]
+    }
+  }
+
   let buffer: ArrayBuffer
   let usedUrl: string
-  if (params.pdfUrls.length > 0) {
+  if (pdfUrlsToTry.length > 0) {
     try {
-      const r = await fetchFirstPdfBuffer(params.pdfUrls)
+      const r = await fetchFirstPdfBuffer(pdfUrlsToTry)
       buffer = r.buffer
       usedUrl = r.usedUrl
     } catch (e) {
@@ -396,6 +505,19 @@ export async function importLiteraturePdfFromRemote(params: {
     throw new Error(uploadError.message)
   }
 
+  const pdfMetadata: Record<string, unknown> = {
+    source_url: usedUrl,
+    tried_urls: triedUrls,
+    ...(params.catalogNote ? { note: params.catalogNote } : {}),
+  }
+  if (verifyResult) {
+    pdfMetadata.pdf_match_confidence = verifyResult.confidence
+    pdfMetadata.pdf_match_threshold = verifyResult.threshold
+    if (verifyResult.extracted_title) {
+      pdfMetadata.pdf_extracted_title_snippet = verifyResult.extracted_title
+    }
+  }
+
   const { error: updateError } = await params.supabase
     .from("literature_reviews")
     .update({
@@ -408,11 +530,7 @@ export async function importLiteraturePdfFromRemote(params: {
       pdf_checksum: clampText(checksum, "pdf_checksum"),
       pdf_match_source: clampText(params.matchSource, "pdf_match_source"),
       pdf_import_status: "success",
-      pdf_metadata: {
-        source_url: usedUrl,
-        tried_urls: triedUrls,
-        ...(params.catalogNote ? { note: params.catalogNote } : {}),
-      },
+      pdf_metadata: pdfMetadata,
     })
     .eq("id", params.literatureId)
 

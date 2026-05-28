@@ -24,6 +24,12 @@ export interface SearchPaper {
   articlePageUrl?: string;
   /** Citation count when known (primarily from OpenAlex). Used for "Most cited" sort. */
   citedByCount?: number;
+  /**
+   * Catalyst PDF-content verification confidence in [0,1]. Populated only when
+   * the PDF was verified via `/literature/pdf/verify` at staging time. Absent on
+   * un-verified rows. Renderers can show a low-confidence indicator.
+   */
+  pdfMatchConfidence?: number;
   source:
     | "PubMed"
     | "Europe PMC"

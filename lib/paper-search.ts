@@ -1,4 +1,11 @@
 /**
+ * @deprecated As of plan `snuggly-meandering-pinwheel` (2026-05-28), the live
+ * search pipeline runs in the catalyst FastAPI service
+ * (`AI/catalyst/api/literature_search.py`). `app/api/search-papers/route.ts` now
+ * proxies to it. This file is kept as a vendored reference during the porting
+ * window and will be deleted in Phase 5 once the catalyst path has reached
+ * parity in production.
+ *
  * Literature search aggregates PubMed, Europe PMC (preprints + non-preprint index), and OpenAlex.
  * - Query variants + synonym / MeSH hints for PubMed (`paper-query-variants`); verbose NL → compact line for OpenAlex/Europe/preprints + PubMed OR-token fallback.
  * - Bounded second OpenAlex pass when PubMed is thin.
