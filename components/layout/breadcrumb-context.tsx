@@ -16,7 +16,7 @@ function serializeSegments(s: BreadcrumbSegment[]): string {
   return s.map((seg) => `${seg.label}|${seg.href ?? ''}`).join('')
 }
 
-export type BreadcrumbSegment = { label: string; href?: string }
+export type BreadcrumbSegment = { label: string; href?: string; icon?: React.ElementType }
 
 type BreadcrumbContextValue = {
   segments: BreadcrumbSegment[]

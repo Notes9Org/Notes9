@@ -40,6 +40,7 @@ import { createClient } from "@/lib/supabase/client";
 import { LITERATURE_DRAG_MIME } from "@/lib/catalyst-agent-types";
 import { CATALYST_MENTION_DRAG_MIME } from "@/lib/catalyst-mention-types";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { useProjectScope } from "@/contexts/project-scope-context";
 
 interface LiteratureReview {
   id: string;
@@ -138,6 +139,7 @@ export function RepoTab({
   lockProjectFilter = false,
 }: RepoTabProps) {
   const router = useRouter();
+  const { projectName: scopedProjectName } = useProjectScope();
   const [activeTab, setActiveTab] = useState<string>("list");
   const [openTabs, setOpenTabs] = useState<string[]>([]);
   const [isInitialized, setIsInitialized] = useState(false);
@@ -177,23 +179,12 @@ export function RepoTab({
   };
 
   useEffect(() => {
-    if (!initialProjectFilterId) {
-      if (!lockProjectFilter) {
-        setSelectedProjectId("all");
-      }
-      return;
-    }
-    if (projects.some((p) => p.id === initialProjectFilterId)) {
+    if (initialProjectFilterId) {
       setSelectedProjectId(initialProjectFilterId);
+    } else {
+      setSelectedProjectId("all");
     }
-  }, [initialProjectFilterId, lockProjectFilter, projects]);
-
-  useEffect(() => {
-    if (!lockProjectFilter || !initialProjectFilterId) return;
-    setSelectedProjectId((current) =>
-      current === initialProjectFilterId ? current : initialProjectFilterId
-    );
-  }, [lockProjectFilter, initialProjectFilterId]);
+  }, [initialProjectFilterId]);
 
   const newManualReferenceHref =
     lockProjectFilter && initialProjectFilterId
@@ -334,6 +325,29 @@ export function RepoTab({
     );
   };
 
+  const projectOptions = useMemo(() => {
+    const optsMap = new Map<string, string>();
+    for (const p of projects) {
+      optsMap.set(p.id, p.name);
+    }
+    if (literatureReviews) {
+      for (const lit of literatureReviews) {
+        const pid = lit.project?.id || (lit as any).project_id;
+        const pname = lit.project?.name;
+        if (pid && !optsMap.has(pid)) {
+          optsMap.set(pid, pname || `Project ${pid.slice(0, 8)}`);
+        }
+      }
+    }
+    if (initialProjectFilterId && !optsMap.has(initialProjectFilterId)) {
+      optsMap.set(initialProjectFilterId, scopedProjectName || `Project ${initialProjectFilterId.slice(0, 8)}`);
+    }
+
+    return Array.from(optsMap.entries())
+      .map(([value, label]) => ({ value, label }))
+      .sort((a, b) => a.label.localeCompare(b.label));
+  }, [projects, literatureReviews, initialProjectFilterId, scopedProjectName]);
+
   const filteredExperiments = useMemo(
     () =>
       selectedProjectId === "all"
@@ -370,9 +384,9 @@ export function RepoTab({
         })();
 
         const matchesProject =
-          selectedProjectId === "all" || lit.project?.id === selectedProjectId;
+          selectedProjectId === "all" || lit.project?.id === selectedProjectId || (lit as any).project_id === selectedProjectId;
         const matchesExperiment =
-          selectedExperimentId === "all" || lit.experiment?.id === selectedExperimentId;
+          selectedExperimentId === "all" || lit.experiment?.id === selectedExperimentId || (lit as any).experiment_id === selectedExperimentId;
         const matchesStatus =
           selectedStatus === "all" || lit.status === selectedStatus;
 
@@ -404,10 +418,6 @@ export function RepoTab({
     setSelectedExperimentId("all");
     setSelectedStatus("all");
     setSearchQuery("");
-    if (lockProjectFilter || initialProjectFilterId) {
-      router.push("/literature-reviews?tab=repo");
-      return;
-    }
     setSelectedProjectId("all");
   };
 
@@ -551,21 +561,20 @@ export function RepoTab({
 
         <div className="flex min-w-0 flex-col gap-3 lg:flex-row lg:flex-wrap lg:items-center">
           <Select
-            value={lockProjectFilter && initialProjectFilterId ? initialProjectFilterId : selectedProjectId}
+            value={selectedProjectId}
             onValueChange={(value) => {
               setSelectedProjectId(value);
               setSelectedExperimentId("all");
             }}
-            disabled={lockProjectFilter && !!initialProjectFilterId}
           >
             <SelectTrigger className="w-full lg:w-[180px]">
               <SelectValue placeholder="Project" />
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All projects</SelectItem>
-              {projects.map((project) => (
-                <SelectItem key={project.id} value={project.id}>
-                  {project.name}
+              {projectOptions.map((project) => (
+                <SelectItem key={project.value} value={project.value}>
+                  {project.label}
                 </SelectItem>
               ))}
             </SelectContent>

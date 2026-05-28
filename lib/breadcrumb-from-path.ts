@@ -4,32 +4,37 @@ import {
   FROM_DASHBOARD_VALUE,
 } from "@/lib/from-dashboard"
 import { isLikelyUuid } from "@/lib/url-project-param"
+import {
+  LayoutDashboard, Folder, FlaskConical, Microscope, FileText, 
+  TestTube, BookOpen, PenTool, Notebook, Settings, BarChart, 
+  Sparkles, Database, Building, Map
+} from "lucide-react"
 
 type RouteCrumbConfig = {
   path: string
   title: string
+  icon?: React.ElementType
   newLabel?: string
   detailLabel?: string
   children?: Record<string, { label: string; newLabel?: string }>
 }
 
-/** Longest paths first so nested sections match correctly. */
 export const APP_ROUTE_CRUMBS: RouteCrumbConfig[] = [
-  { path: "/literature-reviews", title: "Literature", newLabel: "New Review", detailLabel: "Review" },
-  { path: "/research-map", title: "Research map" },
-  { path: "/lab-notes", title: "Lab Notes", detailLabel: "Lab Note" },
-  { path: "/dashboard", title: "Dashboard" },
-  { path: "/experiments", title: "Experiments", newLabel: "New Experiment", detailLabel: "Experiment" },
-  { path: "/equipment", title: "Equipment", newLabel: "New Equipment", detailLabel: "Equipment" },
-  { path: "/protocols", title: "Protocols", newLabel: "New Protocol", detailLabel: "Protocol" },
-  { path: "/projects", title: "Projects", newLabel: "New Project", detailLabel: "Project" },
-  { path: "/samples", title: "Samples", newLabel: "New Sample", detailLabel: "Sample" },
-  { path: "/settings", title: "Settings", children: { organization: { label: "Organization" } } },
-  { path: "/reports", title: "Reports", detailLabel: "Report" },
-  { path: "/catalyst", title: "Catalyst", detailLabel: "Conversation" },
-  { path: "/papers", title: "Writing", newLabel: "New Paper", detailLabel: "Paper" },
-  { path: "/data", title: "Data" },
-  { path: "/org", title: "Organization", children: { setup: { label: "Setup" } } },
+  { path: "/literature-reviews", title: "Literature", icon: BookOpen, newLabel: "New Review", detailLabel: "Review" },
+  { path: "/research-map", title: "Research map", icon: Map },
+  { path: "/lab-notes", title: "Lab Notes", icon: Notebook, detailLabel: "Lab Note" },
+  { path: "/dashboard", title: "Dashboard", icon: LayoutDashboard },
+  { path: "/experiments", title: "Experiments", icon: FlaskConical, newLabel: "New Experiment", detailLabel: "Experiment" },
+  { path: "/equipment", title: "Equipment", icon: Microscope, newLabel: "New Equipment", detailLabel: "Equipment" },
+  { path: "/protocols", title: "Protocols", icon: FileText, newLabel: "New Protocol", detailLabel: "Protocol" },
+  { path: "/projects", title: "Projects", icon: Folder, newLabel: "New Project", detailLabel: "Project" },
+  { path: "/samples", title: "Samples", icon: TestTube, newLabel: "New Sample", detailLabel: "Sample" },
+  { path: "/settings", title: "Settings", icon: Settings, children: { organization: { label: "Organization" } } },
+  { path: "/reports", title: "Reports", icon: BarChart, detailLabel: "Report" },
+  { path: "/catalyst", title: "Catalyst", icon: Sparkles, detailLabel: "Conversation" },
+  { path: "/papers", title: "Writing", icon: PenTool, newLabel: "New Paper", detailLabel: "Paper" },
+  { path: "/data", title: "Data", icon: Database },
+  { path: "/org", title: "Organization", icon: Building, children: { setup: { label: "Setup" } } },
 ].sort((a, b) => b.path.length - a.path.length)
 
 const PROJECT_SCOPED_LIST_PATHS = new Set([
@@ -124,15 +129,15 @@ export function buildBreadcrumbsFromPathname(
   const segments: BreadcrumbSegment[] = []
 
   if (searchParams?.get(FROM_DASHBOARD_PARAM) === FROM_DASHBOARD_VALUE) {
-    segments.push({ label: "Dashboard", href: "/dashboard" })
+    segments.push({ label: "Dashboard", href: "/dashboard", icon: LayoutDashboard })
   }
 
   if (normalized === "/" || normalized === "/dashboard") {
     if (segments.length > 0) {
-      segments.push({ label: "Dashboard" })
+      segments.push({ label: "Dashboard", icon: LayoutDashboard })
       return segments
     }
-    return [{ label: "Dashboard" }]
+    return [{ label: "Dashboard", icon: LayoutDashboard }]
   }
 
   const config = findRouteConfig(normalized)
@@ -151,12 +156,12 @@ export function buildBreadcrumbsFromPathname(
     ) {
       return [
         ...segments,
-        { label: "Projects", href: "/projects" },
-        { label: projectName, href: `/projects/${projectId}` },
-        { label: config.title },
+        { label: "Projects", href: "/projects", icon: Folder },
+        { label: projectName, href: `/projects/${projectId}`, icon: Folder },
+        { label: config.title, icon: config.icon },
       ]
     }
-    segments.push({ label: config.title })
+    segments.push({ label: config.title, icon: config.icon })
     return segments
   }
 
@@ -164,7 +169,7 @@ export function buildBreadcrumbsFromPathname(
   const parts = rest.split("/").filter(Boolean)
   const first = parts[0] ?? ""
 
-  segments.push({ label: config.title, href: config.path })
+  segments.push({ label: config.title, href: config.path, icon: config.icon })
 
   if (first === "new") {
     segments.push({

@@ -89,13 +89,16 @@ export function PapersPageInner({ projects = [] }: PapersPageInnerProps = {}) {
       : Array.from(
           new Map(
             papers
-              .filter((p) => p.project?.id && p.project?.name)
-              .map((p) => [p.project!.id, p.project!.name])
+              .filter((p) => p.project?.id || (p as any).project_id)
+              .map((p) => [
+                p.project?.id || (p as any).project_id, 
+                p.project?.name || `Project ${(p.project?.id || (p as any).project_id).slice(0, 8)}`
+              ])
           ).entries()
         ).map(([value, label]) => ({ value, label }))
 
-    if (projectId && projectName && !opts.some((o) => o.value === projectId)) {
-      opts.push({ value: projectId, label: projectName })
+    if (projectId && !opts.some((o) => o.value === projectId)) {
+      opts.push({ value: projectId, label: projectName || `Project ${projectId.slice(0, 8)}` })
     }
 
     return opts.sort((a, b) => a.label.localeCompare(b.label))
@@ -103,7 +106,10 @@ export function PapersPageInner({ projects = [] }: PapersPageInnerProps = {}) {
 
   const filteredPapers = useMemo(() => {
     if (projectFilter === FILTER_ALL) return papers
-    return papers.filter((p) => p.project?.id === projectFilter)
+    return papers.filter((p) => {
+      const pid = p.project?.id || (p as any).project_id
+      return pid === projectFilter
+    })
   }, [papers, projectFilter])
 
   return (

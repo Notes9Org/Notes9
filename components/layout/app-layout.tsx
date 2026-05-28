@@ -145,13 +145,15 @@ function HeaderTitle() {
               {seg.href ? (
                 <Link
                   href={seg.href}
-                  className="transition-colors hover:text-foreground whitespace-nowrap"
+                  className="transition-colors hover:text-foreground whitespace-nowrap flex items-center gap-1.5"
                   title={seg.label}
                 >
+                  {seg.icon && <seg.icon className="h-4 w-4 shrink-0 text-muted-foreground group-hover:text-foreground transition-colors" aria-hidden="true" />}
                   {shortenLabel(seg.label)}
                 </Link>
               ) : (
-                <span className="font-normal text-foreground whitespace-nowrap" title={seg.label}>
+                <span className="font-normal text-foreground whitespace-nowrap flex items-center gap-1.5" title={seg.label}>
+                  {seg.icon && <seg.icon className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />}
                   {shortenLabel(seg.label)}
                 </span>
               )}
@@ -170,11 +172,15 @@ function HeaderTitle() {
         <span key={seg.href ?? `${seg.label}-${i}`} className="inline-flex items-center gap-1.5 shrink-0 min-w-0">
           {i > 0 && <ChevronRight className="size-3.5 shrink-0" aria-hidden />}
           {seg.href ? (
-            <Link href={seg.href} className="transition-colors hover:text-foreground truncate min-w-0 block">
-              {seg.label}
+            <Link href={seg.href} className="transition-colors hover:text-foreground truncate min-w-0 flex items-center gap-1.5 group">
+              {seg.icon && <seg.icon className="h-4 w-4 shrink-0 text-muted-foreground group-hover:text-foreground transition-colors" aria-hidden="true" />}
+              <span className="truncate">{seg.label}</span>
             </Link>
           ) : (
-            <span className="font-normal text-foreground truncate min-w-0 block">{seg.label}</span>
+            <span className="font-normal text-foreground truncate min-w-0 flex items-center gap-1.5">
+              {seg.icon && <seg.icon className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />}
+              <span className="truncate">{seg.label}</span>
+            </span>
           )}
         </span>
       ))}
