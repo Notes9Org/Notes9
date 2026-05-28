@@ -5,10 +5,11 @@ import {
 } from "@/lib/from-dashboard"
 import { isLikelyUuid } from "@/lib/url-project-param"
 import {
-  LayoutDashboard, Folder, FlaskConical, Microscope, FileText, 
-  TestTube, BookOpen, PenTool, Notebook, Settings, BarChart, 
-  Sparkles, Database, Building, Map
+  Home, Folder, FlaskConical, Microscope, FileText, 
+  TestTube, BookOpen, FileEdit, NotebookPen, Settings, BarChart, 
+  Sparkles, Database, Building, Network
 } from "lucide-react"
+import { ClipboardInfoIcon } from "@/components/ui/clipboard-info-icon"
 
 type RouteCrumbConfig = {
   path: string
@@ -21,18 +22,18 @@ type RouteCrumbConfig = {
 
 export const APP_ROUTE_CRUMBS: RouteCrumbConfig[] = [
   { path: "/literature-reviews", title: "Literature", icon: BookOpen, newLabel: "New Review", detailLabel: "Review" },
-  { path: "/research-map", title: "Research map", icon: Map },
-  { path: "/lab-notes", title: "Lab Notes", icon: Notebook, detailLabel: "Lab Note" },
-  { path: "/dashboard", title: "Dashboard", icon: LayoutDashboard },
+  { path: "/research-map", title: "Research map", icon: Network },
+  { path: "/lab-notes", title: "Lab Notes", icon: NotebookPen, detailLabel: "Lab Note" },
+  { path: "/dashboard", title: "Dashboard", icon: Home },
   { path: "/experiments", title: "Experiments", icon: FlaskConical, newLabel: "New Experiment", detailLabel: "Experiment" },
   { path: "/equipment", title: "Equipment", icon: Microscope, newLabel: "New Equipment", detailLabel: "Equipment" },
-  { path: "/protocols", title: "Protocols", icon: FileText, newLabel: "New Protocol", detailLabel: "Protocol" },
+  { path: "/protocols", title: "Protocols", icon: ClipboardInfoIcon, newLabel: "New Protocol", detailLabel: "Protocol" },
   { path: "/projects", title: "Projects", icon: Folder, newLabel: "New Project", detailLabel: "Project" },
   { path: "/samples", title: "Samples", icon: TestTube, newLabel: "New Sample", detailLabel: "Sample" },
   { path: "/settings", title: "Settings", icon: Settings, children: { organization: { label: "Organization" } } },
-  { path: "/reports", title: "Reports", icon: BarChart, detailLabel: "Report" },
+  { path: "/reports", title: "Reports", icon: FileText, detailLabel: "Report" },
   { path: "/catalyst", title: "Catalyst", icon: Sparkles, detailLabel: "Conversation" },
-  { path: "/papers", title: "Writing", icon: PenTool, newLabel: "New Paper", detailLabel: "Paper" },
+  { path: "/papers", title: "Writing", icon: FileEdit, newLabel: "New Paper", detailLabel: "Paper" },
   { path: "/data", title: "Data", icon: Database },
   { path: "/org", title: "Organization", icon: Building, children: { setup: { label: "Setup" } } },
 ].sort((a, b) => b.path.length - a.path.length)
@@ -154,15 +155,15 @@ export function buildBreadcrumbsFromPathname(
   const segments: BreadcrumbSegment[] = []
 
   if (searchParams?.get(FROM_DASHBOARD_PARAM) === FROM_DASHBOARD_VALUE) {
-    segments.push({ label: "Dashboard", href: "/dashboard", icon: LayoutDashboard })
+    segments.push({ label: "Dashboard", href: "/dashboard", icon: Home })
   }
 
   if (normalized === "/" || normalized === "/dashboard") {
     if (segments.length > 0) {
-      segments.push({ label: "Dashboard", icon: LayoutDashboard })
+      segments.push({ label: "Dashboard", icon: Home })
       return segments
     }
-    return [{ label: "Dashboard", icon: LayoutDashboard }]
+    return [{ label: "Dashboard", icon: Home }]
   }
 
   const config = findRouteConfig(normalized)
