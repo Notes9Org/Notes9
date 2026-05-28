@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useState, useCallback, useRef } from "react"
-import { Activity } from "lucide-react"
+import { BrainCircuit } from "lucide-react"
 
 /** Cache key for localStorage. */
 const CACHE_KEY = "n9:activity-summary"
@@ -127,13 +127,13 @@ export function ActivitySummary() {
         ${isVisible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-2"}
       `}
     >
-      <Activity
+      <BrainCircuit
         aria-hidden
-        className="size-[18px] shrink-0 text-[color:var(--n9-accent)] opacity-70"
-        strokeWidth={1.6}
+        className="size-[22px] shrink-0 text-[color:var(--n9-accent)] opacity-80"
+        strokeWidth={1.5}
       />
       <p
-        className="text-[15px] leading-relaxed text-muted-foreground/90 italic tracking-wide"
+        className="text-lg leading-relaxed text-muted-foreground/90 italic tracking-wide"
         style={{ fontFamily: "var(--font-family-display)" }}
       >
         {summary}

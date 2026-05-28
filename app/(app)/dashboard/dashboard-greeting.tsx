@@ -15,21 +15,36 @@ import { timeOfDayLabel } from "@/lib/greeting"
  */
 export function DashboardGreeting({ name }: { name: string }) {
   const [timeOfDay, setTimeOfDay] = useState<"Morning" | "Afternoon" | "Evening">("Morning")
+  const [dateStr, setDateStr] = useState("")
 
   useEffect(() => {
     setTimeOfDay(timeOfDayLabel(new Date().getHours()))
+    setDateStr(
+      new Date().toLocaleDateString("en-US", {
+        weekday: "long",
+        month: "short",
+        day: "numeric",
+      })
+    )
   }, [])
 
   return (
-    <div className="mx-auto flex w-full max-w-3xl items-center justify-center gap-3 md:gap-4 pt-2 md:pt-6">
-      <Sparkles
-        aria-hidden
-        className="size-7 md:size-9 shrink-0 text-[color:var(--n9-accent)]"
-        strokeWidth={1.5}
-      />
-      <h1 className="font-display text-3xl md:text-5xl font-normal tracking-tight leading-tight text-balance text-foreground">
-        {timeOfDay}, {name}
-      </h1>
+    <div className="mx-auto flex w-full max-w-3xl flex-col items-center justify-center pt-2 md:pt-6">
+      {dateStr && (
+        <div className="mb-2 md:mb-3 text-xs md:text-sm font-medium tracking-widest text-muted-foreground uppercase">
+          {dateStr}
+        </div>
+      )}
+      <div className="flex items-center gap-3 md:gap-4">
+        <Sparkles
+          aria-hidden
+          className="size-7 md:size-9 shrink-0 text-[color:var(--n9-accent)]"
+          strokeWidth={1.5}
+        />
+        <h1 className="font-display text-3xl md:text-5xl font-normal tracking-tight leading-tight text-balance text-foreground">
+          {timeOfDay}, {name}
+        </h1>
+      </div>
     </div>
   )
 }
