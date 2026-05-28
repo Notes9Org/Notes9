@@ -1,8 +1,14 @@
-/** SSE event: thinking – agent step (e.g. "Calling SQL", "Calling RAG") */
+// MIRROR of AI/catalyst/agents/core/sse_schema.py — keep in sync (golden contract tests will fail otherwise)
+
+// ── Payload types ─────────────────────────────────────────────────────────────
+
+/** SSE event: thinking – agent reasoning step */
 export interface ThinkingPayload {
-  node: string;
   status: string;
   message: string;
+  node?: string;
+  stage?: string;
+  detail?: string;
   intent?: string;
   conclusion?: string;
   decision?: string;
@@ -11,38 +17,75 @@ export interface ThinkingPayload {
   sql?: string;
   verdict?: string;
   issues?: string[];
+  [key: string]: unknown;
 }
 
-/** SSE event: sql – SQL query from agent */
-export interface SqlPayload {
-  query: string;
+/** SSE event: thinking_token – reasoning delta, appended to thinkingTokenBuffer only */
+export interface ThinkingTokenPayload {
+  delta: string;
 }
 
-/** SSE event: rag_chunks – retrieved document chunks */
-export interface RagChunk {
-  source_type: string;
-  source_id: string;
-  source_name?: string;
-  chunk_id?: string | null;
-  page_number?: number | null;
-  excerpt: string;
-  relevance: number;
-  /** e.g. abstract vs pdf — drives literature deep-link tab + highlight surface */
-  content_surface?: string | null;
-}
-
-export interface RagChunksPayload {
-  message: string;
-  count: number;
-  chunks: RagChunk[];
-}
-
-/** SSE event: token – streaming answer chunk */
+/**
+ * SSE event: token – streaming answer chunk.
+ * Canonical wire field is `delta`; `text` and `token` are accepted by the
+ * parser for legacy compatibility only.
+ */
 export interface TokenPayload {
-  text: string;
+  /** Canonical wire field. */
+  delta: string;
+  /** Legacy alias — accepted by parser for back-compat. */
+  text?: string;
+  /** Legacy alias — accepted by parser for back-compat. */
+  token?: string;
 }
 
-/** Grounding item: POST /notes9 returns `resources[]` (aligned with POST /chat). */
+/** SSE event: text_reset – backend signals the visible answer buffer should be cleared */
+export type TextResetPayload = Record<string, never>;
+
+/** SSE event: tool_start – a tool invocation has begun */
+export interface ToolStartPayload {
+  /** Stable opaque correlation key — do NOT display; use `label` instead. */
+  tool: string;
+  /** Researcher-facing narration supplied by Tool.narrate_start(). */
+  label: string;
+  args_preview?: string;
+  [key: string]: unknown;
+}
+
+/** SSE event: tool_call – tool completed (summary card data) */
+export interface ToolCallPayload {
+  tool: string;
+  label: string;
+  status: string;
+  citations_count: number;
+  latency_ms: number;
+  // NOTE: `quality` was stripped in routes.py and is intentionally absent here.
+  [key: string]: unknown;
+}
+
+/** SSE event: tool_result – tool result detail */
+export interface ToolResultPayload {
+  tool: string;
+  label: string;
+  status: string;
+  citations_count: number;
+  latency_ms: number;
+  source_names?: string[];
+  preview?: string;
+  [key: string]: unknown;
+}
+
+/** SSE event: citations_manifest – full citation map for the completed answer */
+export interface CitationsManifestPayload {
+  manifest: Record<string, unknown>;
+}
+
+/** SSE event: citations_update – running citation count during tool execution */
+export interface CitationsUpdatePayload {
+  count: number;
+}
+
+/** Grounding item returned inside DonePayload.resources */
 export interface GroundingResource {
   display_label?: string | null;
   source_type: string;
@@ -53,54 +96,28 @@ export interface GroundingResource {
   chunk_id?: string | null;
   page_number?: number | null;
   content_surface?: string | null;
-  /** External URL when the source has one — e.g. the actual web page for a
-   * `web` citation, or the signed PDF URL for a literature review. Workspace
-   * records (lab notes, protocols, etc.) leave this empty and rely on the
-   * internal route from `getCitationRoute` instead. */
   source_url?: string | null;
-  /** Where the excerpt came from inside the source — e.g. `pdf_extracted_text`,
-   * `abstract`. Display-only hint; safe to ignore. */
   excerpt_source?: string | null;
-  /** How the source was obtained. `exact` = fetched by ID/name or returned by a
-   * structured SQL query — NOT a similarity score, so the UI must not render it
-   * as "N% match". `semantic` = vector retrieval (relevance is a real cosine
-   * score). Absent → treat as semantic. */
   match_kind?: string | null;
-  /** Display number, e.g. "3" or "3.2" (ADR-0006). Base is per document; the
-   * ".N" sub-number distinguishes distinct passages of the same document.
-   * Render verbatim; absent → fall back to list position. */
   cite_label?: string | null;
 }
 
 /** @deprecated Use GroundingResource; kept for imports that still say Citation */
 export type Citation = GroundingResource;
 
-/** Final agent response (POST /notes9 non-stream and SSE `done` when streaming is enabled upstream). */
+/** SSE event: done – final agent response */
 export interface DonePayload {
   role?: string;
-  /** Primary answer text (same key as POST /chat). */
   content: string;
-  /** Alias for legacy clients; mirrors `content` when normalized on the client. */
-  answer?: string;
   resources?: GroundingResource[];
-  /** Legacy / streaming shape; prefer `resources`. */
+  /** Legacy alias; mirrors content when normalised on the client. */
+  answer?: string;
+  /** Legacy streaming shape; prefer resources. */
   citations?: GroundingResource[];
   confidence?: number;
-  /** Free-text label describing what the agent did this turn (display only). */
   tool_used?: string;
   debug?: Record<string, unknown> | null;
-}
-
-/** SSE event: tool_output – Individual tool completion details */
-export interface ToolOutputPayload {
-  tool: 'sql' | 'rag' | 'web_search' | string;
-  success: boolean;
-  row_count?: number;
-  chunk_count?: number;
-  file_names?: string[];
-  document_names?: string[];
-  execution_time_ms?: number;
-  avg_similarity?: number;
+  [key: string]: unknown;
 }
 
 /** SSE event: error */
@@ -110,5 +127,93 @@ export interface ErrorPayload {
 
 /** SSE event: ping – keep-alive */
 export interface PingPayload {
-  ts: number;
+  ts?: number;
+  [key: string]: unknown;
+}
+
+// ── Legacy payload types (old LangGraph pipeline — kept for back-compat) ──────
+
+/** @deprecated LangGraph pipeline removed; kept so old imports compile */
+export interface SqlPayload {
+  query: string;
+}
+
+/** @deprecated LangGraph pipeline removed */
+export interface RagChunk {
+  source_type: string;
+  source_id: string;
+  source_name?: string;
+  chunk_id?: string | null;
+  page_number?: number | null;
+  excerpt: string;
+  relevance: number;
+  content_surface?: string | null;
+}
+
+/** @deprecated LangGraph pipeline removed */
+export interface RagChunksPayload {
+  message: string;
+  count: number;
+  chunks: RagChunk[];
+}
+
+/** @deprecated LangGraph pipeline removed */
+export interface ToolOutputPayload {
+  tool: "sql" | "rag" | "web_search" | string;
+  success: boolean;
+  row_count?: number;
+  chunk_count?: number;
+  file_names?: string[];
+  document_names?: string[];
+  execution_time_ms?: number;
+  avg_similarity?: number;
+}
+
+// ── Discriminated union ───────────────────────────────────────────────────────
+
+export type SseEvent =
+  | { event: "thinking"; data: ThinkingPayload }
+  | { event: "thinking_token"; data: ThinkingTokenPayload }
+  | { event: "token"; data: TokenPayload }
+  | { event: "text_reset"; data: TextResetPayload }
+  | { event: "tool_start"; data: ToolStartPayload }
+  | { event: "tool_call"; data: ToolCallPayload }
+  | { event: "tool_result"; data: ToolResultPayload }
+  | { event: "citations_manifest"; data: CitationsManifestPayload }
+  | { event: "citations_update"; data: CitationsUpdatePayload }
+  | { event: "done"; data: DonePayload }
+  | { event: "error"; data: ErrorPayload }
+  | { event: "ping"; data: PingPayload };
+
+// ── Type guard ────────────────────────────────────────────────────────────────
+
+const KNOWN_EVENT_TYPES = new Set([
+  "thinking",
+  "thinking_token",
+  "token",
+  "text_reset",
+  "tool_start",
+  "tool_call",
+  "tool_result",
+  "citations_manifest",
+  "citations_update",
+  "done",
+  "error",
+  "ping",
+] as const);
+
+/**
+ * Returns true when `raw` has a known `event` string and a non-null `data`
+ * object — i.e. it is a recognised SseEvent discriminated-union member.
+ * Used by the contract test to verify fixture entries are accepted.
+ */
+export function isSseEvent(raw: unknown): raw is SseEvent {
+  if (typeof raw !== "object" || raw === null) return false;
+  const r = raw as Record<string, unknown>;
+  return (
+    typeof r.event === "string" &&
+    KNOWN_EVENT_TYPES.has(r.event as never) &&
+    typeof r.data === "object" &&
+    r.data !== null
+  );
 }

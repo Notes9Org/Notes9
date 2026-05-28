@@ -70,14 +70,22 @@ export async function POST(req: Request) {
       clearTimeout(_timeout);
     }
 
-    const data = await response.json().catch(() => ({}));
+    let data: unknown;
+    try {
+      data = await response.json();
+    } catch (parseErr) {
+      const rawText = await response.text().catch(() => '');
+      console.error(JSON.stringify({ event: 'upstream_non_json', route: 'agent/run', status: response.status, snippet: rawText.slice(0, 500) }));
+      return NextResponse.json({ error: 'Upstream returned non-JSON response', status: response.status }, { status: 502 });
+    }
+    const dataObj = data as Record<string, unknown>;
     if (!response.ok) {
       return NextResponse.json(
-        data?.error ? { error: data.error } : data,
+        dataObj?.error ? { error: dataObj.error } : dataObj,
         { status: response.status }
       );
     }
-    return NextResponse.json(data);
+    return NextResponse.json(dataObj);
   } catch (error) {
     console.error('Agent proxy error:', error);
     return NextResponse.json(

@@ -20,13 +20,6 @@ import {
   normalizeAgentRelevance0to1,
 } from '@/lib/document-highlight';
 
-/**
- * Direct backend URL used for SSE streaming — the browser holds this connection
- * open itself, so there is no Vercel function timeout regardless of how long the
- * agent takes. Falls back to the Vercel proxy only when the public URL is absent.
- */
-const BACKEND_BASE = process.env.NEXT_PUBLIC_CHAT_API_URL?.replace(/\/$/, '') || '';
-const DIRECT_STREAM_URL = BACKEND_BASE ? `${BACKEND_BASE}/notes9/stream` : '';
 const PROXY_STREAM_URL = '/api/agent/stream';
 
 /** Workspace entity the user explicitly tagged for this turn. Catalyst preflights
@@ -78,7 +71,6 @@ export interface AgentStreamParams {
   options?: {
     debug?: boolean;
     max_retries?: number;
-    tags?: Array<{ kind: string; id: string; title: string }>;
     web_search?: 'on' | 'off';
   };
 }
@@ -156,6 +148,8 @@ export interface AgentStreamState {
   citationsManifest: CitationsManifest | null;
   toolOutputs: ToolOutput[];
   streamedAnswer: string;
+  /** Accumulated thinking/reasoning tokens from `thinking_token` events. */
+  thinkingTokenBuffer: string;
   donePayload: DonePayload | null;
   error: string | null;
   isStreaming: boolean;
@@ -294,6 +288,7 @@ export function useAgentStream() {
     citationsManifest: null,
     toolOutputs: [],
     streamedAnswer: '',
+    thinkingTokenBuffer: '',
     donePayload: null,
     error: null,
     isStreaming: false,
@@ -306,6 +301,9 @@ export function useAgentStream() {
       params: AgentStreamParams,
       token: string
     ): Promise<{ donePayload: DonePayload | null; error: string | null }> => {
+      if (abortControllerRef.current) {
+        try { abortControllerRef.current.abort(); } catch { /* ignore */ }
+      }
       abortControllerRef.current = new AbortController();
       const signal = abortControllerRef.current.signal;
 
@@ -320,6 +318,7 @@ export function useAgentStream() {
         citationsManifest: null,
         toolOutputs: [],
         streamedAnswer: '',
+        thinkingTokenBuffer: '',
         donePayload: null,
         error: null,
         isStreaming: true,
@@ -462,8 +461,7 @@ export function useAgentStream() {
                 if (payload && typeof payload === 'object') {
                   const p = payload as Record<string, unknown>;
                   const toolId = typeof p.tool === 'string' ? p.tool : 'unknown';
-                  const quality = typeof p.quality === 'string' ? p.quality : '';
-                  const status = (quality === 'error' || p.status === 'error' ? 'error' : 'done') as 'done' | 'error';
+                  const status = (p.status === 'error' ? 'error' : 'done') as 'done' | 'error';
                   const serverLabel = typeof p.label === 'string' ? p.label : '';
                   setState((s) => ({
                     ...s,
@@ -488,8 +486,7 @@ export function useAgentStream() {
                 if (payload && typeof payload === 'object') {
                   const p = payload as Record<string, unknown>;
                   const toolId = typeof p.tool === 'string' ? p.tool : 'unknown';
-                  const quality = typeof p.quality === 'string' ? p.quality : '';
-                  const status = (quality === 'error' || p.status === 'error' ? 'error' : 'done') as 'done' | 'error';
+                  const status = (p.status === 'error' ? 'error' : 'done') as 'done' | 'error';
                   const serverLabel = typeof p.label === 'string' ? p.label : '';
 
                   const sourceNames = Array.isArray(p.source_names)
@@ -609,6 +606,15 @@ export function useAgentStream() {
                 setState((s) => ({ ...s, streamedAnswer: '' }));
                 break;
               }
+              case 'thinking_token': {
+                const delta = payload && typeof (payload as { delta?: string }).delta === 'string'
+                  ? (payload as { delta: string }).delta
+                  : '';
+                if (delta) {
+                  setState((s) => ({ ...s, thinkingTokenBuffer: s.thinkingTokenBuffer + delta }));
+                }
+                break;
+              }
               case 'done': {
                 if (payload) {
                   const finished = normalizeNotes9AgentResponse(payload);
@@ -703,6 +709,7 @@ export function useAgentStream() {
       citationsManifest: null,
       toolOutputs: [],
       streamedAnswer: '',
+      thinkingTokenBuffer: '',
       donePayload: null,
       error: null,
       isStreaming: false,

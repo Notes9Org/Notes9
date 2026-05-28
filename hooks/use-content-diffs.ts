@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useCallback, useEffect } from "react"
+import { useState, useCallback, useEffect, useRef } from "react"
 import { diffWords } from "diff"
 import { createClient } from "@/lib/supabase/client"
 import { buildStoredSegments } from "@/lib/content-diff-segments"
@@ -45,6 +45,11 @@ export function useContentDiffs(
   const [diffs, setDiffs] = useState<ContentDiff[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const supabaseRef = useRef<ReturnType<typeof createClient> | null>(null)
+  function getSupabase() {
+    if (!supabaseRef.current) supabaseRef.current = createClient()
+    return supabaseRef.current
+  }
 
   // Reset cached history when the record we're tracking changes — otherwise
   // switching from note A to note B briefly shows A's history in the History
@@ -60,7 +65,7 @@ export function useContentDiffs(
     setLoading(true)
     setError(null)
     try {
-      const supabase = createClient()
+      const supabase = getSupabase()
       const { data, error: err } = await supabase
         .from("content_diffs")
         .select("*, user:profiles(first_name, last_name, email)")
@@ -115,7 +120,7 @@ export function useContentDiffs(
       })
 
       try {
-        const supabase = createClient()
+        const supabase = getSupabase()
         const {
           data: { user },
         } = await supabase.auth.getUser()

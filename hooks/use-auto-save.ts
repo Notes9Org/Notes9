@@ -115,8 +115,10 @@ export function useAutoSave({
     setStatus('saved')
   }, [])
 
-  // Cleanup on unmount
+  // Cleanup on unmount. Reset unmountedRef on (re)mount so React Strict Mode's
+  // double-invoke doesn't leave it permanently true after the first cleanup.
   useEffect(() => {
+    unmountedRef.current = false
     return () => {
       unmountedRef.current = true
       if (timeoutRef.current) {

@@ -462,6 +462,8 @@ export function RightSidebar({
   const chatScrollRef = useRef<HTMLDivElement>(null);
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [uploadQueue, setUploadQueue] = useState<string[]>([]);
+  const [messageAttachments, setMessageAttachments] = useState<Map<string, Attachment[]>>(new Map());
+  const pendingAttachmentsRef = useRef<Attachment[]>([]);
   const [mounted, setMounted] = useState(false);
   const [isDraggingContext, setIsDraggingContext] = useState(false);
   const [contextLoading, setContextLoading] = useState(false);
@@ -1409,6 +1411,7 @@ export function RightSidebar({
         : null;
 
     const currentAttachments = [...attachments];
+    if (currentAttachments.length > 0) pendingAttachmentsRef.current = currentAttachments;
     setInput('');
       setSelectedMentions([]);
     setAttachments([]);
@@ -1464,9 +1467,17 @@ export function RightSidebar({
         createdAt: new Date(),
       };
       setMessages((prev) => [...prev, userMessage]);
+      const pendingAttsLit = [...pendingAttachmentsRef.current];
+      pendingAttachmentsRef.current = [];
+      if (pendingAttsLit.length > 0) {
+        setMessageAttachments((prev) => new Map(prev).set(userMessageId, pendingAttsLit));
+      }
 
       const sessionId = currentSessionRef.current!;
-      const savedUser = await saveMessage(sessionId, 'user', userStoredContent);
+      const savedUser = await saveMessage(
+        sessionId, 'user', userStoredContent,
+        pendingAttsLit.length > 0 ? { attachments: pendingAttsLit } : undefined
+      );
       if (savedUser) {
         setSavedMessageIds((prev) => new Set(prev).add(savedUser.id));
         setMessages((prev) => {
@@ -1475,6 +1486,14 @@ export function RightSidebar({
           if (last?.role === 'user' && last.id === userMessageId) {
             next[next.length - 1] = { ...last, id: savedUser.id };
           }
+          return next;
+        });
+        setMessageAttachments((prev) => {
+          const atts = prev.get(userMessageId);
+          if (!atts) return prev;
+          const next = new Map(prev);
+          next.delete(userMessageId);
+          next.set(savedUser.id, atts);
           return next;
         });
       }
@@ -1523,9 +1542,17 @@ export function RightSidebar({
         createdAt: new Date(),
       };
       setMessages((prev) => [...prev, userMessage]);
+      const pendingAtts = [...pendingAttachmentsRef.current];
+      pendingAttachmentsRef.current = [];
+      if (pendingAtts.length > 0) {
+        setMessageAttachments((prev) => new Map(prev).set(userMessageId, pendingAtts));
+      }
 
       const sessionId = currentSessionRef.current!;
-      const savedUser = await saveMessage(sessionId, 'user', userStoredContent);
+      const savedUser = await saveMessage(
+        sessionId, 'user', userStoredContent,
+        pendingAtts.length > 0 ? { attachments: pendingAtts } : undefined
+      );
       if (savedUser) {
         setSavedMessageIds((prev) => new Set(prev).add(savedUser.id));
         setMessages((prev) => {
@@ -1534,6 +1561,14 @@ export function RightSidebar({
           if (last?.role === 'user' && last.id === userMessageId) {
             next[next.length - 1] = { ...last, id: savedUser.id };
           }
+          return next;
+        });
+        setMessageAttachments((prev) => {
+          const atts = prev.get(userMessageId);
+          if (!atts) return prev;
+          const next = new Map(prev);
+          next.delete(userMessageId);
+          next.set(savedUser.id, atts);
           return next;
         });
       }
@@ -2155,6 +2190,14 @@ export function RightSidebar({
       setMessages(chatMessages);
       setSavedMessageIds(new Set(msgs.map((m) => m.id)));
 
+      // Hydrate attachment previews from persisted metadata
+      const hydratedAtts = new Map<string, Attachment[]>();
+      for (const m of msgs) {
+        const atts = (m.metadata as { attachments?: Attachment[] } | undefined)?.attachments;
+        if (Array.isArray(atts) && atts.length > 0) hydratedAtts.set(m.id, atts);
+      }
+      setMessageAttachments(hydratedAtts);
+
       // If session has no meaningful title but has messages, set title from first user message
       const session = sessions.find((s) => s.id === sessionId);
       const needsTitle = !session?.title || session.title === 'New conversation' || session.title.trim() === '';
@@ -2379,11 +2422,12 @@ export function RightSidebar({
         id="tour-ai-chat"
       >
         {(attachments.length > 0 || uploadQueue.length > 0) && (
-          <div className="flex flex-wrap gap-2 px-3 pt-2">
+          <div className="flex flex-wrap gap-1.5 px-3 pt-2 pb-0.5">
             {attachments.map((a) => (
               <PreviewAttachment
                 key={a.url || a.name}
                 attachment={a}
+                compact
                 onRemove={() =>
                   setAttachments((prev) =>
                     prev.filter((x) => (x.url || x.name) !== (a.url || a.name)),
@@ -2395,6 +2439,7 @@ export function RightSidebar({
               <PreviewAttachment
                 key={`uploading-${name}`}
                 attachment={{ name, url: '', contentType: '', size: 0 }}
+                compact
                 isUploading
               />
             ))}
@@ -3113,13 +3158,22 @@ export function RightSidebar({
                         const notes9Sources = (() => {
                           if (!notes9Parsed || notes9Parsed.resources.length === 0) return null;
                           const body = notes9Parsed.bodyMarkdown;
-                          // Only surface resources whose [N] marker is present in the response text.
-                          // The backend always sends every retrieved document; suppress any that
-                          // weren't actually cited so the user doesn't see irrelevant citations.
+                          // Only surface resources whose [N] marker appears in the response text.
                           const cited = notes9Parsed.resources.filter((_, i) =>
                             new RegExp(`\\[${i + 1}\\]`).test(body)
                           );
-                          return cited.length > 0 ? cited : null;
+                          if (cited.length === 0) return null;
+                          // Suppress purely-negated citations: when the agent mentions a resource
+                          // only to say the content has nothing to do with it, the [N] appears
+                          // adjacent to negation phrases. Filter those out.
+                          const NEGATION = /\b(does not|doesn't|not related|nothing to do|no (?:text|information|content|data)|does not reference|not reference|unrelated)\b/i;
+                          const meaningful = cited.filter((_, i) => {
+                            const idx = body.indexOf(`[${i + 1}]`);
+                            if (idx === -1) return false;
+                            const window = body.slice(Math.max(0, idx - 120), idx + 20);
+                            return !NEGATION.test(window);
+                          });
+                          return meaningful.length > 0 ? meaningful : null;
                         })();
                         const userLiteratureMarkdown =
                           message.role === 'user' &&
@@ -3159,6 +3213,27 @@ export function RightSidebar({
                                 />
                               ) : (
                                 <>
+                                  {/* Image thumbnails for user messages */}
+                                  {message.role === 'user' && (() => {
+                                    const atts = messageAttachments.get(message.id);
+                                    if (!atts?.length) return null;
+                                    return (
+                                      <div className="flex flex-wrap gap-2 justify-end mb-1.5">
+                                        {atts.map((att, i) =>
+                                          att.contentType?.startsWith('image/') ? (
+                                            <a key={i} href={att.url} target="_blank" rel="noopener noreferrer" className="block rounded-xl overflow-hidden border border-border/40 shadow-sm hover:opacity-90 transition-opacity">
+                                              <img src={att.url} alt={att.name} className="max-h-44 max-w-[260px] object-cover rounded-xl" />
+                                            </a>
+                                          ) : (
+                                            <a key={i} href={att.url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1.5 rounded-lg border border-primary/20 bg-primary/10 px-2 py-1 text-xs text-primary hover:bg-primary/20 transition-colors max-w-[180px]" title={att.name}>
+                                              <FileText className="size-3 shrink-0" />
+                                              <span className="truncate">{att.name}</span>
+                                            </a>
+                                          )
+                                        )}
+                                      </div>
+                                    );
+                                  })()}
                                   <div
                                     className={cn(
                                       'text-sm leading-[1.45] break-words',

@@ -41,7 +41,12 @@ type Body = {
 
 export async function POST(req: Request) {
   const headerToken = req.headers.get('Authorization')?.replace(/^Bearer\s+/i, '').trim();
-  const body = (await req.json().catch(() => ({}))) as Body;
+  let body: Body;
+  try {
+    body = (await req.json()) as Body;
+  } catch {
+    return new Response(JSON.stringify({ error: 'Bad Request: invalid JSON body' }), { status: 400, headers: { 'content-type': 'application/json' } });
+  }
   const token = headerToken;
 
   if (!token) {

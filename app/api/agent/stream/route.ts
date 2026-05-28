@@ -16,7 +16,12 @@ const NOTES9_API_BASE = process.env.CHAT_API_URL?.replace(/\/$/, '') || '';
 
 export async function POST(req: Request) {
   const headerToken = req.headers.get('Authorization')?.replace(/^Bearer\s+/i, '').trim();
-  const body = await req.json().catch(() => ({}));
+  let body: Record<string, unknown>;
+  try {
+    body = await req.json();
+  } catch {
+    return new Response(JSON.stringify({ error: 'Bad Request: invalid JSON body' }), { status: 400, headers: { 'content-type': 'application/json' } });
+  }
   const { supabaseToken: _bodyToken, ...rest } = body;
   const upstreamBody = buildNotes9AgentRequestBody({
     query: typeof rest.query === 'string' ? rest.query : String(rest.query ?? ''),
@@ -62,6 +67,11 @@ export async function POST(req: Request) {
       }),
       { status: 503, headers: { 'Content-Type': 'application/json' } }
     );
+  }
+
+  const queryStr = typeof rest.query === 'string' ? rest.query : String(rest.query ?? '');
+  if (!queryStr.trim()) {
+    return new Response(JSON.stringify({ error: 'Bad Request: query is required' }), { status: 400, headers: { 'content-type': 'application/json' } });
   }
 
   try {

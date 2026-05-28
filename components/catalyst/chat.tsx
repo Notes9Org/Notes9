@@ -238,9 +238,17 @@ export function CatalystChat({ open, onOpenChange }: CatalystChatProps) {
       });
       setMessages(chatMessages);
       setSavedMessageIds(new Set(msgs.map((m) => m.id)));
+
+      const hydratedAtts = new Map<string, Attachment[]>();
+      for (const m of msgs) {
+        const atts = (m.metadata as { attachments?: Attachment[] } | undefined)?.attachments;
+        if (Array.isArray(atts) && atts.length > 0) hydratedAtts.set(m.id, atts);
+      }
+      setMessageAttachments(hydratedAtts);
     } else {
       setMessages([]);
       setSavedMessageIds(new Set());
+      setMessageAttachments(new Map());
     }
     hasLoadedSessionRef.current = sessionId;
     currentSessionRef.current = sessionId;
@@ -288,12 +296,16 @@ export function CatalystChat({ open, onOpenChange }: CatalystChatProps) {
               content = (message as unknown as { content: string }).content;
             }
 
-            // Build metadata bundle: thinking, sources, role provenance
+            // Build metadata bundle: thinking, sources, attachments
             const metadata: Record<string, unknown> = {};
             const sources = getMessageSources(message);
             const thinking = getMessageThinking(message);
             if (sources.length > 0) metadata.sources = sources;
             if (thinking) metadata.thinking = thinking;
+            if (message.role === 'user') {
+              const atts = messageAttachments.get(message.id);
+              if (atts && atts.length > 0) metadata.attachments = atts;
+            }
 
             if (content.trim()) {
               try {

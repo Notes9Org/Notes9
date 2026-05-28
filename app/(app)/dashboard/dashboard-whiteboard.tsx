@@ -21,6 +21,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
+import { toast } from "sonner"
 import { cn } from "@/lib/utils"
 import {
   createWhiteboardNote,
@@ -185,7 +186,10 @@ export function DashboardWhiteboard({
       startTransition(() => {
         for (const id of ids) {
           if (id.startsWith("temp-")) continue
-          updateWhiteboardNoteKind({ id, kind }).catch(() => {})
+          updateWhiteboardNoteKind({ id, kind }).catch((err) => {
+            console.error('whiteboard_mutation_failed', { op: 'updateNoteKind', err });
+            toast.error("Couldn't save — your changes may not persist. Please retry.");
+          })
         }
       })
     },
@@ -203,7 +207,10 @@ export function DashboardWhiteboard({
     startTransition(() => {
       for (const id of ids) {
         if (id.startsWith("temp-")) continue
-        deleteWhiteboardNote(id).catch(() => {})
+        deleteWhiteboardNote(id).catch((err) => {
+          console.error('whiteboard_mutation_failed', { op: 'deleteSelected', err });
+          toast.error("Couldn't save — your changes may not persist. Please retry.");
+        })
       }
     })
   }, [])
@@ -274,7 +281,10 @@ export function DashboardWhiteboard({
         if (id.startsWith("temp-")) continue
         const n = fresh.find((x) => x.id === id)
         if (!n) continue
-        updateWhiteboardNotePosition({ id, x: n.x, y: n.y }).catch(() => {})
+        updateWhiteboardNotePosition({ id, x: n.x, y: n.y }).catch((err) => {
+          console.error('whiteboard_mutation_failed', { op: 'nudgePosition', err });
+          toast.error("Couldn't save — your changes may not persist. Please retry.");
+        })
       }
     })
   }, [])
@@ -403,7 +413,10 @@ export function DashboardWhiteboard({
     setTagDraft("")
     if (id.startsWith("temp-")) return
     startTransition(() => {
-      updateWhiteboardNoteTag({ id, tag }).catch(() => {})
+      updateWhiteboardNoteTag({ id, tag }).catch((err) => {
+      console.error('whiteboard_mutation_failed', { op: 'updateNoteTag', err });
+      toast.error("Couldn't save — your changes may not persist. Please retry.");
+    })
     })
   }
 
@@ -526,7 +539,10 @@ export function DashboardWhiteboard({
     const note = notes.find((n) => n.id === id)
     if (!note || id.startsWith("temp-")) return
     startTransition(() => {
-      updateWhiteboardNoteBody({ id, body: note.body }).catch(() => {})
+      updateWhiteboardNoteBody({ id, body: note.body }).catch((err) => {
+        console.error('whiteboard_mutation_failed', { op: 'commitBody', err });
+        toast.error("Couldn't save — your changes may not persist. Please retry.");
+      })
     })
   }
 
@@ -534,7 +550,10 @@ export function DashboardWhiteboard({
     setNotes((curr) => curr.filter((n) => n.id !== id))
     if (id.startsWith("temp-")) return
     startTransition(() => {
-      deleteWhiteboardNote(id).catch(() => {})
+      deleteWhiteboardNote(id).catch((err) => {
+        console.error('whiteboard_mutation_failed', { op: 'removeSingle', err });
+        toast.error("Couldn't save — your changes may not persist. Please retry.");
+      })
     })
   }
 

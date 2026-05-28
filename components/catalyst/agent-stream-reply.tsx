@@ -76,13 +76,17 @@ export function AgentStreamReply({
       ? donePayload.resources
       : donePayload?.citations ?? [];
 
-  // Only surface resources whose [N] marker is present in the answer text.
-  // The backend always forwards every retrieved document; suppress any that
-  // weren't actually cited so irrelevant context doesn't appear to the user.
+  // Only surface resources whose [N] marker is present in the answer text,
+  // and where the citation is used positively (not just to say "unrelated to X").
   const body = displayAnswer ?? '';
-  const grounding = rawGrounding.filter((_, i) =>
-    new RegExp(`\\[${i + 1}\\]`).test(body)
-  );
+  const NEGATION = /\b(does not|doesn't|not related|nothing to do|no (?:text|information|content|data)|does not reference|not reference|unrelated)\b/i;
+  const grounding = rawGrounding.filter((_, i) => {
+    const marker = `[${i + 1}]`;
+    const idx = body.indexOf(marker);
+    if (idx === -1) return false;
+    const window = body.slice(Math.max(0, idx - 120), idx + 20);
+    return !NEGATION.test(window);
+  });
 
   const mergedCitationItems = mergeGroundingAndRagItems(grounding, ragChunks?.chunks);
   const hasCitationPanel = mergedCitationItems.length > 0;
