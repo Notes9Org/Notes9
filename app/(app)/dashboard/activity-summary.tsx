@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useState, useCallback, useRef } from "react"
-import { BrainCircuit } from "lucide-react"
+import { Sparkles } from "lucide-react"
 
 /** Cache key for localStorage. */
 const CACHE_KEY = "n9:activity-summary"
@@ -122,14 +122,14 @@ export function ActivitySummary() {
   return (
     <div
       className={`
-        mx-auto flex w-full max-w-3xl items-center justify-center gap-2.5 px-4 pt-1
+        mx-auto flex w-full max-w-3xl items-start justify-center gap-3 px-4 pt-1
         transition-all duration-700 ease-out
         ${isVisible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-2"}
       `}
     >
-      <BrainCircuit
+      <Sparkles
         aria-hidden
-        className="size-[22px] shrink-0 text-[color:var(--n9-accent)] opacity-80"
+        className="mt-1 size-[22px] shrink-0 text-[color:var(--n9-accent)] opacity-80"
         strokeWidth={1.5}
       />
       <p

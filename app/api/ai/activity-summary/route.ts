@@ -84,13 +84,13 @@ export async function GET() {
     for (const proto of protocolsRes.data ?? []) {
       events.push(`Updated protocol "${proto.name || 'Untitled'}"`);
     }
-    const completedTaskCount = (tasksRes.data ?? []).filter((t) => t.completed).length;
-    const pendingTaskCount = (tasksRes.data ?? []).filter((t) => !t.completed).length;
-    if (completedTaskCount > 0) {
-      events.push(`Completed ${completedTaskCount} task${completedTaskCount > 1 ? 's' : ''}`);
+    const completedTasks = (tasksRes.data ?? []).filter((t) => t.completed);
+    const pendingTasks = (tasksRes.data ?? []).filter((t) => !t.completed);
+    if (completedTasks.length > 0) {
+      events.push(`Completed ${completedTasks.length} task(s): ${completedTasks.map(t => t.title).join(', ')}`);
     }
-    if (pendingTaskCount > 0) {
-      events.push(`${pendingTaskCount} task${pendingTaskCount > 1 ? 's' : ''} still in progress`);
+    if (pendingTasks.length > 0) {
+      events.push(`Pending task(s) to be done: ${pendingTasks.map(t => t.title).join(', ')}`);
     }
     for (const sample of samplesRes.data ?? []) {
       events.push(`Recorded sample "${sample.name || 'Untitled'}"`);
@@ -119,14 +119,17 @@ export async function GET() {
       });
     }
 
+    const fullName = user.user_metadata?.full_name || user.user_metadata?.name || '';
+    const firstName = fullName ? fullName.split(' ')[0] : 'the researcher';
+
     const activityDigest = events.map((e, i) => `${i + 1}. ${e}`).join('\n');
 
-    const prompt = `You are a lab assistant summarising a researcher's recent activity. Given the following activity log from the last 24 hours, write a SINGLE concise sentence (max 25 words) that captures what the researcher has been working on. Use a warm, professional tone. Do NOT use bullet points. Do NOT include timestamps. Do NOT start with "You". Write in third-person observational style like a lab notebook entry.
+    const prompt = `You are an insightful lab assistant summarising recent activity for ${firstName}. Given the following activity log from the last 24 hours, write a concise, personalised summary (max 40 words) that captures what was done, what is being worked on, and gives a useful insight about what needs to be done next based on pending tasks. Use a warm, professional, and encouraging tone. Do NOT use bullet points. Do NOT include timestamps. Address them by name (e.g., "${firstName}, you have...").
 
 Activity log:
 ${activityDigest}
 
-Single-sentence summary:`;
+Summary:`;
 
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 8000);

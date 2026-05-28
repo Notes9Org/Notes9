@@ -40,7 +40,7 @@ type Row = {
   updated_at: string
 }
 
-const HOURS = [8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18] as const
+const HOURS = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23] as const
 const HOUR_HEIGHT = 56 // px per row, must match the inline style
 
 function isSameLocalDay(iso: string, ref: Date): boolean {
@@ -185,6 +185,9 @@ export function DashboardCalendar({
       and reversible only by manual recreation. */
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null)
   const [, startTransition] = useTransition()
+
+  const scrollContainerRef = useRef<HTMLDivElement>(null)
+  const initialScrollDone = useRef(false)
 
   useEffect(() => {
     function tick() {
@@ -334,6 +337,16 @@ export function DashboardCalendar({
     if (now < HOURS[0] || now > HOURS[HOURS.length - 1] + 1) return null
     return (now - HOURS[0]) * HOUR_HEIGHT
   }, [now])
+
+  useEffect(() => {
+    if (nowOffset !== null && !initialScrollDone.current && scrollContainerRef.current) {
+      initialScrollDone.current = true
+      scrollContainerRef.current.scrollTo({
+        top: Math.max(0, nowOffset - 60),
+        behavior: "auto"
+      })
+    }
+  }, [nowOffset])
 
   function addEvent() {
     const title = draft.trim()
@@ -580,7 +593,7 @@ export function DashboardCalendar({
         </div>
       )}
 
-      <div className="relative min-h-0 flex-1 overflow-auto px-3 py-2">
+      <div className="relative min-h-0 flex-1 overflow-auto px-3 py-2" ref={scrollContainerRef}>
         {/* Sticky overlay strip: day navigation + off-window counter + add
             button. Lives in the scroll container so the column stays narrow,
             but uses position:sticky so the controls don't disappear when the
@@ -646,7 +659,7 @@ export function DashboardCalendar({
                   .join(" · ")}
               </span>
             )}
-            {embedded && !adding && todayEvents.length > 0 && (
+            {embedded && !adding && (
               <button
                 type="button"
                 onClick={() => setAdding(true)}
@@ -682,9 +695,7 @@ export function DashboardCalendar({
             }}
           />
         )}
-        {view === "day" && (todayEvents.length === 0 && !adding ? (
-          <EmptyCalendar onAdd={() => setAdding(true)} />
-        ) : (
+        {view === "day" && (
           <div className="relative" style={{ minHeight: HOURS.length * HOUR_HEIGHT }}>
             {HOURS.map((h, i) => (
               <div
@@ -693,7 +704,7 @@ export function DashboardCalendar({
                 style={{ top: i * HOUR_HEIGHT, height: HOUR_HEIGHT }}
               >
                 <span className="pr-2 text-right text-[10px] font-mono tabular-nums uppercase tracking-wider text-muted-foreground/70">
-                  {h <= 12 ? `${h}a` : `${h - 12}p`}
+                  {h === 0 ? "12a" : h < 12 ? `${h}a` : h === 12 ? "12p" : `${h - 12}p`}
                 </span>
                 {/* Double-click an empty hour row to spawn the in-place quick-add
                     Popover at that hour (Apple-Calendar style). */}
@@ -733,7 +744,7 @@ export function DashboardCalendar({
                       <input
                         autoFocus
                         type="text"
-                        placeholder={`New event · ${h <= 12 ? `${h}:00 AM` : `${h - 12}:00 PM`}`}
+                        placeholder={`New event · ${h === 0 ? "12:00 AM" : h < 12 ? `${h}:00 AM` : h === 12 ? "12:00 PM" : `${h - 12}:00 PM`}`}
                         value={quickAdd.title}
                         onChange={(e) =>
                           setQuickAdd((curr) => (curr ? { ...curr, title: e.target.value } : curr))
@@ -982,7 +993,7 @@ export function DashboardCalendar({
               )
             })}
           </div>
-        ))}
+        )}
       </div>
 
       <AlertDialog
@@ -1107,7 +1118,7 @@ function WeekView({
             style={{ top: i * HOUR_HEIGHT, height: HOUR_HEIGHT }}
           >
             <span className="pr-2 text-right text-[10px] font-mono tabular-nums uppercase tracking-wider text-muted-foreground/70">
-              {h <= 12 ? `${h}a` : `${h - 12}p`}
+              {h === 0 ? "12a" : h < 12 ? `${h}a` : h === 12 ? "12p" : `${h - 12}p`}
             </span>
             {days.map((d) => (
               <div
