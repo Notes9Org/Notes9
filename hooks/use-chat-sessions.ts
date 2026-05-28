@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { createClient } from '@/lib/supabase/client';
+import { useAuthUser } from "@/components/auth/auth-provider"
 import {
   localProtocolClearMessages,
   localProtocolCreateSession,
@@ -64,6 +65,7 @@ export interface ChatMessage {
  *                     When omitted, only Catalyst chats (`protocol_id` IS NULL).
  */
 export function useChatSessions(protocolId?: string) {
+  const user = useAuthUser();
   const [sessions, setSessions] = useState<ChatSession[]>([]);
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -77,7 +79,6 @@ export function useChatSessions(protocolId?: string) {
   const loadSessions = useCallback(async () => {
     setLoading(true);
     try {
-      const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
       if (protocolId && protocolUseLocalRef.current) {
@@ -127,7 +128,6 @@ export function useChatSessions(protocolId?: string) {
 
   const createSession = useCallback(async (title?: string): Promise<string | null> => {
     try {
-      const { data: { user } } = await supabase.auth.getUser();
       if (!user) return null;
 
       if (protocolId && protocolUseLocalRef.current) {

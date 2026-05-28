@@ -61,6 +61,7 @@ import {
 } from "@/components/ui/collapsible"
 import { Popover, PopoverAnchor, PopoverContent } from "@/components/ui/popover"
 import { createClient } from "@/lib/supabase/client"
+import { useAuthUser } from "@/components/auth/auth-provider"
 import { cn } from "@/lib/utils"
 import { Notes9Brand } from "@/components/brand/notes9-brand"
 import { ClipboardInfoIcon } from "@/components/ui/clipboard-info-icon"
@@ -137,6 +138,7 @@ type SearchResultItem = {
 }
 
 export function AppSidebar() {
+  const authUser = useAuthUser();
   const pathname = usePathname()
   const router = useRouter()
   const { setOpenMobile, isMobile, state, openMobile, open, setOpen } = useSidebar()
@@ -216,16 +218,9 @@ export function AppSidebar() {
         return
       }
 
-      // Get current user
-      const { data: { user: currentUser }, error: userError } = await supabase.auth.getUser()
-
-      if (userError) {
-        console.error("Error fetching user:", userError)
-        toast.error("Authentication error. Please try logging in again.")
-        setLoading(false)
-        return
-      }
-
+      // Get current user from the AuthProvider (already verified server-side
+      // in app/(app)/layout.tsx); no extra /auth/v1/user round-trip.
+      const currentUser = authUser
       setUser(currentUser as User)
 
       if (!currentUser) {

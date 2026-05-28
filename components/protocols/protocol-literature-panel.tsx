@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react"
 import { createClient } from "@/lib/supabase/client"
+import { useAuthUser } from "@/components/auth/auth-provider"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
@@ -94,6 +95,7 @@ export function ProtocolLiteraturePanel({
   protocolCandidates = [],
   onAddProtocols,
 }: ProtocolLiteraturePanelProps) {
+  const user = useAuthUser();
   const [papers, setPapers] = useState<LiteraturePaperItem[]>([])
   const [isLoading, setIsLoading] = useState(false)
   const [selected, setSelected] = useState<Set<string>>(new Set())
@@ -122,24 +124,22 @@ export function ProtocolLiteraturePanel({
   // Load org projects for filters
   useEffect(() => {
     if (!showFilters) return
+    if (!user) return
     const supabase = createClient()
-    supabase.auth.getUser().then(({ data: { user } }) => {
-      if (!user) return
-      supabase
-        .from("profiles")
-        .select("organization_id")
-        .eq("id", user.id)
-        .single()
-        .then(({ data: profile }) => {
-          if (!profile?.organization_id) return
-          supabase
-            .from("projects")
-            .select("id, name")
-            .eq("organization_id", profile.organization_id)
-            .order("name")
-            .then(({ data }) => setFilterProjects((data as ProjectItem[]) ?? []))
-        })
-    })
+    supabase
+      .from("profiles")
+      .select("organization_id")
+      .eq("id", user.id)
+      .single()
+      .then(({ data: profile }) => {
+        if (!profile?.organization_id) return
+        supabase
+          .from("projects")
+          .select("id, name")
+          .eq("organization_id", profile.organization_id)
+          .order("name")
+          .then(({ data }) => setFilterProjects((data as ProjectItem[]) ?? []))
+      })
   }, [showFilters])
 
   // Load experiments when internal project changes.

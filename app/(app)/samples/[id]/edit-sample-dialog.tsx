@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react"
 import { useRouter } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
+import { useAuthUser } from "@/components/auth/auth-provider"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -79,6 +80,7 @@ export function EditSampleDialog({
   linkedExperimentIds = [],
   linkedLabNoteIds = [],
 }: EditSampleDialogProps) {
+  const user = useAuthUser();
   const router = useRouter()
   const { toast } = useToast()
   const [open, setOpen] = useState(false)
@@ -148,10 +150,6 @@ export function EditSampleDialog({
           throw new Error(`Custom metadata: ${message}`)
         }
       }
-      const {
-        data: { user },
-      } = await supabase.auth.getUser()
-
       const { error } = await supabase
         .from("samples")
         .update({

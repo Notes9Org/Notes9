@@ -3,6 +3,7 @@
 import { useState } from "react"
 import { useRouter } from 'next/navigation'
 import { createClient } from "@/lib/supabase/client"
+import { useAuthUser } from "@/components/auth/auth-provider"
 import { useCreatePageNav } from "@/hooks/use-create-page-nav"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -23,6 +24,7 @@ import { recordRumEvent } from "@/lib/rum"
 import { DATE_ORDER_ERROR, isEndDateBeforeStartDate } from "@/lib/date-order"
 
 export default function NewProjectPage() {
+  const user = useAuthUser();
   const router = useRouter()
   const { handleBack } = useCreatePageNav({
     pageLabel: "New Project",
@@ -52,8 +54,6 @@ export default function NewProjectPage() {
 
     try {
       const supabase = createClient()
-      const { data: { user } } = await supabase.auth.getUser()
-      
       if (!user) throw new Error("Not authenticated")
 
       // Get user's organization

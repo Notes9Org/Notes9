@@ -1,6 +1,6 @@
 import { Suspense } from "react"
-import { redirect } from "next/navigation"
 import { createClient } from "@/lib/supabase/server"
+import { requireUser } from "@/lib/auth/current-user"
 import { ProtocolsPageContent, type ProtocolsProjectContext } from "./protocols-page-content"
 import { resolveInitialProjectIdParam } from "@/lib/url-project-param"
 import { loadProjectWorkspaceProtocols } from "@/lib/project-workspace-protocols"
@@ -11,15 +11,8 @@ export default async function ProtocolsPage({
 }: {
   searchParams?: Promise<{ project?: string; selectForDesign?: string }>
 }) {
+  const user = await requireUser()
   const supabase = await createClient()
-
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-  if (!user) {
-    redirect("/auth/login")
-  }
-
   const { data: profile } = await supabase
     .from("profiles")
     .select("organization_id")

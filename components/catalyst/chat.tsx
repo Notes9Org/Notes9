@@ -19,6 +19,7 @@ import { ChatHistory } from './chat-history';
 import { ChatMessage } from './chat-message';
 import { PreviewAttachment, type Attachment } from './preview-attachment';
 import { createClient } from '@/lib/supabase/client';
+import { useAuthUser } from "@/components/auth/auth-provider"
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
 import { extractToolCards } from '@/lib/chat-tool-parts';
@@ -47,6 +48,7 @@ interface UserProfile {
 }
 
 export function CatalystChat({ open, onOpenChange }: CatalystChatProps) {
+  const user = useAuthUser();
   const [input, setInput] = useState('');
   const [showHistory, setShowHistory] = useState(true);
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
@@ -180,7 +182,6 @@ export function CatalystChat({ open, onOpenChange }: CatalystChatProps) {
   // Load user profile (runs once)
   useEffect(() => {
     const loadUserProfile = async () => {
-      const { data: { user } } = await supabase.auth.getUser();
       if (user) {
         const { data } = await supabase
           .from('profiles')

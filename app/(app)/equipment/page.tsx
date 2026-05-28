@@ -1,17 +1,10 @@
-import { redirect } from 'next/navigation'
 import { createClient } from "@/lib/supabase/server"
+import { requireUser } from "@/lib/auth/current-user"
 import { EquipmentPageContent, EquipmentEmptyState } from './equipment-page-content'
 
 export default async function EquipmentPage() {
+  const user = await requireUser()
   const supabase = await createClient()
-
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-  if (!user) {
-    redirect("/auth/login")
-  }
-
   const { data: equipment } = await supabase
     .from("equipment")
     .select("*")

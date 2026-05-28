@@ -1,5 +1,6 @@
-import { redirect, notFound } from "next/navigation"
+import { notFound } from "next/navigation"
 import { createClient } from "@/lib/supabase/server"
+import { requireUser } from "@/lib/auth/current-user"
 import { SetPageBreadcrumb } from "@/components/layout/breadcrumb-context"
 import { ReportDetailClient } from "./report-detail-client"
 import type { ReportRow } from "../reports-page-client"
@@ -10,15 +11,8 @@ export default async function ReportDetailPage({
   params: Promise<{ id: string }>
 }) {
   const { id } = await params
+  const user = await requireUser()
   const supabase = await createClient()
-
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-  if (!user) {
-    redirect("/auth/login")
-  }
-
   const { data: report, error } = await supabase
     .from("reports")
     .select(`

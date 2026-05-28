@@ -1,6 +1,6 @@
-import { redirect } from "next/navigation"
 import Link from "next/link"
 import { createClient } from "@/lib/supabase/server"
+import { requireUser } from "@/lib/auth/current-user"
 import {
   Card,
   CardContent,
@@ -34,14 +34,8 @@ import { ActivitySummary } from "./activity-summary"
  * active experiments, and recently edited content.
  */
 export default async function DashboardPage() {
+  const user = await requireUser()
   const supabase = await createClient()
-
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-  if (!user) {
-    redirect("/auth/login")
-  }
 
   const now = new Date()
   const dayStart = new Date(now.getTime() - 36 * 60 * 60 * 1000)

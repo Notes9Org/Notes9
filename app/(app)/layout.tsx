@@ -1,24 +1,20 @@
 import { Suspense } from 'react'
-import { redirect } from 'next/navigation'
 import { createClient } from "@/lib/supabase/server"
+import { requireUser } from "@/lib/auth/current-user"
 import { ensureUserProfile } from "@/lib/ensure-user-profile"
 import { AppLayout } from "@/components/layout/app-layout"
 import { TermsAcceptanceModal } from "@/components/marketing/terms-acceptance-modal"
 import { CURRENT_TERMS_VERSION } from "@/lib/constants"
 import { AuthEventTracker } from "@/components/auth-event-tracker"
+import { AuthProvider } from "@/components/auth/auth-provider"
 
 export default async function AppGroupLayout({
   children,
 }: {
   children: React.ReactNode
 }) {
+  const user = await requireUser()
   const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-
-  // If not authenticated, redirect to login
-  if (!user) {
-    redirect("/auth/login")
-  }
 
   // Bootstrap profile + organization on the server so every client component
   // downstream (sidebar, project picker, etc.) can assume they exist instead
@@ -40,13 +36,13 @@ export default async function AppGroupLayout({
   const mustAcceptTerms = userTermsVersion !== currentTermsVersion
 
   return (
-    <>
+    <AuthProvider initialUser={user}>
       {mustAcceptTerms && <TermsAcceptanceModal />}
       <Suspense>
         <AuthEventTracker />
       </Suspense>
       <AppLayout>{children}</AppLayout>
-    </>
+    </AuthProvider>
   )
 }
 

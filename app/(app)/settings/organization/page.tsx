@@ -21,6 +21,7 @@ import { InviteDialog, type InviteRole } from "@/components/org/invite-dialog"
 import { OrgSettingsForm } from "@/components/org/org-settings-form"
 import { isOrgAdmin, type OrgMember as OrgMemberPerm } from "@/lib/org/permissions"
 import { createClient } from "@/lib/supabase/client"
+import { useAuthUser } from "@/components/auth/auth-provider"
 
 interface Organization {
   id: string
@@ -33,6 +34,7 @@ interface Organization {
 }
 
 export default function OrganizationSettingsPage() {
+  const user = useAuthUser();
   const [loading, setLoading] = useState(true)
   const [userId, setUserId] = useState<string | null>(null)
   const [organization, setOrganization] = useState<Organization | null>(null)
@@ -47,9 +49,6 @@ export default function OrganizationSettingsPage() {
   const fetchData = useCallback(async () => {
     const supabase = createClient()
 
-    const {
-      data: { user },
-    } = await supabase.auth.getUser()
     if (!user) return
     setUserId(user.id)
 

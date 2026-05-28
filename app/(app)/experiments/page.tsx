@@ -1,5 +1,5 @@
-import { redirect } from 'next/navigation'
 import { createClient } from "@/lib/supabase/server"
+import { requireUser } from "@/lib/auth/current-user"
 import { Button } from "@/components/ui/button"
 import {
   Empty,
@@ -21,15 +21,8 @@ export default async function ExperimentsPage({
 }: {
   searchParams?: Promise<{ project?: string }>
 }) {
+  const user = await requireUser()
   const supabase = await createClient()
-
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-  if (!user) {
-    redirect("/auth/login")
-  }
-
   const { data: profile } = await supabase
     .from("profiles")
     .select("organization_id")

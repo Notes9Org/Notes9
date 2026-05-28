@@ -1,5 +1,5 @@
 import { redirect } from 'next/navigation'
-import { createClient } from "@/lib/supabase/server"
+import { getCurrentUser } from "@/lib/auth/current-user"
 import { Header } from "@/components/marketing/header"
 import { Footer } from "@/components/marketing/footer"
 import { AcademicHero } from "@/components/marketing/academic-hero"
@@ -27,11 +27,9 @@ export default async function HomePage({
     return redirect(`/auth/callback?code=${code}`)
   }
 
-  const supabase = await createClient()
   let user = null
   try {
-    const { data } = await supabase.auth.getUser()
-    user = data?.user
+    user = await getCurrentUser()
   } catch (error) {
     console.error("HomePage failed to fetch user from Supabase (offline/timeout):", error)
   }

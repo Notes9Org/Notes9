@@ -2,6 +2,7 @@
 
 import { useState } from "react"
 import { createClient } from "@/lib/supabase/client"
+import { useAuthUser } from "@/components/auth/auth-provider"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -21,6 +22,7 @@ interface ChangePasswordDialogProps {
 }
 
 export function ChangePasswordDialog({ children }: ChangePasswordDialogProps) {
+  const user = useAuthUser();
   const [open, setOpen] = useState(false)
   const [currentPassword, setCurrentPassword] = useState("")
   const [newPassword, setNewPassword] = useState("")
@@ -67,7 +69,6 @@ export function ChangePasswordDialog({ children }: ChangePasswordDialogProps) {
 
     try {
       // First verify the current password by attempting to sign in
-      const { data: { user } } = await supabase.auth.getUser()
       if (!user?.email) {
         throw new Error("User not found")
       }

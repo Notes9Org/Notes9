@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react"
 import { createClient } from "@/lib/supabase/client"
+import { useAuthUser } from "@/components/auth/auth-provider"
 import { createBucketSignedUrl } from "@/lib/storage-signed-url"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -71,6 +72,7 @@ interface ExperimentFile {
 }
 
 export function DataFilesTab({ experimentId }: { experimentId: string }) {
+  const user = useAuthUser();
   const { toast } = useToast()
   const [files, setFiles] = useState<ExperimentFile[]>([])
   const [isLoading, setIsLoading] = useState(true)
@@ -235,9 +237,6 @@ export function DataFilesTab({ experimentId }: { experimentId: string }) {
     setCreatingEmpty(true)
     try {
       const supabase = createClient()
-      const {
-        data: { user },
-      } = await supabase.auth.getUser()
       if (!user) throw new Error("Not signed in")
 
       const orgId = await fetchOrganizationIdForExperiment(supabase, experimentId)

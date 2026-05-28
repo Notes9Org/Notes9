@@ -1,5 +1,5 @@
-import { redirect } from 'next/navigation'
 import { createClient } from "@/lib/supabase/server"
+import { requireUser } from "@/lib/auth/current-user"
 import { Button } from "@/components/ui/button"
 import { PageHeading } from "@/components/ui/page-heading"
 import { Plus } from 'lucide-react'
@@ -16,15 +16,8 @@ export default async function LiteratureReviewsPage({
   searchParams?: Promise<{ project?: string; tab?: string }>
 }) {
   const sp = searchParams ? await searchParams : {}
+  const user = await requireUser()
   const supabase = await createClient()
-
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-  if (!user) {
-    redirect("/auth/login")
-  }
-
   // Fetch literature reviews with related data
   const { data: literatureReviews } = await supabase
     .from("literature_reviews")

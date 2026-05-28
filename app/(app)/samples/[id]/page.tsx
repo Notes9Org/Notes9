@@ -1,6 +1,7 @@
-import { redirect, notFound } from 'next/navigation'
+import { notFound } from 'next/navigation'
 import type { ReactNode } from 'react'
 import { createClient } from "@/lib/supabase/server"
+import { requireUser } from "@/lib/auth/current-user"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -80,15 +81,8 @@ export default async function SampleDetailPage({
   const { id } = await params
   const resolvedSearch = searchParams ? await searchParams : {}
   const initialTab = resolvedSearch.tab ?? "overview"
+  const user = await requireUser()
   const supabase = await createClient()
-
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-  if (!user) {
-    redirect("/auth/login")
-  }
-
   let { data: sample, error } = await supabase
     .from("samples")
     .select(`

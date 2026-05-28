@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
+import { useAuthUser } from "@/components/auth/auth-provider"
 import {
   Card,
   CardContent,
@@ -421,6 +422,7 @@ export function TodoPanel({
   initialTasks: DashboardTask[]
   variant?: "card" | "embedded"
 }) {
+  const user = useAuthUser();
   const supabase = useMemo(() => createClient(), []);
   const [tasks, setTasks] = useState<DashboardTask[]>(initialTasks);
   const [hasMoreTasks, setHasMoreTasks] = useState(false);
@@ -450,9 +452,6 @@ export function TodoPanel({
   const { toast } = useToast();
 
   const fetchTasks = useCallback(async () => {
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
     if (!user) return;
     const { data } = await supabase
       .from("dashboard_tasks")
@@ -473,9 +472,6 @@ export function TodoPanel({
   }, [fetchTasks]);
 
   const loadMoreTasks = useCallback(async () => {
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
     if (!user || isLoadingMore || !hasMoreTasks) return;
     setIsLoadingMore(true);
     try {
@@ -595,9 +591,6 @@ export function TodoPanel({
     }
     setIsAdding(true);
     try {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
       if (!user) return;
       let dueAt: string | null = null;
       if (dueDateStr) {

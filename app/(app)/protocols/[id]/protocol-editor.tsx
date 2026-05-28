@@ -6,6 +6,7 @@ import { ContentDiffHistoryDialog } from "@/components/content-diff-history-dial
 import { useRouter, useSearchParams } from "next/navigation"
 import Link from "next/link"
 import { createClient } from "@/lib/supabase/client"
+import { useAuthUser } from "@/components/auth/auth-provider"
 import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
@@ -71,6 +72,7 @@ export function ProtocolEditor({
   designModeHref: string
   viewHref: string
 }) {
+  const user = useAuthUser();
   const router = useRouter()
   const { toast } = useToast()
   const [designModePromptOpen, setDesignModePromptOpen] = useState(false)
@@ -128,9 +130,6 @@ export function ProtocolEditor({
 
     const run = async () => {
       const supabase = createClient()
-      const {
-        data: { user },
-      } = await supabase.auth.getUser()
       if (!user || cancelled) return
 
       const { data: profile } = await supabase

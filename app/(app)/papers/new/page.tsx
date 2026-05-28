@@ -4,6 +4,7 @@ import { Suspense, useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { useCreatePageNav } from "@/hooks/use-create-page-nav"
 import { createClient } from "@/lib/supabase/client"
+import { useAuthUser } from "@/components/auth/auth-provider"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -19,6 +20,7 @@ import { ArrowLeft } from "lucide-react"
 import { toast } from "sonner"
 
 function NewPaperPageInner() {
+  const user = useAuthUser();
   const router = useRouter()
   const { handleBack } = useCreatePageNav({
     pageLabel: "New Paper",
@@ -59,7 +61,6 @@ function NewPaperPageInner() {
     setIsCreating(true)
     try {
       const supabase = createClient()
-      const { data: { user } } = await supabase.auth.getUser()
       if (!user) throw new Error("Not authenticated")
 
       const { data, error } = await supabase

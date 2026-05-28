@@ -3,6 +3,7 @@
 import { useState, useEffect, Suspense, useRef } from "react"
 import { useRouter, useSearchParams } from 'next/navigation'
 import { createClient } from "@/lib/supabase/client"
+import { useAuthUser } from "@/components/auth/auth-provider"
 import { resolveInitialProjectIdParam } from "@/lib/url-project-param"
 import { useCreatePageNav } from "@/hooks/use-create-page-nav"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -27,6 +28,7 @@ import { recordRumEvent } from "@/lib/rum"
 import { toast } from "sonner"
 
 function NewExperimentForm() {
+  const user = useAuthUser();
   const router = useRouter()
   const { handleBack } = useCreatePageNav({
     pageLabel: "New Experiment",
@@ -112,8 +114,6 @@ function NewExperimentForm() {
 
     try {
       const supabase = createClient()
-      const { data: { user } } = await supabase.auth.getUser()
-      
       if (!user) throw new Error("Not authenticated")
 
       const { data, error: insertError } = await supabase

@@ -2,6 +2,7 @@
 
 import { useState } from "react"
 import { createClient } from "@/lib/supabase/client"
+import { useAuthUser } from "@/components/auth/auth-provider"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -39,6 +40,7 @@ interface DuplicateProjectDialogProps {
 }
 
 export function DuplicateProjectDialog({ project, asMenuItem = false, open: controlledOpen, onOpenChange: controlledOnOpenChange }: DuplicateProjectDialogProps) {
+  const user = useAuthUser();
   const { toast } = useToast()
   const router = useRouter()
   const supabase = createClient()
@@ -64,7 +66,6 @@ export function DuplicateProjectDialog({ project, asMenuItem = false, open: cont
     setIsDuplicating(true)
 
     try {
-      const { data: { user } } = await supabase.auth.getUser()
       if (!user) throw new Error("Not authenticated")
 
       // Get user's organization

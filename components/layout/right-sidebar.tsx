@@ -79,6 +79,7 @@ import { MessageActions } from '@/components/catalyst/message-actions';
 import { IceMascot } from '@/components/ui/ice-mascot';
 import { toast } from 'sonner';
 import { createClient } from '@/lib/supabase/client';
+import { useAuthUser } from "@/components/auth/auth-provider"
 import { useResizable } from '@/hooks/use-resizable';
 import { ResizeHandle } from '@/components/ui/resize-handle';
 import { useSidebar } from '@/components/ui/sidebar';
@@ -401,6 +402,7 @@ export function RightSidebar({
   pendingLaunch = null,
   onPendingLaunchConsumed,
 }: RightSidebarProps = {}) {
+  const user = useAuthUser();
   const isPageVariant = variant === 'page';
   const { setOpenMobile, isMobile } = useSidebar();
   const { setTheme, resolvedTheme } = useTheme();
@@ -548,7 +550,6 @@ export function RightSidebar({
 
   useEffect(() => {
     const loadUserId = async () => {
-      const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
       setUserId(user.id);
       const meta = user.user_metadata ?? {};
@@ -973,9 +974,6 @@ export function RightSidebar({
     if (contextMentionCandidates.length > 0) return;
     let cancelled = false;
     (async () => {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
       if (!user || cancelled) return;
       const { data, error } = await supabase
         .from('literature_reviews')

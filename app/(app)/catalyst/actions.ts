@@ -1,14 +1,14 @@
 'use server';
 
 import { createClient } from '@/lib/supabase/server';
+import { getCurrentUser } from '@/lib/auth/current-user';
 
 export async function deleteTrailingMessages({ id }: { id: string }) {
-  const supabase = await createClient();
-
-  const { data: { user } } = await supabase.auth.getUser();
+  const user = await getCurrentUser();
   if (!user) {
     return { success: false, error: 'Unauthorized' };
   }
+  const supabase = await createClient();
 
   const { data: message, error: msgError } = await supabase
     .from('chat_messages')
@@ -38,12 +38,11 @@ export async function deleteTrailingMessages({ id }: { id: string }) {
 export async function deleteMessagesByIds(ids: string[]) {
   if (ids.length === 0) return { success: true };
 
-  const supabase = await createClient();
-
-  const { data: { user } } = await supabase.auth.getUser();
+  const user = await getCurrentUser();
   if (!user) {
     return { success: false, error: 'Unauthorized' };
   }
+  const supabase = await createClient();
 
   const { data: owned, error: ownedError } = await supabase
     .from('chat_messages')

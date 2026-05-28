@@ -3,6 +3,7 @@
 import { Suspense, useEffect, useMemo, useState } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
+import { useAuthUser } from "@/components/auth/auth-provider"
 import { useCreatePageNav } from "@/hooks/use-create-page-nav"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -56,6 +57,7 @@ function isSchemaMissingError(error: unknown) {
 }
 
 function NewSamplePageInner() {
+  const user = useAuthUser();
   const router = useRouter()
   const searchParams = useSearchParams()
   const { handleBack } = useCreatePageNav({
@@ -178,9 +180,6 @@ function NewSamplePageInner() {
       }
 
       const supabase = createClient()
-      const {
-        data: { user },
-      } = await supabase.auth.getUser()
       if (!user) throw new Error("Not authenticated")
 
       const custom_metadata = parseCustomMetadata()

@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef, Suspense } from "react"
 import { useRouter, useSearchParams } from 'next/navigation'
 import { createClient } from "@/lib/supabase/client"
+import { useAuthUser } from "@/components/auth/auth-provider"
 import { resolveInitialProjectIdParam } from "@/lib/url-project-param"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -29,6 +30,7 @@ import {
 } from "@/lib/literature-link-select-ui"
 
 function NewLiteratureReviewForm() {
+  const user = useAuthUser();
   const router = useRouter()
   const searchParams = useSearchParams()
   const appliedProjectFromUrlRef = useRef(false)
@@ -113,8 +115,6 @@ function NewLiteratureReviewForm() {
 
     try {
       const supabase = createClient()
-      const { data: { user } } = await supabase.auth.getUser()
-      
       if (!user) throw new Error("Not authenticated")
 
       // Get user's organization

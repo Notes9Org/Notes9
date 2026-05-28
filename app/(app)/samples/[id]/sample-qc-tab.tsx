@@ -3,6 +3,7 @@
 import { useCallback, useState } from "react"
 import { useRouter } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
+import { useAuthUser } from "@/components/auth/auth-provider"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -125,6 +126,7 @@ function formatMeasurement(record: SampleQcRecord) {
 }
 
 export function SampleQcTab({ sampleId, initialRecords }: SampleQcTabProps) {
+  const user = useAuthUser();
   const { toast } = useToast()
   const router = useRouter()
   const [records, setRecords] = useState<SampleQcRecord[]>(initialRecords)
@@ -183,9 +185,6 @@ export function SampleQcTab({ sampleId, initialRecords }: SampleQcTabProps) {
     setSubmitting(true)
     try {
       const supabase = createClient()
-      const {
-        data: { user },
-      } = await supabase.auth.getUser()
       if (!user) throw new Error("Not signed in")
 
       const qcType =

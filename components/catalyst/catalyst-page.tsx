@@ -8,6 +8,7 @@ import { PanelLeftClose, PanelLeft } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useChatSessions } from '@/hooks/use-chat-sessions';
 import { createClient } from '@/lib/supabase/client';
+import { useAuthUser } from "@/components/auth/auth-provider"
 import { deleteTrailingMessages } from '@/app/(app)/catalyst/actions';
 import { toast } from 'sonner';
 import { CatalystGreeting } from './catalyst-greeting';
@@ -28,6 +29,7 @@ interface CatalystChatProps {
 }
 
 export function CatalystChat({ sessionId }: CatalystChatProps) {
+  const user = useAuthUser();
   const router = useRouter();
   const [input, setInput] = useState('');
   const [userName, setUserName] = useState<string>('');
@@ -106,9 +108,6 @@ export function CatalystChat({ sessionId }: CatalystChatProps) {
   // Load user profile
   useEffect(() => {
     const loadUserProfile = async () => {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
       if (user) {
         setUserId(user.id);
         const { data } = await supabase

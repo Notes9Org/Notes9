@@ -9,6 +9,7 @@ import {
 } from "react"
 import type { Editor } from "@tiptap/react"
 import { createClient } from "@/lib/supabase/client"
+import { useAuthUser } from "@/components/auth/auth-provider"
 import { useToast } from "@/hooks/use-toast"
 import { useContentDiffs } from "@/hooks/use-content-diffs"
 import { TiptapEditor } from "@/components/text-editor/tiptap-editor"
@@ -104,6 +105,7 @@ export function ProtocolDesignMode({
   onProtocolNameChange,
   onProtocolNameCommit,
 }: ProtocolDesignModeProps) {
+  const user = useAuthUser();
   const { toast } = useToast()
 
   const [draftContent, setDraftContent] = useState(protocol.content)
@@ -148,9 +150,6 @@ export function ProtocolDesignMode({
     let cancelled = false
     const run = async () => {
       const supabase = createClient()
-      const {
-        data: { user },
-      } = await supabase.auth.getUser()
       if (!user || cancelled) return
       const { data: profile } = await supabase
         .from("profiles")
@@ -226,9 +225,6 @@ export function ProtocolDesignMode({
   const handleAccept = useCallback(
     async (newContent: string, newVersion: string) => {
       const supabase = createClient()
-      const {
-        data: { user },
-      } = await supabase.auth.getUser()
       if (!user) throw new Error("Not authenticated")
 
       const { error: upErr } = await updateProtocolWithOptionalContext(supabase, protocol.id, {

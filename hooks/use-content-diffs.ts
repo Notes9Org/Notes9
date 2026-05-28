@@ -3,6 +3,7 @@
 import { useState, useCallback, useEffect, useRef } from "react"
 import { diffWords } from "diff"
 import { createClient } from "@/lib/supabase/client"
+import { useAuthUser } from "@/components/auth/auth-provider"
 import { buildStoredSegments } from "@/lib/content-diff-segments"
 import { htmlToDiffPlainText } from "@/lib/content-diff-plain-text"
 import {
@@ -42,6 +43,7 @@ export function useContentDiffs(
   recordType: "protocol" | "lab_note",
   recordId: string | null | undefined
 ) {
+  const user = useAuthUser();
   const [diffs, setDiffs] = useState<ContentDiff[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -121,9 +123,6 @@ export function useContentDiffs(
 
       try {
         const supabase = getSupabase()
-        const {
-          data: { user },
-        } = await supabase.auth.getUser()
         if (!user) return false
 
         const { error: err } = await supabase.from("content_diffs").insert({

@@ -12,6 +12,7 @@ import {
 import type { ImperativePanelHandle } from "react-resizable-panels"
 import { useRouter, useSearchParams } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
+import { useAuthUser } from "@/components/auth/auth-provider"
 import { resolveInitialProjectIdParam } from "@/lib/url-project-param"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -201,6 +202,7 @@ function TemplateStep({
 // ─── Main form (Step 2) ───────────────────────────────────────────────────────
 
 function NewProtocolForm() {
+  const user = useAuthUser();
   const router = useRouter()
   const searchParams = useSearchParams()
   const { toast } = useToast()
@@ -277,9 +279,6 @@ function NewProtocolForm() {
     let cancelled = false
     const run = async () => {
       const supabase = createClient()
-      const {
-        data: { user },
-      } = await supabase.auth.getUser()
       if (!user || cancelled) return
       const { data: profile } = await supabase
         .from("profiles")
@@ -395,9 +394,6 @@ function NewProtocolForm() {
 
     try {
       const supabase = createClient()
-      const {
-        data: { user },
-      } = await supabase.auth.getUser()
       if (!user) throw new Error("Not authenticated")
 
       const { data: profile } = await supabase

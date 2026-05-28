@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from "react"
 import { useRouter } from 'next/navigation'
 import { useTheme } from "next-themes"
 import { createClient } from "@/lib/supabase/client"
+import { useAuthUser } from "@/components/auth/auth-provider"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -103,6 +104,7 @@ const settingsFieldClass = "h-11 text-base md:text-base"
 const settingsLabelClass = "text-sm font-medium"
 
 export default function SettingsPage() {
+  const user = useAuthUser();
   const router = useRouter()
   const { theme, setTheme } = useTheme()
   const { toast } = useToast()
@@ -133,10 +135,6 @@ export default function SettingsPage() {
   useEffect(() => {
     const loadProfile = async () => {
       const supabase = createClient()
-      const {
-        data: { user },
-      } = await supabase.auth.getUser()
-
       if (user) {
         const { data } = await supabase
           .from("profiles")

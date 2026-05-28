@@ -15,8 +15,10 @@ import { Textarea } from "@/components/ui/textarea"
 import { Flag, Loader2 } from "lucide-react"
 import { toast } from "sonner"
 import { createClient } from "@/lib/supabase/client"
+import { useAuthUser } from "@/components/auth/auth-provider"
 
 export function ReportIssueDialog() {
+  const user = useAuthUser();
   const [open, setOpen] = useState(false)
   const [message, setMessage] = useState("")
   const [sending, setSending] = useState(false)
@@ -31,7 +33,6 @@ export function ReportIssueDialog() {
     try {
       // Get user email for reply-to
       const supabase = createClient()
-      const { data: { user } } = await supabase.auth.getUser()
       const userEmail = user?.email || "unknown@user.com"
 
       const res = await fetch("/api/contact", {

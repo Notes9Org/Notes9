@@ -1,5 +1,5 @@
-import { redirect } from 'next/navigation'
 import { createClient } from "@/lib/supabase/server"
+import { requireUser } from "@/lib/auth/current-user"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { SetPageBreadcrumb } from "@/components/layout/breadcrumb-context"
@@ -26,13 +26,8 @@ export default async function ExperimentDetailPage({
   const { id } = await params
   const resolvedSearch = searchParams ? await searchParams : {}
   const initialTab = resolvedSearch.tab ?? "notes"
+  const user = await requireUser()
   const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-
-  if (!user) {
-    redirect("/auth/login")
-  }
-
   // Fetch experiment data with linked protocols
   const { data: experimentData, error: experimentError } = await supabase
     .from("experiments")

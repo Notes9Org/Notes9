@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useRef } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
 import { createClient } from "@/lib/supabase/client"
+import { useAuthUser } from "@/components/auth/auth-provider"
 import { PaperEditor, DEFAULT_PAPER_TEMPLATE } from "@/components/text-editor/paper-editor"
 import { usePaperAI } from "@/contexts/paper-ai-context"
 import { useCollaboration } from "@/lib/collaboration/use-collaboration"
@@ -81,6 +82,7 @@ function statusVariant(status: string): "default" | "outline" | "success" {
 }
 
 export function PaperWorkspace({ paperId, backLink, leftControls, onPaperMutated, onPaperTitleUpdated }: PaperWorkspaceProps) {
+  const user = useAuthUser();
   const router = useRouter()
   const id = paperId
 
@@ -100,7 +102,6 @@ export function PaperWorkspace({ paperId, backLink, leftControls, onPaperMutated
   useEffect(() => {
     const fetchUser = async () => {
       const supabase = createClient()
-      const { data: { user } } = await supabase.auth.getUser()
       if (user) {
         setUserId(user.id)
         setUserName(user.user_metadata?.full_name || user.email || "Anonymous")

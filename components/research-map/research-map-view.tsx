@@ -21,6 +21,7 @@ import {
 import "@xyflow/react/dist/style.css"
 import { useRouter } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
+import { useAuthUser } from "@/components/auth/auth-provider"
 import {
   ResearchMapNodeKind,
   ResearchMapResponse,
@@ -384,6 +385,7 @@ function mapApiToFlow(
 }
 
 function ResearchMapCanvas() {
+  const user = useAuthUser();
   const router = useRouter()
   const { fitView, getEdges } = useReactFlow()
   const supabase = useMemo(() => createClient(), [])
@@ -436,9 +438,6 @@ function ResearchMapCanvas() {
   }, [labelQuery])
 
   const loadProjectOptions = useCallback(async () => {
-    const {
-      data: { user },
-    } = await supabase.auth.getUser()
     if (!user) return
     const { data: profile } = await supabase
       .from("profiles")

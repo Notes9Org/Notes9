@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
+import { useAuthUser } from "@/components/auth/auth-provider"
 import {
   Dialog,
   DialogContent,
@@ -46,6 +47,7 @@ export function NewLabNoteDialog({
   onCreated,
   defaultProjectId = null,
 }: NewLabNoteDialogProps) {
+  const user = useAuthUser();
   const router = useRouter()
   const { toast } = useToast()
   const supabase = createClient()
@@ -67,7 +69,6 @@ export function NewLabNoteDialog({
     const load = async () => {
       setLoadingProjects(true)
       try {
-        const { data: { user } } = await supabase.auth.getUser()
         if (!user) return
         const { data: profile } = await supabase
           .from("profiles")
@@ -156,7 +157,6 @@ export function NewLabNoteDialog({
     if (!selectedExperimentId?.trim()) return
     setCreating(true)
     try {
-      const { data: { user } } = await supabase.auth.getUser()
       if (!user) throw new Error("Not authenticated")
       const noteTitle = title.trim() || (await getUniqueDefaultTitle(selectedExperimentId))
       const { data, error } = await supabase

@@ -2,6 +2,7 @@
 
 import { after } from "next/server"
 import { createClient } from "@/lib/supabase/server"
+import { getCurrentUser } from "@/lib/auth/current-user"
 import { revalidatePath } from "next/cache"
 import { tryImportPdfForPaper } from "@/lib/literature-pdf-import"
 import { SearchPaper } from "@/types/paper-search"
@@ -9,14 +10,11 @@ import { getLiteratureStorageBucket, normalizeDoi } from "@/lib/literature-pdf-s
 
 export async function removeStagingLiterature(literatureId: string) {
   try {
-    const supabase = await createClient()
-    const {
-      data: { user },
-    } = await supabase.auth.getUser()
-
+    const user = await getCurrentUser()
     if (!user) {
       return { success: false as const, error: "Not authenticated" }
     }
+    const supabase = await createClient()
 
     const { data: row, error: fetchError } = await supabase
       .from("literature_reviews")
@@ -55,14 +53,11 @@ export async function stagePaper(
   options?: { projectId?: string | null }
 ) {
   try {
-    const supabase = await createClient()
-    const {
-      data: { user },
-    } = await supabase.auth.getUser()
-
+    const user = await getCurrentUser()
     if (!user) {
       return { success: false as const, error: "Not authenticated" }
     }
+    const supabase = await createClient()
 
     const { data: profile } = await supabase
       .from("profiles")
@@ -175,14 +170,11 @@ export async function savePaperToRepository(
   }
 ) {
   try {
-    const supabase = await createClient()
-    const {
-      data: { user },
-    } = await supabase.auth.getUser()
-
+    const user = await getCurrentUser()
     if (!user) {
       return { success: false, error: "Not authenticated" }
     }
+    const supabase = await createClient()
 
     const { data: profile } = await supabase
       .from("profiles")

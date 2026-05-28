@@ -1,5 +1,5 @@
-import { redirect } from 'next/navigation'
 import { createClient } from "@/lib/supabase/server"
+import { requireUser } from "@/lib/auth/current-user"
 import {
   ReportsPageClient,
   type ReportRow,
@@ -7,15 +7,8 @@ import {
 import { CatalystSectionHero } from "@/components/catalyst/catalyst-section-hero"
 
 export default async function ReportsPage() {
+  const user = await requireUser()
   const supabase = await createClient()
-
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-  if (!user) {
-    redirect("/auth/login")
-  }
-
   const { data: reports } = await supabase
     .from("reports")
     .select(`

@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from "react"
 import { useRouter, useSearchParams, usePathname } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
+import { useAuthUser } from "@/components/auth/auth-provider"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -127,6 +128,7 @@ export function LabNotesTab({
   experimentPageHref?: string
   experiment: any
 }) {
+  const user = useAuthUser();
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -287,10 +289,6 @@ export function LabNotesTab({
 
     try {
       const supabase = createClient();
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-
       if (!user) throw new Error("Not authenticated");
 
       // If creating a new note, insert it first
@@ -475,7 +473,6 @@ export function LabNotesTab({
   useEffect(() => {
     const fetchCurrentUser = async () => {
       const supabase = createClient();
-      const { data: { user } } = await supabase.auth.getUser();
       if (user) {
         setCurrentUserId(user.id);
       }
@@ -646,9 +643,6 @@ export function LabNotesTab({
     try {
       setIsPublishing(true);
       const supabase = createClient();
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
       if (!user || user.id !== selectedNote.created_by) {
         toast({
           title: "Cannot publish",
@@ -704,9 +698,6 @@ export function LabNotesTab({
     try {
       setIsPublishing(true);
       const supabase = createClient();
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
       if (!user || user.id !== selectedNote.created_by) {
         toast({
           title: "Cannot unpublish",
@@ -756,10 +747,6 @@ export function LabNotesTab({
 
     try {
       const supabase = createClient();
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-
       if (!user) throw new Error("Not authenticated");
 
       if (selectedNote && !isCreating) {
@@ -842,10 +829,6 @@ export function LabNotesTab({
     cancelPendingSave();
     try {
       const supabase = createClient();
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-
       if (!user) throw new Error("Not authenticated");
 
       const defaultTitle = await getUniqueDefaultTitle();

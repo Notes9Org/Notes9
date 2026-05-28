@@ -88,9 +88,12 @@ function fromRow(r: Row): WhiteboardNote {
 
 async function authedClient() {
   const supabase = createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) throw new Error("Not authenticated")
-  return { supabase, userId: user.id }
+  // Use getSession() instead of getUser() — local cookie/storage read, no
+  // /auth/v1/user round-trip. RLS still enforces authorization server-side
+  // via the JWT cookie that PostgREST receives on every query.
+  const { data: { session } } = await supabase.auth.getSession()
+  if (!session?.user) throw new Error("Not authenticated")
+  return { supabase, userId: session.user.id }
 }
 
 export async function listWhiteboardNotes(opts: { projectId: string | null }): Promise<WhiteboardNote[]> {

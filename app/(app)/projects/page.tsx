@@ -1,5 +1,5 @@
-import { redirect } from 'next/navigation'
 import { createClient } from "@/lib/supabase/server"
+import { requireUser } from "@/lib/auth/current-user"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Plus, FlaskConical, ClipboardList, NotebookPen, Sparkles } from 'lucide-react'
@@ -9,15 +9,8 @@ import { SetPageBreadcrumb } from "@/components/layout/breadcrumb-context"
 import { CatalystSectionHero } from "@/components/catalyst/catalyst-section-hero"
 
 export default async function ProjectsPage() {
+  const user = await requireUser()
   const supabase = await createClient()
-
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-  if (!user) {
-    redirect("/auth/login")
-  }
-
   // Fetch projects with member and experiment counts
   const { data: projectsRaw } = await supabase
     .from("projects")

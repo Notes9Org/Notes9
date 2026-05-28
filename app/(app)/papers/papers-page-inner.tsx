@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState, useMemo } from "react"
 import { useSearchParams, useRouter } from "next/navigation"
 import Link from "next/link"
 import { createClient } from "@/lib/supabase/client"
+import { useAuthUser } from "@/components/auth/auth-provider"
 import { Button } from "@/components/ui/button"
 import { Plus } from "lucide-react"
 import { PaperList, type PaperListItem } from "./paper-list"
@@ -17,6 +18,7 @@ interface PapersPageInnerProps {
 }
 
 export function PapersPageInner({ projects = [] }: PapersPageInnerProps = {}) {
+  const user = useAuthUser();
   const searchParams = useSearchParams()
   const router = useRouter()
   const [papers, setPapers] = useState<PaperListItem[]>([])
@@ -28,9 +30,6 @@ export function PapersPageInner({ projects = [] }: PapersPageInnerProps = {}) {
 
   const fetchPapers = useCallback(async () => {
     const supabase = createClient()
-    const {
-      data: { user },
-    } = await supabase.auth.getUser()
     if (!user) {
       setPapers([])
       setFetchError(null)
