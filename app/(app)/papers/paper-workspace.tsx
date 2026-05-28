@@ -12,9 +12,8 @@ import { getCollaboratorColor } from "@/lib/collaboration/colors"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
-import { ArrowLeft, Loader2, Download, Upload } from "lucide-react"
+import { ArrowLeft, Loader2, Download, Upload, FileCode, NotebookPen, FileText, FileDown } from "lucide-react"
 import { toast } from "sonner"
-import { SaveStatusIndicator } from "@/components/ui/save-status"
 import { ConnectionStatus } from "@/components/collaboration/connection-status"
 import { CollaboratorAvatars } from "@/components/collaboration/collaborator-avatars"
 import { useAutoSave } from "@/hooks/use-auto-save"
@@ -33,7 +32,13 @@ import {
   DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu"
 import { FileDropzone } from "@/components/ui/file-dropzone"
-import { NoteExportMenu } from "@/components/note-export-menu"
+import {
+  exportNoteAsDocx,
+  exportNoteAsHtml,
+  exportNoteAsMarkdown,
+  exportNoteAsPdfFromHtml,
+  exportNoteAsPlainText,
+} from "@/lib/note-export"
 
 function publicationYearFromBib(entry: BibEntry, title: string, journal: string): string {
   const raw = entry.year?.trim() ?? ""
@@ -380,25 +385,75 @@ export function PaperWorkspace({ paperId, backLink, leftControls, onPaperMutated
             className="min-w-0 flex-1 border-0 bg-transparent px-0 py-0.5 text-2xl font-bold shadow-none focus-visible:ring-1 focus-visible:ring-ring/40 md:text-2xl"
           />
           <Badge variant={statusVariant(status)}>{status.replace("_", " ")}</Badge>
-          <SaveStatusIndicator status={saveStatus} />
-          {isCollaborationEnabled() && (
-            <ConnectionStatus status={collaborationStatus} />
-          )}
         </div>
         {isCollaborationEnabled() && (
           <CollaboratorAvatars collaborators={collaborators} />
         )}
         <div className="flex shrink-0 items-center gap-2">
+          {/* Import dropdown */}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" size="icon" title="Import">
+                <Download className="h-4 w-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-64">
+              <DropdownMenuLabel>Import Documents</DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={() => texInputRef.current?.click()}>
+                <Download className="mr-2 h-4 w-4" />
+                <div className="flex flex-col gap-0.5">
+                  <span className="text-sm">Import LaTeX (.tex)</span>
+                  <span className="text-xs text-muted-foreground">Replace paper content</span>
+                </div>
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => bibInputRef.current?.click()}>
+                <Download className="mr-2 h-4 w-4" />
+                <div className="flex flex-col gap-0.5">
+                  <span className="text-sm">Import BibTeX (.bib)</span>
+                  <span className="text-xs text-muted-foreground">Add references</span>
+                </div>
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+
           {/* Export dropdown */}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button variant="outline" size="icon" title="Export">
-                <Download className="h-4 w-4" />
+                <Upload className="h-4 w-4" />
               </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="max-h-80 w-64 overflow-y-auto">
-              <DropdownMenuLabel>Export as LaTeX (.tex)</DropdownMenuLabel>
+            <DropdownMenuContent align="end" className="max-h-96 w-64 overflow-y-auto">
+              <DropdownMenuLabel>Export Formats</DropdownMenuLabel>
               <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={() => void exportNoteAsMarkdown(content, displayTitle)}>
+                <Upload className="mr-2 h-4 w-4" />
+                Markdown (.md)
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => exportNoteAsHtml(content, displayTitle)}>
+                <Upload className="mr-2 h-4 w-4" />
+                HTML (.html)
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => exportNoteAsPlainText(content, displayTitle)}>
+                <Upload className="mr-2 h-4 w-4" />
+                Plain text (.txt)
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => void exportNoteAsDocx(content, displayTitle)}>
+                <Upload className="mr-2 h-4 w-4" />
+                Word (.docx)
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={() =>
+                  void exportNoteAsPdfFromHtml(content, displayTitle)
+                }
+              >
+                <Upload className="mr-2 h-4 w-4" />
+                Save as PDF…
+              </DropdownMenuItem>
+
+              <DropdownMenuSeparator />
+              <DropdownMenuLabel>Export as LaTeX</DropdownMenuLabel>
               {JOURNAL_TEMPLATES.map((tmpl) => (
                 <DropdownMenuItem
                   key={tmpl.id}
@@ -410,12 +465,14 @@ export function PaperWorkspace({ paperId, backLink, leftControls, onPaperMutated
                     toast.success(`Exported as ${tmpl.name} LaTeX`)
                   }}
                 >
+                  <Upload className="mr-2 h-4 w-4 text-transparent" />
                   <div className="flex flex-col gap-0.5">
                     <span className="text-sm">{tmpl.name}</span>
                     <span className="text-xs text-muted-foreground">{tmpl.description}</span>
                   </div>
                 </DropdownMenuItem>
               ))}
+
               <DropdownMenuSeparator />
               <DropdownMenuLabel>Bibliography</DropdownMenuLabel>
               <DropdownMenuItem
@@ -431,39 +488,15 @@ export function PaperWorkspace({ paperId, backLink, leftControls, onPaperMutated
                   toast.success(`Exported ${citations.length} references as .bib`)
                 }}
               >
+                <Upload className="mr-2 h-4 w-4" />
                 <div className="flex flex-col gap-0.5">
                   <span className="text-sm">Export BibTeX (.bib)</span>
-                  <span className="text-xs text-muted-foreground">Download citations as BibTeX file</span>
+                  <span className="text-xs text-muted-foreground">Download citations</span>
                 </div>
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
 
-          {/* Import dropdown */}
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="outline" size="icon" title="Import">
-                <Upload className="h-4 w-4" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-64">
-              <DropdownMenuLabel>Import</DropdownMenuLabel>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={() => texInputRef.current?.click()}>
-                <div className="flex flex-col gap-0.5">
-                  <span className="text-sm">Import LaTeX (.tex)</span>
-                  <span className="text-xs text-muted-foreground">Replace paper content from a .tex file</span>
-                </div>
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => bibInputRef.current?.click()}>
-                <div className="flex flex-col gap-0.5">
-                  <span className="text-sm">Import BibTeX (.bib)</span>
-                  <span className="text-xs text-muted-foreground">Add references from a .bib file</span>
-                </div>
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-          <NoteExportMenu title={displayTitle} htmlContent={content} />
           <PaperActions
             paper={{ id, title: displayTitle, status }}
             onAfterMutation={onPaperMutated}
