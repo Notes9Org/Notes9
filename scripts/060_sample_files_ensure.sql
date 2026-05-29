@@ -130,6 +130,10 @@ ALTER TABLE public.sample_lab_notes  ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "sample_files_all"  ON public.sample_files;
 DROP POLICY IF EXISTS "Users can read sample files"   ON public.sample_files;
 DROP POLICY IF EXISTS "Users can manage sample files" ON public.sample_files;
+DROP POLICY IF EXISTS "sample_files_org_select" ON public.sample_files;
+DROP POLICY IF EXISTS "sample_files_org_insert" ON public.sample_files;
+DROP POLICY IF EXISTS "sample_files_org_update" ON public.sample_files;
+DROP POLICY IF EXISTS "sample_files_org_delete" ON public.sample_files;
 CREATE POLICY "sample_files_org_select" ON public.sample_files
   FOR SELECT USING (
     sample_id IN (
@@ -178,6 +182,7 @@ CREATE POLICY "sample_files_org_delete" ON public.sample_files
 DROP POLICY IF EXISTS "sample_experiments_all"  ON public.sample_experiments;
 DROP POLICY IF EXISTS "Users can read sample experiment links"   ON public.sample_experiments;
 DROP POLICY IF EXISTS "Users can manage sample experiment links" ON public.sample_experiments;
+DROP POLICY IF EXISTS "sample_experiments_org" ON public.sample_experiments;
 CREATE POLICY "sample_experiments_org" ON public.sample_experiments
   FOR ALL USING (
     sample_id IN (
@@ -191,6 +196,7 @@ CREATE POLICY "sample_experiments_org" ON public.sample_experiments
 DROP POLICY IF EXISTS "sample_projects_all"  ON public.sample_projects;
 DROP POLICY IF EXISTS "Users can read sample project links"   ON public.sample_projects;
 DROP POLICY IF EXISTS "Users can manage sample project links" ON public.sample_projects;
+DROP POLICY IF EXISTS "sample_projects_org" ON public.sample_projects;
 CREATE POLICY "sample_projects_org" ON public.sample_projects
   FOR ALL USING (
     project_id IN (
@@ -201,6 +207,7 @@ CREATE POLICY "sample_projects_org" ON public.sample_projects
 DROP POLICY IF EXISTS "sample_lab_notes_all"  ON public.sample_lab_notes;
 DROP POLICY IF EXISTS "Users can read sample lab note links"   ON public.sample_lab_notes;
 DROP POLICY IF EXISTS "Users can manage sample lab note links" ON public.sample_lab_notes;
+DROP POLICY IF EXISTS "sample_lab_notes_org" ON public.sample_lab_notes;
 CREATE POLICY "sample_lab_notes_org" ON public.sample_lab_notes
   FOR ALL USING (
     sample_id IN (
