@@ -38,8 +38,38 @@ export async function createSampleFileSignedUrl(
   const { data, error } = await supabase.storage
     .from(USER_STORAGE_BUCKET)
     .createSignedUrl(storagePath, ttlSeconds)
-  if (error || !data?.signedUrl) return null
+  if (error || !data?.signedUrl) {
+    // Surface the underlying cause (almost always a storage RLS denial) instead
+    // of silently returning null — callers otherwise show an endless spinner.
+    if (error) console.error("createSampleFileSignedUrl failed", { storagePath, error })
+    return null
+  }
   return data.signedUrl
+}
+
+/**
+ * Variant that returns the error message so the UI can show a real diagnostic
+ * (e.g. "not authorized") rather than an indefinite loading state.
+ */
+export async function signSampleFileUrl(
+  supabase: SupabaseClient,
+  storagePath: string,
+  ttlSeconds = 3600
+): Promise<{ url: string | null; error: string | null }> {
+  if (!storagePath) return { url: null, error: "Missing storage path for this file." }
+  const { data, error } = await supabase.storage
+    .from(USER_STORAGE_BUCKET)
+    .createSignedUrl(storagePath, ttlSeconds)
+  if (error || !data?.signedUrl) {
+    console.error("signSampleFileUrl failed", { storagePath, error })
+    return {
+      url: null,
+      error:
+        error?.message ??
+        "Could not authorize this file. You may not have access, or the storage policy is missing.",
+    }
+  }
+  return { url: data.signedUrl, error: null }
 }
 
 /** Public URL segment after which the object path begins (Supabase public object URL shape). */

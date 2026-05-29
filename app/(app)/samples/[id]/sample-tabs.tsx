@@ -1,7 +1,7 @@
 "use client"
 
-import { useCallback, useEffect, useId, useState } from "react"
-import { useRouter, useSearchParams, usePathname } from "next/navigation"
+import { useCallback, useId, useState } from "react"
+import { useSearchParams, usePathname } from "next/navigation"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import type { ReactNode } from "react"
 
@@ -31,39 +31,36 @@ export function SampleTabs({
   history,
   qc,
 }: SampleTabsProps) {
-  const router = useRouter()
   const pathname = usePathname()
   const searchParams = useSearchParams()
   const baseId = useId()
-  const [mounted, setMounted] = useState(false)
 
-  // Tab state is derived directly from URL — no useState/useEffect sync dance.
-  // The old useState + useEffect([searchParams, active]) pattern raced router.replace:
-  // a click would set state, then the effect would re-run with stale searchParams
-  // (still showing the previous tab) and revert the click.
-  const fromUrl = searchParams.get("tab")
-  const initialFromProps = isValidTab(initialTab) ? initialTab : "overview"
-  const active: TabValue = isValidTab(fromUrl) ? fromUrl : initialFromProps
-
-  useEffect(() => {
-    setMounted(true)
-  }, [])
+  // Local state is the source of truth so a tab click switches INSTANTLY.
+  // The previous version derived `active` straight from `searchParams` and only
+  // called router.replace() — but on a dynamic server page (with loading.tsx)
+  // that re-runs every DB query in page.tsx, so the navigation stays pending and
+  // `searchParams` never updates → the tab appeared to do nothing. We keep local
+  // state and sync the URL via history.replaceState (no server round-trip), which
+  // still preserves deep-links and refresh while decoupling the switch from the DB.
+  const initialFromProps: TabValue = isValidTab(initialTab) ? initialTab : "overview"
+  const [active, setActive] = useState<TabValue>(initialFromProps)
 
   const handleChange = useCallback(
     (value: string) => {
       if (!isValidTab(value)) return
-      const next = new URLSearchParams(searchParams.toString())
-      if (value === "overview") next.delete("tab")
-      else next.set("tab", value)
-      const query = next.toString()
-      router.replace(query ? `${pathname}?${query}` : pathname, { scroll: false })
+      setActive(value)
+      try {
+        const next = new URLSearchParams(searchParams?.toString() ?? "")
+        if (value === "overview") next.delete("tab")
+        else next.set("tab", value)
+        const query = next.toString()
+        window.history.replaceState(null, "", query ? `${pathname}?${query}` : pathname)
+      } catch {
+        /* URL sync is best-effort; the tab still switches via local state */
+      }
     },
-    [router, pathname, searchParams]
+    [pathname, searchParams]
   )
-
-  if (!mounted) {
-    return <div className="min-h-[400px]" />
-  }
 
   return (
     <Tabs

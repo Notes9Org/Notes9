@@ -6,42 +6,7 @@ import { isLikelyUuid } from "@/lib/url-project-param"
 const PATH_SCOPE_RE =
   /^\/(projects|experiments|lab-notes|protocols|samples|data|reports|equipment|papers|literature-reviews)\/([^/?#]+)/
 
-const TABLE_BY_PATH_TYPE: Record<string, string> = {
-  protocols: "protocols",
-  samples: "samples",
-  data: "experiment_data",
-  reports: "reports",
-  equipment: "equipment",
-  papers: "papers",
-  "literature-reviews": "literature_reviews",
-}
-
-async function loadProjectName(
-  supabase: Awaited<ReturnType<typeof createClient>>,
-  projectId: string,
-): Promise<string | null> {
-  const { data: proj } = await supabase
-    .from("projects")
-    .select("name")
-    .eq("id", projectId)
-    .single()
-  return proj?.name ?? null
-}
-
-async function loadExperimentScope(
-  supabase: Awaited<ReturnType<typeof createClient>>,
-  experimentId: string,
-): Promise<{ experimentName: string | null; projectId: string | null }> {
-  const { data: exp } = await supabase
-    .from("experiments")
-    .select("name, project_id")
-    .eq("id", experimentId)
-    .single()
-  return {
-    experimentName: exp?.name ?? null,
-    projectId: exp?.project_id ?? null,
-  }
-}
+const CACHE_HEADERS = { "Cache-Control": "private, max-age=300" }
 
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url)
@@ -55,17 +20,14 @@ export async function GET(req: NextRequest) {
 
   const match = path.match(PATH_SCOPE_RE)
   if (!match) {
-    return NextResponse.json({
-      projectId: null,
-      projectName: null,
-      experimentId: null,
-      experimentName: null,
-    })
+    return NextResponse.json(
+      { projectId: null, projectName: null, experimentId: null, experimentName: null },
+      { headers: CACHE_HEADERS },
+    )
   }
 
   const type = match[1]
   const id = match[2]
-  const supabase = await createClient()
 
   // Require an authenticated session. Without this, anyone could resolve
   // project/experiment names from IDs (org-structure enumeration). RLS limits
@@ -75,114 +37,71 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   }
 
+  const supabase = await createClient()
+
   let projectId: string | null = null
   let projectName: string | null = null
   let experimentId: string | null = null
   let experimentName: string | null = null
 
   try {
-    if (type === "projects") {
-      projectId = id
-    } else if (type === "experiments") {
-      experimentId = id
-      const scope = await loadExperimentScope(supabase, id)
-      experimentName = scope.experimentName
-      projectId = scope.projectId
-    } else if (type === "lab-notes") {
-      const { data: note } = await supabase
-        .from("lab_notes")
-        .select("experiment_id, project_id")
-        .eq("id", id)
-        .single()
+    // Single round-trip to Postgres instead of 2–4 sequential queries.
+    // The function runs as SECURITY INVOKER so RLS enforces the org boundary.
+    const { data, error } = await supabase.rpc("resolve_entity_scope", {
+      p_type: type,
+      p_id: id,
+    })
 
-      if (note?.experiment_id) {
-        experimentId = note.experiment_id
-        const scope = await loadExperimentScope(supabase, experimentId)
-        experimentName = scope.experimentName
-        projectId = scope.projectId
-      } else if (note?.project_id) {
-        projectId = note.project_id
-      }
-    } else {
-      const tableName = TABLE_BY_PATH_TYPE[type]
-      if (tableName) {
-        const { data: row } = await supabase
-          .from(tableName)
-          .select("project_id, experiment_id")
-          .eq("id", id)
-          .single()
-
-        if (row?.project_id) {
-          projectId = row.project_id
-        }
-        if (row?.experiment_id) {
-          experimentId = row.experiment_id
-          const scope = await loadExperimentScope(supabase, experimentId)
-          experimentName = scope.experimentName
-          projectId = scope.projectId ?? projectId
-        } else if (type === "samples") {
-          const { data: sampleLink } = await supabase
-            .from("sample_experiments")
-            .select("experiment_id")
-            .eq("sample_id", id)
-            .order("linked_at", { ascending: false })
-            .limit(1)
-            .maybeSingle()
-          if (sampleLink?.experiment_id) {
-            experimentId = sampleLink.experiment_id
-            const scope = await loadExperimentScope(supabase, experimentId)
-            experimentName = scope.experimentName
-            projectId = scope.projectId ?? projectId
-          } else if (!projectId) {
-            const { data: projectLink } = await supabase
-              .from("sample_projects")
-              .select("project_id")
-              .eq("sample_id", id)
-              .limit(1)
-              .maybeSingle()
-            if (projectLink?.project_id) {
-              projectId = projectLink.project_id
-            }
-          }
-        } else if (type === "protocols" && !experimentId) {
-          const { data: usage } = await supabase
-            .from("experiment_protocols")
-            .select("experiment_id")
-            .eq("protocol_id", id)
-            .limit(1)
-            .maybeSingle()
-          if (usage?.experiment_id) {
-            experimentId = usage.experiment_id
-            const scope = await loadExperimentScope(supabase, experimentId)
-            experimentName = scope.experimentName
-            projectId = scope.projectId ?? projectId
-          }
-        }
-      }
-    }
-
-    if (!experimentId && experimentParam && isLikelyUuid(experimentParam)) {
-      experimentId = experimentParam
-      const scope = await loadExperimentScope(supabase, experimentId)
-      experimentName = scope.experimentName
-      projectId = scope.projectId ?? projectId
-    }
-
-    if (!projectId && fallback) {
-      projectId = fallback
-    }
-
-    if (projectId) {
-      projectName = await loadProjectName(supabase, projectId)
+    if (!error && data && data.length > 0) {
+      const row = data[0]
+      projectId = row.project_id ?? null
+      projectName = row.project_name ?? null
+      experimentId = row.experiment_id ?? null
+      experimentName = row.experiment_name ?? null
     }
   } catch (err) {
-    console.error("Resolve scope failed", err)
+    console.error("Resolve scope RPC failed", err)
   }
 
-  return NextResponse.json({
-    projectId,
-    projectName,
-    experimentId,
-    experimentName,
-  })
+  // If the path entity didn't carry an experiment but the client passed
+  // ?experiment=<id>, supplement with that experiment's context.
+  if (!experimentId && experimentParam && isLikelyUuid(experimentParam)) {
+    try {
+      const { data: exp } = await supabase
+        .from("experiments")
+        .select("name, project_id")
+        .eq("id", experimentParam)
+        .single()
+      if (exp) {
+        experimentId = experimentParam
+        experimentName = exp.name ?? null
+        if (!projectId) projectId = exp.project_id ?? null
+      }
+    } catch {
+      // non-fatal
+    }
+  }
+
+  // Fallback: if no project resolved from the entity, use the persisted ID
+  // the client sent and look up its name.
+  if (!projectId && fallback) {
+    projectId = fallback
+    if (!projectName) {
+      try {
+        const { data: proj } = await supabase
+          .from("projects")
+          .select("name")
+          .eq("id", fallback)
+          .single()
+        projectName = proj?.name ?? null
+      } catch {
+        // non-fatal
+      }
+    }
+  }
+
+  return NextResponse.json(
+    { projectId, projectName, experimentId, experimentName },
+    { headers: CACHE_HEADERS },
+  )
 }

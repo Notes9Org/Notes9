@@ -22,6 +22,7 @@ import { useToast } from "@/hooks/use-toast"
 import {
   createSampleFileSignedUrl,
   createSampleFileStoragePath,
+  signSampleFileUrl,
   USER_STORAGE_BUCKET,
 } from "@/lib/user-storage-bucket"
 import {
@@ -100,6 +101,7 @@ export function SampleMolecularFilesTab({ sampleId, initialFiles }: SampleMolecu
   const user = useAuthUser();
   const { toast } = useToast()
   const inputRef = useRef<HTMLInputElement | null>(null)
+  const orgIdRef = useRef<string | null>(null)
   const [files, setFiles] = useState(initialFiles)
   const [selectedId, setSelectedId] = useState(initialFiles[0]?.id ?? "")
   const [uploading, setUploading] = useState(false)
@@ -107,6 +109,7 @@ export function SampleMolecularFilesTab({ sampleId, initialFiles }: SampleMolecu
   const [error, setError] = useState<string | null>(null)
   const [signedUrl, setSignedUrl] = useState<string | null>(null)
   const [signedUrlLoading, setSignedUrlLoading] = useState(false)
+  const [signedUrlError, setSignedUrlError] = useState<string | null>(null)
   const [pendingDelete, setPendingDelete] = useState<SampleMolecularFile | null>(null)
   const [deleting, setDeleting] = useState(false)
   const [listOpen, setListOpen] = useState(true)
@@ -116,36 +119,49 @@ export function SampleMolecularFilesTab({ sampleId, initialFiles }: SampleMolecu
     [files, selectedId]
   )
 
+  // When the server passed no initial files (e.g. fallback query ran), fetch
+  // directly on mount so the tab is never silently empty.
+  useEffect(() => {
+    if (initialFiles.length === 0) refreshFiles()
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
   // Resolve a signed URL for the active file whenever selection changes.
+  const signSelectedFile = useCallback(async () => {
+    if (!selectedFile) {
+      setSignedUrl(null)
+      setSignedUrlLoading(false)
+      setSignedUrlError(null)
+      return
+    }
+    setSignedUrlLoading(true)
+    setSignedUrl(null)
+    setSignedUrlError(null)
+    try {
+      const supabase = createClient()
+      const { url, error: signError } = await signSampleFileUrl(
+        supabase,
+        selectedFile.storage_path,
+        3600
+      )
+      setSignedUrl(url)
+      setSignedUrlError(url ? null : signError ?? "Could not load this file.")
+    } catch (err) {
+      console.error("Could not sign sample file URL", err)
+      setSignedUrl(null)
+      setSignedUrlError(err instanceof Error ? err.message : "Could not load this file.")
+    } finally {
+      setSignedUrlLoading(false)
+    }
+  }, [selectedFile?.id, selectedFile?.storage_path])
+
   useEffect(() => {
     let cancelled = false
-    async function resolve() {
-      if (!selectedFile) {
-        setSignedUrl(null)
-        setSignedUrlLoading(false)
-        return
-      }
-      setSignedUrlLoading(true)
-      setSignedUrl(null)
-      try {
-        const supabase = createClient()
-        const url = await createSampleFileSignedUrl(supabase, selectedFile.storage_path, 3600)
-        if (cancelled) return
-        setSignedUrl(url)
-      } catch (err) {
-        if (cancelled) return
-        console.error("Could not sign sample file URL", err)
-        setSignedUrl(null)
-        setError(err instanceof Error ? err.message : "Could not load this file.")
-      } finally {
-        if (!cancelled) setSignedUrlLoading(false)
-      }
-    }
-    resolve()
+    if (!cancelled) signSelectedFile()
     return () => {
       cancelled = true
     }
-  }, [selectedFile?.id, selectedFile?.storage_path])
+  }, [signSelectedFile])
 
   const refreshFiles = useCallback(async () => {
     setRefreshing(true)
@@ -192,16 +208,21 @@ export function SampleMolecularFilesTab({ sampleId, initialFiles }: SampleMolecu
       const supabase = createClient()
       if (!user) throw new Error("Not signed in")
 
-      const { data: profile } = await supabase
-        .from("profiles")
-        .select("organization_id")
-        .eq("id", user.id)
-        .single()
-      if (!profile?.organization_id) throw new Error("Could not resolve your organization for storage.")
+      // Resolve org_id once and cache it for subsequent uploads in this session.
+      if (!orgIdRef.current) {
+        const { data: profile } = await supabase
+          .from("profiles")
+          .select("organization_id")
+          .eq("id", user.id)
+          .single()
+        if (!profile?.organization_id) throw new Error("Could not resolve your organization for storage.")
+        orgIdRef.current = profile.organization_id
+      }
+      const organizationId = orgIdRef.current
 
       const sampleFileId = crypto.randomUUID()
       const storagePath = createSampleFileStoragePath(
-        profile.organization_id,
+        organizationId,
         sampleId,
         sampleFileId,
         file.name
@@ -623,10 +644,24 @@ export function SampleMolecularFilesTab({ sampleId, initialFiles }: SampleMolecu
                 <div className="rounded-md border border-dashed p-8 text-center text-sm text-muted-foreground">
                   Select a file to view it here.
                 </div>
-              ) : signedUrlLoading || !signedUrl ? (
+              ) : signedUrlLoading ? (
                 <div className="flex h-72 items-center justify-center gap-2 text-sm text-muted-foreground">
                   <Loader2 className="h-4 w-4 animate-spin" />
                   Preparing secure viewer...
+                </div>
+              ) : !signedUrl ? (
+                <div className="flex h-72 flex-col items-center justify-center gap-3 rounded-md border border-dashed p-8 text-center">
+                  <p className="text-sm font-medium text-destructive">
+                    Could not open this file
+                  </p>
+                  <p className="max-w-md text-xs text-muted-foreground">
+                    {signedUrlError ??
+                      "The file could not be authorized for viewing. You may not have access, or the storage policy for sample files is missing."}
+                  </p>
+                  <Button type="button" variant="outline" size="sm" onClick={signSelectedFile}>
+                    <RefreshCw className="mr-2 h-4 w-4" />
+                    Try again
+                  </Button>
                 </div>
               ) : selectedFile.file_kind === "protein_structure" ? (
                 <SampleProteinViewer
