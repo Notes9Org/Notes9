@@ -47,7 +47,8 @@ export function CatalystChat({ sessionId }: CatalystChatProps) {
   const hasLoadedSessionRef = useRef<string | null>(null);
   const supabaseTokenRef = useRef<string | null>(null);
 
-  const supabase = createClient();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const supabase = useMemo(() => createClient(), []);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {

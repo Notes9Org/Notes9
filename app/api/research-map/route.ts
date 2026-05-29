@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
+import { getCurrentUser } from "@/lib/auth/current-user"
 import type {
   ResearchMapEdge,
   ResearchMapNode,
@@ -50,12 +51,9 @@ function nodeId(kind: ResearchMapNodeKind, uuid: string) {
 
 export async function GET(req: NextRequest) {
   const supabase = await createClient()
-  const {
-    data: { user },
-    error: authError,
-  } = await supabase.auth.getUser()
+  const user = await getCurrentUser()
 
-  if (authError || !user) {
+  if (!user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   }
 

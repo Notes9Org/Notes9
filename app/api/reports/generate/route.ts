@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { getCurrentUser } from '@/lib/auth/current-user'
 
 export const maxDuration = 60
 
@@ -93,8 +94,8 @@ export async function POST(req: NextRequest) {
   try {
     // Verify the Bearer token is an actual Supabase session, not any non-empty string.
     const supabase = await createClient()
-    const { data: { user }, error: authError } = await supabase.auth.getUser()
-    if (authError || !user) {
+    const user = await getCurrentUser()
+    if (!user) {
       return NextResponse.json(
         { error: 'Unauthorized — sign in to generate reports.' },
         { status: 401 }

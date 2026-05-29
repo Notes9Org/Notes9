@@ -70,7 +70,8 @@ export function CatalystChat({ open, onOpenChange }: CatalystChatProps) {
   const prevMessageCountRef = useRef(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const supabase = createClient();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const supabase = useMemo(() => createClient(), []);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {

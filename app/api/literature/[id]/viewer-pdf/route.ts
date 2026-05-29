@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 
 import { createClient } from "@/lib/supabase/server"
+import { getCurrentUser } from "@/lib/auth/current-user"
 import { createServiceRoleClient } from "@/lib/supabase-service-role"
 import { getLiteratureStorageBucket } from "@/lib/literature-pdf-storage"
 
@@ -23,12 +24,9 @@ export async function GET(_request: Request, context: { params: Promise<{ id: st
   try {
     const { id } = await context.params
     const supabase = await createClient()
-    const {
-      data: { user },
-      error: authError,
-    } = await supabase.auth.getUser()
+    const user = await getCurrentUser()
 
-    if (authError || !user) {
+    if (!user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 

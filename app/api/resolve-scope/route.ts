@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
+import { getCurrentUser } from "@/lib/auth/current-user"
 import { isLikelyUuid } from "@/lib/url-project-param"
 
 const PATH_SCOPE_RE =
@@ -69,11 +70,8 @@ export async function GET(req: NextRequest) {
   // Require an authenticated session. Without this, anyone could resolve
   // project/experiment names from IDs (org-structure enumeration). RLS limits
   // *which* rows are returned, but the endpoint itself must not be anonymous.
-  const {
-    data: { user },
-    error: authError,
-  } = await supabase.auth.getUser()
-  if (authError || !user) {
+  const user = await getCurrentUser()
+  if (!user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   }
 

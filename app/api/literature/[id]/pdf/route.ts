@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 
 import { analyzeLiteraturePdfUpload } from "@/lib/literature-pdf-match"
 import { createClient } from "@/lib/supabase/server"
+import { getCurrentUser } from "@/lib/auth/current-user"
 import {
   createLiteraturePdfPath,
   getLiteratureStorageBucket,
@@ -12,12 +13,9 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
   try {
     const { id } = await context.params
     const supabase = await createClient()
-    const {
-      data: { user },
-      error: authError,
-    } = await supabase.auth.getUser()
+    const user = await getCurrentUser()
 
-    if (authError || !user) {
+    if (!user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
@@ -66,12 +64,9 @@ export async function DELETE(_: Request, context: { params: Promise<{ id: string
   try {
     const { id } = await context.params
     const supabase = await createClient()
-    const {
-      data: { user },
-      error: authError,
-    } = await supabase.auth.getUser()
+    const user = await getCurrentUser()
 
-    if (authError || !user) {
+    if (!user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 

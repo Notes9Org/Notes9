@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
+import { getCurrentUser } from "@/lib/auth/current-user"
 import { USER_STORAGE_BUCKET } from "@/lib/user-storage-bucket"
 import { fileTypeFromBuffer } from "file-type"
 
@@ -22,8 +23,8 @@ const ALLOWED_MIME_TYPES = [
 export async function POST(request: Request) {
   try {
     const supabase = await createClient();
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
-    if (authError || !user) {
+    const user = await getCurrentUser();
+    if (!user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 

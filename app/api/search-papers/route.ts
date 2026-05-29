@@ -1,12 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server'
 import type { PaperSearchSortMode, SearchPaper } from '@/types/paper-search'
 import { createClient } from '@/lib/supabase/server'
+import { getCurrentUser } from '@/lib/auth/current-user'
 import {
   callCatalyst,
   CatalystHttpError,
   CatalystUnavailableError,
 } from '@/lib/catalyst-client'
 import { searchPapersWithMeta } from '@/lib/paper-search'
+
+// The web-search literature agent can run well over a minute. Allow the route
+// enough wall-clock so it isn't killed before catalyst responds (Vercel clamps
+// this to the plan limit; ignored on self-hosted Node).
+export const maxDuration = 160
 
 function parseSort(param: string | null): PaperSearchSortMode {
   if (param === 'recent' || param === 'cited') return param
@@ -45,7 +51,7 @@ type CatalystSearchResponse = {
 export async function GET(request: NextRequest) {
   try {
     const supabase = await createClient()
-    const { data: { user } } = await supabase.auth.getUser()
+    const user = await getCurrentUser()
     if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }

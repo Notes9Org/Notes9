@@ -210,13 +210,13 @@ export function SearchTab({
           <p className="text-xs text-muted-foreground">
             {sortMode === 'recent' ? (
               <>
-                <strong className="font-medium text-foreground">Newest first</strong> lists all matches ordered
-                by publication year (newest at the top). Change sort or filters to refresh.
+                <strong className="font-medium text-foreground">Newest first</strong> orders the matches you
+                already found by publication year (newest at the top).
               </>
             ) : (
               <>
-                After you search, use <strong className="font-medium text-foreground">Sort by</strong> and
-                filters here to reorder the same query — results refresh automatically.
+                Use <strong className="font-medium text-foreground">Sort by</strong> and the Open filter to
+                reorder the papers you already found — instantly, without running a new search.
               </>
             )}
           </p>

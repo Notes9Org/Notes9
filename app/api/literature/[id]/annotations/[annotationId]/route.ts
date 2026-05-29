@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 
 import { clampText, validateTextLimits } from "@/lib/literature-pdf-storage"
 import { createClient } from "@/lib/supabase/server"
+import { getCurrentUser } from "@/lib/auth/current-user"
 
 export async function PATCH(
   request: Request,
@@ -20,12 +21,9 @@ export async function PATCH(
     }
 
     const supabase = await createClient()
-    const {
-      data: { user },
-      error: authError,
-    } = await supabase.auth.getUser()
+    const user = await getCurrentUser()
 
-    if (authError || !user) {
+    if (!user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
@@ -69,12 +67,9 @@ export async function DELETE(
   try {
     const { annotationId } = await context.params
     const supabase = await createClient()
-    const {
-      data: { user },
-      error: authError,
-    } = await supabase.auth.getUser()
+    const user = await getCurrentUser()
 
-    if (authError || !user) {
+    if (!user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 

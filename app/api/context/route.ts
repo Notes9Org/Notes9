@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import { getCurrentUser } from '@/lib/auth/current-user';
 
 export async function GET(req: NextRequest) {
     const url = new URL(req.url);
@@ -16,8 +17,8 @@ export async function GET(req: NextRequest) {
     const supabase = await createClient();
 
     // Verify user is authenticated
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
-    if (authError || !user) {
+    const user = await getCurrentUser();
+    if (!user) {
         return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 

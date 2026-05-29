@@ -2,6 +2,7 @@ import crypto from "crypto";
 import { NextResponse } from "next/server";
 
 import { createClient } from "@/lib/supabase/server";
+import { getCurrentUser } from "@/lib/auth/current-user";
 
 function hmac(key: Buffer | string, data: string): Buffer {
   return crypto.createHmac("sha256", key).update(data, "utf8").digest();
@@ -90,11 +91,8 @@ function presignTranscribeUrl(opts: {
 
 export async function POST(req: Request) {
   const supabase = await createClient();
-  const {
-    data: { user },
-    error: authError,
-  } = await supabase.auth.getUser();
-  if (authError || !user) {
+  const user = await getCurrentUser();
+  if (!user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 

@@ -11,10 +11,12 @@
  *  - `lib/literature-pdf-import.ts`    → POST /literature/pdf/verify (Phase 3)
  */
 
-// Literature-search agent path can take 15–40 s on cold catalyst (Supabase init +
-// Anthropic round-trips + parallel source fan-out). Warm path is < 10 s. Cap at
-// 90 s; anything beyond that we abort and let the route fall back to legacy.
-const DEFAULT_TIMEOUT_MS = 90_000
+// The primary literature path is now a Claude web-search agent: live web search
+// (several server-side fetches) + canonical grounding. That can run 40–110 s on
+// a cold/loaded catalyst; the baseline DB fan-out is < 10 s. Cap at 150 s so the
+// web agent's results actually reach the user — aborting earlier silently serves
+// the stale legacy in-process DB search, which is exactly what we replaced.
+const DEFAULT_TIMEOUT_MS = 150_000
 const RETRY_STATUS = new Set([502, 503])
 
 export class CatalystUnavailableError extends Error {

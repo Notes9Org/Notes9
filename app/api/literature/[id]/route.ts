@@ -2,18 +2,16 @@ import { NextResponse } from "next/server"
 
 import { getLiteratureStorageBucket } from "@/lib/literature-pdf-storage"
 import { createClient } from "@/lib/supabase/server"
+import { getCurrentUser } from "@/lib/auth/current-user"
 
 /** Delete a literature row, its PDF in storage, and annotations. */
 export async function DELETE(_request: Request, context: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await context.params
     const supabase = await createClient()
-    const {
-      data: { user },
-      error: authError,
-    } = await supabase.auth.getUser()
+    const user = await getCurrentUser()
 
-    if (authError || !user) {
+    if (!user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 

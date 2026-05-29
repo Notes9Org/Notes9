@@ -1,5 +1,6 @@
 import { createServerClient } from "@supabase/ssr"
 import { NextResponse, type NextRequest } from "next/server"
+import { verifyAccessTokenLocally } from "@/lib/auth/verify-token"
 
 export async function updateSession(request: NextRequest) {
   let supabaseResponse = NextResponse.next({
@@ -10,8 +11,6 @@ export async function updateSession(request: NextRequest) {
   const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 
   if (!supabaseUrl || !supabaseAnonKey) {
-    console.error("Missing Supabase environment variables!")
-    console.error("Please set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY in your .env.local file")
     throw new Error(
       "Your project's URL and Key are required to create a Supabase client!\n\n" +
       "Check your Supabase project's API settings to find these values:\n" +
@@ -74,32 +73,45 @@ export async function updateSession(request: NextRequest) {
     return supabaseResponse
   }
 
-  // Three outcomes from the Supabase auth check:
+  // Verify the session locally when possible to avoid auth-server round-trips that
+  // saturate the DB connection pool. Three outcomes:
   //   - verified user         → continue
   //   - definitively no user  → redirect to /auth/login
   //   - call threw (network timeout, offline, transient blip)
-  //     → DO NOT bounce a logged-in user to /auth/login. Let the request
-  //       through and rely on the page's own `requireUser()` check (same
-  //       Supabase call, but with cookies fully settled and React.cache
-  //       deduping the verification). Previously this redirected on any
-  //       failure, causing the login page to flash mid-navigation whenever
-  //       getUser() timed out for a still-authenticated user.
+  //     → DO NOT bounce a logged-in user to /auth/login. Let the request through
+  //       and rely on the page's own `requireUser()` check.
   let authCallSucceeded = false
-  let user = null
+  let authenticated = false
   try {
     const {
-      data: { user: fetchedUser },
-    } = await supabase.auth.getUser()
-    user = fetchedUser
+      data: { session },
+    } = await supabase.auth.getSession()
+    const token = session?.access_token
+    const secret = process.env.SUPABASE_JWT_SECRET
+
+    if (token) {
+      if (secret) {
+        const payload = await verifyAccessTokenLocally(token, secret)
+        if (payload) {
+          authenticated = true
+        } else {
+          const { data } = await supabase.auth.getUser()
+          authenticated = Boolean(data?.user)
+        }
+      } else {
+        const { data } = await supabase.auth.getUser()
+        authenticated = Boolean(data?.user)
+      }
+    }
     authCallSucceeded = true
   } catch (error) {
     console.warn(
-      "[middleware] auth.getUser() failed; deferring auth check to the page:",
+      "[middleware] session verification failed; deferring auth check to the page:",
       error,
     )
   }
 
-  if (authCallSucceeded && !user) {
+  if (authCallSucceeded && !authenticated) {
     const loginUrl = new URL("/auth/login", request.url)
     const returnPath =
       request.nextUrl.pathname +

@@ -9,6 +9,7 @@ import {
   validateTextLimits,
 } from "@/lib/literature-pdf-storage"
 import { createClient } from "@/lib/supabase/server"
+import { getCurrentUser } from "@/lib/auth/current-user"
 import type { PdfMatchSource, SaveMode } from "@/types/literature-pdf"
 
 function explainSchemaError(message: string) {
@@ -66,12 +67,9 @@ function resolveMatchSource(action: FinalizeAction, saveMode: SaveMode): PdfMatc
 export async function POST(request: Request) {
   try {
     const supabase = await createClient()
-    const {
-      data: { user },
-      error: authError,
-    } = await supabase.auth.getUser()
+    const user = await getCurrentUser()
 
-    if (authError || !user) {
+    if (!user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 

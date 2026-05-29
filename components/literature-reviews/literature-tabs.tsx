@@ -102,7 +102,6 @@ export function LiteratureTabs({
 
   const [query, setQuery] = useState("")
   const [searchSort, setSearchSort] = useState<PaperSearchSortMode>("relevance")
-  const RECENT_SORT_YEARS = 5
   const [openAccessOnlySearch, setOpenAccessOnlySearch] = useState(false)
   const [searchResults, setSearchResults] = useState<SearchPaper[]>([])
   const [isSearching, setIsSearching] = useState(false)
@@ -525,22 +524,34 @@ export function LiteratureTabs({
     [stagedLiterature, lockedProjectId]
   )
 
-  const executePaperSearch = async (
-    q: string,
-    sort: PaperSearchSortMode,
-    openAccessOnly: boolean
-  ) => {
+  /**
+   * Sorting (Best match / Newest first / Most cited) and the open-access filter
+   * are derived from the metadata we already fetched — no new network search.
+   * "Best match" preserves the relevance order the backend returned; recent and
+   * cited sorts are stable, so ties keep that relevance order.
+   */
+  const displayedResults = useMemo(() => {
+    let list: SearchPaper[] = searchResults
+    if (openAccessOnlySearch) {
+      list = list.filter((p) => p.isOpenAccess)
+    }
+    if (searchSort === "recent") {
+      list = [...list].sort((a, b) => (b.year ?? 0) - (a.year ?? 0))
+    } else if (searchSort === "cited") {
+      list = [...list].sort((a, b) => (b.citedByCount ?? 0) - (a.citedByCount ?? 0))
+    }
+    return list
+  }, [searchResults, openAccessOnlySearch, searchSort])
+
+  const executePaperSearch = async (q: string) => {
     setIsSearching(true)
     try {
       const params = new URLSearchParams()
       params.set("query", q)
-      params.set("sort", sort)
-      if (sort === "recent") {
-        params.set("recentYears", String(RECENT_SORT_YEARS))
-      }
-      if (openAccessOnly) {
-        params.set("openAccessOnly", "true")
-      }
+      // Always fetch the broad, relevance-ranked pool with full metadata. The
+      // Sort-by control and the open-access filter then operate on this set
+      // client-side, so toggling them never triggers another search.
+      params.set("sort", "relevance")
       const response = await fetch(`/api/search-papers?${params.toString()}`)
       const data = await response.json()
 
@@ -560,24 +571,17 @@ export function LiteratureTabs({
     const q = query.trim()
     if (!q) return
     setHasSearched(true)
-    await executePaperSearch(q, searchSort, openAccessOnlySearch)
+    await executePaperSearch(q)
     syncTabsForSearchSession()
   }
 
+  // Sort + open-access are pure client-side views over the fetched metadata.
   const handleSearchSortChange = (sort: PaperSearchSortMode) => {
     setSearchSort(sort)
-    const q = query.trim()
-    if (hasSearched && q) {
-      void executePaperSearch(q, sort, openAccessOnlySearch)
-    }
   }
 
   const handleOpenAccessSearchChange = (openAccess: boolean) => {
     setOpenAccessOnlySearch(openAccess)
-    const q = query.trim()
-    if (hasSearched && q) {
-      void executePaperSearch(q, searchSort, openAccess)
-    }
   }
 
   const isPaperStaged = (paperId: string) => {
@@ -894,7 +898,7 @@ export function LiteratureTabs({
                     <SearchTab
                       query={query}
                       setQuery={setQuery}
-                      searchResults={searchResults}
+                      searchResults={displayedResults}
                       isSearching={isSearching}
                       hasSearched={hasSearched}
                       onSearch={handleSearch}
@@ -937,7 +941,7 @@ export function LiteratureTabs({
             <SearchTab
               query={query}
               setQuery={setQuery}
-              searchResults={searchResults}
+              searchResults={displayedResults}
               isSearching={isSearching}
               hasSearched={hasSearched}
               onSearch={handleSearch}

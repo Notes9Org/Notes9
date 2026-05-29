@@ -12,6 +12,7 @@ import {
 } from '@/lib/general-chat-request';
 import { splitSseBuffer, parseSseDataJson } from '@/lib/sse-event-blocks';
 import { createClient } from '@/lib/supabase/server';
+import { getCurrentUser } from '@/lib/auth/current-user';
 
 export const maxDuration = 300;
 
@@ -62,8 +63,8 @@ export async function POST(req: Request) {
   // and burn LLM quota billed to the account. We verify the Supabase JWT
   // unconditionally now and only forward upstream once we know who's asking.
   const supabase = await createClient();
-  const { data: { user }, error: authError } = await supabase.auth.getUser();
-  if (authError || !user) {
+  const user = await getCurrentUser();
+  if (!user) {
     return new Response(JSON.stringify({ error: 'Unauthorized' }), {
       status: 401,
       headers: { 'Content-Type': 'application/json' },

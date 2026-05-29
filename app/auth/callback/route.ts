@@ -158,12 +158,12 @@ async function handleAuthCallback(request: NextRequest): Promise<NextResponse> {
 
   if (code) {
     const supabase = await createClient()
-    const { error } = await supabase.auth.exchangeCodeForSession(code)
+    const {
+      data: { user },
+      error,
+    } = await supabase.auth.exchangeCodeForSession(code)
 
     if (!error) {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser()
 
       let authEvent: "signup" | "login" = "login"
 
