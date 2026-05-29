@@ -62,21 +62,12 @@ export function ProjectScopeProvider({ children }: { children: ReactNode }) {
   const queryExperimentId =
     rawExperiment && isLikelyUuid(rawExperiment) ? rawExperiment : null
 
-  const [persistedProjectId, setPersistedProjectId] = useState<string | null>(null)
-  const [persistedExperimentId, setPersistedExperimentId] = useState<string | null>(
-    null,
-  )
-
-  useEffect(() => {
-    try {
-      const savedProject = localStorage.getItem("n9_last_project_id")
-      const savedExperiment = localStorage.getItem("n9_last_experiment_id")
-      if (savedProject) setPersistedProjectId(savedProject)
-      if (savedExperiment) setPersistedExperimentId(savedExperiment)
-    } catch {
-      /* ignore */
-    }
-  }, [])
+  const [persistedProjectId, setPersistedProjectId] = useState<string | null>(() => {
+    try { return localStorage.getItem("n9_last_project_id") } catch { return null }
+  })
+  const [persistedExperimentId, setPersistedExperimentId] = useState<string | null>(() => {
+    try { return localStorage.getItem("n9_last_experiment_id") } catch { return null }
+  })
 
   const [projectName, setProjectName] = useState<string | null>(null)
   const [experimentId, setExperimentId] = useState<string | null>(null)

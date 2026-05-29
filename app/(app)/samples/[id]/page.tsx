@@ -117,10 +117,14 @@ export default async function SampleDetailPage({
     .single()
 
   if (error) {
+    // Junction tables (sample_projects, sample_experiments, sample_lab_notes) may not
+    // exist on older DB instances — retry without them. Preserve sample_files(*) so the
+    // Molecular Files tab always gets its initial data.
     const fallback = await supabase
       .from("samples")
       .select(`
         *,
+        sample_files(*),
         experiment:experiments(
           id,
           name,
@@ -134,8 +138,23 @@ export default async function SampleDetailPage({
       `)
       .eq("id", id)
       .single()
-    sample = fallback.data
-    error = fallback.error
+    if (!fallback.error) {
+      sample = fallback.data
+      error = null
+    } else {
+      // sample_files table also missing — bare minimum query
+      const bare = await supabase
+        .from("samples")
+        .select(`
+          *,
+          experiment:experiments(id, name, project:projects(id, name)),
+          created_by_profile:profiles!samples_created_by_fkey(first_name, last_name, email)
+        `)
+        .eq("id", id)
+        .single()
+      sample = bare.data
+      error = bare.error
+    }
   }
 
   if (error || !sample) {

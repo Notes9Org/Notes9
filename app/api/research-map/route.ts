@@ -88,21 +88,6 @@ export async function GET(req: NextRequest) {
   const experimentId = url.searchParams.get("experimentId")
   const includeTypes = parseIncludeTypes(url.searchParams.get("includeTypes"))
 
-  const { data: profile, error: profileError } = await supabase
-    .from("profiles")
-    .select("organization_id")
-    .eq("id", user.id)
-    .single()
-
-  if (profileError || !profile?.organization_id) {
-    return NextResponse.json(
-      { error: "Unable to resolve organization context." },
-      { status: 400 },
-    )
-  }
-
-  const orgId = profile.organization_id
-
   const nodes = new Map<string, ResearchMapNode>()
   const pendingEdges: ResearchMapEdge[] = []
   let truncated = false
@@ -129,7 +114,6 @@ export async function GET(req: NextRequest) {
         .from("projects")
         .select("id, name, status, description")
         .eq("id", projectId)
-        .eq("organization_id", orgId)
         .maybeSingle()
 
       if (projErr || !projectRow) {
@@ -535,7 +519,6 @@ export async function GET(req: NextRequest) {
       const { data: allOrgProjects } = await supabase
         .from("projects")
         .select("id, name, status, description")
-        .eq("organization_id", orgId)
         .order("updated_at", { ascending: false })
         .limit(300)
 
@@ -561,7 +544,6 @@ export async function GET(req: NextRequest) {
       let litOrgQuery = supabase
         .from("literature_reviews")
         .select("id, title, status, project_id, experiment_id")
-        .eq("organization_id", orgId)
       
       if (experimentId) {
         litOrgQuery = litOrgQuery.eq("experiment_id", experimentId)
@@ -638,8 +620,7 @@ export async function GET(req: NextRequest) {
             supabase
               .from("projects")
               .select("id, name, status, description")
-              .in("id", ids)
-              .eq("organization_id", orgId),
+              .in("id", ids),
           unknownProjectIds,
         )
         for (const p of extraProjects) orgProjectMap.set(p.id, p)
