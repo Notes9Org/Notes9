@@ -3,7 +3,8 @@
 import { Suspense, useEffect, useMemo, useState } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
-import { useSmartBack } from "@/hooks/use-smart-back"
+import { useAuthUser } from "@/components/auth/auth-provider"
+import { useCreatePageNav } from "@/hooks/use-create-page-nav"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -18,6 +19,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Alert, AlertDescription } from "@/components/ui/alert"
+import { PageHeading } from "@/components/ui/page-heading"
 import { ArrowLeft, FlaskConical, Link2, Package, TestTube } from "lucide-react"
 import { SampleContextPicker, type SampleLinkOption } from "../sample-context-picker"
 import { parseTagInput } from "@/lib/sample-molecular"
@@ -55,9 +57,13 @@ function isSchemaMissingError(error: unknown) {
 }
 
 function NewSamplePageInner() {
+  const user = useAuthUser();
   const router = useRouter()
   const searchParams = useSearchParams()
-  const handleBack = useSmartBack("/samples")
+  const { handleBack } = useCreatePageNav({
+    pageLabel: "New Sample",
+    listFallbackPath: "/samples",
+  })
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [projects, setProjects] = useState<SampleLinkOption[]>([])
@@ -174,9 +180,6 @@ function NewSamplePageInner() {
       }
 
       const supabase = createClient()
-      const {
-        data: { user },
-      } = await supabase.auth.getUser()
       if (!user) throw new Error("Not authenticated")
 
       const custom_metadata = parseCustomMetadata()
@@ -259,7 +262,7 @@ function NewSamplePageInner() {
           <ArrowLeft className="h-4 w-4" />
         </Button>
         <div className="min-w-0">
-          <h1 className="text-2xl font-bold tracking-tight md:text-3xl">Add New Sample</h1>
+          <PageHeading>Add New Sample</PageHeading>
           <p className="mt-1 text-sm text-muted-foreground">
             Register sample metadata, storage, provenance, and linked research context.
           </p>

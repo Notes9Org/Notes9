@@ -35,7 +35,7 @@ export function ExperimentActions({ experiment, projects, users }: ExperimentAct
       <div className="flex items-center gap-1">
         <Button
           variant="ghost"
-          size="icon-sm"
+          size="icon"
           className="text-muted-foreground hover:text-foreground"
           onClick={() => setEditDialogOpen(true)}
           aria-label="Edit experiment"
@@ -44,7 +44,7 @@ export function ExperimentActions({ experiment, projects, users }: ExperimentAct
         </Button>
         <Button
           variant="ghost"
-          size="icon-sm"
+          size="icon"
           className="text-muted-foreground hover:text-foreground"
           onClick={() => setDuplicateDialogOpen(true)}
           aria-label="Duplicate experiment"
@@ -53,7 +53,7 @@ export function ExperimentActions({ experiment, projects, users }: ExperimentAct
         </Button>
         <Button
           variant="ghost"
-          size="icon-sm"
+          size="icon"
           className="text-destructive hover:text-destructive"
           onClick={() => setDeleteDialogOpen(true)}
           aria-label="Delete experiment"

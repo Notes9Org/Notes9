@@ -11,6 +11,7 @@ import {
 import { cn } from "@/lib/utils"
 import { useToast } from "@/hooks/use-toast"
 import { FileSpreadsheet, Loader2, Maximize2, Minimize2, X } from "lucide-react"
+import { appApiUrl } from "@/lib/app-api-url"
 
 export function isTabularExperimentFile(file: {
   file_name: string
@@ -54,7 +55,7 @@ export function ExperimentDataTabularDialog({
     async (snap: Record<string, unknown>, syncStorage: boolean) => {
       try {
         const res = await fetch(
-          `/api/experiments/${experimentId}/data-files/${fileId}/workbook`,
+          appApiUrl(`/api/experiments/${experimentId}/data-files/${fileId}/workbook`),
           {
             method: "PATCH",
             headers: { "Content-Type": "application/json" },
@@ -126,7 +127,7 @@ export function ExperimentDataTabularDialog({
     const load = async () => {
       try {
         const res = await fetch(
-          `/api/experiments/${experimentId}/data-files/${fileId}/workbook`
+          appApiUrl(`/api/experiments/${experimentId}/data-files/${fileId}/workbook`)
         )
         if (!res.ok) throw new Error(await res.text())
         const data = await res.json()
@@ -138,12 +139,12 @@ export function ExperimentDataTabularDialog({
           latestSnapshotRef.current = snap
         } else {
           const post = await fetch(
-            `/api/experiments/${experimentId}/data-files/${fileId}/workbook`,
+            appApiUrl(`/api/experiments/${experimentId}/data-files/${fileId}/workbook`),
             { method: "POST" }
           )
           if (!post.ok) throw new Error(await post.text())
           const again = await fetch(
-            `/api/experiments/${experimentId}/data-files/${fileId}/workbook`
+            appApiUrl(`/api/experiments/${experimentId}/data-files/${fileId}/workbook`)
           )
           const d2 = await again.json()
           if (!cancelled) {

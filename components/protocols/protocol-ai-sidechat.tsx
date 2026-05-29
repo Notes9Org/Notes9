@@ -1176,20 +1176,6 @@ export function ProtocolAiSidechat({
                     ? "Add papers from Literature or select existing protocols below to provide context."
                     : "Ask me to draft or refine any section of your protocol."}
                 </p>
-                {hasAnyContext && (
-                  <div className="mt-4 flex flex-wrap justify-center gap-2">
-                    {["Draft methods section", "Add safety notes", "Summarize protocol"].map((s) => (
-                      <button
-                        key={s}
-                        type="button"
-                        className="rounded-full border border-border bg-background px-3 py-1.5 text-xs font-medium text-foreground transition-colors hover:bg-muted"
-                        onClick={() => setInput(s)}
-                      >
-                        {s}
-                      </button>
-                    ))}
-                  </div>
-                )}
               </div>
             </div>
           ) : (

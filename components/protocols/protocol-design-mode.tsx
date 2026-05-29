@@ -9,7 +9,9 @@ import {
 } from "react"
 import type { Editor } from "@tiptap/react"
 import { createClient } from "@/lib/supabase/client"
+import { useAuthUser } from "@/components/auth/auth-provider"
 import { useToast } from "@/hooks/use-toast"
+import { useContentDiffs } from "@/hooks/use-content-diffs"
 import { TiptapEditor } from "@/components/text-editor/tiptap-editor"
 import { NoteExportMenu } from "@/components/note-export-menu"
 import { Button } from "@/components/ui/button"
@@ -71,8 +73,10 @@ interface ProtocolDesignModeProps {
   }
   onSaved: () => void
   onExitDesignMode?: () => void
+  samples?: { id: string; name: string; sample_code: string | null }[]
   onContextChange?: (projectId: string | null, experimentId: string | null) => void
   onProtocolNameChange?: (name: string) => void
+  onProtocolNameCommit?: (name: string) => void
 }
 
 interface ProtocolContextItem {
@@ -96,13 +100,18 @@ export function ProtocolDesignMode({
   protocol,
   onSaved,
   onExitDesignMode,
+  samples,
   onContextChange,
   onProtocolNameChange,
+  onProtocolNameCommit,
 }: ProtocolDesignModeProps) {
+  const user = useAuthUser();
   const { toast } = useToast()
 
   const [draftContent, setDraftContent] = useState(protocol.content)
   const [savedContent, setSavedContent] = useState(protocol.content)
+  const historyBaselineRef = useRef(protocol.content)
+  const { recordDiff } = useContentDiffs("protocol", protocol.id)
   const [currentVersion, setCurrentVersion] = useState(protocol.version)
   const [isEditingTitle, setIsEditingTitle] = useState(false)
   const titleInputRef = useRef<HTMLInputElement>(null)
@@ -141,9 +150,6 @@ export function ProtocolDesignMode({
     let cancelled = false
     const run = async () => {
       const supabase = createClient()
-      const {
-        data: { user },
-      } = await supabase.auth.getUser()
       if (!user || cancelled) return
       const { data: profile } = await supabase
         .from("profiles")
@@ -161,6 +167,7 @@ export function ProtocolDesignMode({
   useEffect(() => {
     setDraftContent(protocol.content)
     setSavedContent(protocol.content)
+    historyBaselineRef.current = protocol.content
     setCurrentVersion(protocol.version)
     const dt = protocol.document_template_id ?? null
     setDraftDocumentTemplateId(dt)
@@ -169,6 +176,27 @@ export function ProtocolDesignMode({
     setDraftTemplateLabel(label)
     setSavedTemplateLabel(label)
   }, [protocol.id, protocol.content, protocol.version, protocol.document_template_id, protocol.document_template])
+
+  // Record change history as the user edits (debounced), aligned with lab note auto-save cadence.
+  useEffect(() => {
+    const baseline = historyBaselineRef.current
+    if (draftContent === baseline) return
+
+    const timer = window.setTimeout(() => {
+      void (async () => {
+        const ok = await recordDiff({
+          recordType: "protocol",
+          recordId: protocol.id,
+          previousContent: baseline,
+          newContent: draftContent,
+          documentTitle: protocol.name || null,
+        })
+        if (ok) historyBaselineRef.current = draftContent
+      })()
+    }, 2000)
+
+    return () => window.clearTimeout(timer)
+  }, [draftContent, protocol.id, protocol.name, recordDiff])
 
   const templateMetaDirty =
     (draftDocumentTemplateId ?? null) !== (savedDocumentTemplateId ?? null)
@@ -197,9 +225,6 @@ export function ProtocolDesignMode({
   const handleAccept = useCallback(
     async (newContent: string, newVersion: string) => {
       const supabase = createClient()
-      const {
-        data: { user },
-      } = await supabase.auth.getUser()
       if (!user) throw new Error("Not authenticated")
 
       const { error: upErr } = await updateProtocolWithOptionalContext(supabase, protocol.id, {
@@ -210,7 +235,7 @@ export function ProtocolDesignMode({
       })
       if (upErr) throw upErr
 
-      await supabase.from("audit_log").insert({
+      supabase.from("audit_log").insert({
         table_name: "protocols",
         record_id: protocol.id,
         action: "update",
@@ -225,10 +250,11 @@ export function ProtocolDesignMode({
           document_template_id: draftDocumentTemplateId,
         },
         user_id: user.id,
-      })
+      }).then(({ error }) => { if (error) console.warn("[audit_log]", error.message) })
 
       onSaved()
       setSavedContent(newContent)
+      historyBaselineRef.current = newContent
       setSavedDocumentTemplateId(draftDocumentTemplateId)
       setSavedTemplateLabel(draftTemplateLabel)
       setCurrentVersion(newVersion)
@@ -295,7 +321,10 @@ export function ProtocolDesignMode({
             type="text"
             value={protocol.name}
             onChange={(e) => onProtocolNameChange?.(e.target.value)}
-            onBlur={() => setIsEditingTitle(false)}
+            onBlur={() => {
+              setIsEditingTitle(false)
+              onProtocolNameCommit?.(protocol.name)
+            }}
             onKeyDown={(e) => {
               if (e.key === "Enter") {
                 e.preventDefault()
@@ -406,6 +435,7 @@ export function ProtocolDesignMode({
         <Card className="flex h-full min-h-0 flex-col gap-0 py-0">
           <div
             ref={protocolDesignWorkspaceRef}
+            data-editor-workspace-shell=""
             className="flex h-full min-h-0 min-w-0 flex-1 flex-row items-stretch overflow-hidden"
           >
             {/* Siblings list — desktop column. Collapses to width 0 when hidden. */}
@@ -536,7 +566,10 @@ export function ProtocolDesignMode({
                           type="text"
                           value={protocol.name}
                           onChange={(e) => onProtocolNameChange?.(e.target.value)}
-                          onBlur={() => setIsEditingTitle(false)}
+                          onBlur={() => {
+                            setIsEditingTitle(false)
+                            onProtocolNameCommit?.(protocol.name)
+                          }}
                           onKeyDown={(e) => {
                             if (e.key === "Enter") {
                               e.preventDefault()
@@ -663,12 +696,14 @@ export function ProtocolDesignMode({
                 <CardContent className="flex min-h-0 min-w-0 flex-1 flex-col space-y-3 overflow-hidden px-4 sm:px-6">
                   <div className="relative min-h-0 min-w-0 flex-1 overflow-hidden">
                     <TiptapEditor
+                      key={protocol.id}
                       content={draftContent}
                       onChange={setDraftContent}
-                      placeholder="Draft your protocol… In Protocol (header): drag papers from Literature or type @ to attach from the filtered list."
+                      placeholder="Write your protocol here... Use @ to tag protocols or samples"
                       title={protocol.name}
                       minHeight="100%"
                       fillParentHeight
+                      samples={samples}
                       fullscreenWorkspaceRef={protocolDesignWorkspaceRef}
                       leadingToolbarSlot={protocolFullscreenToolbarLeading}
                       trailingToolbarSlot={protocolFullscreenToolbarTrailing}
@@ -686,6 +721,17 @@ export function ProtocolDesignMode({
                       open={scientificCalculatorOpen}
                       onOpenChange={setScientificCalculatorOpen}
                       getEditor={() => protocolEditorRef.current}
+                      onSaveToHistory={(resultText) => {
+                        // Record the calculator result as a dedicated content_diff
+                        // entry with a [Calculator] tag in the summary.
+                        void recordDiff({
+                          recordType: "protocol",
+                          recordId: protocol.id,
+                          previousContent: draftContent,
+                          newContent: draftContent + `\n<p>[Calculator] ${resultText.split("\n")[0]}</p>`,
+                          documentTitle: protocol.name || null,
+                        })
+                      }}
                     />
                   </div>
 
@@ -710,7 +756,7 @@ export function ProtocolDesignMode({
     </div>
 
       <Dialog open={templateDialogOpen} onOpenChange={setTemplateDialogOpen}>
-        <DialogContent className="max-h-[min(90dvh,85vh)] w-[calc(100vw-1rem)] max-w-3xl overflow-y-auto p-4 sm:p-6">
+        <DialogContent dialogSize="lg" className="max-h-[min(90dvh,85vh)] w-[calc(100vw-1rem)] overflow-y-auto p-4 sm:p-6">
           <DialogHeader>
             <DialogTitle>Change template</DialogTitle>
             <DialogDescription>

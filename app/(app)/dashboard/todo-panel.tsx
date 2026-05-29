@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
+import { useAuthUser } from "@/components/auth/auth-provider"
 import {
   Card,
   CardContent,
@@ -121,6 +122,14 @@ function titleHasPlaceholders(title: string): boolean {
   return /\{\{(experiment|project)(?::[^}]+)?\}\}/.test(title);
 }
 
+/**
+ * Human label for a mention whose target entity no longer exists. Rendering
+ * the raw UUID confuses users — show a clear "(deleted X)" hint instead.
+ */
+function fallbackMentionLabel(kind: "experiment" | "project"): string {
+  return `(deleted ${kind})`;
+}
+
 const CHIP_ICON_EXPERIMENT =
   '<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 2v7.527a2 2 0 0 1-.211.896L4.72 20.55a1 1 0 0 0 .9 1.45h12.76a1 1 0 0 0 .9-1.45l-5.069-10.127A2 2 0 0 1 14 9.527V2"/><path d="M8.5 2h7"/><path d="M7 16h10"/></svg>';
 const CHIP_ICON_PROJECT =
@@ -144,7 +153,7 @@ function buildEditFragment(
       continue;
     }
     const resolved = resolve(part.kind, part.id);
-    const name = resolved?.name ?? part.id ?? part.kind;
+    const name = resolved?.name ?? fallbackMentionLabel(part.kind);
     const span = document.createElement("span");
     span.contentEditable = "false";
     span.setAttribute(MENTION_DATA.kind, part.kind);
@@ -406,7 +415,14 @@ function getQueryAfterAt(text: string): { query: string; startIndex: number } {
   return { query, startIndex: lastAt };
 }
 
-export function TodoPanel({ initialTasks }: { initialTasks: DashboardTask[] }) {
+export function TodoPanel({
+  initialTasks,
+  variant = "card",
+}: {
+  initialTasks: DashboardTask[]
+  variant?: "card" | "embedded"
+}) {
+  const user = useAuthUser();
   const supabase = useMemo(() => createClient(), []);
   const [tasks, setTasks] = useState<DashboardTask[]>(initialTasks);
   const [hasMoreTasks, setHasMoreTasks] = useState(false);
@@ -436,9 +452,6 @@ export function TodoPanel({ initialTasks }: { initialTasks: DashboardTask[] }) {
   const { toast } = useToast();
 
   const fetchTasks = useCallback(async () => {
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
     if (!user) return;
     const { data } = await supabase
       .from("dashboard_tasks")
@@ -459,9 +472,6 @@ export function TodoPanel({ initialTasks }: { initialTasks: DashboardTask[] }) {
   }, [fetchTasks]);
 
   const loadMoreTasks = useCallback(async () => {
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
     if (!user || isLoadingMore || !hasMoreTasks) return;
     setIsLoadingMore(true);
     try {
@@ -573,12 +583,14 @@ export function TodoPanel({ initialTasks }: { initialTasks: DashboardTask[] }) {
   const addTask = async () => {
     if (isAdding) return;
     const title = segmentsToTitleWithPlaceholders(segments);
-    if (!title.trim()) return;
+    if (!title.trim()) {
+      // Surface the silent-failure case so users know what's missing.
+      toast({ title: "Task needs a title", variant: "destructive" });
+      editableRef.current?.focus();
+      return;
+    }
     setIsAdding(true);
     try {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
       if (!user) return;
       let dueAt: string | null = null;
       if (dueDateStr) {
@@ -751,38 +763,27 @@ export function TodoPanel({ initialTasks }: { initialTasks: DashboardTask[] }) {
     });
   };
 
-  return (
-    <Card className="min-w-0 overflow-hidden">
-      <CardHeader className="">
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <CardTitle className="flex items-center gap-2">
-              <ListTodo className="h-5 w-5" />
-              To-Do
-            </CardTitle>
-            {/* <CardDescription>
-              Daily task management for your laboratory work
-            </CardDescription> */}
-          </div>
-          <Select
-            value={sortBy}
-            onValueChange={(v) => setSortBy(v as typeof sortBy)}
-          >
-            <SelectTrigger className="w-[140px]" size="sm">
-              <SelectValue placeholder="Sort by" />
-            </SelectTrigger>
-            <SelectContent>
-              {SORT_OPTIONS.map((opt) => (
-                <SelectItem key={opt.value} value={opt.value}>
-                  {opt.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        {/* Add new todo */}
+  const sortSelect = (
+    <Select
+      value={sortBy}
+      onValueChange={(v) => setSortBy(v as typeof sortBy)}
+    >
+      <SelectTrigger className="w-[140px]" size="sm">
+        <SelectValue placeholder="Sort by" />
+      </SelectTrigger>
+      <SelectContent>
+        {SORT_OPTIONS.map((opt) => (
+          <SelectItem key={opt.value} value={opt.value}>
+            {opt.label}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  );
+
+  const panelBody = (
+    <>
+      {/* Add new todo */}
         <div className="relative flex flex-wrap items-center gap-2">
           <Checkbox
             className="mt-0.5 invisible"
@@ -1027,15 +1028,18 @@ export function TodoPanel({ initialTasks }: { initialTasks: DashboardTask[] }) {
         )}
         {tasks.length === 0 && (
           <p className="text-sm text-muted-foreground py-4 text-center">
-            No tasks yet. Add one above.
+            No open tasks. Add something to work on today using the input above.
           </p>
         )}
-      </CardContent>
+    </>
+  );
+
+  const alertDialog = (
       <AlertDialog
         open={taskToDelete !== null}
         onOpenChange={(open) => !open && setTaskToDelete(null)}
       >
-        <AlertDialogContent>
+        <AlertDialogContent onCloseAutoFocus={(e) => e.preventDefault()}>
           <AlertDialogHeader>
             <AlertDialogTitle>Delete task?</AlertDialogTitle>
             <AlertDialogDescription asChild>
@@ -1064,7 +1068,7 @@ export function TodoPanel({ initialTasks }: { initialTasks: DashboardTask[] }) {
                                 ? experiments.find((e) => e.id === part.id)
                                 : projects.find((p) => p.id === part.id);
                             const name =
-                              resolved?.name ?? part.id ?? part.kind;
+                              resolved?.name ?? fallbackMentionLabel(part.kind);
                             return (
                               <span
                                 key={i}
@@ -1103,6 +1107,35 @@ export function TodoPanel({ initialTasks }: { initialTasks: DashboardTask[] }) {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+  );
+
+  if (variant === "embedded") {
+    return (
+      <>
+        <header className="flex shrink-0 items-center justify-end border-b border-border px-4 py-2.5">
+          {sortSelect}
+        </header>
+        <div className="space-y-4 px-4 py-3">{panelBody}</div>
+        {alertDialog}
+      </>
+    );
+  }
+
+  return (
+    <Card className="min-w-0 overflow-hidden">
+      <CardHeader className="">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <CardTitle className="flex items-center gap-2">
+              <ListTodo className="h-5 w-5" />
+              To-Do
+            </CardTitle>
+          </div>
+          {sortSelect}
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-4">{panelBody}</CardContent>
+      {alertDialog}
     </Card>
   );
 }
@@ -1350,9 +1383,9 @@ function TaskRow({
                               ) : (
                                 <span
                                   key={i}
-                                  className="rounded-md bg-muted px-1.5 py-0.5 text-xs text-muted-foreground"
+                                  className="rounded-md bg-muted px-1.5 py-0.5 text-xs italic text-muted-foreground"
                                 >
-                                  {part.id ?? part.kind}
+                                  {fallbackMentionLabel(part.kind)}
                                 </span>
                               );
                             })()

@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { createClient } from "@/lib/supabase/client"
+import { useAuthUser } from "@/components/auth/auth-provider"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -96,6 +97,7 @@ function FileKindIcon({ kind, className }: { kind: SampleFileKind; className?: s
 }
 
 export function SampleMolecularFilesTab({ sampleId, initialFiles }: SampleMolecularFilesTabProps) {
+  const user = useAuthUser();
   const { toast } = useToast()
   const inputRef = useRef<HTMLInputElement | null>(null)
   const [files, setFiles] = useState(initialFiles)
@@ -188,9 +190,6 @@ export function SampleMolecularFilesTab({ sampleId, initialFiles }: SampleMolecu
 
     try {
       const supabase = createClient()
-      const {
-        data: { user },
-      } = await supabase.auth.getUser()
       if (!user) throw new Error("Not signed in")
 
       const { data: profile } = await supabase

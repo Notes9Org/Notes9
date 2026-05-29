@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { z } from "zod"
 
 import { createClient } from "@/lib/supabase/server"
+import { getCurrentUser } from "@/lib/auth/current-user"
 import { createServiceRoleClient } from "@/lib/supabase-service-role"
 
 const acceptSchema = z.object({
@@ -12,12 +13,9 @@ export async function POST(req: NextRequest) {
   try {
     // Authenticate the user via session cookie
     const supabase = await createClient()
-    const {
-      data: { user },
-      error: authError,
-    } = await supabase.auth.getUser()
+    const user = await getCurrentUser()
 
-    if (authError || !user) {
+    if (!user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
@@ -43,6 +41,20 @@ export async function POST(req: NextRequest) {
       .single()
 
     if (invError || !invitation) {
+      return NextResponse.json(
+        { error: "Invalid or expired invitation" },
+        { status: 400 }
+      )
+    }
+
+    // 1b. Bind the invitation to the authenticated user's email. Without this,
+    // anyone holding/guessing a token could accept an invite addressed to
+    // someone else and join that org under their own account. Same generic
+    // error to avoid leaking whether a token exists.
+    if (
+      !user.email ||
+      invitation.email.trim().toLowerCase() !== user.email.trim().toLowerCase()
+    ) {
       return NextResponse.json(
         { error: "Invalid or expired invitation" },
         { status: 400 }

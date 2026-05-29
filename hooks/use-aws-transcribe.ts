@@ -35,6 +35,7 @@ export function useAwsTranscribe(options: UseAwsTranscribeOptions = {}) {
   const audioContextRef = useRef<AudioContext | null>(null);
   const processorRef = useRef<ScriptProcessorNode | null>(null);
   const sourceRef = useRef<MediaStreamAudioSourceNode | null>(null);
+  const analyserRef = useRef<AnalyserNode | null>(null);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const chunksRef = useRef<Uint8Array[]>([]);
   const wsRef = useRef<WebSocket | null>(null);
@@ -69,6 +70,7 @@ export function useAwsTranscribe(options: UseAwsTranscribeOptions = {}) {
       sourceRef.current = null;
       audioContextRef.current = null;
     }
+    analyserRef.current = null;
     if (streamRef.current) {
       streamRef.current.getTracks().forEach((t) => t.stop());
       streamRef.current = null;
@@ -216,6 +218,11 @@ export function useAwsTranscribe(options: UseAwsTranscribeOptions = {}) {
           const source = audioContext.createMediaStreamSource(mediaStream);
           sourceRef.current = source;
 
+          const analyser = audioContext.createAnalyser();
+          analyser.fftSize = 256;
+          analyser.smoothingTimeConstant = 0.75;
+          analyserRef.current = analyser;
+
           const processor = audioContext.createScriptProcessor(1024, 1, 1);
           processorRef.current = processor;
 
@@ -228,6 +235,7 @@ export function useAwsTranscribe(options: UseAwsTranscribeOptions = {}) {
             chunksRef.current.push(new Uint8Array(pcm));
           };
 
+          source.connect(analyser);
           source.connect(processor);
           processor.connect(audioContext.destination);
 
@@ -326,6 +334,14 @@ export function useAwsTranscribe(options: UseAwsTranscribeOptions = {}) {
     stop,
   ]);
 
-  return { start, stop, isListening };
+  const getWaveformData = useCallback((): Uint8Array | null => {
+    const analyser = analyserRef.current;
+    if (!analyser) return null;
+    const data = new Uint8Array(analyser.frequencyBinCount);
+    analyser.getByteFrequencyData(data);
+    return data;
+  }, []);
+
+  return { start, stop, isListening, getWaveformData };
 }
 

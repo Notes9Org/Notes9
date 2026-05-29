@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from "react"
 import { useRouter } from 'next/navigation'
 import { useTheme } from "next-themes"
 import { createClient } from "@/lib/supabase/client"
+import { useAuthUser } from "@/components/auth/auth-provider"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -19,10 +20,91 @@ import {
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { LogOut, Sun, Moon, Monitor, Loader2 } from 'lucide-react'
 import { ChangePasswordDialog } from "@/components/change-password-dialog"
+import { PageHeading } from "@/components/ui/page-heading"
 import { useToast } from "@/hooks/use-toast"
 import { USER_STORAGE_BUCKET, createProfileAvatarStoragePath } from "@/lib/user-storage-bucket"
+import { cn } from "@/lib/utils"
+import type { ReactNode } from "react"
+
+const SETTINGS_PANEL_MIN_H = "min-h-[540px] max-h-[540px]"
+const SETTINGS_PANEL_SHELL =
+  "mt-0 block w-full min-w-0 max-w-full focus-visible:outline-none"
+
+function SettingsPanelCard({
+  title,
+  description,
+  children,
+  className,
+}: {
+  title: string
+  description: string
+  children: ReactNode
+  className?: string
+}) {
+  return (
+    <Card
+      className={cn(
+        "box-border flex w-full min-w-0 max-w-full flex-col py-6",
+        SETTINGS_PANEL_MIN_H,
+        className,
+      )}
+    >
+      <CardHeader className="space-y-1.5 pb-2">
+        <CardTitle className="text-xl tracking-tight">{title}</CardTitle>
+        <CardDescription className="text-sm">{description}</CardDescription>
+      </CardHeader>
+      <CardContent className="flex min-h-0 flex-1 flex-col gap-6 overflow-y-auto text-base">
+        {children}
+      </CardContent>
+    </Card>
+  )
+}
+
+function SettingsRow({
+  title,
+  description,
+  children,
+}: {
+  title: string
+  description: string
+  children: ReactNode
+}) {
+  return (
+    <div className="flex min-h-[5.5rem] flex-col justify-center gap-3 border-b border-border/60 py-4 last:border-b-0 sm:flex-row sm:items-center sm:justify-between">
+      <div className="min-w-0 space-y-1 pr-0 sm:max-w-[55%] sm:pr-4">
+        <p className="text-base font-medium leading-snug">{title}</p>
+        <p className="text-sm text-muted-foreground">{description}</p>
+      </div>
+      <div className="flex shrink-0 flex-wrap items-center gap-2">{children}</div>
+    </div>
+  )
+}
+
+function SettingsSection({
+  title,
+  description,
+  children,
+}: {
+  title: string
+  description: string
+  children: ReactNode
+}) {
+  return (
+    <div className="flex min-h-[6.25rem] shrink-0 flex-col justify-center gap-3 border-b border-border/60 py-4 last:border-b-0">
+      <div className="space-y-1">
+        <h3 className="text-base font-semibold">{title}</h3>
+        <p className="text-sm text-muted-foreground">{description}</p>
+      </div>
+      <div>{children}</div>
+    </div>
+  )
+}
+
+const settingsFieldClass = "h-11 text-base md:text-base"
+const settingsLabelClass = "text-sm font-medium"
 
 export default function SettingsPage() {
+  const user = useAuthUser();
   const router = useRouter()
   const { theme, setTheme } = useTheme()
   const { toast } = useToast()
@@ -53,10 +135,6 @@ export default function SettingsPage() {
   useEffect(() => {
     const loadProfile = async () => {
       const supabase = createClient()
-      const {
-        data: { user },
-      } = await supabase.auth.getUser()
-
       if (user) {
         const { data } = await supabase
           .from("profiles")
@@ -221,32 +299,40 @@ export default function SettingsPage() {
   }
 
   return (
-      <div className="max-w-4xl mx-auto space-y-4 md:space-y-6">
+      <div className="mx-auto w-full max-w-4xl space-y-4 px-4 md:space-y-6 md:px-6">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight md:text-3xl">Settings</h1>
+          <PageHeading>Settings</PageHeading>
           <p className="text-muted-foreground mt-1 text-sm">
             Manage your account and preferences
           </p>
         </div>
 
-        <Tabs defaultValue="profile" className="space-y-4">
-          <TabsList>
-            <TabsTrigger value="profile">Profile</TabsTrigger>
-            <TabsTrigger value="account">Account</TabsTrigger>
-            <TabsTrigger value="preferences">Preferences</TabsTrigger>
+        <Tabs defaultValue="profile" className="flex w-full min-w-0 flex-col gap-4">
+          <TabsList className="h-auto w-full max-w-md gap-1 self-start p-1">
+            <TabsTrigger value="profile" className="flex-1 px-4 py-2 text-sm sm:text-base">
+              Profile
+            </TabsTrigger>
+            <TabsTrigger value="account" className="flex-1 px-4 py-2 text-sm sm:text-base">
+              Account
+            </TabsTrigger>
+            <TabsTrigger value="preferences" className="flex-1 px-4 py-2 text-sm sm:text-base">
+              Preferences
+            </TabsTrigger>
           </TabsList>
 
-          <TabsContent value="profile" className="space-y-4">
-            <Card>
-              <CardHeader>
-                <CardTitle>Profile Information</CardTitle>
-                <CardDescription>
-                  Update your personal information
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-6">
+          <div className="relative grid w-full min-w-0 grid-cols-1">
+            {/* Full-width sizer so every tab panel matches the settings column width */}
+            <div
+              className="pointer-events-none col-start-1 row-start-1 w-full min-h-[540px] opacity-0"
+              aria-hidden
+            />
+          <TabsContent value="profile" className={cn(SETTINGS_PANEL_SHELL, "col-start-1 row-start-1")}>
+            <SettingsPanelCard
+              title="Profile Information"
+              description="Update your personal information"
+            >
                 <div className="flex items-center gap-4">
-                  <Avatar className="h-20 w-20">
+                  <Avatar className="size-20">
                     {avatarUrl && (
                       <AvatarImage src={avatarUrl} alt="Profile" className="object-cover" />
                     )}
@@ -267,7 +353,7 @@ export default function SettingsPage() {
                     <Button
                       type="button"
                       variant="outline"
-                      size="sm"
+                      className="h-10 text-sm"
                       onClick={handleChangeAvatarClick}
                       disabled={avatarUploading}
                     >
@@ -283,38 +369,53 @@ export default function SettingsPage() {
                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                   <div className="space-y-2">
-                    <Label htmlFor="firstName">First Name</Label>
+                    <Label htmlFor="firstName" className={settingsLabelClass}>
+                      First Name
+                    </Label>
                     <Input
                       id="firstName"
                       value={firstName}
                       onChange={(e) => setFirstName(e.target.value)}
                       placeholder="First name"
                       disabled={saving}
+                      className={settingsFieldClass}
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="lastName">Last Name</Label>
+                    <Label htmlFor="lastName" className={settingsLabelClass}>
+                      Last Name
+                    </Label>
                     <Input
                       id="lastName"
                       value={lastName}
                       onChange={(e) => setLastName(e.target.value)}
                       placeholder="Last name"
                       disabled={saving}
+                      className={settingsFieldClass}
                     />
                   </div>
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="email">Email</Label>
-                  <Input id="email" value={profile?.email || ""} readOnly className="bg-muted" />
+                  <Label htmlFor="email" className={settingsLabelClass}>
+                    Email
+                  </Label>
+                  <Input
+                    id="email"
+                    value={profile?.email || ""}
+                    readOnly
+                    className={cn(settingsFieldClass, "bg-muted")}
+                  />
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="role">Role</Label>
+                  <Label htmlFor="role" className={settingsLabelClass}>
+                    Role
+                  </Label>
                   <Select value={role} onValueChange={setRole} disabled={saving}>
-                    <SelectTrigger id="role">
+                    <SelectTrigger id="role" className={settingsFieldClass}>
                       <SelectValue placeholder="Select role" />
                     </SelectTrigger>
                     <SelectContent>
@@ -327,133 +428,145 @@ export default function SettingsPage() {
                   </Select>
                 </div>
 
-                <Button onClick={handleSaveProfile} disabled={saving}>
-                  {saving ? (
-                    <>
-                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                      Saving...
-                    </>
-                  ) : (
-                    "Save Changes"
-                  )}
-                </Button>
-              </CardContent>
-            </Card>
+                <div className="mt-auto pt-2">
+                  <Button
+                    className="h-11 px-6 text-base"
+                    onClick={handleSaveProfile}
+                    disabled={saving}
+                  >
+                    {saving ? (
+                      <>
+                        <Loader2 className="mr-2 size-4 animate-spin" />
+                        Saving...
+                      </>
+                    ) : (
+                      "Save Changes"
+                    )}
+                  </Button>
+                </div>
+            </SettingsPanelCard>
           </TabsContent>
 
-          <TabsContent value="account" className="space-y-4">
-          <Card>
-            <CardHeader>
-              <CardTitle>Account Settings</CardTitle>
-              <CardDescription>
-                Manage your account security
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              <div className="space-y-2">
-                <ChangePasswordDialog>
-                  <Button variant="outline">Change Password</Button>
-                </ChangePasswordDialog>
-              </div>
+          <TabsContent value="account" className={cn(SETTINGS_PANEL_SHELL, "col-start-1 row-start-1")}>
+            <SettingsPanelCard
+              title="Account Settings"
+              description="Manage your account security"
+            >
+              <div className="flex flex-1 flex-col">
+                <SettingsSection
+                  title="Password"
+                  description="Update the password you use to sign in to Notes9."
+                >
+                  <ChangePasswordDialog>
+                    <Button variant="outline" className="h-10 text-sm">
+                      Change Password
+                    </Button>
+                  </ChangePasswordDialog>
+                </SettingsSection>
 
-              <div className="pt-6 border-t">
-                <h3 className="font-semibold mb-2">Legal & Privacy</h3>
-                <p className="text-sm text-muted-foreground mb-4">
-                  View our terms and privacy policy
-                </p>
-                <Button variant="outline" asChild>
-                  <a href="/privacy" target="_blank" rel="noopener noreferrer">
-                    View Terms & Privacy Policy
-                  </a>
-                </Button>
-              </div>
+                <SettingsSection
+                  title="Two-factor authentication"
+                  description="Add an extra layer of security with a TOTP authenticator app (Google Authenticator, 1Password, Authy). Requires re-signing in to enroll."
+                >
+                  <div className="flex flex-wrap items-center gap-3">
+                    <Button variant="outline" className="h-10 text-sm" disabled>
+                      Enable 2FA
+                    </Button>
+                    <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                      Coming soon
+                    </span>
+                  </div>
+                </SettingsSection>
 
-              <div className="pt-6 border-t">
-                <h3 className="font-semibold mb-2">Sign Out</h3>
-                <p className="text-sm text-muted-foreground mb-4">
-                  Sign out from your account on this device
-                </p>
-                <Button variant="destructive" onClick={handleSignOut}>
-                  <LogOut className="h-4 w-4 mr-2" />
-                  Sign Out
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
+                <SettingsSection
+                  title="Legal & Privacy"
+                  description="View our terms and privacy policy."
+                >
+                  <Button variant="outline" className="h-10 text-sm" asChild>
+                    <a href="/privacy" target="_blank" rel="noopener noreferrer">
+                      View Terms & Privacy Policy
+                    </a>
+                  </Button>
+                </SettingsSection>
 
-        <TabsContent value="preferences" className="space-y-4">
-          <Card>
-            <CardHeader>
-              <CardTitle>Preferences</CardTitle>
-              <CardDescription>
-                Customize your Notes9 experience
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="font-medium">Theme</p>
-                  <p className="text-sm text-muted-foreground">
-                    Choose your preferred color theme
-                  </p>
-                </div>
-                {mounted && (
-                  <div className="flex gap-2">
+                <SettingsSection
+                  title="Sign Out"
+                  description="Sign out from your account on this device."
+                >
+                  <Button
+                    variant="destructive"
+                    className="h-10 text-sm"
+                    onClick={handleSignOut}
+                  >
+                    <LogOut className="mr-2 size-4" />
+                    Sign Out
+                  </Button>
+                </SettingsSection>
+              </div>
+            </SettingsPanelCard>
+          </TabsContent>
+
+        <TabsContent value="preferences" className={cn(SETTINGS_PANEL_SHELL, "col-start-1 row-start-1")}>
+          <SettingsPanelCard
+            title="Preferences"
+            description="Customize your Notes9 experience"
+          >
+            <div className="flex flex-1 flex-col justify-center">
+              <SettingsRow
+                title="Theme"
+                description="Choose your preferred color theme"
+              >
+                {mounted ? (
+                  <div className="flex flex-wrap gap-2">
                     <Button
                       variant={theme === "light" ? "default" : "outline"}
-                      size="sm"
+                      className="h-10 text-sm"
                       onClick={() => setTheme("light")}
                     >
-                      <Sun className="h-4 w-4 mr-2" />
+                      <Sun className="mr-2 size-4" />
                       Light
                     </Button>
                     <Button
                       variant={theme === "dark" ? "default" : "outline"}
-                      size="sm"
+                      className="h-10 text-sm"
                       onClick={() => setTheme("dark")}
                     >
-                      <Moon className="h-4 w-4 mr-2" />
+                      <Moon className="mr-2 size-4" />
                       Dark
                     </Button>
                     <Button
                       variant={theme === "system" ? "default" : "outline"}
-                      size="sm"
+                      className="h-10 text-sm"
                       onClick={() => setTheme("system")}
                     >
-                      <Monitor className="h-4 w-4 mr-2" />
+                      <Monitor className="mr-2 size-4" />
                       System
                     </Button>
                   </div>
-                )}
-              </div>
+                ) : null}
+              </SettingsRow>
 
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="font-medium">Email Notifications</p>
-                  <p className="text-sm text-muted-foreground">
-                    Receive email updates about your experiments
-                  </p>
-                </div>
-                <Button variant="outline" size="sm" disabled title="Coming soon">
-                  Configure
-                </Button>
-              </div>
+              <SettingsRow
+                title="Email Notifications"
+                description="Receive email updates about your experiments"
+              >
+                <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                  Coming soon
+                </span>
+              </SettingsRow>
 
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="font-medium">Default View</p>
-                  <p className="text-sm text-muted-foreground">
-                    Set your preferred dashboard layout
-                  </p>
-                </div>
-                <Button variant="outline" size="sm" disabled title="Coming soon">
-                  Configure
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
+              <SettingsRow
+                title="Default View"
+                description="Set your preferred dashboard layout"
+              >
+                <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                  Coming soon
+                </span>
+              </SettingsRow>
+            </div>
+          </SettingsPanelCard>
         </TabsContent>
+          </div>
 
       </Tabs>
     </div>

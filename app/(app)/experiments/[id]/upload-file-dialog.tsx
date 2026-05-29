@@ -2,6 +2,7 @@
 
 import { useState, useRef } from "react"
 import { createClient } from "@/lib/supabase/client"
+import { useAuthUser } from "@/components/auth/auth-provider"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -96,6 +97,7 @@ interface FileWithStatus {
 }
 
 export function UploadFileDialog({ experimentId, onUploadComplete }: UploadFileDialogProps) {
+  const user = useAuthUser();
   const { toast } = useToast()
   const fileInputRef = useRef<HTMLInputElement>(null)
   
@@ -185,8 +187,6 @@ export function UploadFileDialog({ experimentId, onUploadComplete }: UploadFileD
 
     try {
       const supabase = createClient()
-      const { data: { user } } = await supabase.auth.getUser()
-      
       if (!user) throw new Error("Not authenticated")
 
       const organizationId = await fetchOrganizationIdForExperiment(supabase, experimentId)
@@ -365,7 +365,7 @@ export function UploadFileDialog({ experimentId, onUploadComplete }: UploadFileD
           Upload Files
         </Button>
       </DialogTrigger>
-      <DialogContent className="sm:max-w-[600px] max-h-[90vh] overflow-y-auto">
+      <DialogContent dialogSize="md" className="max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Upload Data Files</DialogTitle>
           <DialogDescription>

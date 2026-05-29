@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { getCurrentUser } from '@/lib/auth/current-user'
 import { buildExportGoogleFontsLink } from '@/lib/export-formatting'
 import { prepareHtmlForExport } from '@/lib/print-export'
 
@@ -26,7 +27,7 @@ function getHtmlDocx() {
 export async function POST(request: NextRequest) {
   try {
     const supabase = await createClient()
-    const { data: { user } } = await supabase.auth.getUser()
+    const user = await getCurrentUser()
     if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
@@ -61,12 +62,17 @@ export async function POST(request: NextRequest) {
     const cleanedHtml = prepareHtmlForExport(html)
     const googleFonts = buildExportGoogleFontsLink(cleanedHtml)
 
-    // Build full HTML document
+    const escapeHtml = (s: string): string =>
+      s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;')
+    const rawTitle = typeof title === 'string' ? title : ''
+    const safeTitleHtml = escapeHtml(rawTitle).slice(0, 500)
+    const filenameSafeTitle = rawTitle.replace(/["\r\n\\]/g, '_').slice(0, 200) || 'document'
+
     const fullHtml = `<!DOCTYPE html>
 <html>
 <head>
   <meta charset="utf-8" />
-  <title>${title ?? 'Document'}</title>
+  <title>${safeTitleHtml || 'Document'}</title>
   ${googleFonts}
   <style>
     body {
@@ -125,7 +131,7 @@ export async function POST(request: NextRequest) {
   </style>
 </head>
 <body>
-  ${title ? `<h1>${title}</h1>` : ''}
+  ${safeTitleHtml ? `<h1>${safeTitleHtml}</h1>` : ''}
   ${cleanedHtml}
 </body>
 </html>`
@@ -141,18 +147,14 @@ export async function POST(request: NextRequest) {
     return new NextResponse(uint8Array, {
       headers: {
         'Content-Type': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-        'Content-Disposition': `attachment; filename="${title || 'document'}.docx"`,
+        'Content-Disposition': `attachment; filename="${filenameSafeTitle}.docx"`,
       },
     })
   } catch (error: any) {
     console.error('HTML → DOCX error:', error)
     console.error('Stack:', error?.stack)
     return NextResponse.json(
-      {
-        error: 'Failed to generate DOCX',
-        message: error?.message || 'Unknown error',
-        stack: error?.stack,
-      },
+      { error: 'Failed to generate DOCX' },
       { status: 500 }
     )
   }

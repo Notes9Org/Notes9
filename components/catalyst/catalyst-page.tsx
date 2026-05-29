@@ -8,6 +8,7 @@ import { PanelLeftClose, PanelLeft } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useChatSessions } from '@/hooks/use-chat-sessions';
 import { createClient } from '@/lib/supabase/client';
+import { useAuthUser } from "@/components/auth/auth-provider"
 import { deleteTrailingMessages } from '@/app/(app)/catalyst/actions';
 import { toast } from 'sonner';
 import { CatalystGreeting } from './catalyst-greeting';
@@ -28,6 +29,7 @@ interface CatalystChatProps {
 }
 
 export function CatalystChat({ sessionId }: CatalystChatProps) {
+  const user = useAuthUser();
   const router = useRouter();
   const [input, setInput] = useState('');
   const [userName, setUserName] = useState<string>('');
@@ -45,7 +47,8 @@ export function CatalystChat({ sessionId }: CatalystChatProps) {
   const hasLoadedSessionRef = useRef<string | null>(null);
   const supabaseTokenRef = useRef<string | null>(null);
 
-  const supabase = createClient();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const supabase = useMemo(() => createClient(), []);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -106,9 +109,6 @@ export function CatalystChat({ sessionId }: CatalystChatProps) {
   // Load user profile
   useEffect(() => {
     const loadUserProfile = async () => {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
       if (user) {
         setUserId(user.id);
         const { data } = await supabase
@@ -749,6 +749,9 @@ export function CatalystChat({ sessionId }: CatalystChatProps) {
                       ragChunks: agentStream.ragChunks,
                       streamedAnswer: agentStream.streamedAnswer,
                       donePayload: agentStream.donePayload,
+                      // Forward the citation manifest so inline [N] chips resolve
+                      // to their source (was dropped here → chips never rendered).
+                      citationsManifest: agentStream.citationsManifest,
                       error: agentStream.error,
                       isStreaming: agentStream.isStreaming,
                     }

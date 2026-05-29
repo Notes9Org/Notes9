@@ -138,6 +138,9 @@ export type AgentCitationPanelItem = {
   pageNumber?: number | null;
   contentSurface?: 'abstract' | 'pdf' | null;
   relevance?: number;
+  /** Provenance: 'exact' records are direct fetches/SQL rows (no similarity
+   * score → no "% match" label); 'semantic' carries a real relevance score. */
+  matchKind?: string | null;
   excerpt: string;
   documentHref: string | null;
   highlightTarget: HighlightTarget | null;
@@ -217,19 +220,19 @@ function useResolvedCitationItem(item: AgentCitationPanelItem): AgentCitationPan
  * Filter out SQL/workspace citations that aren't useful for scientists.
  */
 function shouldShowCitation(item: AgentCitationPanelItem): boolean {
-  const sourceType = item.sourceType?.toLowerCase();
-
-  // Filter out SQL-only citations
-  if (sourceType === 'sql' || sourceType === 'workspace') {
-    return false;
-  }
-
-  // Filter out generic "Workspace data" without meaningful content
-  if (item.title?.toLowerCase().includes('workspace data') && !item.excerpt) {
-    return false;
-  }
-
-  return true;
+  // Show EVERY grounded source the backend returned — including workspace /
+  // sql-derived records (samples, reports, data files, experiments, lab notes).
+  // The previous version dropped entire `sql`/`workspace` source-type families,
+  // which silently shrank the panel and was a primary cause of the
+  // "citations not showing the full list" complaint.
+  //
+  // The only things dropped are truly empty placeholders: no title, no excerpt,
+  // and no source id to link to.
+  const title = item.title?.trim().toLowerCase() ?? '';
+  const hasTitle = title.length > 0 && title !== 'workspace data';
+  const hasExcerpt = !!item.excerpt && item.excerpt.trim().length > 0;
+  const hasId = !!item.sourceId;
+  return hasTitle || hasExcerpt || hasId;
 }
 
 /**
@@ -241,9 +244,13 @@ export function mergeGroundingAndRagItems(
   resources: GroundingResource[],
   ragChunks: RagChunk[] | null | undefined,
 ): AgentCitationPanelItem[] {
+  // Preserve each item's backend-assigned display index (groundingResource-
+  // ToPanelItem set it from the resource's position, which matches the inline
+  // [N] markers and the citations manifest). Do NOT re-number after filtering —
+  // that misaligned panel rows from the [N] chips in the answer text.
   const base = resources.map((c, i) => groundingResourceToPanelItem(c, i)).filter(shouldShowCitation);
   if (!ragChunks?.length) {
-    return base.map((item, i) => ({ ...item, index: i + 1 }));
+    return base;
   }
   const seen = new Set(base.map(fingerprintCitationItem));
   const extras: AgentCitationPanelItem[] = [];
@@ -258,8 +265,8 @@ export function mergeGroundingAndRagItems(
       extras.push(item);
     }
   }
-  const merged = [...base, ...extras];
-  return merged.map((item, i) => ({ ...item, index: i + 1 }));
+  // Keep backend indices on `base`; RAG `extras` were numbered after base.
+  return [...base, ...extras];
 }
 
 export function groundingResourceToPanelItem(
@@ -303,6 +310,7 @@ export function groundingResourceToPanelItem(
       ? c.content_surface
       : null,
     relevance,
+    matchKind: typeof c.match_kind === 'string' ? c.match_kind : null,
     excerpt,
     documentHref,
     highlightTarget,
@@ -345,6 +353,8 @@ export function ragChunkToPanelItem(chunk: RagChunk, i: number): AgentCitationPa
       ? chunk.content_surface
       : null,
     relevance,
+    // RAG chunks are vector retrievals by definition → semantic.
+    matchKind: 'semantic',
     excerpt,
     documentHref,
     highlightTarget,
@@ -506,10 +516,14 @@ function CitationBlock({ item, isStreaming }: { item: AgentCitationPanelItem; is
       </div>
       <p className="mt-1 text-xs text-muted-foreground">
         {resolvedItem.sourceTypeLabel}
-        {resolvedItem.relevance != null &&
+        {resolvedItem.matchKind === 'exact' ? (
+          <span> · Direct record</span>
+        ) : (
+          resolvedItem.relevance != null &&
           resolvedItem.relevance >= 0 &&
           resolvedItem.relevance <= 1 && (
             <span> · {Math.round(resolvedItem.relevance * 100)}% match</span>
+          )
         )}
       </p>
       {displayUrl && (
@@ -579,13 +593,19 @@ function SingleCitationPanel({
           <span className="font-medium text-foreground">{resolvedItem.title}</span>
         )}
       </div>
-      {resolvedItem.relevance != null &&
+      {resolvedItem.matchKind === 'exact' ? (
+        <p className="text-micro text-muted-foreground pl-6">
+          {resolvedItem.sourceTypeLabel} · Direct record
+        </p>
+      ) : (
+        resolvedItem.relevance != null &&
         resolvedItem.relevance >= 0 &&
         resolvedItem.relevance <= 1 && (
           <p className="text-micro text-muted-foreground pl-6">
             {resolvedItem.sourceTypeLabel} · {Math.round(resolvedItem.relevance * 100)}% match
           </p>
-        )}
+        )
+      )}
       {displayUrl && (
         <a
           href={displayUrl}
@@ -631,6 +651,11 @@ export function AgentCitationsPanel({
   defaultOpen = false,
   isStreaming = false,
 }: AgentCitationsPanelProps) {
+  // Hooks must run unconditionally on every render — declare before any early
+  // return. During streaming the item count grows 0→1→2, so a useState placed
+  // after the length checks below changed the hook call order and crashed the
+  // panel (Rules of Hooks violation).
+  const [open, setOpen] = useState(defaultOpen);
   const sorted = [...items].sort((a, b) => a.index - b.index);
   if (sorted.length === 0) return null;
 
@@ -641,8 +666,6 @@ export function AgentCitationsPanel({
       </div>
     );
   }
-
-  const [open, setOpen] = useState(defaultOpen);
 
   return (
     <Collapsible open={open} onOpenChange={setOpen} className={cn('min-w-0 max-w-full', className)}>

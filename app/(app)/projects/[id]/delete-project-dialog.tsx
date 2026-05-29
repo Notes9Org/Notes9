@@ -18,6 +18,8 @@ import { useToast } from "@/hooks/use-toast"
 import { useRouter } from "next/navigation"
 import { Trash2, Loader2, AlertTriangle } from "lucide-react"
 import { Alert, AlertDescription } from "@/components/ui/alert"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
 
 interface DeleteProjectDialogProps {
   projectId: string
@@ -39,6 +41,8 @@ export function DeleteProjectDialog({ projectId, projectName, experimentCount = 
   const open = isControlled ? controlledOpen : internalOpen
   const setOpen = isControlled ? controlledOnOpenChange : setInternalOpen
   const [isDeleting, setIsDeleting] = useState(false)
+  const [confirmText, setConfirmText] = useState("")
+  const canDelete = confirmText.trim() === projectName.trim()
 
   const handleDelete = async () => {
     setIsDeleting(true)
@@ -116,14 +120,33 @@ export function DeleteProjectDialog({ projectId, projectName, experimentCount = 
               <p className="text-sm">
                 <strong className="text-foreground">This action cannot be undone.</strong> All data will be permanently removed from the database.
               </p>
+
+              <div className="space-y-2 pt-2">
+                <Label htmlFor="delete-confirm" className="text-foreground">
+                  Type <code className="rounded bg-muted px-1 py-0.5 text-xs">{projectName}</code> to confirm
+                </Label>
+                <Input
+                  id="delete-confirm"
+                  value={confirmText}
+                  onChange={(e) => setConfirmText(e.target.value)}
+                  placeholder={projectName}
+                  autoComplete="off"
+                  disabled={isDeleting}
+                />
+              </div>
             </div>
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
-          <AlertDialogCancel disabled={isDeleting}>Cancel</AlertDialogCancel>
+          <AlertDialogCancel
+            disabled={isDeleting}
+            onClick={() => setConfirmText("")}
+          >
+            Cancel
+          </AlertDialogCancel>
           <AlertDialogAction
             onClick={handleDelete}
-            disabled={isDeleting}
+            disabled={isDeleting || !canDelete}
             className={buttonVariants({ variant: "destructive" })}
           >
             {isDeleting ? (

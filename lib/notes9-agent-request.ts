@@ -43,7 +43,10 @@ export type Notes9FileAttachment = {
     | 'image/png'
     | 'image/gif'
     | 'image/webp'
-    | 'application/pdf';
+    | 'application/pdf'
+    | 'text/csv'
+    | 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    | 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
   size: number;
 };
 
@@ -59,7 +62,6 @@ export type Notes9AgentRequestInput = {
   options?: {
     debug?: boolean;
     max_retries?: number;
-    tags?: Array<{ kind: string; id: string; title: string }>;
     /** When supported by upstream, enables web search tool alongside SQL/RAG. */
     web_search?: 'on' | 'off';
   };
@@ -83,9 +85,8 @@ export function buildNotes9AgentRequestBody(params: Notes9AgentRequestInput): Re
   if (params.scope !== undefined && params.scope !== null) {
     body.scope = params.scope;
   }
-  // Top-level attachments only — the backend reads request.attachments to
-  // preflight the corresponding records. Keep this distinct from
-  // options.tags (a legacy free-form annotation) so the contract is clear.
+  // Top-level attachments — the backend reads request.attachments to
+  // preflight the corresponding records.
   if (params.attachments && params.attachments.length > 0) {
     body.attachments = params.attachments;
   }

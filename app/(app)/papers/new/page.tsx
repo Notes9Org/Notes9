@@ -1,8 +1,10 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { Suspense, useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
+import { useCreatePageNav } from "@/hooks/use-create-page-nav"
 import { createClient } from "@/lib/supabase/client"
+import { useAuthUser } from "@/components/auth/auth-provider"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -15,17 +17,26 @@ import {
 } from "@/components/ui/select"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { ArrowLeft } from "lucide-react"
-import Link from "next/link"
 import { toast } from "sonner"
 
-export default function NewPaperPage() {
+function NewPaperPageInner() {
+  const user = useAuthUser();
   const router = useRouter()
+  const { handleBack } = useCreatePageNav({
+    pageLabel: "New Paper",
+    listFallbackPath: "/papers",
+  })
   const [title, setTitle] = useState("")
   const [projectId, setProjectId] = useState<string>("")
   const [projects, setProjects] = useState<{ id: string; name: string }[]>([])
   const [isCreating, setIsCreating] = useState(false)
 
   useEffect(() => {
+    if (typeof window !== "undefined") {
+      const p = new URLSearchParams(window.location.search).get("project")
+      if (p) setProjectId(p)
+    }
+
     const fetchProjects = async () => {
       const supabase = createClient()
       const { data } = await supabase
@@ -42,11 +53,14 @@ export default function NewPaperPage() {
       toast.error("Please enter a paper title")
       return
     }
+    if (!projectId) {
+      toast.error("Please select a project")
+      return
+    }
 
     setIsCreating(true)
     try {
       const supabase = createClient()
-      const { data: { user } } = await supabase.auth.getUser()
       if (!user) throw new Error("Not authenticated")
 
       const { data, error } = await supabase
@@ -55,7 +69,7 @@ export default function NewPaperPage() {
           title: title.trim(),
           content: "",
           status: "draft",
-          project_id: projectId || null,
+          project_id: projectId,
           created_by: user.id,
         })
         .select("id")
@@ -64,7 +78,7 @@ export default function NewPaperPage() {
       if (error) throw error
 
       toast.success("Paper created")
-      router.push(`/papers?open=${data.id}`)
+      router.push(`/papers/${data.id}`)
     } catch (error: unknown) {
       console.error("Error creating paper:", error)
       const msg =
@@ -78,23 +92,23 @@ export default function NewPaperPage() {
   }
 
   return (
-    <div className="max-w-2xl mx-auto space-y-6">
-      <div className="flex items-center gap-2">
-        <Button variant="ghost" size="icon" asChild>
-          <Link href="/papers">
-            <ArrowLeft className="h-4 w-4" />
-          </Link>
+    <div className="mx-auto w-full max-w-4xl space-y-6 px-4 md:space-y-8 md:px-6">
+      <div className="flex items-center gap-3">
+        <Button variant="ghost" size="icon" onClick={handleBack} className="shrink-0">
+          <ArrowLeft className="h-5 w-5" />
         </Button>
-        <h1 className="text-2xl font-bold">New Paper</h1>
+        <h1 className="text-3xl font-bold tracking-tight">New Paper</h1>
       </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Paper Details</CardTitle>
+      <Card className="w-full">
+        <CardHeader className="pb-2">
+          <CardTitle className="text-xl">Paper Details</CardTitle>
         </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="title">Title</Label>
+        <CardContent className="space-y-6 text-base">
+          <div className="space-y-2.5">
+            <Label htmlFor="title" className="text-base">
+              Title
+            </Label>
             <Input
               id="title"
               placeholder="Enter paper title"
@@ -103,18 +117,21 @@ export default function NewPaperPage() {
               onKeyDown={(e) => {
                 if (e.key === "Enter") handleCreate()
               }}
+              className="h-11 text-base md:text-base"
             />
           </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="project">Project (optional)</Label>
+          <div className="space-y-2.5">
+            <Label htmlFor="project" className="text-base">
+              Project <span className="text-destructive">*</span>
+            </Label>
             <Select value={projectId} onValueChange={setProjectId}>
-              <SelectTrigger>
+              <SelectTrigger className="h-11 w-full text-base md:text-base">
                 <SelectValue placeholder="Select a project" />
               </SelectTrigger>
               <SelectContent>
                 {projects.map((p) => (
-                  <SelectItem key={p.id} value={p.id}>
+                  <SelectItem key={p.id} value={p.id} className="text-base">
                     {p.name}
                   </SelectItem>
                 ))}
@@ -122,16 +139,35 @@ export default function NewPaperPage() {
             </Select>
           </div>
 
-          <div className="flex justify-end gap-2 pt-2">
-            <Button variant="outline" asChild>
-              <Link href="/papers">Cancel</Link>
+          <div className="flex justify-end gap-3 pt-2">
+            <Button
+              variant="outline"
+              size="lg"
+              className="text-base"
+              type="button"
+              onClick={handleBack}
+            >
+              Cancel
             </Button>
-            <Button onClick={handleCreate} disabled={isCreating}>
+            <Button
+              size="lg"
+              className="text-base"
+              onClick={handleCreate}
+              disabled={isCreating || !projectId}
+            >
               {isCreating ? "Creating..." : "Create Paper"}
             </Button>
           </div>
         </CardContent>
       </Card>
     </div>
+  )
+}
+
+export default function NewPaperPage() {
+  return (
+    <Suspense fallback={<div className="p-6 text-sm text-muted-foreground">Loading…</div>}>
+      <NewPaperPageInner />
+    </Suspense>
   )
 }

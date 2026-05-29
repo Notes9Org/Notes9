@@ -6,6 +6,7 @@ import { ContentDiffHistoryDialog } from "@/components/content-diff-history-dial
 import { useRouter, useSearchParams } from "next/navigation"
 import Link from "next/link"
 import { createClient } from "@/lib/supabase/client"
+import { useAuthUser } from "@/components/auth/auth-provider"
 import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
@@ -71,6 +72,7 @@ export function ProtocolEditor({
   designModeHref: string
   viewHref: string
 }) {
+  const user = useAuthUser();
   const router = useRouter()
   const { toast } = useToast()
   const [designModePromptOpen, setDesignModePromptOpen] = useState(false)
@@ -79,6 +81,7 @@ export function ProtocolEditor({
   const [isSavingContext, setIsSavingContext] = useState(false)
   const [projects, setProjects] = useState<ProjectOption[]>([])
   const [experiments, setExperiments] = useState<ExperimentOption[]>([])
+  const [samples, setSamples] = useState<{id: string, name: string, sample_code: string | null}[]>([])
   const [isLoadingExperiments, setIsLoadingExperiments] = useState(false)
   const [savedContext, setSavedContext] = useState({
     project_id: protocol.project_id ?? "",
@@ -127,9 +130,6 @@ export function ProtocolEditor({
 
     const run = async () => {
       const supabase = createClient()
-      const {
-        data: { user },
-      } = await supabase.auth.getUser()
       if (!user || cancelled) return
 
       const { data: profile } = await supabase
@@ -193,6 +193,32 @@ export function ProtocolEditor({
     // Intentionally omit formData.experiment_id: clearing it inside this effect
     // would otherwise trigger an infinite refetch loop.
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [formData.project_id])
+
+  useEffect(() => {
+    if (!formData.project_id) {
+      setSamples([])
+      return
+    }
+
+    let cancelled = false
+    const run = async () => {
+      const supabase = createClient()
+      const { data } = await supabase
+        .from("samples")
+        .select("id, name, sample_code")
+        .eq("project_id", formData.project_id)
+        .order("name")
+      
+      if (!cancelled) {
+        setSamples((data as any) || [])
+      }
+    }
+
+    void run()
+    return () => {
+      cancelled = true
+    }
   }, [formData.project_id])
 
   // Highlight from AI reference navigation — retries until content is loaded
@@ -380,10 +406,26 @@ export function ProtocolEditor({
         <div className="flex-1 min-w-0 min-h-0 flex flex-col">
           <ProtocolDesignMode
             protocol={designProtocol}
+            samples={samples}
             onSaved={() => router.refresh()}
             onExitDesignMode={() => router.push(viewHref)}
             onContextChange={handleContextChange}
             onProtocolNameChange={(name) => setFormData((c) => ({ ...c, name }))}
+            onProtocolNameCommit={async (name) => {
+              try {
+                const supabase = createClient()
+                const { error } = await updateProtocolWithOptionalContext(supabase, protocol.id, { name })
+                if (error) throw error
+                toast({ title: "Name updated" })
+                router.refresh()
+              } catch (e: unknown) {
+                toast({
+                  title: "Couldn't update name",
+                  description: e instanceof Error ? e.message : "Unknown error",
+                  variant: "destructive"
+                })
+              }
+            }}
           />
         </div>
       </div>
@@ -545,6 +587,10 @@ export function ProtocolEditor({
               {/* Must not be a <button>: TipTap renders TOC etc. with inner <button>s (invalid nesting + hydration error). */}
               <div className="min-h-0 flex-1 overflow-hidden text-left">
                 <TiptapEditor
+                  // Force a fresh editor when the user navigates to a different
+                  // protocol — without the key, ProseMirror reuses internal state
+                  // and the previous protocol's body bleeds in.
+                  key={protocol.id}
                   content={protocol.content ?? ""}
                   onChange={() => {}}
                   placeholder=""
@@ -555,6 +601,7 @@ export function ProtocolEditor({
                   hideToolbar
                   showAITools={false}
                   showAiWritingDropdown={false}
+                  samples={samples}
                   className="min-h-0 flex-1 border-0 shadow-none"
                   onEditorReady={(ed) => { protocolEditorRef.current = ed; setProtocolEditorReady(!!ed) }}
                 />

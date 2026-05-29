@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
+import { getCurrentUser } from "@/lib/auth/current-user"
 import { normalizeRequestedTables, type BackupPayload, type ExportTable } from "@/lib/data-transfer"
 import { escapeHtml } from "@/lib/sanitize-html"
 import {
@@ -37,12 +38,9 @@ type FolderImportMapping = {
 
 export async function POST(req: NextRequest) {
   const supabase = await createClient()
-  const {
-    data: { user },
-    error: authError,
-  } = await supabase.auth.getUser()
+  const user = await getCurrentUser()
 
-  if (authError || !user) {
+  if (!user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   }
 

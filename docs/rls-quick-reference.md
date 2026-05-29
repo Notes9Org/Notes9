@@ -65,8 +65,8 @@ ORDER BY tablename, operation;
 
 | Table | SELECT | INSERT | UPDATE | DELETE | Pattern |
 |-------|--------|--------|--------|--------|---------|
-| organizations | ✓ | ✗ | ✗ | ✗ | System-managed |
-| profiles | ✓ | ✗ | ✓ | ✗ | Self + Org |
+| organizations | ✓ | ✓ | ✗ | ✗ | Org member + email bootstrap |
+| profiles | ✓ | ✓ | ✓ | ✗ | Self + Org |
 | projects | ✓ | ✓ | ✓ | ✓ | Org + Creator |
 | experiments | ✓ | ✓ | ✓ | ✓ | Project + Creator |
 | protocols | ✓ | ✓ | ✓ | ✓ | Organization |

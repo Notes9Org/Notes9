@@ -45,7 +45,7 @@ export function CatalystSidebar({
               aria-label="Catalyst AI"
             />
           </div>
-          <span className="text-sm font-semibold bg-gradient-to-r from-orange-500 to-pink-600 bg-clip-text text-transparent">
+          <span className="text-sm font-semibold text-primary">
             Catalyst AI
           </span>
         </div>

@@ -4,6 +4,23 @@
  * Extracted from tiptap-editor to keep citation logic modular and testable.
  */
 
+import { escapeHtml } from "@/lib/sanitize-html"
+
+// Internal: HTML-escape user-controlled metadata fields before interpolating
+// them into citation HTML. Paper title/authors/journal/url originate from
+// external sources (Perplexity, PubMed, user input) and must never reach
+// `dangerouslySetInnerHTML` unescaped.
+function escapeMetadata(meta: CitationMetadata): CitationMetadata {
+  return {
+    ...meta,
+    title: escapeHtml(meta.title || ''),
+    authors: (meta.authors || []).map(escapeHtml),
+    journal: escapeHtml(meta.journal || ''),
+    url: escapeHtml(meta.url || ''),
+    doi: escapeHtml(meta.doi || ''),
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
@@ -146,7 +163,8 @@ export function formatInlineCitation(
 // ---------------------------------------------------------------------------
 
 /** When authors are missing, lead with title (no "Unknown author" placeholders). */
-function formatCitationNoAuthor(metadata: CitationMetadata, style: string): string {
+function formatCitationNoAuthor(rawMetadata: CitationMetadata, style: string): string {
+  const metadata = escapeMetadata(rawMetadata)
   const { title, journal, url } = metadata
   const yearStr = citationYearString(metadata)
   const t = title?.trim() || ''
@@ -193,13 +211,14 @@ function formatCitationNoAuthor(metadata: CitationMetadata, style: string): stri
   }
 }
 
-export function formatCitation(metadata: CitationMetadata, style: string): string {
+export function formatCitation(rawMetadata: CitationMetadata, style: string): string {
+  const metadata = escapeMetadata(rawMetadata)
   const { authors, title, journal, url } = metadata
   const authorStr = authorString(authors)
   const yearStr = citationYearString(metadata)
 
   if (!authorStr) {
-    return formatCitationNoAuthor(metadata, style)
+    return formatCitationNoAuthor(rawMetadata, style)
   }
 
   switch (style) {

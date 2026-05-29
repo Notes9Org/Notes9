@@ -1,9 +1,10 @@
 "use client"
 
-import { useState, useRef } from "react"
+import { useState, useRef, useMemo } from "react"
 import { Button } from "@/components/ui/button"
 import { Bold, Italic, List, ListOrdered, LinkIcon, Code, Heading1, Heading2 } from 'lucide-react'
 import { cn } from "@/lib/utils"
+import { sanitizeHtml } from "@/lib/sanitize-html"
 
 interface AffineBlockProps {
   initialContent?: string
@@ -20,6 +21,12 @@ export function AffineBlock({
 }: AffineBlockProps) {
   const [content, setContent] = useState(initialContent)
   const editorRef = useRef<HTMLDivElement>(null)
+
+  // Sanitize the initial HTML before painting it into the contentEditable
+  // div. Without this, untrusted stored HTML (lab note content from a
+  // compromised peer in a shared project) would execute embedded
+  // <script>/onerror= via dangerouslySetInnerHTML.
+  const sanitizedInitial = useMemo(() => sanitizeHtml(content), [content])
 
   const handleInput = (e: React.FormEvent<HTMLDivElement>) => {
     const newContent = e.currentTarget.innerHTML
@@ -123,7 +130,7 @@ export function AffineBlock({
         onInput={handleInput}
         className="min-h-[200px] p-4 text-foreground focus:outline-none prose prose-invert max-w-none"
         data-placeholder={placeholder}
-        dangerouslySetInnerHTML={{ __html: content }}
+        dangerouslySetInnerHTML={{ __html: sanitizedInitial }}
       />
     </div>
   )

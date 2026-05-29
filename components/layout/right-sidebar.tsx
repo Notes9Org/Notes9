@@ -42,6 +42,10 @@ import {
   ChevronDown,
   ChevronLeft,
   X,
+  Menu,
+  Sun,
+  Moon,
+  CircleHelp,
   Mic,
   BookOpen,
   FlaskConical,
@@ -63,7 +67,7 @@ import {
   parseLiteratureAssistantStoredContent,
   serializeLiteratureAssistantStoredContent,
 } from '@/lib/literature-assistant-stored';
-import { useAgentStream } from '@/hooks/use-agent-stream';
+import { useAgentStream, type AgentFileAttachment } from '@/hooks/use-agent-stream';
 import { usePinnedAutoScroll } from '@/hooks/use-pinned-auto-scroll';
 import { deleteTrailingMessages } from '@/app/(app)/catalyst/actions';
 import { MessageEditor } from '@/components/catalyst/message-editor';
@@ -75,8 +79,12 @@ import { MessageActions } from '@/components/catalyst/message-actions';
 import { IceMascot } from '@/components/ui/ice-mascot';
 import { toast } from 'sonner';
 import { createClient } from '@/lib/supabase/client';
+import { useAuthUser } from "@/components/auth/auth-provider"
 import { useResizable } from '@/hooks/use-resizable';
 import { ResizeHandle } from '@/components/ui/resize-handle';
+import { useSidebar } from '@/components/ui/sidebar';
+import { useTheme } from 'next-themes';
+import { requestPageHelp } from '@/components/tour/app-tour';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -105,6 +113,8 @@ import {
   type CatalystMentionKind,
   catalystMentionPath,
 } from '@/lib/catalyst-mention-types';
+import { isLikelyUuid } from '@/lib/url-project-param';
+import type { CatalystLaunchDetail } from '@/lib/catalyst-launch';
 import { useLiteratureMentionCandidates } from '@/contexts/literature-mention-context';
 import { useLiteratureAgentStream } from '@/hooks/use-literature-agent-stream';
 import type { LiteratureAgentDonePayload } from '@/lib/literature-agent-types';
@@ -133,6 +143,8 @@ import {
   literatureMessageMarkdownToPlainForModel,
   segmentsToLiteratureMessageMarkdown,
 } from '@/lib/literature-chat-editable';
+import { useAwsTranscribe } from '@/hooks/use-aws-transcribe';
+import { VoiceWaveform } from '@/components/text-editor/voice-waveform';
 
 /** Unwrap stringified JSON parts to plain text (handles double/triple wrapping). Used so request body always sends plain text. */
 function normalizeMessageContentToPlainText(raw: string): string {
@@ -346,16 +358,31 @@ function mergeUniqueTags(
   return Array.from(map.values());
 }
 
+// Module-level stale-while-revalidate cache for the @-mention catalog.
+// The right sidebar mounts on nearly every page navigation; without this,
+// `loadMentionItems` would re-fire 5 parallel `.from()` queries on each mount.
+// We reuse the last result for MENTION_ITEMS_TTL_MS so repeated navigations
+// hold zero DB connections for the mention catalog. The data is identical
+// across mounts (same org-scoped lists), so behavior is unchanged.
+type MentionItem = { kind: CatalystMentionKind; id: string; title: string };
+const MENTION_ITEMS_TTL_MS = 60_000;
+let mentionItemsCache: { fetchedAt: number; items: MentionItem[] } | null = null;
+let mentionItemsInflight: Promise<MentionItem[]> | null = null;
+
 const MAX_FILE_SIZE = 10 * 1024 * 1024;
+// Kept in sync with the backend allowlist (agents/contracts/request.py).
+// Images + PDF go to the model natively; CSV/XLSX/DOCX are parsed to text
+// server-side. text/plain is omitted (the backend does not support it).
 const ALLOWED_TYPES = [
   'image/jpeg',
   'image/png',
   'image/gif',
   'image/webp',
   'application/pdf',
-  'text/plain',
+  'text/csv',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', // .xlsx
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document', // .docx
 ];
-const MAX_CHAT_CHARS = 4096;
 const MAX_LITERATURE_TAGS = 4;
 
 function sortLiteratureCandidates(
@@ -371,15 +398,53 @@ function sortLiteratureCandidates(
 
 interface RightSidebarProps {
   onClose?: () => void;
+  /** `page` = dedicated /catalyst route (full main column). `panel` = right drawer. */
+  variant?: 'panel' | 'page';
+  initialSessionId?: string;
+  /** Seed composer when opened from a section hero or external launch event. */
+  pendingLaunch?: CatalystLaunchDetail | null;
+  onPendingLaunchConsumed?: () => void;
 }
 
-export function RightSidebar({ onClose }: RightSidebarProps = {}) {
+export function RightSidebar({
+  onClose,
+  variant = 'panel',
+  initialSessionId,
+  pendingLaunch = null,
+  onPendingLaunchConsumed,
+}: RightSidebarProps = {}) {
+  const user = useAuthUser();
+  const isPageVariant = variant === 'page';
+  const { setOpenMobile, isMobile } = useSidebar();
+  const { setTheme, resolvedTheme } = useTheme();
+  const [themeMounted, setThemeMounted] = useState(false);
+  const [displayName, setDisplayName] = useState('');
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const paperAI = usePaperAI();
   const [input, setInput] = useState('');
   const [agentMode] = useState<CatalystAgentMode>('notes9');
+  const { start: startMic, stop: stopMic, isListening: micListening, getWaveformData } = useAwsTranscribe({
+    onFinal: (text) => {
+      const cur = inputRef.current?.innerText ?? '';
+      const next = (cur ? `${cur} ${text}` : text).trimStart();
+      setInput(next);
+      // Sync the contentEditable DOM so handleSubmit reads the correct text
+      requestAnimationFrame(() => {
+        if (!inputRef.current) return;
+        inputRef.current.innerText = next;
+        const range = document.createRange();
+        range.selectNodeContents(inputRef.current);
+        range.collapse(false);
+        window.getSelection()?.removeAllRanges();
+        window.getSelection()?.addRange(range);
+        resizeInput();
+      });
+    },
+    onInterim: () => {},
+    onError: () => {},
+  });
   const [taggedLiterature, setTaggedLiterature] = useState<Array<{ id: string; title: string }>>([]);
   const [mentionOpen, setMentionOpen] = useState(false);
   const [mentionFilter, setMentionFilter] = useState('');
@@ -410,11 +475,14 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
   const chatScrollRef = useRef<HTMLDivElement>(null);
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [uploadQueue, setUploadQueue] = useState<string[]>([]);
+  const [messageAttachments, setMessageAttachments] = useState<Map<string, Attachment[]>>(new Map());
+  const pendingAttachmentsRef = useRef<Attachment[]>([]);
   const [mounted, setMounted] = useState(false);
   const [isDraggingContext, setIsDraggingContext] = useState(false);
   const [contextLoading, setContextLoading] = useState(false);
-  const [isExpanded, setIsExpanded] = useState(false);
+  const [isExpanded, setIsExpanded] = useState(isPageVariant);
   const [expandedHistoryOpen, setExpandedHistoryOpen] = useState(true);
+  const initialSessionLoadedRef = useRef<string | null>(null);
   const [showAllPastChats, setShowAllPastChats] = useState(false);
   /** When set, show main Catalyst chat instead of the paper Writing panel (paper context stays registered). */
   const [paperUiSuppressed, setPaperUiSuppressed] = useState(false);
@@ -423,6 +491,10 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
   const wasOnLiteratureRouteRef = useRef(false);
   /** When true, stay on General/Notes9 even while URL is under /literature-reviews (no redirect). */
   const suppressLiteratureAutoModeRef = useRef(false);
+  /** Guards against rapid double-Enter / double-click duplicating the same
+   *  message before `isLoading` has had a chance to flip. The window is small
+   *  (~ms) but real on slow machines and reliable on Enter-key auto-repeat. */
+  const submitInFlightRef = useRef(false);
   const historySidebar = useResizable({
     initialWidth: 224,
     minWidth: 208,
@@ -435,21 +507,27 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
     if (!composer) return;
     composer.style.height = 'auto';
     const plain = composer.innerText ?? '';
+    const emptyHeight = isPageVariant ? '120px' : '52px';
     if (reset || !plain.trim()) {
-      composer.style.height = '52px';
+      composer.style.height = emptyHeight;
       return;
     }
     composer.style.height = `${Math.min(composer.scrollHeight, 300)}px`;
-  }, []);
+  }, [isPageVariant]);
 
   // Cursor-like UI States
   // If messages.length === 0 => "New Chat View" (Input at top/center, Past Chats at bottom)
   // If messages.length > 0 => "Active Chat View" (Messages take space, Input at bottom)
 
-  const supabase = createClient();
+  // Stable client reference — without this, every render creates a new client
+  // object, and the seven downstream `useEffect`s that depend on `supabase`
+  // re-fire on every keystroke (re-subscribing realtime listeners, re-loading
+  // sessions, etc.). The memo holds the client for the lifetime of the panel.
+  const supabase = useMemo(() => createClient(), []);
 
   useEffect(() => {
     setMounted(true);
+    setThemeMounted(true);
   }, []);
 
   const supabaseTokenRef = useRef<string | null>(null);
@@ -467,54 +545,86 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
     []
   );
 
+  // Tagged records must be forwarded as top-level `attachments`, NOT only as
+  // `options.tags`. The backend preflights `request.attachments` (eager
+  // fetch_full_records) so the note/paper/protocol body is in the LLM's first
+  // turn; `options.tags` is a legacy annotation the backend ignores. Without
+  // this, a tagged note never reaches the agent and it falls back to a title
+  // search. Kinds map 1:1 to the AgentAttachment union.
+  const tagsToAttachments = useCallback(
+    (tags: Array<{ kind: CatalystMentionKind; id: string; title: string }>) =>
+      tags.length > 0
+        ? tags.map((t) => ({ kind: t.kind, id: t.id, title: t.title }))
+        : undefined,
+    []
+  );
+
   useEffect(() => {
     const loadUserId = async () => {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (user) setUserId(user.id);
+      if (!user) return;
+      setUserId(user.id);
+      const meta = user.user_metadata ?? {};
+      const fromMeta =
+        (meta.first_name as string | undefined)?.trim() ||
+        (meta.full_name as string | undefined)?.split(/\s+/)[0] ||
+        '';
+      if (fromMeta) {
+        setDisplayName(fromMeta);
+        return;
+      }
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('first_name, last_name')
+        .eq('id', user.id)
+        .maybeSingle();
+      const fromProfile = profile?.first_name?.trim() || profile?.last_name?.trim() || '';
+      setDisplayName(fromProfile || user.email?.split('@')[0] || '');
     };
     loadUserId();
   }, [supabase]);
 
   useEffect(() => {
     let cancelled = false;
+
     const loadMentionItems = async () => {
-      const { data: lit } = await supabase
-        .from('literature_reviews')
-        .select('id,title')
-        .order('updated_at', { ascending: false })
-        .limit(120);
-      const { data: notes } = await supabase
-        .from('lab_notes')
-        .select('id,title')
-        .order('created_at', { ascending: false })
-        .limit(120);
-      const { data: experiments } = await supabase
-        .from('experiments')
-        .select('id,name')
-        .order('created_at', { ascending: false })
-        .limit(120);
-      const { data: projects } = await supabase
-        .from('projects')
-        .select('id,name')
-        .order('created_at', { ascending: false })
-        .limit(120);
-      const { data: protocols } = await supabase
-        .from('protocols')
-        .select('id,name')
-        .order('created_at', { ascending: false })
-        .limit(120);
-
-      if (cancelled) return;
-
-      const merged: Array<{ kind: CatalystMentionKind; id: string; title: string }> = [
-        ...(lit ?? []).map((r) => ({ kind: 'literature_review' as const, id: r.id, title: r.title ?? 'Untitled literature' })),
-        ...(notes ?? []).map((r) => ({ kind: 'lab_note' as const, id: r.id, title: r.title ?? 'Untitled note' })),
-        ...(experiments ?? []).map((r) => ({ kind: 'experiment' as const, id: r.id, title: r.name ?? 'Untitled experiment' })),
-        ...(projects ?? []).map((r) => ({ kind: 'project' as const, id: r.id, title: r.name ?? 'Untitled project' })),
-        ...(protocols ?? []).map((r) => ({ kind: 'protocol' as const, id: r.id, title: r.name ?? 'Untitled protocol' })),
-      ];
-
-      setAllMentionItems(merged);
+      // Serve from cache if it's fresh — no DB connection used.
+      if (mentionItemsCache && Date.now() - mentionItemsCache.fetchedAt < MENTION_ITEMS_TTL_MS) {
+        setAllMentionItems(mentionItemsCache.items);
+        return;
+      }
+      // Dedupe concurrent mounts: reuse the in-flight promise if one exists.
+      if (!mentionItemsInflight) {
+        mentionItemsInflight = (async () => {
+          const [
+            { data: lit },
+            { data: notes },
+            { data: experiments },
+            { data: projects },
+            { data: protocols },
+          ] = await Promise.all([
+            supabase.from('literature_reviews').select('id,title').order('updated_at', { ascending: false }).limit(120),
+            supabase.from('lab_notes').select('id,title').order('created_at', { ascending: false }).limit(120),
+            supabase.from('experiments').select('id,name').order('created_at', { ascending: false }).limit(120),
+            supabase.from('projects').select('id,name').order('created_at', { ascending: false }).limit(120),
+            supabase.from('protocols').select('id,name').order('created_at', { ascending: false }).limit(120),
+          ]);
+          const merged: MentionItem[] = [
+            ...(lit ?? []).map((r) => ({ kind: 'literature_review' as const, id: r.id, title: r.title ?? 'Untitled literature' })),
+            ...(notes ?? []).map((r) => ({ kind: 'lab_note' as const, id: r.id, title: r.title ?? 'Untitled note' })),
+            ...(experiments ?? []).map((r) => ({ kind: 'experiment' as const, id: r.id, title: r.name ?? 'Untitled experiment' })),
+            ...(projects ?? []).map((r) => ({ kind: 'project' as const, id: r.id, title: r.name ?? 'Untitled project' })),
+            ...(protocols ?? []).map((r) => ({ kind: 'protocol' as const, id: r.id, title: r.name ?? 'Untitled protocol' })),
+          ];
+          mentionItemsCache = { fetchedAt: Date.now(), items: merged };
+          return merged;
+        })();
+      }
+      try {
+        const merged = await mentionItemsInflight;
+        if (!cancelled) setAllMentionItems(merged);
+      } finally {
+        mentionItemsInflight = null;
+      }
     };
 
     loadMentionItems();
@@ -661,7 +771,9 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
 
         const icon = document.createElement('span');
         icon.className = 'inline-flex h-3.5 w-3.5 shrink-0 items-center justify-center';
-        icon.innerHTML = mentionIconMarkup(item.kind);
+        const svgDoc = new DOMParser().parseFromString(mentionIconMarkup(item.kind), 'image/svg+xml');
+        const svgEl = svgDoc.documentElement;
+        if (svgEl && svgEl.nodeName !== 'parsererror') icon.appendChild(svgEl);
         chip.appendChild(icon);
 
         const label = document.createElement('span');
@@ -875,9 +987,6 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
     if (contextMentionCandidates.length > 0) return;
     let cancelled = false;
     (async () => {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
       if (!user || cancelled) return;
       const { data, error } = await supabase
         .from('literature_reviews')
@@ -1119,11 +1228,12 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
   }, [input, isLoading, resizeInput]);
 
   useEffect(() => {
+    if (isPageVariant) return;
     if (previousPathnameRef.current !== pathname && isExpanded) {
       setIsExpanded(false);
     }
     previousPathnameRef.current = pathname;
-  }, [pathname, isExpanded]);
+  }, [pathname, isExpanded, isPageVariant]);
 
   const uploadFile = useCallback(async (file: File): Promise<Attachment | null> => {
     try {
@@ -1236,6 +1346,13 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    // Drop second-and-later fires until the first send has finished kicking
+    // off its async work (createSession, then streaming start). Without this,
+    // a quick keyboard repeat on Enter or a fast double-click duplicates the
+    // message before `isLoading` flips to true via the streaming hook.
+    if (submitInFlightRef.current) return;
+    submitInFlightRef.current = true;
+    try {
     const litEl = literatureEditableRef.current;
     const literaturePlain =
       agentMode === 'literature' && isLiteratureRoute && litEl
@@ -1267,7 +1384,7 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
     const text =
       agentMode === 'literature' && isLiteratureRoute
         ? literaturePlain
-        : (inputRef.current?.innerText ?? input).trim();
+        : (inputRef.current?.innerText?.trim() || input).trim();
     const mentionsBefore =
       agentMode === 'literature' && isLiteratureRoute && litEl
         ? getMentionsFromLiteratureEditable(litEl)
@@ -1305,6 +1422,7 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
         : null;
 
     const currentAttachments = [...attachments];
+    if (currentAttachments.length > 0) pendingAttachmentsRef.current = currentAttachments;
     setInput('');
       setSelectedMentions([]);
     setAttachments([]);
@@ -1360,9 +1478,17 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
         createdAt: new Date(),
       };
       setMessages((prev) => [...prev, userMessage]);
+      const pendingAttsLit = [...pendingAttachmentsRef.current];
+      pendingAttachmentsRef.current = [];
+      if (pendingAttsLit.length > 0) {
+        setMessageAttachments((prev) => new Map(prev).set(userMessageId, pendingAttsLit));
+      }
 
       const sessionId = currentSessionRef.current!;
-      const savedUser = await saveMessage(sessionId, 'user', userStoredContent);
+      const savedUser = await saveMessage(
+        sessionId, 'user', userStoredContent,
+        pendingAttsLit.length > 0 ? { attachments: pendingAttsLit } : undefined
+      );
       if (savedUser) {
         setSavedMessageIds((prev) => new Set(prev).add(savedUser.id));
         setMessages((prev) => {
@@ -1371,6 +1497,14 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
           if (last?.role === 'user' && last.id === userMessageId) {
             next[next.length - 1] = { ...last, id: savedUser.id };
           }
+          return next;
+        });
+        setMessageAttachments((prev) => {
+          const atts = prev.get(userMessageId);
+          if (!atts) return prev;
+          const next = new Map(prev);
+          next.delete(userMessageId);
+          next.set(savedUser.id, atts);
           return next;
         });
       }
@@ -1419,9 +1553,17 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
         createdAt: new Date(),
       };
       setMessages((prev) => [...prev, userMessage]);
+      const pendingAtts = [...pendingAttachmentsRef.current];
+      pendingAttachmentsRef.current = [];
+      if (pendingAtts.length > 0) {
+        setMessageAttachments((prev) => new Map(prev).set(userMessageId, pendingAtts));
+      }
 
       const sessionId = currentSessionRef.current!;
-      const savedUser = await saveMessage(sessionId, 'user', userStoredContent);
+      const savedUser = await saveMessage(
+        sessionId, 'user', userStoredContent,
+        pendingAtts.length > 0 ? { attachments: pendingAtts } : undefined
+      );
       if (savedUser) {
         setSavedMessageIds((prev) => new Set(prev).add(savedUser.id));
         setMessages((prev) => {
@@ -1432,6 +1574,14 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
           }
           return next;
         });
+        setMessageAttachments((prev) => {
+          const atts = prev.get(userMessageId);
+          if (!atts) return prev;
+          const next = new Map(prev);
+          next.delete(userMessageId);
+          next.set(savedUser.id, atts);
+          return next;
+        });
       }
 
       const history = messages.map((m) => ({
@@ -1440,15 +1590,29 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
       }));
 
       setNotes9Loading(true);
+      const fileAttachments = (attachments ?? [])
+        .slice(0, 5) // mirror backend MAX_FILE_ATTACHMENTS_PER_REQUEST
+        .map((a) => ({
+          url: a.url,
+          name: a.name,
+          content_type: a.contentType,
+          size: a.size ?? 0,
+        }));
       const { donePayload, error } = await agentStream.runStream(
         {
           query: text,
           session_id: sessionId,
           history,
+          attachments: tagsToAttachments(requestTags),
+          file_attachments:
+            fileAttachments.length > 0
+              ? (fileAttachments as unknown as AgentFileAttachment[])
+              : undefined,
           options: buildNotes9StreamOptions(requestTags),
         },
         token
       );
+      if (fileAttachments.length > 0) setAttachments([]);
       setNotes9Loading(false);
 
       if (donePayload) {
@@ -1489,6 +1653,11 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
     }
     if (text.trim()) parts.push({ type: 'text', text });
     await sendMessage({ parts });
+    } finally {
+      // Always release the in-flight guard so future submits can fire — even
+      // if an early-return above bailed out, the try/finally ensures release.
+      submitInFlightRef.current = false;
+    }
   };
 
   const handleEditMessage = useCallback(
@@ -1614,6 +1783,7 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
             query: newContent,
             session_id: sid,
             history,
+            attachments: tagsToAttachments(requestTags),
             options: buildNotes9StreamOptions(requestTags),
           },
           token
@@ -1766,6 +1936,7 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
           query,
           session_id: sid,
           history,
+          attachments: tagsToAttachments(requestTags),
           options: buildNotes9StreamOptions(requestTags),
         },
         token
@@ -2014,8 +2185,9 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
                 .map((p) => p.text!)
                 .join('');
             }
-          } catch {
-            // keep original text
+          } catch (err) {
+            console.warn('Session history parse failure', err);
+            text = '[message could not be displayed]';
           }
         }
         return {
@@ -2029,6 +2201,14 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
       setMessages(chatMessages);
       setSavedMessageIds(new Set(msgs.map((m) => m.id)));
 
+      // Hydrate attachment previews from persisted metadata
+      const hydratedAtts = new Map<string, Attachment[]>();
+      for (const m of msgs) {
+        const atts = (m.metadata as { attachments?: Attachment[] } | undefined)?.attachments;
+        if (Array.isArray(atts) && atts.length > 0) hydratedAtts.set(m.id, atts);
+      }
+      setMessageAttachments(hydratedAtts);
+
       // If session has no meaningful title but has messages, set title from first user message
       const session = sessions.find((s) => s.id === sessionId);
       const needsTitle = !session?.title || session.title === 'New conversation' || session.title.trim() === '';
@@ -2041,9 +2221,101 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
     });
   }
 
+  useEffect(() => {
+    if (!isPageVariant || !initialSessionId || !mounted) return;
+    if (initialSessionLoadedRef.current === initialSessionId) return;
+    initialSessionLoadedRef.current = initialSessionId;
+    loadSession(initialSessionId);
+  }, [isPageVariant, initialSessionId, mounted]);
+
+  const applyCatalystLaunch = useCallback(
+    (launch: { query?: string; projectId?: string; attachments?: Array<{ url: string; name: string; contentType: string; size?: number }>; webSearch?: boolean }) => {
+      const q = launch.query?.trim();
+      if (q) {
+        setInput(q);
+        // The composer is a contentEditable <div>, not a controlled input, so
+        // we also have to seed its textContent — otherwise React state and
+        // character count update but the visible field stays empty.
+        requestAnimationFrame(() => {
+          if (inputRef.current) {
+            inputRef.current.textContent = q;
+            // Drop caret at the end so the user can keep typing.
+            const range = document.createRange();
+            range.selectNodeContents(inputRef.current);
+            range.collapse(false);
+            const sel = window.getSelection();
+            sel?.removeAllRanges();
+            sel?.addRange(range);
+          }
+          inputRef.current?.focus();
+          resizeInput();
+        });
+      }
+      const projectId = launch.projectId?.trim();
+      if (projectId && isLikelyUuid(projectId)) {
+        supabase
+          .from('projects')
+          .select('name')
+          .eq('id', projectId)
+          .maybeSingle()
+          .then(({ data }) => {
+            if (!data?.name) return;
+            setSelectedMentions((prev) =>
+              prev.some((m) => m.kind === 'project' && m.id === projectId)
+                ? prev
+                : [...prev, { kind: 'project', id: projectId, title: data.name }],
+            );
+          });
+      }
+      if (launch.attachments && launch.attachments.length > 0) {
+        setAttachments((prev) => [...prev, ...launch.attachments!]);
+      }
+      if (launch.webSearch !== undefined) {
+        setWebSearchEnabled(launch.webSearch);
+      }
+    },
+    [resizeInput, supabase],
+  );
+
+  useEffect(() => {
+    if (!isPageVariant) return;
+    const q = searchParams.get('q')?.trim();
+    const projectId = searchParams.get('project')?.trim();
+    applyCatalystLaunch({
+      query: q || undefined,
+      projectId: projectId && isLikelyUuid(projectId) ? projectId : undefined,
+    });
+  }, [isPageVariant, searchParams, applyCatalystLaunch]);
+
+  useEffect(() => {
+    if (isPageVariant || !pendingLaunch || !mounted) return;
+    applyCatalystLaunch({
+      query: pendingLaunch.query,
+      projectId: pendingLaunch.projectId,
+      attachments: pendingLaunch.attachments,
+      webSearch: pendingLaunch.webSearch,
+    });
+    onPendingLaunchConsumed?.();
+  }, [
+    isPageVariant,
+    pendingLaunch,
+    mounted,
+    applyCatalystLaunch,
+    onPendingLaunchConsumed,
+  ]);
+
   // --- Render Components ---
 
-  const renderCursorInput = () => {
+  const catalystHeroComposerShell = cn(
+    'rounded-2xl border border-border/70 bg-card',
+    'shadow-[0_1px_2px_rgba(44,36,24,0.04),0_8px_28px_-8px_rgba(44,36,24,0.12)]',
+    'transition-[border-color,box-shadow] duration-200',
+    'focus-within:border-[color:color-mix(in_srgb,var(--n9-accent)_35%,var(--border))]',
+    'focus-within:shadow-[0_1px_2px_rgba(44,36,24,0.05),0_12px_32px_-8px_rgba(44,36,24,0.14),0_0_0_3px_color-mix(in_srgb,var(--n9-accent)_12%,transparent)]',
+  );
+
+  const renderCursorInput = (opts?: { heroStyle?: boolean }) => {
+    const heroStyle = opts?.heroStyle ?? false;
     const canSendLiterature =
       agentMode === 'literature' &&
       isLiteratureRoute &&
@@ -2071,11 +2343,7 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
                   if (!ie.inputType?.startsWith('insert')) return;
                   const ed = literatureEditableRef.current;
                   if (!ed) return;
-                  if (
-                    getPlainTextFromLiteratureEditable(ed).length >= MAX_CHAT_CHARS
-                  ) {
-                    e.preventDefault();
-                  }
+                  // No character limit enforced here
                 }}
                 onInput={() => {
                   const ed = literatureEditableRef.current;
@@ -2154,10 +2422,40 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
     return (
     <>
     <div className="group/input relative flex flex-col w-full">
-      <div className={cn(
-        "rounded-xl border bg-card/50 shadow-sm focus-within:ring-1 focus-within:ring-ring/50 focus-within:border-ring transition-all overflow-hidden",
-        isDraggingContext && "ring-2 ring-primary border-primary bg-primary/5"
-      )} id="tour-ai-chat">
+      <div
+        className={cn(
+          'overflow-hidden transition-all',
+          heroStyle
+            ? catalystHeroComposerShell
+            : 'rounded-xl border bg-card/50 shadow-sm focus-within:border-ring focus-within:ring-1 focus-within:ring-ring/50',
+          isDraggingContext && 'border-primary bg-primary/5 ring-2 ring-primary',
+        )}
+        id="tour-ai-chat"
+      >
+        {(attachments.length > 0 || uploadQueue.length > 0) && (
+          <div className="flex flex-wrap gap-1.5 px-3 pt-2 pb-0.5">
+            {attachments.map((a) => (
+              <PreviewAttachment
+                key={a.url || a.name}
+                attachment={a}
+                compact
+                onRemove={() =>
+                  setAttachments((prev) =>
+                    prev.filter((x) => (x.url || x.name) !== (a.url || a.name)),
+                  )
+                }
+              />
+            ))}
+            {uploadQueue.map((name) => (
+              <PreviewAttachment
+                key={`uploading-${name}`}
+                attachment={{ name, url: '', contentType: '', size: 0 }}
+                compact
+                isUploading
+              />
+            ))}
+          </div>
+        )}
         <FileDropzone
           onFilesDrop={() => {}}
           onNonFileDrop={handleNonFileDrop}
@@ -2167,12 +2465,25 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
         >
           <div
             ref={inputRef}
+            role="textbox"
+            aria-multiline="true"
+            aria-label="Message Catalyst"
+            aria-disabled={isLoading || contextLoading}
             contentEditable={!isLoading && !contextLoading}
             suppressContentEditableWarning
             onInput={handleTextareaChange}
             onKeyDown={handleKeyDown}
-            data-placeholder="Ask Caty anything. Use @ to tag notes, experiments, projects, protocols, and literature."
-            className="w-full min-h-[68px] resize-none bg-transparent px-4 py-2.5 text-sm focus:outline-none scrollbar-hide empty:before:pointer-events-none empty:before:text-muted-foreground/60 empty:before:content-[attr(data-placeholder)]"
+            data-placeholder={
+              heroStyle
+                ? 'Ask Catalyst anything. Type @ to reference a note, experiment, or paper.'
+                : 'Ask Catalyst anything. Use @ to tag notes, experiments, projects, protocols, and literature.'
+            }
+            className={cn(
+              'w-full resize-none bg-transparent focus-visible:outline-2 focus-visible:outline-ring/40 focus-visible:outline-offset-2 scrollbar-hide empty:before:pointer-events-none empty:before:text-muted-foreground/60 empty:before:content-[attr(data-placeholder)]',
+              heroStyle
+                ? 'min-h-[120px] px-5 py-4 text-[15px] leading-relaxed'
+                : 'min-h-[68px] px-4 py-2.5 text-sm',
+            )}
           />
         </FileDropzone>
         {mentionOpenForInput && filteredGlobalMentions.length > 0 && (
@@ -2243,11 +2554,33 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
           </div>
 
           <div className="flex h-9 shrink-0 items-center justify-end gap-1">
-            <span className="mr-1 hidden text-micro text-muted-foreground sm:inline">
-              {input.length}
-              /{MAX_CHAT_CHARS}
-            </span>
+            <div className="inline-flex items-center gap-1 mr-1">
+              <Button
+                type="button"
+                size="icon"
+                variant="ghost"
+                className={cn("size-7 text-muted-foreground transition-colors hover:text-primary", micListening && "text-red-500 hover:text-red-600")}
+                onClick={() => micListening ? stopMic() : startMic()}
+                aria-label={micListening ? "Stop dictation" : "Start dictation"}
+                title={micListening ? "Stop dictation" : "Dictate message"}
+              >
+                <Mic className="size-4" />
+              </Button>
+              {micListening && <VoiceWaveform getWaveformData={getWaveformData} />}
+            </div>
 
+            <Button
+              type="button"
+              size="icon"
+              variant="ghost"
+              className="size-7 text-muted-foreground transition-colors hover:text-primary"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={isLoading || isUploading}
+              aria-label="Attach file"
+              title="Attach a file (image, PDF, DOCX, XLSX, CSV)"
+            >
+              <Paperclip className="size-4" />
+            </Button>
             {isLoading ? (
               <Button
                 type="button"
@@ -2403,12 +2736,32 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
     ? 'Ask about papers, compare findings, and cross-check cited source passages. Use @ to link papers or drop literature rows into the composer.'
     : 'Your intelligent research assistant. Ask anything about your lab notes, experiments, or protocols.';
 
+  const layoutExpanded = isPageVariant || isExpanded;
+
+  const timeGreeting = (() => {
+    const hour = new Date().getHours();
+    if (hour >= 5 && hour < 12) return 'Good morning';
+    if (hour >= 12 && hour < 17) return 'Good afternoon';
+    if (hour >= 17 && hour < 21) return 'Good evening';
+    const day = new Date().toLocaleDateString('en-US', { weekday: 'long' });
+    return `Happy ${day}`;
+  })();
+
+  const toggleTheme = () => {
+    setTheme(resolvedTheme === 'dark' ? 'light' : 'dark');
+  };
+
   return (
     <div className={cn(
-      "flex flex-col bg-background border-l border-border/45 min-h-0 overflow-hidden shadow-[-2px_0_18px_-16px_rgba(44,36,24,0.22)] dark:shadow-[-2px_0_18px_-16px_rgba(0,0,0,0.45)]",
-      isExpanded
-        ? "fixed top-0 right-0 bottom-0 left-[var(--sidebar-width,0px)] z-[120] w-auto h-full transition-none"
-        : "h-full w-full min-w-0 transition-none"
+      "flex flex-col bg-background min-h-0 overflow-hidden transition-none",
+      isPageVariant
+        ? "h-full w-full min-w-0"
+        : cn(
+            "border-l border-border/45 shadow-[-2px_0_18px_-16px_rgba(44,36,24,0.22)] dark:shadow-[-2px_0_18px_-16px_rgba(0,0,0,0.45)]",
+            isExpanded
+              ? "fixed top-0 right-0 bottom-0 left-[var(--sidebar-width,0px)] z-[120] w-auto h-full"
+              : "h-full w-full min-w-0"
+          )
     )}>
       {/* Hidden File Input */}
       <input ref={fileInputRef} type="file" multiple accept={ALLOWED_TYPES.join(',')} className="hidden" onChange={handleFileSelect} disabled={isLoading || isUploading} />
@@ -2433,10 +2786,24 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
         />
       ) : (
         <>
-          {/* Header: Tab-like Navigation (History + New Chat hidden when maximized; left sidebar has them) */}
+          {/* Header: page route uses app chrome; panel uses compact history controls */}
             <header className="h-12 sm:h-14 flex items-center justify-between px-2 sm:px-4 border-b border-border/40 shrink-0 bg-[color:var(--n9-header-bg)]/80 backdrop-blur-md z-10 text-xs select-none">
-            <div className="flex items-center gap-1 overflow-hidden">
-              {isExpanded && !expandedHistoryOpen && (
+            <div className="flex items-center gap-1 overflow-hidden min-w-0">
+              {isPageVariant && isMobile ? (
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="size-8 shrink-0 sm:size-9"
+                  onClick={() => setOpenMobile(true)}
+                  aria-label="Open navigation"
+                >
+                  <Menu className="size-4" />
+                </Button>
+              ) : null}
+              {isPageVariant ? (
+                <span className="truncate px-1 text-sm font-semibold text-foreground">Catalyst</span>
+              ) : null}
+              {!isPageVariant && layoutExpanded && !expandedHistoryOpen && (
                 <Button
                   variant="ghost"
                   size="icon"
@@ -2447,7 +2814,7 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
                     <History className="size-4" />
                 </Button>
               )}
-              {!isExpanded && (
+              {!isPageVariant && !layoutExpanded && (
                 <>
                   <ScrollArea className="w-full whitespace-nowrap scrollbar-hide">
                     <div className="flex items-center gap-1">
@@ -2538,20 +2905,78 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
               )}
             </div>
 
-            <div className="flex items-center gap-1 pl-2">
-              <Button variant="ghost" size="icon" className="size-8 sm:size-9 text-muted-foreground" onClick={() => setIsExpanded(!isExpanded)}>
-                  {isExpanded ? <Minimize2 className="size-4" /> : <Maximize2 className="size-4" />}
-                </Button>
-                <Button variant="ghost" size="icon" className="size-8 sm:size-9 text-muted-foreground" onClick={() => onClose?.()}>
-                  <X className="size-4" />
-                </Button>
+            <div className="flex items-center gap-1 pl-2 shrink-0">
+              {isPageVariant ? (
+                <>
+                  {layoutExpanded && !expandedHistoryOpen ? (
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="size-8 sm:size-9 text-muted-foreground"
+                      onClick={() => setExpandedHistoryOpen(true)}
+                      aria-label="Show chat history"
+                    >
+                      <History className="size-4" />
+                    </Button>
+                  ) : null}
+                  <Button
+                    variant="secondary"
+                    className="hidden h-8 text-muted-foreground sm:inline-flex sm:h-9"
+                    onClick={handleNewChat}
+                    aria-label="New chat"
+                  >
+                    <Plus className="size-4" />
+                    <span>New chat</span>
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="size-8 text-muted-foreground sm:size-9"
+                    onClick={() => requestPageHelp(pathname ?? '/catalyst')}
+                    aria-label="Help: tour this page"
+                    title="Help: short tour for this page"
+                  >
+                    <CircleHelp className="size-4" />
+                  </Button>
+                  <Button
+                    id="tour-theme-toggle"
+                    variant="ghost"
+                    size="icon"
+                    className="size-8 sm:size-9"
+                    onClick={toggleTheme}
+                    aria-label={
+                      themeMounted && resolvedTheme === 'dark'
+                        ? 'Switch to light mode'
+                        : 'Switch to dark mode'
+                    }
+                  >
+                    {!themeMounted ? (
+                      <Moon className="size-4" />
+                    ) : resolvedTheme === 'dark' ? (
+                      <Sun className="size-4" />
+                    ) : (
+                      <Moon className="size-4" />
+                    )}
+                  </Button>
+                </>
+              ) : (
+                <>
+                  <Button variant="ghost" size="icon" className="size-8 sm:size-9 text-muted-foreground" onClick={() => setIsExpanded(!isExpanded)}>
+                    {isExpanded ? <Minimize2 className="size-4" /> : <Maximize2 className="size-4" />}
+                  </Button>
+                  <Button variant="ghost" size="icon" className="size-8 sm:size-9 text-muted-foreground" onClick={() => onClose?.()}>
+                    <X className="size-4" />
+                  </Button>
+                </>
+              )}
             </div>
           </header>
 
           {/* When full screen: left = conversation list, right = chat. Otherwise: single column. */}
-          <div className={cn("flex-1 flex min-h-0 overflow-hidden", isExpanded ? "flex-row" : "flex-col")}>
-            {/* Full-screen only: left sidebar with previous conversations (lab-notes-style, toggleable) */}
-            {isExpanded && expandedHistoryOpen && (
+          <div className={cn("flex-1 flex min-h-0 overflow-hidden", layoutExpanded ? "flex-row" : "flex-col")}>
+            {/* Full-screen / page route: left sidebar with previous conversations */}
+            {layoutExpanded && expandedHistoryOpen && (
               <>
                 <aside
                   className="flex-shrink-0 flex flex-col overflow-hidden border-r border-border bg-sidebar transition-[width] duration-200 ease-in-out min-h-0"
@@ -2651,36 +3076,59 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
             {/* Main chat area (narrow: only this; full screen: right side) */}
             <div className="flex-1 flex flex-col min-h-0 min-w-0 overflow-hidden">
               {messages.length === 0 ? (
-                // --- Empty State: input at bottom; full screen = compact bar, narrow = full input card ---
-                <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
-                <div className="flex-1 flex flex-col items-center justify-center px-4">
-                    <div className="relative mb-3 flex justify-center">
-                      <IceMascot
-                        className="w-16 shrink-0 rounded-full"
-                        options={{ src: "/notes9-mascot-ui.png" }}
-                        aria-label="Catalyst AI"
-                      />
-                    </div>
-                    <h2 className="text-lg font-bold tracking-tight bg-gradient-to-r from-orange-500 to-pink-600 bg-clip-text text-transparent">
-                      Catalyst AI
-                    </h2>
-                    {emptyStateSubheading ? (
-                      <h3 className="text-sm font-semibold tracking-tight bg-gradient-to-r from-orange-500 to-pink-600 bg-clip-text text-transparent">
-                        {emptyStateSubheading}
-                      </h3>
-                    ) : null}
-                    <p className="text-muted-foreground text-center max-w-xs text-sm">
-                      {emptyStateDescription}
-                    </p>
-                  </div>
-
-                  {/* Input at bottom (General, model, textarea) */}
-                  <div className="flex-shrink-0 p-4 bg-background/95 backdrop-blur border-t">
-                    <div className="max-w-3xl mx-auto min-w-0">
-                      {renderCursorInput()}
+                isPageVariant ? (
+                  <div className="relative min-h-0 flex-1 overflow-hidden">
+                    <div className="absolute inset-0 flex items-center justify-center px-4 py-6 sm:px-6">
+                      <div className="flex w-full max-w-3xl flex-col items-center gap-5 sm:gap-6">
+                        <div className="space-y-2 text-center">
+                          <div className="flex justify-center">
+                            <IceMascot
+                              className="w-12 shrink-0 rounded-full sm:w-14"
+                              options={{ src: '/notes9-mascot-ui.png' }}
+                              aria-label="Catalyst AI"
+                            />
+                          </div>
+                          <h1 className="text-2xl font-semibold tracking-tight text-foreground sm:text-[1.75rem]">
+                            {timeGreeting}
+                            {displayName ? `, ${displayName}` : ''}
+                          </h1>
+                          {emptyStateSubheading ? (
+                            <p className="text-sm text-muted-foreground">{emptyStateSubheading}</p>
+                          ) : null}
+                        </div>
+                        <div className="w-full min-w-0">
+                          {renderCursorInput({ heroStyle: true })}
+                        </div>
+                      </div>
                     </div>
                   </div>
-                </div>
+                ) : (
+                  <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+                    <div className="flex flex-1 flex-col items-center justify-center px-4">
+                      <div className="relative mb-3 flex justify-center">
+                        <IceMascot
+                          className="w-16 shrink-0 rounded-full"
+                          options={{ src: '/notes9-mascot-ui.png' }}
+                          aria-label="Catalyst AI"
+                        />
+                      </div>
+                      <h2 className="bg-gradient-to-r from-orange-500 to-pink-600 bg-clip-text text-lg font-bold tracking-tight text-transparent">
+                        Catalyst AI
+                      </h2>
+                      {emptyStateSubheading ? (
+                        <h3 className="bg-gradient-to-r from-orange-500 to-pink-600 bg-clip-text text-sm font-semibold tracking-tight text-transparent">
+                          {emptyStateSubheading}
+                        </h3>
+                      ) : null}
+                      <p className="max-w-xs text-center text-sm text-muted-foreground">
+                        {emptyStateDescription}
+                      </p>
+                    </div>
+                    <div className="flex-shrink-0 border-t bg-background/95 p-4 backdrop-blur">
+                      <div className="mx-auto min-w-0 max-w-3xl">{renderCursorInput()}</div>
+                    </div>
+                  </div>
+                )
               ) : (
                 // --- Active Chat View ---
                 <div className="flex min-h-0 flex-1 flex-col overflow-hidden relative">
@@ -2718,10 +3166,26 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
                         const literatureSources = hasLitRefs
                           ? literatureParsed!.refs
                           : null;
-                        const notes9Sources =
-                          notes9Parsed && notes9Parsed.resources.length > 0
-                            ? notes9Parsed.resources
-                            : null;
+                        const notes9Sources = (() => {
+                          if (!notes9Parsed || notes9Parsed.resources.length === 0) return null;
+                          const body = notes9Parsed.bodyMarkdown;
+                          // Only surface resources whose [N] marker appears in the response text.
+                          const cited = notes9Parsed.resources.filter((_, i) =>
+                            new RegExp(`\\[${i + 1}\\]`).test(body)
+                          );
+                          if (cited.length === 0) return null;
+                          // Suppress purely-negated citations: when the agent mentions a resource
+                          // only to say the content has nothing to do with it, the [N] appears
+                          // adjacent to negation phrases. Filter those out.
+                          const NEGATION = /\b(does not|doesn't|not related|nothing to do|no (?:text|information|content|data)|does not reference|not reference|unrelated)\b/i;
+                          const meaningful = cited.filter((_, i) => {
+                            const idx = body.indexOf(`[${i + 1}]`);
+                            if (idx === -1) return false;
+                            const window = body.slice(Math.max(0, idx - 120), idx + 20);
+                            return !NEGATION.test(window);
+                          });
+                          return meaningful.length > 0 ? meaningful : null;
+                        })();
                         const userLiteratureMarkdown =
                           message.role === 'user' &&
                           ((agentMode === 'literature' && isLiteratureRoute) ||
@@ -2760,6 +3224,27 @@ export function RightSidebar({ onClose }: RightSidebarProps = {}) {
                                 />
                               ) : (
                                 <>
+                                  {/* Image thumbnails for user messages */}
+                                  {message.role === 'user' && (() => {
+                                    const atts = messageAttachments.get(message.id);
+                                    if (!atts?.length) return null;
+                                    return (
+                                      <div className="flex flex-wrap gap-2 justify-end mb-1.5">
+                                        {atts.map((att, i) =>
+                                          att.contentType?.startsWith('image/') ? (
+                                            <a key={i} href={att.url} target="_blank" rel="noopener noreferrer" className="block rounded-xl overflow-hidden border border-border/40 shadow-sm hover:opacity-90 transition-opacity">
+                                              <img src={att.url} alt={att.name} className="max-h-44 max-w-[260px] object-cover rounded-xl" />
+                                            </a>
+                                          ) : (
+                                            <a key={i} href={att.url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1.5 rounded-lg border border-primary/20 bg-primary/10 px-2 py-1 text-xs text-primary hover:bg-primary/20 transition-colors max-w-[180px]" title={att.name}>
+                                              <FileText className="size-3 shrink-0" />
+                                              <span className="truncate">{att.name}</span>
+                                            </a>
+                                          )
+                                        )}
+                                      </div>
+                                    );
+                                  })()}
                                   <div
                                     className={cn(
                                       'text-sm leading-[1.45] break-words',

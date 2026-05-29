@@ -11,6 +11,8 @@ import {
   buildGeneralChatStreamNotes9UpstreamBody,
 } from '@/lib/general-chat-request';
 import { splitSseBuffer, parseSseDataJson } from '@/lib/sse-event-blocks';
+import { createClient } from '@/lib/supabase/server';
+import { getCurrentUser } from '@/lib/auth/current-user';
 
 export const maxDuration = 300;
 
@@ -55,6 +57,20 @@ function getPlainTextFromMessage(msg: {
 }
 
 export async function POST(req: Request) {
+  // Auth gate. Previously the route accepted any caller — when
+  // AI_SERVICE_BEARER_TOKEN is set in env, the handler proceeded without
+  // verifying the user at all. An unauthenticated attacker could POST here
+  // and burn LLM quota billed to the account. We verify the Supabase JWT
+  // unconditionally now and only forward upstream once we know who's asking.
+  const supabase = await createClient();
+  const user = await getCurrentUser();
+  if (!user) {
+    return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+      status: 401,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }
+
   const body = await req.json();
   const { messages, sessionId, webSearch } = body;
   const webSearchOn = webSearch === true;
@@ -63,11 +79,20 @@ export async function POST(req: Request) {
     rawResponseFormat === 'json' || rawResponseFormat === 'text'
       ? rawResponseFormat
       : undefined;
-  console.log('API Request Body:', JSON.stringify({ ...body }, null, 2));
+  // PII redaction. Previously this logged the full body — including every
+  // user message — to stdout, which on Vercel/CloudWatch persists indefinitely.
+  // We now log only the lightweight envelope so debugging stays possible
+  // without retaining user-authored research content.
+  console.log('chat POST', {
+    sessionId,
+    messageCount: Array.isArray(messages) ? messages.length : 0,
+    webSearch: webSearchOn,
+    responseFormat: notes9ResponseFormat ?? 'default',
+  });
   const supabaseToken = req.headers.get('Authorization')?.replace(/^Bearer\s+/i, '').trim() || null;
 
   if (!sessionId) {
-    console.error('Missing session_id. Body:', body);
+    console.error('Missing session_id');
     return new Response('Missing session_id', { status: 400 });
   }
 
@@ -112,6 +137,8 @@ export async function POST(req: Request) {
               body.skip_clarify === true || body.chat_options?.skip_clarify === true;
             const _upstream_ctrl = new AbortController();
             const _upstream_timeout = setTimeout(() => _upstream_ctrl.abort(), 90_000);
+            const _upstreamStart = Date.now();
+            try {
             const response = await fetch(`${NOTES9_API_BASE}/chat/stream`, {
               method: 'POST',
               signal: _upstream_ctrl.signal,
@@ -130,6 +157,8 @@ export async function POST(req: Request) {
                 })
               ),
             });
+
+            console.log(JSON.stringify({ event: 'ai_upstream_complete', route: 'chat/stream', duration_ms: Date.now() - _upstreamStart, status: response.status, sessionId }));
 
             if (!response.ok) {
               const errText = await response.text();
@@ -279,7 +308,6 @@ export async function POST(req: Request) {
               }
             }
 
-            clearTimeout(_upstream_timeout);
             if (errored) return;
 
             const pseudoPayload: Record<string, unknown> = { sources: sourceItems };
@@ -301,6 +329,9 @@ export async function POST(req: Request) {
 
             if (textOpen) {
               writer.write({ type: 'text-end', id: textId });
+            }
+            } finally {
+              clearTimeout(_upstream_timeout);
             }
           } else {
             const response = await fetch(`${NOTES9_API_BASE}/chat`, {
@@ -398,7 +429,7 @@ export async function POST(req: Request) {
         await updateChatContext(sessionId, newUpdates);
 
         // Notes9 paths already streamed to the client (JSON or SSE). Legacy service: single chunk.
-        if (!useNotes9Fallback) {
+        if (!useNotes9Fallback && assistantContent && assistantContent.length > 0) {
           const legacyTextId = generateId();
           writer.write({ type: 'text-start', id: legacyTextId });
           writer.write({ type: 'text-delta', id: legacyTextId, delta: assistantContent });

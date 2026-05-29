@@ -30,4 +30,15 @@ describe("htmlToDiffPlainText", () => {
     const html = "<p>Hello <strong>world</strong></p>"
     expect(htmlToDiffPlainText(html)).toBe("Hello world")
   })
+
+  it("preserves paragraph breaks as newlines", () => {
+    const html = "<p>First paragraph</p><p>Second paragraph</p>"
+    expect(htmlToDiffPlainText(html)).toBe("First paragraph\nSecond paragraph")
+  })
+
+  it("includes image embed tokens", () => {
+    const html =
+      '<div data-type="resizable-image" data-align="center"><img src="x" alt="gel lane" /></div>'
+    expect(htmlToDiffPlainText(html)).toContain("[image: gel lane]")
+  })
 })

@@ -1,46 +1,9 @@
 import type { Metadata } from 'next'
-import {
-  Familjen_Grotesk,
-  IBM_Plex_Sans,
-  IBM_Plex_Serif,
-  JetBrains_Mono,
-} from 'next/font/google'
 import "./globals.css"
 import { ThemeProvider } from "@/components/theme-provider"
 import { Toaster as Sonner } from "@/components/ui/sonner"
 import { NavigationLoader } from "@/components/navigation-loader"
 import { RumProvider } from "@/components/rum-provider"
-
-// Body — IBM Plex Sans. Carries every long-form sentence in the product.
-const ibmPlexSans = IBM_Plex_Sans({
-  subsets: ['latin'],
-  weight: ['300', '400', '500', '600', '700'],
-  variable: '--font-ibm-sans',
-  display: 'swap',
-})
-
-// Display — IBM Plex Serif. Reserved for hero/editorial moments (page H1s,
-// dashboard stat numbers, empty-state titles, marketing surfaces).
-const ibmPlexSerif = IBM_Plex_Serif({
-  subsets: ['latin'],
-  weight: ['400', '500', '600', '700'],
-  variable: '--font-ibm-serif',
-  display: 'swap',
-})
-
-// Heading — Familjen Grotesk. Drives every h1-h6 inside the app.
-const familjenGrotesk = Familjen_Grotesk({
-  subsets: ['latin'],
-  weight: ['400', '500', '600', '700'],
-  variable: '--font-familjen',
-  display: 'swap',
-})
-
-const jetbrainsMono = JetBrains_Mono({
-  subsets: ['latin'],
-  variable: '--font-jetbrains-mono',
-  display: 'swap',
-})
 
 export const metadata: Metadata = {
   title: 'Notes9 - Research Lab Management',
@@ -111,9 +74,23 @@ export default function RootLayout({
             <link rel="dns-prefetch" href={SUPABASE_ORIGIN} />
           </>
         ) : null}
+        {/* Load Google Fonts directly in the browser to bypass Next.js compilation network fetching */}
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
+        <link
+          href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,wght@0,400;0,500;0,700;1,400;1,500;1,700&family=DM+Serif+Display&family=Familjen+Grotesk:wght@400;500;600;700&family=IBM+Plex+Sans:wght@300;400;500;600;700&family=IBM+Plex+Serif:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&family=Work+Sans:wght@300;400;500;600;700&display=swap"
+          rel="stylesheet"
+        />
       </head>
       <body
-        className={`font-sans ${ibmPlexSans.variable} ${ibmPlexSerif.variable} ${familjenGrotesk.variable} ${jetbrainsMono.variable} antialiased`}
+        className="font-sans antialiased"
+        style={{
+          // Map global styles to CSS variables so Tailwind classes still function correctly
+          "--font-ibm-sans": "var(--font-ibm-sans, 'IBM Plex Sans', system-ui, sans-serif)",
+          "--font-ibm-serif": "var(--font-ibm-serif, 'IBM Plex Serif', Georgia, serif)",
+          "--font-familjen": "var(--font-familjen, 'Familjen Grotesk', system-ui, sans-serif)",
+          "--font-jetbrains-mono": "var(--font-jetbrains-mono, 'JetBrains Mono', monospace)",
+        } as React.CSSProperties}
       >
         <ThemeProvider
           attribute="class"

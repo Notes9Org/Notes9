@@ -45,6 +45,56 @@ async function supabaseRequest(
   });
 }
 
+const RETRY_DELAYS_MS = [500, 1000, 2000];
+
+function jitter(ms: number): number {
+  // ±20% jitter
+  return ms * (0.8 + Math.random() * 0.4);
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function withRetry<T>(
+  op: "fetch" | "store",
+  documentId: string,
+  fn: () => Promise<T>
+): Promise<T> {
+  let lastError: unknown;
+  for (let attempt = 1; attempt <= RETRY_DELAYS_MS.length + 1; attempt++) {
+    try {
+      return await fn();
+    } catch (error) {
+      lastError = error;
+      if (attempt <= RETRY_DELAYS_MS.length) {
+        const delay = jitter(RETRY_DELAYS_MS[attempt - 1]);
+        console.warn(
+          JSON.stringify({
+            event: "hocuspocus_db_retry",
+            op,
+            documentId,
+            attempt,
+            error: error instanceof Error ? error.message : String(error),
+          })
+        );
+        await sleep(delay);
+      }
+    }
+  }
+  console.error(
+    JSON.stringify({
+      event: "hocuspocus_db_retry",
+      op,
+      documentId,
+      attempt: RETRY_DELAYS_MS.length + 1,
+      final: true,
+      error: lastError instanceof Error ? lastError.message : String(lastError),
+    })
+  );
+  throw lastError;
+}
+
 /**
  * Creates and returns a configured Hocuspocus Database extension instance.
  *
@@ -59,7 +109,7 @@ export function createDatabaseExtension(): Database {
     async fetch({ documentName }) {
       const paperId = documentName;
 
-      try {
+      return withRetry("fetch", paperId, async () => {
         // Load HTML content from papers table
         const paperResponse = await supabaseRequest(
           `papers?id=eq.${paperId}&select=content`,
@@ -75,18 +125,16 @@ export function createDatabaseExtension(): Database {
           ydoc.destroy();
           return state;
         }
-      } catch (error) {
-        console.error("[fetch] Error loading document:", error);
-      }
 
-      // No content found — return null (Hocuspocus creates empty doc)
-      return null;
+        // No content found — return null (Hocuspocus creates empty doc)
+        return null;
+      });
     },
 
     async store({ documentName, state }) {
       const paperId = documentName;
 
-      try {
+      await withRetry("store", paperId, async () => {
         // Render Yjs doc to HTML and save to papers.content
         const ydoc = new Y.Doc();
         Y.applyUpdate(ydoc, state);
@@ -102,9 +150,7 @@ export function createDatabaseExtension(): Database {
             },
           });
         }
-      } catch (error) {
-        console.error("[store] Error saving document:", error);
-      }
+      });
     },
   });
 }

@@ -24,6 +24,16 @@ export type CalculatorResultUpdate = {
 
 export type CalculatorResultCallback = (update: CalculatorResultUpdate) => void
 
+/** A single saved calculation entry for the history panel. */
+export interface CalcHistoryEntry {
+  id: string
+  timestamp: number
+  mode: CalculatorModeId
+  modeLabel: string
+  resultText: string
+  latex: string | null
+}
+
 export function formatResultForNote(r: CalculationSuccess): string {
   const u = r.unit.trim()
   const warn =

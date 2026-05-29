@@ -10,7 +10,10 @@ export interface CitationMatch {
   originalText: string;
 }
 
-const CITATION_PATTERN = /\[(\d+)\]/g;
+// Matches `[1]`, `[10]`, and hierarchical sub-citations `[3.2]` (ADR-0006).
+// `number` carries the BASE (3 for `3.2`); `originalText` preserves the full
+// label for display.
+const CITATION_PATTERN = /\[(\d+(?:\.\d+)?)\]/g;
 
 /**
  * Extract all citation numbers from markdown text.

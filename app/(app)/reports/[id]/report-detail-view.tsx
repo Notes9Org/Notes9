@@ -6,6 +6,8 @@ import { marked } from "marked"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
+import { PageHeading } from "@/components/ui/page-heading"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import {
   Calendar,
   FileText,
@@ -35,8 +37,12 @@ import {
 } from "@/components/ui/alert-dialog"
 import { buttonVariants } from "@/components/ui/button"
 
+import type { ReactNode } from "react"
+
 interface ReportDetailViewProps {
   report: ReportRow & { content: string | null }
+  leftControls?: ReactNode
+  sidebar?: ReactNode
 }
 
 /** Build a QuickChart.io image URL from a Chart.js config object. */
@@ -97,7 +103,7 @@ function isMarkdown(content: string): boolean {
 }
 
 
-export function ReportDetailView({ report }: ReportDetailViewProps) {
+export function ReportDetailView({ report, leftControls, sidebar }: ReportDetailViewProps) {
   const router = useRouter()
   const supabase = useMemo(() => createClient(), [])
 
@@ -146,7 +152,7 @@ export function ReportDetailView({ report }: ReportDetailViewProps) {
       }
       toast.success("Report deleted")
       setDeleteOpen(false)
-      router.push("/reports")
+      ;(() => { const pq = typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("project") : null; router.push(pq ? "/reports?project=" + pq : "/reports"); })()
       router.refresh()
     } finally {
       setIsDeleting(false)
@@ -156,33 +162,37 @@ export function ReportDetailView({ report }: ReportDetailViewProps) {
   const exportTitle = report.title || "Data Analysis Report"
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-start justify-between gap-4">
-        <div className="space-y-2">
-          <div className="flex items-center gap-2">
-            <Button variant="ghost" size="icon-sm" className="shrink-0" onClick={() => router.push("/reports")} title="Back to reports">
-              <ArrowLeft className="h-4 w-4" />
-            </Button>
-            <h1 className="text-2xl font-bold tracking-tight">{report.title}</h1>
-          </div>
-          <div className="flex flex-wrap items-center gap-2 ml-10">
-            <Badge variant={statusVariant}>{report.status}</Badge>
-            <Badge variant="outline">{report.report_type.replace(/_/g, " ")}</Badge>
+    <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-hidden md:gap-6 h-full">
+      {/* Header: stacked on mobile, row on desktop */}
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4 shrink-0">
+        <div className="flex items-start gap-3 min-w-0">
+          <Button variant="ghost" size="icon" className="shrink-0" onClick={() => (() => { const pq = typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("project") : null; router.push(pq ? "/reports?project=" + pq : "/reports"); })()} title="Back to reports">
+            <ArrowLeft className="h-4 w-4" />
+          </Button>
+          <div className="min-w-0 space-y-1">
+            <div className="flex flex-wrap items-center gap-2">
+              <PageHeading>{report.title}</PageHeading>
+              <Badge variant={statusVariant}>{report.status}</Badge>
+            </div>
+            <p className="text-sm text-muted-foreground">
+              {report.report_type.replace(/_/g, " ")}
+            </p>
           </div>
         </div>
-        <div className="flex items-center gap-2 shrink-0">
-          <SaveStatusIndicator status={autoSaveStatus} lastSaved={lastSaved} variant="icon" />
+        <div className="flex flex-wrap items-center justify-end gap-2 shrink-0">
           <NoteExportMenu
             title={exportTitle}
             htmlContent={content}
             trigger={
-              <Button variant="ghost" size="icon-sm" title="Download report">
+              <Button variant="outline" size="sm" title="Download report" className="gap-2">
                 <Download className="h-4 w-4" />
+                Export
               </Button>
             }
           />
-          <Button variant="ghost" size="icon-sm" className="text-destructive" onClick={() => setDeleteOpen(true)} title="Delete report">
+          <Button variant="outline" size="sm" className="text-destructive gap-2" onClick={() => setDeleteOpen(true)} title="Delete report">
             <Trash2 className="h-4 w-4" />
+            Delete
           </Button>
         </div>
       </div>
@@ -208,60 +218,98 @@ export function ReportDetailView({ report }: ReportDetailViewProps) {
         </AlertDialogContent>
       </AlertDialog>
 
-      <Card>
-        <CardHeader>
-          <span className="text-sm font-medium text-muted-foreground">Report Details</span>
-        </CardHeader>
-        <CardContent>
-          <div className="grid gap-3 text-sm sm:grid-cols-2">
-            <div className="flex items-center gap-2 text-muted-foreground">
-              <Calendar className="h-4 w-4 shrink-0" />
-              <span>Created: {new Date(report.created_at).toLocaleDateString()}</span>
-            </div>
-            {report.generated_by && (
-              <div className="flex items-center gap-2 text-muted-foreground">
-                <User className="h-4 w-4 shrink-0" />
-                <span>Author: {report.generated_by.first_name} {report.generated_by.last_name}</span>
-              </div>
-            )}
-            {report.project && (
-              <div className="flex items-center gap-2 text-muted-foreground">
-                <FolderOpen className="h-4 w-4 shrink-0" />
-                <span>Project: {report.project.name}</span>
-              </div>
-            )}
-            {report.experiment && (
-              <div className="flex items-center gap-2 text-muted-foreground">
-                <FlaskConical className="h-4 w-4 shrink-0" />
-                <span>Experiment: {report.experiment.name}</span>
-              </div>
-            )}
+      {/* Main Content Area */}
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col items-stretch overflow-hidden">
+        <Tabs defaultValue="editor" className="flex min-h-0 min-w-0 flex-1 flex-col gap-3 overflow-hidden">
+          <div className="flex min-h-9 min-w-0 flex-wrap items-center justify-between gap-2">
+            <TabsList className="h-9 w-fit min-w-0 shrink-0">
+              <TabsTrigger value="editor">Editor</TabsTrigger>
+              <TabsTrigger value="details">Details</TabsTrigger>
+            </TabsList>
           </div>
-        </CardContent>
-      </Card>
 
-      <Card>
-        <CardContent className="pt-6">
-          {content || report.content ? (
-            <TiptapEditor
-              content={content}
-              onChange={handleContentChange}
-              placeholder="Start writing your report..."
-              title={exportTitle}
-              minHeight="400px"
-              showAITools
-              showAiWritingDropdown={false}
-              enableMath
-              hideExportControls
-            />
-          ) : (
-            <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
-              <FileText className="h-10 w-10 mb-3" />
-              <p>No content yet. Start writing above.</p>
-            </div>
-          )}
-        </CardContent>
-      </Card>
+          <TabsContent
+            value="editor"
+            className="mt-0 flex min-h-0 min-w-0 flex-1 flex-row gap-4 overflow-hidden focus-visible:outline-none data-[state=inactive]:hidden"
+          >
+            {sidebar && (
+              <Card className="flex min-h-0 shrink-0 flex-col gap-0 py-0 border-0 shadow-none rounded-none sm:border sm:shadow-sm sm:rounded-xl">
+                {sidebar}
+              </Card>
+            )}
+            <Card className="flex-1 flex flex-col min-h-0">
+              <CardContent className="flex-1 min-h-0 overflow-y-auto pt-6 p-4">
+                {content || report.content ? (
+                  <TiptapEditor
+                    key={report.id}
+                    content={content}
+                    onChange={handleContentChange}
+                    placeholder="Start writing your report..."
+                    title={exportTitle}
+                    minHeight="100%"
+                    showAITools
+                    showAiWritingDropdown={false}
+                    enableMath
+                    hideExportControls
+                    leadingToolbarSlot={leftControls}
+                  />
+                ) : (
+                  <div className="flex h-full flex-col items-center justify-center text-muted-foreground">
+                    <FileText className="h-10 w-10 mb-3" />
+                    <p>No content yet. Start writing above.</p>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="details" className="mt-0 space-y-4 focus-visible:outline-none overflow-y-auto min-h-0 pb-4">
+            <Card>
+              <CardHeader>
+                <span className="text-sm font-medium text-muted-foreground">Report Details</span>
+              </CardHeader>
+              <CardContent>
+                <div className="grid gap-4 text-sm sm:grid-cols-2">
+                  <div className="flex flex-col gap-1">
+                    <span className="text-muted-foreground text-xs font-medium uppercase tracking-wider">Created</span>
+                    <div className="flex items-center gap-2">
+                      <Calendar className="h-4 w-4 shrink-0 text-muted-foreground" />
+                      <span>{new Date(report.created_at).toLocaleDateString()}</span>
+                    </div>
+                  </div>
+                  {report.generated_by && (
+                    <div className="flex flex-col gap-1">
+                      <span className="text-muted-foreground text-xs font-medium uppercase tracking-wider">Author</span>
+                      <div className="flex items-center gap-2">
+                        <User className="h-4 w-4 shrink-0 text-muted-foreground" />
+                        <span>{report.generated_by.first_name} {report.generated_by.last_name}</span>
+                      </div>
+                    </div>
+                  )}
+                  {report.project && (
+                    <div className="flex flex-col gap-1">
+                      <span className="text-muted-foreground text-xs font-medium uppercase tracking-wider">Project</span>
+                      <div className="flex items-center gap-2">
+                        <FolderOpen className="h-4 w-4 shrink-0 text-muted-foreground" />
+                        <span>{report.project.name}</span>
+                      </div>
+                    </div>
+                  )}
+                  {report.experiment && (
+                    <div className="flex flex-col gap-1">
+                      <span className="text-muted-foreground text-xs font-medium uppercase tracking-wider">Experiment</span>
+                      <div className="flex items-center gap-2">
+                        <FlaskConical className="h-4 w-4 shrink-0 text-muted-foreground" />
+                        <span>{report.experiment.name}</span>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+        </Tabs>
+      </div>
     </div>
   )
 }

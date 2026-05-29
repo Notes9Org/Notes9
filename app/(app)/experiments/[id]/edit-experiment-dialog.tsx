@@ -87,6 +87,23 @@ export function EditExperimentDialog({
   const [projectId, setProjectId] = useState(experiment.project_id)
   const [assignedTo, setAssignedTo] = useState(experiment.assigned_to || "")
 
+  // Inline-error state: errors render under the offending input as soon as the
+  // user submits once (or modifies the field after a failed submit), instead
+  // of only firing a toast. The submitAttempted gate avoids yelling at the
+  // user before they've tried to save.
+  const [submitAttempted, setSubmitAttempted] = useState(false)
+  const trimmedName = name.trim()
+  const descWordCount = countWordsFromHtml(description)
+  const nameError = submitAttempted && !trimmedName ? "Experiment name is required." : null
+  const descError =
+    descWordCount > 1000
+      ? `Description is ${descWordCount} words — keep it under 1000.`
+      : null
+  const dateOrderError = hasInvalidDateOrder
+    ? `${DATE_ORDER_ERROR} Pick a date later than the start date.`
+    : null
+  const hasFieldErrors = Boolean(nameError || descError || dateOrderError)
+
   // Reset form when dialog opens
   useEffect(() => {
     if (open) {
@@ -98,35 +115,16 @@ export function EditExperimentDialog({
       setCompletionDate(experiment.completion_date || "")
       setProjectId(experiment.project_id)
       setAssignedTo(experiment.assigned_to || "")
+      setSubmitAttempted(false)
     }
   }, [open, experiment])
 
   const handleSave = async () => {
-    if (!name.trim()) {
-      toast({
-        title: "Validation Error",
-        description: "Experiment name is required.",
-        variant: "destructive",
-      })
-      return
-    }
-    const descWords = countWordsFromHtml(description)
-    if (descWords > 1000) {
-      toast({
-        title: "Description too long",
-        description: `Description must be 1000 words or fewer (currently ${descWords} words).`,
-        variant: "destructive",
-      })
-      return
-    }
-    if (hasInvalidDateOrder) {
-      toast({
-        title: "Validation Error",
-        description: `${DATE_ORDER_ERROR} Please select a later date than the start date.`,
-        variant: "destructive",
-      })
-      return
-    }
+    setSubmitAttempted(true)
+    // Inline errors are the authoritative validation UI now — short-circuit
+    // silently if any field error is present rather than ALSO toasting the
+    // same message, which made every failed save shout in two places.
+    if (!trimmedName || descError || dateOrderError) return
 
     setIsSaving(true)
 
@@ -187,7 +185,7 @@ export function EditExperimentDialog({
           </DialogTrigger>
         )
       )}
-      <DialogContent className="sm:max-w-[600px] max-h-[90vh] overflow-y-auto" onKeyDown={handleKeyDown}>
+      <DialogContent dialogSize="md" className="max-h-[90vh] overflow-y-auto" onKeyDown={handleKeyDown}>
         <DialogHeader>
           <DialogTitle>Edit Experiment</DialogTitle>
           <DialogDescription>
@@ -211,7 +209,14 @@ export function EditExperimentDialog({
               placeholder="e.g., Protein Crystallization - Batch #47"
               disabled={isSaving}
               required
+              aria-invalid={nameError ? true : undefined}
+              aria-describedby={nameError ? "name-error" : undefined}
             />
+            {nameError ? (
+              <p id="name-error" className="text-xs text-destructive">
+                {nameError}
+              </p>
+            ) : null}
           </div>
 
           {/* Project */}
@@ -294,11 +299,11 @@ export function EditExperimentDialog({
             </div>
           </div>
 
-          {hasInvalidDateOrder && (
-            <div className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">
-              {DATE_ORDER_ERROR} Please select a later date than the start date.
-            </div>
-          )}
+          {dateOrderError ? (
+            <p className="text-xs text-destructive" id="date-order-error">
+              {dateOrderError}
+            </p>
+          ) : null}
 
           {/* Description */}
           <div className="space-y-2">
@@ -309,16 +314,26 @@ export function EditExperimentDialog({
               placeholder="Detailed description of the experiment..."
               disabled={isSaving}
             />
-            <p
-              className={cn(
-                "text-right text-xs tabular-nums",
-                countWordsFromHtml(description) > 1000
-                  ? "text-destructive"
-                  : "text-muted-foreground"
+            <div className="flex items-center justify-between gap-3">
+              {descError ? (
+                <p
+                  id="description-error"
+                  className="text-xs text-destructive"
+                >
+                  {descError}
+                </p>
+              ) : (
+                <span aria-hidden />
               )}
-            >
-              {countWordsFromHtml(description)} / 1000 words
-            </p>
+              <p
+                className={cn(
+                  "text-right text-xs tabular-nums",
+                  descError ? "text-destructive" : "text-muted-foreground",
+                )}
+              >
+                {descWordCount} / 1000 words
+              </p>
+            </div>
           </div>
 
           {/* Hypothesis */}
@@ -344,7 +359,7 @@ export function EditExperimentDialog({
             >
               Cancel
             </Button>
-            <Button type="submit" disabled={isSaving}>
+            <Button type="submit" disabled={isSaving || (submitAttempted && hasFieldErrors)}>
               {isSaving ? (
                 <>
                   <Loader2 className="h-4 w-4 mr-2 animate-spin" />

@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { createClient } from '@/lib/supabase/client';
+import { useAuthUser } from "@/components/auth/auth-provider"
 import {
   localProtocolClearMessages,
   localProtocolCreateSession,
@@ -64,6 +65,7 @@ export interface ChatMessage {
  *                     When omitted, only Catalyst chats (`protocol_id` IS NULL).
  */
 export function useChatSessions(protocolId?: string) {
+  const user = useAuthUser();
   const [sessions, setSessions] = useState<ChatSession[]>([]);
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -77,7 +79,6 @@ export function useChatSessions(protocolId?: string) {
   const loadSessions = useCallback(async () => {
     setLoading(true);
     try {
-      const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
       if (protocolId && protocolUseLocalRef.current) {
@@ -127,7 +128,6 @@ export function useChatSessions(protocolId?: string) {
 
   const createSession = useCallback(async (title?: string): Promise<string | null> => {
     try {
-      const { data: { user } } = await supabase.auth.getUser();
       if (!user) return null;
 
       if (protocolId && protocolUseLocalRef.current) {
@@ -317,27 +317,38 @@ export function useChatSessions(protocolId?: string) {
         return localProtocolSaveMessage(protocolId, sessionId, role, content, metadata) as ChatMessage | null;
       }
 
-      const { data: existing } = await supabase
-        .from('chat_messages')
-        .select('id')
-        .eq('session_id', sessionId)
-        .eq('role', role)
-        .eq('content', content)
-        .gte('created_at', new Date(Date.now() - 60_000).toISOString())
-        .limit(1);
-
-      if (existing && existing.length > 0) {
-        return null;
+      // Compute a deterministic id as SHA-256(session_id|role|content|bucketed-minute)
+      // so concurrent writes from multiple tabs are idempotent without a race.
+      const bucketedMinute = Math.floor(Date.now() / 60_000);
+      const idSeed = `${sessionId}|${role}|${content}|${bucketedMinute}`;
+      let deterministicId: string | undefined;
+      try {
+        const hashBuf = await crypto.subtle.digest(
+          'SHA-256',
+          new TextEncoder().encode(idSeed)
+        );
+        deterministicId = Array.from(new Uint8Array(hashBuf))
+          .map((b) => b.toString(16).padStart(2, '0'))
+          .join('')
+          .slice(0, 36)
+          // Format as UUID v4-ish for Postgres uuid column compatibility.
+          .replace(/^(.{8})(.{4})(.{4})(.{4})(.{12})$/, '$1-$2-$3-$4-$5');
+      } catch {
+        console.warn('[saveMessage] crypto.subtle unavailable; falling back to random id');
       }
 
       const { data, error } = await supabase
         .from('chat_messages')
-        .insert({
-          session_id: sessionId,
-          role,
-          content,
-          metadata: metadata ?? {},
-        })
+        .upsert(
+          {
+            ...(deterministicId ? { id: deterministicId } : {}),
+            session_id: sessionId,
+            role,
+            content,
+            metadata: metadata ?? {},
+          },
+          { onConflict: 'id', ignoreDuplicates: true }
+        )
         .select()
         .single();
 

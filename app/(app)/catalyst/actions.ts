@@ -1,27 +1,26 @@
 'use server';
 
 import { createClient } from '@/lib/supabase/server';
+import { getCurrentUser } from '@/lib/auth/current-user';
 
-/**
- * Delete all messages in a chat session that were created at or after
- * the specified message's timestamp (including the message itself).
- */
 export async function deleteTrailingMessages({ id }: { id: string }) {
+  const user = await getCurrentUser();
+  if (!user) {
+    return { success: false, error: 'Unauthorized' };
+  }
   const supabase = await createClient();
-  
-  // First, get the message to find its session and timestamp
+
   const { data: message, error: msgError } = await supabase
     .from('chat_messages')
-    .select('id, session_id, created_at')
+    .select('id, session_id, created_at, chat_sessions!inner(user_id)')
     .eq('id', id)
+    .eq('chat_sessions.user_id', user.id)
     .single();
 
   if (msgError || !message) {
-    console.error('Failed to get message:', msgError);
     return { success: false, error: 'Message not found' };
   }
 
-  // Delete all messages in the same session with created_at >= this message's created_at
   const { error: deleteError } = await supabase
     .from('chat_messages')
     .delete()
@@ -36,18 +35,35 @@ export async function deleteTrailingMessages({ id }: { id: string }) {
   return { success: true };
 }
 
-/**
- * Delete a specific set of messages by their IDs
- */
 export async function deleteMessagesByIds(ids: string[]) {
   if (ids.length === 0) return { success: true };
 
+  const user = await getCurrentUser();
+  if (!user) {
+    return { success: false, error: 'Unauthorized' };
+  }
   const supabase = await createClient();
+
+  const { data: owned, error: ownedError } = await supabase
+    .from('chat_messages')
+    .select('id, chat_sessions!inner(user_id)')
+    .in('id', ids)
+    .eq('chat_sessions.user_id', user.id);
+
+  if (ownedError) {
+    console.error('Failed to verify message ownership:', ownedError);
+    return { success: false, error: 'Failed to delete messages' };
+  }
+
+  const ownedIds = (owned ?? []).map((m: { id: string }) => m.id);
+  if (ownedIds.length === 0) {
+    return { success: false, error: 'No messages found' };
+  }
 
   const { error } = await supabase
     .from('chat_messages')
     .delete()
-    .in('id', ids);
+    .in('id', ownedIds);
 
   if (error) {
     console.error('Failed to delete messages:', error);
@@ -56,11 +72,3 @@ export async function deleteMessagesByIds(ids: string[]) {
 
   return { success: true };
 }
-
-
-
-
-
-
-
-

@@ -1,30 +1,37 @@
 import { Suspense } from "react"
-import { redirect } from "next/navigation"
 import { createClient } from "@/lib/supabase/server"
+import { requireUser } from "@/lib/auth/current-user"
 import { ProtocolsPageContent, type ProtocolsProjectContext } from "./protocols-page-content"
 import { resolveInitialProjectIdParam } from "@/lib/url-project-param"
-import { SetPageBreadcrumb } from "@/components/layout/breadcrumb-context"
 import { loadProjectWorkspaceProtocols } from "@/lib/project-workspace-protocols"
+import { CatalystSectionHero } from "@/components/catalyst/catalyst-section-hero"
 
 export default async function ProtocolsPage({
   searchParams,
 }: {
   searchParams?: Promise<{ project?: string; selectForDesign?: string }>
 }) {
+  const user = await requireUser()
   const supabase = await createClient()
-
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-  if (!user) {
-    redirect("/auth/login")
-  }
-
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("organization_id")
-    .eq("id", user.id)
-    .single()
+  // `profile` and the protocols list are independent — fan out in parallel.
+  // `orgProjects` still has to wait for `profile.organization_id` below.
+  const [profileRes, protocolsRes] = await Promise.all([
+    supabase
+      .from("profiles")
+      .select("organization_id")
+      .eq("id", user.id)
+      .single(),
+    supabase
+      .from("protocols")
+      .select(`
+        *,
+        experiment_protocols(count)
+      `)
+      .eq("is_active", true)
+      .order("name"),
+  ])
+  const profile = profileRes.data
+  const protocols = protocolsRes.data
 
   const orgId = profile?.organization_id
   const { data: orgProjects = [] } = orgId
@@ -53,15 +60,6 @@ export default async function ProtocolsPage({
     }
   }
 
-  const { data: protocols } = await supabase
-    .from("protocols")
-    .select(`
-      *,
-      experiment_protocols(count)
-    `)
-    .eq("is_active", true)
-    .order("name")
-
   // Attempt to enrich with project/experiment context (requires migration 030).
   // If the columns don't exist yet the enrichment silently fails and protocols
   // are displayed without context chips.
@@ -87,16 +85,8 @@ export default async function ProtocolsPage({
 
   return (
     <div className="space-y-6">
-      {projectContext ? (
-        <SetPageBreadcrumb
-          segments={[
-            { label: projectContext.name, href: `/projects/${projectContext.id}` },
-            { label: "Protocols" },
-          ]}
-        />
-      ) : (
-        <SetPageBreadcrumb segments={[]} />
-      )}
+      <CatalystSectionHero size="sm" scope="protocols" />
+
       <Suspense
         fallback={
           <div className="space-y-4 animate-pulse">

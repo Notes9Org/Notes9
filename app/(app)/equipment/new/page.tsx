@@ -3,6 +3,7 @@
 import { useState } from "react"
 import { useRouter } from 'next/navigation'
 import { createClient } from "@/lib/supabase/client"
+import { useAuthUser } from "@/components/auth/auth-provider"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -15,11 +16,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import { PageHeading } from "@/components/ui/page-heading"
 import { ArrowLeft } from 'lucide-react'
 import Link from 'next/link'
 import { DATE_ORDER_ERROR, isEndDateBeforeStartDate } from "@/lib/date-order"
 
 export default function NewEquipmentPage() {
+  const user = useAuthUser();
   const router = useRouter()
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -50,8 +53,6 @@ export default function NewEquipmentPage() {
 
     try {
       const supabase = createClient()
-      const { data: { user } } = await supabase.auth.getUser()
-      
       if (!user) throw new Error("Not authenticated")
 
       // Get user's organization
@@ -87,7 +88,7 @@ export default function NewEquipmentPage() {
             </Link>
           </Button>
           <div className="min-w-0">
-            <h1 className="text-2xl font-bold tracking-tight text-foreground md:text-3xl">Add Equipment</h1>
+            <PageHeading>Add Equipment</PageHeading>
             <p className="text-muted-foreground mt-1 text-sm">
               Register new laboratory equipment
             </p>

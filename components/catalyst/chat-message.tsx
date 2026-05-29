@@ -4,7 +4,8 @@ import { useState, useDeferredValue } from 'react';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
-import { Copy, Check, RefreshCw, Globe, ChevronDown, ChevronUp } from 'lucide-react';
+import { Copy, Check, RefreshCw, Globe, ChevronDown, ChevronUp, FileText, ImageIcon } from 'lucide-react';
+import type { Attachment } from './preview-attachment';
 import { cn } from '@/lib/utils';
 import { MarkdownRenderer } from './markdown-renderer';
 import { AgentToolCards } from './agent-tool-cards';
@@ -20,6 +21,7 @@ interface SourceItem {
 interface ChatMessageProps {
   role: 'user' | 'assistant';
   content: string;
+  attachments?: Attachment[];
   sources?: Array<Record<string, unknown>>;
   thinking?: string | null;
   toolCards?: ToolCard[];
@@ -34,6 +36,7 @@ interface ChatMessageProps {
 export function ChatMessage({
   role,
   content,
+  attachments = [],
   sources = [],
   thinking = null,
   toolCards = [],
@@ -108,6 +111,43 @@ export function ChatMessage({
             collapsible={!isStreaming}
             className="mt-0.5"
           />
+        )}
+
+        {/* Attachments — shown above the bubble for user messages */}
+        {isUser && attachments.length > 0 && (
+          <div className="flex flex-wrap gap-2 justify-end mb-1">
+            {attachments.map((att, i) => {
+              const isImage = att.contentType?.startsWith('image/');
+              return isImage ? (
+                <a
+                  key={i}
+                  href={att.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="block rounded-xl overflow-hidden border border-primary/20 shadow-sm hover:opacity-90 transition-opacity"
+                  title={att.name}
+                >
+                  <img
+                    src={att.url}
+                    alt={att.name}
+                    className="max-h-48 max-w-xs object-cover rounded-xl"
+                  />
+                </a>
+              ) : (
+                <a
+                  key={i}
+                  href={att.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-1.5 rounded-lg border border-primary/20 bg-primary/10 px-2 py-1 text-xs text-primary hover:bg-primary/20 transition-colors max-w-[180px]"
+                  title={att.name}
+                >
+                  <FileText className="size-3 shrink-0" />
+                  <span className="truncate">{att.name}</span>
+                </a>
+              );
+            })}
+          </div>
         )}
 
         {/* Message Bubble — suppressed when the assistant has only tool cards

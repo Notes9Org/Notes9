@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 
 import { createClient } from "@/lib/supabase/server"
+import { getCurrentUser } from "@/lib/auth/current-user"
 import type { ProtocolTemplateExtracted } from "@/lib/protocol-template-types"
 import { removeProtocolTemplateStorageObjects } from "@/lib/protocol-templates-storage"
 
@@ -10,11 +11,8 @@ export async function DELETE(_request: Request, ctx: Ctx) {
   try {
     const { id } = await ctx.params
     const supabase = await createClient()
-    const {
-      data: { user },
-      error: authError,
-    } = await supabase.auth.getUser()
-    if (authError || !user) {
+    const user = await getCurrentUser()
+    if (!user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 

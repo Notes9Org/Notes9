@@ -6,6 +6,20 @@ import * as AlertDialogPrimitive from '@radix-ui/react-alert-dialog'
 import { cn } from '@/lib/utils'
 import { buttonVariants } from '@/components/ui/button'
 
+/** Above fixed sidebar chrome (`z-[120]` in `components/ui/sidebar.tsx`). */
+const ALERT_DIALOG_Z = 'z-[130]'
+
+function blurSidebarSearchIfFocused() {
+  if (typeof document === 'undefined') return
+  const active = document.activeElement
+  if (
+    active instanceof HTMLElement &&
+    (active.dataset.sidebar === 'input' || active.closest('#tour-search'))
+  ) {
+    active.blur()
+  }
+}
+
 function AlertDialog({
   ...props
 }: React.ComponentProps<typeof AlertDialogPrimitive.Root>) {
@@ -36,7 +50,8 @@ function AlertDialogOverlay({
     <AlertDialogPrimitive.Overlay
       data-slot="alert-dialog-overlay"
       className={cn(
-        'data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 fixed inset-0 z-[130] bg-black/50',
+        'data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 fixed inset-0 bg-black/50',
+        ALERT_DIALOG_Z,
         className,
       )}
       {...props}
@@ -46,6 +61,8 @@ function AlertDialogOverlay({
 
 function AlertDialogContent({
   className,
+  onOpenAutoFocus,
+  onCloseAutoFocus,
   ...props
 }: React.ComponentProps<typeof AlertDialogPrimitive.Content>) {
   return (
@@ -54,9 +71,19 @@ function AlertDialogContent({
       <AlertDialogPrimitive.Content
         data-slot="alert-dialog-content"
         className={cn(
-          'bg-background data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 fixed top-[50%] left-[50%] grid w-full max-w-[calc(100%-2rem)] translate-x-[-50%] translate-y-[-50%] gap-4 rounded-lg border p-6 shadow-lg duration-200 sm:max-w-lg z-[131]',
+          'bg-background data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 fixed top-[50%] left-[50%] z-[131] grid w-full max-w-[calc(100%-2rem)] translate-x-[-50%] translate-y-[-50%] gap-4 rounded-lg border p-6 shadow-lg duration-200 sm:max-w-lg',
           className,
         )}
+        onOpenAutoFocus={(e) => {
+          blurSidebarSearchIfFocused()
+          onOpenAutoFocus?.(e)
+        }}
+        onCloseAutoFocus={(e) => {
+          // Prevent Radix from restoring focus to the sidebar search (or other
+          // anchors) after dismiss — that looked like a stray caret / highlight.
+          e.preventDefault()
+          onCloseAutoFocus?.(e)
+        }}
         {...props}
       />
     </AlertDialogPortal>

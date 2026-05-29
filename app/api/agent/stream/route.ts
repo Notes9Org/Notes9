@@ -2,6 +2,7 @@ import {
   buildNotes9AgentRequestBody,
   type Notes9AgentHistoryItem,
 } from '@/lib/notes9-agent-request';
+import { verifyBearerToken } from "@/lib/verify-bearer-token";
 
 export const maxDuration = 300;
 // Node runtime buffers a passed-through ReadableStream until a flush threshold
@@ -15,7 +16,12 @@ const NOTES9_API_BASE = process.env.CHAT_API_URL?.replace(/\/$/, '') || '';
 
 export async function POST(req: Request) {
   const headerToken = req.headers.get('Authorization')?.replace(/^Bearer\s+/i, '').trim();
-  const body = await req.json().catch(() => ({}));
+  let body: Record<string, unknown>;
+  try {
+    body = await req.json();
+  } catch {
+    return new Response(JSON.stringify({ error: 'Bad Request: invalid JSON body' }), { status: 400, headers: { 'content-type': 'application/json' } });
+  }
   const { supabaseToken: _bodyToken, ...rest } = body;
   const upstreamBody = buildNotes9AgentRequestBody({
     query: typeof rest.query === 'string' ? rest.query : String(rest.query ?? ''),
@@ -32,6 +38,10 @@ export async function POST(req: Request) {
           })
         : undefined,
     scope: rest.scope && typeof rest.scope === 'object' ? rest.scope : undefined,
+    // Forward uploaded files + tagged records to the agent (were silently
+    // dropped here, so attachments never reached the backend).
+    file_attachments: Array.isArray(rest.file_attachments) ? rest.file_attachments : undefined,
+    attachments: Array.isArray(rest.attachments) ? rest.attachments : undefined,
   });
   const token = headerToken;
 
@@ -41,6 +51,14 @@ export async function POST(req: Request) {
       { status: 401, headers: { 'Content-Type': 'application/json' } }
     );
   }
+  const _verifiedUser = await verifyBearerToken(token)
+  if (!_verifiedUser) {
+    return new Response(JSON.stringify({ error: "Unauthorized" }), {
+      status: 401,
+      headers: { "Content-Type": "application/json" },
+    })
+  }
+
 
   if (!NOTES9_API_BASE) {
     return new Response(
@@ -51,11 +69,17 @@ export async function POST(req: Request) {
     );
   }
 
+  const queryStr = typeof rest.query === 'string' ? rest.query : String(rest.query ?? '');
+  if (!queryStr.trim()) {
+    return new Response(JSON.stringify({ error: 'Bad Request: query is required' }), { status: 400, headers: { 'content-type': 'application/json' } });
+  }
+
   try {
     // 90s timeout applies ONLY to the initial fetch (headers received). It is
     // cleared in `finally` so it cannot abort the streaming body afterward.
     const _ctrl = new AbortController();
     const _timeout = setTimeout(() => _ctrl.abort(), 90_000);
+    const _upstreamStart = Date.now();
     let response: Response;
     try {
       response = await fetch(`${NOTES9_API_BASE}/notes9/stream`, {
@@ -70,6 +94,7 @@ export async function POST(req: Request) {
     } finally {
       clearTimeout(_timeout);
     }
+    console.log(JSON.stringify({ event: 'ai_upstream_complete', route: 'agent/stream', duration_ms: Date.now() - _upstreamStart, status: response.status, sessionId: (upstreamBody as { session_id?: string })?.session_id ?? null }));
 
     if (!response.ok) {
       const errText = await response.text();

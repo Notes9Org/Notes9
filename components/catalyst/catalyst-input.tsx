@@ -8,6 +8,7 @@ import {
   Globe,
   MessageSquare,
   NotebookPen,
+  Mic,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
@@ -17,6 +18,8 @@ import { PreviewAttachment, type Attachment } from './preview-attachment';
 import { toast } from 'sonner';
 import { FileDropzone } from '../ui/file-dropzone';
 import { recordRumEvent } from '@/lib/rum';
+import { useAwsTranscribe } from '@/hooks/use-aws-transcribe';
+import { VoiceWaveform } from '@/components/text-editor/voice-waveform';
 
 export type AgentMode = 'general' | 'notes9';
 
@@ -38,17 +41,20 @@ interface CatalystInputProps {
 }
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
+// Kept in sync with the backend allowlist (agents/contracts/request.py
+// SUPPORTED_FILE_MIME_TYPES). Images + PDF go to the model natively; CSV/
+// XLSX/DOCX are parsed to text server-side. Types not supported by the
+// backend are omitted so the UI never accepts a file the agent will drop.
 const ALLOWED_TYPES = [
   'image/jpeg',
   'image/png',
   'image/gif',
   'image/webp',
   'application/pdf',
-  'text/plain',
   'text/csv',
-  'application/json',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', // .xlsx
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document', // .docx
 ];
-const MAX_CHAT_CHARS = 4096;
 
 export function CatalystInput({
   input,
@@ -66,6 +72,15 @@ export function CatalystInput({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [uploadQueue, setUploadQueue] = useState<string[]>([]);
+
+  const { start: startMic, stop: stopMic, isListening, getWaveformData } = useAwsTranscribe({
+    onFinal: (text) => {
+      const cur = textareaRef.current?.value ?? '';
+      setInput((cur ? `${cur} ${text}` : text).trimStart());
+    },
+    onInterim: () => {},
+    onError: (err) => toast.error(err),
+  });
 
   const resizeTextarea = useCallback(() => {
     const textarea = textareaRef.current;
@@ -305,6 +320,7 @@ export function CatalystInput({
                 <PreviewAttachment
                   key={attachment.url}
                   attachment={attachment}
+                  compact
                   onRemove={() => handleRemoveAttachment(index)}
                 />
               ))}
@@ -312,6 +328,7 @@ export function CatalystInput({
                 <PreviewAttachment
                   key={name}
                   attachment={{ url: '', name, contentType: '' }}
+                  compact
                   isUploading
                 />
               ))}
@@ -331,10 +348,9 @@ export function CatalystInput({
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={handleKeyDown}
-              placeholder="How can I help you today?"
+              placeholder="Ask about your data, or type @ to reference a note, protocol, or paper."
               className="min-h-[52px] max-h-[200px] resize-none border-0 bg-transparent px-4 pt-4 pb-14 text-base focus-visible:ring-0 focus-visible:ring-offset-0"
               disabled={isLoading}
-              maxLength={MAX_CHAT_CHARS}
             />
 
             {/* Hidden file input */}
@@ -365,7 +381,24 @@ export function CatalystInput({
               >
                 <Paperclip className="size-4" />
               </Button>
-              {/* Clock button removed — it had no handler and was always disabled or no-op. */}
+              <div className="inline-flex items-center gap-1">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className={cn(
+                    'size-8 rounded-lg text-muted-foreground hover:text-foreground',
+                    isListening && 'text-red-500 hover:text-red-600'
+                  )}
+                  disabled={isLoading}
+                  onClick={() => (isListening ? stopMic() : startMic())}
+                  aria-label={isListening ? 'Stop dictation' : 'Start dictation'}
+                  title={isListening ? 'Stop dictation' : 'Dictate message'}
+                >
+                  <Mic className="size-4" />
+                </Button>
+                {isListening && <VoiceWaveform getWaveformData={getWaveformData} />}
+              </div>
             </div>
 
             {/* Right - Submit/Stop button */}
@@ -396,12 +429,9 @@ export function CatalystInput({
       </form>
 
       {/* Helper text */}
-      <div className="mt-2 flex items-center justify-between gap-3 text-xs text-muted-foreground">
-        <p>
-          Paste images or click <Paperclip className="inline size-3" /> to attach files
-        </p>
-        <span>{input.length}/{MAX_CHAT_CHARS}</span>
-      </div>
+      <p className="mt-2 text-xs text-muted-foreground">
+        Paste images or click <Paperclip className="inline size-3" /> to attach files
+      </p>
     </div>
   );
 }

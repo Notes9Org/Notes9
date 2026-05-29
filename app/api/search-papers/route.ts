@@ -1,7 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { searchPapers, searchPapersWithMeta } from '@/lib/paper-search'
-import type { PaperSearchSortMode } from '@/types/paper-search'
+import type { PaperSearchSortMode, SearchPaper } from '@/types/paper-search'
 import { createClient } from '@/lib/supabase/server'
+import { getCurrentUser } from '@/lib/auth/current-user'
+import {
+  callCatalyst,
+  CatalystHttpError,
+  CatalystUnavailableError,
+} from '@/lib/catalyst-client'
+import { searchPapersWithMeta } from '@/lib/paper-search'
+
+// The web-search literature agent can run well over a minute. Allow the route
+// enough wall-clock so it isn't killed before catalyst responds (Vercel clamps
+// this to the plan limit; ignored on self-hosted Node).
+export const maxDuration = 160
 
 function parseSort(param: string | null): PaperSearchSortMode {
   if (param === 'recent' || param === 'cited') return param
@@ -15,10 +26,32 @@ function parseRecentYears(param: string | null): number | undefined {
   return n
 }
 
+type CatalystSearchBody = {
+  query: string
+  sort: PaperSearchSortMode
+  recent_years?: number
+  open_access_only: boolean
+}
+
+type CatalystSearchResponse = {
+  papers: SearchPaper[]
+  totalCount: number
+  pipeline?: {
+    cache_hit?: boolean
+    agent_enabled?: boolean
+    degraded_sources?: string[]
+    source_durations_ms?: Record<string, number>
+    iterations?: number
+    dropped_offtopic?: number
+    intent_summary?: string
+    short_circuit?: 'doi' | 'pmid'
+  }
+}
+
 export async function GET(request: NextRequest) {
   try {
     const supabase = await createClient()
-    const { data: { user } } = await supabase.auth.getUser()
+    const user = await getCurrentUser()
     if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
@@ -39,31 +72,71 @@ export async function GET(request: NextRequest) {
       searchParams.get('openAccessOnly') === '1' ||
       searchParams.get('openAccessOnly') === 'true'
 
-    const debug =
-      searchParams.get('debug') === '1' || searchParams.get('debug') === 'true'
-
-    const opts = {
-      sort,
-      ...(recentYears != null ? { recentYears } : {}),
-      openAccessOnly,
+    const accessToken = (await supabase.auth.getSession()).data.session?.access_token
+    if (!accessToken) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    if (debug) {
-      const { papers, variants, pipeline } = await searchPapersWithMeta(query, opts)
+    const body: CatalystSearchBody = {
+      query,
+      sort,
+      open_access_only: openAccessOnly,
+    }
+    if (recentYears !== undefined) body.recent_years = recentYears
+
+    try {
+      const data = await callCatalyst<CatalystSearchBody, CatalystSearchResponse>(
+        '/literature/search',
+        body,
+        accessToken
+      )
+
       return NextResponse.json({
-        papers,
-        totalCount: papers.length,
-        meta: { variants, pipeline },
+        papers: data.papers,
+        totalCount: data.totalCount,
+        ...(data.pipeline ? { pipeline: data.pipeline } : {}),
+      })
+    } catch (catalystErr) {
+      // Graceful degradation: when catalyst is unreachable (not configured,
+      // 5xx, network failure, or our own client-side timeout), serve the
+      // search from the legacy in-process pipeline so the UI keeps working.
+      // Logged so operators can see how often it fires.
+      const isAbort =
+        catalystErr instanceof DOMException && catalystErr.name === "AbortError"
+      const shouldFallback =
+        catalystErr instanceof CatalystUnavailableError ||
+        (catalystErr instanceof CatalystHttpError && catalystErr.status >= 500) ||
+        isAbort
+      if (!shouldFallback) throw catalystErr
+
+      console.warn(
+        'Catalyst unavailable, falling back to legacy in-process search:',
+        catalystErr instanceof Error ? catalystErr.message : catalystErr
+      )
+      const legacy = await searchPapersWithMeta(query, {
+        sort,
+        openAccessOnly,
+        ...(recentYears !== undefined ? { recentYears } : {}),
+      })
+      return NextResponse.json({
+        papers: legacy.papers,
+        totalCount: legacy.papers.length,
+        pipeline: {
+          cache_hit: false,
+          agent_enabled: false,
+          degraded_sources: ['catalyst'],
+          fallback: 'legacy-in-process',
+        },
       })
     }
-
-    const results = await searchPapers(query, opts)
-
-    return NextResponse.json({
-      papers: results,
-      totalCount: results.length,
-    })
   } catch (error) {
+    if (error instanceof CatalystHttpError) {
+      console.error('Catalyst error:', error.status, error.body)
+      return NextResponse.json(
+        { error: 'Literature search failed' },
+        { status: error.status >= 500 ? 502 : error.status }
+      )
+    }
     console.error('Paper search API error:', error)
     return NextResponse.json({ error: 'Failed to search papers' }, { status: 500 })
   }

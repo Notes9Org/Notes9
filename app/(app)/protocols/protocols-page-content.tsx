@@ -5,16 +5,23 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import { useMediaQuery } from "@/hooks/use-media-query"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
+import {
+  Empty,
+  EmptyHeader,
+  EmptyMedia,
+  EmptyTitle,
+  EmptyDescription,
+  EmptyContent,
+} from "@/components/ui/empty"
 import { Plus, FileText, Grid3x3, List, PenBox, X } from "lucide-react"
 import Link from "next/link"
 import { ProtocolList } from "./protocol-list"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { ProtocolTemplatesPanel } from "@/components/protocols/protocol-templates-panel"
 import {
   FILTER_ALL,
   ResourceFilterRow,
   ResourceListFilter,
 } from "@/components/ui/resource-list-filters"
+import { ViewModeToggle } from "@/components/ui/view-mode-toggle"
 
 export type ProtocolsProjectContext = {
   id: string
@@ -57,22 +64,7 @@ export function ProtocolsPageContent({
   const router = useRouter()
   const pathname = usePathname()
   const searchParams = useSearchParams()
-  const mainTab = searchParams.get("tab") === "templates" ? "templates" : "library"
   const selectForDesign = searchParams.get("selectForDesign") === "1"
-
-  const setMainTab = useCallback(
-    (value: string) => {
-      const params = new URLSearchParams(searchParams.toString())
-      if (value === "templates") {
-        params.set("tab", "templates")
-      } else {
-        params.delete("tab")
-      }
-      const q = params.toString()
-      router.push(q ? `${pathname}?${q}` : pathname)
-    },
-    [pathname, router, searchParams]
-  )
 
   const isMobile = useMediaQuery("(max-width: 768px)")
   const [viewMode, setViewMode] = useState<"grid" | "table">("table")
@@ -150,47 +142,11 @@ export function ProtocolsPageContent({
           Standard Operating Procedures library
         </p>
         <div className="flex items-center gap-2 shrink-0 self-end sm:self-auto">
-          {projectContext ? (
-            <Button asChild variant="outline" size="sm" className="gap-2">
-              <Link href="/protocols">
-                <X className="h-4 w-4" />
-                Remove project filter
-              </Link>
-            </Button>
-          ) : null}
-          {mainTab === "library" ? (
-            <div className="inline-flex gap-1 rounded-lg border p-1">
-              <Button
-                variant={viewMode === "grid" ? "default" : "ghost"}
-                size="sm"
-                onClick={() => setViewMode("grid")}
-                className="gap-2"
-              >
-                <Grid3x3 className="h-4 w-4" />
-                Grid
-              </Button>
-              <Button
-                variant={isMobile ? "ghost" : viewMode === "table" ? "default" : "ghost"}
-                size="sm"
-                onClick={() => !isMobile && setViewMode("table")}
-                className="gap-2"
-                disabled={isMobile}
-                aria-disabled={isMobile}
-              >
-                <List className="h-4 w-4" />
-                Table
-              </Button>
-            </div>
-          ) : null}
-          <Button
-            asChild
-            size="icon"
-            variant="ghost"
-            className="size-8 rounded-md text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
-            aria-label="New protocol"
-          >
+          <ViewModeToggle value={viewMode} onChange={setViewMode} tableDisabled={isMobile} />
+          <Button asChild size="sm" className="gap-2" aria-label="New protocol">
             <Link href={newProtocolHref}>
               <Plus className="size-4" />
+              New protocol
             </Link>
           </Button>
         </div>
@@ -213,18 +169,8 @@ export function ProtocolsPageContent({
         </Card>
       ) : null}
 
-      <Tabs value={mainTab} onValueChange={setMainTab} className="space-y-4">
-        <TabsList className="h-9 w-fit">
-          <TabsTrigger value="library" className="text-sm">
-            Library
-          </TabsTrigger>
-          <TabsTrigger value="templates" className="text-sm">
-            Templates
-          </TabsTrigger>
-        </TabsList>
-
-        <TabsContent value="library" className="mt-0 space-y-6 focus-visible:outline-none">
-          <ResourceFilterRow>
+      <div className="space-y-6">
+        <ResourceFilterRow>
             <ResourceListFilter
               label="Category"
               value={categoryFilter}
@@ -289,29 +235,32 @@ export function ProtocolsPageContent({
               </CardContent>
             </Card>
           ) : scopedProtocols.length === 0 ? (
-            <Card>
-              <CardContent className="flex flex-col items-center justify-center py-12">
-                <FileText className="h-12 w-12 text-muted-foreground mb-4" />
-                <p className="text-muted-foreground mb-4">No protocols in your library yet</p>
+            <Empty className="border border-dashed">
+              <EmptyHeader>
+                <EmptyMedia variant="icon">
+                  <FileText aria-hidden />
+                </EmptyMedia>
+                <EmptyTitle>No protocols in your library</EmptyTitle>
+                <EmptyDescription>
+                  Protocols are reusable procedures you link to experiments. Build one once, version
+                  it as your method evolves, and reference it from every experiment that runs it.
+                </EmptyDescription>
+              </EmptyHeader>
+              <EmptyContent>
                 <Button asChild>
                   <Link href={newProtocolHref}>
                     <Plus className="h-4 w-4 mr-2" />
-                    Create first protocol
+                    New protocol
                   </Link>
                 </Button>
-              </CardContent>
-            </Card>
+              </EmptyContent>
+            </Empty>
           ) : (
             <p className="py-10 text-center text-sm text-muted-foreground">
               No protocols match the selected filters.
             </p>
           )}
-        </TabsContent>
-
-        <TabsContent value="templates" className="mt-0 focus-visible:outline-none">
-          <ProtocolTemplatesPanel />
-        </TabsContent>
-      </Tabs>
+      </div>
     </div>
   )
 }

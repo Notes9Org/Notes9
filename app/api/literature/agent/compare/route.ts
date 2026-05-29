@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { verifyBearerToken } from "@/lib/verify-bearer-token"
 
 export const maxDuration = 60;
 
@@ -26,6 +27,14 @@ export async function POST(req: Request) {
       { status: 401 }
     );
   }
+  const _verifiedUser = await verifyBearerToken(token)
+  if (!_verifiedUser) {
+    return new Response(JSON.stringify({ error: "Unauthorized" }), {
+      status: 401,
+      headers: { "Content-Type": "application/json" },
+    })
+  }
+
 
   const query = typeof body.query === 'string' ? body.query : String(body.query ?? '');
   const session_id =
@@ -69,7 +78,14 @@ export async function POST(req: Request) {
       body: JSON.stringify(forwardBody),
     });
 
-    const data = (await response.json().catch(() => ({}))) as Record<string, unknown>;
+    let data: Record<string, unknown>;
+    try {
+      data = (await response.json()) as Record<string, unknown>;
+    } catch (parseErr) {
+      const rawText = await response.text().catch(() => '');
+      console.error(JSON.stringify({ event: 'upstream_non_json', route: 'literature/agent/compare', status: response.status, snippet: rawText.slice(0, 500) }));
+      return NextResponse.json({ error: 'Upstream returned non-JSON response', status: response.status }, { status: 502 });
+    }
     if (!response.ok) {
       const detail = data.detail;
       const detailStr =

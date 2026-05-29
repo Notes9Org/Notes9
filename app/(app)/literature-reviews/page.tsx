@@ -1,7 +1,8 @@
-import { redirect } from 'next/navigation'
 import { createClient } from "@/lib/supabase/server"
+import { requireUser } from "@/lib/auth/current-user"
 import { Button } from "@/components/ui/button"
-import { Plus, X } from 'lucide-react'
+import { PageHeading } from "@/components/ui/page-heading"
+import { Plus } from 'lucide-react'
 import Link from 'next/link'
 import { LiteratureTabs } from '@/components/literature-reviews/literature-tabs'
 import type { StagingLiteratureRow } from "@/components/literature-reviews/staged-paper-view"
@@ -15,31 +16,27 @@ export default async function LiteratureReviewsPage({
   searchParams?: Promise<{ project?: string; tab?: string }>
 }) {
   const sp = searchParams ? await searchParams : {}
+  const user = await requireUser()
   const supabase = await createClient()
-
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-  if (!user) {
-    redirect("/auth/login")
-  }
-
-  // Fetch literature reviews with related data
-  const { data: literatureReviews } = await supabase
-    .from("literature_reviews")
-    .select(`
-      *,
-      project:projects(id, name),
-      experiment:experiments(id, name),
-      created_by_profile:profiles!literature_reviews_created_by_fkey(first_name, last_name)
-    `)
-    .order("created_at", { ascending: false })
-
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("organization_id")
-    .eq("id", user.id)
-    .single()
+  // `literatureReviews` and `profile` are independent — parallelize.
+  const [literatureReviewsRes, profileRes] = await Promise.all([
+    supabase
+      .from("literature_reviews")
+      .select(`
+        *,
+        project:projects(id, name),
+        experiment:experiments(id, name),
+        created_by_profile:profiles!literature_reviews_created_by_fkey(first_name, last_name)
+      `)
+      .order("created_at", { ascending: false }),
+    supabase
+      .from("profiles")
+      .select("organization_id")
+      .eq("id", user.id)
+      .single(),
+  ])
+  const literatureReviews = literatureReviewsRes.data
+  const profile = profileRes.data
 
   const organizationId = profile?.organization_id
 
@@ -91,23 +88,16 @@ export default async function LiteratureReviewsPage({
       ) : (
         <SetPageBreadcrumb segments={[]} />
       )}
+
       {/* Header: stacked on mobile */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight text-foreground md:text-3xl">Literature Reviews</h1>
+          <PageHeading>Literature Reviews</PageHeading>
           <p className="text-muted-foreground mt-1 text-sm">
             Search papers and manage your reference library
           </p>
         </div>
         <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
-          {initialProjectId ? (
-            <Button asChild variant="outline" className="w-full sm:w-auto">
-              <Link href="/literature-reviews">
-                <X className="h-4 w-4 mr-2" />
-                Remove project filter
-              </Link>
-            </Button>
-          ) : null}
           <UploadLiteraturePdfDialog
             literatureReviews={(literatureReviews ?? []) as any}
             projects={safeProjects}

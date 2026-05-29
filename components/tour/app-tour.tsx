@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation"
 import { driver, type Driver, type PopoverDOM, type DriveStep } from "driver.js"
 import "driver.js/dist/driver.css"
 import { createClient } from "@/lib/supabase/client"
+import { useAuthUser } from "@/components/auth/auth-provider"
 
 type TourStatus = "completed" | "skipped"
 
@@ -335,6 +336,7 @@ function buildContextualTourSteps(
 }
 
 export function AppTour() {
+  const user = useAuthUser();
   const [mounted, setMounted] = useState(false)
   const router = useRouter()
   const driverRef = useRef<Driver | null>(null)
@@ -635,10 +637,6 @@ export function AppTour() {
       clearPendingStart()
       const myGeneration = ++tourGeneration
 
-      const {
-        data: { user },
-      } = await supabase.auth.getUser()
-
       if (!user || cancelled || tourGeneration !== myGeneration) return
 
       const { data: profile, error } = await supabase
@@ -706,10 +704,6 @@ export function AppTour() {
     const runContextualPageHelp = async (pathname: string) => {
       clearPendingStart()
       const myGeneration = ++tourGeneration
-
-      const {
-        data: { user },
-      } = await supabase.auth.getUser()
 
       if (!user || cancelled || tourGeneration !== myGeneration) return
 

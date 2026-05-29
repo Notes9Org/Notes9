@@ -117,9 +117,16 @@ export function createLabNoteSuggestion(
         items: ({ query }: { query: string }) => {
             const labNotes = labNotesRef.current
             return labNotes
-                .filter((item) =>
-                    item.title.toLowerCase().includes(query.toLowerCase())
-                )
+                .filter((item) => {
+                    try {
+                        if (!item) return false;
+                        const n = item.title || "Untitled";
+                        const q = query || "";
+                        return String(n).toLowerCase().includes(String(q).toLowerCase());
+                    } catch (e) {
+                        return false;
+                    }
+                })
                 .slice(0, 5)
         },
 

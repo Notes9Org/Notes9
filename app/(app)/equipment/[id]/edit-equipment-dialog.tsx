@@ -136,7 +136,7 @@ export function EditEquipmentDialog({ equipment }: EditEquipmentDialogProps) {
           <Pencil className="h-4 w-4" />
         </Button>
       </DialogTrigger>
-      <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+      <DialogContent dialogSize="lg" className="max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Edit Equipment</DialogTitle>
           <DialogDescription>

@@ -1,5 +1,6 @@
-import { redirect, notFound } from 'next/navigation'
+import { notFound } from 'next/navigation'
 import { createClient } from "@/lib/supabase/server"
+import { requireUser } from "@/lib/auth/current-user"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -13,6 +14,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
+import { PageHeading } from "@/components/ui/page-heading"
 import { ArrowLeft, Microscope, MapPin, Calendar, AlertTriangle } from 'lucide-react'
 import Link from 'next/link'
 import { EquipmentActions } from './equipment-actions'
@@ -23,15 +25,8 @@ export default async function EquipmentDetailPage({
   params: Promise<{ id: string }>
 }) {
   const { id } = await params
+  const user = await requireUser()
   const supabase = await createClient()
-
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-  if (!user) {
-    redirect("/auth/login")
-  }
-
   // Fetch equipment details
   const { data: equipment, error } = await supabase
     .from("equipment")
@@ -95,9 +90,9 @@ export default async function EquipmentDetailPage({
             </Button>
             <div className="min-w-0 space-y-1">
               <div className="flex flex-wrap items-center gap-2">
-                <h1 className="text-2xl font-bold tracking-tight text-foreground md:text-3xl">
+                <PageHeading>
                   {equipment.name}
-                </h1>
+                </PageHeading>
                 <Badge
                   variant={
                     equipment.status === "available"

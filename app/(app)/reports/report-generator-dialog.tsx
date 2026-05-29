@@ -285,7 +285,7 @@ export function ReportGeneratorDialog({
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent className="sm:max-w-lg">
+      <DialogContent>
         <DialogHeader>
           <DialogTitle>Generate Data Analysis Report</DialogTitle>
           <DialogDescription>

@@ -1,5 +1,6 @@
-import { redirect, notFound } from 'next/navigation'
+import { notFound } from 'next/navigation'
 import { createClient } from "@/lib/supabase/server"
+import { requireUser } from "@/lib/auth/current-user"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -13,6 +14,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
+import { PageHeading } from "@/components/ui/page-heading"
 import { ArrowLeft, CheckCircle, Pencil, X } from 'lucide-react'
 import Link from 'next/link'
 import { ProtocolActions } from './protocol-actions'
@@ -30,16 +32,8 @@ export default async function ProtocolDetailPage({
 }) {
   const { id } = await params
   const resolvedSearch = searchParams ? await searchParams : {}
-  const defaultDesignMode = resolvedSearch.design === "1"
+  const user = await requireUser()
   const supabase = await createClient()
-
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-  if (!user) {
-    redirect("/auth/login")
-  }
-
   const { data: profileForProject } = await supabase
     .from("profiles")
     .select("organization_id")
@@ -149,27 +143,7 @@ export default async function ProtocolDetailPage({
   const protocolViewHref = projectFromUrl
     ? `/protocols/${protocol.id}?project=${projectFromUrl}`
     : `/protocols/${protocol.id}`
-  const designModeHref = projectFromUrl
-    ? `/protocols/${protocol.id}?design=1&project=${projectFromUrl}`
-    : `/protocols/${protocol.id}?design=1`
-
-  // ─── Design mode: full-height layout matching lab notes Card pattern ──────
-  if (defaultDesignMode) {
-    return (
-      <div className="flex min-h-0 flex-1 flex-col overflow-hidden -m-3 sm:-m-4 md:-m-6">
-        <SetPageBreadcrumb segments={protocolBreadcrumbSegments} />
-        {/* Full-height editor — title lives inside the Card like lab notes */}
-        <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
-          <ProtocolEditor
-            protocol={protocol}
-            defaultDesignMode={true}
-            designModeHref={designModeHref}
-            viewHref={protocolViewHref}
-          />
-        </div>
-      </div>
-    )
-  }
+  // ─── Edit layout is now the base layout ─
 
   // ─── Standard layout — height-bounded so the content tab fits the viewport ─
   return (
@@ -196,9 +170,9 @@ export default async function ProtocolDetailPage({
                 </p>
               ) : null}
               <div className="flex flex-wrap items-center gap-2">
-                <h1 className="text-2xl font-bold tracking-tight text-foreground md:text-3xl">
+                <PageHeading>
                   {protocol.name}
-                </h1>
+                </PageHeading>
                 <Badge variant="outline">v{protocol.version}</Badge>
                 {protocol.is_active ? (
                   <Badge variant="default" className="gap-1">
@@ -226,32 +200,16 @@ export default async function ProtocolDetailPage({
             </div>
           </div>
           <div className="flex flex-wrap items-center justify-end gap-2">
-            {projectFromUrl ? (
-              <Button asChild variant="outline" size="sm" className="gap-2">
-                <Link href={`/protocols/${protocol.id}`}>
-                  <X className="h-4 w-4" />
-                  Remove project filter
-                </Link>
-              </Button>
-            ) : null}
             <ProtocolActions protocol={protocol} usageCount={experimentUsageRows.length} />
           </div>
         </div>
 
-        {/* Tabs + Design Mode entry on one row (button hidden from DOM when Usage/Details active is OK — still navigates to design) */}
         <Tabs defaultValue="content" className="flex min-h-0 min-w-0 flex-1 flex-col gap-3 overflow-hidden">
           <div className="flex min-h-9 min-w-0 flex-wrap items-center justify-between gap-2">
             <TabsList className="h-9 w-fit min-w-0 shrink-0">
-              <TabsTrigger value="content">Protocol</TabsTrigger>
-              <TabsTrigger value="usage">Usage</TabsTrigger>
-              <TabsTrigger value="info">Details</TabsTrigger>
+              <TabsTrigger value="content">Editor</TabsTrigger>
+              <TabsTrigger value="usage_details">Usage & Details</TabsTrigger>
             </TabsList>
-            <Button asChild size="sm" className="h-9 shrink-0 gap-2">
-              <Link href={designModeHref}>
-                <Pencil className="h-3.5 w-3.5" />
-                Edit
-              </Link>
-            </Button>
           </div>
 
           <TabsContent
@@ -260,62 +218,13 @@ export default async function ProtocolDetailPage({
           >
             <ProtocolEditor
               protocol={protocol}
-              defaultDesignMode={false}
-              designModeHref={designModeHref}
+              defaultDesignMode={true}
+              designModeHref={protocolViewHref}
               viewHref={protocolViewHref}
             />
           </TabsContent>
 
-          <TabsContent value="usage" className="mt-0 space-y-4 focus-visible:outline-none">
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-foreground">Experiments Using This Protocol</CardTitle>
-                <CardDescription>
-                  Experiments and lab-note contexts that reference this SOP
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                {experimentUsageRows.length > 0 ? (
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Experiment Name</TableHead>
-                        <TableHead>Project</TableHead>
-                        <TableHead>Status</TableHead>
-                        <TableHead className="text-right">Actions</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {experimentUsageRows.map((row) => (
-                        <TableRow key={row.key}>
-                          <TableCell className="font-medium text-foreground">
-                            {row.experimentName}
-                          </TableCell>
-                          <TableCell className="text-muted-foreground">
-                            {row.projectName || "—"}
-                          </TableCell>
-                          <TableCell>
-                            <Badge variant="outline">{row.status}</Badge>
-                          </TableCell>
-                          <TableCell className="text-right">
-                            <Button variant="ghost" size="sm" asChild>
-                              <Link href={row.actionHref}>View</Link>
-                            </Button>
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                ) : (
-                  <div className="text-center py-8 text-muted-foreground">
-                    No experiments are currently using this protocol
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          <TabsContent value="info" className="mt-0 space-y-4 focus-visible:outline-none">
+          <TabsContent value="usage_details" className="mt-0 space-y-4 focus-visible:outline-none overflow-y-auto min-h-0 pb-4">
             <Card>
               <CardHeader>
                 <CardTitle className="text-foreground">Protocol Information</CardTitle>
@@ -393,6 +302,53 @@ export default async function ProtocolDetailPage({
                     </p>
                   </div>
                 </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-foreground">Experiments Using This Protocol</CardTitle>
+                <CardDescription>
+                  Experiments and lab-note contexts that reference this SOP
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                {experimentUsageRows.length > 0 ? (
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Experiment Name</TableHead>
+                        <TableHead>Project</TableHead>
+                        <TableHead>Status</TableHead>
+                        <TableHead className="text-right">Actions</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {experimentUsageRows.map((row) => (
+                        <TableRow key={row.key}>
+                          <TableCell className="font-medium text-foreground">
+                            {row.experimentName}
+                          </TableCell>
+                          <TableCell className="text-muted-foreground">
+                            {row.projectName || "—"}
+                          </TableCell>
+                          <TableCell>
+                            <Badge variant="outline">{row.status}</Badge>
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <Button variant="ghost" size="sm" asChild>
+                              <Link href={row.actionHref}>View</Link>
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                ) : (
+                  <div className="text-center py-8 text-muted-foreground">
+                    No experiments are currently using this protocol
+                  </div>
+                )}
               </CardContent>
             </Card>
           </TabsContent>

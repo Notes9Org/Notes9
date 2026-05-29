@@ -6,6 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { ViewModeToggle } from "@/components/ui/view-mode-toggle"
 import { NotebookPen, Grid3x3, List, ArrowUpRight } from "lucide-react"
 import { CATALYST_MENTION_DRAG_MIME } from "@/lib/catalyst-mention-types"
 
@@ -77,28 +78,7 @@ export default function LabNotesList({
       {/* View Toggle - only when not in header */}
       {!hideToolbar && (
         <div className="flex justify-end mb-4">
-          <div className="inline-flex gap-1 rounded-lg border p-1">
-            <Button
-              variant={effectiveViewMode === "grid" ? "default" : "ghost"}
-              size="sm"
-              onClick={() => setViewMode("grid")}
-              className="gap-2"
-            >
-              <Grid3x3 className="h-4 w-4" />
-              Grid
-            </Button>
-            <Button
-              variant={isMobile ? "ghost" : effectiveViewMode === "table" ? "default" : "ghost"}
-              size="sm"
-              onClick={() => !isMobile && setViewMode("table")}
-              className="gap-2"
-              disabled={isMobile}
-              aria-disabled={isMobile}
-            >
-              <List className="h-4 w-4" />
-              Table
-            </Button>
-          </div>
+          <ViewModeToggle value={viewMode} onChange={setViewMode} tableDisabled={isMobile} />
         </div>
       )}
 
@@ -193,9 +173,11 @@ export default function LabNotesList({
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead className="min-w-[300px]">Note Title</TableHead>
+                    <TableHead className="min-w-[260px]">Note Title</TableHead>
+                    <TableHead className="min-w-[180px]">Experiment</TableHead>
+                    <TableHead className="min-w-[160px]">Project</TableHead>
                     <TableHead className="min-w-[120px]">Created</TableHead>
-                    <TableHead className="text-right min-w-[100px]">Actions</TableHead>
+                    <TableHead className="text-right min-w-[80px]">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -220,10 +202,20 @@ export default function LabNotesList({
                       <TableCell className="font-medium text-foreground">
                         <div className="flex items-center gap-2">
                           <NotebookPen className="h-4 w-4 text-primary shrink-0" />
-                          <span className="truncate">{note.title}</span>
+                          <span className="truncate" title={note.title}>{note.title}</span>
                         </div>
                       </TableCell>
                       <TableCell className="text-muted-foreground">
+                        <span className="truncate inline-block max-w-[180px] align-bottom" title={note.experiment_name ?? undefined}>
+                          {note.experiment_name ?? <span className="italic">—</span>}
+                        </span>
+                      </TableCell>
+                      <TableCell className="text-muted-foreground">
+                        <span className="truncate inline-block max-w-[160px] align-bottom" title={note.project_name ?? undefined}>
+                          {note.project_name ?? <span className="italic">—</span>}
+                        </span>
+                      </TableCell>
+                      <TableCell className="text-muted-foreground whitespace-nowrap">
                         {formatDate(note.created_at)}
                       </TableCell>
                       <TableCell className="text-right">

@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useState, Suspense } from "react"
 import { useSearchParams, useRouter } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
 import { Button } from "@/components/ui/button"
@@ -33,7 +33,7 @@ type PageState =
   | { kind: "accepting" }
   | { kind: "success"; roleName: string }
 
-export default function InviteAcceptPage() {
+function InviteAcceptContent() {
   const searchParams = useSearchParams()
   const router = useRouter()
   const { toast } = useToast()
@@ -54,11 +54,10 @@ export default function InviteAcceptPage() {
     async function loadInvitation() {
       const supabase = createClient()
 
-      // Check auth status first
-      const {
-        data: { user },
-      } = await supabase.auth.getUser()
-
+      // Check auth status first. This route is public (users land here via
+      // email link before signing in), so we cannot use the AuthProvider —
+      // we have to verify against Supabase directly.
+      const { data: { user } } = await supabase.auth.getUser()
       if (!user) {
         // Unauthenticated — redirect to sign-up with token preserved
         router.replace(`/auth/sign-up?token=${encodeURIComponent(token!)}`)
@@ -332,5 +331,19 @@ export default function InviteAcceptPage() {
         </div>
       </div>
     </div>
+  )
+}
+
+export default function InviteAcceptPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex min-h-screen w-full items-center justify-center p-6 bg-background">
+          <Spinner className="h-8 w-8" />
+        </div>
+      }
+    >
+      <InviteAcceptContent />
+    </Suspense>
   )
 }

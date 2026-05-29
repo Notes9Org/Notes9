@@ -24,6 +24,7 @@ import {
 } from "@/app/(app)/literature-reviews/actions"
 import { toast } from "sonner"
 import { useRouter } from "next/navigation"
+import { recordRumEvent } from "@/lib/rum"
 import {
   Dialog,
   DialogContent,
@@ -101,7 +102,6 @@ export function LiteratureTabs({
 
   const [query, setQuery] = useState("")
   const [searchSort, setSearchSort] = useState<PaperSearchSortMode>("relevance")
-  const RECENT_SORT_YEARS = 5
   const [openAccessOnlySearch, setOpenAccessOnlySearch] = useState(false)
   const [searchResults, setSearchResults] = useState<SearchPaper[]>([])
   const [isSearching, setIsSearching] = useState(false)
@@ -353,6 +353,11 @@ export function LiteratureTabs({
     return [...ids]
   }, [stripPaperIds, stagedByIdMerged])
 
+  const pollErrorCountRef = useRef(0)
+  const importStartedAtRef = useRef<Record<string, number>>({})
+  const pollWarningShownRef = useRef(false)
+  const pollStoppedRef = useRef(false)
+
   useEffect(() => {
     if (topSection !== "search" || pendingPdfImportIds.length === 0) return
 
@@ -360,6 +365,8 @@ export function LiteratureTabs({
     let didRefreshList = false
 
     const pollImportStatus = async () => {
+      if (pollStoppedRef.current) return
+      let anyError = false
       for (const id of pendingPdfImportIds) {
         if (cancelled) return
         try {
@@ -369,7 +376,7 @@ export function LiteratureTabs({
             pdf_storage_path?: string | null
             pdf_file_name?: string | null
           }
-          if (!res.ok || !data.pdf_import_status) continue
+          if (!res.ok || !data.pdf_import_status) { anyError = true; continue }
           if (data.pdf_import_status === "pending") continue
 
           setStagedPdfPatches((prev) => ({
@@ -381,18 +388,46 @@ export function LiteratureTabs({
             },
           }))
 
-          if (data.pdf_import_status === "success" && !didRefreshList) {
-            didRefreshList = true
-            void router.refresh()
+          if (data.pdf_import_status === "success") {
+            const startedAt = importStartedAtRef.current[id]
+            if (typeof startedAt === "number") {
+              recordRumEvent("literature_pdf_import_completed", {
+                literatureId: id,
+                durationMs: Date.now() - startedAt,
+              })
+              delete importStartedAtRef.current[id]
+            }
+            if (!didRefreshList) {
+              didRefreshList = true
+              void router.refresh()
+            }
           }
-        } catch {
-          /* ignore transient poll errors */
+        } catch (err) {
+          anyError = true
+          console.error("Literature import-status poll failed", err)
         }
+      }
+      if (anyError) {
+        pollErrorCountRef.current += 1
+        if (pollErrorCountRef.current >= 3 && !pollWarningShownRef.current) {
+          pollWarningShownRef.current = true
+          toast.warning("PDF import status check failed — retrying")
+        }
+        if (pollErrorCountRef.current >= 10 && !pollStoppedRef.current) {
+          pollStoppedRef.current = true
+          toast.error("Import status unavailable, please refresh")
+        }
+      } else {
+        pollErrorCountRef.current = 0
       }
     }
 
     void pollImportStatus()
-    const interval = window.setInterval(() => void pollImportStatus(), 2000)
+    // Poll every 5s (was 2s): PDF imports take many seconds, so 5s stays
+    // responsive while cutting request volume ~2.5x. Terminal items are
+    // removed from pendingPdfImportIds (via setStagedPdfPatches above), so the
+    // set empties and this effect re-runs / clears the interval automatically.
+    const interval = window.setInterval(() => void pollImportStatus(), 5000)
     return () => {
       cancelled = true
       window.clearInterval(interval)
@@ -493,22 +528,34 @@ export function LiteratureTabs({
     [stagedLiterature, lockedProjectId]
   )
 
-  const executePaperSearch = async (
-    q: string,
-    sort: PaperSearchSortMode,
-    openAccessOnly: boolean
-  ) => {
+  /**
+   * Sorting (Best match / Newest first / Most cited) and the open-access filter
+   * are derived from the metadata we already fetched — no new network search.
+   * "Best match" preserves the relevance order the backend returned; recent and
+   * cited sorts are stable, so ties keep that relevance order.
+   */
+  const displayedResults = useMemo(() => {
+    let list: SearchPaper[] = searchResults
+    if (openAccessOnlySearch) {
+      list = list.filter((p) => p.isOpenAccess)
+    }
+    if (searchSort === "recent") {
+      list = [...list].sort((a, b) => (b.year ?? 0) - (a.year ?? 0))
+    } else if (searchSort === "cited") {
+      list = [...list].sort((a, b) => (b.citedByCount ?? 0) - (a.citedByCount ?? 0))
+    }
+    return list
+  }, [searchResults, openAccessOnlySearch, searchSort])
+
+  const executePaperSearch = async (q: string) => {
     setIsSearching(true)
     try {
       const params = new URLSearchParams()
       params.set("query", q)
-      params.set("sort", sort)
-      if (sort === "recent") {
-        params.set("recentYears", String(RECENT_SORT_YEARS))
-      }
-      if (openAccessOnly) {
-        params.set("openAccessOnly", "true")
-      }
+      // Always fetch the broad, relevance-ranked pool with full metadata. The
+      // Sort-by control and the open-access filter then operate on this set
+      // client-side, so toggling them never triggers another search.
+      params.set("sort", "relevance")
       const response = await fetch(`/api/search-papers?${params.toString()}`)
       const data = await response.json()
 
@@ -528,24 +575,17 @@ export function LiteratureTabs({
     const q = query.trim()
     if (!q) return
     setHasSearched(true)
-    await executePaperSearch(q, searchSort, openAccessOnlySearch)
+    await executePaperSearch(q)
     syncTabsForSearchSession()
   }
 
+  // Sort + open-access are pure client-side views over the fetched metadata.
   const handleSearchSortChange = (sort: PaperSearchSortMode) => {
     setSearchSort(sort)
-    const q = query.trim()
-    if (hasSearched && q) {
-      void executePaperSearch(q, sort, openAccessOnlySearch)
-    }
   }
 
   const handleOpenAccessSearchChange = (openAccess: boolean) => {
     setOpenAccessOnlySearch(openAccess)
-    const q = query.trim()
-    if (hasSearched && q) {
-      void executePaperSearch(q, searchSort, openAccess)
-    }
   }
 
   const isPaperStaged = (paperId: string) => {
@@ -569,6 +609,8 @@ export function LiteratureTabs({
             ? String((result.data as { id: string }).id)
             : resolveStagedLiteratureId(paper)
         if (rowId) {
+          importStartedAtRef.current[rowId] = Date.now()
+          recordRumEvent("literature_pdf_import_started", { literatureId: rowId })
           openPaperTab(rowId, paper.title)
         }
         if (result.alreadyStaged) {
@@ -757,13 +799,24 @@ export function LiteratureTabs({
                   className="group relative data-[state=active]:bg-transparent data-[state=active]:border-b-2 data-[state=active]:border-[var(--n9-accent)] data-[state=active]:text-foreground rounded-none border-b-2 border-transparent px-4 py-2 bg-transparent text-muted-foreground transition-none shadow-none max-w-[220px] flex items-center gap-1 shrink-0"
                 >
                   <span className="truncate text-sm font-semibold">{tabTitle}</span>
-                  <button
-                    type="button"
+                  {/* role=button span, NOT a <button>: TabsTrigger already
+                      renders a <button>, and a nested button is invalid HTML
+                      (React hydration error). Span keeps click + keyboard. */}
+                  <span
+                    role="button"
+                    tabIndex={0}
+                    aria-label="Close tab"
                     onClick={(e) => handleCloseTabClick(id, e)}
-                    className="flex-shrink-0 p-1 rounded-md hover:bg-muted text-muted-foreground/60 hover:text-rose-500 transition-all opacity-0 group-hover:opacity-100 focus:opacity-100"
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault()
+                        handleCloseTabClick(id, e)
+                      }
+                    }}
+                    className="flex-shrink-0 p-1 rounded-md hover:bg-muted text-muted-foreground/60 hover:text-rose-500 transition-all opacity-0 group-hover:opacity-100 focus:opacity-100 cursor-pointer"
                   >
                     <X className="h-3 w-3" />
-                  </button>
+                  </span>
                 </TabsTrigger>
               )
             })}
@@ -849,7 +902,7 @@ export function LiteratureTabs({
                     <SearchTab
                       query={query}
                       setQuery={setQuery}
-                      searchResults={searchResults}
+                      searchResults={displayedResults}
                       isSearching={isSearching}
                       hasSearched={hasSearched}
                       onSearch={handleSearch}
@@ -892,7 +945,7 @@ export function LiteratureTabs({
             <SearchTab
               query={query}
               setQuery={setQuery}
-              searchResults={searchResults}
+              searchResults={displayedResults}
               isSearching={isSearching}
               hasSearched={hasSearched}
               onSearch={handleSearch}

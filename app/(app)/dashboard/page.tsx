@@ -1,91 +1,257 @@
-import { redirect } from 'next/navigation'
-import Link from "next/link";
-import { createClient } from "@/lib/supabase/server";
+import Link from "next/link"
+import { createClient } from "@/lib/supabase/server"
+import { requireUser } from "@/lib/auth/current-user"
 import {
   Card,
   CardContent,
-  CardDescription,
   CardHeader,
   CardTitle,
-} from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { Progress } from "@/components/ui/progress";
+} from "@/components/ui/card"
 import {
-  FlaskConical,
-  TestTube,
-  Microscope,
   FileText,
   BookOpen,
-  ArrowUpRight,
-  Plus,
-} from "lucide-react";
-import { TodoPanel } from "./todo-panel";
-import { OrgSetupCTA } from "@/components/org/org-setup-cta";
+  FolderOpen,
+  ScrollText,
+} from "lucide-react"
+import { OrgSetupCTA } from "@/components/org/org-setup-cta"
+import {
+  DashboardMyLab,
+  type DashboardLabSummary,
+} from "@/components/org/dashboard-my-lab"
+import { isOrgAdmin, type OrgMember as OrgMemberPerm } from "@/lib/org/permissions"
+import { CatalystSectionHero } from "@/components/catalyst/catalyst-section-hero"
+import { DashboardGreeting } from "./dashboard-greeting"
+import { DashboardFirstRun } from "./dashboard-first-run"
+import { DashboardScheduleTasks } from "./dashboard-schedule-tasks"
+import { DashboardWhiteboard } from "./dashboard-whiteboard"
+import { DashboardRecentWork } from "./dashboard-recent-work"
+import { ActivitySummary } from "./activity-summary"
 
+/**
+ * Dashboard = Unified lab workspace.
+ *
+ * This screen is the user's primary view — schedule, tasks, whiteboard,
+ * active experiments, and recently edited content.
+ */
 export default async function DashboardPage() {
-  const supabase = await createClient();
+  const user = await requireUser()
+  const supabase = await createClient()
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) {
-    redirect("/auth/login");
+  const now = new Date()
+  const dayStart = new Date(now.getTime() - 36 * 60 * 60 * 1000)
+  const dayEnd = new Date(now.getTime() + 36 * 60 * 60 * 1000)
+
+  // Fan out the lab-signal queries in parallel. `profile` and `orgMembership`
+  // are needed later for the "My Lab" footer; folding them in here avoids two
+  // extra serial roundtrips after the main fan-out completes.
+  const [
+    projectsHeadRes,
+    activeExperimentsRes,
+    recentNotesRes,
+    recentPapersRes,
+    recentProtocolsRes,
+    allTasksRes,
+    allEventsRes,
+    whiteboardNotesRes,
+    profileRes,
+    orgMembershipRes,
+  ] = await Promise.all([
+    supabase.from("projects").select("id", { count: "exact", head: true }).limit(1),
+    supabase
+      .from("experiments")
+      .select("id,name,status,updated_at,project_id")
+      .eq("status", "in_progress")
+      .order("updated_at", { ascending: false })
+      .limit(3),
+    supabase
+      .from("lab_notes")
+      .select("id,title,updated_at,experiment_id")
+      .order("updated_at", { ascending: false })
+      .limit(5),
+    supabase
+      .from("papers")
+      .select("id,title,updated_at")
+      .order("updated_at", { ascending: false })
+      .limit(3),
+    supabase
+      .from("protocols")
+      .select("id,name,updated_at")
+      .order("updated_at", { ascending: false })
+      .limit(3),
+    supabase
+      .from("dashboard_tasks")
+      .select("*")
+      .eq("user_id", user.id)
+      .order("completed", { ascending: true })
+      .order("due_at", { ascending: true, nullsFirst: false })
+      .order("created_at", { ascending: false }),
+    supabase
+      .from("calendar_events")
+      .select("*")
+      .eq("user_id", user.id)
+      .gte("start_at", dayStart.toISOString())
+      .lt("start_at", dayEnd.toISOString())
+      .order("start_at", { ascending: true }),
+    supabase
+      .from("whiteboard_notes")
+      .select("*")
+      .eq("user_id", user.id)
+      .is("project_id", null)
+      .order("created_at", { ascending: true }),
+    supabase
+      .from("profiles")
+      .select("organization_id")
+      .eq("id", user.id)
+      .single(),
+    supabase
+      .from("org_members")
+      .select("id")
+      .eq("user_id", user.id)
+      .eq("is_active", true)
+      .maybeSingle(),
+  ])
+
+  const hasProjects = (projectsHeadRes.count ?? 0) > 0
+  if (!hasProjects) {
+    return (
+      <div className="flex min-h-0 flex-1 flex-col gap-6 md:gap-8 pb-8 min-w-0">
+        <DashboardFirstRun />
+      </div>
+    )
   }
 
-  // Dashboard queries — fire in parallel. The previous version also fetched
-  // `profiles`, `projects`, `experiments`, `equipment`, `reports`, and the
-  // chat-researcher graph snapshot. None of them are rendered after we removed
-  // the stats cards and the relation-graph button, so they're dropped here to
-  // cut ~5 round-trips and a `chat_researcher_profiles.graph_data` blob from
-  // every dashboard hit.
-  const [recentExperimentsRes, recentNotesRes, dashboardTasksRes] =
-    await Promise.all([
+  const activeExperiments = activeExperimentsRes.data ?? []
+  const recentNotes = recentNotesRes.data ?? []
+  const recentPapers = recentPapersRes.data ?? []
+  const recentProtocols = recentProtocolsRes.data ?? []
+  const tasks = allTasksRes.data ?? []
+  const events = allEventsRes.data ?? []
+  const whiteboardNotes = whiteboardNotesRes.data ?? []
+  // Merge cross-entity "recently edited" feed (last 5).
+  type RecentItem = { kind: "project" | "note" | "paper" | "protocol"; id: string; title: string; updated_at: string; href: string }
+  const recentlyEdited: RecentItem[] = [
+    ...recentNotes.map((n) => ({
+      kind: "note" as const,
+      id: n.id,
+      title: n.title || "Untitled note",
+      updated_at: n.updated_at,
+      href: `/experiments/${n.experiment_id}?note=${n.id}`,
+    })),
+    ...recentPapers.map((p) => ({
+      kind: "paper" as const,
+      id: p.id,
+      title: p.title || "Untitled",
+      updated_at: p.updated_at,
+      href: `/papers/${p.id}`,
+    })),
+    ...recentProtocols.map((p) => ({
+      kind: "protocol" as const,
+      id: p.id,
+      title: p.name || "Untitled protocol",
+      updated_at: p.updated_at,
+      href: `/protocols/${p.id}`,
+    })),
+  ]
+    .sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime())
+    .slice(0, 5)
+
+  const profile = profileRes.data
+  const orgMembership = orgMembershipRes.data
+
+  let labSummary: DashboardLabSummary | null = null
+  const orgId = profile?.organization_id
+
+  if (orgMembership && orgId) {
+    const [orgRes, membersRes, memberCountRes, invitationsRes, rolesRes] =
+      await Promise.all([
       supabase
-        .from("experiments")
-        .select(`
-          *,
-          project:projects(name),
-          assigned_to:profiles!experiments_assigned_to_fkey(first_name, last_name)
-        `)
-        .order("created_at", { ascending: false })
-        .limit(3),
+        .from("organizations")
+        .select("id, name, type")
+        .eq("id", orgId)
+        .single(),
       supabase
-        .from("lab_notes")
-        .select(`
-          id,
-          title,
-          created_at,
-          updated_at,
-          note_type,
-          experiment_id,
-          experiment:experiments (
-            name,
-            project:projects ( name )
-          )
-        `)
-        .order("updated_at", { ascending: false })
-        .limit(3),
+        .from("org_members")
+        .select(
+          `id, user_id, role_id, is_active, joined_at,
+           profiles:user_id (id, first_name, last_name, email),
+           org_roles:role_id (id, name, is_system_role)`,
+        )
+        .eq("organization_id", orgId)
+        .eq("is_active", true)
+        .order("joined_at", { ascending: true })
+        .limit(6),
       supabase
-        .from("dashboard_tasks")
-        .select("*")
-        .eq("user_id", user.id)
-        .order("completed", { ascending: true })
-        .order("due_at", { ascending: true, nullsFirst: false })
-        .order("created_at", { ascending: false }),
+        .from("org_members")
+        .select("id", { count: "exact", head: true })
+        .eq("organization_id", orgId)
+        .eq("is_active", true),
+      supabase
+        .from("org_invitations")
+        .select("id", { count: "exact", head: true })
+        .eq("organization_id", orgId)
+        .eq("status", "pending"),
+      supabase
+        .from("org_roles")
+        .select("id, name")
+        .eq("organization_id", orgId)
+        .order("name"),
     ])
 
-  const recentExperiments = recentExperimentsRes.data
-  const recentNotes = recentNotesRes.data
-  const dashboardTasks = dashboardTasksRes.data
+    if (orgRes.data) {
+      const members = membersRes.data ?? []
+      const rawForAdmin: OrgMemberPerm[] = members.map((m) => {
+        const row = m as {
+          user_id: string
+          role_id: string | null
+          is_active: boolean
+          org_roles: { is_system_role: boolean; name: string } | null
+        }
+        return {
+          user_id: row.user_id,
+          role_id: row.role_id,
+          is_active: row.is_active,
+          role: row.org_roles
+            ? {
+                is_system_role: row.org_roles.is_system_role,
+                name: row.org_roles.name,
+              }
+            : null,
+        }
+      })
 
-  // Check if user has completed org setup (has an org_members record)
-  const { data: orgMembership } = await supabase
-    .from("org_members")
-    .select("id")
-    .eq("user_id", user.id)
-    .eq("is_active", true)
-    .maybeSingle();
+      labSummary = {
+        organization: orgRes.data,
+        memberCount: memberCountRes.count ?? members.length,
+        pendingInviteCount: invitationsRes.count ?? 0,
+        previewMembers: members.map((m) => {
+          const row = m as {
+            id: string
+            profiles: {
+              first_name: string | null
+              last_name: string | null
+              email: string | null
+            } | null
+            org_roles: { name: string } | null
+          }
+          const name = row.profiles
+            ? `${row.profiles.first_name ?? ""} ${row.profiles.last_name ?? ""}`.trim() ||
+              row.profiles.email ||
+              "Unknown"
+            : "Unknown"
+          return {
+            id: row.id,
+            name,
+            roleName: row.org_roles?.name ?? "Member",
+          }
+        }),
+        isAdmin: isOrgAdmin(rawForAdmin, user.id),
+        inviteRoles: (rolesRes.data ?? []).map((r) => ({
+          id: r.id,
+          name: r.name,
+        })),
+      }
+    }
+  }
 
   // First-name lives in user_metadata too; avoid an extra profiles round-trip
   // just for the greeting.
@@ -93,246 +259,108 @@ export default async function DashboardPage() {
     (user.user_metadata?.first_name as string | undefined) ||
     (user.user_metadata?.full_name as string | undefined)?.split(" ")[0] ||
     user.email?.split("@")[0] ||
-    "User"
+    "Researcher"
 
   return (
-    <div className="min-w-0 space-y-4 md:space-y-6 pb-6">
-      {/* Welcome Section — editorial display face (IBM Plex Serif) anchors the
-          arrival moment; the Familjen Grotesk body keeps the rest system-y. */}
-      <div>
-        <h1 className="font-display text-3xl font-medium tracking-tight md:text-4xl">
-          Hello, {greetingName}
-        </h1>
-        <p className="text-muted-foreground mt-1">
-          Here&apos;s what&apos;s happening in your laboratory today.
-        </p>
+    <div className="flex min-h-0 flex-1 flex-col gap-6 md:gap-8 pb-8 min-w-0">
+      {/* Wish greeting ("Morning, <name>") */}
+      <DashboardGreeting name={greetingName} />
+      {/* Catalyst AI composer */}
+      <div className="sticky -top-3 sm:-top-4 md:-top-6 z-40 -mx-3 px-3 sm:-mx-4 sm:px-4 md:-mx-6 md:px-6 py-2 md:py-4 bg-background/80 backdrop-blur-md border-b border-border/50 transition-all">
+        <CatalystSectionHero size="lg" scope="lab" />
       </div>
 
-      {/* Stats Grid - Hidden for now */}
-      {/* <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium">
-              Active Projects
-            </CardTitle>
-            <FlaskConical className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{activeProjectsCount}</div>
-            <p className="text-xs text-muted-foreground">
-              Currently active or planning
-            </p>
-          </CardContent>
-        </Card>
+      {/* AI-generated one-liner summarising recent lab activity */}
+      <div className="mt-2 flex flex-col gap-3">
+        <ActivitySummary />
+      </div>
 
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium">
-              Running Experiments
-            </CardTitle>
-            <TestTube className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{runningExperimentsCount}</div>
-            <p className="text-xs text-muted-foreground">
-              In progress or collecting data
-            </p>
-          </CardContent>
-        </Card>
+      {/* Dashboard 2x2 Grid */}
+      <div className="grid grid-cols-1 gap-4 md:gap-5 xl:grid-cols-2 auto-rows-[400px]">
+        
+        {/* Top Left: Schedule */}
+        <div className="flex flex-col min-w-0 h-full">
+          <DashboardScheduleTasks
+            initialEvents={events}
+            initialTasks={tasks}
+          />
+        </div>
 
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium">
-              Equipment Status
-            </CardTitle>
-            <Microscope className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              {equipmentAvailabilityPercentage}%
-            </div>
-            <p className="text-xs text-muted-foreground">
-              {availableEquipmentCount} of {totalEquipmentCount} available
-            </p>
-          </CardContent>
-        </Card>
+        {/* Top Right: recently opened projects + in-progress experiments */}
+        <DashboardRecentWork activeExperiments={activeExperiments} />
 
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium">
-              Pending Reports
-            </CardTitle>
-            <FileText className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{pendingReportsCount}</div>
-            <p className="text-xs text-muted-foreground">
-              Draft reports to complete
-            </p>
-          </CardContent>
-        </Card>
-      </div> */}
+        {/* Bottom Left: Whiteboard */}
+        <div className="flex flex-col min-w-0 h-full">
+          <DashboardWhiteboard initialNotes={whiteboardNotes} />
+        </div>
 
-      {/* Org Setup CTA */}
-      <OrgSetupCTA visible={!orgMembership} />
-
-      <Card className="min-w-0 overflow-hidden">
-        <CardHeader>
-          <CardTitle>Quick Actions</CardTitle>
-          <CardDescription>Common tasks to get you started.</CardDescription>
-        </CardHeader>
-        <CardContent className="flex flex-wrap gap-2">
-          <Link href="/projects/new">
-            <Button variant="outline">Create New Project</Button>
-          </Link>
-          <Link href="/experiments/new">
-            <Button variant="outline">Add Experiment</Button>
-          </Link>
-          <Link href="/samples/new">
-            <Button variant="outline">Record Sample</Button>
-          </Link>
-        </CardContent>
-      </Card>
-
-      {/* Recent Experiments & Notes */}
-      <div className="grid min-w-0 gap-4 md:grid-cols-2">
-        <Card className="min-w-0 overflow-hidden">
+        {/* Bottom Right: Recently Edited */}
+        <Card className="flex flex-col min-w-0">
           <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <FlaskConical className="h-5 w-5" />
-              Recent Experiments
-            </CardTitle>
-            <CardDescription>
-              Track your ongoing laboratory work
-            </CardDescription>
+            <CardTitle className="text-base">Recently edited</CardTitle>
           </CardHeader>
-          <CardContent className="space-y-4">
-            {recentExperiments && recentExperiments.length > 0 ? (
-              recentExperiments.map((exp) => (
-                <div key={exp.id} className="space-y-2">
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="space-y-1.5 flex-1 min-w-0">
-                      <p className="text-sm font-medium leading-none truncate">
-                        {exp.name}
-                      </p>
-                      <p className="text-xs text-muted-foreground break-words">
-                        {exp.project?.name || "No project"}
-                      </p>
-                      <p className="text-xs text-muted-foreground break-words">
-                        {exp.assigned_to
-                          ? `${exp.assigned_to.first_name} ${exp.assigned_to.last_name}`
-                          : "Unassigned"}
-                      </p>
-                    </div>
-                    <div className="flex items-center gap-2 shrink-0">
-                      <Badge
-                        variant={
-                          exp.status === "in_progress"
-                            ? "default"
-                            : exp.status === "data_collection"
-                            ? "secondary"
-                            : exp.status === "completed"
-                            ? "outline"
-                            : "outline"
-                        }
-                      >
-                        {exp.status?.replace("_", " ") || "planned"}
-                      </Badge>
-                      <Link href={`/experiments/${exp.id}`}>
-                        <Button variant="ghost" size="icon" aria-label="View experiment">
-                          <ArrowUpRight className="size-4" />
-                          <span className="sr-only">View experiment</span>
-                        </Button>
-                      </Link>
-                    </div>
-                  </div>
-                  <Progress value={exp.progress || 0} className="h-2" />
-                </div>
-              ))
+          <CardContent className="flex-1 overflow-y-auto min-h-0 pr-2">
+            {recentlyEdited.length > 0 ? (
+              <ul className="space-y-2">
+                {recentlyEdited.map((item) => (
+                  <li key={`${item.kind}-${item.id}`}>
+                    <Link
+                      href={item.href}
+                      className="flex items-start gap-2 text-sm hover:text-foreground transition-colors"
+                    >
+                      <RecentIcon kind={item.kind} />
+                      <div className="flex-1 min-w-0">
+                        <div className="line-clamp-1">{item.title}</div>
+                        <div className="text-2xs text-muted-foreground mt-0.5">
+                          {relativeTime(item.updated_at)}
+                        </div>
+                      </div>
+                    </Link>
+                  </li>
+                ))}
+              </ul>
             ) : (
-              <div className="text-sm text-muted-foreground space-y-2">
-                <p>No recent experiments.</p>
-                <Link
-                  href="/experiments/new"
-                  className="inline-flex items-center gap-1 text-primary hover:underline"
-                >
-                  <Plus className="size-3.5" /> Start your first experiment
-                </Link>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-
-        <Card className="min-w-0 overflow-hidden">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <BookOpen className="h-5 w-5" />
-              Recent Notes
-            </CardTitle>
-            <CardDescription>Your latest lab notes</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {recentNotes && recentNotes.length > 0 ? (
-              recentNotes.map((note: any) => (
-                <div
-                  key={note.id}
-                  className="pb-4 border-b last:border-0 last:pb-0"
-                >
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="space-y-1.5 flex-1 min-w-0">
-                      <p className="text-sm font-medium leading-none truncate">
-                        {note.title}
-                      </p>
-                      <p className="text-xs text-muted-foreground break-words">
-                        {note.experiment?.name || "No experiment"}
-                        {note.experiment?.project?.name &&
-                          ` · ${note.experiment.project.name}`}
-                      </p>
-                      <p className="text-xs text-muted-foreground">
-                        Updated {new Date(note.updated_at).toISOString().slice(0, 10)}
-                      </p>
-                    </div>
-                    <div className="flex items-center gap-2 shrink-0">
-                      {note.note_type && (
-                        <Badge variant="outline" className="text-xs">
-                          {note.note_type}
-                        </Badge>
-                      )}
-                      <Link
-                        href={
-                          note.experiment_id
-                            ? `/experiments/${note.experiment_id}?noteId=${note.id}`
-                            : `/lab-notes`
-                        }
-                      >
-                        <Button variant="ghost" size="icon" aria-label="View note">
-                          <ArrowUpRight className="size-4" />
-                          <span className="sr-only">View note</span>
-                        </Button>
-                      </Link>
-                    </div>
-                  </div>
-                </div>
-              ))
-            ) : (
-              <div className="text-sm text-muted-foreground space-y-2">
-                <p>No recent notes.</p>
-                <Link
-                  href="/lab-notes"
-                  className="inline-flex items-center gap-1 text-primary hover:underline"
-                >
-                  <Plus className="size-3.5" /> Write your first lab note
-                </Link>
-              </div>
+              <p className="text-sm text-muted-foreground">Nothing yet.</p>
             )}
           </CardContent>
         </Card>
       </div>
 
-      {/* To-Do Panel */}
-      <div className="grid min-w-0 gap-4">
-        <TodoPanel initialTasks={dashboardTasks ?? []} />
-      </div>
+      {/* My Lab — bottom of dashboard, easy to spot for new users */}
+      {labSummary ? (
+        <DashboardMyLab lab={labSummary} />
+      ) : (
+        <OrgSetupCTA visible={!orgMembership} />
+      )}
     </div>
-  );
+  )
+}
+
+function RecentIcon({ kind }: { kind: "project" | "note" | "paper" | "protocol" }) {
+  const cls = "size-3.5 mt-0.5 shrink-0 text-muted-foreground"
+  switch (kind) {
+    case "project":
+      return <FolderOpen className={cls} />
+    case "note":
+      return <FileText className={cls} />
+    case "paper":
+      return <BookOpen className={cls} />
+    default:
+      return <ScrollText className={cls} />
+  }
+}
+
+function relativeTime(iso: string): string {
+  const then = new Date(iso).getTime()
+  const diff = Date.now() - then
+  const minutes = Math.floor(diff / 60000)
+  if (minutes < 1) return "just now"
+  if (minutes < 60) return `${minutes}m ago`
+  const hours = Math.floor(minutes / 60)
+  if (hours < 24) return `${hours}h ago`
+  const days = Math.floor(hours / 24)
+  if (days < 7) return `${days}d ago`
+  const weeks = Math.floor(days / 7)
+  if (weeks < 5) return `${weeks}w ago`
+  return new Date(iso).toLocaleDateString()
 }

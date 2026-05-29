@@ -20,11 +20,11 @@ import {
 } from "@/components/ui/select"
 import Link from "next/link"
 import { useRouter, useSearchParams } from 'next/navigation'
-import { useState, useEffect } from "react"
+import { useState, useEffect, Suspense } from "react"
 import { Separator } from "@/components/ui/separator"
 import { Notes9Brand } from "@/components/brand/notes9-brand"
 
-export default function SignUpPage() {
+function SignUpContent() {
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [firstName, setFirstName] = useState("")
@@ -387,5 +387,19 @@ export default function SignUpPage() {
         </div>
       </div>
     </div>
+  )
+}
+
+export default function SignUpPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex min-h-screen w-full items-center justify-center p-6 bg-background">
+          <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
+        </div>
+      }
+    >
+      <SignUpContent />
+    </Suspense>
   )
 }

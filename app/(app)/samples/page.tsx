@@ -1,17 +1,11 @@
-import { redirect } from 'next/navigation'
 import { createClient } from "@/lib/supabase/server"
+import { requireUser } from "@/lib/auth/current-user"
 import { SamplesPageContent, SamplesEmptyState } from './samples-page-content'
+import { CatalystSectionHero } from "@/components/catalyst/catalyst-section-hero"
 
 export default async function SamplesPage() {
+  const user = await requireUser()
   const supabase = await createClient()
-
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-  if (!user) {
-    redirect("/auth/login")
-  }
-
   let { data: samples, error: samplesError } = await supabase
     .from("samples")
     .select(`
@@ -65,6 +59,7 @@ export default async function SamplesPage() {
 
   return (
     <div className="space-y-6">
+      <CatalystSectionHero size="sm" scope="samples" />
       {safeSamples.length > 0 ? (
         <SamplesPageContent samples={safeSamples} statusCount={statusCount} />
       ) : (

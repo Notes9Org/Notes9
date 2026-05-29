@@ -12,6 +12,7 @@ import {
   ResourceFilterRow,
   ResourceListFilter,
 } from "@/components/ui/resource-list-filters"
+import { ViewModeToggle } from "@/components/ui/view-mode-toggle"
 
 interface Sample {
   id: string
@@ -176,39 +177,11 @@ export function SamplesPageContent({ samples, statusCount }: SamplesPageContentP
           Track and manage laboratory samples
         </p>
         <div className="flex items-center gap-2 shrink-0">
-          <div className="inline-flex gap-1 rounded-lg border p-1">
-            <Button
-              variant={viewMode === "grid" ? "default" : "ghost"}
-              size="sm"
-              onClick={() => setViewMode("grid")}
-              className="gap-2"
-              aria-label="Switch to grid view"
-            >
-              <Grid3x3 className="h-4 w-4" />
-              Grid
-            </Button>
-            <Button
-              variant={isMobile ? "ghost" : viewMode === "table" ? "default" : "ghost"}
-              size="sm"
-              onClick={() => !isMobile && setViewMode("table")}
-              className="gap-2"
-              disabled={isMobile}
-              aria-disabled={isMobile}
-              aria-label="Switch to table view"
-            >
-              <List className="h-4 w-4" />
-              Table
-            </Button>
-          </div>
-          <Button
-            asChild
-            size="icon"
-            variant="ghost"
-            className="size-8 rounded-md text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
-            aria-label="New sample"
-          >
+          <ViewModeToggle value={viewMode} onChange={setViewMode} tableDisabled={isMobile} />
+          <Button asChild size="sm" className="gap-2" aria-label="New sample">
             <Link href="/samples/new">
               <Plus className="size-4" />
+              New sample
             </Link>
           </Button>
         </div>
@@ -308,15 +281,10 @@ export function SamplesEmptyState() {
         <p className="text-muted-foreground">
           Track and manage laboratory samples
         </p>
-        <Button
-          asChild
-          size="icon"
-          variant="ghost"
-          className="size-8 shrink-0 rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-          aria-label="New sample"
-        >
+        <Button asChild size="sm" className="gap-2" aria-label="New sample">
           <Link href="/samples/new">
             <Plus className="size-4" />
+            New sample
           </Link>
         </Button>
       </div>

@@ -1,8 +1,9 @@
 "use client"
 
-import { useState, useCallback } from "react"
+import { useState, useCallback, useEffect, useRef } from "react"
 import { diffWords } from "diff"
 import { createClient } from "@/lib/supabase/client"
+import { useAuthUser } from "@/components/auth/auth-provider"
 import { buildStoredSegments } from "@/lib/content-diff-segments"
 import { htmlToDiffPlainText } from "@/lib/content-diff-plain-text"
 import {
@@ -42,16 +43,31 @@ export function useContentDiffs(
   recordType: "protocol" | "lab_note",
   recordId: string | null | undefined
 ) {
+  const user = useAuthUser();
   const [diffs, setDiffs] = useState<ContentDiff[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const supabaseRef = useRef<ReturnType<typeof createClient> | null>(null)
+  function getSupabase() {
+    if (!supabaseRef.current) supabaseRef.current = createClient()
+    return supabaseRef.current
+  }
+
+  // Reset cached history when the record we're tracking changes — otherwise
+  // switching from note A to note B briefly shows A's history in the History
+  // dialog until the new fetch lands.
+  useEffect(() => {
+    setDiffs([])
+    setError(null)
+    setLoading(false)
+  }, [recordId, recordType])
 
   const loadDiffs = useCallback(async () => {
     if (!recordId) return
     setLoading(true)
     setError(null)
     try {
-      const supabase = createClient()
+      const supabase = getSupabase()
       const { data, error: err } = await supabase
         .from("content_diffs")
         .select("*, user:profiles(first_name, last_name, email)")
@@ -70,7 +86,7 @@ export function useContentDiffs(
   }, [recordId, recordType])
 
   const recordDiff = useCallback(
-    async (input: RecordDiffInput): Promise<void> => {
+    async (input: RecordDiffInput): Promise<boolean> => {
       const {
         recordType: rt,
         recordId: rid,
@@ -78,11 +94,11 @@ export function useContentDiffs(
         newContent,
         documentTitle,
       } = input
-      if (!rid || previousContent === newContent) return
+      if (!rid || previousContent === newContent) return false
 
       const prevText = htmlToDiffPlainText(previousContent)
       const nextText = htmlToDiffPlainText(newContent)
-      if (prevText === nextText) return
+      if (prevText === nextText) return false
 
       const parts = diffWords(prevText, nextText)
       let wordsAdded = 0
@@ -106,11 +122,8 @@ export function useContentDiffs(
       })
 
       try {
-        const supabase = createClient()
-        const {
-          data: { user },
-        } = await supabase.auth.getUser()
-        if (!user) return
+        const supabase = getSupabase()
+        if (!user) return false
 
         const { error: err } = await supabase.from("content_diffs").insert({
           record_type: rt,
@@ -124,11 +137,15 @@ export function useContentDiffs(
         })
         if (err) {
           console.warn("[useContentDiffs] recordDiff insert error:", err)
-          return
+          setError("Failed to save change history")
+          return false
         }
         await loadDiffs()
+        return true
       } catch (e) {
         console.warn("[useContentDiffs] recordDiff error:", e)
+        setError("Failed to save change history")
+        return false
       }
     },
     [loadDiffs]

@@ -46,16 +46,33 @@ function DialogOverlay({
   )
 }
 
+export type DialogSize = 'sm' | 'md' | 'lg' | 'xl' | 'full'
+
+const dialogSizeClasses: Record<DialogSize, string> = {
+  sm: 'sm:max-w-md',
+  md: 'sm:max-w-2xl',
+  lg: 'sm:max-w-4xl',
+  xl: 'sm:w-[min(96vw,1280px)] sm:max-w-none',
+  full: 'sm:w-[calc(100vw-3rem)] sm:max-w-none sm:h-[calc(100dvh-3rem)]',
+}
+
 function DialogContent({
   className,
   children,
   showCloseButton = true,
   overlayClassName,
+  dialogSize,
   ...props
 }: React.ComponentProps<typeof DialogPrimitive.Content> & {
   showCloseButton?: boolean
   /** Merged into the overlay; use for z-index above app chrome (e.g. sidebar z-[120]). */
   overlayClassName?: string
+  /**
+   * Standard width tokens. Omit to keep the legacy `sm:max-w-lg` default so
+   * un-migrated callers don't shift. `sm` ≈ 28rem, `md` ≈ 42rem, `lg` ≈ 56rem,
+   * `xl` clamps to 96vw / 1280px, `full` fills near-viewport for editors.
+   */
+  dialogSize?: DialogSize
 }) {
   return (
     <DialogPortal data-slot="dialog-portal">
@@ -63,7 +80,8 @@ function DialogContent({
       <DialogPrimitive.Content
         data-slot="dialog-content"
         className={cn(
-          'bg-background data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 fixed top-[50%] left-[50%] z-[131] grid w-full max-w-[calc(100%-2rem)] translate-x-[-50%] translate-y-[-50%] gap-4 rounded-lg border p-6 shadow-lg duration-200 sm:max-w-lg',
+          'bg-background data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 fixed top-[50%] left-[50%] z-[131] grid w-full max-w-[calc(100%-2rem)] translate-x-[-50%] translate-y-[-50%] gap-4 rounded-lg border p-6 shadow-lg duration-200',
+          dialogSize ? dialogSizeClasses[dialogSize] : 'sm:max-w-lg',
           className,
         )}
         {...props}
@@ -72,7 +90,8 @@ function DialogContent({
         {showCloseButton && (
           <DialogPrimitive.Close
             data-slot="dialog-close"
-            className="ring-offset-background focus:ring-ring data-[state=open]:bg-accent data-[state=open]:text-muted-foreground absolute top-4 right-4 rounded-xs opacity-70 transition-opacity hover:opacity-100 focus:ring-2 focus:ring-offset-2 focus:outline-hidden disabled:pointer-events-none [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4"
+            aria-label="Close dialog"
+            className="ring-offset-background focus-visible:ring-ring data-[state=open]:bg-accent data-[state=open]:text-muted-foreground absolute top-4 right-4 rounded-xs opacity-70 transition-opacity hover:opacity-100 focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none disabled:pointer-events-none [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4"
           >
             <XIcon />
             <span className="sr-only">Close</span>

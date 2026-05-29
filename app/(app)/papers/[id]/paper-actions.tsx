@@ -66,7 +66,7 @@ export function PaperActions({ paper, onAfterMutation }: PaperActionsProps) {
     }
     toast.success("Paper deleted")
     onAfterMutation?.()
-    router.push("/papers")
+    ;(() => { const pq = typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("project") : null; router.push(pq ? "/papers?project=" + pq : "/papers"); })()
   }
 
   return (

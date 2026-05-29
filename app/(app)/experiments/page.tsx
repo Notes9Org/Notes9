@@ -1,32 +1,48 @@
-import { redirect } from 'next/navigation'
 import { createClient } from "@/lib/supabase/server"
-import { Card, CardContent } from "@/components/ui/card"
+import { requireUser } from "@/lib/auth/current-user"
 import { Button } from "@/components/ui/button"
-import { Plus, X } from 'lucide-react'
+import {
+  Empty,
+  EmptyHeader,
+  EmptyMedia,
+  EmptyTitle,
+  EmptyDescription,
+  EmptyContent,
+} from "@/components/ui/empty"
+import { FlaskConical, Plus } from 'lucide-react'
 import Link from 'next/link'
 import { ExperimentsPageContent } from './experiment-list'
 import { SetPageBreadcrumb } from "@/components/layout/breadcrumb-context"
 import { resolveInitialProjectIdParam } from "@/lib/url-project-param"
+import { CatalystSectionHero } from "@/components/catalyst/catalyst-section-hero"
 
 export default async function ExperimentsPage({
   searchParams,
 }: {
   searchParams?: Promise<{ project?: string }>
 }) {
+  const user = await requireUser()
   const supabase = await createClient()
+  // `profile` and the unfiltered `experiments` list are independent — fetch
+  // in parallel. `orgProjects` has to wait for `profile.organization_id`.
+  const [profileRes, experimentsRes] = await Promise.all([
+    supabase
+      .from("profiles")
+      .select("organization_id")
+      .eq("id", user.id)
+      .single(),
+    supabase
+      .from("experiments")
+      .select(`
+        *,
+        project:projects(id, name),
+        assigned_to:profiles!experiments_assigned_to_fkey(first_name, last_name)
+      `)
+      .order("created_at", { ascending: false }),
+  ])
+  const profile = profileRes.data
+  const experiments = experimentsRes.data
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-  if (!user) {
-    redirect("/auth/login")
-  }
-
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("organization_id")
-    .eq("id", user.id)
-    .single()
   const orgId = profile?.organization_id
   const { data: orgProjects = [] } = orgId
     ? await supabase.from("projects").select("id").eq("organization_id", orgId)
@@ -45,16 +61,6 @@ export default async function ExperimentsPage({
     if (proj) projectContext = { id: proj.id, name: proj.name }
   }
 
-  // Fetch experiments
-  const { data: experiments } = await supabase
-    .from("experiments")
-    .select(`
-      *,
-      project:projects(id, name),
-      assigned_to:profiles!experiments_assigned_to_fkey(first_name, last_name)
-    `)
-    .order("created_at", { ascending: false })
-
   return (
       <div className="space-y-6">
         {projectContext ? (
@@ -67,6 +73,9 @@ export default async function ExperimentsPage({
         ) : (
           <SetPageBreadcrumb segments={[]} />
         )}
+
+        <CatalystSectionHero size="sm" scope="experiments" />
+
         {experiments && experiments.length > 0 ? (
           <ExperimentsPageContent
             experiments={experiments}
@@ -80,15 +89,7 @@ export default async function ExperimentsPage({
                 Manage and track all experimental procedures
               </p>
               <div className="flex items-center gap-2">
-                {projectContext ? (
-                  <Button asChild variant="outline" size="sm" className="gap-2">
-                    <Link href="/experiments">
-                      <X className="h-4 w-4" />
-                      Remove project filter
-                    </Link>
-                  </Button>
-                ) : null}
-                <Button id="tour-create-experiment" asChild size="icon" variant="ghost" className="shrink-0 size-8 rounded-md text-muted-foreground hover:bg-muted hover:text-foreground transition-colors" aria-label="New experiment">
+                <Button id="tour-create-experiment" asChild size="sm" className="gap-2">
                   <Link
                     href={
                       projectContext
@@ -97,13 +98,24 @@ export default async function ExperimentsPage({
                     }
                   >
                     <Plus className="size-4" />
+                    New experiment
                   </Link>
                 </Button>
               </div>
             </div>
-            <Card>
-              <CardContent className="flex flex-col items-center justify-center py-12">
-                <p className="text-muted-foreground mb-4">No experiments yet</p>
+            <Empty className="border border-dashed">
+              <EmptyHeader>
+                <EmptyMedia variant="icon">
+                  <FlaskConical aria-hidden />
+                </EmptyMedia>
+                <EmptyTitle>No experiments yet</EmptyTitle>
+                <EmptyDescription>
+                  {projectContext
+                    ? `Run your first experiment in ${projectContext.name} — link protocols, capture samples, and write lab notes from one place.`
+                    : "An experiment is where you record what you ran, link the protocol and samples used, and capture lab notes alongside the results."}
+                </EmptyDescription>
+              </EmptyHeader>
+              <EmptyContent>
                 <Button id="tour-create-experiment-empty" asChild>
                   <Link
                     href={
@@ -113,11 +125,11 @@ export default async function ExperimentsPage({
                     }
                   >
                     <Plus className="h-4 w-4 mr-2" />
-                    Create First Experiment
+                    New experiment
                   </Link>
                 </Button>
-              </CardContent>
-            </Card>
+              </EmptyContent>
+            </Empty>
           </>
         )}
       </div>

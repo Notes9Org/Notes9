@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 
 import { fetchOpenAccessPdfBufferByIds } from "@/lib/literature-pdf-import"
 import { createClient } from "@/lib/supabase/server"
+import { getCurrentUser } from "@/lib/auth/current-user"
 
 /** Official NLM documentation for this flow (discovery + download layout). */
 const NLM_PMC_DOCS = {
@@ -24,12 +25,9 @@ const NLM_PMC_DOCS = {
  */
 export async function GET(request: Request) {
   const supabase = await createClient()
-  const {
-    data: { user },
-    error: authError,
-  } = await supabase.auth.getUser()
+  const user = await getCurrentUser()
 
-  if (authError || !user) {
+  if (!user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   }
 

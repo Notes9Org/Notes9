@@ -99,35 +99,10 @@ export function ProtocolSiblingsList({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [organizationId, projectId, experimentId])
 
-  const handleCreate = async () => {
-    setBusy(true)
-    try {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) throw new Error("Not authenticated")
-      const { data, error } = await supabase
-        .from("protocols")
-        .insert({
-          name: "Untitled protocol",
-          version: "1.0",
-          content: "",
-          organization_id: organizationId,
-          project_id: projectId,
-          experiment_id: experimentId,
-          created_by: user.id,
-        })
-        .select("id")
-        .single()
-      if (error || !data) throw error ?? new Error("Insert failed")
-      router.push(`/protocols/${data.id}`)
-    } catch (e: any) {
-      toast({
-        title: "Couldn't create protocol",
-        description: e?.message ?? "Unknown error",
-        variant: "destructive",
-      })
-    } finally {
-      setBusy(false)
-    }
+  const handleCreate = () => {
+    const params = new URLSearchParams()
+    if (projectId) params.set("project", projectId)
+    router.push(`/protocols/new?${params.toString()}`)
   }
 
   const startRename = (row: ProtocolSibling) => {

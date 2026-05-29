@@ -553,7 +553,10 @@ export function SampleProteinViewer({
       })
 
       const structures = plugin.managers.structure.hierarchy.current.structures ?? []
-      const newIndex = structures.length > before ? structures.length - 1 : structures.length - 1
+      // If MolStar didn't actually grow the hierarchy on this load, there's
+      // no new index to point at — bail to surface the failure rather than
+      // silently re-pivoting on the prior structure.
+      const newIndex = structures.length > before ? structures.length - 1 : -1
       const pivotIndex = 0
       if (pivotIndex === newIndex || newIndex < 0) {
         throw new Error("Could not load the target structure.")
@@ -799,7 +802,7 @@ export function SampleProteinViewer({
       <Card className="overflow-hidden p-0">
         <div
           ref={wrapperRef}
-          className="relative h-[calc(100vh-320px)] min-h-[440px] w-full overflow-hidden bg-card"
+          className="relative h-[calc(100dvh-320px)] min-h-[440px] w-full overflow-hidden bg-card"
         >
           {state === "loading" ? (
             <div className="absolute inset-0 z-10 flex items-center justify-center gap-2 bg-card/70 text-sm text-muted-foreground">

@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect, useMemo } from "react"
-import { useRouter } from "next/navigation"
+import { useRouter, usePathname } from "next/navigation"
 import { useMediaQuery } from "@/hooks/use-media-query"
 import Link from "next/link"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -15,7 +15,9 @@ import {
   ResourceFilterRow,
   ResourceListFilter,
 } from "@/components/ui/resource-list-filters"
+import { ViewModeToggle } from "@/components/ui/view-mode-toggle"
 import { CATALYST_MENTION_DRAG_MIME } from "@/lib/catalyst-mention-types"
+import { sortByRecentProjectOrder } from "@/lib/recent-projects"
 
 // Format date consistently to avoid hydration mismatch between server/client locales
 const formatDate = (dateStr: string): string => {
@@ -43,6 +45,7 @@ interface Project {
 
 /** Client wrapper: single-line header (description + Grid/Table toggle + New button) + list */
 export function ProjectsPageContent({ projects }: { projects: Project[] }) {
+  const pathname = usePathname()
   const isMobile = useMediaQuery("(max-width: 768px)")
   const [viewMode, setViewMode] = useState<"grid" | "table">("table")
   const [statusFilter, setStatusFilter] = useState(FILTER_ALL)
@@ -52,29 +55,41 @@ export function ProjectsPageContent({ projects }: { projects: Project[] }) {
     if (isMobile) setViewMode("grid")
   }, [isMobile])
 
+  // Hard-coded enums (matches the project creation form). Counts surface the
+  // current distribution so empty buckets stay discoverable.
+  const PROJECT_STATUSES = ["planning", "active", "on_hold", "completed", "archived"] as const
+  const PROJECT_PRIORITIES = ["low", "medium", "high", "critical"] as const
+
   const statusOptions = useMemo(() => {
-    const s = new Set(projects.map((p) => p.status).filter(Boolean))
-    return Array.from(s)
-      .sort()
-      .map((value) => ({ value, label: value.replace(/_/g, " ") }))
+    const counts = new Map<string, number>()
+    for (const p of projects) {
+      if (p.status) counts.set(p.status, (counts.get(p.status) ?? 0) + 1)
+    }
+    return PROJECT_STATUSES.map((value) => ({
+      value,
+      label: `${value.replace(/_/g, " ")} (${counts.get(value) ?? 0})`,
+    }))
   }, [projects])
 
   const priorityOptions = useMemo(() => {
-    const s = new Set(
-      projects.map((p) => p.priority).filter((x): x is string => Boolean(x))
-    )
-    return Array.from(s)
-      .sort()
-      .map((value) => ({ value, label: value.replace(/_/g, " ") }))
+    const counts = new Map<string, number>()
+    for (const p of projects) {
+      if (p.priority) counts.set(p.priority, (counts.get(p.priority) ?? 0) + 1)
+    }
+    return PROJECT_PRIORITIES.map((value) => ({
+      value,
+      label: `${value} (${counts.get(value) ?? 0})`,
+    }))
   }, [projects])
 
   const filteredProjects = useMemo(() => {
-    return projects.filter((p) => {
+    const filtered = projects.filter((p) => {
       if (statusFilter !== FILTER_ALL && p.status !== statusFilter) return false
       if (priorityFilter !== FILTER_ALL && (p.priority || "") !== priorityFilter) return false
       return true
     })
-  }, [projects, statusFilter, priorityFilter])
+    return sortByRecentProjectOrder(filtered)
+  }, [projects, statusFilter, priorityFilter, pathname])
 
   return (
     <div className="space-y-6">
@@ -83,31 +98,7 @@ export function ProjectsPageContent({ projects }: { projects: Project[] }) {
           Manage your research initiatives and experiments
         </p>
         <div className="flex items-center gap-2 shrink-0">
-          <div className="inline-flex gap-1 rounded-lg border p-1">
-            <Button
-              variant={viewMode === "grid" ? "default" : "ghost"}
-              size="sm"
-              onClick={() => setViewMode("grid")}
-              className="gap-2"
-              aria-label="Switch to grid view"
-            >
-              <Grid3x3 className="h-4 w-4" />
-              Grid
-            </Button>
-            <Button
-              variant={isMobile ? "ghost" : viewMode === "table" ? "default" : "ghost"}
-              size="sm"
-              onClick={() => !isMobile && setViewMode("table")}
-              className="gap-2"
-              disabled={isMobile}
-              aria-disabled={isMobile}
-              aria-label="Switch to table view"
-              title={isMobile ? "Table view isn't available on mobile" : undefined}
-            >
-              <List className="h-4 w-4" />
-              Table
-            </Button>
-          </div>
+          <ViewModeToggle value={viewMode} onChange={setViewMode} tableDisabled={isMobile} />
           <Button id="tour-create-project" asChild size="icon" variant="ghost" className="size-8 rounded-md text-muted-foreground hover:bg-muted hover:text-foreground transition-colors" aria-label="New project">
             <Link href="/projects/new">
               <Plus className="size-4" />
@@ -185,31 +176,7 @@ export function ProjectList({ projects, viewMode: controlledView, setViewMode: s
       {/* View Toggle - only when not in header */}
       {!hideToolbar && (
         <div className="flex justify-end mb-4">
-          <div className="inline-flex gap-1 rounded-lg border p-1">
-            <Button
-              variant={effectiveViewMode === "grid" ? "default" : "ghost"}
-              size="sm"
-              onClick={() => setViewMode("grid")}
-              className="gap-2"
-              aria-label="Switch to grid view"
-            >
-              <Grid3x3 className="h-4 w-4" />
-              Grid
-            </Button>
-            <Button
-              variant={isMobile ? "ghost" : effectiveViewMode === "table" ? "default" : "ghost"}
-              size="sm"
-              onClick={() => !isMobile && setViewMode("table")}
-              className="gap-2"
-              disabled={isMobile}
-              aria-disabled={isMobile}
-              aria-label="Switch to table view"
-              title={isMobile ? "Table view isn't available on mobile" : undefined}
-            >
-              <List className="h-4 w-4" />
-              Table
-            </Button>
-          </div>
+          <ViewModeToggle value={viewMode} onChange={setViewMode} tableDisabled={isMobile} />
         </div>
       )}
 

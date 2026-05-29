@@ -37,6 +37,12 @@ export function RichTextEditor({
   className
 }: RichTextEditorProps) {
   const editorRef = React.useRef<HTMLDivElement>(null)
+  const onChangeRef = React.useRef(onChange)
+  const debounceRef = React.useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  React.useEffect(() => {
+    onChangeRef.current = onChange
+  }, [onChange])
 
   const editor = useEditor({
     extensions: [
@@ -53,11 +59,29 @@ export function RichTextEditor({
     ],
     content,
     onUpdate: ({ editor }) => {
-      onChange(editor.getHTML())
+      if (debounceRef.current) clearTimeout(debounceRef.current)
+      const html = editor.getHTML()
+      debounceRef.current = setTimeout(() => {
+        onChangeRef.current(html)
+      }, 300)
     },
     editable: !disabled,
     immediatelyRender: false,
   })
+
+  React.useEffect(() => {
+    if (!editor) return
+    const current = editor.getHTML()
+    if (content !== undefined && content !== current) {
+      editor.commands.setContent(content, { emitUpdate: false })
+    }
+  }, [content, editor])
+
+  React.useEffect(() => {
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current)
+    }
+  }, [])
 
   if (!editor) {
     return (

@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef, Suspense } from "react"
 import { useRouter, useSearchParams } from 'next/navigation'
 import { createClient } from "@/lib/supabase/client"
+import { useAuthUser } from "@/components/auth/auth-provider"
 import { resolveInitialProjectIdParam } from "@/lib/url-project-param"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -16,6 +17,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import { PageHeading } from "@/components/ui/page-heading"
 import { ArrowLeft, Star } from 'lucide-react'
 import Link from 'next/link'
 import { toast } from "sonner"
@@ -28,6 +30,7 @@ import {
 } from "@/lib/literature-link-select-ui"
 
 function NewLiteratureReviewForm() {
+  const user = useAuthUser();
   const router = useRouter()
   const searchParams = useSearchParams()
   const appliedProjectFromUrlRef = useRef(false)
@@ -112,8 +115,6 @@ function NewLiteratureReviewForm() {
 
     try {
       const supabase = createClient()
-      const { data: { user } } = await supabase.auth.getUser()
-      
       if (!user) throw new Error("Not authenticated")
 
       // Get user's organization
@@ -180,7 +181,7 @@ function NewLiteratureReviewForm() {
             </Link>
           </Button>
           <div className="min-w-0">
-            <h1 className="text-2xl font-bold tracking-tight md:text-3xl">Add Literature Reference</h1>
+            <PageHeading>Add Literature Reference</PageHeading>
             <p className="text-muted-foreground mt-1 text-sm">
               Save a research paper or citation to your library
             </p>

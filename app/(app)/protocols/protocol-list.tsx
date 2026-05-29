@@ -14,6 +14,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
+import { ViewModeToggle } from "@/components/ui/view-mode-toggle"
 import { FileText, Calendar, ArrowUpRight, Grid3x3, List, Pencil, FolderOpen, FlaskConical } from "lucide-react"
 import Link from "next/link"
 import type { Protocol } from "./protocols-page-content"
@@ -70,28 +71,7 @@ export function ProtocolList({
     <>
       {!hideToolbar && (
         <div className="flex justify-end mb-4">
-          <div className="inline-flex gap-1 rounded-lg border p-1">
-            <Button
-              variant={effectiveViewMode === "grid" ? "default" : "ghost"}
-              size="sm"
-              onClick={() => setViewMode("grid")}
-              className="gap-2"
-            >
-              <Grid3x3 className="h-4 w-4" />
-              Grid
-            </Button>
-            <Button
-              variant={isMobile ? "ghost" : effectiveViewMode === "table" ? "default" : "ghost"}
-              size="sm"
-              onClick={() => !isMobile && setViewMode("table")}
-              className="gap-2"
-              disabled={isMobile}
-              aria-disabled={isMobile}
-            >
-              <List className="h-4 w-4" />
-              Table
-            </Button>
-          </div>
+          <ViewModeToggle value={viewMode} onChange={setViewMode} tableDisabled={isMobile} />
         </div>
       )}
 

@@ -3,6 +3,7 @@
 import { useCallback, useState } from "react"
 import { useRouter } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
+import { useAuthUser } from "@/components/auth/auth-provider"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -123,6 +124,7 @@ function formatQuantity(transfer: SampleTransfer) {
 }
 
 export function SampleHistoryTab({ sampleId, initialTransfers, currentLocation }: SampleHistoryTabProps) {
+  const user = useAuthUser();
   const { toast } = useToast()
   const router = useRouter()
   const [transfers, setTransfers] = useState<SampleTransfer[]>(initialTransfers)
@@ -179,9 +181,6 @@ export function SampleHistoryTab({ sampleId, initialTransfers, currentLocation }
     setSubmitting(true)
     try {
       const supabase = createClient()
-      const {
-        data: { user },
-      } = await supabase.auth.getUser()
       if (!user) throw new Error("Not signed in")
 
       const trimmedQuantity = quantity.trim()
@@ -274,7 +273,7 @@ export function SampleHistoryTab({ sampleId, initialTransfers, currentLocation }
               Add entry
             </Button>
           </DialogTrigger>
-          <DialogContent className="sm:max-w-lg">
+          <DialogContent>
             <DialogHeader>
               <DialogTitle>Add history entry</DialogTitle>
               <DialogDescription>

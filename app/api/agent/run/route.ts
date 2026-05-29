@@ -3,6 +3,7 @@ import {
   buildNotes9AgentRequestBody,
   type Notes9AgentHistoryItem,
 } from '@/lib/notes9-agent-request';
+import { verifyBearerToken } from "@/lib/verify-bearer-token";
 
 export const maxDuration = 300;
 
@@ -22,6 +23,10 @@ export async function POST(req: Request) {
         ? (rest.options as { debug?: boolean; max_retries?: number })
         : undefined,
     scope: rest.scope && typeof rest.scope === 'object' ? rest.scope : undefined,
+    // Forward uploaded files + tagged records to the agent (were silently
+    // dropped here, so attachments never reached the backend).
+    file_attachments: Array.isArray(rest.file_attachments) ? rest.file_attachments : undefined,
+    attachments: Array.isArray(rest.attachments) ? rest.attachments : undefined,
   });
   const token = headerToken;
 
@@ -31,6 +36,14 @@ export async function POST(req: Request) {
       { status: 401 }
     );
   }
+  const _verifiedUser = await verifyBearerToken(token)
+  if (!_verifiedUser) {
+    return new Response(JSON.stringify({ error: "Unauthorized" }), {
+      status: 401,
+      headers: { "Content-Type": "application/json" },
+    })
+  }
+
 
   if (!NOTES9_API_BASE) {
     return NextResponse.json(
@@ -57,14 +70,22 @@ export async function POST(req: Request) {
       clearTimeout(_timeout);
     }
 
-    const data = await response.json().catch(() => ({}));
+    let data: unknown;
+    try {
+      data = await response.json();
+    } catch (parseErr) {
+      const rawText = await response.text().catch(() => '');
+      console.error(JSON.stringify({ event: 'upstream_non_json', route: 'agent/run', status: response.status, snippet: rawText.slice(0, 500) }));
+      return NextResponse.json({ error: 'Upstream returned non-JSON response', status: response.status }, { status: 502 });
+    }
+    const dataObj = data as Record<string, unknown>;
     if (!response.ok) {
       return NextResponse.json(
-        data?.error ? { error: data.error } : data,
+        dataObj?.error ? { error: dataObj.error } : dataObj,
         { status: response.status }
       );
     }
-    return NextResponse.json(data);
+    return NextResponse.json(dataObj);
   } catch (error) {
     console.error('Agent proxy error:', error);
     return NextResponse.json(

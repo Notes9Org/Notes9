@@ -2,21 +2,47 @@
 
 import { after } from "next/server"
 import { createClient } from "@/lib/supabase/server"
+import { getCurrentUser } from "@/lib/auth/current-user"
 import { revalidatePath } from "next/cache"
 import { tryImportPdfForPaper } from "@/lib/literature-pdf-import"
 import { SearchPaper } from "@/types/paper-search"
 import { getLiteratureStorageBucket, normalizeDoi } from "@/lib/literature-pdf-storage"
+import type { SupabaseClient } from "@supabase/supabase-js"
+
+function abstractIsBlank(value: string | null | undefined): boolean {
+  if (!value) return true
+  const t = value.trim()
+  if (!t) return true
+  return t.toLowerCase() === "no abstract available."
+}
+
+/**
+ * Backfill `literature_reviews.abstract` when the search hit had a blank/placeholder
+ * abstract but OA resolution recovered a real one. No-op if the existing abstract is
+ * usable or no abstract was resolved.
+ */
+async function backfillAbstractIfBlank(
+  supabase: SupabaseClient,
+  literatureId: string,
+  existingAbstract: string | null | undefined,
+  resolvedAbstract: string | null | undefined
+): Promise<void> {
+  if (!abstractIsBlank(existingAbstract)) return
+  const resolved = resolvedAbstract?.trim()
+  if (!resolved || abstractIsBlank(resolved)) return
+  await supabase
+    .from("literature_reviews")
+    .update({ abstract: resolved })
+    .eq("id", literatureId)
+}
 
 export async function removeStagingLiterature(literatureId: string) {
   try {
-    const supabase = await createClient()
-    const {
-      data: { user },
-    } = await supabase.auth.getUser()
-
+    const user = await getCurrentUser()
     if (!user) {
       return { success: false as const, error: "Not authenticated" }
     }
+    const supabase = await createClient()
 
     const { data: row, error: fetchError } = await supabase
       .from("literature_reviews")
@@ -55,14 +81,11 @@ export async function stagePaper(
   options?: { projectId?: string | null }
 ) {
   try {
-    const supabase = await createClient()
-    const {
-      data: { user },
-    } = await supabase.auth.getUser()
-
+    const user = await getCurrentUser()
     if (!user) {
       return { success: false as const, error: "Not authenticated" }
     }
+    const supabase = await createClient()
 
     const { data: profile } = await supabase
       .from("profiles")
@@ -142,16 +165,24 @@ export async function stagePaper(
     revalidatePath("/literature-reviews")
 
     // PDF fetch/upload can take many seconds — run after the action returns so staging feels instant.
+    const stagedAbstract = paper.abstract
+
     after(async () => {
       try {
         const bgSupabase = await createClient()
-        await tryImportPdfForPaper({
+        const importResult = await tryImportPdfForPaper({
           supabase: bgSupabase,
           userId,
           literatureId,
           paper,
           matchSource: "staging_pubmed_import",
         })
+        await backfillAbstractIfBlank(
+          bgSupabase,
+          literatureId,
+          stagedAbstract,
+          importResult.resolvedAbstract
+        )
       } catch (err) {
         console.error("[stagePaper] background PDF import failed", err)
       } finally {
@@ -175,14 +206,11 @@ export async function savePaperToRepository(
   }
 ) {
   try {
-    const supabase = await createClient()
-    const {
-      data: { user },
-    } = await supabase.auth.getUser()
-
+    const user = await getCurrentUser()
     if (!user) {
       return { success: false, error: "Not authenticated" }
     }
+    const supabase = await createClient()
 
     const { data: profile } = await supabase
       .from("profiles")
@@ -231,7 +259,7 @@ export async function savePaperToRepository(
       let warning: string | null = null
       const { data: withPdf } = await supabase
         .from("literature_reviews")
-        .select("pdf_storage_path, pdf_import_status")
+        .select("pdf_storage_path, pdf_import_status, abstract")
         .eq("id", stagingRow.id)
         .single()
 
@@ -243,6 +271,12 @@ export async function savePaperToRepository(
           paper,
           matchSource: "repository_pubmed_import",
         })
+        await backfillAbstractIfBlank(
+          supabase,
+          stagingRow.id,
+          withPdf?.abstract ?? paper.abstract,
+          importResult.resolvedAbstract
+        )
         if (!importResult.ok && importResult.reason === "fetch_failed" && "message" in importResult) {
           warning = importResult.message ?? "Could not download the PDF from the search link."
         } else if (!importResult.ok && importResult.reason === "no_open_access_pdf") {
@@ -312,6 +346,7 @@ export async function savePaperToRepository(
       paper,
       matchSource: "repository_pubmed_import",
     })
+    await backfillAbstractIfBlank(supabase, data.id, paper.abstract, importResult.resolvedAbstract)
     if (!importResult.ok && importResult.reason === "fetch_failed" && "message" in importResult) {
       warning = importResult.message ?? "Paper saved but the search PDF link could not be downloaded."
     } else if (!importResult.ok && importResult.reason === "no_open_access_pdf") {

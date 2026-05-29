@@ -3,8 +3,9 @@
 import { useState, useEffect, Suspense, useRef } from "react"
 import { useRouter, useSearchParams } from 'next/navigation'
 import { createClient } from "@/lib/supabase/client"
+import { useAuthUser } from "@/components/auth/auth-provider"
 import { resolveInitialProjectIdParam } from "@/lib/url-project-param"
-import { useSmartBack } from "@/hooks/use-smart-back"
+import { useCreatePageNav } from "@/hooks/use-create-page-nav"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -18,6 +19,7 @@ import {
 } from "@/components/ui/select"
 import { RichTextEditor } from "@/components/rich-text-editor"
 import { countWordsFromHtml } from "@/components/ui/textarea-with-word-count"
+import { PageHeading } from "@/components/ui/page-heading"
 import { cn } from "@/lib/utils"
 import { ArrowLeft } from 'lucide-react'
 import { getUniqueNameErrorMessage } from "@/lib/unique-name-error"
@@ -26,8 +28,12 @@ import { recordRumEvent } from "@/lib/rum"
 import { toast } from "sonner"
 
 function NewExperimentForm() {
+  const user = useAuthUser();
   const router = useRouter()
-  const handleBack = useSmartBack("/experiments")
+  const { handleBack } = useCreatePageNav({
+    pageLabel: "New Experiment",
+    listFallbackPath: "/experiments",
+  })
   const searchParams = useSearchParams()
   const appliedProjectFromUrlRef = useRef(false)
   
@@ -108,8 +114,6 @@ function NewExperimentForm() {
 
     try {
       const supabase = createClient()
-      const { data: { user } } = await supabase.auth.getUser()
-      
       if (!user) throw new Error("Not authenticated")
 
       const { data, error: insertError } = await supabase
@@ -167,9 +171,9 @@ function NewExperimentForm() {
             <ArrowLeft className="h-4 w-4" />
           </Button>
           <div className="min-w-0">
-            <h1 className="text-2xl font-bold tracking-tight text-foreground md:text-3xl">Create New Experiment</h1>
+            <PageHeading>New Experiment</PageHeading>
             <p className="text-muted-foreground mt-1 text-sm">
-              Design and configure your experimental procedure
+              Name your experiment and link it to a project.
             </p>
           </div>
         </div>

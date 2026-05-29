@@ -1,30 +1,28 @@
 import type { ComponentType } from "react"
 import {
-  BarChart3,
   BookOpen,
-  FlaskConical,
   Folder,
   Home,
   Network,
-  NotebookPen,
-  ScrollText,
-  TestTube,
+  Sparkles,
 } from "lucide-react"
-import { ClipboardInfoIcon } from "@/components/ui/clipboard-info-icon"
 
 /** Accepts both Lucide icons and our custom SVG-based wrapper icons. */
 type NavIcon = ComponentType<{ className?: string }>
 
-/** Single source of truth: primary app nav (mirrors [components/layout/app-sidebar](components/layout/app-sidebar)). */
+/** Single source of truth: primary app nav (mirrors [components/layout/app-sidebar](components/layout/app-sidebar)).
+ *
+ * Dashboard / Planner are deliberately separate after the 2026-05 split:
+ *   - Dashboard = lab status overview (active experiments, recently edited, today).
+ *   - Planner   = self-organized workspace (schedule, tasks, whiteboard).
+ */
 export const APP_PRIMARY_NAV: { name: string; href: string; icon: NavIcon }[] = [
+  // Writing (/papers) and Reports (/reports) intentionally omitted from the
+  // primary nav — they're surfaced as cards inside each project workspace.
+  // The routes still exist and are reachable from those cards.
   { name: "Dashboard", href: "/dashboard", icon: Home },
   { name: "Projects", href: "/projects", icon: Folder },
-  { name: "Experiments", href: "/experiments", icon: FlaskConical },
-  { name: "Lab Notes", href: "/lab-notes", icon: NotebookPen },
-  { name: "Samples", href: "/samples", icon: TestTube },
-  { name: "Protocols", href: "/protocols", icon: ClipboardInfoIcon },
   { name: "Literature", href: "/literature-reviews", icon: BookOpen },
+  { name: "Catalyst", href: "/catalyst", icon: Sparkles },
   { name: "Research map", href: "/research-map", icon: Network },
-  { name: "Writing", href: "/papers", icon: ScrollText },
-  { name: "Reports", href: "/reports", icon: BarChart3 },
 ]

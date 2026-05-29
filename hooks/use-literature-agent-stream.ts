@@ -276,7 +276,7 @@ async function drainLiteratureAgentSse(
 
   return {
     donePayload: null,
-    error: null,
+    error: 'Agent stream closed without a response.',
     clarify: null,
   };
 }

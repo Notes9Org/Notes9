@@ -1,5 +1,6 @@
-import { redirect, notFound } from 'next/navigation'
+import { notFound } from 'next/navigation'
 import { createClient } from "@/lib/supabase/server"
+import { requireUser } from "@/lib/auth/current-user"
 import { SetPageBreadcrumb } from "@/components/layout/breadcrumb-context"
 import { Button } from "@/components/ui/button"
 import { LiteratureDetailView } from '@/components/literature-reviews/literature-detail-view'
@@ -22,15 +23,8 @@ export default async function LiteratureReviewDetailPage({
     resolvedSearch.tab === "linked"
       ? resolvedSearch.tab
       : "overview"
+  const user = await requireUser()
   const supabase = await createClient()
-
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-  if (!user) {
-    redirect("/auth/login")
-  }
-
   // Fetch literature review details
   const { data: literature, error } = await supabase
     .from("literature_reviews")

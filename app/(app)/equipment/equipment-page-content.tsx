@@ -12,6 +12,7 @@ import {
   ResourceFilterRow,
   ResourceListFilter,
 } from "@/components/ui/resource-list-filters"
+import { ViewModeToggle } from "@/components/ui/view-mode-toggle"
 
 interface Equipment {
   id: string
@@ -83,30 +84,7 @@ export function EquipmentPageContent({ equipment, statusCount }: EquipmentPageCo
           Manage and track laboratory instruments and equipment
         </p>
         <div className="flex items-center gap-2 shrink-0">
-          <div className="inline-flex gap-1 rounded-lg border p-1">
-            <Button
-              variant={viewMode === "grid" ? "default" : "ghost"}
-              size="sm"
-              onClick={() => setViewMode("grid")}
-              className="gap-2"
-              aria-label="Switch to grid view"
-            >
-              <Grid3x3 className="h-4 w-4" />
-              Grid
-            </Button>
-            <Button
-              variant={isMobile ? "ghost" : viewMode === "table" ? "default" : "ghost"}
-              size="sm"
-              onClick={() => !isMobile && setViewMode("table")}
-              className="gap-2"
-              disabled={isMobile}
-              aria-disabled={isMobile}
-              aria-label="Switch to table view"
-            >
-              <List className="h-4 w-4" />
-              Table
-            </Button>
-          </div>
+          <ViewModeToggle value={viewMode} onChange={setViewMode} tableDisabled={isMobile} />
           <Button
             asChild
             size="icon"

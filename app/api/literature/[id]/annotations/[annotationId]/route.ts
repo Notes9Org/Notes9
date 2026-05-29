@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 
 import { clampText, validateTextLimits } from "@/lib/literature-pdf-storage"
 import { createClient } from "@/lib/supabase/server"
+import { getCurrentUser } from "@/lib/auth/current-user"
 
 export async function PATCH(
   request: Request,
@@ -20,15 +21,16 @@ export async function PATCH(
     }
 
     const supabase = await createClient()
-    const {
-      data: { user },
-      error: authError,
-    } = await supabase.auth.getUser()
+    const user = await getCurrentUser()
 
-    if (authError || !user) {
+    if (!user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
+    // Ownership scope — without `.eq("created_by", user.id)` any authenticated
+    // user could PATCH any annotation by guessing its id. RLS may also cover
+    // this at the DB layer; defense-in-depth keeps the route safe even if a
+    // future migration relaxes the policy.
     const { data, error } = await supabase
       .from("literature_pdf_annotations")
       .update({
@@ -39,11 +41,16 @@ export async function PATCH(
         anchor: payload.anchor ?? null,
       })
       .eq("id", annotationId)
+      .eq("created_by", user.id)
       .select("*")
-      .single()
+      .maybeSingle()
 
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 500 })
+    }
+    if (!data) {
+      // 404 (no row matched) is preferable to leaking "exists but not yours".
+      return NextResponse.json({ error: "Annotation not found" }, { status: 404 })
     }
 
     return NextResponse.json({ annotation: data })
@@ -60,22 +67,25 @@ export async function DELETE(
   try {
     const { annotationId } = await context.params
     const supabase = await createClient()
-    const {
-      data: { user },
-      error: authError,
-    } = await supabase.auth.getUser()
+    const user = await getCurrentUser()
 
-    if (authError || !user) {
+    if (!user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    const { error } = await supabase
+    // Ownership scope (see PATCH above).
+    const { data, error } = await supabase
       .from("literature_pdf_annotations")
       .delete()
       .eq("id", annotationId)
+      .eq("created_by", user.id)
+      .select("id")
 
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 500 })
+    }
+    if (!data || data.length === 0) {
+      return NextResponse.json({ error: "Annotation not found" }, { status: 404 })
     }
 
     return NextResponse.json({ success: true })

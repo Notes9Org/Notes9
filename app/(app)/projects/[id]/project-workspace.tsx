@@ -1,17 +1,35 @@
 import type { ReactNode } from "react"
 import Link from "next/link"
-import { BookOpen, ClipboardList, FlaskConical, TestTube, ArrowRight, ArrowUpRight } from "lucide-react"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import type { LucideIcon } from "lucide-react"
+import {
+  BookOpen,
+  Database,
+  FlaskConical,
+  PenLine,
+  BarChart3,
+  ArrowRight,
+  Sparkles,
+} from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
-import { cn } from "@/lib/utils"
 
 export type ProjectWorkspaceLiterature = { id: string; title: string; status: string | null }
 export type ProjectWorkspaceProtocol = { id: string; name: string; version: string | null }
-export type ProjectWorkspaceExperiment = { id: string; name: string }
+export type ProjectWorkspaceExperiment = {
+  id: string
+  name: string
+  status: string | null
+}
+export type ProjectWorkspaceDataFile = {
+  id: string
+  file_name: string
+  experiment_id: string | null
+}
 export type ProjectWorkspaceSample = { id: string; sample_code: string; sample_type: string | null }
+export type ProjectWorkspaceLabNote = { id: string; title: string | null; experiment_id: string | null }
+export type ProjectWorkspacePaper = { id: string; title: string | null; updated_at: string | null }
+export type ProjectWorkspaceReport = { id: string; title: string | null; created_at: string | null }
 
-type ProjectWorkspaceProps = {
+type WorkspaceProps = {
   projectId: string
   literature: ProjectWorkspaceLiterature[]
   literatureCount: number
@@ -19,81 +37,128 @@ type ProjectWorkspaceProps = {
   protocolCount: number
   experiments: ProjectWorkspaceExperiment[]
   experimentsCount: number
+  dataFiles: ProjectWorkspaceDataFile[]
+  dataFilesCount: number
   samples: ProjectWorkspaceSample[]
   samplesCount: number
+  labNotes: ProjectWorkspaceLabNote[]
+  labNotesCount: number
+  papers: ProjectWorkspacePaper[]
+  papersCount: number
+  reports: ProjectWorkspaceReport[]
+  reportsCount: number
 }
 
-function SectionCard({
-  title,
-  description,
+type ModuleTone = "default" | "leaf" | "warm" | "neutral" | "accent"
+
+const TONE_BG: Record<ModuleTone, string> = {
+  default: "color-mix(in srgb, var(--foreground) 6%, var(--card))",
+  leaf: "color-mix(in srgb, #5e7a4a 14%, var(--card))",
+  accent: "var(--n9-accent-light)",
+  warm: "color-mix(in srgb, #b56b54 14%, var(--card))",
+  neutral: "var(--muted)",
+}
+
+const TONE_FG: Record<ModuleTone, string> = {
+  default: "var(--foreground)",
+  leaf: "#3f5c33",
+  accent: "var(--n9-accent)",
+  warm: "#8c4f38",
+  neutral: "var(--foreground)",
+}
+
+function WorkspaceCard({
+  href,
+  newHref,
   icon: Icon,
+  tone = "default",
+  name,
   count,
-  emptyTitle,
-  emptyBody,
-  primaryCta,
-  secondaryCta,
   children,
 }: {
-  title: string
-  description: string
-  icon: typeof BookOpen
-  count: number
-  emptyTitle: string
-  emptyBody: string
-  primaryCta: { label: string; href: string }
-  secondaryCta?: { label: string; href: string }
+  href: string
+  newHref?: string
+  icon: LucideIcon
+  tone?: ModuleTone
+  name: string
+  /** Optional count/status pill shown top-right (e.g. 23, "7 active", "2 drafts"). */
+  count?: string | number
   children?: ReactNode
 }) {
-  const isEmpty = count === 0
-
+  const isEmpty = !children
+  const hasCount = count !== undefined && count !== null && count !== "" && count !== 0
   return (
-    <Card className="h-full min-h-[220px] gap-0 py-2.5">
-      <CardHeader className="pb-0 pt-2">
-        <div className="flex items-start justify-between gap-1.5">
-          <div className="flex min-w-0 flex-1 items-start gap-1.5">
-            <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border bg-muted/50">
-              <Icon className="h-3.5 w-3.5 text-muted-foreground" />
-            </div>
-            {/* Fixed block so the first list row lines up across Literature / Protocols / Experiments */}
-            <div className="min-h-[4.5rem] min-w-0 flex-1">
-              <CardTitle className="text-base font-semibold leading-tight line-clamp-2">
-                {title}
-              </CardTitle>
-              <CardDescription className="mt-0 text-xs leading-tight line-clamp-2">
-                {description}
-              </CardDescription>
-            </div>
-          </div>
-          <Badge variant={isEmpty ? "secondary" : "default"} className="shrink-0 tabular-nums">
+    <article className="flex h-full min-h-[180px] flex-col rounded-[calc(var(--radius)+6px)] border border-border bg-card p-4 shadow-[0_1px_2px_rgba(44,36,24,0.04)]">
+      <header className="flex items-center gap-3">
+        <span
+          aria-hidden
+          className="flex size-10 shrink-0 items-center justify-center rounded-xl"
+          style={{ background: TONE_BG[tone], color: TONE_FG[tone] }}
+        >
+          <Icon size={20} strokeWidth={1.75} />
+        </span>
+        <h3 className="min-w-0 flex-1 font-display text-[15px] font-semibold text-foreground">
+          {name}
+        </h3>
+        {hasCount && (
+          <span className="shrink-0 rounded-full border border-border bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground tabular-nums">
             {count}
-          </Badge>
-        </div>
-      </CardHeader>
-      <CardContent className="flex flex-1 flex-col gap-2 pt-0">
-        {isEmpty ? (
-          <div className="flex flex-1 flex-col justify-center rounded-lg border border-dashed bg-muted/20 px-3 py-4 text-center">
-            <p className="text-sm font-medium text-foreground">{emptyTitle}</p>
-            <p className="text-xs text-muted-foreground mt-1">{emptyBody}</p>
-          </div>
-        ) : (
-          <ul className="space-y-1.5 text-sm flex-1 min-h-0">{children}</ul>
+          </span>
         )}
-        <div className={cn("flex flex-wrap gap-2", secondaryCta && "flex-col sm:flex-row")}>
-          <Button asChild size="sm" className="w-full sm:w-auto">
-            <Link href={primaryCta.href}>
-              {primaryCta.label}
-              <ArrowRight className="ml-1 h-3.5 w-3.5" />
-            </Link>
-          </Button>
-          {secondaryCta ? (
-            <Button asChild variant="outline" size="sm" className="w-full sm:w-auto">
-              <Link href={secondaryCta.href}>{secondaryCta.label}</Link>
-            </Button>
-          ) : null}
-        </div>
-      </CardContent>
-    </Card>
+      </header>
+
+      <div className="mt-4 flex flex-1 flex-col justify-center gap-2">
+        {isEmpty ? (
+          <>
+            <div className="h-2 rounded-full bg-muted/80" aria-hidden />
+            <div className="h-2 w-[88%] rounded-full bg-muted/60" aria-hidden />
+            <div className="h-2 w-[72%] rounded-full bg-muted/40" aria-hidden />
+          </>
+        ) : (
+          children
+        )}
+      </div>
+
+      <footer className="mt-4 flex items-center justify-between border-t border-border/80 pt-3">
+        {newHref ? (
+          <Link
+            href={newHref}
+            className="inline-flex items-center gap-1 text-[13px] font-medium text-emerald-600 hover:text-emerald-700 dark:text-emerald-500 dark:hover:text-emerald-400"
+          >
+            + New
+          </Link>
+        ) : (
+          <div />
+        )}
+        <Link
+          href={href}
+          className="group inline-flex items-center gap-1 text-[13px] font-medium text-foreground/80 transition-colors hover:text-foreground"
+        >
+          Open
+          <ArrowRight size={14} aria-hidden className="transition-transform group-hover:translate-x-0.5" />
+        </Link>
+      </footer>
+    </article>
   )
+}
+
+function PreviewLine({ text, href }: { text: string; href?: string }) {
+  const className =
+    "truncate text-[12.5px] text-foreground/85 leading-snug hover:text-foreground"
+  if (href) {
+    return (
+      <Link href={href} className={`block ${className} underline-offset-2 hover:underline`}>
+        {text}
+      </Link>
+    )
+  }
+  return <p className={className}>{text}</p>
+}
+
+function formatExperimentPreview(experiment: ProjectWorkspaceExperiment) {
+  return experiment.status
+    ? `${experiment.name} · ${experiment.status.replace(/_/g, " ")}`
+    : experiment.name
 }
 
 export function ProjectWorkspace({
@@ -104,163 +169,165 @@ export function ProjectWorkspace({
   protocolCount,
   experiments,
   experimentsCount,
+  dataFiles,
+  dataFilesCount,
   samples,
   samplesCount,
-}: ProjectWorkspaceProps) {
+  labNotes,
+  labNotesCount,
+  papers,
+  papersCount,
+  reports,
+  reportsCount,
+}: WorkspaceProps) {
+  // First-run teaching banner: when the project is brand-new and every module
+  // tile is empty, the workspace is 8 identical placeholder cards with no
+  // anchor for what to do first. Surface a single canonical next-step
+  // ("New experiment") above the grid; once any entity exists, the banner
+  // disappears and the populated tiles speak for themselves.
+  const isFirstRun =
+    literatureCount === 0 &&
+    protocolCount === 0 &&
+    experimentsCount === 0 &&
+    dataFilesCount === 0 &&
+    samplesCount === 0 &&
+    labNotesCount === 0 &&
+    papersCount === 0 &&
+    reportsCount === 0
+
   return (
-    <div className="space-y-2">
-      <div>
-        <h2 className="text-lg font-semibold leading-tight tracking-tight">Project workspace</h2>
-        <p className="mt-0 text-sm leading-snug text-muted-foreground">
-          Jump into literature, protocols, or experiments. Lab notes live under each experiment.
-        </p>
-      </div>
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <SectionCard
-          title="Literature & search"
-          description="References and discovery linked to this project"
+    <section aria-label="Project workspace" className="space-y-4">
+      {isFirstRun ? (
+        <div className="rounded-[calc(var(--radius)+6px)] border border-dashed border-border bg-card/60 p-5 sm:p-6">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex min-w-0 items-start gap-3">
+              <span
+                aria-hidden
+                className="mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-lg"
+                style={{ background: TONE_BG.accent, color: TONE_FG.accent }}
+              >
+                <Sparkles size={18} strokeWidth={1.75} />
+              </span>
+              <div className="min-w-0">
+                <h2 className="font-display text-base font-semibold text-foreground">
+                  Start with an experiment
+                </h2>
+                <p className="mt-1 text-sm leading-relaxed text-muted-foreground">
+                  An experiment is the anchor of this project — link a protocol to it, attach the
+                  samples you used, and capture lab notes as you go. The eight cards below fill in
+                  as you work.
+                </p>
+              </div>
+            </div>
+            <Button asChild size="sm" className="shrink-0 gap-2">
+              <Link href={`/experiments/new?project=${projectId}`}>
+                New experiment
+                <ArrowRight className="size-4" aria-hidden />
+              </Link>
+            </Button>
+          </div>
+        </div>
+      ) : null}
+
+      {/* Lab Notes, Protocols, and Samples cards intentionally removed — they
+          now live as sub-items under Experiments in the project sidebar, so
+          surfacing them as separate workspace cards was redundant. */}
+      <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
+        <WorkspaceCard
+          href={`/literature-reviews?project=${projectId}`}
+          newHref={`/literature-reviews/new?project=${projectId}`}
           icon={BookOpen}
+          tone="default"
+          name="Literature"
           count={literatureCount}
-          emptyTitle="No references yet"
-          emptyBody="Search literature and save papers to this project from your repository."
-          primaryCta={{
-            label: "Open literature",
-            href: `/literature-reviews?project=${projectId}&tab=repo`,
-          }}
-          secondaryCta={{
-            label: "Find",
-            href: `/literature-reviews?project=${projectId}&tab=search`,
-          }}
         >
-          {literature.slice(0, 5).map((row) => (
-            <li key={row.id}>
-              <Link
-                href={`/literature-reviews?project=${projectId}&tab=repo`}
-                className="group flex items-start gap-3 rounded-md px-1 py-1.5 text-sm transition-colors hover:bg-muted/40"
-              >
-                <span className="min-w-0 flex-1">
-                  <span className="block truncate text-foreground group-hover:text-primary">
-                    {row.title || "Untitled"}
-                  </span>
-                  {row.status ? (
-                    <span className="block truncate text-xs text-muted-foreground">
-                      {row.status.replace(/_/g, " ")}
-                    </span>
-                  ) : null}
-                </span>
-                <ArrowUpRight className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground group-hover:text-primary" />
-              </Link>
-            </li>
-          ))}
-        </SectionCard>
+          {literatureCount > 0
+            ? literature.slice(0, 3).map((l) => (
+                <PreviewLine key={l.id} href={`/literature-reviews/${l.id}`} text={l.title} />
+              ))
+            : null}
+        </WorkspaceCard>
 
-        <SectionCard
-          title="Protocols"
-          description="SOPs linked via experiments, lab notes in this project, or protocol project fields"
-          icon={ClipboardList}
-          count={protocolCount}
-          emptyTitle="No protocols linked yet"
-          emptyBody="Link from an experiment (Protocol & Assays), from a lab note, or set project/experiment on the protocol. You can also browse the library here."
-          primaryCta={{
-            label: "New protocol",
-            href: `/protocols/new?project=${projectId}`,
-          }}
-          secondaryCta={{
-            label: "Browse protocols",
-            href: `/protocols?project=${projectId}`,
-          }}
-        >
-          {protocols.slice(0, 5).map((row) => (
-            <li key={row.id}>
-              <Link
-                href={`/protocols/${row.id}?project=${projectId}`}
-                className="group flex items-start gap-3 rounded-md px-1 py-1.5 text-sm transition-colors hover:bg-muted/40"
-              >
-                <span className="min-w-0 flex-1">
-                  <span className="block truncate text-foreground group-hover:text-primary">
-                    {row.name || "Untitled"}
-                  </span>
-                  {row.version ? (
-                    <span className="block truncate text-xs text-muted-foreground">
-                      Version {row.version}
-                    </span>
-                  ) : null}
-                </span>
-                <ArrowUpRight className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground group-hover:text-primary" />
-              </Link>
-            </li>
-          ))}
-        </SectionCard>
-
-        <SectionCard
-          title="Experiments"
-          description="Runs and plans under this project"
+        <WorkspaceCard
+          href={`/experiments?project=${projectId}`}
+          newHref={`/experiments/new?project=${projectId}`}
           icon={FlaskConical}
-          count={experimentsCount}
-          emptyTitle="No experiments yet"
-          emptyBody="Create an experiment to organize protocols, samples, and lab notes for this project."
-          primaryCta={{
-            label: "New experiment",
-            href: `/experiments/new?project=${projectId}`,
-          }}
-          secondaryCta={{
-            label: "View experiments",
-            href: `/experiments?project=${projectId}`,
-          }}
+          tone="accent"
+          name="Experiments"
+          count={experimentsCount > 0 ? `${experimentsCount} active` : undefined}
         >
-          {experiments.slice(0, 5).map((row) => (
-            <li key={row.id}>
-              <Link
-                href={`/experiments/${row.id}?project=${projectId}`}
-                className="group flex items-start gap-3 rounded-md px-1 py-1.5 text-sm transition-colors hover:bg-muted/40"
-              >
-                <span className="min-w-0 flex-1">
-                  <span className="block truncate text-foreground group-hover:text-primary">
-                    {row.name || "Untitled"}
-                  </span>
-                </span>
-                <ArrowUpRight className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground group-hover:text-primary" />
-              </Link>
-            </li>
-          ))}
-        </SectionCard>
+          {experimentsCount > 0
+            ? experiments.slice(0, 3).map((e) => (
+                <PreviewLine
+                  key={e.id}
+                  href={`/experiments/${e.id}?project=${projectId}`}
+                  text={formatExperimentPreview(e)}
+                />
+              ))
+            : null}
+        </WorkspaceCard>
 
-        <SectionCard
-          title="Samples"
-          description="Inventory linked directly or through experiments"
-          icon={TestTube}
-          count={samplesCount}
-          emptyTitle="No samples linked yet"
-          emptyBody="Create or link samples to track material provenance in this project."
-          primaryCta={{
-            label: "New sample",
-            href: "/samples/new",
-          }}
-          secondaryCta={{
-            label: "View samples",
-            href: "/samples",
-          }}
+        <WorkspaceCard
+          href={
+            experiments[0]?.id
+              ? `/experiments/${experiments[0].id}?project=${projectId}&tab=data`
+              : `/experiments?project=${projectId}`
+          }
+          newHref={
+            experiments[0]?.id
+              ? `/experiments/${experiments[0].id}?project=${projectId}&tab=data`
+              : `/experiments/new?project=${projectId}`
+          }
+          icon={Database}
+          tone="leaf"
+          name="Data"
+          count={dataFilesCount}
         >
-          {samples.slice(0, 5).map((row) => (
-            <li key={row.id}>
-              <Link
-                href={`/samples/${row.id}`}
-                className="group flex items-start gap-3 rounded-md px-1 py-1.5 text-sm transition-colors hover:bg-muted/40"
-              >
-                <span className="min-w-0 flex-1">
-                  <span className="block truncate font-mono text-foreground group-hover:text-primary">
-                    {row.sample_code || "Sample"}
-                  </span>
-                  {row.sample_type ? (
-                    <span className="block truncate text-xs text-muted-foreground">{row.sample_type}</span>
-                  ) : null}
-                </span>
-                <ArrowUpRight className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground group-hover:text-primary" />
-              </Link>
-            </li>
-          ))}
-        </SectionCard>
+          {dataFilesCount > 0
+            ? dataFiles.slice(0, 3).map((f) => (
+                <PreviewLine
+                  key={f.id}
+                  href={
+                    f.experiment_id
+                      ? `/experiments/${f.experiment_id}?project=${projectId}&tab=data`
+                      : `/experiments?project=${projectId}`
+                  }
+                  text={f.file_name}
+                />
+              ))
+            : null}
+        </WorkspaceCard>
+
+        <WorkspaceCard
+          href={`/reports?project=${projectId}`}
+          newHref={`/reports?project=${projectId}&new=true`}
+          icon={BarChart3}
+          tone="neutral"
+          name="Reports"
+          count={reportsCount}
+        >
+          {reportsCount > 0
+            ? reports.slice(0, 3).map((r) => (
+                <PreviewLine key={r.id} href={`/reports/${r.id}`} text={r.title || "Untitled report"} />
+              ))
+            : null}
+        </WorkspaceCard>
+
+        <WorkspaceCard
+          href={`/papers?project=${projectId}`}
+          newHref={`/papers/new?project=${projectId}`}
+          icon={PenLine}
+          tone="accent"
+          name="Writing"
+          count={papersCount > 0 ? `${papersCount} drafts` : undefined}
+        >
+          {papersCount > 0
+            ? papers.slice(0, 3).map((p) => (
+                <PreviewLine key={p.id} href={`/papers/${p.id}`} text={p.title || "Untitled draft"} />
+              ))
+            : null}
+        </WorkspaceCard>
       </div>
-    </div>
+    </section>
   )
 }

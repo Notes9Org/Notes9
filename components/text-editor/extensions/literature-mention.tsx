@@ -129,11 +129,18 @@ export function createLiteratureSuggestion(
         items: ({ query }: { query: string }) => {
             const items = literatureRef.current
             return items
-                .filter(
-                    (item) =>
-                        item.title.toLowerCase().includes(query.toLowerCase()) ||
-                        (item.authors ?? "").toLowerCase().includes(query.toLowerCase())
-                )
+                .filter((item) => {
+                    try {
+                        if (!item) return false;
+                        const t = item.title || "Untitled";
+                        const a = item.authors || "";
+                        const q = query || "";
+                        return String(t).toLowerCase().includes(String(q).toLowerCase()) ||
+                               String(a).toLowerCase().includes(String(q).toLowerCase());
+                    } catch (e) {
+                        return false;
+                    }
+                })
                 .slice(0, 6)
         },
 

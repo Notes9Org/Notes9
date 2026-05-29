@@ -63,7 +63,7 @@ export function DeleteExperimentDialog({
       })
 
       // Redirect to experiments list
-      router.push("/experiments")
+      ;(() => { const pq = typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("project") : null; router.push(pq ? "/experiments?project=" + pq : "/experiments"); })()
       router.refresh()
     } catch (error: any) {
       console.error("Delete error:", error)

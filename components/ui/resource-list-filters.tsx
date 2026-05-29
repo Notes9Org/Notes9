@@ -25,6 +25,7 @@ type ResourceListFilterProps = {
   allLabel: string
   className?: string
   triggerClassName?: string
+  disabled?: boolean
 }
 
 export function ResourceListFilter({
@@ -35,11 +36,12 @@ export function ResourceListFilter({
   allLabel,
   className,
   triggerClassName,
+  disabled,
 }: ResourceListFilterProps) {
   return (
     <div className={cn("flex min-w-0 max-w-full flex-col gap-1.5", className)}>
       <Label className="text-xs text-muted-foreground">{label}</Label>
-      <Select value={value} onValueChange={onValueChange}>
+      <Select value={value} onValueChange={onValueChange} disabled={disabled}>
         <SelectTrigger className={cn("h-9", triggerClassName)} aria-label={label}>
           <SelectValue />
         </SelectTrigger>

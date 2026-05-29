@@ -88,6 +88,41 @@ export function SaveStatusIndicator({
   }
 
   const isIconOnly = variant === 'icon'
+  const isPassive = !onClick
+
+  if (isPassive) {
+    return (
+      <TooltipProvider delayDuration={300}>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <span
+              className={cn(
+                'inline-flex items-center justify-center',
+                isIconOnly ? 'h-8 w-8' : 'h-9 px-3 gap-2',
+                'transition-all rounded-md',
+                config.bgClassName,
+                config.className,
+                className
+              )}
+              aria-label={config.detail}
+            >
+              <Icon
+                className={cn('h-4 w-4', 'animate' in config && config.animate && 'animate-spin')}
+              />
+            </span>
+          </TooltipTrigger>
+          <TooltipContent side="bottom" className="max-w-xs">
+            <p className="text-sm">{config.detail}</p>
+            {status === 'saved' && lastSaved && (
+              <p className="text-xs text-muted-foreground mt-1">
+                {lastSaved.toLocaleString()}
+              </p>
+            )}
+          </TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
+    )
+  }
 
   return (
     <TooltipProvider delayDuration={300}>

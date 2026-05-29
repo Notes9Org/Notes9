@@ -501,10 +501,10 @@ export function Notes9VideoLoader({
             horizontal && compact && "max-w-[220px]",
           )}
         >
-          <p className={cn("text-base font-semibold leading-tight text-foreground/95", compact && "text-sm")}>
+          <p className={cn("text-2xl font-semibold leading-tight text-foreground", compact && "text-xl")}>
             {title}
           </p>
-          <p className={cn("text-sm leading-snug text-foreground/88 transition-opacity duration-500", compact && "text-xs")}>
+          <p className={cn("text-base leading-snug text-foreground/85 transition-opacity duration-500", compact && "text-sm")}>
             {resolvedCaptions[captionIndex]}
           </p>
         </div>

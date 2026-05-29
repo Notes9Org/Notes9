@@ -1,3 +1,5 @@
+import { verifyBearerToken } from "@/lib/verify-bearer-token"
+
 /** Long Biomni design-mode runs can exceed 120s; 300s matches typical Vercel Pro serverless max (raise on Fluid/self-host if needed). */
 export const maxDuration = 300;
 
@@ -39,11 +41,25 @@ type Body = {
 
 export async function POST(req: Request) {
   const headerToken = req.headers.get('Authorization')?.replace(/^Bearer\s+/i, '').trim();
-  const body = (await req.json().catch(() => ({}))) as Body;
+  let body: Body;
+  try {
+    body = (await req.json()) as Body;
+  } catch {
+    return new Response(JSON.stringify({ error: 'Bad Request: invalid JSON body' }), { status: 400, headers: { 'content-type': 'application/json' } });
+  }
   const token = headerToken;
 
   if (!token) {
     return new Response(JSON.stringify({ error: 'Authorization required. Provide Bearer token.' }), {
+      status: 401,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }
+
+  // Real JWT verification — `token` being non-empty is not authentication.
+  const _verifiedUser = await verifyBearerToken(token);
+  if (!_verifiedUser) {
+    return new Response(JSON.stringify({ error: 'Unauthorized' }), {
       status: 401,
       headers: { 'Content-Type': 'application/json' },
     });
@@ -93,6 +109,7 @@ export async function POST(req: Request) {
   }
 
   try {
+    const _upstreamStart = Date.now();
     const response = await fetch(UPSTREAM, {
       method: 'POST',
       headers: {
@@ -102,6 +119,7 @@ export async function POST(req: Request) {
       },
       body: JSON.stringify(forwardBody),
     });
+    console.log(JSON.stringify({ event: 'ai_upstream_complete', route: 'literature/biomni-stream', duration_ms: Date.now() - _upstreamStart, status: response.status, sessionId: (forwardBody as { session_id?: string })?.session_id ?? null }));
 
     if (!response.ok) {
       const errText = await response.text();

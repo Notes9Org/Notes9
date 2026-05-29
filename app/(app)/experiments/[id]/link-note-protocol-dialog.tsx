@@ -148,7 +148,7 @@ export function LinkNoteProtocolDialog({
                     </Button>
                 )}
             </DialogTrigger>
-            <DialogContent className="sm:max-w-[425px]">
+            <DialogContent dialogSize="sm">
                 <DialogHeader>
                     <DialogTitle>Link Protocol to Note</DialogTitle>
                     <DialogDescription>

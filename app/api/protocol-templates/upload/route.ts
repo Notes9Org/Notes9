@@ -14,6 +14,7 @@ import {
   getProtocolTemplatesStorageBucket,
 } from "@/lib/protocol-templates-storage"
 import { createClient } from "@/lib/supabase/server"
+import { getCurrentUser } from "@/lib/auth/current-user"
 import { PROTOCOL_TEMPLATE_MAX_FILE_BYTES } from "@/lib/protocol-template-types"
 
 export const runtime = "nodejs"
@@ -41,11 +42,8 @@ function resolveMimeType(file: File): string {
 export async function POST(request: Request) {
   try {
     const supabase = await createClient()
-    const {
-      data: { user },
-      error: authError,
-    } = await supabase.auth.getUser()
-    if (authError || !user) {
+    const user = await getCurrentUser()
+    if (!user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 

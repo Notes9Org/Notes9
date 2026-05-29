@@ -71,10 +71,22 @@ export function AgentStreamReply({
 }: AgentStreamReplyProps) {
   const displayAnswer =
     donePayload?.content ?? donePayload?.answer ?? streamedAnswer;
-  const grounding =
+  const rawGrounding =
     donePayload?.resources?.length
       ? donePayload.resources
       : donePayload?.citations ?? [];
+
+  // Only surface resources whose [N] marker is present in the answer text,
+  // and where the citation is used positively (not just to say "unrelated to X").
+  const body = displayAnswer ?? '';
+  const NEGATION = /\b(does not|doesn't|not related|nothing to do|no (?:text|information|content|data)|does not reference|not reference|unrelated)\b/i;
+  const grounding = rawGrounding.filter((_, i) => {
+    const marker = `[${i + 1}]`;
+    const idx = body.indexOf(marker);
+    if (idx === -1) return false;
+    const window = body.slice(Math.max(0, idx - 120), idx + 20);
+    return !NEGATION.test(window);
+  });
 
   const mergedCitationItems = mergeGroundingAndRagItems(grounding, ragChunks?.chunks);
   const hasCitationPanel = mergedCitationItems.length > 0;
@@ -187,7 +199,7 @@ export function AgentStreamReply({
             ) : (
               /* No content yet — standalone cursor */
               <span
-                className="inline-block w-[3px] h-[1em] bg-foreground/70 rounded-sm animate-cursor-blink translate-y-[2px]"
+                className="inline-block h-4 w-1 bg-foreground/70 rounded-sm animate-cursor-blink translate-y-[2px]"
                 aria-hidden
               />
             )}

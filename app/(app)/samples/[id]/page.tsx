@@ -1,10 +1,12 @@
-import { redirect, notFound } from 'next/navigation'
+import { notFound } from 'next/navigation'
 import type { ReactNode } from 'react'
 import { createClient } from "@/lib/supabase/server"
+import { requireUser } from "@/lib/auth/current-user"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
+import { PageHeading } from "@/components/ui/page-heading"
 import { SetPageBreadcrumb } from "@/components/layout/breadcrumb-context"
 import { ArrowLeft, Calendar, Dna, FlaskConical, Link2, MapPin, Package, ShieldAlert, Thermometer } from 'lucide-react'
 import Link from 'next/link'
@@ -79,15 +81,8 @@ export default async function SampleDetailPage({
   const { id } = await params
   const resolvedSearch = searchParams ? await searchParams : {}
   const initialTab = resolvedSearch.tab ?? "overview"
+  const user = await requireUser()
   const supabase = await createClient()
-
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-  if (!user) {
-    redirect("/auth/login")
-  }
-
   let { data: sample, error } = await supabase
     .from("samples")
     .select(`
@@ -265,9 +260,9 @@ export default async function SampleDetailPage({
           </Button>
           <div className="min-w-0 space-y-1">
             <div className="flex flex-wrap items-center gap-2">
-              <h1 className="text-2xl font-bold tracking-tight text-foreground md:text-3xl">
+              <PageHeading>
                 {sample.sample_code}
-              </h1>
+              </PageHeading>
               <Badge variant={getStatusColor(sample.status)}>
                 {sample.status}
               </Badge>

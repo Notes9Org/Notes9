@@ -158,6 +158,7 @@ export function ProtocolTemplatePicker({
   const [documentTemplates, setDocumentTemplates] = useState<DocumentTemplateRow[]>([])
   const [loadingProtocols, setLoadingProtocols] = useState(false)
   const [loadingDocuments, setLoadingDocuments] = useState(false)
+  const [loadError, setLoadError] = useState<string | null>(null)
   const [search, setSearch] = useState("")
 
   useEffect(() => {
@@ -189,9 +190,10 @@ export function ProtocolTemplatePicker({
       })
   }, [organizationId, includeLibraryProtocols])
 
-  useEffect(() => {
+  const fetchDocumentTemplates = () => {
     if (!organizationId) return
     setLoadingDocuments(true)
+    setLoadError(null)
     fetch("/api/protocol-templates")
       .then((r) => r.json())
       .then((data) => {
@@ -210,8 +212,16 @@ export function ProtocolTemplatePicker({
           }))
         )
       })
-      .catch(() => setDocumentTemplates([]))
+      .catch((err) => {
+        setLoadError("Couldn't load templates. Please retry.")
+        console.error('protocol_templates_fetch_failed', err)
+      })
       .finally(() => setLoadingDocuments(false))
+  }
+
+  useEffect(() => {
+    fetchDocumentTemplates()
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [organizationId])
 
   const q = search.toLowerCase().trim()
@@ -336,7 +346,20 @@ export function ProtocolTemplatePicker({
             )
           })}
 
-        {!isLoading && filteredDoc.length === 0 && !includeLibraryProtocols && !q && (
+        {!isLoading && loadError && (
+          <div className="col-span-full rounded-lg border border-dashed border-destructive/40 bg-destructive/5 px-4 py-6 text-center text-sm text-destructive">
+            {loadError}
+            <button
+              type="button"
+              onClick={fetchDocumentTemplates}
+              className="ml-2 underline underline-offset-2 hover:opacity-80 transition-opacity"
+            >
+              Retry
+            </button>
+          </div>
+        )}
+
+        {!isLoading && !loadError && filteredDoc.length === 0 && !includeLibraryProtocols && !q && (
           <div className="col-span-full rounded-lg border border-dashed border-muted-foreground/25 bg-muted/20 px-4 py-6 text-center text-sm text-muted-foreground">
             No document templates yet. Upload DOCX or PDF under{" "}
             <span className="font-medium text-foreground">Protocols → Templates</span>.

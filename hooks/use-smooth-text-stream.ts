@@ -26,39 +26,44 @@ export function useSmoothTextStream(
   } = options;
 
   const [displayText, setDisplayText] = useState('');
+  // Ref mirror of displayText — read inside effects/RAF without re-triggering deps.
+  const displayTextRef = useRef('');
   const queueRef = useRef<string>('');
   const lastRenderRef = useRef<number>(0);
   const rafIdRef = useRef<number | null>(null);
 
-  // When smoothing is disabled, pass through immediately
+  // When smoothing is disabled, pass through immediately.
   useEffect(() => {
     if (!enabled) {
       setDisplayText(incomingText);
-      return;
+      displayTextRef.current = incomingText;
     }
   }, [incomingText, enabled]);
 
-  // Add new text to queue
+  // Add new text to queue. Does NOT list displayText as a dep — reads via ref
+  // instead to avoid re-scheduling a second RAF on every setDisplayText call.
   useEffect(() => {
     if (!enabled) return;
 
-    const newChars = incomingText.slice(displayText.length);
+    const newChars = incomingText.slice(displayTextRef.current.length);
     if (!newChars) return;
 
     queueRef.current += newChars;
 
-    // Force flush if queue is too large
+    // Force flush if queue is too large.
     if (queueRef.current.length > maxQueueSize) {
+      displayTextRef.current = incomingText;
       setDisplayText(incomingText);
       queueRef.current = '';
       return;
     }
 
-    // Start rendering loop if not already running
-    if (rafIdRef.current === null) {
+    // Start rendering loop only when one isn't already running.
+    if (queueRef.current.length > 0 && rafIdRef.current === null) {
       rafIdRef.current = requestAnimationFrame(renderLoop);
     }
-  }, [incomingText, displayText, enabled, maxQueueSize]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [incomingText, enabled, maxQueueSize]);
 
   const renderLoop = (timestamp: number) => {
     if (!enabled) return;
@@ -66,51 +71,51 @@ export function useSmoothTextStream(
     const elapsed = timestamp - lastRenderRef.current;
 
     if (elapsed < minDelay) {
-      // Too soon, wait for next frame
       rafIdRef.current = requestAnimationFrame(renderLoop);
       return;
     }
 
     if (queueRef.current.length === 0) {
-      // Queue empty, stop loop
       rafIdRef.current = null;
       return;
     }
 
-    // Render next chunk (3-5 chars for smooth feel)
+    // Render next chunk (3-5 chars for smooth feel).
     const chunkSize = Math.min(5, queueRef.current.length);
     const chunk = queueRef.current.slice(0, chunkSize);
     queueRef.current = queueRef.current.slice(chunkSize);
 
-    setDisplayText((prev) => prev + chunk);
+    const next = displayTextRef.current + chunk;
+    displayTextRef.current = next;
+    setDisplayText(next);
     lastRenderRef.current = timestamp;
 
-    // Continue loop
     rafIdRef.current = requestAnimationFrame(renderLoop);
   };
 
-  // Cleanup
+  // Cleanup on unmount.
   useEffect(() => {
     return () => {
       if (rafIdRef.current !== null) {
         cancelAnimationFrame(rafIdRef.current);
+        rafIdRef.current = null;
       }
     };
   }, []);
 
-  // Sync displayText when incoming text is finalized (stream ends)
+  // Sync displayText when incoming text is finalized (stream ends).
   useEffect(() => {
     if (!enabled) return;
 
-    // If incoming text hasn't changed for 500ms and queue is empty, sync
     const timer = setTimeout(() => {
-      if (displayText !== incomingText && queueRef.current.length === 0) {
+      if (displayTextRef.current !== incomingText && queueRef.current.length === 0) {
+        displayTextRef.current = incomingText;
         setDisplayText(incomingText);
       }
     }, 500);
 
     return () => clearTimeout(timer);
-  }, [incomingText, displayText, enabled]);
+  }, [incomingText, enabled]);
 
   return enabled ? displayText : incomingText;
 }

@@ -1,5 +1,5 @@
 import { redirect } from 'next/navigation'
-import { createClient } from "@/lib/supabase/server"
+import { getCurrentUser } from "@/lib/auth/current-user"
 import { Header } from "@/components/marketing/header"
 import { Footer } from "@/components/marketing/footer"
 import { AcademicHero } from "@/components/marketing/academic-hero"
@@ -12,18 +12,6 @@ import { FloatingPageMenu } from "@/components/marketing/floating-page-menu"
 import { InteractiveParticles } from "@/components/ui/interactive-particles"
 
 import "@/styles/marketing.css"
-import { DM_Sans, DM_Serif_Display } from "next/font/google"
-
-const dmSans = DM_Sans({
-  subsets: ["latin"],
-  variable: "--font-dm-sans",
-})
-
-const dmSerif = DM_Serif_Display({
-  weight: "400",
-  subsets: ["latin"],
-  variable: "--font-dm-serif",
-})
 
 export default async function HomePage({
   searchParams,
@@ -39,8 +27,12 @@ export default async function HomePage({
     return redirect(`/auth/callback?code=${code}`)
   }
 
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
+  let user = null
+  try {
+    user = await getCurrentUser()
+  } catch (error) {
+    console.error("HomePage failed to fetch user from Supabase (offline/timeout):", error)
+  }
 
   if (user) {
     redirect("/dashboard")
@@ -62,7 +54,13 @@ export default async function HomePage({
   }
 
   return (
-    <div className={`marketing-theme ${dmSans.variable} ${dmSerif.variable} font-sans min-h-screen flex flex-col bg-background text-foreground relative overflow-hidden`}>
+    <div
+      className="marketing-theme font-sans min-h-screen flex flex-col bg-background text-foreground relative overflow-hidden"
+      style={{
+        "--font-dm-sans": "var(--font-dm-sans, 'DM Sans', sans-serif)",
+        "--font-dm-serif": "var(--font-dm-serif, 'DM Serif Display', serif)",
+      } as React.CSSProperties}
+    >
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(organizationJsonLd) }}

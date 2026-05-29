@@ -12,8 +12,45 @@ const contactSchema = z.object({
   company: z.string().max(200).optional().default(""),
 })
 
+// Best-effort per-IP rate limit. This is a public (unauthenticated) marketing
+// endpoint that sends mail through Resend, so without a limit anyone can burn
+// sending quota / get the domain flagged. In-memory is per-instance only — for
+// multi-instance prod, back this with Upstash/Redis. Still raises the bar.
+const RATE_LIMIT_MAX = 3
+const RATE_LIMIT_WINDOW_MS = 60_000
+const contactHits = new Map<string, number[]>()
+
+function rateLimited(ip: string): boolean {
+  const now = Date.now()
+  const recent = (contactHits.get(ip) ?? []).filter((t) => now - t < RATE_LIMIT_WINDOW_MS)
+  if (recent.length >= RATE_LIMIT_MAX) {
+    contactHits.set(ip, recent)
+    return true
+  }
+  recent.push(now)
+  contactHits.set(ip, recent)
+  // Opportunistic cleanup so the map can't grow unbounded.
+  if (contactHits.size > 5000) {
+    for (const [k, v] of contactHits) {
+      if (v.every((t) => now - t >= RATE_LIMIT_WINDOW_MS)) contactHits.delete(k)
+    }
+  }
+  return false
+}
+
 export async function POST(request: NextRequest) {
   try {
+    const ip =
+      request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
+      request.headers.get("x-real-ip") ||
+      "unknown"
+    if (rateLimited(ip)) {
+      return NextResponse.json(
+        { error: "Too many requests. Please try again in a minute." },
+        { status: 429 }
+      )
+    }
+
     const json = await request.json()
     const parsed = contactSchema.safeParse(json)
 

@@ -1,6 +1,6 @@
-import { CatalystChat } from '@/components/catalyst/catalyst-page';
+import { CatalystFullPage } from "@/components/catalyst/catalyst-full-page"
 
 export default function CatalystPage() {
-  return <CatalystChat />;
+  return <CatalystFullPage />
 }
 

@@ -14,9 +14,11 @@ import { PrivacyContent } from "@/components/marketing/privacy-content"
 import { acceptTermsAction } from "@/app/actions/terms"
 import { useRouter } from "next/navigation"
 import { toast } from "sonner"
+import { createClient } from "@/lib/supabase/client"
 
 export function TermsAcceptanceModal() {
     const [isLoading, setIsLoading] = useState(false)
+    const [isSigningOut, setIsSigningOut] = useState(false)
     const router = useRouter()
 
     const handleAccept = async () => {
@@ -30,6 +32,19 @@ export function TermsAcceptanceModal() {
             console.error(error)
         } finally {
             setIsLoading(false)
+        }
+    }
+
+    const handleSignOut = async () => {
+        setIsSigningOut(true)
+        try {
+            const supabase = createClient()
+            await supabase.auth.signOut()
+            router.push("/auth/login")
+        } catch (err) {
+            toast.error("Failed to sign out. Please refresh the page.")
+            console.error(err)
+            setIsSigningOut(false)
         }
     }
 
@@ -49,8 +64,11 @@ export function TermsAcceptanceModal() {
                     </div>
                 </div>
 
-                <DialogFooter className="px-6 py-4 border-t shrink-0 bg-background">
-                    <Button onClick={handleAccept} disabled={isLoading} className="w-full sm:w-auto">
+                <DialogFooter className="px-6 py-4 border-t shrink-0 bg-background gap-2 sm:gap-2">
+                    <Button variant="ghost" onClick={handleSignOut} disabled={isLoading || isSigningOut} className="w-full sm:w-auto">
+                        {isSigningOut ? "Signing out..." : "Sign out"}
+                    </Button>
+                    <Button onClick={handleAccept} disabled={isLoading || isSigningOut} className="w-full sm:w-auto">
                         {isLoading ? "Processing..." : "Agree and Proceed"}
                     </Button>
                 </DialogFooter>

@@ -648,8 +648,8 @@ export function SamplePlasmidViewer({
     ? "fixed inset-0 z-50 overflow-auto bg-background p-3 space-y-3"
     : "space-y-3"
   const mapHeight = fullscreen
-    ? "h-[calc(100vh-360px)]"
-    : "h-[calc(100vh-360px)] min-h-[440px]"
+    ? "h-[calc(100dvh-360px)]"
+    : "h-[calc(100dvh-360px)] min-h-[440px]"
 
   return (
     <div className={containerClass}>
