@@ -23,11 +23,26 @@ export default async function ExperimentsPage({
 }) {
   const user = await requireUser()
   const supabase = await createClient()
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("organization_id")
-    .eq("id", user.id)
-    .single()
+  // `profile` and the unfiltered `experiments` list are independent — fetch
+  // in parallel. `orgProjects` has to wait for `profile.organization_id`.
+  const [profileRes, experimentsRes] = await Promise.all([
+    supabase
+      .from("profiles")
+      .select("organization_id")
+      .eq("id", user.id)
+      .single(),
+    supabase
+      .from("experiments")
+      .select(`
+        *,
+        project:projects(id, name),
+        assigned_to:profiles!experiments_assigned_to_fkey(first_name, last_name)
+      `)
+      .order("created_at", { ascending: false }),
+  ])
+  const profile = profileRes.data
+  const experiments = experimentsRes.data
+
   const orgId = profile?.organization_id
   const { data: orgProjects = [] } = orgId
     ? await supabase.from("projects").select("id").eq("organization_id", orgId)
@@ -45,16 +60,6 @@ export default async function ExperimentsPage({
       .single()
     if (proj) projectContext = { id: proj.id, name: proj.name }
   }
-
-  // Fetch experiments
-  const { data: experiments } = await supabase
-    .from("experiments")
-    .select(`
-      *,
-      project:projects(id, name),
-      assigned_to:profiles!experiments_assigned_to_fkey(first_name, last_name)
-    `)
-    .order("created_at", { ascending: false })
 
   return (
       <div className="space-y-6">

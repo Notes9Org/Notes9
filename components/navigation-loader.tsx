@@ -9,14 +9,14 @@ export const MAX_LOADER_DURATION_MS = 8000
 export const AUTH_MAX_LOADER_DURATION_MS = 12000
 
 const RESEARCH_FUN_FACTS = [
-  "Researchers often spend more time finding prior context than rewriting the final paragraph.",
-  "Well-linked notes reduce repeat experiment setup because the rationale stays attached to the protocol.",
-  "A searchable lab memory can cut handoff friction when projects move between scientists.",
-  "Most literature reviews improve when claims, source files, and experiment outcomes stay connected.",
-  "Teams lose less knowledge over time when decisions are captured near the data that triggered them.",
-  "Small documentation gaps compound quickly in long-running research programs.",
-  "Structured experiment notes make retrospective analysis faster because assumptions stay visible.",
-  "Literature retrieval gets easier when keywords, methods, and findings are stored in one workflow.",
+  "Mascot is filing your notes before the coffee cools.",
+  "Untangling a small ball of citations. Almost there.",
+  "Catching the page before it scrolls away.",
+  "Persuading the database to share its secrets.",
+  "Counting pipettes so you don't have to.",
+  "Bribing the loading bar with a fresh dataset.",
+  "Sharpening pencils and aligning footnotes.",
+  "Lightly dusting the experiment notebook.",
 ]
 
 export function extractPathname(href: string): string {
@@ -98,69 +98,69 @@ function buildLoaderCopy(actionLabel: string, variant: Notes9LoaderVariant) {
   const variantCaptions =
     variant === "literature"
       ? [
-          "Mascot is scanning books and surfacing the strongest sources.",
-          "Context improves when evidence stays linked to the work.",
-          "Structured literature review reduces repeated searching later.",
+          "Mascot is stacking papers into a precarious tower.",
+          "Skimming abstracts at lightning speed (well, almost).",
+          "Borrowing one more book from the library.",
         ]
       : variant === "writing"
         ? [
-            "Mascot is setting up the writing desk and sharpening the pen.",
-            "Clear structure helps ideas flow from outline to finished draft.",
-            "Good writing starts when notes, citations, and context stay connected.",
+            "Sharpening pencils, dusting the writing desk.",
+            "Negotiating with the blank page.",
+            "Plotting your next great paragraph.",
           ]
       : variant === "auth"
         ? [
-            "Mascot is preparing your secure workspace access.",
-            "Opening the sign in flow and loading your research environment.",
-            "Getting Notes9 ready before you enter the workspace.",
+            "Polishing the workspace before you walk in.",
+            "Unrolling the welcome mat.",
+            "Pouring a fresh cup before the doors open.",
           ]
       : variant === "search"
         ? [
-            "Mascot is sweeping the workspace with a magnifying glass.",
-            "Fast retrieval matters when experiments depend on prior context.",
-            "Good search reduces time lost to context switching.",
+            "Magnifying glass deployed. Standing by.",
+            "Checking every drawer for the right paper.",
+            "Reading minds is hard. Reading indexes is faster.",
           ]
         : variant === "projects"
           ? [
-              "Mascot is stacking the project floor one layer at a time.",
-              "Clear project structure keeps experiments and notes connected.",
-              "Hierarchy helps research teams see status without hunting for it.",
+              "Stacking project folders into a tidy pile.",
+              "Naming files because the hard part is naming things.",
+              "Calibrating Gantt chart energy.",
             ]
           : variant === "experiments"
           ? [
-              "Mascot is setting up a pipette and test tube for the experiment view.",
-              "Experiment continuity improves when notes, files, and protocol stay together.",
-              "Execution moves faster when setup details remain attached to the run.",
+              "Pipettes uncapped. Test tubes in formation.",
+              "Reviewing your last brilliant hypothesis.",
+              "Whispering encouragement to the bench.",
             ]
           : variant === "samples"
             ? [
-                "Mascot is cycling sample tubes into view for the inventory.",
-                "Sample traceability improves when material context stays attached to each record.",
-                "Consistent sample tracking reduces ambiguity across experiments and reviews.",
+                "Sample tubes spinning into place.",
+                "Counting freezer racks one more time.",
+                "Labels straight, lids tight.",
               ]
             : variant === "equipment"
               ? [
-                  "Mascot is lining up the microscope for the equipment view.",
-                  "Instrument visibility improves when status, location, and history stay connected.",
-                  "Equipment context helps teams plan runs without checking multiple systems.",
+                  "Tuning the microscope to your favorite focus.",
+                  "Plugging in the spectrometer one cable at a time.",
+                  "Asking the centrifuge nicely to behave today.",
                 ]
               : variant === "research-map"
                 ? [
-                    "Mascot is tracing the links between your projects, experiments, protocols, and papers.",
-                    "Research maps are most useful when the connections stay visible, not just the individual records.",
-                    "Linked entities make it easier to follow how evidence and execution fit together.",
+                    "Connecting the dots between everything you've built.",
+                    "Drawing arrows the satisfying way.",
+                    "Mapping protocols → papers → results.",
                   ]
                 : variant === "protocols"
                   ? [
-                      "Mascot is writing protocol steps beside the notebook.",
-                      "Protocol clarity reduces ambiguity before experiments begin.",
-                      "Well-defined methods make repeats more reliable.",
+                      "Steps in order, units double-checked.",
+                      "Translating wet-lab to dry-text.",
+                      "Hiding the ambiguities under reproducible methods.",
                     ]
                   : variant === "notes"
                     ? [
-                        "Mascot is opening the lab notebook and setting the page.",
-                        "Well-kept notes preserve rationale, not just results.",
-                        "Documentation is most useful when it stays close to execution.",
+                        "Opening the lab notebook to a fresh page.",
+                        "Catching observations before they escape.",
+                        "Stitching today's results into the bigger story.",
                       ]
                     : RESEARCH_FUN_FACTS
 

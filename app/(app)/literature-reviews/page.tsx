@@ -18,22 +18,25 @@ export default async function LiteratureReviewsPage({
   const sp = searchParams ? await searchParams : {}
   const user = await requireUser()
   const supabase = await createClient()
-  // Fetch literature reviews with related data
-  const { data: literatureReviews } = await supabase
-    .from("literature_reviews")
-    .select(`
-      *,
-      project:projects(id, name),
-      experiment:experiments(id, name),
-      created_by_profile:profiles!literature_reviews_created_by_fkey(first_name, last_name)
-    `)
-    .order("created_at", { ascending: false })
-
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("organization_id")
-    .eq("id", user.id)
-    .single()
+  // `literatureReviews` and `profile` are independent — parallelize.
+  const [literatureReviewsRes, profileRes] = await Promise.all([
+    supabase
+      .from("literature_reviews")
+      .select(`
+        *,
+        project:projects(id, name),
+        experiment:experiments(id, name),
+        created_by_profile:profiles!literature_reviews_created_by_fkey(first_name, last_name)
+      `)
+      .order("created_at", { ascending: false }),
+    supabase
+      .from("profiles")
+      .select("organization_id")
+      .eq("id", user.id)
+      .single(),
+  ])
+  const literatureReviews = literatureReviewsRes.data
+  const profile = profileRes.data
 
   const organizationId = profile?.organization_id
 

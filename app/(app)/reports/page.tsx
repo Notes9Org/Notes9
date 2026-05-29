@@ -9,22 +9,26 @@ import { CatalystSectionHero } from "@/components/catalyst/catalyst-section-hero
 export default async function ReportsPage() {
   const user = await requireUser()
   const supabase = await createClient()
-  const { data: reports } = await supabase
-    .from("reports")
-    .select(`
-      *,
-      project:projects(id, name),
-      experiment:experiments(id, name),
-      generated_by:profiles!reports_generated_by_fkey(first_name, last_name)
-    `)
-    .order("created_at", { ascending: false })
-
-  // Fetch profile to get organization_id (same pattern as literature-reviews page)
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("organization_id")
-    .eq("id", user.id)
-    .single()
+  // `reports` and `profile` don't depend on each other — fan them out in
+  // parallel to cut one roundtrip off every reports-page load.
+  const [reportsRes, profileRes] = await Promise.all([
+    supabase
+      .from("reports")
+      .select(`
+        *,
+        project:projects(id, name),
+        experiment:experiments(id, name),
+        generated_by:profiles!reports_generated_by_fkey(first_name, last_name)
+      `)
+      .order("created_at", { ascending: false }),
+    supabase
+      .from("profiles")
+      .select("organization_id")
+      .eq("id", user.id)
+      .single(),
+  ])
+  const reports = reportsRes.data
+  const profile = profileRes.data
 
   const organizationId = profile?.organization_id
 

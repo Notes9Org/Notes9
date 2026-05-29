@@ -13,11 +13,25 @@ export default async function ProtocolsPage({
 }) {
   const user = await requireUser()
   const supabase = await createClient()
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("organization_id")
-    .eq("id", user.id)
-    .single()
+  // `profile` and the protocols list are independent — fan out in parallel.
+  // `orgProjects` still has to wait for `profile.organization_id` below.
+  const [profileRes, protocolsRes] = await Promise.all([
+    supabase
+      .from("profiles")
+      .select("organization_id")
+      .eq("id", user.id)
+      .single(),
+    supabase
+      .from("protocols")
+      .select(`
+        *,
+        experiment_protocols(count)
+      `)
+      .eq("is_active", true)
+      .order("name"),
+  ])
+  const profile = profileRes.data
+  const protocols = protocolsRes.data
 
   const orgId = profile?.organization_id
   const { data: orgProjects = [] } = orgId
@@ -45,15 +59,6 @@ export default async function ProtocolsPage({
       projectContext = { id: proj.id, name: proj.name, protocolIds }
     }
   }
-
-  const { data: protocols } = await supabase
-    .from("protocols")
-    .select(`
-      *,
-      experiment_protocols(count)
-    `)
-    .eq("is_active", true)
-    .order("name")
 
   // Attempt to enrich with project/experiment context (requires migration 030).
   // If the columns don't exist yet the enrichment silently fails and protocols

@@ -74,17 +74,32 @@ export async function updateSession(request: NextRequest) {
     return supabaseResponse
   }
 
+  // Three outcomes from the Supabase auth check:
+  //   - verified user         → continue
+  //   - definitively no user  → redirect to /auth/login
+  //   - call threw (network timeout, offline, transient blip)
+  //     → DO NOT bounce a logged-in user to /auth/login. Let the request
+  //       through and rely on the page's own `requireUser()` check (same
+  //       Supabase call, but with cookies fully settled and React.cache
+  //       deduping the verification). Previously this redirected on any
+  //       failure, causing the login page to flash mid-navigation whenever
+  //       getUser() timed out for a still-authenticated user.
+  let authCallSucceeded = false
   let user = null
   try {
     const {
       data: { user: fetchedUser },
     } = await supabase.auth.getUser()
     user = fetchedUser
+    authCallSucceeded = true
   } catch (error) {
-    console.error("Middleware failed to fetch user from Supabase (connection timeout or offline):", error)
+    console.warn(
+      "[middleware] auth.getUser() failed; deferring auth check to the page:",
+      error,
+    )
   }
 
-  if (!user) {
+  if (authCallSucceeded && !user) {
     const loginUrl = new URL("/auth/login", request.url)
     const returnPath =
       request.nextUrl.pathname +

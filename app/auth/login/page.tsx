@@ -35,6 +35,26 @@ function safeNextPath(raw: string | null): string {
 
 const SIGN_IN_TIMEOUT_MS = 30_000
 
+/**
+ * Detects the browser's network-level "Failed to fetch" so we can translate it
+ * into a human-readable hint instead of a TypeError that scares the user. This
+ * fires when the request can't reach the server at all — paused Supabase
+ * project, offline, ad blocker, content-blocker extensions, captive portals,
+ * DNS hiccups, etc. The actual auth response (wrong password, etc.) never
+ * comes through this path.
+ */
+function isFailedToFetchError(err: unknown): boolean {
+  if (!(err instanceof Error)) return false
+  return /failed to fetch|network ?error|load failed/i.test(err.message)
+}
+
+function friendlyAuthErrorMessage(err: unknown, fallback: string): string {
+  if (isFailedToFetchError(err)) {
+    return "Couldn't reach the sign-in service. Check your internet connection (or any ad/script blockers) and try again."
+  }
+  return err instanceof Error ? err.message : fallback
+}
+
 function LoginForm() {
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
@@ -76,7 +96,11 @@ function LoginForm() {
     setIsLoading(true)
     setError(null)
 
-    try {
+    // Network-only errors get one transparent retry after a short pause. A
+    // genuine credentials failure or any other supabase error path returns
+    // immediately — we only retry the "Failed to fetch" / browser-blocked
+    // case where retrying might succeed.
+    const attemptSignIn = async () => {
       const signInPromise = supabase.auth.signInWithPassword({ email, password })
       const timeoutPromise = new Promise<never>((_, reject) => {
         setTimeout(
@@ -84,9 +108,20 @@ function LoginForm() {
           SIGN_IN_TIMEOUT_MS,
         )
       })
+      return Promise.race([signInPromise, timeoutPromise])
+    }
 
-      const { error } = await Promise.race([signInPromise, timeoutPromise])
+    try {
+      let result: Awaited<ReturnType<typeof attemptSignIn>>
+      try {
+        result = await attemptSignIn()
+      } catch (firstErr) {
+        if (!isFailedToFetchError(firstErr)) throw firstErr
+        await new Promise((r) => setTimeout(r, 800))
+        result = await attemptSignIn()
+      }
 
+      const { error } = result
       if (error) {
         if (error.message.includes('Invalid login credentials')) {
           setError("Wrong email or password. Please try again.")
@@ -104,7 +139,7 @@ function LoginForm() {
 
       router.push(destination)
     } catch (error: unknown) {
-      setError(error instanceof Error ? error.message : "An error occurred")
+      setError(friendlyAuthErrorMessage(error, "An error occurred"))
     } finally {
       setIsLoading(false)
     }
@@ -136,7 +171,7 @@ function LoginForm() {
       })
       if (error) throw error
     } catch (error: unknown) {
-      setError(error instanceof Error ? error.message : "An error occurred")
+      setError(friendlyAuthErrorMessage(error, "An error occurred"))
       setIsLoading(false)
     }
   }
@@ -240,9 +275,19 @@ function LoginForm() {
                 </div>
               </div>
 
-              <form onSubmit={handleLogin}>
-                <div className="flex flex-col gap-4">
-                  <div className="grid gap-2">
+              {/*
+                Password-manager extensions (1Password, LastPass, Bitwarden,
+                Dashlane) inject data-* attributes onto the form and the
+                wrappers around email/password inputs *after* server render but
+                *before* React hydrates, which raises a hydration mismatch
+                logged on these wrapper elements. `suppressHydrationWarning`
+                only suppresses warnings for attributes/text and does NOT mask
+                real bugs (children mismatches still surface), so it's the
+                correct fix here. The Input component itself already has it.
+              */}
+              <form onSubmit={handleLogin} suppressHydrationWarning>
+                <div className="flex flex-col gap-4" suppressHydrationWarning>
+                  <div className="grid gap-2" suppressHydrationWarning>
                     <Label htmlFor="email">Email</Label>
                     <Input
                       id="email"
@@ -251,12 +296,11 @@ function LoginForm() {
                       required
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
-                      suppressHydrationWarning
                     />
                   </div>
-                  <div className="grid gap-2">
+                  <div className="grid gap-2" suppressHydrationWarning>
                     <Label htmlFor="password">Password</Label>
-                    <div className="relative">
+                    <div className="relative" suppressHydrationWarning>
                       <Input
                         id="password"
                         type={showPassword ? "text" : "password"}

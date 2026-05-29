@@ -41,7 +41,9 @@ export default async function DashboardPage() {
   const dayStart = new Date(now.getTime() - 36 * 60 * 60 * 1000)
   const dayEnd = new Date(now.getTime() + 36 * 60 * 60 * 1000)
 
-  // Fan out the lab-signal queries in parallel.
+  // Fan out the lab-signal queries in parallel. `profile` and `orgMembership`
+  // are needed later for the "My Lab" footer; folding them in here avoids two
+  // extra serial roundtrips after the main fan-out completes.
   const [
     projectsHeadRes,
     activeExperimentsRes,
@@ -51,6 +53,8 @@ export default async function DashboardPage() {
     allTasksRes,
     allEventsRes,
     whiteboardNotesRes,
+    profileRes,
+    orgMembershipRes,
   ] = await Promise.all([
     supabase.from("projects").select("id", { count: "exact", head: true }).limit(1),
     supabase
@@ -94,6 +98,17 @@ export default async function DashboardPage() {
       .eq("user_id", user.id)
       .is("project_id", null)
       .order("created_at", { ascending: true }),
+    supabase
+      .from("profiles")
+      .select("organization_id")
+      .eq("id", user.id)
+      .single(),
+    supabase
+      .from("org_members")
+      .select("id")
+      .eq("user_id", user.id)
+      .eq("is_active", true)
+      .maybeSingle(),
   ])
 
   const hasProjects = (projectsHeadRes.count ?? 0) > 0
@@ -140,18 +155,8 @@ export default async function DashboardPage() {
     .sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime())
     .slice(0, 5)
 
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("organization_id")
-    .eq("id", user.id)
-    .single()
-
-  const { data: orgMembership } = await supabase
-    .from("org_members")
-    .select("id")
-    .eq("user_id", user.id)
-    .eq("is_active", true)
-    .maybeSingle()
+  const profile = profileRes.data
+  const orgMembership = orgMembershipRes.data
 
   let labSummary: DashboardLabSummary | null = null
   const orgId = profile?.organization_id

@@ -33,11 +33,30 @@ export default async function ReportDetailPage({
       ? `${report.title.substring(0, 50)}...`
       : report.title
 
+  // Prepend the project context (Projects → [Project name]) so the breadcrumb
+  // matches the rest of the project-scoped views instead of jumping straight
+  // to /reports. Falls back to a flat trail when the report has no project.
+  const projectSegments =
+    report.project && typeof report.project === "object" && "id" in report.project
+      ? [
+          { label: "Projects", href: "/projects" },
+          {
+            label: (report.project as { name?: string | null }).name || "Untitled Project",
+            href: `/projects/${(report.project as { id: string }).id}`,
+          },
+        ]
+      : []
+  const reportsHref =
+    report.project && typeof report.project === "object" && "id" in report.project
+      ? `/reports?project=${(report.project as { id: string }).id}`
+      : "/reports"
+
   return (
     <div className="flex h-full min-h-0 w-full flex-1 flex-col overflow-hidden">
       <SetPageBreadcrumb
         segments={[
-          { label: "Reports", href: "/reports" },
+          ...projectSegments,
+          { label: "Reports", href: reportsHref },
           { label: titleShort },
         ]}
       />

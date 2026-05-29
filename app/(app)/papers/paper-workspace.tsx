@@ -5,6 +5,8 @@ import { useRouter } from "next/navigation"
 import Link from "next/link"
 import { createClient } from "@/lib/supabase/client"
 import { useAuthUser } from "@/components/auth/auth-provider"
+import { useProjectScope } from "@/contexts/project-scope-context"
+import { SetScopedBreadcrumb } from "@/components/layout/breadcrumb-context"
 import { PaperEditor, DEFAULT_PAPER_TEMPLATE } from "@/components/text-editor/paper-editor"
 import { usePaperAI } from "@/contexts/paper-ai-context"
 import { useCollaboration } from "@/lib/collaboration/use-collaboration"
@@ -84,6 +86,7 @@ function statusVariant(status: string): "default" | "outline" | "success" {
 export function PaperWorkspace({ paperId, backLink, leftControls, onPaperMutated, onPaperTitleUpdated }: PaperWorkspaceProps) {
   const user = useAuthUser();
   const router = useRouter()
+  const { projectId, projectName } = useProjectScope()
   const id = paperId
 
   const [paper, setPaper] = useState<Record<string, unknown> | null>(null)
@@ -359,9 +362,17 @@ export function PaperWorkspace({ paperId, backLink, leftControls, onPaperMutated
   if (!paper) return null
 
   const status = String(paper.status || "draft")
+  const breadcrumbTitle = (titleInput.trim() || (paper.title as string) || "Untitled Paper").slice(0, 60)
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-4">
+      <SetScopedBreadcrumb
+        scope={{ projectId, projectName }}
+        sectionSegments={[
+          { label: "Writing", href: projectId ? `/papers?project=${projectId}` : "/papers" },
+          { label: breadcrumbTitle },
+        ]}
+      />
       <div className="flex items-center justify-between gap-2">
         <div className="flex min-w-0 flex-1 items-center gap-3">
           {backLink ? (
