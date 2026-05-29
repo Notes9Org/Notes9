@@ -423,7 +423,11 @@ export function LiteratureTabs({
     }
 
     void pollImportStatus()
-    const interval = window.setInterval(() => void pollImportStatus(), 2000)
+    // Poll every 5s (was 2s): PDF imports take many seconds, so 5s stays
+    // responsive while cutting request volume ~2.5x. Terminal items are
+    // removed from pendingPdfImportIds (via setStagedPdfPatches above), so the
+    // set empties and this effect re-runs / clears the interval automatically.
+    const interval = window.setInterval(() => void pollImportStatus(), 5000)
     return () => {
       cancelled = true
       window.clearInterval(interval)

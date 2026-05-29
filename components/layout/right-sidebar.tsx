@@ -358,6 +358,17 @@ function mergeUniqueTags(
   return Array.from(map.values());
 }
 
+// Module-level stale-while-revalidate cache for the @-mention catalog.
+// The right sidebar mounts on nearly every page navigation; without this,
+// `loadMentionItems` would re-fire 5 parallel `.from()` queries on each mount.
+// We reuse the last result for MENTION_ITEMS_TTL_MS so repeated navigations
+// hold zero DB connections for the mention catalog. The data is identical
+// across mounts (same org-scoped lists), so behavior is unchanged.
+type MentionItem = { kind: CatalystMentionKind; id: string; title: string };
+const MENTION_ITEMS_TTL_MS = 60_000;
+let mentionItemsCache: { fetchedAt: number; items: MentionItem[] } | null = null;
+let mentionItemsInflight: Promise<MentionItem[]> | null = null;
+
 const MAX_FILE_SIZE = 10 * 1024 * 1024;
 // Kept in sync with the backend allowlist (agents/contracts/request.py).
 // Images + PDF go to the model natively; CSV/XLSX/DOCX are parsed to text
@@ -574,44 +585,46 @@ export function RightSidebar({
 
   useEffect(() => {
     let cancelled = false;
+
     const loadMentionItems = async () => {
-      const { data: lit } = await supabase
-        .from('literature_reviews')
-        .select('id,title')
-        .order('updated_at', { ascending: false })
-        .limit(120);
-      const { data: notes } = await supabase
-        .from('lab_notes')
-        .select('id,title')
-        .order('created_at', { ascending: false })
-        .limit(120);
-      const { data: experiments } = await supabase
-        .from('experiments')
-        .select('id,name')
-        .order('created_at', { ascending: false })
-        .limit(120);
-      const { data: projects } = await supabase
-        .from('projects')
-        .select('id,name')
-        .order('created_at', { ascending: false })
-        .limit(120);
-      const { data: protocols } = await supabase
-        .from('protocols')
-        .select('id,name')
-        .order('created_at', { ascending: false })
-        .limit(120);
-
-      if (cancelled) return;
-
-      const merged: Array<{ kind: CatalystMentionKind; id: string; title: string }> = [
-        ...(lit ?? []).map((r) => ({ kind: 'literature_review' as const, id: r.id, title: r.title ?? 'Untitled literature' })),
-        ...(notes ?? []).map((r) => ({ kind: 'lab_note' as const, id: r.id, title: r.title ?? 'Untitled note' })),
-        ...(experiments ?? []).map((r) => ({ kind: 'experiment' as const, id: r.id, title: r.name ?? 'Untitled experiment' })),
-        ...(projects ?? []).map((r) => ({ kind: 'project' as const, id: r.id, title: r.name ?? 'Untitled project' })),
-        ...(protocols ?? []).map((r) => ({ kind: 'protocol' as const, id: r.id, title: r.name ?? 'Untitled protocol' })),
-      ];
-
-      setAllMentionItems(merged);
+      // Serve from cache if it's fresh — no DB connection used.
+      if (mentionItemsCache && Date.now() - mentionItemsCache.fetchedAt < MENTION_ITEMS_TTL_MS) {
+        setAllMentionItems(mentionItemsCache.items);
+        return;
+      }
+      // Dedupe concurrent mounts: reuse the in-flight promise if one exists.
+      if (!mentionItemsInflight) {
+        mentionItemsInflight = (async () => {
+          const [
+            { data: lit },
+            { data: notes },
+            { data: experiments },
+            { data: projects },
+            { data: protocols },
+          ] = await Promise.all([
+            supabase.from('literature_reviews').select('id,title').order('updated_at', { ascending: false }).limit(120),
+            supabase.from('lab_notes').select('id,title').order('created_at', { ascending: false }).limit(120),
+            supabase.from('experiments').select('id,name').order('created_at', { ascending: false }).limit(120),
+            supabase.from('projects').select('id,name').order('created_at', { ascending: false }).limit(120),
+            supabase.from('protocols').select('id,name').order('created_at', { ascending: false }).limit(120),
+          ]);
+          const merged: MentionItem[] = [
+            ...(lit ?? []).map((r) => ({ kind: 'literature_review' as const, id: r.id, title: r.title ?? 'Untitled literature' })),
+            ...(notes ?? []).map((r) => ({ kind: 'lab_note' as const, id: r.id, title: r.title ?? 'Untitled note' })),
+            ...(experiments ?? []).map((r) => ({ kind: 'experiment' as const, id: r.id, title: r.name ?? 'Untitled experiment' })),
+            ...(projects ?? []).map((r) => ({ kind: 'project' as const, id: r.id, title: r.name ?? 'Untitled project' })),
+            ...(protocols ?? []).map((r) => ({ kind: 'protocol' as const, id: r.id, title: r.name ?? 'Untitled protocol' })),
+          ];
+          mentionItemsCache = { fetchedAt: Date.now(), items: merged };
+          return merged;
+        })();
+      }
+      try {
+        const merged = await mentionItemsInflight;
+        if (!cancelled) setAllMentionItems(merged);
+      } finally {
+        mentionItemsInflight = null;
+      }
     };
 
     loadMentionItems();

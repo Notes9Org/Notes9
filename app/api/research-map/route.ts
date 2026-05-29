@@ -45,6 +45,32 @@ function chunkArray<T>(arr: T[], size: number): T[][] {
   return out
 }
 
+/**
+ * Postgres handles `IN` lists well into the thousands, so we issue a single
+ * `.in(col, ids)` query instead of one round-trip per chunk. We only fall back
+ * to chunking when the id list is very large (> IN_CHUNK_THRESHOLD) to avoid
+ * pathological statement sizes — that keeps connection usage flat for the
+ * common case (a project with a few hundred experiments) while staying safe at
+ * the extreme. Rows are returned flattened across chunks; RLS still scopes
+ * them to the caller's org.
+ */
+const IN_CHUNK_THRESHOLD = 1000
+
+async function selectIn<Row>(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  buildQuery: (ids: string[]) => PromiseLike<{ data: Row[] | null }>,
+  ids: string[],
+): Promise<Row[]> {
+  if (ids.length === 0) return []
+  if (ids.length <= IN_CHUNK_THRESHOLD) {
+    const { data } = await buildQuery(ids)
+    return data ?? []
+  }
+  const chunks = chunkArray(ids, IN_CHUNK_THRESHOLD)
+  const results = await Promise.all(chunks.map((chunk) => buildQuery(chunk)))
+  return results.flatMap((r) => r.data ?? [])
+}
+
 function nodeId(kind: ResearchMapNodeKind, uuid: string) {
   return `${kind}:${uuid}`
 }
@@ -282,70 +308,73 @@ export async function GET(req: NextRequest) {
       }
 
       const protocolIds = new Set<string>()
-      for (const chunk of chunkArray(experimentIds, CHUNK)) {
-        if (chunk.length === 0) continue
-        const { data: epRows } = await supabase
-          .from("experiment_protocols")
-          .select("experiment_id, protocol_id")
-          .in("experiment_id", chunk)
-        for (const row of epRows ?? []) {
-          protocolIds.add(row.protocol_id)
-          if (
-            includeTypes.has("experiment") &&
-            includeTypes.has("protocol")
-          ) {
-            queueEdge({
-              id: `exp_proto:${row.experiment_id}:${row.protocol_id}`,
-              source: nodeId("experiment", row.experiment_id),
-              target: nodeId("protocol", row.protocol_id),
-              kind: "experiment_uses_protocol",
-              label: "Uses protocol",
-            })
-          }
+      const epRows = await selectIn<{ experiment_id: string; protocol_id: string }>(
+        (ids) =>
+          supabase
+            .from("experiment_protocols")
+            .select("experiment_id, protocol_id")
+            .in("experiment_id", ids),
+        experimentIds,
+      )
+      for (const row of epRows) {
+        protocolIds.add(row.protocol_id)
+        if (includeTypes.has("experiment") && includeTypes.has("protocol")) {
+          queueEdge({
+            id: `exp_proto:${row.experiment_id}:${row.protocol_id}`,
+            source: nodeId("experiment", row.experiment_id),
+            target: nodeId("protocol", row.protocol_id),
+            kind: "experiment_uses_protocol",
+            label: "Uses protocol",
+          })
         }
       }
 
-      for (const chunk of chunkArray(noteIds, CHUNK)) {
-        if (chunk.length === 0) continue
-        const { data: lnpRows } = await supabase
-          .from("lab_note_protocols")
-          .select("lab_note_id, protocol_id")
-          .in("lab_note_id", chunk)
-        for (const row of lnpRows ?? []) {
-          protocolIds.add(row.protocol_id)
-          if (
-            includeTypes.has("lab_note") &&
-            includeTypes.has("protocol")
-          ) {
-            queueEdge({
-              id: `note_proto:${row.lab_note_id}:${row.protocol_id}`,
-              source: nodeId("lab_note", row.lab_note_id),
-              target: nodeId("protocol", row.protocol_id),
-              kind: "lab_note_references_protocol",
-              label: "References protocol",
-            })
-          }
+      const lnpRows = await selectIn<{ lab_note_id: string; protocol_id: string }>(
+        (ids) =>
+          supabase
+            .from("lab_note_protocols")
+            .select("lab_note_id, protocol_id")
+            .in("lab_note_id", ids),
+        noteIds,
+      )
+      for (const row of lnpRows) {
+        protocolIds.add(row.protocol_id)
+        if (includeTypes.has("lab_note") && includeTypes.has("protocol")) {
+          queueEdge({
+            id: `note_proto:${row.lab_note_id}:${row.protocol_id}`,
+            source: nodeId("lab_note", row.lab_note_id),
+            target: nodeId("protocol", row.protocol_id),
+            kind: "lab_note_references_protocol",
+            label: "References protocol",
+          })
         }
       }
 
       if (protocolIds.size > 0 && includeTypes.has("protocol")) {
-        for (const chunk of chunkArray([...protocolIds], CHUNK)) {
-          const { data: protos } = await supabase
-            .from("protocols")
-            .select("id, name, version, category")
-            .in("id", chunk)
-          for (const p of protos ?? []) {
-            addNode({
-              id: nodeId("protocol", p.id),
-              kind: "protocol",
-              label: p.name || "Untitled protocol",
-              href: `/protocols/${p.id}`,
-              meta: {
-                version: p.version ?? null,
-                category: p.category ?? null,
-              },
-            })
-          }
+        const protos = await selectIn<{
+          id: string
+          name: string | null
+          version: string | null
+          category: string | null
+        }>(
+          (ids) =>
+            supabase
+              .from("protocols")
+              .select("id, name, version, category")
+              .in("id", ids),
+          [...protocolIds],
+        )
+        for (const p of protos) {
+          addNode({
+            id: nodeId("protocol", p.id),
+            kind: "protocol",
+            label: p.name || "Untitled protocol",
+            href: `/protocols/${p.id}`,
+            meta: {
+              version: p.version ?? null,
+              category: p.category ?? null,
+            },
+          })
         }
       }
 
@@ -453,14 +482,19 @@ export async function GET(req: NextRequest) {
           .map((l) => l.sample_id)
           .filter((x): x is string => Boolean(x))
         const missing = linkedSampleIds.filter((id) => !sampleRows.has(id))
-        for (const batch of chunkArray(missing, CHUNK)) {
-          if (batch.length === 0) continue
-          const { data: extra } = await supabase
-            .from("samples")
-            .select("id, sample_code, experiment_id")
-            .in("id", batch)
-          for (const s of extra ?? []) sampleRows.set(s.id, s)
-        }
+        const extraSamples = await selectIn<{
+          id: string
+          sample_code: string | null
+          experiment_id: string | null
+        }>(
+          (ids) =>
+            supabase
+              .from("samples")
+              .select("id, sample_code, experiment_id")
+              .in("id", ids),
+          missing,
+        )
+        for (const s of extraSamples) sampleRows.set(s.id, s)
         for (const s of sampleRows.values()) {
           addNode({
             id: nodeId("sample", s.id),
@@ -563,13 +597,14 @@ export async function GET(req: NextRequest) {
 
       let extraExps: typeof expList = []
       if (missingExpIds.length > 0) {
-        for (const chunk of chunkArray(missingExpIds, CHUNK)) {
-          const { data: more } = await supabase
-            .from("experiments")
-            .select("id, name, status, project_id")
-            .in("id", chunk)
-          extraExps = extraExps.concat(more ?? [])
-        }
+        extraExps = await selectIn<(typeof expList)[number]>(
+          (ids) =>
+            supabase
+              .from("experiments")
+              .select("id, name, status, project_id")
+              .in("id", ids),
+          missingExpIds,
+        )
       }
 
       const allExperiments = [...expList, ...extraExps]
@@ -589,36 +624,43 @@ export async function GET(req: NextRequest) {
       )
 
       const projectIds = [...projectIdSet]
-      for (const chunk of chunkArray(projectIds, CHUNK)) {
-        if (chunk.length === 0) continue
-        // Use already-fetched org projects where possible; only query unknowns
-        const unknownIds = chunk.filter((id) => !orgProjectMap.has(id))
-        if (unknownIds.length > 0) {
-          const { data: extra } = await supabase
-            .from("projects")
-            .select("id, name, status, description")
-            .in("id", unknownIds)
-            .eq("organization_id", orgId)
-          for (const p of extra ?? []) orgProjectMap.set(p.id, p)
-        }
+      // Use already-fetched org projects where possible; only query unknowns,
+      // in a single batched `.in()` instead of one query per chunk.
+      const unknownProjectIds = projectIds.filter((id) => !orgProjectMap.has(id))
+      if (unknownProjectIds.length > 0) {
+        const extraProjects = await selectIn<{
+          id: string
+          name: string | null
+          status: string | null
+          description: string | null
+        }>(
+          (ids) =>
+            supabase
+              .from("projects")
+              .select("id, name, status, description")
+              .in("id", ids)
+              .eq("organization_id", orgId),
+          unknownProjectIds,
+        )
+        for (const p of extraProjects) orgProjectMap.set(p.id, p)
+      }
 
-        for (const id of chunk) {
-          const p = orgProjectMap.get(id)
-          if (!p) continue
-          if (includeTypes.has("project")) {
-            addNode({
-              id: nodeId("project", p.id),
-              kind: "project",
-              label: p.name || "Untitled project",
-              href: `/projects/${p.id}`,
-              meta: {
-                status: p.status ?? null,
-                description: p.description
-                  ? String(p.description).slice(0, 200)
-                  : null,
-              },
-            })
-          }
+      for (const id of projectIds) {
+        const p = orgProjectMap.get(id)
+        if (!p) continue
+        if (includeTypes.has("project")) {
+          addNode({
+            id: nodeId("project", p.id),
+            kind: "project",
+            label: p.name || "Untitled project",
+            href: `/projects/${p.id}`,
+            meta: {
+              status: p.status ?? null,
+              description: p.description
+                ? String(p.description).slice(0, 200)
+                : null,
+            },
+          })
         }
       }
 
@@ -650,26 +692,24 @@ export async function GET(req: NextRequest) {
       const allExpIds = [...new Set(allExperiments.map((e) => e.id))]
       const protocolIds = new Set<string>()
 
-      for (const chunk of chunkArray(allExpIds, CHUNK)) {
-        if (chunk.length === 0) continue
-        const { data: epRows } = await supabase
-          .from("experiment_protocols")
-          .select("experiment_id, protocol_id")
-          .in("experiment_id", chunk)
-        for (const row of epRows ?? []) {
-          protocolIds.add(row.protocol_id)
-          if (
-            includeTypes.has("experiment") &&
-            includeTypes.has("protocol")
-          ) {
-            queueEdge({
-              id: `exp_proto:${row.experiment_id}:${row.protocol_id}`,
-              source: nodeId("experiment", row.experiment_id),
-              target: nodeId("protocol", row.protocol_id),
-              kind: "experiment_uses_protocol",
-              label: "Uses protocol",
-            })
-          }
+      const epRowsOrg = await selectIn<{ experiment_id: string; protocol_id: string }>(
+        (ids) =>
+          supabase
+            .from("experiment_protocols")
+            .select("experiment_id, protocol_id")
+            .in("experiment_id", ids),
+        allExpIds,
+      )
+      for (const row of epRowsOrg) {
+        protocolIds.add(row.protocol_id)
+        if (includeTypes.has("experiment") && includeTypes.has("protocol")) {
+          queueEdge({
+            id: `exp_proto:${row.experiment_id}:${row.protocol_id}`,
+            source: nodeId("experiment", row.experiment_id),
+            target: nodeId("protocol", row.protocol_id),
+            kind: "experiment_uses_protocol",
+            label: "Uses protocol",
+          })
         }
       }
 
@@ -757,47 +797,52 @@ export async function GET(req: NextRequest) {
         }
       }
 
-      for (const chunk of chunkArray(noteIds, CHUNK)) {
-        if (chunk.length === 0) continue
-        const { data: lnpRows } = await supabase
-          .from("lab_note_protocols")
-          .select("lab_note_id, protocol_id")
-          .in("lab_note_id", chunk)
-        for (const row of lnpRows ?? []) {
-          protocolIds.add(row.protocol_id)
-          if (
-            includeTypes.has("lab_note") &&
-            includeTypes.has("protocol")
-          ) {
-            queueEdge({
-              id: `note_proto:${row.lab_note_id}:${row.protocol_id}`,
-              source: nodeId("lab_note", row.lab_note_id),
-              target: nodeId("protocol", row.protocol_id),
-              kind: "lab_note_references_protocol",
-              label: "References protocol",
-            })
-          }
+      const lnpRowsOrg = await selectIn<{ lab_note_id: string; protocol_id: string }>(
+        (ids) =>
+          supabase
+            .from("lab_note_protocols")
+            .select("lab_note_id, protocol_id")
+            .in("lab_note_id", ids),
+        noteIds,
+      )
+      for (const row of lnpRowsOrg) {
+        protocolIds.add(row.protocol_id)
+        if (includeTypes.has("lab_note") && includeTypes.has("protocol")) {
+          queueEdge({
+            id: `note_proto:${row.lab_note_id}:${row.protocol_id}`,
+            source: nodeId("lab_note", row.lab_note_id),
+            target: nodeId("protocol", row.protocol_id),
+            kind: "lab_note_references_protocol",
+            label: "References protocol",
+          })
         }
       }
 
       if (protocolIds.size > 0 && includeTypes.has("protocol")) {
-        for (const chunk of chunkArray([...protocolIds], CHUNK)) {
-          const { data: protos } = await supabase
-            .from("protocols")
-            .select("id, name, version, category")
-            .in("id", chunk)
-          for (const p of protos ?? []) {
-            addNode({
-              id: nodeId("protocol", p.id),
-              kind: "protocol",
-              label: p.name || "Untitled protocol",
-              href: `/protocols/${p.id}`,
-              meta: {
-                version: p.version ?? null,
-                category: p.category ?? null,
-              },
-            })
-          }
+        const protos = await selectIn<{
+          id: string
+          name: string | null
+          version: string | null
+          category: string | null
+        }>(
+          (ids) =>
+            supabase
+              .from("protocols")
+              .select("id, name, version, category")
+              .in("id", ids),
+          [...protocolIds],
+        )
+        for (const p of protos) {
+          addNode({
+            id: nodeId("protocol", p.id),
+            kind: "protocol",
+            label: p.name || "Untitled protocol",
+            href: `/protocols/${p.id}`,
+            meta: {
+              version: p.version ?? null,
+              category: p.category ?? null,
+            },
+          })
         }
       }
 
@@ -889,38 +934,50 @@ export async function GET(req: NextRequest) {
           string,
           { id: string; sample_code: string | null; experiment_id: string | null }
         >()
-        for (const chunk of chunkArray([...includedExpIds], CHUNK)) {
-          if (chunk.length === 0) continue
-          const { data: byExp } = await supabase
-            .from("samples")
-            .select("id, sample_code, experiment_id")
-            .in("experiment_id", chunk)
-          for (const s of byExp ?? []) sampleRows.set(s.id, s)
-        }
+        const byExp = await selectIn<{
+          id: string
+          sample_code: string | null
+          experiment_id: string | null
+        }>(
+          (ids) =>
+            supabase
+              .from("samples")
+              .select("id, sample_code, experiment_id")
+              .in("experiment_id", ids),
+          [...includedExpIds],
+        )
+        for (const s of byExp) sampleRows.set(s.id, s)
+
         const sampleProjectPairs: Array<{ sample_id: string; project_id: string }> = []
-        for (const chunk of chunkArray([...projectIdSet], CHUNK)) {
-          if (chunk.length === 0) continue
-          const { data: spLinks } = await supabase
-            .from("sample_projects")
-            .select("sample_id, project_id")
-            .in("project_id", chunk)
-          for (const l of spLinks ?? []) {
-            if (l.sample_id && l.project_id) {
-              sampleProjectPairs.push({ sample_id: l.sample_id, project_id: l.project_id })
-            }
+        const spLinks = await selectIn<{ sample_id: string | null; project_id: string | null }>(
+          (ids) =>
+            supabase
+              .from("sample_projects")
+              .select("sample_id, project_id")
+              .in("project_id", ids),
+          [...projectIdSet],
+        )
+        for (const l of spLinks) {
+          if (l.sample_id && l.project_id) {
+            sampleProjectPairs.push({ sample_id: l.sample_id, project_id: l.project_id })
           }
         }
         const missing = [...new Set(sampleProjectPairs.map((p) => p.sample_id))].filter(
           (id) => !sampleRows.has(id),
         )
-        for (const chunk of chunkArray(missing, CHUNK)) {
-          if (chunk.length === 0) continue
-          const { data: extra } = await supabase
-            .from("samples")
-            .select("id, sample_code, experiment_id")
-            .in("id", chunk)
-          for (const s of extra ?? []) sampleRows.set(s.id, s)
-        }
+        const extraSamples = await selectIn<{
+          id: string
+          sample_code: string | null
+          experiment_id: string | null
+        }>(
+          (ids) =>
+            supabase
+              .from("samples")
+              .select("id, sample_code, experiment_id")
+              .in("id", ids),
+          missing,
+        )
+        for (const s of extraSamples) sampleRows.set(s.id, s)
         for (const s of sampleRows.values()) {
           addNode({
             id: nodeId("sample", s.id),

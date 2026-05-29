@@ -535,7 +535,7 @@ function ResearchMapCanvas() {
       mapRefreshDebounceRef.current = null
       void loadProjectOptions()
       void fetchMap({ showLoadingOverlay: false })
-    }, 650)
+    }, 1000)
   }, [fetchMap, loadProjectOptions])
 
   useEffect(() => {

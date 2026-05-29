@@ -14,13 +14,11 @@ async function provisionOauthProfileAndOrg(
   db: SupabaseClient,
   user: User
 ): Promise<"signup" | "login"> {
-  const { data: profileRow } = await supabase
+  const { data: existingProfile } = await supabase
     .from("profiles")
     .select("id, email, first_name, last_name")
     .eq("id", user.id)
     .single()
-
-  const existingProfile = profileRow
 
   if (existingProfile && user.email && existingProfile.email !== user.email) {
     console.warn("Profile email mismatch:", {
@@ -164,7 +162,6 @@ async function handleAuthCallback(request: NextRequest): Promise<NextResponse> {
     } = await supabase.auth.exchangeCodeForSession(code)
 
     if (!error) {
-
       let authEvent: "signup" | "login" = "login"
 
       if (user?.email) {
