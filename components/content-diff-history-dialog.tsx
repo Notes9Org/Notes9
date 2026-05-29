@@ -20,6 +20,14 @@ import {
 } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table"
 import { cn } from "@/lib/utils"
 import {
   exportSegmentsPlain,
@@ -185,104 +193,43 @@ function downloadContentDiffsLog(
   URL.revokeObjectURL(url)
 }
 
-function DiffEntry({ diff }: { diff: ContentDiff }) {
-  const [expanded, setExpanded] = useState(false)
-  const { date, time, relative } = formatDateTime(diff.created_at)
-  const userName = diff.user
-    ? `${diff.user.first_name} ${diff.user.last_name}`.trim() || diff.user.email
-    : diff.user_id.slice(0, 8) + "…"
-
+/** Expanded diff body, rendered inside a full-width table row beneath the header row. */
+function DiffDetailBody({ diff }: { diff: ContentDiff }) {
   const resolved = resolveDiffDisplay(diff)
   const legacyParts =
-    expanded && resolved.kind === "legacy"
+    resolved.kind === "legacy"
       ? diffWords(resolved.prevPlain, resolved.nextPlain)
       : []
   const structureHints = parseStructureHints(diff)
   const structureHintsLine = formatStructureHintsDisplay(structureHints)
-  const hasStructureHints = Boolean(structureHintsLine)
 
   return (
-    <div className="group rounded-lg border border-border/60 bg-card overflow-hidden">
-      {/* Header row */}
-      <div className="flex flex-col gap-2 px-2 py-2.5 sm:flex-row sm:items-start sm:gap-3 sm:px-3">
-        <div className="mt-0.5 hidden h-6 w-6 shrink-0 items-center justify-center rounded-full bg-muted sm:flex">
-          <User className="h-3 w-3 text-muted-foreground" />
-        </div>
-
-        <div className="min-w-0 flex-1 space-y-0 overflow-hidden">
-          <p className="text-xs font-medium leading-snug text-foreground">
-            <span className="font-normal text-muted-foreground">User </span>
-            {userName}
-          </p>
-          <p className="mt-0.5 text-2xs leading-snug text-muted-foreground" title={`${date} at ${time}`}>
-            {relative} · {date} at {time}
-          </p>
-          {diff.change_summary ? (
-            <p className="mt-2 text-xs leading-relaxed text-foreground/90 line-clamp-4">{diff.change_summary}</p>
-          ) : null}
-          {(diff.words_added > 0 || diff.words_removed > 0) && (
-            <div className="mt-2 flex flex-col gap-0.5 text-2xs">
-              {diff.words_added > 0 && (
-                <span className="inline-flex items-center gap-1 text-emerald-600 dark:text-emerald-400">
-                  <Plus className="h-2.5 w-2.5 shrink-0" aria-hidden />
-                  {diff.words_added} word{diff.words_added === 1 ? "" : "s"} added
-                </span>
-              )}
-              {diff.words_removed > 0 && (
-                <span className="inline-flex items-center gap-1 text-destructive">
-                  <Minus className="h-2.5 w-2.5 shrink-0" aria-hidden />
-                  {diff.words_removed} word{diff.words_removed === 1 ? "" : "s"} removed
-                </span>
-              )}
-            </div>
-          )}
-          {hasStructureHints && (
-            <p
-              className="mt-2 text-2xs leading-relaxed text-muted-foreground sm:line-clamp-6"
-              title={structureHintsLine}
-            >
-              <span className="font-medium text-foreground/80">Document / sections</span>
-              {": "}
-              <span className="break-words">{structureHintsLine}</span>
-            </p>
-          )}
-        </div>
-
-        <Button
-          variant="ghost"
-          size="sm"
-          className="h-9 w-full shrink-0 gap-1 px-2 text-2xs text-muted-foreground touch-manipulation sm:h-6 sm:w-auto sm:self-start sm:px-1.5"
-          onClick={() => setExpanded((v) => !v)}
-          aria-label={expanded ? "Hide diff" : "Show diff"}
-        >
-          {expanded ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
-          {expanded ? "Hide" : "Diff"}
-        </Button>
-      </div>
-
-      {/* Inline diff view */}
-      {expanded && resolved.kind === "none" && (
-        <div className="border-t border-border/40 bg-muted/10 px-3 py-2">
-          <p className="text-micro text-muted-foreground">
-            No diff detail is stored for this entry (e.g. created before compact diff storage).
-          </p>
-        </div>
+    <div className="space-y-2 bg-muted/10 px-3 py-2.5">
+      {structureHintsLine && (
+        <p className="text-2xs leading-relaxed text-muted-foreground" title={structureHintsLine}>
+          <span className="font-medium text-foreground/80">Document / sections</span>
+          {": "}
+          <span className="break-words">{structureHintsLine}</span>
+        </p>
       )}
 
-      {expanded && resolved.kind === "segments" && (
-        <div className="border-t border-border/40 bg-muted/10 px-3 pb-3 pt-2">
-          <p className="mb-1.5 text-2xs font-medium uppercase tracking-wide text-muted-foreground">
-            Word-level diff · removed / added (unchanged text shown when stored)
+      {resolved.kind === "none" && (
+        <p className="text-micro text-muted-foreground">
+          No diff detail is stored for this entry (e.g. created before compact diff storage).
+        </p>
+      )}
+
+      {resolved.kind === "segments" && (
+        <>
+          <p className="text-2xs font-medium uppercase tracking-wide text-muted-foreground">
+            Word-level diff
           </p>
-          <div className="max-h-[min(45vh,14rem)] overflow-y-auto rounded border border-border/40 bg-background p-2 sm:max-h-48">
+          <div className="max-h-[min(45vh,14rem)] overflow-y-auto rounded border border-border/40 bg-background p-2">
             <p className="font-mono text-micro leading-relaxed whitespace-pre-wrap break-words">
               {resolved.segments.map((seg, i) => {
                 if (seg.k === "_") {
                   const unchanged = formatUnchangedSegment(seg)
-                  const title =
-                    typeof seg.n === "number"
-                      ? `${seg.n} characters unchanged`
-                      : "Unchanged"
+                  const title = "n" in seg ? `${seg.n} characters unchanged` : "Unchanged"
                   return (
                     <span
                       key={i}
@@ -314,35 +261,37 @@ function DiffEntry({ diff }: { diff: ContentDiff }) {
               })}
             </p>
           </div>
-          <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2">
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
             <div>
-              <p className="mb-1 text-2xs font-medium text-muted-foreground uppercase tracking-wide">
+              <p className="mb-1 text-2xs font-medium uppercase tracking-wide text-muted-foreground">
                 Removed
               </p>
-              <div className="max-h-[min(28vh,8rem)] overflow-y-auto rounded border border-border/40 bg-background p-1.5 sm:max-h-28">
-                <p className="text-micro leading-relaxed text-foreground/80 whitespace-pre-wrap break-words font-mono">
+              <div className="max-h-28 overflow-y-auto rounded border border-border/40 bg-background p-1.5">
+                <p className="font-mono text-micro leading-relaxed text-foreground/80 whitespace-pre-wrap break-words">
                   {joinRemovedExcerpts(resolved.segments).trim() || "(none)"}
                 </p>
               </div>
             </div>
             <div>
-              <p className="mb-1 text-2xs font-medium text-muted-foreground uppercase tracking-wide">Added</p>
-              <div className="max-h-[min(28vh,8rem)] overflow-y-auto rounded border border-border/40 bg-background p-1.5 sm:max-h-28">
-                <p className="text-micro leading-relaxed text-foreground/80 whitespace-pre-wrap break-words font-mono">
+              <p className="mb-1 text-2xs font-medium uppercase tracking-wide text-muted-foreground">
+                Added
+              </p>
+              <div className="max-h-28 overflow-y-auto rounded border border-border/40 bg-background p-1.5">
+                <p className="font-mono text-micro leading-relaxed text-foreground/80 whitespace-pre-wrap break-words">
                   {joinAddedExcerpts(resolved.segments).trim() || "(none)"}
                 </p>
               </div>
             </div>
           </div>
-        </div>
+        </>
       )}
 
-      {expanded && resolved.kind === "legacy" && (
-        <div className="border-t border-border/40 bg-muted/10 px-3 pb-3 pt-2">
-          <p className="mb-1.5 text-2xs font-medium uppercase tracking-wide text-muted-foreground">
+      {resolved.kind === "legacy" && (
+        <>
+          <p className="text-2xs font-medium uppercase tracking-wide text-muted-foreground">
             Word-level diff · previous → current
           </p>
-          <div className="max-h-[min(45vh,14rem)] overflow-y-auto rounded border border-border/40 bg-background p-2 sm:max-h-48">
+          <div className="max-h-[min(45vh,14rem)] overflow-y-auto rounded border border-border/40 bg-background p-2">
             <p className="font-mono text-micro leading-relaxed whitespace-pre-wrap break-words">
               {legacyParts.map((part, i) => {
                 if (!part.added && !part.removed) {
@@ -358,7 +307,7 @@ function DiffEntry({ diff }: { diff: ContentDiff }) {
                     className={cn(
                       "rounded px-0.5",
                       part.added && "bg-emerald-500/15 text-emerald-800 dark:text-emerald-300",
-                      part.removed && "bg-destructive/15 text-destructive line-through"
+                      part.removed && "bg-destructive/15 text-destructive line-through",
                     )}
                   >
                     {part.value}
@@ -367,27 +316,81 @@ function DiffEntry({ diff }: { diff: ContentDiff }) {
               })}
             </p>
           </div>
-          <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2">
-            <div>
-              <p className="mb-1 text-2xs font-medium text-muted-foreground uppercase tracking-wide">Previous</p>
-              <div className="max-h-[min(28vh,8rem)] overflow-y-auto rounded border border-border/40 bg-background p-1.5 sm:max-h-28">
-                <p className="text-micro leading-relaxed text-foreground/80 whitespace-pre-wrap break-words font-mono">
-                  {resolved.prevPlain || "(empty)"}
-                </p>
-              </div>
-            </div>
-            <div>
-              <p className="mb-1 text-2xs font-medium text-muted-foreground uppercase tracking-wide">Current</p>
-              <div className="max-h-[min(28vh,8rem)] overflow-y-auto rounded border border-border/40 bg-background p-1.5 sm:max-h-28">
-                <p className="text-micro leading-relaxed text-foreground/80 whitespace-pre-wrap break-words font-mono">
-                  {resolved.nextPlain || "(empty)"}
-                </p>
-              </div>
-            </div>
-          </div>
-        </div>
+        </>
       )}
     </div>
+  )
+}
+
+function DiffTableRows({ diff }: { diff: ContentDiff }) {
+  const [expanded, setExpanded] = useState(false)
+  const { date, time, relative } = formatDateTime(diff.created_at)
+  const userName = diff.user
+    ? `${diff.user.first_name} ${diff.user.last_name}`.trim() || diff.user.email
+    : diff.user_id.slice(0, 8) + "…"
+
+  return (
+    <>
+      <TableRow className="align-top">
+        <TableCell className="w-[8.5rem] whitespace-nowrap py-2 align-top text-xs text-foreground/90">
+          <div className="font-medium">{relative}</div>
+          <div className="text-2xs text-muted-foreground" title={`${date} at ${time}`}>
+            {date} · {time}
+          </div>
+        </TableCell>
+        <TableCell className="w-[8rem] py-2 align-top text-xs">
+          <div className="flex items-center gap-1.5 text-foreground/90">
+            <User className="h-3 w-3 shrink-0 text-muted-foreground" aria-hidden />
+            <span className="truncate" title={userName}>
+              {userName}
+            </span>
+          </div>
+        </TableCell>
+        <TableCell className="py-2 align-top text-xs text-foreground/90">
+          <p className="leading-snug line-clamp-3">{diff.change_summary || "—"}</p>
+        </TableCell>
+        <TableCell className="w-[7rem] whitespace-nowrap py-2 align-top text-2xs tabular-nums">
+          <div className="flex flex-col gap-0.5">
+            {diff.words_added > 0 && (
+              <span className="inline-flex items-center gap-1 text-emerald-600 dark:text-emerald-400">
+                <Plus className="h-2.5 w-2.5 shrink-0" aria-hidden />+{diff.words_added}
+              </span>
+            )}
+            {diff.words_removed > 0 && (
+              <span className="inline-flex items-center gap-1 text-destructive">
+                <Minus className="h-2.5 w-2.5 shrink-0" aria-hidden />−{diff.words_removed}
+              </span>
+            )}
+            {diff.words_added === 0 && diff.words_removed === 0 && (
+              <span className="text-muted-foreground">0</span>
+            )}
+          </div>
+        </TableCell>
+        <TableCell className="w-12 py-2 pr-2 align-top text-right">
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-6 w-6 text-muted-foreground hover:text-foreground"
+            onClick={() => setExpanded((v) => !v)}
+            aria-label={expanded ? "Hide diff" : "Show diff"}
+            aria-expanded={expanded}
+          >
+            {expanded ? (
+              <ChevronUp className="h-3.5 w-3.5" />
+            ) : (
+              <ChevronDown className="h-3.5 w-3.5" />
+            )}
+          </Button>
+        </TableCell>
+      </TableRow>
+      {expanded && (
+        <TableRow className="bg-muted/5 hover:bg-muted/5">
+          <TableCell colSpan={5} className="p-0">
+            <DiffDetailBody diff={diff} />
+          </TableCell>
+        </TableRow>
+      )}
+    </>
   )
 }
 
@@ -402,7 +405,7 @@ export function ContentDiffHistoryDialog({
 }: ContentDiffHistoryDialogProps) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="flex h-[min(90dvh,92vh)] w-[calc(100vw-1rem)] max-w-xl flex-col gap-0 overflow-hidden p-0 sm:h-auto sm:max-h-[80vh]">
+      <DialogContent className="flex h-[min(90dvh,92vh)] w-[calc(100vw-1rem)] max-w-3xl flex-col gap-0 overflow-hidden p-0 sm:h-auto sm:max-h-[80vh]">
         <DialogHeader className="shrink-0 border-b border-border/60 px-3 py-3 sm:px-4">
           <DialogTitle className="flex items-center gap-2 text-sm font-semibold">
             <History className="h-4 w-4 text-muted-foreground" />
@@ -410,18 +413,18 @@ export function ContentDiffHistoryDialog({
           </DialogTitle>
         </DialogHeader>
 
-        {/* flex-1 min-h-0 + overflow-y-auto keeps the list scrollable inside max-h-[80vh] (Radix ScrollArea alone often grows with content and never scrolls). */}
-        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 py-3 [scrollbar-gutter:stable] sm:px-4">
+        {/* flex-1 min-h-0 + overflow-y-auto keeps the table scrollable inside max-h-[80vh] (Radix ScrollArea alone often grows with content and never scrolls). */}
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain [scrollbar-gutter:stable]">
           {loading && (
-            <div className="space-y-2">
+            <div className="space-y-2 px-3 py-3 sm:px-4">
               {[...Array(3)].map((_, i) => (
-                <Skeleton key={i} className="h-16 w-full rounded-lg" />
+                <Skeleton key={i} className="h-10 w-full rounded" />
               ))}
             </div>
           )}
 
           {!loading && error && (
-            <div className="flex flex-col items-center gap-2 py-8 text-muted-foreground">
+            <div className="flex flex-col items-center gap-2 px-3 py-8 text-muted-foreground sm:px-4">
               <Clock className="h-6 w-6 opacity-40" />
               <p className="text-sm">{error}</p>
               <p className="text-xs text-center">
@@ -434,7 +437,7 @@ export function ContentDiffHistoryDialog({
           )}
 
           {!loading && !error && diffs.length === 0 && (
-            <div className="flex flex-col items-center gap-2 py-8 text-muted-foreground">
+            <div className="flex flex-col items-center gap-2 px-3 py-8 text-muted-foreground sm:px-4">
               <Clock className="h-8 w-8 opacity-30" />
               <p className="text-sm font-medium">No change history yet</p>
               <p className="text-xs text-center">
@@ -444,11 +447,32 @@ export function ContentDiffHistoryDialog({
           )}
 
           {!loading && !error && diffs.length > 0 && (
-            <div className="space-y-2 pb-2">
-              {diffs.map((diff) => (
-                <DiffEntry key={diff.id} diff={diff} />
-              ))}
-            </div>
+            <Table>
+              <TableHeader className="sticky top-0 z-10 bg-background">
+                <TableRow>
+                  <TableHead className="h-9 w-[8.5rem] text-2xs font-semibold uppercase tracking-wide text-muted-foreground">
+                    When
+                  </TableHead>
+                  <TableHead className="h-9 w-[8rem] text-2xs font-semibold uppercase tracking-wide text-muted-foreground">
+                    User
+                  </TableHead>
+                  <TableHead className="h-9 text-2xs font-semibold uppercase tracking-wide text-muted-foreground">
+                    Summary
+                  </TableHead>
+                  <TableHead className="h-9 w-[7rem] text-2xs font-semibold uppercase tracking-wide text-muted-foreground">
+                    Words
+                  </TableHead>
+                  <TableHead className="h-9 w-12 text-right text-2xs font-semibold uppercase tracking-wide text-muted-foreground">
+                    Diff
+                  </TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {diffs.map((diff) => (
+                  <DiffTableRows key={diff.id} diff={diff} />
+                ))}
+              </TableBody>
+            </Table>
           )}
         </div>
 
