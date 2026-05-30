@@ -8,10 +8,28 @@ import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Sheet, SheetContent } from "@/components/ui/sheet"
 import { useMediaQuery } from "@/hooks/use-media-query"
-import { FileText, PanelLeftClose, PanelLeftOpen, Loader2 } from "lucide-react"
+import { FileText, PanelLeftClose, PanelLeftOpen, Loader2, MoreVertical, Trash2 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { ReportDetailView } from "./report-detail-view"
 import type { ReportRow } from "../reports-page-client"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+  DropdownMenuSeparator,
+} from "@/components/ui/dropdown-menu"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
+import { toast } from "sonner"
 
 interface SidebarReport {
   id: string
@@ -31,6 +49,8 @@ export function ReportDetailClient({
   const [reports, setReports] = useState<SidebarReport[]>([])
   const [loading, setLoading] = useState(true)
   const [sidebarOpen, setSidebarOpen] = useState(true)
+  const [deleteTarget, setDeleteTarget] = useState<string | null>(null)
+  const [isDeleting, setIsDeleting] = useState(false)
 
   const isMobile = useMediaQuery("(max-width: 768px)")
 
@@ -65,6 +85,29 @@ export function ReportDetailClient({
     router.push(`/reports/${id}${projectId ? `?project=${projectId}` : ""}`)
   }
 
+  const confirmDelete = async () => {
+    if (!deleteTarget) return
+    setIsDeleting(true)
+    try {
+      const supabase = createClient()
+      const { error } = await supabase.from("reports").delete().eq("id", deleteTarget)
+      if (error) {
+        toast.error(`Failed to delete report: ${error.message}`)
+        return
+      }
+      toast.success("Report deleted")
+      setReports((prev) => prev.filter((r) => r.id !== deleteTarget))
+      if (deleteTarget === activeReport.id) {
+        router.push(projectId ? `/reports?project=${projectId}` : "/reports")
+      }
+      setDeleteTarget(null)
+    } catch (err: any) {
+      toast.error(`Error: ${err.message}`)
+    } finally {
+      setIsDeleting(false)
+    }
+  }
+
   const SidebarContent = () => (
     <div className="flex h-full min-h-0 w-52 min-w-[13rem] flex-col gap-0 p-2">
       <div className="flex h-9 shrink-0 items-center justify-between px-1">
@@ -96,7 +139,7 @@ export function ReportDetailClient({
                     }}
                     title={`Created: ${createdStr}`}
                     className={cn(
-                      "grid w-full min-h-8 grid-cols-[auto_1fr] items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm outline-none transition-colors hover:bg-muted/80",
+                      "grid w-full min-h-8 grid-cols-[auto_1fr_auto] items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm outline-none transition-colors hover:bg-muted/80",
                       isActive && "bg-muted font-medium"
                     )}
                   >
@@ -104,6 +147,31 @@ export function ReportDetailClient({
                     <p className="min-w-0 truncate m-0 text-sm">
                       {report.title || "Untitled Report"}
                     </p>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="size-7 shrink-0 opacity-70 hover:opacity-100"
+                          onClick={(e) => e.stopPropagation()}
+                          aria-label="Report options"
+                        >
+                          <MoreVertical className="h-3.5 w-3.5" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
+                        <DropdownMenuItem
+                          className="text-destructive focus:text-destructive"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            setDeleteTarget(report.id)
+                          }}
+                        >
+                          <Trash2 className="mr-2 h-4 w-4" />
+                          Delete
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
                   </div>
                 </li>
               )
@@ -141,6 +209,29 @@ export function ReportDetailClient({
       leftControls={toggleButton}
       sidebar={
         <>
+          <AlertDialog open={!!deleteTarget} onOpenChange={(open) => !open && setDeleteTarget(null)}>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Delete report?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  Are you sure you want to delete this report? This action cannot be undone.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel disabled={isDeleting}>Cancel</AlertDialogCancel>
+                <AlertDialogAction
+                  onClick={(e) => {
+                    e.preventDefault()
+                    confirmDelete()
+                  }}
+                  disabled={isDeleting}
+                  className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                >
+                  {isDeleting ? "Deleting..." : "Delete"}
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
           {/* Desktop Sidebar */}
           <aside
             className={cn(

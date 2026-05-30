@@ -18,7 +18,6 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { Separator } from "@/components/ui/separator"
-import { SaveStatusIndicator } from "@/components/ui/save-status"
 import {
   Sheet,
   SheetContent,
@@ -369,10 +368,6 @@ export function ProtocolDesignMode({
 
   const protocolFullscreenToolbarTrailing = protocolMergedFullscreenToolbar ? (
     <>
-      <SaveStatusIndicator
-        status={hasPendingChanges ? "unsaved" : "saved"}
-        variant="icon"
-      />
       <Badge variant="outline" className="shrink-0 text-2xs font-normal">
         v{currentVersion}
       </Badge>
@@ -616,12 +611,6 @@ export function ProtocolDesignMode({
                         </div>
                       )}
                     </div>
-
-                    {/* Save status placeholder to keep rhythm with lab notes */}
-                    <SaveStatusIndicator
-                      status={hasPendingChanges ? "unsaved" : "saved"}
-                      variant="icon"
-                    />
                   </div>
                 </div>
 

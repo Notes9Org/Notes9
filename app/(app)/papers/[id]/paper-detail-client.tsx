@@ -8,9 +8,27 @@ import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Sheet, SheetContent } from "@/components/ui/sheet"
 import { useMediaQuery } from "@/hooks/use-media-query"
-import { FileText, PanelLeftClose, PanelLeftOpen, Loader2, Plus } from "lucide-react"
+import { FileText, PanelLeftClose, PanelLeftOpen, Loader2, Plus, MoreVertical, Trash2, Pencil } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { PaperWorkspace } from "../paper-workspace"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+  DropdownMenuSeparator,
+} from "@/components/ui/dropdown-menu"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
+import { toast } from "sonner"
 
 interface Paper {
   id: string
@@ -26,6 +44,8 @@ export function PaperDetailClient({ activePaperId }: { activePaperId: string }) 
   const [papers, setPapers] = useState<Paper[]>([])
   const [loading, setLoading] = useState(true)
   const [sidebarOpen, setSidebarOpen] = useState(true)
+  const [deleteTarget, setDeleteTarget] = useState<string | null>(null)
+  const [isDeleting, setIsDeleting] = useState(false)
   
   const isMobile = useMediaQuery("(max-width: 768px)")
 
@@ -68,6 +88,29 @@ export function PaperDetailClient({ activePaperId }: { activePaperId: string }) 
 
   const handlePaperMutated = () => {
     fetchPapers()
+  }
+
+  const confirmDelete = async () => {
+    if (!deleteTarget) return
+    setIsDeleting(true)
+    try {
+      const supabase = createClient()
+      const { error } = await supabase.from("papers").delete().eq("id", deleteTarget)
+      if (error) {
+        toast.error(`Failed to delete paper: ${error.message}`)
+        return
+      }
+      toast.success("Paper deleted")
+      setPapers(prev => prev.filter(p => p.id !== deleteTarget))
+      if (deleteTarget === activePaperId) {
+        router.push(projectId ? `/papers?project=${projectId}` : "/papers")
+      }
+      setDeleteTarget(null)
+    } catch (err: any) {
+      toast.error(`Error: ${err.message}`)
+    } finally {
+      setIsDeleting(false)
+    }
   }
 
   const SidebarContent = () => (
@@ -113,7 +156,7 @@ export function PaperDetailClient({ activePaperId }: { activePaperId: string }) 
                     }}
                     title={`Updated: ${updatedStr}`}
                     className={cn(
-                      "grid w-full min-h-8 grid-cols-[auto_1fr] items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm outline-none transition-colors hover:bg-muted/80",
+                      "grid w-full min-h-8 grid-cols-[auto_1fr_auto] items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm outline-none transition-colors hover:bg-muted/80",
                       isActive && "bg-muted font-medium"
                     )}
                   >
@@ -121,6 +164,31 @@ export function PaperDetailClient({ activePaperId }: { activePaperId: string }) 
                     <p className="min-w-0 truncate m-0 text-sm">
                       {paper.title || "Untitled Paper"}
                     </p>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="size-7 shrink-0 opacity-70 hover:opacity-100"
+                          onClick={(e) => e.stopPropagation()}
+                          aria-label="Paper options"
+                        >
+                          <MoreVertical className="h-3.5 w-3.5" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
+                        <DropdownMenuItem
+                          className="text-destructive focus:text-destructive"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            setDeleteTarget(paper.id)
+                          }}
+                        >
+                          <Trash2 className="mr-2 h-4 w-4" />
+                          Delete
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
                   </div>
                 </li>
               )
@@ -149,6 +217,30 @@ export function PaperDetailClient({ activePaperId }: { activePaperId: string }) 
 
   return (
     <div className="flex h-full min-h-0 w-full flex-1 flex-col overflow-hidden">
+      <AlertDialog open={!!deleteTarget} onOpenChange={(open) => !open && setDeleteTarget(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete paper?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete this paper? This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isDeleting}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(e) => {
+                e.preventDefault()
+                confirmDelete()
+              }}
+              disabled={isDeleting}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {isDeleting ? "Deleting..." : "Delete"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+      
       <div className="flex-1 min-w-0 min-h-0 flex flex-col">
         <Card className="flex h-full min-h-0 flex-col gap-0 py-0 border-0 shadow-none rounded-none sm:border sm:shadow-sm sm:rounded-xl">
           <div className="flex h-full min-h-0 min-w-0 flex-1 flex-row items-stretch overflow-hidden">
