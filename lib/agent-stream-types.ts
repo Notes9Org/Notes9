@@ -7,6 +7,9 @@ export interface ThinkingPayload {
   status: string;
   message: string;
   node?: string;
+  /** High-level phase label. Canonical stages:
+   * understanding → searching → reading → designing → drafting → done
+   * (legacy: analyzing / synthesizing / composing / validating). */
   stage?: string;
   detail?: string;
   intent?: string;
@@ -17,6 +20,15 @@ export interface ThinkingPayload {
   sql?: string;
   verdict?: string;
   issues?: string[];
+  // ── Long-run progress / heartbeat (emitted during Cat-Bio synthesis) ──────
+  /** Fractional progress 0–1 for the current long-running stage, when known. */
+  progress?: number;
+  /** Monotonic heartbeat flag: a no-op keep-alive so a 60s run never looks
+   * frozen. When true the client should keep the current step "active" without
+   * appending a new visible line. */
+  heartbeat?: boolean;
+  /** Elapsed wall-clock seconds since the stage started, if the backend tracks it. */
+  elapsed_s?: number;
   [key: string]: unknown;
 }
 
@@ -100,6 +112,20 @@ export interface GroundingResource {
   excerpt_source?: string | null;
   match_kind?: string | null;
   cite_label?: string | null;
+  // ── Per-claim, span-level grounding (unified wire contract) ───────────────
+  /** Verbatim supporting span for THIS citation. Prefer over `excerpt` for
+   * highlighting — it pinpoints the exact sentence backing the claim. */
+  cited_text?: string | null;
+  /** Char offset into the stripped source where `cited_text` begins (advisory). */
+  char_start?: number | null;
+  /** Char offset (exclusive) where `cited_text` ends (advisory). */
+  char_end?: number | null;
+  /** Support strength 0–1 for this specific claim↔span pairing. */
+  support_score?: number | null;
+  /** Grounding verdict for the claim. Display as a subtle signal, never "wrong". */
+  support_status?: 'supported' | 'partial' | 'unsupported' | null;
+  /** How the span was located: model-native citation, heuristic match, or none. */
+  grounding?: 'native' | 'heuristic' | 'none' | null;
 }
 
 /** @deprecated Use GroundingResource; kept for imports that still say Citation */

@@ -194,8 +194,8 @@ export function ProtocolSiblingsList({
                   <li key={row.id} className="group/list-item relative">
                     <div
                       className={cn(
-                        "grid w-full min-h-8 grid-cols-[auto_1fr_auto] items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm outline-none transition-colors hover:bg-muted/80",
-                        isActive && "bg-muted font-medium",
+                        "grid min-h-8 w-full grid-cols-[auto_1fr_auto] items-center gap-2 rounded-md px-2 py-1 text-left text-sm outline-none transition-colors hover:bg-muted/80",
+                        isActive && "bg-muted font-medium"
                       )}
                     >
                       <ClipboardList className="h-4 w-4 shrink-0 text-muted-foreground" />

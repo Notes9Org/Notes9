@@ -330,7 +330,10 @@ export function useChatSessions(protocolId?: string) {
         deterministicId = Array.from(new Uint8Array(hashBuf))
           .map((b) => b.toString(16).padStart(2, '0'))
           .join('')
-          .slice(0, 36)
+          // A UUID is 32 hex digits (8-4-4-4-12). Must slice to 32 — not 36 —
+          // or the anchored regex below never matches, leaving an un-dashed
+          // 36-char string that Postgres rejects as invalid uuid (22P02).
+          .slice(0, 32)
           // Format as UUID v4-ish for Postgres uuid column compatibility.
           .replace(/^(.{8})(.{4})(.{4})(.{4})(.{12})$/, '$1-$2-$3-$4-$5');
       } catch {

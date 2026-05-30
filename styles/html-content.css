@@ -134,3 +134,31 @@ a.notes9-cite--link {
 a.notes9-cite:visited {
   color: var(--primary, #0070f3);
 }
+/* Keyboard focus affordance — chips are role="button" tabindex="0". */
+.html-content .notes9-cite:focus-visible,
+.notes9-cite:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--primary, #0070f3) 60%, transparent);
+  outline-offset: 1px;
+}
+/* Subtle provenance color-coding. Direct workspace records read as primary
+ * (the default above). Semantic matches lean violet; web sources lean teal —
+ * enough to distinguish provenance at a glance without shouting. */
+.html-content .notes9-cite[data-cite-provenance='semantic'],
+.notes9-cite[data-cite-provenance='semantic'] {
+  color: var(--primary, #0070f3);
+  background: color-mix(in srgb, #8b5cf6 12%, transparent);
+  border-color: color-mix(in srgb, #8b5cf6 28%, transparent);
+}
+.html-content .notes9-cite[data-cite-provenance='semantic']:hover,
+.notes9-cite[data-cite-provenance='semantic']:hover {
+  background: color-mix(in srgb, #8b5cf6 22%, transparent);
+}
+.html-content .notes9-cite[data-cite-provenance='web'],
+.notes9-cite[data-cite-provenance='web'] {
+  background: color-mix(in srgb, #0d9488 12%, transparent);
+  border-color: color-mix(in srgb, #0d9488 28%, transparent);
+}
+.html-content .notes9-cite[data-cite-provenance='web']:hover,
+.notes9-cite[data-cite-provenance='web']:hover {
+  background: color-mix(in srgb, #0d9488 22%, transparent);
+}

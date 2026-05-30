@@ -1,15 +1,20 @@
 'use client';
 
+import { Check, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { MarkdownRenderer } from './markdown-renderer';
 import {
   AgentCitationsPanel,
   mergeGroundingAndRagItems,
 } from '@/components/catalyst/agent-citations-panel';
-import { AgentThinkingBar } from '@/components/catalyst/agent-thinking-bar';
 import { AgentToolCards } from '@/components/catalyst/agent-tool-cards';
 import type { ThinkingPayload, RagChunksPayload, DonePayload } from '@/lib/agent-stream-types';
-import type { CitationsManifest, ThinkingStage, ToolCard } from '@/hooks/use-agent-stream';
+import type { CitationsManifest, ThinkingStage, ToolCard, SynthesisPlan } from '@/hooks/use-agent-stream';
+
+/** Escape a string for safe interpolation into a RegExp literal. */
+function escapeRegExp(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
 
 interface ToolOutput {
   tool: string;
@@ -19,12 +24,15 @@ interface ToolOutput {
 
 interface AgentStreamReplyProps {
   thinkingSteps: ThinkingPayload[];
-  /** Current stage from latest thinking event — drives the ThinkingBar */
+  /** Current stage from latest thinking event — still used to gate the
+   * legacy thinking-step fallback. The stage stepper UI has been removed. */
   currentStage?: ThinkingStage | null;
   currentThinkingMessage?: string | null;
   currentThinkingDetail?: string | null;
   /** Live tool cards from tool_start / tool_result / tool_call events */
   toolCards?: ToolCard[];
+  /** Biomni-style synthesis checklist (synthesis_plan / synthesis_step) */
+  synthesisPlan?: SynthesisPlan | null;
   sql: string | null;
   ragChunks: RagChunksPayload | null;
   toolOutputs?: ToolOutput[];
@@ -48,7 +56,8 @@ const TOOL_LABELS: Record<string, string> = {
   sql: 'From your records',
   rag: 'From your documents',
   hybrid: 'Records + documents',
-  biomni: 'From biomedical synthesis',
+  biomni: 'From Cat-Bio synthesis',
+  cat_bio: 'From Cat-Bio synthesis',
   web: 'From the web',
   clarification: 'Awaiting your reply',
   none: 'General',
@@ -58,8 +67,8 @@ export function AgentStreamReply({
   thinkingSteps,
   currentStage,
   currentThinkingMessage,
-  currentThinkingDetail,
   toolCards = [],
+  synthesisPlan = null,
   sql,
   ragChunks,
   streamedAnswer,
@@ -76,16 +85,27 @@ export function AgentStreamReply({
       ? donePayload.resources
       : donePayload?.citations ?? [];
 
-  // Only surface resources whose [N] marker is present in the answer text,
-  // and where the citation is used positively (not just to say "unrelated to X").
+  // Only surface resources whose marker is actually present in the answer
+  // text. Key the presence check on each resource's cite_label (now reliably
+  // on the wire) and fall back to the array position for legacy payloads. The
+  // previous position-based negation heuristic was removed — it could drop
+  // valid citations whenever the agent mentioned a source near a negating
+  // phrase, and the manifest is now authoritative for what's cited.
   const body = displayAnswer ?? '';
-  const NEGATION = /\b(does not|doesn't|not related|nothing to do|no (?:text|information|content|data)|does not reference|not reference|unrelated)\b/i;
-  const grounding = rawGrounding.filter((_, i) => {
-    const marker = `[${i + 1}]`;
-    const idx = body.indexOf(marker);
-    if (idx === -1) return false;
-    const window = body.slice(Math.max(0, idx - 120), idx + 20);
-    return !NEGATION.test(window);
+  const grounding = rawGrounding.filter((r, i) => {
+    const label =
+      typeof r.cite_label === 'string' && r.cite_label.trim()
+        ? r.cite_label.trim()
+        : String(i + 1);
+    // Match the base document marker too ("3.2" → still cited if "[3.2]" or any
+    // "[3.x]" appears). Use anchored brackets, NOT substring includes — a plain
+    // `.includes("[1]")` falsely matches "[10]"/"[11]". The base regex covers
+    // "[3]" and any "[3.<n>]"; the exact `[label]` check covers odd labels.
+    const base = label.split('.')[0];
+    return (
+      new RegExp(`\\[${escapeRegExp(base)}(?:\\.\\d+)?\\]`).test(body) ||
+      body.includes(`[${label}]`)
+    );
   });
 
   const mergedCitationItems = mergeGroundingAndRagItems(grounding, ragChunks?.chunks);
@@ -98,8 +118,7 @@ export function AgentStreamReply({
   const isStreaming = isThinkingStreaming;
   const hasToolCards = toolCards.length > 0;
   const hasThinkingBar =
-    isStreaming &&
-    (currentStage != null || currentThinkingMessage != null || thinkingSteps.length > 0);
+    isStreaming && (currentStage != null || currentThinkingMessage != null);
 
   if (error) {
     return (
@@ -126,16 +145,55 @@ export function AgentStreamReply({
         />
       )}
 
-      {/* ── One-line "what stage is the agent in" indicator — only shown
-            before any tool has fired so the user knows the agent is alive. ── */}
-      {isStreaming && currentThinkingMessage && !hasToolCards && (
-        <AgentThinkingBar
-          stage={currentStage ?? null}
-          message={currentThinkingMessage ?? null}
-          detail={currentThinkingDetail}
-          isStreaming={isStreaming}
-        />
+      {/* ── Synthesis checklist — Biomni-style "here's my plan, ticking it off"
+            view. Each step shows a spinner while active and a check when done,
+            so a long protocol design reads as visible progress. ── */}
+      {synthesisPlan && synthesisPlan.steps.length > 0 && (
+        <div className="rounded-lg border border-border/60 bg-muted/20 px-3 py-2 text-sm">
+          <div className="mb-1.5 font-medium text-foreground/80">
+            {synthesisPlan.title}
+          </div>
+          <ul className="flex flex-col gap-1">
+            {synthesisPlan.steps.map((step) => (
+              <li key={step.id} className="flex items-center gap-2">
+                <span
+                  className={cn(
+                    'flex size-4 shrink-0 items-center justify-center rounded-full border text-[10px]',
+                    step.status === 'done'
+                      ? 'border-primary bg-primary text-primary-foreground'
+                      : step.status === 'active'
+                        ? 'border-primary text-primary'
+                        : 'border-border/60 text-muted-foreground'
+                  )}
+                  aria-hidden
+                >
+                  {step.status === 'done' ? (
+                    <Check className="size-3" />
+                  ) : step.status === 'active' ? (
+                    <Loader2 className="size-3 animate-spin" />
+                  ) : null}
+                </span>
+                <span
+                  className={cn(
+                    'truncate',
+                    step.status === 'done'
+                      ? 'text-muted-foreground'
+                      : step.status === 'active'
+                        ? 'text-foreground'
+                        : 'text-muted-foreground'
+                  )}
+                >
+                  {step.label}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
       )}
+
+      {/* The stage stepper (Understanding · Searching · Reading · Designing ·
+            Drafting · Done) was removed per user request. Tool cards above and
+            the legacy thinking steps below cover live progress. */}
 
       {/* ── Legacy thinking steps (fallback when no stage/toolCards) ── */}
       {!hasThinkingBar && !hasToolCards && thinkingSteps.length > 0 && (
@@ -231,8 +289,16 @@ export function AgentStreamReply({
       )}
 
       {/* ── Citations panel ── */}
-      {hasCitationPanel && (
+      {hasCitationPanel ? (
         <AgentCitationsPanel items={mergedCitationItems} triggerLabel={citationTriggerLabel} />
+      ) : (
+        // Once the answer is complete with no cited sources, say so honestly
+        // rather than leaving a silent gap.
+        donePayload != null &&
+        displayAnswer != null &&
+        displayAnswer.trim().length > 0 && (
+          <AgentCitationsPanel items={[]} triggerLabel={citationTriggerLabel} showEmptyState />
+        )
       )}
     </div>
   );

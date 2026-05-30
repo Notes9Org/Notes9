@@ -11,6 +11,10 @@ export interface HighlightTarget {
   pageNumber?: number | null;
   /** For literature: jump to Overview abstract vs PDF full text. */
   contentSurface?: 'abstract' | 'pdf' | null;
+  /** Advisory char offsets (into the stripped source) for the supporting span.
+   * Used as a precision bonus by the highlighter — the fuzzy match on `excerpt`
+   * (which now prefers `cited_text`) is the reliable primary path. */
+  charRange?: { start: number; end: number } | null;
 }
 
 const HIGHLIGHT_PARAM = 'highlight';
@@ -24,6 +28,7 @@ export function encodeHighlightParam(target: HighlightTarget): string {
     ...(target.chunkId ? { cid: target.chunkId } : {}),
     ...(target.pageNumber != null ? { pg: target.pageNumber } : {}),
     ...(target.contentSurface ? { sf: target.contentSurface } : {}),
+    ...(target.charRange ? { cr: [target.charRange.start, target.charRange.end] } : {}),
   });
   if (typeof window !== 'undefined') {
     return btoa(unescape(encodeURIComponent(json)));
@@ -47,6 +52,15 @@ export function decodeHighlightParam(param: string): HighlightTarget | null {
     const sf = o.sf;
     const contentSurface =
       sf === 'abstract' || sf === 'pdf' ? sf : null;
+    const cr = o.cr;
+    const charRange =
+      Array.isArray(cr) &&
+      typeof cr[0] === 'number' &&
+      typeof cr[1] === 'number' &&
+      cr[0] >= 0 &&
+      cr[1] > cr[0]
+        ? { start: cr[0], end: cr[1] }
+        : null;
     return {
       sourceType,
       sourceId,
@@ -54,6 +68,7 @@ export function decodeHighlightParam(param: string): HighlightTarget | null {
       chunkId: typeof o.cid === 'string' ? o.cid : null,
       pageNumber: typeof o.pg === 'number' ? o.pg : null,
       contentSurface,
+      charRange,
     };
   } catch {
     return null;
@@ -122,9 +137,36 @@ export function normalizeAgentSourceType(raw: string): string {
     case 'project':
     case 'projects':
       return 'project';
+    // Cat-Bio synthesis (formerly "Biomni"). The backend is renaming the
+    // citation source_type biomni_synthesis → cat_bio_synthesis; map both to
+    // the canonical key so OLD persisted citations keep resolving (back-compat).
+    case 'cat_bio_synthesis':
+    case 'biomni_synthesis':
+      return 'cat_bio_synthesis';
     default:
       return t;
   }
+}
+
+/**
+ * Friendly, user-facing label for a (raw) citation source_type. Falls back to
+ * a de-underscored title when the type is unknown so new backend types still
+ * render readably without a code change. Used by the citations panel.
+ */
+const SOURCE_TYPE_LABELS: Record<string, string> = {
+  literature_review: 'Literature',
+  lab_note: 'Lab note',
+  protocol: 'Protocol',
+  experiment: 'Experiment',
+  project: 'Project',
+  // Cat-Bio synthesis — covers both the new cat_bio_synthesis source_type and
+  // legacy biomni_synthesis (both normalize to cat_bio_synthesis).
+  cat_bio_synthesis: 'Cat-Bio synthesis',
+};
+
+export function sourceTypeLabel(rawSourceType: string): string {
+  const canonical = normalizeAgentSourceType(rawSourceType);
+  return SOURCE_TYPE_LABELS[canonical] ?? rawSourceType.replace(/_/g, ' ');
 }
 
 /**
@@ -157,9 +199,13 @@ export function coalesceAgentSourceId(c: Record<string, unknown>): string | null
   return null;
 }
 
-/** Match / RAG payloads may label the passage `text`, `snippet`, etc. */
+/** Match / RAG payloads may label the passage `text`, `snippet`, etc.
+ * `cited_text` (the exact per-claim supporting span from the span-level
+ * grounding contract) is preferred first so the highlighter targets the
+ * precise sentence backing a sub-citation, not the document head. */
 export function coalesceAgentExcerpt(c: Record<string, unknown>): string | null {
   const keys = [
+    'cited_text',
     'excerpt',
     'text',
     'snippet',
@@ -228,6 +274,9 @@ export function buildHighlightTargetFromResource(
     source_type: string;
     source_id?: string | null;
     excerpt?: string | null;
+    cited_text?: string | null;
+    char_start?: number | null;
+    char_end?: number | null;
     chunk_id?: string | null;
     content_surface?: string | null;
     page_number?: number | null;
@@ -239,7 +288,9 @@ export function buildHighlightTargetFromResource(
     (c.source_id != null && String(c.source_id).trim() !== ''
       ? String(c.source_id).trim()
       : null);
-  const excerpt = coalesceAgentExcerpt(obj) ?? c.excerpt?.trim() ?? null;
+  // `coalesceAgentExcerpt` already prefers `cited_text`, so this resolves to the
+  // exact per-claim span when the backend sent one.
+  const excerpt = coalesceAgentExcerpt(obj) ?? c.cited_text?.trim() ?? c.excerpt?.trim() ?? null;
   if (!id || !excerpt) return null;
   const sourceType = normalizeAgentSourceType(c.source_type);
   if (!HIGHLIGHTABLE_SOURCE_TYPES.has(sourceType)) return null;
@@ -255,6 +306,11 @@ export function buildHighlightTargetFromResource(
       ? inferLiteratureContentSurface(c) ?? 'abstract'
       : undefined;
 
+  const start = typeof c.char_start === 'number' && Number.isFinite(c.char_start) ? c.char_start : null;
+  const end = typeof c.char_end === 'number' && Number.isFinite(c.char_end) ? c.char_end : null;
+  const charRange =
+    start != null && end != null && end > start ? { start, end } : null;
+
   return {
     sourceType,
     sourceId: String(id).trim(),
@@ -262,6 +318,7 @@ export function buildHighlightTargetFromResource(
     chunkId: c.chunk_id ?? null,
     pageNumber,
     contentSurface: contentSurface ?? null,
+    charRange,
   };
 }
 

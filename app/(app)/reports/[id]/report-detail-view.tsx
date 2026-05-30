@@ -14,7 +14,6 @@ import {
   User,
   FlaskConical,
   FolderOpen,
-  Trash2,
   ArrowLeft,
   Download,
 } from "lucide-react"
@@ -25,16 +24,6 @@ import { useAutoSave } from "@/hooks/use-auto-save"
 import { createClient } from "@/lib/supabase/client"
 import { toast } from "sonner"
 import type { ReportRow } from "../reports-page-client"
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog"
 import { buttonVariants } from "@/components/ui/button"
 
 import type { ReactNode } from "react"
@@ -114,9 +103,6 @@ export function ReportDetailView({ report, leftControls, sidebar }: ReportDetail
   }, [report.content])
 
   const [content, setContent] = useState(initialHtml)
-  const [deleteOpen, setDeleteOpen] = useState(false)
-  const [isDeleting, setIsDeleting] = useState(false)
-
   const statusVariant =
     report.status === "final" ? "default" : report.status === "review" ? "secondary" : "outline"
 
@@ -141,23 +127,6 @@ export function ReportDetailView({ report, leftControls, sidebar }: ReportDetail
     },
     [debouncedSave]
   )
-
-  const confirmDelete = async () => {
-    setIsDeleting(true)
-    try {
-      const { error } = await supabase.from("reports").delete().eq("id", report.id)
-      if (error) {
-        toast.error(`Failed to delete: ${error.message}`)
-        return
-      }
-      toast.success("Report deleted")
-      setDeleteOpen(false)
-      ;(() => { const pq = typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("project") : null; router.push(pq ? "/reports?project=" + pq : "/reports"); })()
-      router.refresh()
-    } finally {
-      setIsDeleting(false)
-    }
-  }
 
   const exportTitle = report.title || "Data Analysis Report"
 
@@ -190,33 +159,8 @@ export function ReportDetailView({ report, leftControls, sidebar }: ReportDetail
               </Button>
             }
           />
-          <Button variant="outline" size="sm" className="text-destructive gap-2" onClick={() => setDeleteOpen(true)} title="Delete report">
-            <Trash2 className="h-4 w-4" />
-            Delete
-          </Button>
         </div>
       </div>
-
-      <AlertDialog open={deleteOpen} onOpenChange={setDeleteOpen}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Delete report?</AlertDialogTitle>
-            <AlertDialogDescription>
-              This will permanently delete <strong>"{report.title}"</strong>. This action cannot be undone.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel disabled={isDeleting}>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={confirmDelete}
-              disabled={isDeleting}
-              className={buttonVariants({ variant: "destructive" })}
-            >
-              {isDeleting ? "Deleting..." : "Delete"}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
 
       {/* Main Content Area */}
       <div className="flex min-h-0 min-w-0 flex-1 flex-col items-stretch overflow-hidden">

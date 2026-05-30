@@ -755,7 +755,7 @@ function NewProtocolForm() {
                     <TiptapEditor
                       content={formData.content}
                       onChange={(content) => setFormData((prev) => ({ ...prev, content }))}
-                      placeholder="Draft your protocol… Link literature on the left for Biomni; apply AI output from the right."
+                      placeholder="Draft your protocol… Link literature on the left for Cat-Bio; apply AI output from the right."
                       title={formData.name || "new-protocol"}
                       minHeight="460px"
                       showAITools

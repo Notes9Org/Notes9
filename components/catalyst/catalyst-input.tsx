@@ -123,6 +123,8 @@ export function CatalystInput({
         name: data.pathname,
         contentType: data.contentType,
         size: data.size,
+        storagePath: data.storagePath,
+        chatAttachmentId: data.chatAttachmentId ?? undefined,
       };
     } catch (error) {
       console.error('Upload error:', error);

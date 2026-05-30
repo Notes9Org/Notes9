@@ -1,4 +1,5 @@
 import type { DonePayload, GroundingResource } from '@/lib/agent-stream-types';
+import type { CitationsManifest } from '@/hooks/use-agent-stream';
 
 /** Chat message rows use DB UUIDs once persisted. */
 export function isPersistedChatMessageId(id: string): boolean {
@@ -8,6 +9,11 @@ export function isPersistedChatMessageId(id: string): boolean {
 /** Appended to saved assistant markdown; stripped for display, history, and parsing. */
 export const NOTES9_GROUNDING_MARKER = '\n§§NOTES9_GROUNDING§§\n';
 
+/** Appended after the grounding block; carries the base64 citations manifest so
+ * restored sessions render identical inline `[N]` chips (with hover previews
+ * and click navigation) instead of dead plain-text markers. */
+export const NOTES9_MANIFEST_MARKER = '\n§§NOTES9_MANIFEST§§\n';
+
 // Display labels only. Unknown keys fall through to the raw value at the
 // usage site via `?? tool` — adding a new agent capability requires no
 // change here.
@@ -15,7 +21,8 @@ const TOOL_USED_LABEL: Record<string, string> = {
   sql: 'From your records',
   rag: 'From your documents',
   hybrid: 'Records + documents',
-  biomni: 'From biomedical synthesis',
+  biomni: 'From Cat-Bio synthesis',
+  cat_bio: 'From Cat-Bio synthesis',
   web: 'From the web',
   clarification: 'Awaiting your reply',
   none: '',
@@ -80,7 +87,10 @@ function formatNotes9Footer(donePayload: DonePayload): string {
  * Persist assistant turn: answer markdown + footer + opaque grounding payload (like literature agent).
  * UI parses {@link parseNotes9AssistantStoredContent} to show “All citations” with deep-links.
  */
-export function formatNotes9AssistantMarkdown(donePayload: DonePayload): string {
+export function formatNotes9AssistantMarkdown(
+  donePayload: DonePayload,
+  citationsManifest?: CitationsManifest | null,
+): string {
   const refs =
     donePayload.resources?.length
       ? donePayload.resources
@@ -94,37 +104,65 @@ export function formatNotes9AssistantMarkdown(donePayload: DonePayload): string 
     out += NOTES9_GROUNDING_MARKER + payload;
   }
 
+  // Persist the manifest separately so restored sessions resolve the inline
+  // `[N]` / `[3.2]` chips by cite_label exactly as the live stream did.
+  if (citationsManifest?.manifest && Object.keys(citationsManifest.manifest).length > 0) {
+    const manifestPayload = utf8ToBase64(JSON.stringify(citationsManifest.manifest));
+    out += NOTES9_MANIFEST_MARKER + manifestPayload;
+  }
+
   return out;
 }
 
 /**
- * Split stored assistant markdown into display body and structured resources for {@link AgentCitationsPanel}.
+ * Split stored assistant markdown into display body, structured resources, and
+ * the citations manifest for {@link AgentCitationsPanel} / MarkdownRenderer.
  */
 export function parseNotes9AssistantStoredContent(stored: string): {
   bodyMarkdown: string;
   resources: GroundingResource[];
+  citationsManifest: CitationsManifest | null;
 } {
-  const i = stored.lastIndexOf(NOTES9_GROUNDING_MARKER);
+  // Peel off the manifest block first (it always trails the grounding block).
+  let working = stored;
+  let citationsManifest: CitationsManifest | null = null;
+  const mi = working.lastIndexOf(NOTES9_MANIFEST_MARKER);
+  if (mi !== -1) {
+    const manifestB64 = working.slice(mi + NOTES9_MANIFEST_MARKER.length).trim();
+    working = working.slice(0, mi);
+    try {
+      const json = base64ToUtf8(manifestB64);
+      const parsed = JSON.parse(json) as unknown;
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+        citationsManifest = { manifest: parsed as CitationsManifest['manifest'] };
+      }
+    } catch {
+      citationsManifest = null;
+    }
+  }
+
+  const i = working.lastIndexOf(NOTES9_GROUNDING_MARKER);
   if (i === -1) {
     return {
-      bodyMarkdown: stripLegacyMarkdownReferencesSection(stored),
+      bodyMarkdown: stripLegacyMarkdownReferencesSection(working),
       resources: [],
+      citationsManifest,
     };
   }
 
-  const bodyMarkdown = stored.slice(0, i);
-  const b64 = stored.slice(i + NOTES9_GROUNDING_MARKER.length).trim();
+  const bodyMarkdown = working.slice(0, i);
+  const b64 = working.slice(i + NOTES9_GROUNDING_MARKER.length).trim();
 
   try {
     const json = base64ToUtf8(b64);
     const parsed = JSON.parse(json) as unknown;
     if (!Array.isArray(parsed)) {
-      return { bodyMarkdown, resources: [] };
+      return { bodyMarkdown, resources: [], citationsManifest };
     }
     const resources = parsed as GroundingResource[];
-    return { bodyMarkdown, resources };
+    return { bodyMarkdown, resources, citationsManifest };
   } catch {
-    return { bodyMarkdown: stored.slice(0, i), resources: [] };
+    return { bodyMarkdown: working.slice(0, i), resources: [], citationsManifest };
   }
 }
 

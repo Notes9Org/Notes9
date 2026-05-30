@@ -6,6 +6,13 @@ import { fileTypeFromBuffer } from "file-type"
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10 MB
 
+// The `user` bucket is PRIVATE (see scripts/057_security_hardening.sql §4), so
+// getPublicUrl() returns a dead link. We mint a signed URL whose lifetime ==
+// the chat-attachment TTL (7 days), so the link is valid for exactly as long
+// as the file exists. `storagePath` is returned alongside so the client can
+// persist it and re-sign later (e.g. when chat history reloads).
+const SIGNED_URL_TTL_SECONDS = 7 * 24 * 60 * 60; // 7 days
+
 const ALLOWED_MIME_TYPES = [
   'image/jpeg',
   'image/png',
@@ -94,12 +101,16 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Failed to upload file" }, { status: 500 });
     }
 
-    const { data: publicUrlData } = supabase.storage
+    const { data: signedUrlData, error: signedUrlError } = await supabase.storage
       .from(USER_STORAGE_BUCKET)
-      .getPublicUrl(storagePath);
-    const publicUrl = publicUrlData?.publicUrl ?? "";
+      .createSignedUrl(storagePath, SIGNED_URL_TTL_SECONDS);
+    const signedUrl = signedUrlData?.signedUrl ?? "";
 
-    if (!publicUrl.startsWith("https://")) {
+    if (signedUrlError || !signedUrl.startsWith("http")) {
+      console.error("Failed to sign uploaded file URL", {
+        storagePath,
+        error: signedUrlError?.message,
+      });
       await supabase.storage.from(USER_STORAGE_BUCKET).remove([storagePath]);
       return NextResponse.json({ error: "Failed to generate file URL" }, { status: 500 });
     }
@@ -145,7 +156,7 @@ export async function POST(request: Request) {
     }
 
     return NextResponse.json({
-      url: publicUrl,
+      url: signedUrl,
       storagePath,
       pathname: file.name,
       contentType: file.type,

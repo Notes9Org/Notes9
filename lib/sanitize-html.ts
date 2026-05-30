@@ -37,6 +37,15 @@ const ALLOWED_ATTR = [
   "data-paper-journal", "data-paper-doi", "data-paper-url",
   "data-citation-id", "data-citation-number",
   "data-katex", "data-latex", "data-math-type",
+  // Inline citation chips emitted by markdown-renderer.tsx (postProcessHtml).
+  // Without these, DOMPurify strips the chip payload + a11y/interaction attrs,
+  // killing every chip click/hover. Keep in sync with the dataAttrs builder.
+  "data-cite-n", "data-cite-label", "data-cite-token", "data-cite-type",
+  "data-cite-id", "data-cite-name", "data-cite-match", "data-cite-relevance",
+  "data-cite-excerpt", "data-cite-provenance", "data-cite-url",
+  // Span-level grounding: exact per-claim snippet + support verdict.
+  "data-cite-snippet", "data-cite-support",
+  "role", "tabindex", "aria-label",
   // Common chart/embed attrs
   "loading", "decoding", "referrerpolicy",
 ]

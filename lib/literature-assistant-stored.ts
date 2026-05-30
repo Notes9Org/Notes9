@@ -1,7 +1,13 @@
 import type { PaperAnalyzerReference } from '@/lib/literature-agent-types';
+import type { CitationsManifest } from '@/hooks/use-agent-stream';
 
 /** Appended to saved assistant markdown; stripped for display and model history. */
 const MARKER = '\n§§NOTES9_LITERATURE_REFS§§\n';
+
+/** Appended after the refs block; carries the base64 citations manifest so restored
+ * literature sessions render identical interactive inline `[N]` chips (mirrors the
+ * mechanism in lib/notes9-chat-format.ts). */
+const MANIFEST_MARKER = '\n§§NOTES9_MANIFEST§§\n';
 
 function utf8ToBase64(text: string): string {
   const bytes = new TextEncoder().encode(text);
@@ -19,29 +25,55 @@ function base64ToUtf8(b64: string): string {
 
 export function serializeLiteratureAssistantStoredContent(
   bodyMarkdown: string,
-  refs: PaperAnalyzerReference[]
+  refs: PaperAnalyzerReference[],
+  citationsManifest?: CitationsManifest | null
 ): string {
-  const body = bodyMarkdown.trimEnd();
-  if (!refs.length) return body;
-  const payload = utf8ToBase64(JSON.stringify(refs));
-  return `${body}${MARKER}${payload}`;
+  let out = bodyMarkdown.trimEnd();
+  if (refs.length) {
+    out += `${MARKER}${utf8ToBase64(JSON.stringify(refs))}`;
+  }
+  // Persist the manifest separately so restored sessions resolve the inline
+  // `[N]` chips by cite_label exactly as the live stream did.
+  if (citationsManifest?.manifest && Object.keys(citationsManifest.manifest).length > 0) {
+    out += `${MANIFEST_MARKER}${utf8ToBase64(JSON.stringify(citationsManifest.manifest))}`;
+  }
+  return out;
 }
 
 export function parseLiteratureAssistantStoredContent(stored: string): {
   bodyMarkdown: string;
   refs: PaperAnalyzerReference[];
+  citationsManifest: CitationsManifest | null;
 } {
-  const i = stored.lastIndexOf(MARKER);
-  if (i === -1) {
-    return { bodyMarkdown: stored, refs: [] };
+  // Peel off the manifest block first (it always trails the refs block).
+  let working = stored;
+  let citationsManifest: CitationsManifest | null = null;
+  const mi = working.lastIndexOf(MANIFEST_MARKER);
+  if (mi !== -1) {
+    const manifestB64 = working.slice(mi + MANIFEST_MARKER.length).trim();
+    working = working.slice(0, mi);
+    try {
+      const json = base64ToUtf8(manifestB64);
+      const parsed = JSON.parse(json) as unknown;
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+        citationsManifest = { manifest: parsed as CitationsManifest['manifest'] };
+      }
+    } catch {
+      citationsManifest = null;
+    }
   }
-  const bodyMarkdown = stored.slice(0, i);
-  const b64 = stored.slice(i + MARKER.length).trim();
+
+  const i = working.lastIndexOf(MARKER);
+  if (i === -1) {
+    return { bodyMarkdown: working, refs: [], citationsManifest };
+  }
+  const bodyMarkdown = working.slice(0, i);
+  const b64 = working.slice(i + MARKER.length).trim();
   try {
     const json = base64ToUtf8(b64);
     const parsed = JSON.parse(json) as unknown;
     if (!Array.isArray(parsed)) {
-      return { bodyMarkdown: stored, refs: [] };
+      return { bodyMarkdown: working, refs: [], citationsManifest };
     }
     const refs: PaperAnalyzerReference[] = [];
     for (const item of parsed) {
@@ -62,8 +94,8 @@ export function parseLiteratureAssistantStoredContent(stored: string): {
         note: typeof o.note === 'string' ? o.note : o.note === null ? null : undefined,
       });
     }
-    return { bodyMarkdown, refs };
+    return { bodyMarkdown, refs, citationsManifest };
   } catch {
-    return { bodyMarkdown: stored.slice(0, i), refs: [] };
+    return { bodyMarkdown: working.slice(0, i), refs: [], citationsManifest };
   }
 }

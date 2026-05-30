@@ -6,7 +6,7 @@ import {
   ChevronDown,
   ChevronRight,
   CheckCircle2,
-  XCircle,
+  AlertCircle,
   Loader2,
   Database,
   FileText,
@@ -45,8 +45,8 @@ const TOOL_NAMES: Record<string, string> = {
   web_search_tool:        'web_search',
   full_record_fetch_tool: 'open_record',
   document_analysis_tool: 'analyze_doc',
-  biomni_tool:            'biomni',
-  biomni_full_tool:       'biomni_full',
+  biomni_tool:            'cat_bio',
+  biomni_full_tool:       'cat_bio_full',
   llm_chat_tool:          'reason',
   extract_data_tool:      'extract',
   episodic_memory_tool:   'memory',
@@ -93,7 +93,9 @@ function ToolCardItem({ card }: ToolCardItemProps) {
       className={cn(
         'rounded-md border bg-card/40 overflow-hidden transition-colors',
         isRunning && 'border-primary/40 bg-primary/[0.03]',
-        isError && 'border-destructive/40 bg-destructive/[0.04]',
+        // Failed tool: muted amber, not an alarming full-red — the label
+        // text ("Couldn't …") already conveys failure.
+        isError && 'border-amber-500/40 bg-amber-500/[0.05]',
         !isRunning && !isError && 'border-border/60',
       )}
     >
@@ -119,7 +121,8 @@ function ToolCardItem({ card }: ToolCardItemProps) {
           {isRunning ? (
             <Loader2 className="size-3.5 animate-spin text-primary" aria-hidden />
           ) : isError ? (
-            <XCircle className="size-3.5 text-destructive" aria-hidden />
+            // Failed tool — distinct amber alert, never the green success check.
+            <AlertCircle className="size-3.5 text-amber-600 dark:text-amber-500" aria-hidden />
           ) : (
             <CheckCircle2 className="size-3.5 text-emerald-600 dark:text-emerald-500" aria-hidden />
           )}
@@ -128,7 +131,7 @@ function ToolCardItem({ card }: ToolCardItemProps) {
         <Icon
           className={cn(
             'shrink-0 size-3.5',
-            isRunning ? 'text-primary' : isError ? 'text-destructive' : 'text-muted-foreground',
+            isRunning ? 'text-primary' : isError ? 'text-amber-600 dark:text-amber-500' : 'text-muted-foreground',
           )}
           aria-hidden
         />

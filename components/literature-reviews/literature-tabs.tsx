@@ -888,6 +888,12 @@ export function LiteratureTabs({
             onSearch={handleSearch}
           />
 
+          {resolvedActiveTab !== "search" && (
+            <p className="text-sm text-muted-foreground text-center -mt-2">
+              Looking for more? Use the search bar above{hasSearched ? " or return to the Search results tab" : ""}.
+            </p>
+          )}
+
           {showUnifiedTabStrip ? (
             <Tabs
               value={resolvedActiveTab}

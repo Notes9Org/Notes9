@@ -166,7 +166,10 @@ export function CatalystMessages({
                           <div className="whitespace-pre-wrap">{content}</div>
                         ) : (
                           <>
-                            <MarkdownRenderer content={assistantDisplayMarkdown} />
+                            <MarkdownRenderer
+                              content={assistantDisplayMarkdown}
+                              citationsManifest={notes9Parsed?.citationsManifest ?? null}
+                            />
                             {notes9Sources && (
                               <AgentCitationsPanel
                                 items={notes9Sources.map((c, i) =>

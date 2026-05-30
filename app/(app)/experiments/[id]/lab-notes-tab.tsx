@@ -239,7 +239,7 @@ export function LabNotesTab({
       if (cancelled) return;
       const editor = noteEditorRef.current;
       if (!editor) return;
-      editor.commands.setRagHighlight(activeHighlightTarget.excerpt);
+      editor.commands.setRagHighlight(activeHighlightTarget.excerpt, activeHighlightTarget.charRange ?? null);
       requestAnimationFrame(() => {
         if (cancelled) return;
         const el = editor.view.dom.querySelector('.rag-chunk-highlight');

@@ -11,17 +11,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog"
-import { MoreHorizontal, Trash2, FileCheck, FileEdit } from "lucide-react"
+import { MoreHorizontal, FileCheck, FileEdit, FileDown } from "lucide-react"
 import { toast } from "sonner"
 
 interface PaperActionsProps {
@@ -54,19 +44,9 @@ export function PaperActions({ paper, onAfterMutation }: PaperActionsProps) {
     router.refresh()
   }
 
-  const handleDelete = async () => {
-    const { error } = await supabase
-      .from("papers")
-      .delete()
-      .eq("id", paper.id)
-
-    if (error) {
-      toast.error("Failed to delete paper")
-      return
-    }
-    toast.success("Paper deleted")
-    onAfterMutation?.()
-    ;(() => { const pq = typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("project") : null; router.push(pq ? "/papers?project=" + pq : "/papers"); })()
+  const exportToWord = async () => {
+    // Placeholder for export logic
+    toast.info("Exporting to Word...")
   }
 
   return (
@@ -97,32 +77,13 @@ export function PaperActions({ paper, onAfterMutation }: PaperActionsProps) {
             </DropdownMenuItem>
           )}
           <DropdownMenuSeparator />
-          <DropdownMenuItem
-            className="text-destructive focus:text-destructive"
-            onClick={() => setDeleteOpen(true)}
-          >
-            <Trash2 className="h-4 w-4 mr-2" />
-            Delete
+          <DropdownMenuItem onClick={exportToWord}>
+            <FileDown className="h-4 w-4 mr-2" />
+            Export to Word
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
 
-      <AlertDialog open={deleteOpen} onOpenChange={setDeleteOpen}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Delete paper?</AlertDialogTitle>
-            <AlertDialogDescription>
-              This will permanently delete &quot;{paper.title}&quot;. This action cannot be undone.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={handleDelete} className={buttonVariants({ variant: "destructive" })}>
-              Delete
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
     </>
   )
 }

@@ -155,10 +155,12 @@ export function CatalystChat({ open, onOpenChange }: CatalystChatProps) {
     try {
       const fd = new FormData();
       fd.append('file', file);
+      const sid = currentSessionRef.current;
+      if (sid) fd.append('session_id', sid);
       const res = await fetch('/api/files/upload', { method: 'POST', body: fd });
       if (!res.ok) { const d = await res.json(); throw new Error(d.error || 'Upload failed'); }
       const d = await res.json();
-      return { url: d.url, name: d.pathname, contentType: d.contentType, size: d.size };
+      return { url: d.url, name: d.pathname, contentType: d.contentType, size: d.size, storagePath: d.storagePath, chatAttachmentId: d.chatAttachmentId ?? undefined };
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Upload failed');
       return null;
@@ -247,6 +249,34 @@ export function CatalystChat({ open, onOpenChange }: CatalystChatProps) {
         if (Array.isArray(atts) && atts.length > 0) hydratedAtts.set(m.id, atts);
       }
       setMessageAttachments(hydratedAtts);
+
+      // The `user` bucket is private; persisted signed URLs expire, so re-sign
+      // from storagePath before rendering reloaded attachments.
+      const pathsToSign = Array.from(
+        new Set(
+          [...hydratedAtts.values()].flat().map((a) => a.storagePath).filter((p): p is string => !!p),
+        ),
+      );
+      if (pathsToSign.length > 0) {
+        fetch('/api/files/sign', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ storagePaths: pathsToSign }),
+        })
+          .then((r) => (r.ok ? r.json() : Promise.reject(new Error('sign failed'))))
+          .then((data: { urls?: Record<string, string> }) => {
+            const urls = data?.urls ?? {};
+            if (Object.keys(urls).length === 0) return;
+            setMessageAttachments((prev) => {
+              const next = new Map(prev);
+              for (const [mid, list] of next) {
+                next.set(mid, list.map((a) => (a.storagePath && urls[a.storagePath] ? { ...a, url: urls[a.storagePath] } : a)));
+              }
+              return next;
+            });
+          })
+          .catch((err) => console.warn('Attachment re-sign failed', err));
+      }
     } else {
       setMessages([]);
       setSavedMessageIds(new Set());
