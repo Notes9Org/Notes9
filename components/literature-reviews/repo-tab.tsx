@@ -597,21 +597,7 @@ export function RepoTab({
             </SelectContent>
           </Select>
 
-          {statusOptions.length > 0 && (
-            <Select value={selectedStatus} onValueChange={setSelectedStatus}>
-              <SelectTrigger className="min-w-0 max-w-full w-full lg:w-[160px]">
-                <SelectValue placeholder="Status" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All statuses</SelectItem>
-                {statusOptions.map((st) => (
-                  <SelectItem key={st} value={st}>
-                    {st.replace(/_/g, " ")}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          )}
+
 
           <Button
             variant="ghost"
@@ -681,8 +667,7 @@ export function RepoTab({
                       onMouseDown={(e) => handleResize('journal', e.clientX, columnWidths.journal)}
                     />
                   </TableHead>
-                  <TableHead className="w-[100px] font-semibold text-foreground/80">Status</TableHead>
-                  <TableHead className="sticky right-0 z-20 w-[120px] font-semibold text-foreground/80 text-left bg-background border-l border-border/40">
+                  <TableHead className="w-[120px] font-semibold text-foreground/80 text-left">
                     Actions
                   </TableHead>
                 </TableRow>
@@ -721,16 +706,16 @@ export function RepoTab({
                       className="py-4"
                       style={{ width: columnWidths.details }}
                     >
-                      <div className="flex flex-col gap-1 w-full overflow-hidden" style={{ maxWidth: columnWidths.details - 32 }}>
+                      <div className="flex flex-col gap-1 w-full min-w-0 overflow-hidden">
                         <button
                           onClick={() => handleOpenPaper(lit.id)}
-                          className="font-semibold text-sm leading-snug text-foreground hover:text-[var(--n9-accent)] text-left transition-colors truncate block"
+                          className="font-semibold text-sm leading-snug text-foreground hover:text-[var(--n9-accent)] text-left transition-colors block w-full overflow-hidden"
                           title={lit.title}
                         >
-                          {lit.title}
+                          <span className="block truncate w-full">{lit.title}</span>
                         </button>
                         <div className="flex items-center gap-2">
-                          <span className="text-micro font-medium text-muted-foreground/80 truncate" style={{ maxWidth: columnWidths.details - 100 }}>
+                          <span className="text-micro font-medium text-muted-foreground/80 truncate min-w-0">
                             {lit.authors || "Unknown Authors"}
                           </span>
                           {lit.pdf_storage_path && (
@@ -749,7 +734,7 @@ export function RepoTab({
                       </div>
                     </TableCell>
                     <TableCell style={{ width: columnWidths.journal }}>
-                      <div className="flex flex-col gap-0.5 w-full overflow-hidden" style={{ maxWidth: columnWidths.journal - 32 }}>
+                      <div className="flex flex-col gap-0.5 w-full min-w-0 overflow-hidden">
                         <span className="text-micro font-bold text-foreground/70 truncate w-full" title={lit.journal || "Unknown Journal"}>
                           {lit.journal || "No journal info"}
                         </span>
@@ -758,15 +743,7 @@ export function RepoTab({
                         </span>
                       </div>
                     </TableCell>
-                    <TableCell>
-                      <Badge
-                        variant={getStatusBadge(lit.status)}
-                        className="text-3xs font-bold uppercase tracking-tighter px-1.5 h-4 rounded-sm"
-                      >
-                        {lit.status}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="sticky right-0 z-10 text-left bg-background group-hover:bg-muted/50 transition-colors border-l border-border/40">
+                    <TableCell className="text-left">
                       <div className="flex items-center justify-start gap-1.5 opacity-40 hover:opacity-100 transition-opacity">
                         <Button
                           variant="secondary"

@@ -173,14 +173,7 @@ export default async function ExperimentDetailPage({
           </div>
         </div>
         <div className="flex flex-wrap items-center justify-end gap-2">
-          {projectFromUrl ? (
-            <Button asChild variant="outline" size="sm" className="gap-2">
-              <Link href={`/experiments/${experiment.id}`}>
-                {/* <X className="h-4 w-4" /> */}
-                {/* Remove project filter */}
-              </Link>
-            </Button>
-          ) : null}
+
           <ExperimentActions
             experiment={{
               id: experimentData.id,

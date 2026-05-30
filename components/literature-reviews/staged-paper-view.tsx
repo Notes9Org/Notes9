@@ -3,7 +3,7 @@
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { SearchPaper } from "@/types/paper-search"
-import { BookOpen, Database, ExternalLink, FileText, Loader2, Trash2 } from "lucide-react"
+import { BookOpen, Database, ExternalLink, FileText, Loader2, Trash2, Search } from "lucide-react"
 import { LiteraturePdfPanel } from "./literature-pdf-panel"
 import { UploadLiteraturePdfDialog } from "./upload-literature-pdf-dialog"
 
@@ -98,38 +98,40 @@ export function StagedPaperView({
 
   return (
     <div className="space-y-6">
-      <div className="flex items-start justify-between">
-        <div className="space-y-1">
-          <h3 className="text-xl font-bold text-foreground">{lit.title}</h3>
-          <p className="text-sm text-muted-foreground">
-            {lit.authors || "Unknown Author"} • {lit.journal || "No journal"} (
-            {lit.publication_year || "n.d."})
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => void onSavePaper(rowToSearchPaper(lit), lit.id)}
-            disabled={Boolean(savingLiteratureId)}
-            className="gap-2"
-          >
-            {savingLiteratureId === lit.id ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <Database className="h-4 w-4" />
-            )}
-            Save to Repository
-          </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="text-muted-foreground hover:bg-rose-50 hover:text-rose-400 dark:hover:bg-rose-950/40 dark:hover:text-rose-300"
-            onClick={onRemove}
-          >
-            <Trash2 className="h-4 w-4 mr-2" />
-            Remove
-          </Button>
+      <div className="flex flex-col gap-4">
+        <div className="flex items-start justify-between">
+          <div className="space-y-1">
+            <h3 className="text-xl font-bold text-foreground">{lit.title}</h3>
+            <p className="text-sm text-muted-foreground">
+              {lit.authors || "Unknown Author"} • {lit.journal || "No journal"} (
+              {lit.publication_year || "n.d."})
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => void onSavePaper(rowToSearchPaper(lit), lit.id)}
+              disabled={Boolean(savingLiteratureId)}
+              className="gap-2"
+            >
+              {savingLiteratureId === lit.id ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Database className="h-4 w-4" />
+              )}
+              Save to Repository
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="text-muted-foreground hover:bg-rose-50 hover:text-rose-400 dark:hover:bg-rose-950/40 dark:hover:text-rose-300"
+              onClick={onRemove}
+            >
+              <Trash2 className="h-4 w-4 mr-2" />
+              Remove
+            </Button>
+          </div>
         </div>
       </div>
 
