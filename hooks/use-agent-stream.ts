@@ -75,24 +75,45 @@ export interface AgentStreamParams {
   };
 }
 
+/** One resolved citation in the manifest. Keyed in `manifest` by its full
+ * `cite_label` (e.g. "3" or the hierarchical "3.2"). Per the shared wire
+ * contract, `source_id`, `cite_label`, `match_kind`, and `relevance` are now
+ * reliably present, so chips can navigate by identity without a title lookup. */
+export interface CitationsManifestEntry {
+  /** Display number `[N]` the answer text uses. */
+  index?: number;
+  /** Stable per-source token from Option C citations (`lit_7c4f`, `lab_a1b2`). */
+  token?: string;
+  /** Full display label ("3", "3.2"); also the manifest key. */
+  cite_label?: string;
+  source_type: string;
+  /** Server-side identity for the source — now reliably present on the wire. */
+  source_id?: string;
+  source_name?: string;
+  source_url?: string;
+  excerpt?: string;
+  /** 'exact' → direct record (no % match); otherwise semantic similarity. */
+  match_kind?: string;
+  /** Semantic similarity 0–1 (or 0–100; normalize at the UI). */
+  relevance?: number;
+  // ── Per-claim, span-level grounding (unified wire contract) ───────────────
+  /** Verbatim supporting span for THIS sub-citation. Prefer over `excerpt`
+   * when highlighting so [3.1] and [3.2] land on different sentences. */
+  cited_text?: string;
+  /** Char offset into the stripped source where `cited_text` begins (advisory). */
+  char_start?: number;
+  /** Char offset (exclusive) where `cited_text` ends (advisory). */
+  char_end?: number;
+  /** Support strength 0–1 for this specific claim↔span pairing. */
+  support_score?: number;
+  /** Grounding verdict for the claim. Subtle signal, never "wrong". */
+  support_status?: 'supported' | 'partial' | 'unsupported' | null;
+  /** How the span was located: model-native citation, heuristic match, or none. */
+  grounding?: 'native' | 'heuristic' | 'none' | null;
+}
+
 export interface CitationsManifest {
-  manifest: Record<string, {
-    /** Display number `[N]` the answer text uses (also the key). */
-    index?: number;
-    /** Stable per-source token from Option C citations (`lit_7c4f`, `lab_a1b2`).
-     * Present even when the answer renders numerics — lets the chip stay bound
-     * to source identity if display numbering shifts during a re-render. */
-    token?: string;
-    source_type: string;
-    /** Server-side identity for the source. Backend intentionally omits raw
-     * UUIDs from the wire payload (see CitationResponse), so this is almost
-     * always absent in practice — kept optional so consumers don't crash on
-     * the missing field. Bind chips to `token`, not `source_id`. */
-    source_id?: string;
-    source_name?: string;
-    source_url?: string;
-    excerpt?: string;
-  }>;
+  manifest: Record<string, CitationsManifestEntry>;
 }
 
 export interface ToolOutput {
@@ -123,10 +144,29 @@ export interface ToolCard {
   row_count?: number;
 }
 
-/** Thinking stage values emitted by the backend */
+export interface SynthesisStep {
+  id: string;
+  label: string;
+  status: 'pending' | 'active' | 'done';
+}
+
+export interface SynthesisPlan {
+  /** Correlation id of the synthesis run (tool field). */
+  id: string;
+  title: string;
+  steps: SynthesisStep[];
+}
+
+/** Thinking stage values emitted by the backend.
+ * Canonical staged flow:  understanding → searching → reading → designing →
+ * drafting → done.  The older analyzing/synthesizing/composing/validating
+ * names are retained for back-compat with messages mid-migration. */
 export type ThinkingStage =
   | 'understanding'
   | 'searching'
+  | 'reading'
+  | 'designing'
+  | 'drafting'
   | 'analyzing'
   | 'synthesizing'
   | 'composing'
@@ -141,8 +181,17 @@ export interface AgentStreamState {
   currentThinkingMessage: string | null;
   /** Latest thinking detail */
   currentThinkingDetail: string | null;
+  /** Fractional progress 0–1 for the current long-running stage (Cat-Bio
+   * synthesis), or null when the backend hasn't reported one. */
+  currentStageProgress: number | null;
+  /** Elapsed seconds reported by the backend for the current stage, or null. */
+  currentStageElapsedS: number | null;
   /** Live tool cards — keyed by tool id */
   toolCards: ToolCard[];
+  /** Biomni-style synthesis checklist — the ordered steps the design works
+   * through, each ticked off live as its section is written. Null until the
+   * backend emits a `synthesis_plan`. */
+  synthesisPlan: SynthesisPlan | null;
   sql: string | null;
   ragChunks: RagChunksPayload | null;
   citationsManifest: CitationsManifest | null;
@@ -266,8 +315,8 @@ const TOOL_LABELS: Record<string, { label: string }> = {
 };
 
 const THINKING_STAGES: ThinkingStage[] = [
-  'understanding', 'searching', 'analyzing', 'synthesizing',
-  'composing', 'validating', 'done',
+  'understanding', 'searching', 'reading', 'designing', 'drafting',
+  'analyzing', 'synthesizing', 'composing', 'validating', 'done',
 ];
 
 function normalizeStage(raw: unknown): ThinkingStage | null {
@@ -282,7 +331,10 @@ export function useAgentStream() {
     currentStage: null,
     currentThinkingMessage: null,
     currentThinkingDetail: null,
+    currentStageProgress: null,
+    currentStageElapsedS: null,
     toolCards: [],
+    synthesisPlan: null,
     sql: null,
     ragChunks: null,
     citationsManifest: null,
@@ -312,7 +364,10 @@ export function useAgentStream() {
         currentStage: null,
         currentThinkingMessage: null,
         currentThinkingDetail: null,
+        currentStageProgress: null,
+        currentStageElapsedS: null,
         toolCards: [],
+        synthesisPlan: null,
         sql: null,
         ragChunks: null,
         citationsManifest: null,
@@ -391,6 +446,20 @@ export function useAgentStream() {
                   const node = typeof p?.node === 'string' ? p.node : '';
                   const status = typeof p?.status === 'string' ? p.status : '';
                   const message = step.message || '';
+                  // Long-run progress signals (Cat-Bio synthesis): fractional
+                  // progress 0–1 and elapsed seconds keep the current step
+                  // visibly "alive" during a 60s run.
+                  const progress =
+                    typeof p?.progress === 'number' && Number.isFinite(p.progress)
+                      ? Math.max(0, Math.min(1, p.progress as number))
+                      : null;
+                  const elapsedS =
+                    typeof p?.elapsed_s === 'number' && Number.isFinite(p.elapsed_s)
+                      ? (p.elapsed_s as number)
+                      : null;
+                  // A heartbeat is a keep-alive: refresh progress/stage but do
+                  // NOT append another visible thinking line.
+                  const isHeartbeat = p?.heartbeat === true;
 
                   setState((s) => {
                     let toolCards = s.toolCards;
@@ -424,10 +493,32 @@ export function useAgentStream() {
                     return {
                       ...s,
                       toolCards,
-                      thinkingSteps: [...s.thinkingSteps, step],
+                      // Heartbeats keep the step list stable — only stage
+                      // progress / elapsed are refreshed so the UI shows life
+                      // without a flood of duplicate lines.
+                      thinkingSteps: isHeartbeat
+                        ? s.thinkingSteps
+                        : [...s.thinkingSteps, step],
                       currentStage: stage ?? s.currentStage,
-                      currentThinkingMessage: step.message,
-                      currentThinkingDetail: detail ?? null,
+                      currentThinkingMessage: isHeartbeat
+                        ? s.currentThinkingMessage
+                        : step.message,
+                      currentThinkingDetail: isHeartbeat
+                        ? s.currentThinkingDetail
+                        : detail ?? null,
+                      // On a real stage transition, clear stale progress so the
+                      // new stage starts fresh; heartbeats and same-stage steps
+                      // keep the last known value.
+                      currentStageProgress:
+                        progress ??
+                        (!isHeartbeat && stage && stage !== s.currentStage
+                          ? null
+                          : s.currentStageProgress),
+                      currentStageElapsedS:
+                        elapsedS ??
+                        (!isHeartbeat && stage && stage !== s.currentStage
+                          ? null
+                          : s.currentStageElapsedS),
                     };
                   });
                 }
@@ -511,6 +602,54 @@ export function useAgentStream() {
                 }
                 break;
               }
+              case 'synthesis_plan': {
+                if (payload && typeof payload === 'object') {
+                  const p = payload as Record<string, unknown>;
+                  const rawSteps = Array.isArray(p.steps) ? p.steps : [];
+                  const steps: SynthesisStep[] = rawSteps
+                    .filter((s): s is Record<string, unknown> => !!s && typeof s === 'object')
+                    .map((s) => ({
+                      id: typeof s.id === 'string' ? s.id : '',
+                      label: typeof s.label === 'string' ? s.label : '',
+                      status: 'pending' as const,
+                    }))
+                    .filter((s) => s.id && s.label);
+                  setState((s) => ({
+                    ...s,
+                    synthesisPlan: {
+                      id: typeof p.tool === 'string' ? p.tool : 'cat_bio',
+                      title: typeof p.title === 'string' ? p.title : 'Designing',
+                      steps,
+                    },
+                  }));
+                }
+                break;
+              }
+              case 'synthesis_step': {
+                if (payload && typeof payload === 'object') {
+                  const p = payload as Record<string, unknown>;
+                  const stepId = typeof p.id === 'string' ? p.id : '';
+                  const status = (p.status === 'active' || p.status === 'done'
+                    ? p.status
+                    : 'pending') as SynthesisStep['status'];
+                  if (stepId) {
+                    setState((s) =>
+                      s.synthesisPlan
+                        ? {
+                            ...s,
+                            synthesisPlan: {
+                              ...s.synthesisPlan,
+                              steps: s.synthesisPlan.steps.map((st) =>
+                                st.id === stepId ? { ...st, status } : st
+                              ),
+                            },
+                          }
+                        : s
+                    );
+                  }
+                }
+                break;
+              }
               case 'sql': {
                 const q =
                   payload && typeof (payload as { query?: string }).query === 'string'
@@ -547,9 +686,15 @@ export function useAgentStream() {
                 break;
               }
               case 'citations_manifest': {
-                // Citation manifest for inline [N] resolution
+                // Citation manifest for inline [N] resolution. Guard the wire
+                // shape before trusting the cast — `manifest.manifest` must be a
+                // plain object map (not null / array / scalar).
                 const manifest = payload as CitationsManifest | null;
-                if (manifest?.manifest) {
+                if (
+                  typeof manifest?.manifest === 'object' &&
+                  manifest.manifest !== null &&
+                  !Array.isArray(manifest.manifest)
+                ) {
                   setState((s) => ({ ...s, citationsManifest: manifest }));
                 }
                 break;
@@ -703,7 +848,10 @@ export function useAgentStream() {
       currentStage: null,
       currentThinkingMessage: null,
       currentThinkingDetail: null,
+      currentStageProgress: null,
+      currentStageElapsedS: null,
       toolCards: [],
+      synthesisPlan: null,
       sql: null,
       ragChunks: null,
       citationsManifest: null,

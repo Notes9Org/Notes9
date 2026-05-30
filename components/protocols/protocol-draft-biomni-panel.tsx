@@ -175,7 +175,7 @@ export function ProtocolDraftBiomniPanel({
       <div className="flex items-center justify-between gap-2 px-3 py-2 border-b shrink-0 bg-background/80">
         <div className="flex items-center gap-2 min-w-0">
           <Sparkles className="h-4 w-4 text-primary shrink-0" />
-          <span className="text-sm font-semibold truncate">AI draft (Biomni)</span>
+          <span className="text-sm font-semibold truncate">AI draft (Cat-Bio)</span>
         </div>
         {onRequestClose && (
           <Button
@@ -193,7 +193,7 @@ export function ProtocolDraftBiomniPanel({
 
       <div className="px-3 py-2 border-b space-y-1.5 shrink-0">
         <p className="text-micro text-muted-foreground leading-snug">
-          Selected papers are sent to the Biomni literature stream only — they are not inserted into
+          Selected papers are sent to the Cat-Bio literature stream only — they are not inserted into
           the protocol body until you apply an assistant reply below.
         </p>
         <div className="flex flex-wrap gap-1">
@@ -328,7 +328,7 @@ export function ProtocolDraftBiomniPanel({
             placeholder={
               literatureIds.length === 0
                 ? "Select papers on the left first…"
-                : "Ask Biomni to draft a section, list steps, or refine the protocol…"
+                : "Ask Cat-Bio to draft a section, list steps, or refine the protocol…"
             }
             className="min-h-[72px] text-xs resize-none"
             disabled={literatureIds.length === 0 || isStreaming}

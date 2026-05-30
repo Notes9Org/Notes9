@@ -4,18 +4,42 @@ import { useState, useDeferredValue } from 'react';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
-import { Copy, Check, RefreshCw, Globe, ChevronDown, ChevronUp, FileText, ImageIcon } from 'lucide-react';
+import { Copy, Check, RefreshCw, ChevronDown, ChevronUp, FileText } from 'lucide-react';
 import type { Attachment } from './preview-attachment';
 import { cn } from '@/lib/utils';
 import { MarkdownRenderer } from './markdown-renderer';
 import { AgentToolCards } from './agent-tool-cards';
-import type { ToolCard } from '@/hooks/use-agent-stream';
+import {
+  AgentCitationsPanel,
+  groundingResourceToPanelItem,
+} from './agent-citations-panel';
+import type { ToolCard, CitationsManifest } from '@/hooks/use-agent-stream';
+import type { GroundingResource } from '@/lib/agent-stream-types';
 
 interface SourceItem {
   url?: string;
   title?: string;
   snippet?: string;
   [key: string]: unknown;
+}
+
+/** Adapt the modal's loose web-source shape into a GroundingResource so the
+ * same AgentCitationsPanel renders modal answers identically to the page. */
+function sourceToGroundingResource(src: SourceItem): GroundingResource {
+  const url = typeof src.url === 'string' ? src.url : null;
+  const title =
+    typeof src.title === 'string' && src.title.trim()
+      ? src.title.trim()
+      : url || 'Source';
+  const excerpt = typeof src.snippet === 'string' ? src.snippet : null;
+  return {
+    source_type: 'web',
+    source_name: title,
+    display_label: title,
+    source_url: url,
+    excerpt,
+    match_kind: 'web',
+  };
 }
 
 interface ChatMessageProps {
@@ -31,6 +55,8 @@ interface ChatMessageProps {
   onRegenerate?: () => void;
   isRegenerating?: boolean;
   isStreaming?: boolean;
+  /** When present, inline `[N]` markers render as interactive citation chips. */
+  citationsManifest?: CitationsManifest | null;
 }
 
 export function ChatMessage({
@@ -46,6 +72,7 @@ export function ChatMessage({
   onRegenerate,
   isRegenerating,
   isStreaming = false,
+  citationsManifest = null,
 }: ChatMessageProps) {
   const [copied, setCopied] = useState(false);
   const [showThinking, setShowThinking] = useState(false);
@@ -167,50 +194,23 @@ export function ChatMessage({
               <MarkdownRenderer
                 content={deferredContent}
                 showCursor={isStreaming}
+                citationsManifest={citationsManifest}
               />
             )}
           </div>
         )}
 
-        {/* Sources */}
+        {/* Sources — routed through the shared AgentCitationsPanel so modal
+            answers get the same grouped, interactive citation display as the
+            page surface. */}
         {!isUser && normalizedSources.length > 0 && !isStreaming && (
-          <div className="flex flex-col gap-1 mt-0.5">
-            <span className="text-micro font-medium text-muted-foreground flex items-center gap-1">
-              <Globe className="size-3" /> Sources
-            </span>
-            <div className="flex flex-wrap gap-1.5">
-              {normalizedSources.slice(0, 6).map((src, i) => {
-                const url = typeof src.url === 'string' ? src.url : undefined;
-                const title = typeof src.title === 'string' ? src.title : url ?? `Source ${i + 1}`;
-                let domain = '';
-                try {
-                  if (url) domain = new URL(url).hostname.replace(/^www\./, '');
-                } catch {
-                  domain = '';
-                }
-                return url ? (
-                  <a
-                    key={i}
-                    href={url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1 rounded-full border border-border/60 bg-background px-2 py-0.5 text-micro text-muted-foreground hover:text-foreground hover:border-border transition-colors max-w-[180px]"
-                    title={title}
-                  >
-                    <Globe className="size-2.5 shrink-0" />
-                    <span className="truncate">{domain || title}</span>
-                  </a>
-                ) : (
-                  <span
-                    key={i}
-                    className="inline-flex items-center gap-1 rounded-full border border-border/40 bg-muted/40 px-2 py-0.5 text-micro text-muted-foreground max-w-[180px]"
-                  >
-                    <span className="truncate">{title}</span>
-                  </span>
-                );
-              })}
-            </div>
-          </div>
+          <AgentCitationsPanel
+            items={normalizedSources.map((src, i) =>
+              groundingResourceToPanelItem(sourceToGroundingResource(src), i)
+            )}
+            triggerLabel="All citations"
+            className="mt-0.5 self-start"
+          />
         )}
 
         {/* Actions (visible on hover for completed assistant messages) */}

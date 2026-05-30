@@ -1,12 +1,141 @@
 'use client';
 
 import * as React from 'react';
-import { useMemo } from 'react';
+import { useMemo, useRef, useState, useCallback, useEffect } from 'react';
 import { cn } from '@/lib/utils';
 import { markdownToHtml } from '@/lib/markdown-to-html';
 import { sanitizeHtml } from '@/lib/sanitize-html';
 import type { CitationsManifest } from '@/hooks/use-agent-stream';
+import {
+  buildHighlightUrl,
+  dispatchDocumentHighlight,
+  normalizeAgentSourceType,
+  normalizeAgentRelevance0to1,
+  type HighlightTarget,
+} from '@/lib/document-highlight';
 import '@/styles/html-content.css';
+
+/** Citation chip metadata read off the clicked/hovered DOM element's data-*. */
+interface ChipData {
+  label: string;
+  sourceType: string;
+  sourceId: string;
+  sourceName: string;
+  sourceUrl: string;
+  matchKind: string;
+  relevance: number | null;
+  excerpt: string;
+  /** Exact per-claim supporting span (span-level grounding). Preferred over
+   * `excerpt` for the hover preview and for the click highlight target. */
+  citedText: string;
+  /** Grounding verdict for this specific claim — drives the support badge. */
+  supportStatus: 'supported' | 'partial' | 'unsupported' | null;
+  provenance: string;
+}
+
+function parseSupportStatus(
+  raw: string | undefined,
+): 'supported' | 'partial' | 'unsupported' | null {
+  return raw === 'supported' || raw === 'partial' || raw === 'unsupported' ? raw : null;
+}
+
+function readChipData(el: HTMLElement): ChipData {
+  const ds = el.dataset;
+  const rel = ds.citeRelevance ? Number(ds.citeRelevance) : NaN;
+  return {
+    label: ds.citeLabel || ds.citeN || '',
+    sourceType: ds.citeType || '',
+    sourceId: ds.citeId || '',
+    sourceName: ds.citeName || '',
+    sourceUrl: ds.citeUrl || '',
+    matchKind: ds.citeMatch || '',
+    relevance: Number.isFinite(rel) ? normalizeAgentRelevance0to1(rel) : null,
+    excerpt: ds.citeExcerpt || '',
+    citedText: ds.citeSnippet || '',
+    supportStatus: parseSupportStatus(ds.citeSupport),
+    provenance: ds.citeProvenance || '',
+  };
+}
+
+/** Subtle grounding signal shown in the hover card. These are confidence
+ * cues, NOT correctness verdicts — phrasing avoids reading as "wrong". */
+const SUPPORT_BADGE: Record<
+  'supported' | 'partial' | 'unsupported',
+  { label: string; symbol: string; className: string }
+> = {
+  supported: {
+    label: 'Directly quoted',
+    symbol: '✓',
+    className: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400',
+  },
+  partial: {
+    label: 'Closely matched',
+    symbol: '•',
+    className: 'bg-amber-500/10 text-amber-600 dark:text-amber-400',
+  },
+  unsupported: {
+    label: 'Inferred from source',
+    symbol: '–',
+    className: 'bg-muted text-muted-foreground',
+  },
+};
+
+function SupportBadge({
+  status,
+  className,
+}: {
+  status: 'supported' | 'partial' | 'unsupported' | null;
+  className?: string;
+}) {
+  if (!status) return null;
+  const b = SUPPORT_BADGE[status];
+  return (
+    <span
+      className={cn(
+        'inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-2xs font-medium',
+        b.className,
+        className,
+      )}
+    >
+      <span aria-hidden className="leading-none">
+        {b.symbol}
+      </span>
+      {b.label}
+    </span>
+  );
+}
+
+/** Internal route for a workspace source kind + id (mirrors AgentCitationsPanel). */
+function workspaceRoute(sourceType: string, sourceId: string): string {
+  if (!sourceId) return '';
+  switch (normalizeAgentSourceType(sourceType)) {
+    case 'literature_review':
+      return `/literature-reviews/${sourceId}`;
+    case 'protocol':
+      return `/protocols/${sourceId}`;
+    case 'project':
+      return `/projects/${sourceId}`;
+    case 'experiment':
+      return `/experiments/${sourceId}`;
+    case 'lab_note':
+      return `/lab-notes/${sourceId}`;
+    default:
+      return '';
+  }
+}
+
+function provenanceLabel(chip: ChipData): string {
+  if (chip.provenance === 'web' || chip.sourceUrl) {
+    try {
+      return new URL(chip.sourceUrl).hostname.replace(/^www\./, '') || 'Web';
+    } catch {
+      return 'Web';
+    }
+  }
+  if (chip.matchKind === 'exact') return 'Direct record';
+  if (chip.relevance != null) return `${Math.round(chip.relevance * 100)}% match`;
+  return chip.sourceType.replace(/_/g, ' ');
+}
 
 const PROSE_CSS_VARS = {
   '--tw-prose-body': 'var(--foreground)',
@@ -95,37 +224,76 @@ function postProcessHtml(html: string, manifest?: CitationsManifest | null): str
           ? manifest.manifest[n] ?? manifest.manifest[n.split('.')[0]]
           : undefined;
       const name = entry?.source_name || '';
-      const token = (entry as { token?: string } | undefined)?.token || '';
+      const token = entry?.token || '';
       const sType = entry?.source_type || '';
       const url = entry?.source_url || '';
+      const sourceId = entry?.source_id || '';
+      const matchKind = entry?.match_kind || '';
+      const excerpt = entry?.excerpt || '';
+      // Exact per-claim span (span-level grounding). Falls back to excerpt so
+      // older manifests without cited_text still show a meaningful preview.
+      const citedText = entry?.cited_text || excerpt || '';
+      const supportStatus =
+        entry?.support_status === 'supported' ||
+        entry?.support_status === 'partial' ||
+        entry?.support_status === 'unsupported'
+          ? entry.support_status
+          : entry?.grounding === 'none'
+            ? 'unsupported'
+            : null;
+      const relevance =
+        typeof entry?.relevance === 'number' && Number.isFinite(entry.relevance)
+          ? String(entry.relevance)
+          : '';
+      // Provenance drives the subtle chip color-coding (web vs direct record
+      // vs semantic match). Web wins when a URL is present.
+      const provenance = url
+        ? 'web'
+        : matchKind === 'exact'
+          ? 'exact'
+          : matchKind
+            ? 'semantic'
+            : '';
       // Show the URL in the tooltip when present so the user can preview
       // where the chip points without opening it. Falls back to the source
       // name / type if there's no URL (workspace records).
       const tip = url || name || sType || '';
+      // Screen-reader label so the chip announces its citation context.
+      const ariaLabel = `Citation ${n}${name ? `: ${name}` : ''}`;
+      // Shared data-* payload — read by the renderer's click + hover delegation.
+      const dataAttrs =
+        `data-cite-n="${escapeHtmlAttr(n)}" `
+        + `data-cite-label="${escapeHtmlAttr(n)}" `
+        + (token ? `data-cite-token="${escapeHtmlAttr(token)}" ` : '')
+        + (sType ? `data-cite-type="${escapeHtmlAttr(sType)}" ` : '')
+        + (name ? `data-cite-name="${escapeHtmlAttr(name)}" ` : '')
+        + (sourceId ? `data-cite-id="${escapeHtmlAttr(sourceId)}" ` : '')
+        + (matchKind ? `data-cite-match="${escapeHtmlAttr(matchKind)}" ` : '')
+        + (relevance ? `data-cite-relevance="${escapeHtmlAttr(relevance)}" ` : '')
+        + (excerpt ? `data-cite-excerpt="${escapeHtmlAttr(excerpt.slice(0, 500))}" ` : '')
+        + (citedText ? `data-cite-snippet="${escapeHtmlAttr(citedText.slice(0, 500))}" ` : '')
+        + (supportStatus != null ? `data-cite-support="${escapeHtmlAttr(supportStatus)}" ` : '')
+        + (provenance ? `data-cite-provenance="${escapeHtmlAttr(provenance)}" ` : '');
       // External URL → render as a real anchor so clicking the chip opens
-      // the source in a new tab. No URL → keep the original styleable
-      // <sup> chip (workspace records get their click handler from the
-      // citations panel below the message).
+      // the source in a new tab. No URL → styleable <sup> chip; its click +
+      // hover behavior is wired by the renderer container via delegation.
       if (url && /^https?:\/\//i.test(url)) {
         return (
           `<a class="notes9-cite notes9-cite--link" `
           + `href="${escapeHtmlAttr(url)}" `
           + `target="_blank" rel="noopener noreferrer" `
-          + `data-cite-n="${n}" `
-          + (token ? `data-cite-token="${escapeHtmlAttr(token)}" ` : '')
-          + (sType ? `data-cite-type="${escapeHtmlAttr(sType)}" ` : '')
-          + (name ? `data-cite-name="${escapeHtmlAttr(name)}" ` : '')
+          + dataAttrs
           + `data-cite-url="${escapeHtmlAttr(url)}" `
+          + `aria-label="${escapeHtmlAttr(ariaLabel)}" `
           + `title="${escapeHtmlAttr(tip)}"`
           + `>[${n}]</a>`
         );
       }
       return (
         `<sup class="notes9-cite" `
-        + `data-cite-n="${n}" `
-        + (token ? `data-cite-token="${escapeHtmlAttr(token)}" ` : '')
-        + (sType ? `data-cite-type="${escapeHtmlAttr(sType)}" ` : '')
-        + (name ? `data-cite-name="${escapeHtmlAttr(name)}" ` : '')
+        + `role="button" tabindex="0" `
+        + `aria-label="${escapeHtmlAttr(ariaLabel)}" `
+        + dataAttrs
         + (tip ? `title="${escapeHtmlAttr(tip)}"` : '')
         + `>[${n}]</sup>`
       );
@@ -135,12 +303,96 @@ function postProcessHtml(html: string, manifest?: CitationsManifest | null): str
   return processed;
 }
 
+/** Hover preview card anchored to a citation chip. */
+function CitationHoverCard({
+  chip,
+  anchor,
+  containerRect,
+  onMouseEnter,
+  onMouseLeave,
+}: {
+  chip: ChipData;
+  anchor: DOMRect;
+  containerRect: DOMRect;
+  onMouseEnter?: () => void;
+  onMouseLeave?: () => void;
+}) {
+  // Position relative to the renderer container (which is `relative`).
+  const top = anchor.bottom - containerRect.top + 6;
+  const rawLeft = anchor.left - containerRect.left + anchor.width / 2;
+  const left = Math.max(8, Math.min(rawLeft, containerRect.width - 8));
+  // Prefer the exact per-claim span; fall back to the document excerpt.
+  const snippetSource = chip.citedText || chip.excerpt;
+  const excerpt =
+    snippetSource.length > 180 ? `${snippetSource.slice(0, 179)}…` : snippetSource;
+  return (
+    <div
+      className={cn(
+        'absolute z-50 w-72 -translate-x-1/2 rounded-lg border border-border bg-popover p-2.5 text-popover-foreground shadow-lg',
+        'animate-in fade-in-0 zoom-in-95 duration-150'
+      )}
+      style={{ top, left }}
+      role="tooltip"
+      onMouseEnter={onMouseEnter}
+      onMouseLeave={onMouseLeave}
+    >
+      <div className="flex items-center gap-1.5">
+        <span className="inline-flex items-center rounded-full bg-muted px-1.5 py-0.5 text-2xs font-medium uppercase tracking-wide text-muted-foreground">
+          {chip.sourceType ? chip.sourceType.replace(/_/g, ' ') : 'Source'}
+        </span>
+        <span className="font-mono text-2xs text-muted-foreground tabular-nums">
+          [{chip.label}]
+        </span>
+      </div>
+      {chip.sourceName && (
+        <p className="mt-1.5 line-clamp-2 text-xs font-medium text-foreground">
+          {chip.sourceName}
+        </p>
+      )}
+      {chip.supportStatus && (
+        <div className="mt-1.5">
+          <SupportBadge status={chip.supportStatus} />
+        </div>
+      )}
+      {excerpt && (
+        <p className="mt-1.5 line-clamp-3 text-xs leading-snug text-muted-foreground">
+          “{excerpt}”
+        </p>
+      )}
+      <p className="mt-1.5 text-2xs text-muted-foreground/80">
+        {provenanceLabel(chip)}
+        <span className="ml-1.5 text-primary">Open ↗</span>
+      </p>
+    </div>
+  );
+}
+
 export function MarkdownRenderer({
   content,
   className,
   showCursor = false,
   citationsManifest,
 }: MarkdownRendererProps) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [hover, setHover] = useState<{ chip: ChipData; anchor: DOMRect } | null>(null);
+  // Deferred dismiss: lets the pointer travel from the chip into the card
+  // (so the user can read / click "Open") without the card vanishing.
+  const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const cancelHoverClose = useCallback(() => {
+    if (closeTimer.current) {
+      clearTimeout(closeTimer.current);
+      closeTimer.current = null;
+    }
+  }, []);
+  const scheduleHoverClose = useCallback(() => {
+    cancelHoverClose();
+    closeTimer.current = setTimeout(() => setHover(null), 120);
+  }, [cancelHoverClose]);
+
+  const hasManifest = Boolean(
+    citationsManifest?.manifest && Object.keys(citationsManifest.manifest).length > 0
+  );
+
   const html = useMemo(() => {
     const raw = markdownToHtml(content);
     if (!raw) return '';
@@ -154,23 +406,119 @@ export function MarkdownRenderer({
     return sanitizeHtml(processed);
   }, [content, citationsManifest]);
 
+  /** Open the source a chip points at: web → new tab; workspace → highlight
+   * deep-link via dispatchDocumentHighlight (no fragile title lookup — the
+   * manifest now carries source_id). */
+  const openChip = useCallback((chip: ChipData) => {
+    if (chip.sourceUrl && /^https?:\/\//i.test(chip.sourceUrl)) {
+      window.open(chip.sourceUrl, '_blank', 'noopener,noreferrer');
+      return;
+    }
+    if (!chip.sourceId) return;
+    // Prefer the exact per-claim span so [3.1] and [3.2] (same document,
+    // different cited_text) scroll to and highlight DIFFERENT sentences.
+    const spanText = chip.citedText || chip.excerpt;
+    const target: HighlightTarget = {
+      sourceType: normalizeAgentSourceType(chip.sourceType),
+      sourceId: chip.sourceId,
+      excerpt: spanText,
+      contentSurface:
+        normalizeAgentSourceType(chip.sourceType) === 'literature_review' ? 'abstract' : null,
+    };
+    // Prefer in-app highlight dispatch (same-page doc viewers listen for it).
+    if (spanText && dispatchDocumentHighlight(target)) return;
+    const href = spanText
+      ? buildHighlightUrl(target) || workspaceRoute(chip.sourceType, chip.sourceId)
+      : workspaceRoute(chip.sourceType, chip.sourceId);
+    if (href) window.location.assign(href);
+  }, []);
+
+  const onClick = useCallback(
+    (e: React.MouseEvent<HTMLDivElement>) => {
+      const chipEl = (e.target as HTMLElement).closest<HTMLElement>('.notes9-cite');
+      if (!chipEl) return;
+      // Anchor variants are real links — let the browser handle them.
+      if (chipEl.tagName === 'A') return;
+      e.preventDefault();
+      openChip(readChipData(chipEl));
+    },
+    [openChip]
+  );
+
+  const onMouseOver = useCallback(
+    (e: React.MouseEvent<HTMLDivElement>) => {
+      const chipEl = (e.target as HTMLElement).closest<HTMLElement>('.notes9-cite');
+      if (!chipEl) {
+        // Not over a chip: defer dismissal so the pointer can reach the card.
+        scheduleHoverClose();
+        return;
+      }
+      cancelHoverClose();
+      setHover({ chip: readChipData(chipEl), anchor: chipEl.getBoundingClientRect() });
+    },
+    [cancelHoverClose, scheduleHoverClose]
+  );
+
+  // Scroll invalidates the anchored position → dismiss so the card never floats
+  // stale over unrelated content.
+  const onScroll = useCallback(() => {
+    cancelHoverClose();
+    setHover(null);
+  }, [cancelHoverClose]);
+
+  const onKeyDown = useCallback(
+    (e: React.KeyboardEvent<HTMLDivElement>) => {
+      if (e.key !== 'Enter' && e.key !== ' ') return;
+      const chipEl = (e.target as HTMLElement).closest<HTMLElement>('.notes9-cite');
+      if (!chipEl || chipEl.tagName === 'A') return;
+      e.preventDefault();
+      openChip(readChipData(chipEl));
+    },
+    [openChip]
+  );
+
+  // Clear the preview when the content changes (e.g. live streaming updates).
+  useEffect(() => {
+    setHover(null);
+  }, [html]);
+
+  // Leak-free: drop any pending dismiss timer on unmount.
+  useEffect(() => () => cancelHoverClose(), [cancelHoverClose]);
+
   if (!html) return null;
 
   return (
-    <div
-      className={cn(
-        'prose prose-sm dark:prose-invert max-w-none html-content text-sm text-foreground',
-        '[&_h1]:!text-lg [&_h1]:!font-semibold [&_h1]:!leading-snug [&_h1]:!mt-0 [&_h1]:!mb-2',
-        '[&_h2]:!text-base [&_h2]:!font-semibold [&_h2]:!leading-snug [&_h2]:!mt-4 [&_h2]:!mb-1.5 first:[&_h2]:!mt-0',
-        '[&_h3]:!text-sm [&_h3]:!font-semibold [&_h3]:!leading-snug [&_h3]:!mt-3 [&_h3]:!mb-1',
-        '[&_h4]:!text-sm [&_h4]:!font-medium [&_h4]:!text-muted-foreground',
-        '[&_pre]:overflow-x-auto [&_pre]:max-w-full',
-        '[&_a]:break-words [&_a]:overflow-wrap-anywhere',
-        showCursor && 'notes9-md--streaming',
-        className
+    <div className={cn('relative', hasManifest && 'min-w-0')}>
+      <div
+        ref={containerRef}
+        className={cn(
+          'prose prose-sm dark:prose-invert max-w-none html-content text-sm text-foreground',
+          '[&_h1]:!text-lg [&_h1]:!font-semibold [&_h1]:!leading-snug [&_h1]:!mt-0 [&_h1]:!mb-2',
+          '[&_h2]:!text-base [&_h2]:!font-semibold [&_h2]:!leading-snug [&_h2]:!mt-4 [&_h2]:!mb-1.5 first:[&_h2]:!mt-0',
+          '[&_h3]:!text-sm [&_h3]:!font-semibold [&_h3]:!leading-snug [&_h3]:!mt-3 [&_h3]:!mb-1',
+          '[&_h4]:!text-sm [&_h4]:!font-medium [&_h4]:!text-muted-foreground',
+          '[&_pre]:overflow-x-auto [&_pre]:max-w-full',
+          '[&_a]:break-words [&_a]:overflow-wrap-anywhere',
+          showCursor && 'notes9-md--streaming',
+          className
+        )}
+        style={PROSE_CSS_VARS}
+        onClick={hasManifest ? onClick : undefined}
+        onMouseOver={hasManifest ? onMouseOver : undefined}
+        onMouseLeave={hasManifest ? scheduleHoverClose : undefined}
+        onScroll={hasManifest ? onScroll : undefined}
+        onKeyDown={hasManifest ? onKeyDown : undefined}
+        dangerouslySetInnerHTML={{ __html: html }}
+      />
+      {hover && containerRef.current && (
+        <CitationHoverCard
+          chip={hover.chip}
+          anchor={hover.anchor}
+          containerRect={containerRef.current.getBoundingClientRect()}
+          onMouseEnter={cancelHoverClose}
+          onMouseLeave={scheduleHoverClose}
+        />
       )}
-      style={PROSE_CSS_VARS}
-      dangerouslySetInnerHTML={{ __html: html }}
-    />
+    </div>
   );
 }

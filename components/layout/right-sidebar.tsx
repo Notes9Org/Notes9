@@ -67,7 +67,7 @@ import {
   parseLiteratureAssistantStoredContent,
   serializeLiteratureAssistantStoredContent,
 } from '@/lib/literature-assistant-stored';
-import { useAgentStream, type AgentFileAttachment } from '@/hooks/use-agent-stream';
+import { useAgentStream, type AgentFileAttachment, type CitationsManifest } from '@/hooks/use-agent-stream';
 import { usePinnedAutoScroll } from '@/hooks/use-pinned-auto-scroll';
 import { deleteTrailingMessages } from '@/app/(app)/catalyst/actions';
 import { MessageEditor } from '@/components/catalyst/message-editor';
@@ -552,11 +552,47 @@ export function RightSidebar({
   // this, a tagged note never reaches the agent and it falls back to a title
   // search. Kinds map 1:1 to the AgentAttachment union.
   const tagsToAttachments = useCallback(
-    (tags: Array<{ kind: CatalystMentionKind; id: string; title: string }>) =>
-      tags.length > 0
-        ? tags.map((t) => ({ kind: t.kind, id: t.id, title: t.title }))
-        : undefined,
-    []
+    (tags: Array<{ kind: CatalystMentionKind; id: string; title: string }>) => {
+      if (tags.length === 0) return undefined;
+      // Reconcile each tag against the LIVE mention list before sending. A tag
+      // can carry a STALE id — a record that was re-imported under a new UUID
+      // (papers commonly get duplicated staging/repository copies) or deleted —
+      // when it was persisted in an earlier message/draft. A dead id makes the
+      // agent show "Record not found" and then flail. If the live workspace has
+      // the same kind + title, remap to the current id; if it's truly gone, drop
+      // it with a warning so it never reaches the agent.
+      //
+      // GUARD: if the live list hasn't loaded yet, pass tags through unchanged —
+      // never drop valid tags just because the lookup table is empty.
+      if (allMentionItems.length === 0) {
+        return tags.map((t) => ({ kind: t.kind, id: t.id, title: t.title }));
+      }
+      const liveIds = new Set(allMentionItems.map((m) => m.id));
+      const norm = (s: string) => (s || '').trim().toLowerCase();
+      const out: Array<{ kind: CatalystMentionKind; id: string; title: string }> = [];
+      const dropped: string[] = [];
+      for (const t of tags) {
+        if (liveIds.has(t.id)) {
+          out.push({ kind: t.kind, id: t.id, title: t.title });
+          continue;
+        }
+        const match = allMentionItems.find(
+          (m) => m.kind === t.kind && norm(m.title) === norm(t.title)
+        );
+        if (match) {
+          out.push({ kind: t.kind, id: match.id, title: match.title });
+        } else {
+          dropped.push(t.title || t.id);
+        }
+      }
+      if (dropped.length > 0) {
+        toast.warning(
+          `Skipped ${dropped.length} tagged item${dropped.length > 1 ? 's' : ''} no longer in your workspace: ${dropped.slice(0, 3).join(', ')}${dropped.length > 3 ? '…' : ''}`
+        );
+      }
+      return out.length > 0 ? out : undefined;
+    },
+    [allMentionItems]
   );
 
   useEffect(() => {
@@ -830,11 +866,16 @@ export function RightSidebar({
     async (
       donePayload: LiteratureAgentDonePayload,
       sessionId: string,
-      endpoint: 'compare' | 'biomni'
+      endpoint: 'compare' | 'biomni',
+      citationsManifest?: CitationsManifest | null
     ) => {
       const bodyMd = formatLiteratureAssistantMarkdown(donePayload, endpoint);
       const refs = donePayload.structured?.references ?? [];
-      const formattedAnswer = serializeLiteratureAssistantStoredContent(bodyMd, refs);
+      const formattedAnswer = serializeLiteratureAssistantStoredContent(
+        bodyMd,
+        refs,
+        citationsManifest ?? literatureAgentStream.citationsManifest
+      );
       const assistantMessageId = `assistant-${Date.now()}`;
       setMessages((prev) => [
         ...prev,
@@ -876,8 +917,10 @@ export function RightSidebar({
       }
       const sid = currentSessionRef.current;
       if (!sid) return;
-      const { donePayload, error, finalizeTag } = await literatureAgentStream.answerClarify(answer, token);
-      if (donePayload && finalizeTag) await finalizeLiteratureAssistant(donePayload, sid, finalizeTag);
+      const { donePayload, error, finalizeTag, citationsManifest } =
+        await literatureAgentStream.answerClarify(answer, token);
+      if (donePayload && finalizeTag)
+        await finalizeLiteratureAssistant(donePayload, sid, finalizeTag, citationsManifest);
       else if (error) toast.error(error);
     },
     [supabase, literatureAgentStream, finalizeLiteratureAssistant]
@@ -894,8 +937,10 @@ export function RightSidebar({
     }
     const sid = currentSessionRef.current;
     if (!sid) return;
-    const { donePayload, error, finalizeTag } = await literatureAgentStream.skipClarify(token);
-    if (donePayload && finalizeTag) await finalizeLiteratureAssistant(donePayload, sid, finalizeTag);
+    const { donePayload, error, finalizeTag, citationsManifest } =
+      await literatureAgentStream.skipClarify(token);
+    if (donePayload && finalizeTag)
+      await finalizeLiteratureAssistant(donePayload, sid, finalizeTag, citationsManifest);
     else if (error) toast.error(error);
   }, [supabase, literatureAgentStream, finalizeLiteratureAssistant]);
 
@@ -1239,6 +1284,12 @@ export function RightSidebar({
     try {
       const formData = new FormData();
       formData.append('file', file);
+      // Register the upload against the current session so (a) catalyst's
+      // read_document tool can fetch it and (b) the 7-day TTL cron reaps it.
+      // First message may not have a session yet — that's fine, the row is
+      // created without a session_id and the file still gets a signed URL.
+      const sid = currentSessionRef.current;
+      if (sid) formData.append('session_id', sid);
       const response = await fetch('/api/files/upload', { method: 'POST', body: formData });
       if (!response.ok) {
         const data = await response.json();
@@ -1250,6 +1301,8 @@ export function RightSidebar({
         name: data.pathname,
         contentType: data.contentType,
         size: data.size,
+        storagePath: data.storagePath,
+        chatAttachmentId: data.chatAttachmentId ?? undefined,
       };
     } catch (error) {
       console.error('Upload error:', error);
@@ -1453,6 +1506,32 @@ export function RightSidebar({
       updateSessionTitle(currentSessionRef.current, titleFromFirst);
     }
 
+    // Back-fill chat_attachments rows for files uploaded before this session
+    // existed (first message of a new chat). Gives them the 7-day TTL + makes
+    // them readable by read_document in later turns. Fire-and-forget — the
+    // signed URL in file_attachments already lets the agent read them this turn.
+    {
+      const sid = currentSessionRef.current;
+      const toRegister = currentAttachments.filter(
+        (a) => a.storagePath && !a.chatAttachmentId,
+      );
+      if (sid && toRegister.length > 0) {
+        fetch('/api/files/register', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            sessionId: sid,
+            items: toRegister.map((a) => ({
+              storagePath: a.storagePath,
+              fileName: a.name,
+              mimeType: a.contentType,
+              size: a.size ?? 0,
+            })),
+          }),
+        }).catch((err) => console.warn('Attachment register back-fill failed', err));
+      }
+    }
+
     if (agentMode === 'literature') {
       const { data: { session } } = await supabase.auth.getSession();
       const token = session?.access_token;
@@ -1515,7 +1594,7 @@ export function RightSidebar({
       }));
 
       const endpoint = 'compare' as const;
-      const { donePayload, error } = await literatureAgentStream.runRequest(
+      const { donePayload, error, citationsManifest } = await literatureAgentStream.runRequest(
         endpoint,
         {
           query: queryText,
@@ -1527,7 +1606,7 @@ export function RightSidebar({
       );
 
       if (donePayload) {
-        await finalizeLiteratureAssistant(donePayload, sessionId, endpoint);
+        await finalizeLiteratureAssistant(donePayload, sessionId, endpoint, citationsManifest);
       } else if (error) {
         toast.error(error);
       }
@@ -1616,7 +1695,7 @@ export function RightSidebar({
       setNotes9Loading(false);
 
       if (donePayload) {
-        const formattedAnswer = formatNotes9AssistantMarkdown(donePayload);
+        const formattedAnswer = formatNotes9AssistantMarkdown(donePayload, agentStream.citationsManifest);
 
         const assistantMessageId = `assistant-${Date.now()}`;
         const assistantMessage = {
@@ -1731,7 +1810,7 @@ export function RightSidebar({
         const queryFromEdit =
           literatureMessageMarkdownToPlainForModel(newContent).trim() ||
           (litIds.length > 0 ? 'Compare and analyze the tagged papers.' : '');
-        const { donePayload, error } = await literatureAgentStream.runRequest(
+        const { donePayload, error, citationsManifest } = await literatureAgentStream.runRequest(
           endpoint,
           {
             query: queryFromEdit,
@@ -1743,7 +1822,7 @@ export function RightSidebar({
         );
 
         if (donePayload) {
-          await finalizeLiteratureAssistant(donePayload, sid, endpoint);
+          await finalizeLiteratureAssistant(donePayload, sid, endpoint, citationsManifest);
         } else if (error) {
           toast.error(error);
         }
@@ -1791,7 +1870,7 @@ export function RightSidebar({
         setNotes9Loading(false);
 
         if (donePayload) {
-          const formattedAnswer = formatNotes9AssistantMarkdown(donePayload);
+          const formattedAnswer = formatNotes9AssistantMarkdown(donePayload, agentStream.citationsManifest);
           const assistantMessageId = `assistant-${Date.now()}`;
           setMessages((prev) => [
             ...prev,
@@ -1883,14 +1962,14 @@ export function RightSidebar({
 
       const litIds = sortedTaggedLiterature.map((t) => t.id);
       const endpoint = 'compare' as const;
-      const { donePayload, error } = await literatureAgentStream.runRequest(
+      const { donePayload, error, citationsManifest } = await literatureAgentStream.runRequest(
         endpoint,
         { query, session_id: sid, history, literature_review_ids: litIds },
         token
       );
 
       if (donePayload) {
-        await finalizeLiteratureAssistant(donePayload, sid, endpoint);
+        await finalizeLiteratureAssistant(donePayload, sid, endpoint, citationsManifest);
       } else if (error) {
         toast.error(error);
       }
@@ -1944,7 +2023,7 @@ export function RightSidebar({
       setNotes9Loading(false);
 
       if (donePayload) {
-        const formattedAnswer = formatNotes9AssistantMarkdown(donePayload);
+        const formattedAnswer = formatNotes9AssistantMarkdown(donePayload, agentStream.citationsManifest);
         const assistantMessageId = `assistant-${Date.now()}`;
         setMessages((prev) => [
           ...prev,
@@ -2201,13 +2280,52 @@ export function RightSidebar({
       setMessages(chatMessages);
       setSavedMessageIds(new Set(msgs.map((m) => m.id)));
 
-      // Hydrate attachment previews from persisted metadata
+      // Hydrate attachment previews from persisted metadata. The persisted
+      // `url` is a signed URL that has very likely expired, so we re-sign from
+      // the persisted `storagePath` before rendering. Attachments saved before
+      // storagePath was persisted (legacy) fall back to their stored url.
       const hydratedAtts = new Map<string, Attachment[]>();
       for (const m of msgs) {
         const atts = (m.metadata as { attachments?: Attachment[] } | undefined)?.attachments;
         if (Array.isArray(atts) && atts.length > 0) hydratedAtts.set(m.id, atts);
       }
       setMessageAttachments(hydratedAtts);
+
+      const pathsToSign = Array.from(
+        new Set(
+          [...hydratedAtts.values()]
+            .flat()
+            .map((a) => a.storagePath)
+            .filter((p): p is string => !!p),
+        ),
+      );
+      if (pathsToSign.length > 0) {
+        fetch('/api/files/sign', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ storagePaths: pathsToSign }),
+        })
+          .then((r) => (r.ok ? r.json() : Promise.reject(new Error('sign failed'))))
+          .then((data: { urls?: Record<string, string> }) => {
+            const urls = data?.urls ?? {};
+            if (Object.keys(urls).length === 0) return;
+            setMessageAttachments((prev) => {
+              const next = new Map(prev);
+              for (const [mid, list] of next) {
+                next.set(
+                  mid,
+                  list.map((a) =>
+                    a.storagePath && urls[a.storagePath]
+                      ? { ...a, url: urls[a.storagePath] }
+                      : a,
+                  ),
+                );
+              }
+              return next;
+            });
+          })
+          .catch((err) => console.warn('Attachment re-sign failed', err));
+      }
 
       // If session has no meaningful title but has messages, set title from first user message
       const session = sessions.find((s) => s.id === sessionId);
@@ -3268,6 +3386,11 @@ export function RightSidebar({
                                       <MarkdownRenderer
                                         content={content}
                                         className="text-sm text-foreground break-words [overflow-wrap:anywhere] [&_pre]:max-w-full [&_pre]:overflow-auto [&_pre]:whitespace-pre [&_code]:break-all"
+                                        citationsManifest={
+                                          notes9Parsed?.citationsManifest ??
+                                          literatureParsed?.citationsManifest ??
+                                          null
+                                        }
                                       />
                                     )}
                                   </div>
@@ -3409,8 +3532,8 @@ export function RightSidebar({
                                 thinkingSteps={agentStream.thinkingSteps}
                                 currentStage={agentStream.currentStage}
                                 currentThinkingMessage={agentStream.currentThinkingMessage}
-                                currentThinkingDetail={agentStream.currentThinkingDetail}
                                 toolCards={agentStream.toolCards}
+                                synthesisPlan={agentStream.synthesisPlan}
                                 sql={agentStream.sql}
                                 ragChunks={agentStream.ragChunks}
                                 streamedAnswer={agentStream.streamedAnswer}

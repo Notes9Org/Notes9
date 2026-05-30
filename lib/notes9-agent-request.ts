@@ -3,8 +3,12 @@
  * optional **`history`**, **`options`**, **`scope`**. Do not use OpenAI-style
  * **`messages`**; **`user_id`** in the body is ignored (identity is the JWT).
  *
- * **Zep vs `history`:** With Zep on, body **`history`** is ignored; default here
- * is **`[]`** unless **`NEXT_PUBLIC_NOTES9_AGENT_INCLUDE_HISTORY=true`** (Zep off).
+ * **Zep vs `history`:** the backend builds the model's prior-turn context from
+ * the body **`history`** (it appends the current **`query`** itself), so history
+ * passthrough is ON by default. Set
+ * **`NEXT_PUBLIC_NOTES9_AGENT_INCLUDE_HISTORY=false`** ONLY when a server-side
+ * memory store (Zep) is actually running and owns the thread, to avoid sending
+ * history twice. Leaving it unset (the normal case) preserves short-term memory.
  * The Notes9 API splits per-role content into multiple Zep thread messages when a
  * single message would exceed **4096** characters (Zep thread API limit).
  *
@@ -68,7 +72,12 @@ export type Notes9AgentRequestInput = {
 };
 
 export function notes9AgentIncludesBodyHistory(): boolean {
-  return process.env.NEXT_PUBLIC_NOTES9_AGENT_INCLUDE_HISTORY === 'true';
+  // Opt-OUT: history passthrough is ON unless explicitly disabled. Previously
+  // this was opt-in (`=== 'true'`) for a Zep integration that was never wired
+  // up, so the flag stayed unset and EVERY turn shipped `history: []` — the
+  // agent saw only the current message and lost all short-term memory. Disable
+  // only when a real server-side memory store owns the thread.
+  return process.env.NEXT_PUBLIC_NOTES9_AGENT_INCLUDE_HISTORY !== 'false';
 }
 
 /** Shape forwarded to `POST /notes9` (and `/api/agent/run`). Never sends `user_id` from the client. */

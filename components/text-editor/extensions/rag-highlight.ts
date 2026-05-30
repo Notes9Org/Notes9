@@ -10,6 +10,14 @@ export interface RagHighlightOptions {
 
 const ragHighlightKey = new PluginKey('ragHighlight')
 
+/** Advisory char offsets (into the stripped source text) for the supporting
+ * span. A precision bonus over the fuzzy `excerpt` match — only used when the
+ * offsets map cleanly onto the live editor text. */
+export interface RagHighlightCharRange {
+  start: number
+  end: number
+}
+
 interface RagHighlightState {
   excerpt: string | null
   decorations: DecorationSet
@@ -18,7 +26,7 @@ interface RagHighlightState {
 declare module '@tiptap/core' {
   interface Commands<ReturnType> {
     ragHighlight: {
-      setRagHighlight: (excerpt: string) => ReturnType
+      setRagHighlight: (excerpt: string, charRange?: RagHighlightCharRange | null) => ReturnType
       clearRagHighlight: () => ReturnType
     }
   }
@@ -41,10 +49,10 @@ export const RagHighlight = Extension.create<RagHighlightOptions>({
   addCommands() {
     return {
       setRagHighlight:
-        (excerpt: string) =>
+        (excerpt: string, charRange?: RagHighlightCharRange | null) =>
         ({ tr, dispatch }: { tr: Transaction; dispatch?: (tr: Transaction) => void }) => {
           if (dispatch) {
-            tr.setMeta(ragHighlightKey, { action: 'set', excerpt })
+            tr.setMeta(ragHighlightKey, { action: 'set', excerpt, charRange: charRange ?? null })
           }
           return true
         },
@@ -69,7 +77,7 @@ export const RagHighlight = Extension.create<RagHighlightOptions>({
           },
           apply(tr, prev): RagHighlightState {
             const meta = tr.getMeta(ragHighlightKey) as
-              | { action: 'set'; excerpt: string }
+              | { action: 'set'; excerpt: string; charRange?: RagHighlightCharRange | null }
               | { action: 'clear' }
               | undefined
 
@@ -110,7 +118,36 @@ export const RagHighlight = Extension.create<RagHighlightOptions>({
                 fullText += part.text
               }
 
-              const match = fuzzyFindExcerpt(fullText, excerpt, { threshold: 0.3 })
+              // PRIMARY path: fuzzy-match the excerpt (which prefers the exact
+              // per-claim cited_text) against the live editor text. The backend
+              // char offsets are into a DIFFERENT string (its own stripped
+              // plaintext: different stripping, different node-boundary spaces),
+              // so applying them as ProseMirror positions can land on the wrong
+              // span. Fuzzy search on the real editor text is the reliable path.
+              let match: { start: number; end: number } | null = null
+              const charRange = meta.charRange
+              if (
+                charRange &&
+                charRange.start >= 0 &&
+                charRange.end > charRange.start &&
+                charRange.end <= fullText.length
+              ) {
+                const slice = fullText.slice(charRange.start, charRange.end)
+                // Only trust the raw offsets when the text at those positions
+                // STRONGLY corroborates the excerpt (≥0.65). A weak overlap is
+                // not enough to risk a confidently-wrong highlight — anything
+                // below the bar falls through to the full-document fuzzy search.
+                const corroboration = fuzzyFindExcerpt(slice, excerpt, { threshold: 0.65 })
+                if (corroboration) {
+                  match = { start: charRange.start, end: charRange.end }
+                }
+              }
+
+              if (!match) {
+                // Fall back to (or use as primary) the full-document fuzzy search.
+                // Never highlight the raw offsets when they failed to corroborate.
+                match = fuzzyFindExcerpt(fullText, excerpt, { threshold: 0.3 })
+              }
               if (!match) {
                 return { excerpt, decorations: DecorationSet.empty }
               }

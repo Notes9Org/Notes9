@@ -20,12 +20,72 @@ import {
   dispatchDocumentHighlight,
   normalizeAgentRelevance0to1,
   normalizeAgentSourceType,
+  sourceTypeLabel,
   type HighlightTarget,
 } from '@/lib/document-highlight';
 import type { GroundingResource, RagChunk } from '@/lib/agent-stream-types';
 
 const EXCERPT_PREVIEW = 320;
 const sourceIdFallbackCache = new Map<string, string | null>();
+
+/** Derive the grounding verdict from the wire fields. `support_status` wins;
+ * `grounding === 'none'` degrades to 'unsupported'. Returns null → no badge. */
+function deriveSupportStatus(
+  c: Pick<GroundingResource, 'support_status' | 'grounding'>,
+): 'supported' | 'partial' | 'unsupported' | null {
+  const s = c.support_status;
+  if (s === 'supported' || s === 'partial' || s === 'unsupported') return s;
+  if (c.grounding === 'none') return 'unsupported';
+  return null;
+}
+
+/** Subtle grounding signal — confidence cues, NOT correctness verdicts. */
+const SUPPORT_BADGE: Record<
+  'supported' | 'partial' | 'unsupported',
+  { label: string; symbol: string; className: string }
+> = {
+  supported: {
+    label: 'Directly quoted',
+    symbol: '✓',
+    className: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400',
+  },
+  partial: {
+    label: 'Closely matched',
+    symbol: '•',
+    className: 'bg-amber-500/10 text-amber-600 dark:text-amber-400',
+  },
+  unsupported: {
+    label: 'Inferred from source',
+    symbol: '–',
+    className: 'bg-muted text-muted-foreground',
+  },
+};
+
+function SupportBadge({
+  status,
+  className,
+}: {
+  status: 'supported' | 'partial' | 'unsupported' | null | undefined;
+  className?: string;
+}) {
+  if (!status) return null;
+  const b = SUPPORT_BADGE[status];
+  return (
+    <span
+      className={cn(
+        'inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-2xs font-medium',
+        b.className,
+        className,
+      )}
+      title={b.label}
+    >
+      <span aria-hidden className="leading-none">
+        {b.symbol}
+      </span>
+      {b.label}
+    </span>
+  );
+}
 
 function getCitationRoute(citation: { source_type: string; source_id?: string | null }): string {
   const id =
@@ -129,6 +189,10 @@ async function resolveSourceIdFromName(
 
 export type AgentCitationPanelItem = {
   index: number;
+  /** Full display label from the manifest (e.g. "3" or the hierarchical
+   * "3.2"). Drives the prose-matching `[label]` shown in the panel. Falls back
+   * to `String(index)` when the backend sent no cite_label. */
+  citeLabel: string;
   title: string;
   sourceType: string;
   sourceTypeLabel: string;
@@ -142,6 +206,9 @@ export type AgentCitationPanelItem = {
    * score → no "% match" label); 'semantic' carries a real relevance score. */
   matchKind?: string | null;
   excerpt: string;
+  /** Grounding verdict for this specific claim↔span pairing. Drives the
+   * subtle support badge. null/undefined → no badge. */
+  supportStatus?: 'supported' | 'partial' | 'unsupported' | null;
   documentHref: string | null;
   highlightTarget: HighlightTarget | null;
   highlightHref: string | null;
@@ -156,26 +223,41 @@ function fingerprintCitationItem(item: AgentCitationPanelItem): string {
   return `${item.highlightHref ?? ''}|${item.documentHref ?? ''}|${ex}`;
 }
 
-function useResolvedCitationItem(item: AgentCitationPanelItem): AgentCitationPanelItem {
+function useResolvedCitationItem(
+  item: AgentCitationPanelItem,
+): AgentCitationPanelItem & { isResolving: boolean } {
   const [resolvedSourceId, setResolvedSourceId] = useState<string | null>(item.sourceId);
+  // True only while we're waiting on the title-lookup fallback. When the
+  // manifest/resource already carries source_id (the common case now that the
+  // backend sends it on the wire) we never enter the resolving state.
+  const [isResolving, setIsResolving] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
+    // Prefer source_id straight from the manifest/resource — no Supabase query.
     if (item.sourceId) {
       setResolvedSourceId(item.sourceId);
+      setIsResolving(false);
       return () => {
         cancelled = true;
       };
     }
     if (!item.sourceName) {
       setResolvedSourceId(null);
+      setIsResolving(false);
       return () => {
         cancelled = true;
       };
     }
 
+    // Only here — when source_id is truly absent — do we fall back to the
+    // by-title `.ilike()` lookup.
+    setIsResolving(true);
     resolveSourceIdFromName(item.sourceType, item.sourceName).then((id) => {
-      if (!cancelled) setResolvedSourceId(id);
+      if (!cancelled) {
+        setResolvedSourceId(id);
+        setIsResolving(false);
+      }
     });
 
     return () => {
@@ -213,6 +295,7 @@ function useResolvedCitationItem(item: AgentCitationPanelItem): AgentCitationPan
     highlightTarget,
     documentHref,
     highlightHref,
+    isResolving,
   };
 }
 
@@ -269,6 +352,16 @@ export function mergeGroundingAndRagItems(
   return [...base, ...extras];
 }
 
+/** Part-wise numeric sort key for a cite_label like "3" or "3.10".
+ * Returns NaN for non-numeric labels so callers can fall back to position. */
+function citeLabelSortKey(label: string): number {
+  const [major, minor] = label.split('.');
+  const m = Number(major);
+  const s = Number(minor);
+  if (!Number.isFinite(m)) return NaN;
+  return m + (Number.isFinite(s) ? s / 10000 : 0);
+}
+
 export function groundingResourceToPanelItem(
   c: GroundingResource,
   index: number,
@@ -297,11 +390,22 @@ export function groundingResourceToPanelItem(
   const sourceUrl = typeof c.source_url === 'string' && c.source_url.trim()
     ? c.source_url.trim()
     : null;
+  // Number from the backend-assigned cite_label when present so the panel row
+  // matches the inline `[N]`/`[3.2]` marker exactly (ADR-0006). Fall back to
+  // the array position only when no label was sent.
+  const citeLabelRaw =
+    typeof c.cite_label === 'string' && c.cite_label.trim() ? c.cite_label.trim() : '';
+  const citeLabel = citeLabelRaw || String(index + 1);
+  // Sort key: part-wise numeric ("3.10" must sort after "3.2"). A plain
+  // parseFloat collides — parseFloat("3.10") === parseFloat("3.1") === 3.1.
+  // Fall back to array position when the label is non-numeric.
+  const labelNumeric = citeLabelSortKey(citeLabel);
   return {
-    index: index + 1,
+    index: Number.isFinite(labelNumeric) ? labelNumeric : index + 1,
+    citeLabel,
     title,
     sourceType,
-    sourceTypeLabel: c.source_type.replace(/_/g, ' '),
+    sourceTypeLabel: sourceTypeLabel(c.source_type),
     sourceId,
     sourceName,
     chunkId: c.chunk_id ?? null,
@@ -312,6 +416,7 @@ export function groundingResourceToPanelItem(
     relevance,
     matchKind: typeof c.match_kind === 'string' ? c.match_kind : null,
     excerpt,
+    supportStatus: deriveSupportStatus(c),
     documentHref,
     highlightTarget,
     highlightHref,
@@ -330,7 +435,10 @@ export function ragChunkToPanelItem(chunk: RagChunk, i: number): AgentCitationPa
   const documentHref =
     getCitationRoute({ source_type: sourceType, source_id: sourceId ?? chunk.source_id }) ||
     null;
-  const excerpt = coalesceAgentExcerpt(row) ?? chunk.excerpt?.trim() ?? '';
+  // A RagChunk's supporting passage lives on `excerpt`. Don't route through
+  // coalesceAgentExcerpt — it now prefers `cited_text`, a field a RagChunk
+  // doesn't legitimately carry, so read the chunk's own field directly.
+  const excerpt = chunk.excerpt?.trim() ?? '';
   const relevance =
     typeof chunk.relevance === 'number' && Number.isFinite(chunk.relevance)
       ? normalizeAgentRelevance0to1(chunk.relevance)
@@ -342,9 +450,10 @@ export function ragChunkToPanelItem(chunk: RagChunk, i: number): AgentCitationPa
       : null;
   return {
     index: i + 1,
+    citeLabel: String(i + 1),
     title,
     sourceType,
-    sourceTypeLabel: chunk.source_type.replace(/_/g, ' '),
+    sourceTypeLabel: sourceTypeLabel(chunk.source_type),
     sourceId,
     sourceName,
     chunkId: chunk.chunk_id ?? null,
@@ -498,7 +607,10 @@ function CitationBlock({ item, isStreaming }: { item: AgentCitationPanelItem; is
       )}
     >
       <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
-        <span className="font-mono text-xs text-muted-foreground tabular-nums">[{resolvedItem.index}]</span>
+        <span className="font-mono text-xs text-muted-foreground tabular-nums">[{resolvedItem.citeLabel}]</span>
+        {resolvedItem.isResolving && (
+          <span className="size-3 shrink-0 animate-spin self-center rounded-full border border-muted-foreground/40 border-t-transparent" aria-hidden />
+        )}
         {titleHref ? (
           <SmartCitationLink
             href={titleHref}
@@ -514,18 +626,21 @@ function CitationBlock({ item, isStreaming }: { item: AgentCitationPanelItem; is
           <span className="min-w-0 flex-1 font-medium">{resolvedItem.title}</span>
         )}
       </div>
-      <p className="mt-1 text-xs text-muted-foreground">
-        {resolvedItem.sourceTypeLabel}
-        {resolvedItem.matchKind === 'exact' ? (
-          <span> · Direct record</span>
-        ) : (
-          resolvedItem.relevance != null &&
-          resolvedItem.relevance >= 0 &&
-          resolvedItem.relevance <= 1 && (
-            <span> · {Math.round(resolvedItem.relevance * 100)}% match</span>
-          )
-        )}
-      </p>
+      <div className="mt-1 flex flex-wrap items-center gap-1.5">
+        <p className="text-xs text-muted-foreground">
+          {resolvedItem.sourceTypeLabel}
+          {resolvedItem.matchKind === 'exact' ? (
+            <span> · Direct record</span>
+          ) : (
+            resolvedItem.relevance != null &&
+            resolvedItem.relevance >= 0 &&
+            resolvedItem.relevance <= 1 && (
+              <span> · {Math.round(resolvedItem.relevance * 100)}% match</span>
+            )
+          )}
+        </p>
+        <SupportBadge status={resolvedItem.supportStatus} />
+      </div>
       {displayUrl && (
         <a
           href={displayUrl}
@@ -544,6 +659,122 @@ function CitationBlock({ item, isStreaming }: { item: AgentCitationPanelItem; is
           excerptLinkHref={excerptLinkHref}
         />
       )}
+    </li>
+  );
+}
+
+/**
+ * One sub-citation row under a parent document. Renders its own [3.1] label,
+ * its own exact supporting span (`excerpt`, which already prefers cited_text),
+ * its own support badge, and is independently clickable to its own highlight.
+ */
+function SubCitationRow({ item }: { item: AgentCitationPanelItem }) {
+  const resolvedItem = useResolvedCitationItem(item);
+  const excerpt = resolvedItem.excerpt;
+  const excerptPreview =
+    excerpt.length > EXCERPT_PREVIEW ? `${excerpt.slice(0, EXCERPT_PREVIEW - 1)}…` : excerpt;
+  const excerptLinkHref =
+    resolvedItem.sourceUrl ||
+    resolvedItem.highlightHref ||
+    (resolvedItem.documentHref && excerpt ? resolvedItem.documentHref : null);
+
+  const labelEl = (
+    <span className="font-mono text-2xs text-muted-foreground tabular-nums">
+      [{resolvedItem.citeLabel}]
+    </span>
+  );
+
+  return (
+    <li className="py-1.5">
+      <div className="flex items-center gap-1.5">
+        {labelEl}
+        <SupportBadge status={resolvedItem.supportStatus} />
+        {resolvedItem.isResolving && (
+          <span className="size-3 shrink-0 animate-spin self-center rounded-full border border-muted-foreground/40 border-t-transparent" aria-hidden />
+        )}
+      </div>
+      {excerpt &&
+        (excerptLinkHref ? (
+          <SmartCitationLink
+            href={excerptLinkHref}
+            highlightTarget={resolvedItem.highlightTarget}
+            title="Open source document and scroll to this exact passage"
+            className="group mt-0.5 -mx-1 block rounded-sm px-1 py-0.5 transition-colors hover:bg-primary/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            <span className="flex items-start gap-1.5 text-xs leading-snug text-primary underline underline-offset-2 decoration-primary/40 group-hover:decoration-primary">
+              {resolvedItem.highlightHref && (
+                <MapPin className="size-3 mt-0.5 shrink-0 text-primary/70" aria-hidden />
+              )}
+              <span>“{excerptPreview}”</span>
+            </span>
+          </SmartCitationLink>
+        ) : (
+          <p className="mt-0.5 text-xs leading-snug text-muted-foreground">“{excerptPreview}”</p>
+        ))}
+    </li>
+  );
+}
+
+/**
+ * A parent document with multiple sub-citations: shows the document header once
+ * (with a link/highlight to the first span) then lists each distinct supporting
+ * span as an indented, independently-clickable [3.1]/[3.2] sub-entry.
+ * Single-span groups defer to the flat {@link CitationBlock} for visual parity.
+ */
+function SubCitationGroupBlock({
+  group,
+  isStreaming,
+}: {
+  group: SubCitationGroup;
+  isStreaming?: boolean;
+}) {
+  if (!group.hasMultiple) {
+    return <CitationBlock item={group.items[0]} isStreaming={isStreaming} />;
+  }
+  return <MultiSpanGroupBlock group={group} isStreaming={isStreaming} />;
+}
+
+function MultiSpanGroupBlock({
+  group,
+  isStreaming,
+}: {
+  group: SubCitationGroup;
+  isStreaming?: boolean;
+}) {
+  const head = useResolvedCitationItem(group.items[0]);
+  // Match CitationBlock precedence: external sourceUrl → highlightHref (deep
+  // link to the passage) → documentHref. Putting highlightHref before
+  // documentHref makes the header deep-link to the span, not just the doc top.
+  const titleHref = head.sourceUrl || head.highlightHref || head.documentHref;
+  return (
+    <li
+      className={cn(
+        'px-3 py-2.5 text-sm',
+        isStreaming && 'animate-in fade-in-0 slide-in-from-bottom-2 duration-300'
+      )}
+    >
+      <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+        <span className="font-mono text-xs text-muted-foreground tabular-nums">[{group.baseLabel}]</span>
+        {titleHref ? (
+          <SmartCitationLink
+            href={titleHref}
+            highlightTarget={head.highlightTarget}
+            className="min-w-0 flex-1 font-medium text-primary hover:underline"
+          >
+            {group.title}
+          </SmartCitationLink>
+        ) : (
+          <span className="min-w-0 flex-1 font-medium">{group.title}</span>
+        )}
+      </div>
+      <p className="mt-0.5 text-xs text-muted-foreground">
+        {group.sourceTypeLabel} · {group.items.length} supporting passages
+      </p>
+      <ul className="mt-1.5 space-y-0 border-l-2 border-muted pl-3">
+        {group.items.map((sub) => (
+          <SubCitationRow key={`${sub.citeLabel}-${sub.excerpt.slice(0, 24)}`} item={sub} />
+        ))}
+      </ul>
     </li>
   );
 }
@@ -579,7 +810,10 @@ function SingleCitationPanel({
     >
       <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
         <BookOpen className="size-3.5 shrink-0" aria-hidden />
-        <span className="font-mono tabular-nums text-muted-foreground/80">[{resolvedItem.index}]</span>
+        <span className="font-mono tabular-nums text-muted-foreground/80">[{resolvedItem.citeLabel}]</span>
+        {resolvedItem.isResolving && (
+          <span className="size-3 shrink-0 animate-spin self-center rounded-full border border-muted-foreground/40 border-t-transparent" aria-hidden />
+        )}
         {titleHref ? (
           <SmartCitationLink
             href={titleHref}
@@ -593,19 +827,22 @@ function SingleCitationPanel({
           <span className="font-medium text-foreground">{resolvedItem.title}</span>
         )}
       </div>
-      {resolvedItem.matchKind === 'exact' ? (
-        <p className="text-micro text-muted-foreground pl-6">
-          {resolvedItem.sourceTypeLabel} · Direct record
-        </p>
-      ) : (
-        resolvedItem.relevance != null &&
-        resolvedItem.relevance >= 0 &&
-        resolvedItem.relevance <= 1 && (
-          <p className="text-micro text-muted-foreground pl-6">
-            {resolvedItem.sourceTypeLabel} · {Math.round(resolvedItem.relevance * 100)}% match
+      <div className="flex flex-wrap items-center gap-1.5 pl-6">
+        {resolvedItem.matchKind === 'exact' ? (
+          <p className="text-micro text-muted-foreground">
+            {resolvedItem.sourceTypeLabel} · Direct record
           </p>
-        )
-      )}
+        ) : (
+          resolvedItem.relevance != null &&
+          resolvedItem.relevance >= 0 &&
+          resolvedItem.relevance <= 1 && (
+            <p className="text-micro text-muted-foreground">
+              {resolvedItem.sourceTypeLabel} · {Math.round(resolvedItem.relevance * 100)}% match
+            </p>
+          )
+        )}
+        <SupportBadge status={resolvedItem.supportStatus} />
+      </div>
       {displayUrl && (
         <a
           href={displayUrl}
@@ -630,6 +867,84 @@ function SingleCitationPanel({
   );
 }
 
+/** The base (document-level) part of a cite label: "3.2" → "3", "5" → "5". */
+function citeLabelBase(label: string): string {
+  return label.split('.')[0];
+}
+
+/** A parent document with one-or-more sub-citations ([3.1], [3.2], …). */
+interface SubCitationGroup {
+  /** Stable key: base label + source identity (avoids merging unrelated docs). */
+  key: string;
+  /** Document-level label ("3"). */
+  baseLabel: string;
+  /** Shared parent document title. */
+  title: string;
+  sourceTypeLabel: string;
+  /** True when more than one distinct supporting span backs this document. */
+  hasMultiple: boolean;
+  items: AgentCitationPanelItem[];
+}
+
+/**
+ * Collapse a flat list into parent-document groups. Items that share the same
+ * base cite label AND the same source identity become sub-citations under one
+ * parent header. This is the span-level USP surface: one document, multiple
+ * distinct supporting sentences, each its own clickable [3.1]/[3.2] row.
+ */
+function groupBySubCitation(items: AgentCitationPanelItem[]): SubCitationGroup[] {
+  const order: string[] = [];
+  const byKey = new Map<string, SubCitationGroup>();
+  for (const item of items) {
+    // Only merge items into one sub-citation group when they share the SAME
+    // base label AND a non-empty STABLE identity. Prefer sourceId; the [N]
+    // label is itself a stable per-document identity from the backend manifest
+    // (ADR-0006: real sub-citations of one doc share a base, e.g. [3.1]/[3.2],
+    // while two distinct docs get distinct bases [3] and [4]), so the base
+    // label backstops a missing sourceId. We deliberately do NOT fall back to
+    // sourceName/title — two DIFFERENT documents that happen to share a title
+    // but lack a sourceId must never collapse into one group.
+    const base = citeLabelBase(item.citeLabel);
+    const identity = item.sourceId ?? '';
+    const key = `${base}|${identity}`;
+    let group = byKey.get(key);
+    if (!group) {
+      group = {
+        key,
+        baseLabel: base,
+        title: item.title,
+        sourceTypeLabel: item.sourceTypeLabel,
+        hasMultiple: false,
+        items: [],
+      };
+      byKey.set(key, group);
+      order.push(key);
+    }
+    group.items.push(item);
+  }
+  for (const g of byKey.values()) {
+    g.hasMultiple = g.items.length > 1;
+    g.items.sort((a, b) => a.index - b.index);
+  }
+  return order.map((k) => byKey.get(k)!);
+}
+
+/** Coarse provenance buckets for the panel section dividers. */
+type CitationGroupKey = 'workspace' | 'papers' | 'web';
+
+const GROUP_ORDER: CitationGroupKey[] = ['workspace', 'papers', 'web'];
+const GROUP_LABELS: Record<CitationGroupKey, string> = {
+  workspace: 'Workspace records',
+  papers: 'Papers',
+  web: 'Web',
+};
+
+function citationGroup(item: AgentCitationPanelItem): CitationGroupKey {
+  if (item.sourceUrl && /^https?:\/\//i.test(item.sourceUrl)) return 'web';
+  if (normalizeAgentSourceType(item.sourceType) === 'literature_review') return 'papers';
+  return 'workspace';
+}
+
 export interface AgentCitationsPanelProps {
   items: AgentCitationPanelItem[];
   /** Collapsible trigger label, e.g. "All citations" or "Retrieved chunks" */
@@ -638,18 +953,24 @@ export interface AgentCitationsPanelProps {
   defaultOpen?: boolean;
   /** Enable streaming mode with progressive fade-in animations */
   isStreaming?: boolean;
+  /** When true, render a muted "no sources" note instead of nothing when the
+   * answer used no workspace sources. */
+  showEmptyState?: boolean;
 }
 
 /**
- * Literature-mode style: one compact row when there is a single item; otherwise
- * collapsible "All citations" with bordered list (matches {@link LiteratureSourcesDropdown}).
+ * Grouped sources panel. One compact row when there is a single item; otherwise
+ * a "Grounded in N sources" header that expands to a list grouped by source
+ * kind (Workspace records / Papers / Web). Numbers match the prose via
+ * `citeLabel`; provenance is shown honestly (Direct record / N% match / domain).
  */
 export function AgentCitationsPanel({
   items,
   triggerLabel,
   className,
-  defaultOpen = false,
+  defaultOpen = true,
   isStreaming = false,
+  showEmptyState = false,
 }: AgentCitationsPanelProps) {
   // Hooks must run unconditionally on every render — declare before any early
   // return. During streaming the item count grows 0→1→2, so a useState placed
@@ -657,7 +978,15 @@ export function AgentCitationsPanel({
   // panel (Rules of Hooks violation).
   const [open, setOpen] = useState(defaultOpen);
   const sorted = [...items].sort((a, b) => a.index - b.index);
-  if (sorted.length === 0) return null;
+
+  if (sorted.length === 0) {
+    if (!showEmptyState) return null;
+    return (
+      <p className={cn('text-xs text-muted-foreground/80', className)}>
+        Answered from general knowledge — no workspace sources cited.
+      </p>
+    );
+  }
 
   if (sorted.length === 1) {
     return (
@@ -666,6 +995,13 @@ export function AgentCitationsPanel({
       </div>
     );
   }
+
+  // Bucket into ordered groups, preserving sorted order within each.
+  const groups = GROUP_ORDER.map((key) => ({
+    key,
+    label: GROUP_LABELS[key],
+    items: sorted.filter((it) => citationGroup(it) === key),
+  })).filter((g) => g.items.length > 0);
 
   return (
     <Collapsible open={open} onOpenChange={setOpen} className={cn('min-w-0 max-w-full', className)}>
@@ -681,8 +1017,12 @@ export function AgentCitationsPanel({
           )}
         >
           <BookOpen className="size-3.5 shrink-0" aria-hidden />
-          {triggerLabel}
-          <span className="tabular-nums text-muted-foreground">({sorted.length})</span>
+          {triggerLabel === 'All citations'
+            ? `Grounded in ${sorted.length} source${sorted.length === 1 ? '' : 's'}`
+            : triggerLabel}
+          {triggerLabel !== 'All citations' && (
+            <span className="tabular-nums text-muted-foreground">({sorted.length})</span>
+          )}
           <ChevronDown
             className={cn(
               'size-3.5 shrink-0 opacity-70 transition-transform duration-200',
@@ -699,15 +1039,33 @@ export function AgentCitationsPanel({
           'data-[state=open]:animate-in data-[state=open]:fade-in-0'
         )}
       >
-        <ul className="max-h-[min(22rem,55vh)] divide-y divide-border/60 overflow-y-auto">
-          {sorted.map((item) => (
-            <CitationBlock
-              key={`${item.index}-${item.title}-${item.excerpt.slice(0, 24)}`}
-              item={item}
-              isStreaming={isStreaming}
-            />
+        <div className="max-h-[min(22rem,55vh)] overflow-y-auto">
+          {groups.map((group, gi) => (
+            <div key={group.key}>
+              {/* Only show section dividers when more than one kind is present. */}
+              {groups.length > 1 && (
+                <p
+                  className={cn(
+                    'px-3 py-1.5 text-2xs font-medium uppercase tracking-wide text-muted-foreground/80',
+                    'bg-muted/30',
+                    gi > 0 && 'border-t border-border/60'
+                  )}
+                >
+                  {group.label}
+                </p>
+              )}
+              <ul className="divide-y divide-border/60">
+                {groupBySubCitation(group.items).map((subGroup) => (
+                  <SubCitationGroupBlock
+                    key={subGroup.key}
+                    group={subGroup}
+                    isStreaming={isStreaming}
+                  />
+                ))}
+              </ul>
+            </div>
           ))}
-        </ul>
+        </div>
       </CollapsibleContent>
     </Collapsible>
   );

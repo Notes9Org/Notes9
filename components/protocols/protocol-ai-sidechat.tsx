@@ -11,7 +11,7 @@ import {
 import { createClient } from "@/lib/supabase/client"
 import { sanitizeHtml } from "@/lib/sanitize-html"
 import { chat as notes9Chat } from "@/lib/notes9-api"
-import { useAgentStream } from "@/hooks/use-agent-stream"
+import { useAgentStream, type CitationsManifest } from "@/hooks/use-agent-stream"
 import { useLiteratureAgentStream } from "@/hooks/use-literature-agent-stream"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
@@ -117,6 +117,8 @@ interface ChatMessage {
   text: string
   literatureRefs?: PaperAnalyzerReference[]
   notes9Sources?: GroundingResource[]
+  /** Citation map for interactive inline `[N]` chips in the answer body. */
+  citationsManifest?: CitationsManifest | null
   /** For assistant messages: pending = user hasn't applied/discarded yet */
   state?: "pending" | "applied" | "discarded"
   /** Background steps captured at stream completion */
@@ -214,6 +216,7 @@ function uiMessageFromDb(
     text: parsed?.text ?? row.content,
     literatureRefs: parsed?.literatureRefs,
     notes9Sources: parsed?.notes9Sources,
+    citationsManifest: parsed?.citationsManifest ?? null,
     state:
       overrides?.state ??
       (role === "assistant" ? "applied" : undefined),
@@ -225,6 +228,7 @@ function parseAssistantStoredMessage(raw: string): {
   text: string
   literatureRefs?: PaperAnalyzerReference[]
   notes9Sources?: GroundingResource[]
+  citationsManifest?: CitationsManifest | null
 } {
   const literatureParsed = parseLiteratureAssistantStoredContent(raw)
   const notes9Parsed = parseNotes9AssistantStoredContent(literatureParsed.bodyMarkdown)
@@ -234,18 +238,21 @@ function parseAssistantStoredMessage(raw: string): {
       literatureParsed.refs.length > 0 ? literatureParsed.refs : undefined,
     notes9Sources:
       notes9Parsed.resources.length > 0 ? notes9Parsed.resources : undefined,
+    citationsManifest:
+      notes9Parsed.citationsManifest ?? literatureParsed.citationsManifest ?? null,
   }
 }
 
 function buildAssistantStoredMessage(
   donePayload: LiteratureAgentDonePayload,
-  endpoint: 'compare' | 'biomni'
+  endpoint: 'compare' | 'biomni',
+  citationsManifest?: CitationsManifest | null
 ): string {
   const bodyMarkdown = stripQuestionsForYouSection(
     formatLiteratureAssistantMarkdown(donePayload, endpoint)
   )
   const refs = donePayload.structured?.references ?? []
-  return serializeLiteratureAssistantStoredContent(bodyMarkdown, refs)
+  return serializeLiteratureAssistantStoredContent(bodyMarkdown, refs, citationsManifest)
 }
 
 export function ProtocolAiSidechat({
@@ -626,10 +633,11 @@ export function ProtocolAiSidechat({
       donePayload: LiteratureAgentDonePayload,
       endpoint: 'compare' | 'biomni',
       pending: boolean,
-      capturedSteps: string[]
+      capturedSteps: string[],
+      citationsManifest?: CitationsManifest | null
     ) => {
       if (!activeSessionId) return
-      const stored = buildAssistantStoredMessage(donePayload, endpoint)
+      const stored = buildAssistantStoredMessage(donePayload, endpoint, citationsManifest)
       const saved = await saveMessage(activeSessionId, "assistant", stored)
       if (!saved) return
       setMessages((prev) => [
@@ -788,7 +796,13 @@ export function ProtocolAiSidechat({
       const hasRefs = (result.donePayload.structured?.references?.length ?? 0) > 0
       if (text || hasRefs) {
         const capturedSteps = [...steps]
-        await appendAssistantFromDb(result.donePayload, "biomni", true, capturedSteps)
+        await appendAssistantFromDb(
+          result.donePayload,
+          "biomni",
+          true,
+          capturedSteps,
+          result.citationsManifest
+        )
       }
     }
   }, [
@@ -1216,7 +1230,8 @@ export function ProtocolAiSidechat({
                                   res.donePayload,
                                   res.finalizeTag ?? "biomni",
                                   true,
-                                  [...steps]
+                                  [...steps],
+                                  res.citationsManifest
                                 )
                               }
                             }
@@ -1244,7 +1259,8 @@ export function ProtocolAiSidechat({
                                 res.donePayload,
                                 res.finalizeTag ?? "biomni",
                                 true,
-                                [...steps]
+                                [...steps],
+                                res.citationsManifest
                               )
                             }
                           }
@@ -1669,6 +1685,7 @@ function AssistantMessage({
       <div className="w-full min-w-0 max-w-full overflow-x-hidden">
         <MarkdownRenderer
           content={message.text}
+          citationsManifest={message.citationsManifest ?? null}
           className="
             w-full min-w-0 max-w-full break-words
             text-xs

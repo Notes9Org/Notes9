@@ -9,6 +9,15 @@ export interface Attachment {
   name: string;
   contentType: string;
   size?: number;
+  /**
+   * Object key inside the `user` storage bucket. The `user` bucket is PRIVATE,
+   * so `url` is a short-lived signed URL that expires with the file's 7-day TTL.
+   * We persist `storagePath` (NOT the signed url) in message metadata so the
+   * link can be re-signed when chat history is reloaded.
+   */
+  storagePath?: string;
+  /** Row id in `chat_attachments` (present when registered against a session). */
+  chatAttachmentId?: string;
 }
 
 interface PreviewAttachmentProps {
@@ -34,16 +43,26 @@ export function PreviewAttachment({
   };
 
   if (compact) {
+    // Images get a small thumbnail preview; PDFs / spreadsheets / docs stay as
+    // a lightweight icon chip (no preview needed) per product spec.
+    const showThumb = isImage && !!attachment.url && !isUploading;
     return (
       <div className="relative group">
         <div
           className={cn(
-            'flex items-center gap-2 rounded-lg border bg-muted/50 px-2 py-1.5',
+            'flex items-center gap-2 rounded-lg border bg-muted/50 py-1.5',
+            showThumb ? 'pl-1.5 pr-2' : 'px-2',
             isUploading && 'opacity-60'
           )}
         >
           {isUploading ? (
             <Loader2 className="size-3 animate-spin text-muted-foreground" />
+          ) : showThumb ? (
+            <img
+              src={attachment.url}
+              alt={attachment.name}
+              className="size-7 rounded-md object-cover shrink-0"
+            />
           ) : isImage ? (
             <ImageIcon className="size-3 text-muted-foreground" />
           ) : (

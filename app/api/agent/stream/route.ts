@@ -137,7 +137,21 @@ export async function POST(req: Request) {
             }
             controller.close();
           } catch (err) {
-            controller.error(err);
+            // Client disconnect / navigation-away aborts the reader. That is a
+            // NORMAL end-of-stream, not an error — close quietly instead of
+            // surfacing it as a stream error (which logged ECONNRESET /
+            // "uncaughtException: aborted" noise and could destabilize the dev
+            // server). Only real upstream failures propagate.
+            const name = (err as { name?: string } | null)?.name;
+            const code = (err as { code?: string } | null)?.code;
+            if (name === 'AbortError' || code === 'ECONNRESET') {
+              try { controller.close(); } catch { /* already closed */ }
+            } else {
+              try { controller.error(err); } catch { /* already errored */ }
+            }
+          } finally {
+            // Ensure the upstream connection is released either way.
+            upstreamReader.cancel().catch(() => {});
           }
         })();
       },
@@ -161,6 +175,17 @@ export async function POST(req: Request) {
       },
     });
   } catch (error) {
+    // The 90s controller above aborts ONLY the initial fetch (waiting for the
+    // upstream to send response headers). An AbortError here = the agent didn't
+    // start responding in time → a clean 504, not a 502 "service unavailable",
+    // and not a scary error log (it's an expected slow-start, not a crash).
+    const name = (error as { name?: string } | null)?.name;
+    if (name === 'AbortError') {
+      return new Response(
+        JSON.stringify({ error: 'The assistant took too long to start responding. Please try again.' }),
+        { status: 504, headers: { 'Content-Type': 'application/json' } }
+      );
+    }
     console.error('Agent stream proxy error:', error);
     return new Response(
       JSON.stringify({

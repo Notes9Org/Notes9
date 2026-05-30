@@ -440,7 +440,7 @@ export function ProtocolLiteraturePanel({
                 </TooltipTrigger>
                 {aiMode && (
                   <TooltipContent side="right" className="max-w-[220px] text-xs">
-                    Sends selected papers as context to the Biomni panel — not added to the draft.
+                    Sends selected papers as context to the Cat-Bio panel — not added to the draft.
                   </TooltipContent>
                 )}
               </Tooltip>
