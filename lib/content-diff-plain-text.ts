@@ -126,6 +126,21 @@ function serializeNodeToParts(node: Node, parts: string[]) {
     return
   }
 
+  // Table cells aren't block-level, but without a separator every cell in a row
+  // collapses into one run ("A B C" → "ABC") and the word-diff of an edited
+  // table becomes meaningless. Emit a " | " boundary between cells so each
+  // cell's text diffs independently; row breaks come from TR being a block tag.
+  if (tag === "TD" || tag === "TH") {
+    const last = parts[parts.length - 1] ?? ""
+    if (parts.length > 0 && !last.endsWith("\n") && !last.endsWith("| ")) {
+      parts.push(" | ")
+    }
+    for (const child of Array.from(el.childNodes)) {
+      serializeNodeToParts(child, parts)
+    }
+    return
+  }
+
   const isBlock = BLOCK_TAGS.has(tag)
 
   if (isBlock) appendNewline(parts)
