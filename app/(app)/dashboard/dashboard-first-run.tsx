@@ -9,6 +9,7 @@ import {
   EmptyDescription,
   EmptyContent,
 } from "@/components/ui/empty"
+import { StartTourButton } from "@/components/tour/start-tour-button"
 
 /**
  * First-run dashboard surface — rendered in place of Schedule/Tasks/Whiteboard
@@ -58,12 +59,15 @@ export function DashboardFirstRun() {
           />
         </ul>
 
-        <Button asChild size="lg" className="gap-2">
-          <Link href="/projects/new">
-            Create your first project
-            <ArrowRight className="size-4" aria-hidden />
-          </Link>
-        </Button>
+        <div className="flex flex-col items-center gap-2 sm:flex-row">
+          <Button asChild size="lg" className="gap-2">
+            <Link href="/projects/new">
+              Create your first project
+              <ArrowRight className="size-4" aria-hidden />
+            </Link>
+          </Button>
+          <StartTourButton />
+        </div>
       </EmptyContent>
     </Empty>
   )

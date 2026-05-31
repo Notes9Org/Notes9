@@ -6,6 +6,7 @@ import Link from "next/link"
 import { AppSidebar } from "./app-sidebar"
 import { RightSidebar } from "./right-sidebar"
 import { AppTour, requestPageHelp } from "@/components/tour/app-tour"
+import { TOUR } from "@/lib/tour/anchors"
 import { BreadcrumbProvider, useBreadcrumb } from "./breadcrumb-context"
 import { PaperAIProvider } from "@/contexts/paper-ai-context"
 import { LiteratureMentionProvider } from "@/contexts/literature-mention-context"
@@ -423,16 +424,18 @@ function AppLayoutBody({ children }: AppLayoutProps) {
                 type="button"
                 variant="ghost"
                 size="icon"
+                data-tour={TOUR.help}
                 className="size-8 sm:size-9 text-muted-foreground hover:text-foreground"
                 onClick={() => requestPageHelp(pathname ?? "/dashboard")}
                 aria-label="Help: tour this page"
-                title="Help: short tour for this page"
+                title="Help: take a quick tour of this page"
               >
                 <CircleHelp className="size-4" />
               </Button>
               {/* Theme toggle: one click toggles dark ↔ light (client-only to avoid hydration mismatch) */}
               <Button
                 id="tour-theme-toggle"
+                data-tour={TOUR.themeToggle}
                 variant="ghost"
                 size="icon"
                 className="size-8 sm:size-9"
@@ -462,6 +465,7 @@ function AppLayoutBody({ children }: AppLayoutProps) {
                 ) : null}
               <Button
                 id="tour-ai-toggle"
+                data-tour={TOUR.aiToggle}
                 type="button"
                 variant={catalystVisible ? "secondary" : "ghost"}
                 size="icon"

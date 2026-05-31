@@ -136,20 +136,20 @@ export default async function ExperimentDetailPage({
         segments={
           useProjectScopedHeader
             ? [
-                {
-                  label: experiment.project,
-                  href: `/projects/${experiment.projectId}`,
-                },
-                { label: experiment.name },
-              ]
+              {
+                label: experiment.project,
+                href: `/projects/${experiment.projectId}`,
+              },
+              { label: experiment.name },
+            ]
             : [
-                { label: "Projects", href: "/projects" },
-                {
-                  label: experiment.project,
-                  href: `/projects/${experiment.projectId}`,
-                },
-                { label: experiment.name },
-              ]
+              { label: "Projects", href: "/projects" },
+              {
+                label: experiment.project,
+                href: `/projects/${experiment.projectId}`,
+              },
+              { label: experiment.name },
+            ]
         }
       />
       {/* Header: stacked on mobile, row on desktop (matches project detail) */}
@@ -164,8 +164,8 @@ export default async function ExperimentDetailPage({
                 experiment.status === "active"
                   ? "default"
                   : experiment.status === "completed"
-                  ? "success"
-                  : "outline"
+                    ? "success"
+                    : "outline"
               }
             >
               {experiment.status}
