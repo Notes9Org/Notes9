@@ -595,7 +595,12 @@ export function AppSidebar() {
                 const pathMatches =
                   pathname === item.href || pathname.startsWith(item.href + "/")
                 const isActive = mounted && pathMatches
-                const isProjectItemWithScope = item.name === "Projects" && scope.projectId;
+                // `scope` is a client-only store (empty during SSR), so gating on
+                // `mounted` keeps the server and first client render identical —
+                // both emit the plain Projects link — and the scoped row appears
+                // only after hydration. Without this the branch flips <a>→<div>
+                // and React throws a hydration mismatch.
+                const isProjectItemWithScope = mounted && item.name === "Projects" && !!scope.projectId;
                 const ActiveIcon = isProjectItemWithScope ? (isProjectExpanded ? FolderOpen : Folder) : Icon;
 
                     return (

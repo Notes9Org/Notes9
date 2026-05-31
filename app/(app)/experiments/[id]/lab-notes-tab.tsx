@@ -30,6 +30,8 @@ import { NoteExportMenu, NotePrintButton } from "@/components/note-export-menu"
 import { useToast } from "@/hooks/use-toast"
 import { useAutoSave } from "@/hooks/use-auto-save"
 import { useContentDiffs } from "@/hooks/use-content-diffs"
+import { useDocumentVersions, type DocumentVersion } from "@/hooks/use-document-versions"
+import { LabNoteVersionsDialog } from "@/components/lab-notes/lab-note-versions-dialog"
 import {
   Plus,
   NotebookPen,
@@ -43,6 +45,7 @@ import {
   List,
   Pencil,
   X,
+  GitCompare,
 } from "lucide-react"
 import {
   Table,
@@ -95,6 +98,15 @@ interface LabNote {
   created_at: string;
   updated_at: string;
   created_by: string;
+  /** Live autosave buffer; null when there is no uncommitted draft (draft === content). */
+  draft_content?: string | null;
+  draft_updated_at?: string | null;
+  draft_author_id?: string | null;
+}
+
+/** The body the editor should open with: the uncommitted draft if one exists, else the committed content. */
+function effectiveBody(note: Pick<LabNote, "content" | "draft_content">): string {
+  return note.draft_content ?? note.content ?? "";
 }
 
 interface LinkedProtocol {
@@ -151,11 +163,19 @@ export function LabNotesTab({
     note_type: "general",
   });
 
-  /** Last persisted note body — drives the bottom diff bar (like protocol design mode). */
+  /** Committed note body — the approval bar diffs the live draft against this. Advanced only by an explicit Save. */
   const [savedContent, setSavedContent] = useState("");
-  /** Baseline for content_diffs — advanced on each recorded history row (auto-save + accept). */
-  const historyBaselineRef = useRef("");
   const { recordDiff } = useContentDiffs("lab_note", selectedNote?.id ?? null);
+
+  // Immutable version history (document_versions) — one row per explicit Save.
+  const {
+    versions,
+    loading: versionsLoading,
+    error: versionsError,
+    loadVersions,
+    restoreVersion,
+  } = useDocumentVersions("lab_note", selectedNote?.id ?? null);
+  const [versionsOpen, setVersionsOpen] = useState(false);
 
   // Linked protocols state
   const [linkedProtocols, setLinkedProtocols] = useState<LinkedProtocol[]>([]);
@@ -264,21 +284,14 @@ export function LabNotesTab({
     return () => { cancelled = true; clearTimeout(initialTimer); };
   }, [activeHighlightTarget, selectedNote?.id, noteEditorReady]);
 
-  const recordLabNoteHistory = useCallback(
-    async (noteId: string, previousContent: string, newContent: string) => {
-      if (previousContent === newContent) return
-      const ok = await recordDiff({
-        recordType: "lab_note",
-        recordId: noteId,
-        previousContent,
-        newContent,
-      })
-      if (ok) historyBaselineRef.current = newContent
-    },
-    [recordDiff],
-  )
+  // Guards a brand-new-note INSERT so a burst of debounced saves can't create
+  // two rows before the first INSERT resolves and flips selectedNote.
+  const draftInsertInFlightRef = useRef(false);
 
-  // Auto-save: persist to DB and append a content_diffs row for each saved revision.
+  // Auto-save = DRAFT only. It persists `draft_content` so nothing the user
+  // types is ever lost, but it does NOT touch the committed `content` column
+  // and records NO audit history. The official record and its content_diffs
+  // entry are written only by an explicit Save (handleSave / Accept & Save).
   const handleAutoSave = async (content: string, title?: string, noteType?: string) => {
     // Use provided values or fall back to formData
     const titleToSave = title !== undefined ? title : formData.title;
@@ -290,64 +303,66 @@ export function LabNotesTab({
     try {
       const supabase = createClient();
       if (!user) throw new Error("Not authenticated");
+      const nowIso = new Date().toISOString();
 
-      // If creating a new note, insert it first
+      // If creating a new note, insert it first. The committed body starts empty
+      // and the typed text lives in draft_content until the user Saves.
       if (isCreating || !selectedNote) {
-        const { data, error } = await supabase
-          .from("lab_notes")
-          .insert({
-            experiment_id: experimentId,
-            title: titleToSave,
-            content,
-            note_type: noteTypeToSave,
-            created_by: user.id,
-          })
-          .select()
-          .single();
-
-        if (error) throw error;
+        if (draftInsertInFlightRef.current) return; // an INSERT is already resolving
+        draftInsertInFlightRef.current = true;
+        let data: LabNote;
+        try {
+          const res = await supabase
+            .from("lab_notes")
+            .insert({
+              experiment_id: experimentId,
+              title: titleToSave,
+              content: "",
+              draft_content: content,
+              draft_updated_at: nowIso,
+              draft_author_id: user.id,
+              note_type: noteTypeToSave,
+              created_by: user.id,
+            })
+            .select()
+            .single();
+          if (res.error) throw res.error;
+          data = res.data as LabNote;
+        } finally {
+          draftInsertInFlightRef.current = false;
+        }
 
         recordRumEvent('lab_note_created', { experimentId })
 
-        // Switch to editing mode
+        // Switch to editing mode. savedContent stays "" (the committed body) so
+        // the approval bar correctly shows the typed text as pending.
         setIsCreating(false);
         setSelectedNote(data);
-        setSavedContent(content);
-        await recordLabNoteHistory(data.id, historyBaselineRef.current, content);
 
         // Refresh notes list
-        await fetchNotes();
+        await fetchNotes(data.id);
       } else {
-        // Update existing note
+        // Update existing note's draft buffer only.
         const { error } = await supabase
           .from("lab_notes")
           .update({
-            content,
-            title: titleToSave,
-            note_type: noteTypeToSave,
-            updated_at: new Date().toISOString(),
+            draft_content: content,
+            draft_updated_at: nowIso,
+            draft_author_id: user.id,
           })
           .eq("id", selectedNote.id);
 
         if (error) throw error;
 
-        await recordLabNoteHistory(selectedNote.id, historyBaselineRef.current, content);
+        // Intentionally do NOT update `savedContent`: it is the committed
+        // baseline the approval bar diffs the live draft against, advanced only
+        // by an explicit Save.
 
-        // Intentionally do NOT update `savedContent`: it is the baseline the
-        // approval bar diffs the live draft against, and gets advanced only
-        // by Accept & Save.
-
-        // Update local state — use functional updater to avoid stale closure
+        // Mirror the draft into local state so a refetch doesn't clobber it.
         setNotes((prev) =>
           prev.map((note) =>
             note.id === selectedNote.id
-              ? {
-                ...note,
-                content,
-                title: titleToSave,
-                note_type: noteTypeToSave,
-                updated_at: new Date().toISOString(),
-              }
+              ? { ...note, draft_content: content, draft_updated_at: nowIso, draft_author_id: user.id }
               : note
           )
         );
@@ -360,7 +375,6 @@ export function LabNotesTab({
 
   const {
     debouncedSave,
-    forceSave,
     cancelPendingSave,
     markSynced,
   } = useAutoSave({
@@ -369,13 +383,13 @@ export function LabNotesTab({
     enabled: true, // Always enabled, even during creation
   });
 
-  // Baseline for diff bar when switching notes — must mirror selectedNote.content
-  // so the approval bar doesn't flash "Pending changes" with the prior note's
-  // body as the comparison baseline on the first render after a switch.
+  // Baseline for the diff bar when switching notes — mirrors the COMMITTED
+  // `content`, so the approval bar compares the live draft against the official
+  // record. If the note carries an uncommitted draft, that draft is shown in the
+  // editor (see fetchNotes / performSwitchToNote) and the bar correctly surfaces
+  // it as pending — and this survives reloads because the draft is persisted.
   useEffect(() => {
-    const baseline = selectedNote?.content ?? "";
-    setSavedContent(baseline);
-    historyBaselineRef.current = baseline;
+    setSavedContent(selectedNote?.content ?? "");
   }, [selectedNote?.id]);
 
   // Fetch existing lab notes
@@ -454,7 +468,7 @@ export function LabNotesTab({
           setSelectedNote(next);
           setFormData({
             title: next.title,
-            content: next.content,
+            content: effectiveBody(next),
             note_type: next.note_type || "general",
           });
         }
@@ -748,39 +762,65 @@ export function LabNotesTab({
     try {
       const supabase = createClient();
       if (!user) throw new Error("Not authenticated");
+      const committedContent = formData.content;
+      const nowIso = new Date().toISOString();
 
       if (selectedNote && !isCreating) {
-        // Update existing note
-        const { error } = await supabase
-          .from("lab_notes")
-          .update({
-            title: formData.title,
-            content: formData.content,
-            note_type: formData.note_type,
-          })
-          .eq("id", selectedNote.id);
+        // Commit via commit_lab_note: it sets app.force_version so the DB trigger
+        // `trg_write_document_version` writes a version even inside its 3-minute
+        // throttle window, then promotes the draft into `content` and clears the
+        // draft — all in one transaction. The trigger owns versioning; the client
+        // must NOT also write document_versions (that would double-write).
+        const { error } = await supabase.rpc("commit_lab_note", {
+          p_id: selectedNote.id,
+          p_content: committedContent,
+          p_title: formData.title,
+          p_note_type: formData.note_type,
+          p_user_agent:
+            typeof navigator !== "undefined" ? navigator.userAgent : null,
+        });
 
         if (error) throw error;
 
-        setSavedContent(formData.content);
+        // Refresh the version list if the history dialog is open.
+        if (versionsOpen) void loadVersions();
+
+        setSavedContent(committedContent);
+        // Mirror the commit locally so a refetch (same id → skipped) and the
+        // sidebar stay consistent: content advanced, draft cleared.
+        setNotes((prev) =>
+          prev.map((n) =>
+            n.id === selectedNote.id
+              ? { ...n, content: committedContent, title: formData.title, note_type: formData.note_type, draft_content: null, draft_updated_at: null, draft_author_id: null, updated_at: nowIso }
+              : n,
+          ),
+        );
+        setSelectedNote((prev) =>
+          prev && prev.id === selectedNote.id
+            ? { ...prev, content: committedContent, title: formData.title, note_type: formData.note_type, draft_content: null, draft_updated_at: null, draft_author_id: null, updated_at: nowIso }
+            : prev,
+        );
 
         toast({
-          title: "Note updated",
-          description: "Your lab note has been updated successfully.",
+          title: "Note saved",
+          description: "Changes committed to the record.",
         });
       } else {
-        // Create new note
-        const { error } = await supabase.from("lab_notes").insert({
-          experiment_id: experimentId,
-          title: formData.title,
-          content: formData.content,
-          note_type: formData.note_type,
-          created_by: user.id,
-        });
+        // Create new note. The DB trigger records its first version (action
+        // 'create') automatically on INSERT — no client-side versioning.
+        const { error } = await supabase
+          .from("lab_notes")
+          .insert({
+            experiment_id: experimentId,
+            title: formData.title,
+            content: committedContent,
+            note_type: formData.note_type,
+            created_by: user.id,
+          });
 
         if (error) throw error;
 
-        setSavedContent(formData.content);
+        setSavedContent(committedContent);
 
         recordRumEvent('lab_note_created', { experimentId })
 
@@ -805,6 +845,53 @@ export function LabNotesTab({
       setIsSaving(false);
     }
   };
+
+  const handleOpenVersions = useCallback(() => {
+    if (!selectedNote?.id) return;
+    setVersionsOpen(true);
+    void loadVersions();
+  }, [selectedNote?.id, loadVersions]);
+
+  // Restore a prior version: the RPC re-commits its content as a new 'restore'
+  // version and clears any draft. Mirror the result into the editor + local state
+  // so the UI reflects the restored body without a full refetch.
+  const handleRestoreVersion = useCallback(
+    async (version: DocumentVersion) => {
+      const id = selectedNote?.id;
+      if (!id) return;
+      cancelPendingSave(); // a queued draft autosave must not clobber the restore
+      const ok = await restoreVersion(version);
+      if (!ok) {
+        toast({
+          title: "Restore failed",
+          description: "Couldn't restore that version. Please try again.",
+          variant: "destructive",
+        });
+        return;
+      }
+      const restoredContent = version.content ?? "";
+      setFormData((f) => ({ ...f, content: restoredContent }));
+      setSavedContent(restoredContent);
+      setNotes((prev) =>
+        prev.map((n) =>
+          n.id === id
+            ? { ...n, content: restoredContent, draft_content: null, draft_updated_at: null, draft_author_id: null }
+            : n,
+        ),
+      );
+      setSelectedNote((prev) =>
+        prev && prev.id === id
+          ? { ...prev, content: restoredContent, draft_content: null, draft_updated_at: null, draft_author_id: null }
+          : prev,
+      );
+      markSynced();
+      toast({
+        title: "Version restored",
+        description: `Restored v${version.version_no} as a new version.`,
+      });
+    },
+    [selectedNote?.id, restoreVersion, cancelPendingSave, markSynced, toast],
+  );
 
   const getUniqueDefaultTitle = async (): Promise<string> => {
     const supabase = createClient();
@@ -863,7 +950,7 @@ export function LabNotesTab({
       setSelectedNote(data);
       setFormData({
         title: data.title,
-        content: data.content,
+        content: effectiveBody(data),
         note_type: data.note_type || "general",
       });
       setIsCreating(false);
@@ -987,10 +1074,10 @@ export function LabNotesTab({
     setSelectedNote(note);
     setFormData({
       title: note.title,
-      content: note.content,
+      content: effectiveBody(note),
       note_type: note.note_type || "general",
     });
-    setSavedContent(note.content);
+    setSavedContent(note.content ?? "");
     fetchLinkedProtocols(note.id);
     syncNoteIdInUrl(note.id);
   }, [cancelPendingSave, fetchLinkedProtocols, syncNoteIdInUrl]);
@@ -1037,7 +1124,7 @@ export function LabNotesTab({
         if (previousSelected) {
           setFormData({
             title: previousSelected.title,
-            content: previousSelected.content,
+            content: effectiveBody(previousSelected),
             note_type: previousSelected.note_type || "general",
           });
           syncNoteIdInUrl(previousSelected.id);
@@ -1264,6 +1351,16 @@ export function LabNotesTab({
       </Button>
       {!isCreating && selectedNote ? (
         <>
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            className="shrink-0 text-muted-foreground hover:text-foreground"
+            onClick={handleOpenVersions}
+            aria-label="Version history"
+            title="Version history"
+          >
+            <GitCompare className="h-4 w-4" />
+          </Button>
           <NotePrintButton
             getHtmlContent={() => formData.content || ""}
             title={resolvedExportTitle}
@@ -1687,6 +1784,16 @@ export function LabNotesTab({
                     </Button>
                     {!isCreating && selectedNote && (
                       <>
+                        <Button
+                          variant="ghost"
+                          size="icon-sm"
+                          className="text-muted-foreground hover:text-foreground"
+                          onClick={handleOpenVersions}
+                          aria-label="Version history"
+                          title="Version history"
+                        >
+                          <GitCompare className="h-4 w-4" />
+                        </Button>
                         <NotePrintButton
                           getHtmlContent={() => formData.content || ""}
                           title={resolvedExportTitle}
@@ -1783,20 +1890,45 @@ export function LabNotesTab({
                         draftContent={formData.content}
                         noteId={selectedNote?.id ?? null}
                         onAccept={async (newContent) => {
-                          // Mirror the prior cloud-button behavior: cancel the
-                          // pending debounced auto-save, run the full handleSave
-                          // flow (title validation, toast, list refresh, router
-                          // refresh), then advance the diff baseline so the
-                          // approval bar collapses to "No pending changes".
+                          // Commit: cancel the pending draft autosave, then run
+                          // handleSave (promotes draft → content, clears the draft
+                          // buffer, bumps updated_at). The single audit diff was
+                          // recorded by the bar before this fires. handleSave also
+                          // advances savedContent, collapsing the bar to "No
+                          // pending changes".
                           cancelPendingSave();
                           await handleSave();
                           setSavedContent(newContent);
-                          historyBaselineRef.current = newContent;
                         }}
-                        onReject={() => {
+                        onReject={async () => {
+                          // Discard: drop the pending autosave, revert the editor
+                          // to the committed body, AND clear the persisted draft
+                          // so the revert is durable (a reload won't resurrect the
+                          // discarded text). Optimistic — restore on failure.
                           cancelPendingSave();
                           setFormData((f) => ({ ...f, content: savedContent }));
                           markSynced();
+                          const id = selectedNote?.id;
+                          if (!id) return;
+                          setNotes((prev) =>
+                            prev.map((n) =>
+                              n.id === id ? { ...n, draft_content: null, draft_updated_at: null, draft_author_id: null } : n,
+                            ),
+                          );
+                          try {
+                            const supabase = createClient();
+                            const { error } = await supabase
+                              .from("lab_notes")
+                              .update({ draft_content: null, draft_updated_at: null, draft_author_id: null })
+                              .eq("id", id);
+                            if (error) throw error;
+                          } catch (err: any) {
+                            toast({
+                              title: "Couldn't discard draft",
+                              description: err?.message || "The draft may reappear on reload. Please try again.",
+                              variant: "destructive",
+                            });
+                          }
                         }}
                       />
                     )}
@@ -1810,31 +1942,49 @@ export function LabNotesTab({
       <AlertDialog open={pendingSwitchNote !== null} onOpenChange={(open) => { if (!open) setPendingSwitchNote(null) }}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Unsaved changes</AlertDialogTitle>
+            <AlertDialogTitle>Uncommitted changes</AlertDialogTitle>
             <AlertDialogDescription>
-              {`You have unsaved edits in "${selectedNote?.title || 'this note'}". Save them before switching?`}
+              {`"${selectedNote?.title || 'This note'}" has changes that are autosaved as a draft but not yet committed to the record. Commit them before switching?`}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel onClick={() => setPendingSwitchNote(null)}>Stay</AlertDialogCancel>
             <Button
               variant="outline"
-              onClick={() => {
+              onClick={async () => {
+                // Discard the draft: clear it so the note reverts to its committed
+                // body, then switch. The draft is safe until this point, so this is
+                // the only path that actually drops the autosaved text.
                 const target = pendingSwitchNote
+                const id = selectedNote?.id
                 setPendingSwitchNote(null)
+                if (id) {
+                  try {
+                    const supabase = createClient()
+                    await supabase
+                      .from("lab_notes")
+                      .update({ draft_content: null, draft_updated_at: null, draft_author_id: null })
+                      .eq("id", id)
+                    setNotes((prev) =>
+                      prev.map((n) => (n.id === id ? { ...n, draft_content: null, draft_updated_at: null, draft_author_id: null } : n)),
+                    )
+                  } catch (err) {
+                    console.error('Discard draft before switch failed', err)
+                  }
+                }
                 if (target) performSwitchToNote(target)
               }}
             >
-              Discard
+              Discard draft
             </Button>
             <AlertDialogAction
               onClick={async () => {
                 const target = pendingSwitchNote
                 setPendingSwitchNote(null)
                 try {
-                  await forceSave()
+                  await handleSave()
                 } catch (err) {
-                  console.error('Save before switch failed', err)
+                  console.error('Commit before switch failed', err)
                   toast({ title: "Couldn't save", description: 'The previous note was kept. Please try again.', variant: 'destructive' })
                   return
                 }
@@ -1846,6 +1996,16 @@ export function LabNotesTab({
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <LabNoteVersionsDialog
+        open={versionsOpen}
+        onOpenChange={setVersionsOpen}
+        versions={versions}
+        loading={versionsLoading}
+        error={versionsError}
+        currentContent={formData.content}
+        onRestore={handleRestoreVersion}
+      />
     </div>
   );
 }
