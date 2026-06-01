@@ -644,7 +644,7 @@ export function AppSidebar() {
                             </div>
                           ) : (
                             <Link
-                              href={(item.name === "Literature" && scope.projectId) ? `${item.href}${scope.scopedQueryString}` : item.href}
+                              href={(mounted && item.name === "Literature" && scope.projectId) ? `${item.href}${scope.scopedQueryString}` : item.href}
                               aria-label={isIconMode ? item.name : undefined}
                               className="flex-1 flex items-center pr-6"
                             >

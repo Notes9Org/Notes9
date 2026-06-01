@@ -215,7 +215,7 @@ export default function SettingsPage() {
   const handleSignOut = async () => {
     const supabase = createClient()
     await supabase.auth.signOut()
-    router.push("/auth/login")
+    window.location.href = "/auth/login"
   }
 
   const handleChangeAvatarClick = () => {

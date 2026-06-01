@@ -110,13 +110,13 @@ export function LabNoteVersionsDialog({
   const isNewest = selectedIdx === 0
 
   const diffRows = useMemo(() => {
-    if (!selected) return []
+    if (!open || !selected) return []
     const prevBody = previous?.content ?? ""
     // For the newest version, compare against the live editor body so the user
     // sees any still-uncommitted edits too; otherwise compare snapshot→snapshot.
     const nextBody = isNewest ? currentContent : selected.content ?? ""
     return buildLineDiff(prevBody, nextBody)
-  }, [selected, previous, isNewest, currentContent])
+  }, [open, selected, previous, isNewest, currentContent])
 
   const addCount = diffRows.filter((r) => r.kind === "add").length
   const delCount = diffRows.filter((r) => r.kind === "del").length
@@ -133,7 +133,7 @@ export function LabNoteVersionsDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="flex h-[80vh] max-h-[80vh] w-[min(96vw,72rem)] max-w-[min(96vw,72rem)] flex-col gap-0 overflow-hidden p-0">
+      <DialogContent className="flex h-[80vh] max-h-[80vh] w-[95vw] max-w-[95vw] sm:max-w-[95vw] flex-col gap-0 overflow-hidden p-0">
         <DialogHeader className="shrink-0 border-b border-border/60 px-4 py-3">
           <DialogTitle className="flex items-center gap-2 text-base">
             <GitCompare className="h-4 w-4" />

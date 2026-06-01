@@ -30,9 +30,14 @@ export const getCurrentUser = cache(async (): Promise<User | null> => {
   const secret = process.env.SUPABASE_JWT_SECRET
 
   if (secret) {
-    const {
-      data: { session },
-    } = await supabase.auth.getSession()
+    let session = null;
+    try {
+      const { data } = await supabase.auth.getSession()
+      session = data?.session
+    } catch (err) {
+      // getSession might throw if refresh token is invalid
+    }
+    
     const token = session?.access_token
     if (token) {
       const payload = await verifyAccessTokenLocally(token, secret)
@@ -52,9 +57,13 @@ export const getCurrentUser = cache(async (): Promise<User | null> => {
   }
 
   // Fallback: secret not configured, or local verification failed.
-  const { data, error } = await supabase.auth.getUser()
-  if (error || !data?.user) return null
-  return data.user
+  try {
+    const { data, error } = await supabase.auth.getUser()
+    if (error || !data?.user) return null
+    return data.user
+  } catch (err) {
+    return null
+  }
 })
 
 // Convenience wrapper for protected pages/actions. Redirects to /auth/login
