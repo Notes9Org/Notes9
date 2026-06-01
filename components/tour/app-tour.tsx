@@ -15,9 +15,7 @@ type TourMode = "idle" | "welcome" | "onboarding" | "page"
 
 // localStorage keys are scoped per-user so a brand-new sign-up (including Google
 // / Microsoft OAuth) on a browser that previously hosted another account still
-// gets onboarding — a global flag would wrongly suppress it. The legacy global
-// `notes9_welcome_seen` key is honored ONLY for screenshot/demo captures.
-const LEGACY_WELCOME_SEEN_KEY = "notes9_welcome_seen"
+// gets onboarding.
 const welcomeSeenKey = (userId: string) => `notes9_welcome_seen:${userId}`
 const tourDoneKey = (userId: string) => `notes9_tour_done:${userId}`
 
@@ -51,7 +49,6 @@ export function AppTour() {
   const [pageSteps, setPageSteps] = useState<ReturnType<typeof buildContextualSteps>>([])
   const [firstName, setFirstName] = useState("there")
 
-  const bootstrappedRef = useRef(false)
   const supabaseRef = useRef<ReturnType<typeof createClient> | null>(null)
   const getSupabase = () => (supabaseRef.current ??= createClient())
 
@@ -95,11 +92,9 @@ export function AppTour() {
 
   // ---- new-user bootstrap: decide whether to show the welcome modal -------
   useEffect(() => {
-    if (!mounted || !user || bootstrappedRef.current) return
-    // Defer onboarding until terms are accepted. We deliberately do NOT set
-    // bootstrappedRef here, so the effect re-runs once `termsAccepted` flips.
+    if (!mounted || !user) return
+    // Defer onboarding until terms are accepted. The effect re-runs once `termsAccepted` flips.
     if (!termsAccepted) return
-    bootstrappedRef.current = true
 
     let cancelled = false
     const run = async () => {
@@ -110,13 +105,8 @@ export function AppTour() {
         "there"
 
       // Fast per-user client gate so returning users never flash the modal.
-      // The legacy global key is honored too, but only to keep screenshot/demo
-      // captures (which set it) free of the modal.
-      if (
-        localStorage.getItem(welcomeSeenKey(user.id)) === "true" ||
-        localStorage.getItem(LEGACY_WELCOME_SEEN_KEY) === "true"
-      ) {
-        setFirstName(metaFirst)
+      if (localStorage.getItem(welcomeSeenKey(user.id)) === "true") {
+        if (!cancelled) setFirstName(metaFirst)
         return
       }
 
@@ -129,7 +119,7 @@ export function AppTour() {
         | { first_name?: string | null; notes9_welcome_seen_at?: string | null }
         | null = null
       for (let attempt = 0; attempt < 3 && !cancelled; attempt++) {
-        const { data } = await getSupabase()
+        const { data, error } = await getSupabase()
           .from("profiles")
           .select("first_name, notes9_welcome_seen_at")
           .eq("id", user.id)
@@ -138,9 +128,13 @@ export function AppTour() {
           profile = data
           break
         }
-        console.warn(
-          `app-tour: profile not yet readable for user ${user.id} (attempt ${attempt + 1}/3); retrying`,
-        )
+        if (error) {
+          console.error("AppTour profile fetch error:", error)
+        } else {
+          console.warn(
+            `app-tour: profile not yet readable for user ${user.id} (attempt ${attempt + 1}/3); retrying`,
+          )
+        }
         await new Promise((r) => setTimeout(r, 600))
       }
       if (cancelled) return
