@@ -206,6 +206,11 @@ export function LabNotesTab({
   const notesAsideRef = useRef<HTMLElement | null>(null);
   const [noteEditorFullscreen, setNoteEditorFullscreen] = useState(false);
   const [noteEditorReady, setNoteEditorReady] = useState(false);
+  // Bumped on Restore to force a fresh TiptapEditor mount. Without this, the
+  // editor's lastEmittedHtmlRef guard can suppress the setContent() for restored
+  // content that matches the last externally-set body, so the restore wouldn't
+  // visibly apply.
+  const [editorRemountNonce, setEditorRemountNonce] = useState(0);
   const [inlineHighlightTarget, setInlineHighlightTarget] =
     useState<HighlightTarget | null>(null);
 
@@ -885,6 +890,10 @@ export function LabNotesTab({
           : prev,
       );
       markSynced();
+      // Force the editor to remount with the restored body, and close the dialog
+      // so the result is visible.
+      setEditorRemountNonce((n) => n + 1);
+      setVersionsOpen(false);
       toast({
         title: "Version restored",
         description: `Restored v${version.version_no} as a new version.`,
@@ -1843,7 +1852,7 @@ export function LabNotesTab({
                         // state is built. Without the key, the editor's internal
                         // `lastEmittedHtmlRef` can suppress the setContent() the parent issues
                         // and the previous note's body bleeds into a brand-new note.
-                        key={selectedNote?.id ?? "new-note"}
+                        key={`${selectedNote?.id ?? "new-note"}:${editorRemountNonce}`}
                         content={formData.content}
                         onChange={handleEditorContentChange}
                         placeholder="Write your lab notes here... Use @ to tag protocols"

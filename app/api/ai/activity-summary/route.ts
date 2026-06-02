@@ -117,6 +117,12 @@ export async function GET() {
       });
     }
 
+    // Computed (non-AI) summary, used whenever the AI backend is unavailable.
+    const fallbackSummary =
+      events.length <= 2
+        ? events.join(' and ')
+        : `${events.slice(0, 2).join(', ')}, and ${events.length - 2} more activities`;
+
     const fullName = user.user_metadata?.full_name || user.user_metadata?.name || '';
     const firstName = fullName ? fullName.split(' ')[0] : 'the researcher';
 
@@ -150,13 +156,8 @@ Summary:`;
 
       if (!response.ok) {
         console.error('Activity summary AI error:', response.status);
-        // Fallback to non-AI summary
-        const fallback =
-          events.length <= 2
-            ? events.join(' and ')
-            : `${events.slice(0, 2).join(', ')}, and ${events.length - 2} more activities`;
         return NextResponse.json({
-          summary: fallback,
+          summary: fallbackSummary,
           generatedAt: new Date().toISOString(),
         });
       }
@@ -172,6 +173,16 @@ Summary:`;
 
       return NextResponse.json({
         summary: cleanSummary || events[0],
+        generatedAt: new Date().toISOString(),
+      });
+    } catch (aiError) {
+      // The AI backend is optional. A network failure (ECONNREFUSED when the
+      // Notes9/Catalyst chat service isn't running), an 8s timeout abort, or a
+      // bad JSON body must NOT 500 the dashboard — degrade to the computed
+      // summary instead.
+      console.warn('Activity summary AI unavailable, using computed summary:', (aiError as Error)?.message);
+      return NextResponse.json({
+        summary: fallbackSummary,
         generatedAt: new Date().toISOString(),
       });
     } finally {
