@@ -60,6 +60,18 @@ export async function POST(req: NextRequest) {
 
   const contentType = req.headers.get("content-type") ?? ""
   if (contentType.includes("multipart/form-data")) {
+    // Guard against unbounded uploads exhausting server memory before we even
+    // buffer the body. Research-folder imports bundle multiple files, so 50MB is
+    // a generous ceiling that still protects the process. App-layer only — no
+    // DB impact. (Content-Length is present for normal multipart uploads.)
+    const MAX_IMPORT_BYTES = 50 * 1024 * 1024
+    const contentLength = Number(req.headers.get("content-length") ?? 0)
+    if (Number.isFinite(contentLength) && contentLength > MAX_IMPORT_BYTES) {
+      return NextResponse.json(
+        { error: "Import exceeds the 50MB size limit." },
+        { status: 413 },
+      )
+    }
     const formData = await req.formData()
     const mode = asString(formData.get("mode")) || "research-folder"
     if (mode === "research-folder") {

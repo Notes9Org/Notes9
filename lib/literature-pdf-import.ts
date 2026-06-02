@@ -100,8 +100,18 @@ async function verifyPdfCandidatesViaCatalyst(params: {
       { timeoutMs: 30_000 }
     )
   } catch (e) {
-    if (e instanceof CatalystUnavailableError) return null
-    if (e instanceof CatalystHttpError) return null
+    // Verification is best-effort: any failure degrades to "unverified" (null)
+    // rather than blocking the import. Log so persistent catalyst outages or
+    // unexpected errors are diagnosable.
+    if (e instanceof CatalystUnavailableError) {
+      console.warn("[literature-pdf-import] catalyst unavailable during PDF verification:", e.message)
+      return null
+    }
+    if (e instanceof CatalystHttpError) {
+      console.warn("[literature-pdf-import] catalyst HTTP error during PDF verification:", e.message)
+      return null
+    }
+    console.warn("[literature-pdf-import] unexpected error during PDF verification:", e)
     return null
   }
 }

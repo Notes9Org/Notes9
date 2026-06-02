@@ -2,17 +2,17 @@ import { useEffect, useRef, useState, useCallback } from 'react'
 
 export type SaveStatus = 'saved' | 'saving' | 'unsaved' | 'error'
 
-interface UseAutoSaveOptions {
-  onSave: (content: string, ...args: any[]) => Promise<void>
+interface UseAutoSaveOptions<TArgs extends unknown[]> {
+  onSave: (content: string, ...args: TArgs) => Promise<void>
   delay?: number // milliseconds to wait before saving
   enabled?: boolean
 }
 
-export function useAutoSave({
+export function useAutoSave<TArgs extends unknown[] = unknown[]>({
   onSave,
   delay = 2000, // 2 seconds default delay
   enabled = true,
-}: UseAutoSaveOptions) {
+}: UseAutoSaveOptions<TArgs>) {
   const [status, setStatus] = useState<SaveStatus>('saved')
   const [lastSaved, setLastSaved] = useState<Date | null>(null)
   const timeoutRef = useRef<NodeJS.Timeout | undefined>(undefined)
@@ -20,7 +20,7 @@ export function useAutoSave({
   // null = no pending payload. Cleared by cancelPendingSave so a stale draft
   // from a previously-edited record can't be replayed against a new record
   // via forceSave or the error-retry path.
-  const paramsRef = useRef<[string, ...any[]] | null>(null)
+  const paramsRef = useRef<[string, ...TArgs] | null>(null)
   const isSavingRef = useRef<boolean>(false)
   const unmountedRef = useRef<boolean>(false)
   // Always invoke the *latest* onSave so consumers can keep `useCallback([])`
@@ -34,7 +34,7 @@ export function useAutoSave({
     onSaveRef.current = onSave
   }, [onSave])
 
-  const save = useCallback(async (content: string, ...args: any[]) => {
+  const save = useCallback(async (content: string, ...args: TArgs) => {
     if (isSavingRef.current || unmountedRef.current) {
       // If already saving or unmounted, skip
       return
@@ -64,7 +64,7 @@ export function useAutoSave({
     }
   }, [])
 
-  const debouncedSave = useCallback((content: string, ...args: any[]) => {
+  const debouncedSave = useCallback((content: string, ...args: TArgs) => {
     if (!enabled) return
 
     paramsRef.current = [content, ...args]

@@ -202,11 +202,11 @@ export function ProtocolLiteraturePanel({
       .eq("catalog_placement", "repository")
       .order("title")
 
-    if (projectId) query = (query as any).eq("project_id", projectId)
-    if (experimentId) query = (query as any).eq("experiment_id", experimentId)
+    if (projectId) query = query.eq("project_id", projectId)
+    if (experimentId) query = query.eq("experiment_id", experimentId)
 
-    query.then(({ data }: { data: LiteraturePaperItem[] | null }) => {
-      setPapers(data ?? [])
+    query.then(({ data }) => {
+      setPapers((data as LiteraturePaperItem[] | null) ?? [])
       setIsLoading(false)
     })
   }, [projectId, experimentId])

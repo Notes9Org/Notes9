@@ -119,6 +119,7 @@ export async function POST(request: Request) {
     // catalyst's read_document tool and get auto-purged after 7 days. Other
     // uploads (lab notes, papers) skip this step and are NOT TTL'd.
     let chatAttachmentId: string | null = null;
+    let attachmentWarning: string | null = null;
     if (sessionId) {
       const { data: attRow, error: attErr } = await supabase
         .from("chat_attachments")
@@ -150,6 +151,12 @@ export async function POST(request: Request) {
             error: attErr.message,
           }),
         );
+        // Signal the registration failure to the client so it can warn the
+        // user that the AI agent won't be able to read this attachment. The
+        // bytes are in storage (chatAttachmentId stays null), so behaviour for
+        // the upload itself is unchanged — this is an additive field.
+        attachmentWarning =
+          "File uploaded but could not be registered for AI access. The assistant may not be able to read it.";
       } else {
         chatAttachmentId = attRow?.id ?? null;
       }
@@ -162,6 +169,7 @@ export async function POST(request: Request) {
       contentType: file.type,
       size: file.size,
       chatAttachmentId,
+      attachmentWarning,
     });
   } catch (error) {
     console.error("Upload error:", error);

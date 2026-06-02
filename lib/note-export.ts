@@ -37,13 +37,13 @@ export async function exportNoteAsMarkdown(html: string, title: string, toasts =
     })
 
     turndownService.addRule("preserveStyledSpan", {
-      filter: (node) => {
+      filter: (node: HTMLElement) => {
         if (node.nodeName !== "SPAN") return false
-        const style = (node as HTMLElement).getAttribute("style") || ""
+        const style = node.getAttribute("style") || ""
         return /font-family|font-size|color|background/i.test(style)
       },
-      replacement: (content, node) => {
-        const style = (node as HTMLElement).getAttribute("style") || ""
+      replacement: (content: string, node: HTMLElement) => {
+        const style = node.getAttribute("style") || ""
         return `<span style="${style.replace(/"/g, "&quot;")}">${content}</span>`
       },
     })

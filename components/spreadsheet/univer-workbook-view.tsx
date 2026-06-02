@@ -14,6 +14,13 @@ import {
   scheduleMicrotask,
 } from "@/components/spreadsheet/spreadsheet-univer-shared"
 
+/**
+ * Univer's `ICommandService` command type enum value for MUTATION commands.
+ * Mirrors `CommandType.MUTATION` from `@univerjs/core` (kept as a local constant
+ * to avoid a brittle deep import). If Univer changes this enum, update here.
+ */
+const UNIVER_COMMAND_TYPE_MUTATION = 2
+
 /** Dark-mode color palette for Univer: grays are inverted, white/black swapped. */
 function buildDarkUniverTheme(base: Record<string, unknown>): Record<string, unknown> {
   return {
@@ -305,10 +312,10 @@ export function UniverWorkbookView({
           ? []
           : [
               univerAPI.onCommandExecuted((command: { type: number }) => {
-                // type 2 = MUTATION — covers value changes, cell style (color, font,
+                // MUTATION covers value changes, cell style (color, font,
                 // background, bold, italic, borders, merges, number format) and all
                 // structural changes (insert/delete/rename/hide sheet, etc.)
-                if (command.type === 2) {
+                if (command.type === UNIVER_COMMAND_TYPE_MUTATION) {
                   persistWorkbook()
                 }
               }),
@@ -337,11 +344,15 @@ export function UniverWorkbookView({
                 })
               }
             }
-          } catch {}
+          } catch (e) {
+            console.warn("Univer cleanup: snapshot persist failed", e)
+          }
           disposables.forEach((disposable) => {
             try {
               disposable.dispose()
-            } catch {}
+            } catch (e) {
+              console.warn("Univer cleanup: disposable.dispose() failed", e)
+            }
           })
           try {
             const univerDisposable = univer as { dispose?: () => void }
@@ -350,10 +361,14 @@ export function UniverWorkbookView({
               window.setTimeout(() => {
                 try {
                   univerDisposable.dispose?.()
-                } catch {}
+                } catch (e) {
+                  console.warn("Univer cleanup: univer.dispose() failed", e)
+                }
               }, 0)
             }
-          } catch {}
+          } catch (e) {
+            console.warn("Univer cleanup: teardown failed", e)
+          }
           const el = containerRef.current
           if (el && el === mountHost?.parentElement) {
             el.replaceChildren()

@@ -50,7 +50,7 @@ import {
 import Link from "next/link"
 import { TiptapEditor } from "@/components/text-editor/tiptap-editor"
 import { NoteExportMenu } from "@/components/note-export-menu"
-import { type ProtocolTemplateChoice } from "@/components/protocols/protocol-template-picker"
+import { type ProtocolTemplateChoice, ProtocolTemplatePicker } from "@/components/protocols/protocol-template-picker"
 import { buildProtocolDraftHtmlFromExtracted } from "@/lib/build-protocol-draft-from-template"
 import {
   ProtocolLiteraturePanel,
@@ -274,7 +274,10 @@ function NewProtocolForm() {
     [formData.content]
   )
 
-  // Fetch org + projects on mount
+  // Fetch org + projects on mount. Only the `project` param affects the
+  // resolved selection, so depend on its value rather than the whole
+  // `searchParams` object to avoid redundant fetches on unrelated URL changes.
+  const projectParam = searchParams.get("project") ?? undefined
   useEffect(() => {
     let cancelled = false
     const run = async () => {
@@ -300,10 +303,7 @@ function NewProtocolForm() {
       setProjects(projectList)
 
       const allowed = projectList.map((p) => p.id)
-      const id = resolveInitialProjectIdParam(
-        searchParams.get("project") ?? undefined,
-        allowed
-      )
+      const id = resolveInitialProjectIdParam(projectParam, allowed)
       setReturnProjectId(id)
       if (id) setFormData((prev) => ({ ...prev, project_id: id }))
     }
@@ -311,7 +311,7 @@ function NewProtocolForm() {
     return () => {
       cancelled = true
     }
-  }, [searchParams])
+  }, [projectParam, user])
 
   // Fetch experiments when project changes
   useEffect(() => {
@@ -886,7 +886,7 @@ function NewProtocolForm() {
           <div className="border-t px-4 pb-4 pt-3">
             <ProtocolTemplatePicker
               organizationId={organizationId}
-              onSelect={(c) => {
+              onSelect={(c: ProtocolTemplateChoice) => {
                 applyTemplate(c)
                 setTemplateStepCollapsed(true)
               }}

@@ -18,13 +18,53 @@ interface LiteratureDetailModalProps {
   initialTab?: "overview" | "pdf" | "citation" | "linked";
 }
 
+// Mirrors the LiteratureData shape consumed by LiteratureDetailView. The
+// Supabase `select("*", ...joins)` returns a broad row; we narrow it to the
+// fields the view actually reads so the rest of this component is type-safe.
+interface LiteratureData {
+  id: string;
+  title: string;
+  authors: string | null;
+  journal: string | null;
+  publication_year: number | null;
+  doi: string | null;
+  pmid: string | null;
+  status: string;
+  relevance_rating: number | null;
+  abstract: string | null;
+  keywords: string[] | null;
+  personal_notes: string | null;
+  url: string | null;
+  volume: string | null;
+  issue: string | null;
+  pages: string | null;
+  pdf_file_url: string | null;
+  pdf_file_name: string | null;
+  pdf_file_size: number | null;
+  pdf_file_type: string | null;
+  pdf_storage_path: string | null;
+  pdf_uploaded_at: string | null;
+  pdf_checksum: string | null;
+  pdf_match_source: string | null;
+  pdf_metadata: Record<string, unknown> | null;
+  pdf_import_status?: string | null;
+  created_at: string;
+  project: { id: string; name: string } | null;
+  experiment: { id: string; name: string } | null;
+  created_by_profile: {
+    first_name: string;
+    last_name: string;
+    email: string;
+  } | null;
+}
+
 export function LiteratureDetailModal({
   literatureId,
   open,
   onOpenChange,
   initialTab = "overview",
 }: LiteratureDetailModalProps) {
-  const [literature, setLiterature] = useState<any>(null);
+  const [literature, setLiterature] = useState<LiteratureData | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -67,7 +107,9 @@ export function LiteratureDetailModal({
         setError("Failed to load literature details");
         console.error("Error fetching literature:", error);
       } else {
-        setLiterature(data);
+        // The select returns a broad joined row; narrow to the fields the
+        // view reads. Shape is guaranteed by the select above.
+        setLiterature(data as unknown as LiteratureData);
       }
     } catch (err) {
       setError("Failed to load literature details");

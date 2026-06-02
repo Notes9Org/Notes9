@@ -418,8 +418,10 @@ async function enrichPapersPdfFromUnpaywall(papers: SearchPaper[]): Promise<Sear
           if (data.is_oa) oaByDoi.set(doi.toLowerCase(), true)
           const pdf = extractPdfFromUnpaywallPayload(data)
           if (pdf) pdfByDoi.set(doi.toLowerCase(), pdf)
-        } catch {
-          /* ignore per-DOI failures */
+        } catch (e) {
+          // Per-DOI enrichment is best-effort; one failure must not abort the
+          // batch. Log for visibility into Unpaywall outages.
+          console.warn("[paper-search] Unpaywall lookup failed for DOI", doi, e instanceof Error ? e.message : String(e))
         }
       }),
     )
@@ -485,7 +487,9 @@ async function fetchCrossrefEnrichment(doi: string): Promise<{
       articlePageUrl = `https://www.sciencedirect.com/science/article/pii/${encodeURIComponent(pii)}`
     }
     return { pdfUrl, articlePageUrl }
-  } catch {
+  } catch (e) {
+    // Crossref enrichment is best-effort; on failure return no extra URLs.
+    console.warn("[paper-search] Crossref lookup failed:", e instanceof Error ? e.message : String(e))
     return {}
   }
 }

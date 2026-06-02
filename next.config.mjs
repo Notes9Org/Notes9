@@ -1,7 +1,11 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   typescript: {
-    ignoreBuildErrors: true,
+    // Re-enabled the build-time type gate now that `npx tsc --noEmit` is clean
+    // (0 errors). On Vercel this build IS the quality gate. If a future deploy
+    // ever fails purely on a type error you can't fix immediately, flipping this
+    // back to `true` is the escape hatch — but keep it false to stay enterprise-safe.
+    ignoreBuildErrors: false,
   },
   /**
    * Expose CHAT_API_URL to the browser so client-side SSE calls can reach the

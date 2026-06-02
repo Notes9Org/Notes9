@@ -37,9 +37,9 @@ export default function PublicNotePage() {
 
                 const noteData = await response.json()
                 setNote(noteData)
-            } catch (err: any) {
+            } catch (err: unknown) {
                 console.error("Error fetching note:", err)
-                setError(err.message || "Failed to load the note.")
+                setError(err instanceof Error ? err.message : "Failed to load the note.")
             } finally {
                 setLoading(false)
             }

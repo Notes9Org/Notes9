@@ -45,6 +45,10 @@ export function onAuthenticate({ token }: { token: string }): UserContext {
   let decoded: JwtPayload;
 
   try {
+    // jwt.verify performs the HMAC signature check internally. jsonwebtoken
+    // (v9) compares HMAC digests using Node's crypto, which is constant-time
+    // with respect to the secret, so this is not vulnerable to timing attacks
+    // on signature comparison. No additional constant-time guard is needed here.
     decoded = jwt.verify(token, secret) as JwtPayload;
   } catch (err) {
     if (err instanceof jwt.TokenExpiredError) {

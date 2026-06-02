@@ -21,7 +21,8 @@ function loadHistory(): CalcHistoryEntry[] {
     const parsed = JSON.parse(raw)
     if (!Array.isArray(parsed)) return []
     return parsed.slice(0, MAX_ENTRIES) as CalcHistoryEntry[]
-  } catch {
+  } catch (err) {
+    console.warn("calc-history: failed to load history from localStorage", err)
     return []
   }
 }
@@ -29,8 +30,11 @@ function loadHistory(): CalcHistoryEntry[] {
 function persistHistory(entries: CalcHistoryEntry[]) {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(entries.slice(0, MAX_ENTRIES)))
-  } catch {
-    // quota exceeded — silently drop
+  } catch (err) {
+    // Most likely a quota error (or storage disabled in private mode). The
+    // in-memory history still works; we just couldn't persist it. Surface it
+    // for observability instead of dropping silently.
+    console.warn("calc-history: failed to persist history to localStorage", err)
   }
 }
 

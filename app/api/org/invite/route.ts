@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/server"
 import { getCurrentUser } from "@/lib/auth/current-user"
 import { createServiceRoleClient } from "@/lib/supabase-service-role"
 import { generateInvitationToken, buildInvitationUrl } from "@/lib/org/invitation"
+import { isSystemAdminRow } from "@/lib/org/require-admin"
 import { resend } from "@/lib/resend"
 
 const inviteSchema = z.object({
@@ -52,11 +53,7 @@ export async function POST(req: NextRequest) {
       .eq("is_active", true)
       .single()
 
-    if (
-      memberError ||
-      !membership ||
-      !(membership.org_roles as any)?.is_system_role
-    ) {
+    if (memberError || !membership || !isSystemAdminRow(membership.org_roles)) {
       return NextResponse.json(
         { error: "Admin access required" },
         { status: 403 }

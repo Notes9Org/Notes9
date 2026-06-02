@@ -192,11 +192,16 @@ function InviteAcceptContent() {
         return
       }
 
-      setState({ kind: "success", roleName: data.roleName })
+      const roleName =
+        data && typeof data === "object" && typeof data.roleName === "string"
+          ? data.roleName
+          : "a member"
+
+      setState({ kind: "success", roleName })
 
       toast({
         title: "Welcome!",
-        description: `You've joined as ${data.roleName}.`,
+        description: `You've joined as ${roleName}.`,
       })
 
       // Redirect to dashboard after a brief moment

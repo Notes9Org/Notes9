@@ -81,7 +81,7 @@ export function ProtocolEditor({
   const [isSavingContext, setIsSavingContext] = useState(false)
   const [projects, setProjects] = useState<ProjectOption[]>([])
   const [experiments, setExperiments] = useState<ExperimentOption[]>([])
-  const [samples, setSamples] = useState<{id: string, name: string, sample_code: string | null}[]>([])
+  const [samples, setSamples] = useState<{id: string, name: string, sample_code: string | null, type: 'sample'}[]>([])
   const [isLoadingExperiments, setIsLoadingExperiments] = useState(false)
   const [savedContext, setSavedContext] = useState({
     project_id: protocol.project_id ?? "",
@@ -211,7 +211,7 @@ export function ProtocolEditor({
         .order("name")
       
       if (!cancelled) {
-        setSamples((data as any) || [])
+        setSamples(((data as any) || []).map((s: any) => ({ ...s, type: 'sample' as const })))
       }
     }
 
@@ -273,12 +273,16 @@ export function ProtocolEditor({
           el.scrollIntoView({ behavior: 'smooth', block: 'center' })
           setTimeout(() => {
             document.querySelectorAll('.rag-chunk-highlight').forEach((e) => e.classList.add('fading'))
-            setTimeout(() => { try { editor.commands.clearRagHighlight() } catch {} }, 1_200)
+            setTimeout(() => {
+              try { editor.commands.clearRagHighlight() } catch (err) { console.warn('clearRagHighlight failed', err) }
+            }, 1_200)
           }, 12_000)
         } else if (attempt < retryDelays.length - 1) {
-          try { editor.commands.clearRagHighlight() } catch {}
+          try { editor.commands.clearRagHighlight() } catch (err) { console.warn('clearRagHighlight failed', err) }
           attempt++
           setTimeout(tryHighlight, retryDelays[attempt])
+        } else {
+          console.warn('Failed to highlight protocol section after retries', { excerpt: activeHighlightTarget.excerpt })
         }
       })
     }

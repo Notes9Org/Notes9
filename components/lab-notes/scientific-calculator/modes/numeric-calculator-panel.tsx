@@ -146,8 +146,10 @@ export function NumericCalculatorPanel({
   const unaryPress = (op: UnarySciOp, label: string) => {
     const r = unaryScientific(op, parseFloat(state.display))
     if (!r.ok) {
-      onResultChange({ text: null, latex: null, error: r.error })
+      // Update reducer state first so any re-render triggered by the parent's
+      // onResultChange observes the error state rather than stale values.
       dispatch({ type: "mathError" })
+      onResultChange({ text: null, latex: null, error: r.error })
       return
     }
     dispatch({

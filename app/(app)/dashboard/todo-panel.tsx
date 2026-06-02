@@ -1334,22 +1334,6 @@ function TaskRow({
                 onCheckedChange={onToggleComplete}
                 className="mt-0.5"
               />
-              {/* <div
-                role="button"
-                tabIndex={0}
-                onClick={onStartEdit}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" || e.key === " ") {
-                    e.preventDefault();
-                    onStartEdit();
-                  }
-                }}
-                className={cn(
-                  "min-h-[2.5rem] flex items-center gap-2 flex-wrap rounded-md -m-1 p-1 cursor-text text-left text-sm min-w-0 grow",
-                  completed && "line-through text-muted-foreground",
-                )}
-                aria-label="Edit task"
-              > */}
                 <div className="grow">
                   <span className="inline-flex flex-wrap items-center gap-x-1 gap-y-0.5 break-words min-w-0">
                     {titleHasPlaceholders(task.title)
@@ -1418,7 +1402,6 @@ function TaskRow({
                     </Badge>
                   </div>
                 </div>
-              {/* </div> */}
             </>
           )}
         </div>

@@ -118,7 +118,7 @@ export function DashboardWhiteboard({
   // Resizing state & persistence
   const [sizes, setSizes] = useState<Record<string, { w: number, h: number }>>(() => {
     if (typeof window === 'undefined') return {}
-    try { return JSON.parse(localStorage.getItem('whiteboard_sizes') || '{}') } catch { return {} }
+    try { return JSON.parse(localStorage.getItem('whiteboard_sizes') || '{}') } catch (err) { console.warn('whiteboard_sizes_parse_failed', err); return {} }
   })
   const [resizing, setResizing] = useState<{ id: string; startX: number; startY: number; startW: number; startH: number } | null>(null)
 
@@ -150,8 +150,10 @@ export function DashboardWhiteboard({
   // Persist position on drop (not on every move).
   const persistPosition = useCallback((id: string, x: number, y: number) => {
     startTransition(() => {
-      updateWhiteboardNotePosition({ id, x, y }).catch(() => {
-        // No-op: the visible state already shows the user's drag; surface errors via toast layer later.
+      updateWhiteboardNotePosition({ id, x, y }).catch((err) => {
+        // The visible state already shows the user's drag; log so the failure is observable.
+        console.error('whiteboard_mutation_failed', { op: 'persistPosition', err })
+        toast.error("Couldn't save — your changes may not persist. Please retry.")
       })
     })
   }, [])
@@ -251,7 +253,8 @@ export function DashboardWhiteboard({
               return next
             })
           })
-          .catch(() => {
+          .catch((err) => {
+            console.error('whiteboard_mutation_failed', { op: 'duplicateNote', err })
             setNotes((curr) => curr.filter((n) => n.id !== tempId))
           })
       })
@@ -447,20 +450,19 @@ export function DashboardWhiteboard({
 
   useEffect(() => {
     if (!drag) return
+    const activeDrag = drag
     function move(e: globalThis.MouseEvent) {
       const rect = canvasRef.current?.getBoundingClientRect()
       if (!rect) return
-      const noteW = sizesRef.current[drag!.id]?.w || 180
-      const noteH = sizesRef.current[drag!.id]?.h || 110
-      const x = Math.max(0, Math.min(rect.width - noteW, e.clientX - rect.left - drag!.ox))
-      const y = Math.max(0, Math.min(rect.height - noteH, e.clientY - rect.top - drag!.oy))
-      setNotes((curr) => curr.map((n) => (n.id === drag!.id ? { ...n, x, y } : n)))
+      const noteW = sizesRef.current[activeDrag.id]?.w || 180
+      const noteH = sizesRef.current[activeDrag.id]?.h || 110
+      const x = Math.max(0, Math.min(rect.width - noteW, e.clientX - rect.left - activeDrag.ox))
+      const y = Math.max(0, Math.min(rect.height - noteH, e.clientY - rect.top - activeDrag.oy))
+      setNotes((curr) => curr.map((n) => (n.id === activeDrag.id ? { ...n, x, y } : n)))
     }
     function up() {
-      if (drag) {
-        const current = notesRef.current.find((n) => n.id === drag.id)
-        if (current) persistPosition(drag.id, current.x, current.y)
-      }
+      const current = notesRef.current.find((n) => n.id === activeDrag.id)
+      if (current) persistPosition(activeDrag.id, current.x, current.y)
       setDrag(null)
     }
     window.addEventListener("mousemove", move)
@@ -473,12 +475,17 @@ export function DashboardWhiteboard({
 
   useEffect(() => {
     if (!resizing) return
+    const activeResize = resizing
     function move(e: globalThis.MouseEvent) {
-      const w = Math.max(120, resizing!.startW + (e.clientX - resizing!.startX))
-      const h = Math.max(80, resizing!.startH + (e.clientY - resizing!.startY))
+      const w = Math.max(120, activeResize.startW + (e.clientX - activeResize.startX))
+      const h = Math.max(80, activeResize.startH + (e.clientY - activeResize.startY))
       setSizes((curr) => {
-        const next = { ...curr, [resizing!.id]: { w, h } }
-        localStorage.setItem('whiteboard_sizes', JSON.stringify(next))
+        const next = { ...curr, [activeResize.id]: { w, h } }
+        try {
+          localStorage.setItem('whiteboard_sizes', JSON.stringify(next))
+        } catch (err) {
+          console.warn('whiteboard_sizes_persist_failed', err)
+        }
         return next
       })
     }

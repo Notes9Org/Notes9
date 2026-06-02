@@ -212,6 +212,10 @@ export function ProductTour({
           setReady(true)
           return
         }
+        console.warn(
+          `product-tour: step ${i} target not found within ${RESOLVE_TIMEOUT}ms; skipping`,
+          s.target,
+        )
         i += dir // target missing → skip onward
       }
       if (dir > 0) finishRef.current()

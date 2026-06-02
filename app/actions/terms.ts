@@ -5,7 +5,7 @@ import { getCurrentUser } from "@/lib/auth/current-user"
 import { revalidatePath } from "next/cache"
 import { CURRENT_TERMS_VERSION } from "@/lib/constants"
 
-export async function acceptTermsAction() {
+export async function acceptTermsAction(): Promise<{ success: boolean }> {
     const user = await getCurrentUser()
     if (!user) {
         throw new Error("User not authenticated")
@@ -20,6 +20,7 @@ export async function acceptTermsAction() {
     })
 
     if (error) {
+        console.error("Failed to accept terms", { userId: user.id, error: error.message })
         throw new Error(error.message)
     }
 

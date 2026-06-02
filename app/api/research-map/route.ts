@@ -88,6 +88,19 @@ export async function GET(req: NextRequest) {
   const experimentId = url.searchParams.get("experimentId")
   const includeTypes = parseIncludeTypes(url.searchParams.get("includeTypes"))
 
+  // projectId/experimentId are interpolated into PostgREST `.or(...)` filter
+  // strings below. They are always UUIDs in practice, but reject any malformed
+  // value up front so a non-UUID can never be concatenated into a filter
+  // expression. Valid requests are unaffected.
+  const UUID_RE =
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+  if (projectId && !UUID_RE.test(projectId)) {
+    return NextResponse.json({ error: "Invalid projectId" }, { status: 400 })
+  }
+  if (experimentId && !UUID_RE.test(experimentId)) {
+    return NextResponse.json({ error: "Invalid experimentId" }, { status: 400 })
+  }
+
   const nodes = new Map<string, ResearchMapNode>()
   const pendingEdges: ResearchMapEdge[] = []
   let truncated = false
@@ -178,18 +191,27 @@ export async function GET(req: NextRequest) {
       let notesQuery = supabase
         .from("lab_notes")
         .select("id, title, note_type, experiment_id, project_id")
+      let litQuery = supabase
+        .from("literature_reviews")
+        .select("id, title, status, project_id, experiment_id")
 
       if (experimentId) {
         notesQuery = notesQuery.eq("experiment_id", experimentId).limit(400)
+        litQuery = litQuery.eq("experiment_id", experimentId).limit(400)
       } else if (experimentIds.length > 0) {
-        notesQuery = notesQuery
-          .or(`project_id.eq.${projectId},experiment_id.in.(${experimentIds.join(",")})`)
-          .limit(400)
+        const orFilter = `project_id.eq.${projectId},experiment_id.in.(${experimentIds.join(",")})`
+        notesQuery = notesQuery.or(orFilter).limit(400)
+        litQuery = litQuery.or(orFilter).limit(400)
       } else {
         notesQuery = notesQuery.eq("project_id", projectId).limit(400)
+        litQuery = litQuery.eq("project_id", projectId).limit(400)
       }
 
-      const { data: notes } = await notesQuery
+      // notes + literature only depend on experimentIds — fetch concurrently.
+      const [{ data: notes }, { data: literature }] = await Promise.all([
+        notesQuery,
+        litQuery,
+      ])
       const noteList = notes ?? []
       const noteIds = noteList.map((n) => n.id)
 
@@ -235,21 +257,6 @@ export async function GET(req: NextRequest) {
         }
       }
 
-      let litQuery = supabase
-        .from("literature_reviews")
-        .select("id, title, status, project_id, experiment_id")
-
-      if (experimentId) {
-        litQuery = litQuery.eq("experiment_id", experimentId).limit(400)
-      } else if (experimentIds.length > 0) {
-        litQuery = litQuery
-          .or(`project_id.eq.${projectId},experiment_id.in.(${experimentIds.join(",")})`)
-          .limit(400)
-      } else {
-        litQuery = litQuery.eq("project_id", projectId).limit(400)
-      }
-
-      const { data: literature } = await litQuery
       const litList = literature ?? []
 
       for (const l of litList) {
@@ -515,59 +522,56 @@ export async function GET(req: NextRequest) {
         }
       }
     } else {
-      // Fetch all org projects first so empty projects always appear in the map
-      const { data: allOrgProjects } = await supabase
-        .from("projects")
-        .select("id, name, status, description")
-        .order("updated_at", { ascending: false })
-        .limit(300)
+      // These four top-level fetches are independent of one another — issue them
+      // concurrently instead of four sequential round-trips. Org projects are
+      // included so empty projects still appear in the map.
+      let expQuery = supabase
+        .from("experiments")
+        .select("id, name, status, project_id")
+      let litOrgQuery = supabase
+        .from("literature_reviews")
+        .select("id, title, status, project_id, experiment_id")
+      let notesOrgQuery = supabase
+        .from("lab_notes")
+        .select("id, title, note_type, experiment_id, project_id")
+
+      if (experimentId) {
+        expQuery = expQuery.eq("id", experimentId)
+        litOrgQuery = litOrgQuery.eq("experiment_id", experimentId)
+        notesOrgQuery = notesOrgQuery.eq("experiment_id", experimentId)
+      } else {
+        expQuery = expQuery.order("updated_at", { ascending: false }).limit(400)
+        litOrgQuery = litOrgQuery.order("updated_at", { ascending: false }).limit(350)
+        notesOrgQuery = notesOrgQuery.order("updated_at", { ascending: false }).limit(400)
+      }
+
+      const [
+        { data: allOrgProjects },
+        { data: experiments },
+        { data: litOrg },
+        { data: notesOrg },
+      ] = await Promise.all([
+        supabase
+          .from("projects")
+          .select("id, name, status, description")
+          .order("updated_at", { ascending: false })
+          .limit(300),
+        expQuery,
+        litOrgQuery,
+        notesOrgQuery,
+      ])
 
       const projectIdSet = new Set<string>()
       for (const p of allOrgProjects ?? []) {
         projectIdSet.add(p.id)
       }
 
-      let expQuery = supabase
-        .from("experiments")
-        .select("id, name, status, project_id")
-
-      if (experimentId) {
-        expQuery = expQuery.eq("id", experimentId)
-      } else {
-        expQuery = expQuery.order("updated_at", { ascending: false }).limit(400)
-      }
-
-      const { data: experiments } = await expQuery
       const expList = experiments ?? []
       const experimentIdSet = new Set(expList.map((e) => e.id))
-
-      let litOrgQuery = supabase
-        .from("literature_reviews")
-        .select("id, title, status, project_id, experiment_id")
-      
-      if (experimentId) {
-        litOrgQuery = litOrgQuery.eq("experiment_id", experimentId)
-      } else {
-        litOrgQuery = litOrgQuery.order("updated_at", { ascending: false }).limit(350)
-      }
-
-      const { data: litOrg } = await litOrgQuery
 
       for (const l of litOrg ?? []) {
         if (l.experiment_id) experimentIdSet.add(l.experiment_id)
       }
-
-      let notesOrgQuery = supabase
-        .from("lab_notes")
-        .select("id, title, note_type, experiment_id, project_id")
-      
-      if (experimentId) {
-        notesOrgQuery = notesOrgQuery.eq("experiment_id", experimentId)
-      } else {
-        notesOrgQuery = notesOrgQuery.order("updated_at", { ascending: false }).limit(400)
-      }
-
-      const { data: notesOrg } = await notesOrgQuery
 
       for (const n of notesOrg ?? []) {
         if (n.experiment_id) experimentIdSet.add(n.experiment_id)

@@ -1217,11 +1217,60 @@ export function ProtocolAiSidechat({
                           size="sm"
                           className="h-auto whitespace-normal py-1.5 text-left text-xs"
                           onClick={async () => {
+                            try {
+                              const supabase = createClient()
+                              const { data: { session } } = await supabase.auth.getSession()
+                              const token = session?.access_token
+                              if (!token) {
+                                await appendPlainAssistantFromDb(
+                                  "Error: Your session has expired. Please sign in again."
+                                )
+                                return
+                              }
+                              const res = await answerClarify(opt, token)
+                              if (res.donePayload) {
+                                const text = (res.donePayload.answer || res.donePayload.content).trim()
+                                const hasRefs = (res.donePayload.structured?.references?.length ?? 0) > 0
+                                if (text || hasRefs) {
+                                  void appendAssistantFromDb(
+                                    res.donePayload,
+                                    res.finalizeTag ?? "biomni",
+                                    true,
+                                    [...steps],
+                                    res.citationsManifest
+                                  )
+                                }
+                              }
+                            } catch (err) {
+                              console.error("protocol_clarify_answer_failed", err)
+                              const errText =
+                                err instanceof Error
+                                  ? `Error: ${err.message}`
+                                  : "Error: Failed to send your answer."
+                              await appendPlainAssistantFromDb(errText)
+                            }
+                          }}
+                        >
+                          {opt}
+                        </Button>
+                      ))}
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="h-auto py-1.5 text-xs"
+                        onClick={async () => {
+                          try {
                             const supabase = createClient()
                             const { data: { session } } = await supabase.auth.getSession()
                             const token = session?.access_token
-                            if (!token) return
-                            const res = await answerClarify(opt, token)
+                            if (!token) {
+                              await appendPlainAssistantFromDb(
+                                "Error: Your session has expired. Please sign in again."
+                              )
+                              return
+                            }
+                            const res = await skipClarify(token)
                             if (res.donePayload) {
                               const text = (res.donePayload.answer || res.donePayload.content).trim()
                               const hasRefs = (res.donePayload.structured?.references?.length ?? 0) > 0
@@ -1235,34 +1284,13 @@ export function ProtocolAiSidechat({
                                 )
                               }
                             }
-                          }}
-                        >
-                          {opt}
-                        </Button>
-                      ))}
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        className="h-auto py-1.5 text-xs"
-                        onClick={async () => {
-                          const supabase = createClient()
-                          const { data: { session } } = await supabase.auth.getSession()
-                          const token = session?.access_token
-                          if (!token) return
-                          const res = await skipClarify(token)
-                          if (res.donePayload) {
-                            const text = (res.donePayload.answer || res.donePayload.content).trim()
-                            const hasRefs = (res.donePayload.structured?.references?.length ?? 0) > 0
-                            if (text || hasRefs) {
-                              void appendAssistantFromDb(
-                                res.donePayload,
-                                res.finalizeTag ?? "biomni",
-                                true,
-                                [...steps],
-                                res.citationsManifest
-                              )
-                            }
+                          } catch (err) {
+                            console.error("protocol_clarify_skip_failed", err)
+                            const errText =
+                              err instanceof Error
+                                ? `Error: ${err.message}`
+                                : "Error: Failed to skip the clarifying question."
+                            await appendPlainAssistantFromDb(errText)
                           }
                         }}
                       >

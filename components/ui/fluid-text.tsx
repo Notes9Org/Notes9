@@ -61,7 +61,11 @@ export function PretextReveal({
     try {
       const prepared = prepareWithSegments(text, dim.font)
       return layoutWithLines(prepared, dim.width, dim.lineHeight)
-    } catch {
+    } catch (err) {
+      console.warn(
+        `fluid-text: line layout failed (len=${text.length}, font="${dim.font}", width=${dim.width}); falling back to character animation`,
+        err,
+      )
       return null
     }
   }, [text, dim, reduceMotion])

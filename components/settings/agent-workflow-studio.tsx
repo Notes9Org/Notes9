@@ -191,6 +191,11 @@ type RunLog = {
   details?: string
 }
 
+// Cap the in-memory run log so repeated workflow runs don't grow the array
+// (and re-render cost) without bound. Newest entries are prepended, so we keep
+// the most recent MAX_RUN_LOGS.
+const MAX_RUN_LOGS = 200
+
 type StageExecution = {
   id: string
   title: string
@@ -363,7 +368,7 @@ export function AgentWorkflowStudio() {
         details: `Workflow order: ${runtimeOrder.join(" -> ")}`,
       },
       ...previous,
-    ])
+    ].slice(0, MAX_RUN_LOGS))
 
     const stageResults: StageExecution[] = []
 
@@ -390,14 +395,27 @@ export function AgentWorkflowStudio() {
               .join("\n") || "- none"}`,
           },
           ...previous,
-        ])
+        ].slice(0, MAX_RUN_LOGS))
 
         await sleep(450, controller.signal)
-        const output = createLocalStageOutput({
-          campaignName,
-          previousStages: stageResults,
-          agent,
-        }).trim()
+        let output: string
+        try {
+          output = createLocalStageOutput({
+            campaignName,
+            previousStages: stageResults,
+            agent,
+          }).trim()
+        } catch (stageError) {
+          // Surface which stage failed and why instead of only reporting a
+          // generic error at the end of the run.
+          const detail =
+            stageError instanceof Error ? stageError.message : String(stageError)
+          console.error(
+            `agent-workflow-studio: stage failed (agentId=${agent.id}, index=${index})`,
+            stageError,
+          )
+          throw new Error(`Stage "${agent.name}" failed: ${detail}`)
+        }
         stageResults.push({
           id: agent.id,
           title: agent.name,
@@ -413,7 +431,7 @@ export function AgentWorkflowStudio() {
             details: output,
           },
           ...previous,
-        ])
+        ].slice(0, MAX_RUN_LOGS))
       }
 
       setRuntimeStatus(buildRuntimeStatus(runtimeOrder.length))
@@ -425,7 +443,7 @@ export function AgentWorkflowStudio() {
           details: stageResults.map((stage) => `## ${stage.title}\n${stage.output}`).join("\n\n"),
         },
         ...previous,
-      ])
+      ].slice(0, MAX_RUN_LOGS))
     } catch (error) {
       const message =
         error instanceof Error && error.name === "AbortError"
@@ -441,7 +459,7 @@ export function AgentWorkflowStudio() {
           details: "Workflow halted before all enabled stages completed.",
         },
         ...previous,
-      ])
+      ].slice(0, MAX_RUN_LOGS))
     } finally {
       setRunning(false)
       runAbortRef.current = null
@@ -460,7 +478,7 @@ export function AgentWorkflowStudio() {
         details: `Completed stages so far: ${stageExecutions.map((stage) => stage.title).join(", ") || "none"}`,
       },
       ...previous,
-    ])
+    ].slice(0, MAX_RUN_LOGS))
   }
 
   const updateSkillSummary = (value: string) => {

@@ -4,6 +4,7 @@ import { z } from "zod"
 import { createClient } from "@/lib/supabase/server"
 import { getCurrentUser } from "@/lib/auth/current-user"
 import { createServiceRoleClient } from "@/lib/supabase-service-role"
+import { isSystemAdminRow } from "@/lib/org/require-admin"
 
 const createRoleSchema = z.object({
   name: z.string().trim().min(1, "Role name is required"),
@@ -69,7 +70,7 @@ async function authenticateAdmin() {
   if (
     memberError ||
     !membership ||
-    !(membership.org_roles as any)?.is_system_role
+    !isSystemAdminRow(membership.org_roles)
   ) {
     return {
       error: NextResponse.json(

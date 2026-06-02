@@ -9,7 +9,22 @@ import {
 import { EditEquipmentDialog } from './edit-equipment-dialog'
 import { DeleteEquipmentDialog } from './delete-equipment-dialog'
 
-export function EquipmentActions({ equipment }: { equipment: any }) {
+interface EquipmentActionsItem {
+  id: string
+  name: string
+  equipment_code: string
+  category?: string | null
+  model?: string | null
+  manufacturer?: string | null
+  serial_number?: string | null
+  location?: string | null
+  status: string
+  next_maintenance_date?: string | null
+  purchase_date?: string | null
+  notes?: string | null
+}
+
+export function EquipmentActions({ equipment }: { equipment: EquipmentActionsItem }) {
   return (
     <TooltipProvider>
       <div className="flex items-center gap-1">

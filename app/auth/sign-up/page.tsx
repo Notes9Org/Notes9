@@ -61,14 +61,17 @@ function SignUpContent() {
         } else {
           setEmailError(null)
         }
-      } catch (error: any) {
-        // If error is "no rows returned", email doesn't exist (good)
-        if (error?.code === 'PGRST116') {
-          setEmailError(null)
-        } else {
-          // Other errors, don't show error (might be network issue)
-          setEmailError(null)
+      } catch (error: unknown) {
+        // If error is "no rows returned" (PGRST116) the email doesn't exist (good).
+        // Any other error (e.g. network) is intentionally not surfaced here.
+        const code =
+          error && typeof error === "object" && "code" in error
+            ? (error as { code?: string }).code
+            : undefined
+        if (code !== "PGRST116") {
+          console.warn("Email existence check failed", error)
         }
+        setEmailError(null)
       } finally {
         setCheckingEmail(false)
       }

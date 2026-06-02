@@ -169,6 +169,17 @@ function NewSamplePageInner() {
     return parsed
   }
 
+  // Parse an optional numeric field. Empty -> null. Non-numeric or negative
+  // input throws a clear error instead of silently storing NaN.
+  const parseOptionalNumber = (raw: string, label: string): number | null => {
+    if (!raw) return null
+    const value = parseFloat(raw)
+    if (!Number.isFinite(value) || value < 0) {
+      throw new Error(`${label} must be a non-negative number.`)
+    }
+    return value
+  }
+
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault()
     setIsLoading(true)
@@ -194,7 +205,7 @@ function NewSamplePageInner() {
         collection_date: formData.collection_date || null,
         storage_location: formData.storage_location || null,
         storage_condition: formData.storage_condition || null,
-        quantity: formData.quantity ? parseFloat(formData.quantity) : null,
+        quantity: parseOptionalNumber(formData.quantity, "Quantity"),
         quantity_unit: formData.quantity_unit || null,
         status: formData.status,
         created_by: user.id,
@@ -210,7 +221,7 @@ function NewSamplePageInner() {
         supplier: formData.supplier || null,
         catalog_number: formData.catalog_number || null,
         lot_number: formData.lot_number || null,
-        concentration: formData.concentration ? parseFloat(formData.concentration) : null,
+        concentration: parseOptionalNumber(formData.concentration, "Concentration"),
         concentration_unit: formData.concentration_unit || null,
         purity: formData.purity || null,
         container_type: formData.container_type || null,

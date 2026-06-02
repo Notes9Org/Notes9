@@ -8,6 +8,7 @@ import { ProductTour } from "@/components/tour/product-tour"
 import { WelcomeDialog, type WelcomeResult } from "@/components/tour/welcome-dialog"
 import { buildOnboardingSteps } from "@/lib/tour/onboarding-steps"
 import { buildContextualSteps } from "@/lib/tour/contextual-steps"
+import { CURRENT_TERMS_VERSION } from "@/lib/constants"
 
 type TourStatus = "completed" | "skipped"
 type TourMode = "idle" | "welcome" | "onboarding" | "page"
@@ -83,9 +84,21 @@ export function AppTour() {
     void getSupabase().from("profiles").update(updates).eq("id", user.id)
   }
 
+  // The welcome wizard must not appear until the user has accepted the current
+  // terms — a brand-new signup sees the terms gate FIRST, then the tour. This is
+  // read from the auth user, which the terms modal refreshes on accept (via
+  // refreshSession → onAuthStateChange), so the value flips here automatically.
+  // Existing users have already accepted, so this is true immediately (no change
+  // to their flow).
+  const termsAccepted =
+    user?.user_metadata?.terms_accepted_version === CURRENT_TERMS_VERSION
+
   // ---- new-user bootstrap: decide whether to show the welcome modal -------
   useEffect(() => {
     if (!mounted || !user || bootstrappedRef.current) return
+    // Defer onboarding until terms are accepted. We deliberately do NOT set
+    // bootstrappedRef here, so the effect re-runs once `termsAccepted` flips.
+    if (!termsAccepted) return
     bootstrappedRef.current = true
 
     let cancelled = false
@@ -125,6 +138,9 @@ export function AppTour() {
           profile = data
           break
         }
+        console.warn(
+          `app-tour: profile not yet readable for user ${user.id} (attempt ${attempt + 1}/3); retrying`,
+        )
         await new Promise((r) => setTimeout(r, 600))
       }
       if (cancelled) return
@@ -138,7 +154,7 @@ export function AppTour() {
     return () => {
       cancelled = true
     }
-  }, [mounted, user])
+  }, [mounted, user, termsAccepted])
 
   // ---- event wiring: page help + manual tour restart ---------------------
   useEffect(() => {

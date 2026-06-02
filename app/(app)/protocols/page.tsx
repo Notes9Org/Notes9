@@ -1,7 +1,7 @@
 import { Suspense } from "react"
 import { createClient } from "@/lib/supabase/server"
 import { requireUser } from "@/lib/auth/current-user"
-import { ProtocolsPageContent, type ProtocolsProjectContext } from "./protocols-page-content"
+import { ProtocolsPageContent, type ProtocolsProjectContext, type Protocol } from "./protocols-page-content"
 import { resolveInitialProjectIdParam } from "@/lib/url-project-param"
 import { loadProjectWorkspaceProtocols } from "@/lib/project-workspace-protocols"
 import { CatalystSectionHero } from "@/components/catalyst/catalyst-section-hero"
@@ -63,23 +63,33 @@ export default async function ProtocolsPage({
   // Attempt to enrich with project/experiment context (requires migration 030).
   // If the columns don't exist yet the enrichment silently fails and protocols
   // are displayed without context chips.
-  let enrichedProtocols: any[] = protocols ?? []
+  let enrichedProtocols: Protocol[] = (protocols ?? []) as Protocol[]
   if (protocols && protocols.length > 0) {
     try {
       const { data: ctx } = await supabase
         .from("protocols")
         .select("id, project:projects(id, name), experiment:experiments(id, name)")
-        .in("id", protocols.map((p: any) => p.id))
+        .in("id", protocols.map((p) => p.id))
       if (ctx) {
-        const ctxMap = new Map((ctx as any[]).map((r) => [r.id, r]))
-        enrichedProtocols = protocols.map((p: any) => ({
+        // Supabase types the embedded relations as arrays; the original query
+        // returns at most one row per relation, so we read them as single
+        // objects (matching prior behavior). Cast through `unknown` to bridge.
+        type CtxRow = {
+          id: string
+          project?: Protocol["project"]
+          experiment?: Protocol["experiment"]
+        }
+        const ctxRows = ctx as unknown as CtxRow[]
+        const ctxMap = new Map(ctxRows.map((r) => [r.id, r] as const))
+        enrichedProtocols = (protocols as Protocol[]).map((p) => ({
           ...p,
           project: ctxMap.get(p.id)?.project ?? null,
           experiment: ctxMap.get(p.id)?.experiment ?? null,
         }))
       }
-    } catch {
+    } catch (err) {
       // migration not yet applied — show protocols without context
+      console.error("protocols_enrichment_failed", err)
     }
   }
 

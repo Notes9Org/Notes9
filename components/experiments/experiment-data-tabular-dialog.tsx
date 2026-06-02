@@ -122,6 +122,10 @@ export function ExperimentDataTabularDialog({
     }
 
     let cancelled = false
+    // Clear any previously loaded workbook so a fast file switch (or a failed
+    // load) never shows stale data from the prior file while the new one loads.
+    setSnapshot(null)
+    latestSnapshotRef.current = null
     setLoading(true)
 
     const load = async () => {

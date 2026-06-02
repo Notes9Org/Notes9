@@ -193,13 +193,13 @@ export function UploadLiteraturePdfDialog({
       if (data.status === "unmatched") {
         setDestinationMode("new")
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       if (uploadedPath) {
         await supabase.storage.from(uploadBucket).remove([uploadedPath])
       }
       toast({
         title: "PDF analysis failed",
-        description: error.message,
+        description: error instanceof Error ? error.message : String(error),
         variant: "destructive",
       })
     } finally {

@@ -61,6 +61,20 @@ export function SaveStatusIndicator({
           className: 'text-red-600 dark:text-red-400',
           bgClassName: 'bg-red-50 dark:bg-red-950/30 hover:bg-red-100 dark:hover:bg-red-950/50',
         }
+      default: {
+        // Exhaustiveness guard: `status` is a typed union so this is never hit
+        // for valid input. If a new SaveStatus value is added without a case,
+        // fall back to the error styling rather than crashing on `config.icon`.
+        const _exhaustive: never = status
+        void _exhaustive
+        console.warn('SaveStatusIndicator: unhandled status', status)
+        return {
+          icon: CloudOff,
+          detail: 'Unable to save. Will retry automatically.',
+          className: 'text-red-600 dark:text-red-400',
+          bgClassName: 'bg-red-50 dark:bg-red-950/30 hover:bg-red-100 dark:hover:bg-red-950/50',
+        }
+      }
     }
   }
 
@@ -141,8 +155,8 @@ export function SaveStatusIndicator({
             )}
             disabled={disabledProp ?? status === 'saving'}
             onClick={onClick}
-            type={onClick ? "button" : undefined}
-            aria-label={onClick ? "Save note" : undefined}
+            type="button"
+            aria-label="Save note"
           >
             <Icon
               className={cn('h-4 w-4', 'animate' in config && config.animate && 'animate-spin')}

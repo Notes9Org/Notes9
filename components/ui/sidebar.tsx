@@ -94,8 +94,14 @@ function SidebarProvider({
         _setOpen(openState)
       }
 
-      // This sets the cookie to keep the sidebar state.
-      document.cookie = `${SIDEBAR_COOKIE_NAME}=${openState}; path=/; max-age=${SIDEBAR_COOKIE_MAX_AGE}`
+      // This sets the cookie to keep the sidebar state. Cookie writes can throw
+      // (or silently no-op) in private browsing / when cookies are disabled —
+      // guard so a persistence failure never breaks the in-memory toggle.
+      try {
+        document.cookie = `${SIDEBAR_COOKIE_NAME}=${openState}; path=/; max-age=${SIDEBAR_COOKIE_MAX_AGE}`
+      } catch (err) {
+        console.warn('sidebar: failed to persist open state to cookie', err)
+      }
     },
     [setOpenProp, open],
   )

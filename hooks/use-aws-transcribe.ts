@@ -63,8 +63,8 @@ export function useAwsTranscribe(options: UseAwsTranscribeOptions = {}) {
         sourceRef.current.disconnect();
         processorRef.current.disconnect();
         audioContextRef.current.close();
-      } catch {
-        // Ignore
+      } catch (err) {
+        console.warn("[aws-transcribe] audio cleanup failed:", err);
       }
       processorRef.current = null;
       sourceRef.current = null;
@@ -84,8 +84,8 @@ export function useAwsTranscribe(options: UseAwsTranscribeOptions = {}) {
         if (wsRef.current.readyState === WebSocket.OPEN) {
           wsRef.current.close();
         }
-      } catch {
-        // Ignore
+      } catch (err) {
+        console.warn("[aws-transcribe] websocket close failed:", err);
       }
       wsRef.current = null;
     }
@@ -109,8 +109,9 @@ export function useAwsTranscribe(options: UseAwsTranscribeOptions = {}) {
     try {
       const frame = encodeAudioEvent(buffer);
       ws.send(frame);
-    } catch {
-      // Swallow send errors; onerror/onclose will handle cleanup.
+    } catch (err) {
+      // onerror/onclose will handle cleanup; log for visibility.
+      console.warn("[aws-transcribe] audio frame send failed:", err);
     }
   }, []);
 
@@ -123,13 +124,13 @@ export function useAwsTranscribe(options: UseAwsTranscribeOptions = {}) {
       try {
         const emptyFrame = encodeAudioEvent(new Uint8Array(0));
         wsRef.current.send(emptyFrame);
-      } catch {
-        // Ignore
+      } catch (err) {
+        console.warn("[aws-transcribe] final frame send failed:", err);
       }
       try {
         wsRef.current.close();
-      } catch {
-        // Ignore
+      } catch (err) {
+        console.warn("[aws-transcribe] websocket close on stop failed:", err);
       }
     }
 
@@ -299,8 +300,10 @@ export function useAwsTranscribe(options: UseAwsTranscribeOptions = {}) {
             );
             onError?.(errorText || "Transcription failed.");
           }
-        } catch {
-          // Ignore individual parse errors; the stream will continue.
+        } catch (err) {
+          // Ignore individual parse errors; the stream will continue. Log for
+          // visibility so a persistently corrupted stream is diagnosable.
+          console.warn("[aws-transcribe] message parse failed:", err);
         }
       };
 

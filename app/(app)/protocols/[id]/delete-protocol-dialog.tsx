@@ -49,12 +49,16 @@ export function DeleteProtocolDialog({
         description: `Protocol "${protocolName}" has been deleted successfully.`,
       })
 
-      ;(() => { const pq = typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("project") : null; router.push(pq ? "/protocols?project=" + pq : "/protocols"); })()
+      const projectParam =
+        typeof window !== "undefined"
+          ? new URLSearchParams(window.location.search).get("project")
+          : null
+      router.push(projectParam ? "/protocols?project=" + projectParam : "/protocols")
       router.refresh()
-    } catch (error: any) {
+    } catch (error) {
       toast({
         title: "Error",
-        description: error.message,
+        description: error instanceof Error ? error.message : String(error),
         variant: "destructive",
       })
     } finally {

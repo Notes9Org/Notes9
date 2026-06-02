@@ -180,7 +180,7 @@ export function CatalystChat({ sessionId }: CatalystChatProps) {
           setVotes(data);
         }
       } catch (error) {
-        console.error('Failed to load votes:', error);
+        console.error('Failed to load votes', { event: 'votes_load_failed', sessionId: currentSessionId, error });
       }
     };
 

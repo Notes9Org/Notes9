@@ -3,6 +3,10 @@
 import { InteractiveParticles } from "@/components/ui/interactive-particles"
 import { ModeToggle } from "@/components/mode-toggle"
 
+const SURVEY_FORM_URL =
+  process.env.NEXT_PUBLIC_SURVEY_FORM_URL ||
+  "https://docs.google.com/forms/d/e/1FAIpQLScL1fAjzPqu34jByr-VvNZtn1uMc02ILo80BsAXrh5IlIXWdw/viewform?embedded=true"
+
 export default function SurveyPage() {
   return (
     <div className="flex flex-col h-screen bg-background relative overflow-hidden">
@@ -42,7 +46,7 @@ export default function SurveyPage() {
         <div className="flex-1 overflow-hidden px-4 pb-4">
           <div className="max-w-3xl mx-auto h-full rounded-xl overflow-hidden shadow-2xl border border-border">
             <iframe
-              src="https://docs.google.com/forms/d/e/1FAIpQLScL1fAjzPqu34jByr-VvNZtn1uMc02ILo80BsAXrh5IlIXWdw/viewform?embedded=true"
+              src={SURVEY_FORM_URL}
               width="100%"
               height="100%"
               frameBorder="0"

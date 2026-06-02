@@ -17,7 +17,7 @@ type RouteCrumbConfig = {
   icon?: React.ElementType
   newLabel?: string
   detailLabel?: string
-  children?: Record<string, { label: string; newLabel?: string }>
+  children?: Record<string, { label: string; newLabel?: string } | undefined>
 }
 
 export const APP_ROUTE_CRUMBS: RouteCrumbConfig[] = [

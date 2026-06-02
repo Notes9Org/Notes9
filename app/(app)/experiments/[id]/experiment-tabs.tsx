@@ -337,7 +337,9 @@ export function ExperimentTabs({ experiment, initialTab, experimentPageHref }: E
             )}
             <LinkProtocolDialog
               experimentId={experiment.id}
-              linkedProtocolIds={experiment.protocols.map((p) => normalizeProtocol(p.protocol).id)}
+              linkedProtocolIds={experiment.protocols
+                .map((p) => normalizeProtocol(p.protocol)?.id)
+                .filter((id): id is string => Boolean(id))}
             />
           </div>
         </div>

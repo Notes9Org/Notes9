@@ -62,10 +62,16 @@ export function ProjectScopeProvider({ children }: { children: ReactNode }) {
   const queryExperimentId =
     rawExperiment && isLikelyUuid(rawExperiment) ? rawExperiment : null
 
+  // localStorage is undefined during SSR — short-circuit on the server so the
+  // initializer never throws (this runs on every server render). The catch then
+  // only guards real client-side failures (private mode / quota), which stay
+  // silent by design: a missing key is an expected first-visit state, not an error.
   const [persistedProjectId, setPersistedProjectId] = useState<string | null>(() => {
+    if (typeof window === "undefined") return null
     try { return localStorage.getItem("n9_last_project_id") } catch { return null }
   })
   const [persistedExperimentId, setPersistedExperimentId] = useState<string | null>(() => {
+    if (typeof window === "undefined") return null
     try { return localStorage.getItem("n9_last_experiment_id") } catch { return null }
   })
 
@@ -173,8 +179,8 @@ export function ProjectScopeProvider({ children }: { children: ReactNode }) {
       if (persistedExperimentId) {
         localStorage.setItem("n9_last_experiment_id", persistedExperimentId)
       }
-    } catch {
-      /* ignore */
+    } catch (e) {
+      console.warn("[ProjectScope] localStorage write failed:", e)
     }
   }, [persistedProjectId, persistedExperimentId])
 
@@ -192,8 +198,8 @@ export function ProjectScopeProvider({ children }: { children: ReactNode }) {
     try {
       localStorage.removeItem("n9_last_project_id")
       localStorage.removeItem("n9_last_experiment_id")
-    } catch {
-      /* ignore */
+    } catch (e) {
+      console.warn("[ProjectScope] localStorage clear failed:", e)
     }
     setPersistedProjectId(null)
     setPersistedExperimentId(null)

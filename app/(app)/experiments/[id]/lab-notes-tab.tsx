@@ -274,11 +274,11 @@ export function LabNotesTab({
           el.scrollIntoView({ behavior: 'smooth', block: 'center' });
           setTimeout(() => {
             document.querySelectorAll('.rag-chunk-highlight').forEach((e) => e.classList.add('fading'));
-            setTimeout(() => { try { editor.commands.clearRagHighlight(); } catch {} }, 1_200);
+            setTimeout(() => { try { editor.commands.clearRagHighlight(); } catch (err) { console.warn('clearRagHighlight (fade) failed', err); } }, 1_200);
           }, 12_000);
         } else if (attempt < retryDelays.length - 1) {
           // No element yet — clear and retry after a longer delay
-          try { editor.commands.clearRagHighlight(); } catch {}
+          try { editor.commands.clearRagHighlight(); } catch (err) { console.warn('clearRagHighlight (retry) failed', err); }
           attempt++;
           setTimeout(tryHighlight, retryDelays[attempt]);
         }
@@ -403,7 +403,7 @@ export function LabNotesTab({
   // Memoize the protocols projection — without this, every keystroke recreates
   // a new array reference and busts memoization inside <TiptapEditor>.
   const editorProtocols = useMemo(
-    () => availableProtocols.map((p) => ({ id: p.id, name: p.name, version: p.version })),
+    () => availableProtocols.map((p) => ({ id: p.id, name: p.name, version: p.version, type: 'protocol' as const })),
     [availableProtocols],
   )
 
@@ -556,11 +556,14 @@ export function LabNotesTab({
   useEffect(() => {
     const fetchAllProtocols = async () => {
       const supabase = createClient();
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from("protocols")
         .select("id, name, version")
         .order("name");
 
+      if (error) {
+        console.error("Error fetching protocols for lab notes:", error);
+      }
       if (data) {
         setAvailableProtocols(data);
       }
@@ -948,7 +951,9 @@ export function LabNotesTab({
           recordRumEvent('user_first_note', {})
           window.sessionStorage.setItem('n9_first_note_sent', '1')
         }
-      } catch {}
+      } catch (err) {
+        console.warn('first-note RUM/sessionStorage write failed', err)
+      }
 
       toast({
         title: "Note created",

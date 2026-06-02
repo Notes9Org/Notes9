@@ -66,106 +66,97 @@ export async function GET(req: NextRequest) {
   const experiments = await fetchExperiments(supabase, projectIds, warnings)
   summary.experiments = experiments.length
 
-  const labNotes = await fetchRows(
-    supabase,
-    "lab_notes",
-    projectIds.length > 0
-      ? supabase.from("lab_notes").select("*").in("project_id", projectIds)
-      : supabase.from("lab_notes").select("*").eq("created_by", user.id),
-    warnings,
-  )
+  const experimentIds = experiments.map((experiment) => experiment.id)
+
+  // Every remaining table read depends only on already-known ids (projectIds,
+  // experimentIds, organization_id) — issue them concurrently instead of as
+  // eight sequential round-trips.
+  const [
+    labNotes,
+    protocols,
+    experimentProtocols,
+    experimentFiles,
+    samples,
+    equipment,
+    literature,
+    projectMembers,
+  ] = await Promise.all([
+    fetchRows(
+      supabase,
+      "lab_notes",
+      projectIds.length > 0
+        ? supabase.from("lab_notes").select("*").in("project_id", projectIds)
+        : supabase.from("lab_notes").select("*").eq("created_by", user.id),
+      warnings,
+    ),
+    fetchRows(
+      supabase,
+      "protocols",
+      supabase
+        .from("protocols")
+        .select("*")
+        .eq("organization_id", profile.organization_id)
+        .order("created_at", { ascending: true }),
+      warnings,
+    ),
+    fetchRows(
+      supabase,
+      "experiment_protocols",
+      experimentIds.length > 0
+        ? supabase.from("experiment_protocols").select("*").in("experiment_id", experimentIds)
+        : supabase.from("experiment_protocols").select("*").limit(0),
+      warnings,
+    ),
+    fetchRows(
+      supabase,
+      "experiment_data",
+      experimentIds.length > 0
+        ? supabase.from("experiment_data").select("*").in("experiment_id", experimentIds)
+        : supabase.from("experiment_data").select("*").limit(0),
+      warnings,
+    ),
+    fetchRows(
+      supabase,
+      "samples",
+      experimentIds.length > 0
+        ? supabase.from("samples").select("*").in("experiment_id", experimentIds)
+        : supabase.from("samples").select("*").limit(0),
+      warnings,
+    ),
+    fetchRows(
+      supabase,
+      "equipment",
+      supabase
+        .from("equipment")
+        .select("*")
+        .eq("organization_id", profile.organization_id),
+      warnings,
+    ),
+    fetchRows(
+      supabase,
+      "literature_reviews",
+      supabase
+        .from("literature_reviews")
+        .select("*")
+        .eq("organization_id", profile.organization_id),
+      warnings,
+    ),
+    fetchRows(
+      supabase,
+      "project_members",
+      projectIds.length > 0
+        ? supabase.from("project_members").select("*").in("project_id", projectIds)
+        : supabase.from("project_members").select("*").limit(0),
+      warnings,
+    ),
+  ])
   summary.lab_notes = labNotes.length
-
-  const protocols = await fetchRows(
-    supabase,
-    "protocols",
-    supabase
-      .from("protocols")
-      .select("*")
-      .eq("organization_id", profile.organization_id)
-      .order("created_at", { ascending: true }),
-    warnings,
-  )
   summary.protocols = protocols.length
-
-  const experimentProtocols = await fetchRows(
-    supabase,
-    "experiment_protocols",
-    experiments.length > 0
-      ? supabase
-          .from("experiment_protocols")
-          .select("*")
-          .in(
-            "experiment_id",
-            experiments.map((experiment) => experiment.id),
-          )
-      : supabase.from("experiment_protocols").select("*").limit(0),
-    warnings,
-  )
   summary.experiment_protocols = experimentProtocols.length
-
-  const experimentFiles = await fetchRows(
-    supabase,
-    "experiment_data",
-    experiments.length > 0
-      ? supabase
-          .from("experiment_data")
-          .select("*")
-          .in(
-            "experiment_id",
-            experiments.map((experiment) => experiment.id),
-          )
-      : supabase.from("experiment_data").select("*").limit(0),
-    warnings,
-  )
   summary.experiment_data = experimentFiles.length
-
-  const samples = await fetchRows(
-    supabase,
-    "samples",
-    experiments.length > 0
-      ? supabase
-          .from("samples")
-          .select("*")
-          .in(
-            "experiment_id",
-            experiments.map((experiment) => experiment.id),
-          )
-      : supabase.from("samples").select("*").limit(0),
-    warnings,
-  )
   summary.samples = samples.length
-
-  const equipment = await fetchRows(
-    supabase,
-    "equipment",
-    supabase
-      .from("equipment")
-      .select("*")
-      .eq("organization_id", profile.organization_id),
-    warnings,
-  )
   summary.equipment = equipment.length
-
-  const literature = await fetchRows(
-    supabase,
-    "literature_reviews",
-    supabase
-      .from("literature_reviews")
-      .select("*")
-      .eq("organization_id", profile.organization_id),
-    warnings,
-  )
   summary.literature_reviews = literature.length
-
-  const projectMembers = await fetchRows(
-    supabase,
-    "project_members",
-    projectIds.length > 0
-      ? supabase.from("project_members").select("*").in("project_id", projectIds)
-      : supabase.from("project_members").select("*").limit(0),
-    warnings,
-  )
   summary.project_members = projectMembers.length
 
   const projectById = new Map<string, ProjectRow>()
@@ -239,7 +230,16 @@ export async function GET(req: NextRequest) {
   }
 
   if (selectedSet.has("protocols")) {
-    const linkedProtocolIds = new Set(experimentProtocols.map((row) => row.protocol_id))
+    // Build a reverse index protocol_id -> experiment_protocol links once, so the
+    // per-protocol loop is O(protocols + experimentProtocols) instead of
+    // O(protocols * experimentProtocols).
+    const protocolToExperiments = new Map<string, ExperimentRow[]>()
+    for (const row of experimentProtocols) {
+      const key = row.protocol_id
+      const existing = protocolToExperiments.get(key)
+      if (existing) existing.push(row)
+      else protocolToExperiments.set(key, [row])
+    }
     for (const protocol of protocols) {
       const protocolPdf = textToPdf(
         `${protocol.name}\n\nVersion: ${protocol.version || "1.0"}\nCategory: ${protocol.category || "N/A"}\n\n${stripHtml(protocol.content || "")}`,
@@ -255,8 +255,9 @@ export async function GET(req: NextRequest) {
         data: JSON.stringify(protocol, null, 2),
       })
 
-      if (linkedProtocolIds.has(protocol.id)) {
-        for (const link of experimentProtocols.filter((row) => row.protocol_id === protocol.id)) {
+      const protocolLinks = protocolToExperiments.get(protocol.id)
+      if (protocolLinks) {
+        for (const link of protocolLinks) {
           const experiment = experimentById.get(link.experiment_id)
           if (!experiment) continue
           const project = projectById.get(experiment.project_id)

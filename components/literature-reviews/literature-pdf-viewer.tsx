@@ -40,6 +40,35 @@ type RagHighlightRect = {
   rects: Array<{ top: number; left: number; width: number; height: number }>
 }
 
+/** Cap canvas oversampling: HiDPI sharpens text but >3x wastes memory for no visible gain. */
+const MAX_CANVAS_OUTPUT_SCALE = 3
+/** Fallback device pixel ratio when the browser does not report one. */
+const FALLBACK_DEVICE_PIXEL_RATIO = 1.5
+/**
+ * After centering a navigated match, nudge the scroll down by this fraction of
+ * the viewport height so the match sits slightly below dead-center (easier to read).
+ */
+const SCROLL_NUDGE_RATIO = 0.15
+/** Highlight box height as a multiple of font size — covers ascenders plus slight leading. */
+const HIGHLIGHT_HEIGHT_FONT_MULTIPLE = 1.3
+
+/**
+ * Annotation anchors are persisted as `Record<string, unknown>`. Normalize to a
+ * `{ x?, y? }` shape, keeping only finite numeric coordinates so callers can
+ * safely read positions without an unchecked structural cast.
+ */
+function readAnchorXY(
+  anchor: Record<string, unknown> | null | undefined
+): { x?: number; y?: number } {
+  if (!anchor || typeof anchor !== "object") return {}
+  const rawX = (anchor as { x?: unknown }).x
+  const rawY = (anchor as { y?: unknown }).y
+  return {
+    x: typeof rawX === "number" && Number.isFinite(rawX) ? rawX : undefined,
+    y: typeof rawY === "number" && Number.isFinite(rawY) ? rawY : undefined,
+  }
+}
+
 interface LiteraturePdfViewerProps {
   /** URL passed to pdf.js (often same-origin `/api/.../viewer-pdf`). */
   pdfUrl: string
@@ -127,7 +156,10 @@ function LiteraturePdfPageBlock({
       const textLayerContainer = textLayerRef.current
       const pageContainer = pageRef.current
       const context = canvas.getContext("2d")
-      const outputScale = Math.max(1, Math.min(3, window.devicePixelRatio || 1.5))
+      const outputScale = Math.max(
+        1,
+        Math.min(MAX_CANVAS_OUTPUT_SCALE, window.devicePixelRatio || FALLBACK_DEVICE_PIXEL_RATIO)
+      )
 
       if (!context || !pageContainer) return
       canvas.width = Math.floor(viewport.width * outputScale)
@@ -317,7 +349,7 @@ function LiteraturePdfPageBlock({
         {pageAnnotations
           .filter((annotation) => !annotation.rects?.length && annotation.anchor)
           .map((annotation) => {
-            const anchor = annotation.anchor as { x?: number; y?: number }
+            const anchor = readAnchorXY(annotation.anchor)
             return (
               <div
                 key={annotation.id}
@@ -457,7 +489,7 @@ export const LiteraturePdfViewer = forwardRef<LiteraturePdfViewerHandle, Literat
         const pageTop = elementTopInScrollContent(el, frame)
         const centerOffset = frame.clientHeight / 2
         // Nudge scroll slightly further down so the match sits a bit below dead-center (easier to read).
-        const scrollNudgeDown = Math.round(frame.clientHeight * 0.15)
+        const scrollNudgeDown = Math.round(frame.clientHeight * SCROLL_NUDGE_RATIO)
         const desiredTop = pageTop + yWithinPage - centerOffset + scrollNudgeDown
         const maxScroll = Math.max(0, frame.scrollHeight - frame.clientHeight)
         frame.scrollTo({ top: Math.max(0, Math.min(desiredTop, maxScroll)), behavior: "smooth" })
@@ -573,7 +605,7 @@ export const LiteraturePdfViewer = forwardRef<LiteraturePdfViewerHandle, Literat
               left: tx / pw,
               top: 1 - (ty + fontSize) / ph,
               width: iw / pw,
-              height: (fontSize * 1.3) / ph,
+              height: (fontSize * HIGHLIGHT_HEIGHT_FONT_MULTIPLE) / ph,
             })
           }
 
@@ -733,12 +765,12 @@ export const LiteraturePdfViewer = forwardRef<LiteraturePdfViewerHandle, Literat
         mid.scrollIntoView({ behavior: "smooth", block: "center", inline: "nearest" })
       } else {
         const rects = ann.rects
-        const anchor = ann.anchor as { y?: number } | undefined
+        const anchor = readAnchorXY(ann.anchor)
         const pageHeight = pageEl.getBoundingClientRect().height
         let yWithinPagePx: number
         if (rects && rects.length > 0) {
           yWithinPagePx = highlightCenterYWithinPage(rects, pageHeight)
-        } else if (typeof anchor?.y === "number") {
+        } else if (typeof anchor.y === "number") {
           yWithinPagePx = anchor.y * pageHeight
         } else {
           yWithinPagePx = 0.22 * pageHeight

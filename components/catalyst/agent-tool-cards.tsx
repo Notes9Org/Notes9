@@ -192,8 +192,8 @@ function ToolCardItem({ card }: ToolCardItemProps) {
             title={card.args_preview}
           >
             <span className="text-muted-foreground/50 select-none mr-1.5">args</span>
-            {card.args_preview!.length > 220
-              ? `${card.args_preview!.slice(0, 220)}…`
+            {(card.args_preview?.length ?? 0) > 220
+              ? `${card.args_preview?.slice(0, 220)}…`
               : card.args_preview}
           </code>
         </div>

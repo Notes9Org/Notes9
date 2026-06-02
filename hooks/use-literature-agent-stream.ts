@@ -320,6 +320,20 @@ export function useLiteratureAgentStream() {
     citationsManifest: null,
   });
 
+  // Single source of truth for the "begin a fresh stream" reset. Sets every
+  // field of LiteratureAgentStreamState, so it fully replaces prior state — the
+  // three stream entry points previously duplicated this object literal.
+  const STREAMING_RESET: LiteratureAgentStreamState = {
+    donePayload: null,
+    error: null,
+    isStreaming: true,
+    steps: [],
+    clarify: null,
+    streamedAnswer: '',
+    upstreamActivityAt: null,
+    citationsManifest: null,
+  };
+
   const abortControllerRef = useRef<AbortController | null>(null);
   const clarifyRef = useRef<LiteratureClarifyPending | null>(null);
 
@@ -457,16 +471,7 @@ export function useLiteratureAgentStream() {
       const signal = abortControllerRef.current.signal;
       clarifyRef.current = null;
 
-      setState({
-        donePayload: null,
-        error: null,
-        isStreaming: true,
-        steps: [],
-        clarify: null,
-        streamedAnswer: '',
-        upstreamActivityAt: null,
-        citationsManifest: null,
-      });
+      setState({ ...STREAMING_RESET });
 
       try {
         const skipClarify = options?.skipClarify === true;
@@ -587,17 +592,7 @@ export function useLiteratureAgentStream() {
       const signal = abortControllerRef.current.signal;
       clarifyRef.current = null;
 
-      setState((s) => ({
-        ...s,
-        clarify: null,
-        isStreaming: true,
-        error: null,
-        donePayload: null,
-        steps: [],
-        streamedAnswer: '',
-        upstreamActivityAt: null,
-        citationsManifest: null,
-      }));
+      setState({ ...STREAMING_RESET });
 
       try {
         const onStep = (line: string) => {
@@ -687,17 +682,7 @@ export function useLiteratureAgentStream() {
       const signal = abortControllerRef.current.signal;
       clarifyRef.current = null;
 
-      setState((s) => ({
-        ...s,
-        clarify: null,
-        isStreaming: true,
-        error: null,
-        donePayload: null,
-        steps: [],
-        streamedAnswer: '',
-        upstreamActivityAt: null,
-        citationsManifest: null,
-      }));
+      setState({ ...STREAMING_RESET });
 
       try {
         const onStep = (line: string) => {

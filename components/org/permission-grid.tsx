@@ -22,7 +22,8 @@ interface PermissionGridProps {
   disabled?: boolean
 }
 
-function capitalize(s: string): string {
+function capitalize(s: string | null | undefined): string {
+  if (!s) return "?"
   return s.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())
 }
 

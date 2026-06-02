@@ -35,7 +35,10 @@ export const getCurrentUser = cache(async (): Promise<User | null> => {
       const { data } = await supabase.auth.getSession()
       session = data?.session
     } catch (err) {
-      // getSession might throw if refresh token is invalid
+      // getSession can throw if the refresh token is invalid or the cookie is
+      // malformed. We intentionally fall through to the authoritative getUser()
+      // below, but log so malformed-cookie anomalies are visible in monitoring.
+      console.warn("[getCurrentUser] getSession failed; falling back to getUser:", err)
     }
     
     const token = session?.access_token
@@ -62,6 +65,7 @@ export const getCurrentUser = cache(async (): Promise<User | null> => {
     if (error || !data?.user) return null
     return data.user
   } catch (err) {
+    console.warn("[getCurrentUser] getUser fallback failed:", err)
     return null
   }
 })

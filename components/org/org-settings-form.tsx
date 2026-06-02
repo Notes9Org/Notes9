@@ -111,7 +111,16 @@ export function OrgSettingsForm({ organization }: OrgSettingsFormProps) {
     try {
       const supabase = createClient()
 
-      const payload: Record<string, string | null> = {
+      type OrgUpdatePayload = {
+        name: string
+        type: string | null
+        description: string | null
+        address: string | null
+        phone: string | null
+        email: string | null
+      }
+
+      const payload: OrgUpdatePayload = {
         name: result.data.name,
         type: result.data.type ?? null,
         description: result.data.description || null,
