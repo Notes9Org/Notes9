@@ -3,6 +3,8 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
+    "typecheck": "tsc --noEmit",
+    "prebuild": "tsc --noEmit",
     "build": "next build",
     "capture:screenshots": "tsx scripts/capture-screenshots.ts",
     "record:workflow": "tsx scripts/record-workflow.ts",
