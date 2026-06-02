@@ -192,6 +192,7 @@ export const RagHighlight = Extension.create<RagHighlightOptions>({
 
               return {
                 excerpt,
+                // @ts-expect-error prosemirror version split between root and collaboration-server — runtime types are identical
                 decorations: DecorationSet.create(doc, decs),
               }
             }
@@ -199,6 +200,7 @@ export const RagHighlight = Extension.create<RagHighlightOptions>({
             if (prev.decorations !== DecorationSet.empty && tr.docChanged) {
               return {
                 ...prev,
+                // @ts-expect-error prosemirror version split between root and collaboration-server — runtime types are identical
                 decorations: prev.decorations.map(tr.mapping, tr.doc),
               }
             }

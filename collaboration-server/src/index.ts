@@ -1,6 +1,7 @@
 import { Server } from "@hocuspocus/server";
 import { Logger } from "@hocuspocus/extension-logger";
 import { onAuthenticate } from "./auth.js";
+import type { UserContext } from "./auth.js";
 import { createDatabaseExtension } from "./database.js";
 import { createHealthCheckHandler } from "./health.js";
 
@@ -10,6 +11,28 @@ import type {
   onDisconnectPayload,
   onRequestPayload,
 } from "@hocuspocus/server";
+
+/**
+ * Validate that all required environment variables are present before the
+ * server starts accepting connections. Without this, missing config (e.g.
+ * JWT_SECRET) would only surface on the first WebSocket auth attempt instead
+ * of failing fast at boot.
+ */
+function validateEnv(): void {
+  const required = [
+    "JWT_SECRET",
+    "SUPABASE_URL",
+    "SUPABASE_SERVICE_ROLE_KEY",
+  ];
+  const missing = required.filter((name) => !process.env[name]);
+  if (missing.length > 0) {
+    throw new Error(
+      `Missing required environment variables: ${missing.join(", ")}`
+    );
+  }
+}
+
+validateEnv();
 
 const port = parseInt(process.env.PORT || "8080", 10);
 
@@ -53,7 +76,14 @@ const server = new Server({
   // Clean up awareness state when a user disconnects
   async onDisconnect({ document, context }: onDisconnectPayload) {
     const awareness = document.awareness;
-    const userContext = context as { userId?: string } | undefined;
+
+    // Narrow the loosely-typed Hocuspocus context to our UserContext shape
+    // via a runtime guard so a future change to the context structure surfaces
+    // here instead of silently producing an unexpected value.
+    const userContext =
+      context && typeof context === "object" && "userId" in context
+        ? (context as UserContext)
+        : undefined;
 
     if (!awareness || !userContext?.userId) {
       return;
@@ -77,5 +107,11 @@ const server = new Server({
 });
 
 server.listen().then(() => {
-  console.log(`Collaboration server running on port ${port}`);
+  // Structured log to match the JSON log format used elsewhere (database.ts)
+  console.log(
+    JSON.stringify({
+      event: "server_listening",
+      port,
+    })
+  );
 });

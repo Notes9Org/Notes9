@@ -57,11 +57,14 @@ export function LiteraturePdfPanel({
       const response = await fetch(`/api/literature/${literatureId}/annotations`)
       const data = await response.json()
       if (!response.ok) throw new Error(data.error)
-      setAnnotations(data.annotations ?? [])
-    } catch (error: any) {
+      // Guard against a malformed body: only accept an array of annotations.
+      setAnnotations(Array.isArray(data.annotations) ? data.annotations : [])
+    } catch (error: unknown) {
+      const description = error instanceof Error ? error.message : String(error)
+      console.error("Failed to load literature annotations", error)
       toast({
         title: "Failed to load annotations",
-        description: error.message,
+        description,
         variant: "destructive",
       })
     } finally {
@@ -101,6 +104,15 @@ export function LiteraturePdfPanel({
         attempt++
         setTimeout(tryHighlight, delays[Math.min(attempt, delays.length - 1)])
       } else {
+        if (!found) {
+          // Exhausted all retries (or last attempt) without locating the
+          // excerpt. Log so a missing highlight is diagnosable rather than
+          // failing silently. We still mark as fired to avoid re-looping.
+          console.warn(
+            "Literature PDF excerpt highlight not found after retries",
+            { literatureId, highlightPageNumber, attempts: attempt + 1 },
+          )
+        }
         highlightExcerptFiredRef.current = highlightExcerpt
       }
     }

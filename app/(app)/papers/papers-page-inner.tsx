@@ -89,11 +89,15 @@ export function PapersPageInner({ projects = [] }: PapersPageInnerProps = {}) {
       : Array.from(
           new Map(
             papers
-              .filter((p) => p.project?.id || (p as any).project_id)
-              .map((p) => [
-                p.project?.id || (p as any).project_id, 
-                p.project?.name || `Project ${(p.project?.id || (p as any).project_id).slice(0, 8)}`
-              ])
+              .filter((p) => p.project?.id || (p as { project_id?: string | null }).project_id)
+              .map((p) => {
+                // pid is guaranteed truthy by the preceding filter.
+                const pid = (p.project?.id || (p as { project_id?: string | null }).project_id)!
+                return [
+                  pid,
+                  p.project?.name || `Project ${pid.slice(0, 8)}`,
+                ] as const
+              })
           ).entries()
         ).map(([value, label]) => ({ value, label }))
 
@@ -107,7 +111,7 @@ export function PapersPageInner({ projects = [] }: PapersPageInnerProps = {}) {
   const filteredPapers = useMemo(() => {
     if (projectFilter === FILTER_ALL) return papers
     return papers.filter((p) => {
-      const pid = p.project?.id || (p as any).project_id
+      const pid = p.project?.id || (p as { project_id?: string | null }).project_id
       return pid === projectFilter
     })
   }, [papers, projectFilter])

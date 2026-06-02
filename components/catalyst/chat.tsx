@@ -275,7 +275,7 @@ export function CatalystChat({ open, onOpenChange }: CatalystChatProps) {
               return next;
             });
           })
-          .catch((err) => console.warn('Attachment re-sign failed', err));
+          .catch((err) => console.warn('Attachment re-sign failed', { event: 'attachment_resign_failed', sessionId, pathCount: pathsToSign.length, err }));
       }
     } else {
       setMessages([]);
@@ -318,15 +318,7 @@ export function CatalystChat({ open, onOpenChange }: CatalystChatProps) {
             // Extract TEXT only — never include thinking, sources, or tool parts
             // in the persisted content. Those go in metadata so they can be
             // rendered separately (and never leak into the visible chat history).
-            let content = '';
-            if (message.parts && message.parts.length > 0) {
-              content = message.parts
-                .filter((p) => p.type === 'text')
-                .map((p) => ('text' in p ? p.text : ''))
-                .join('');
-            } else if (typeof (message as unknown as { content?: unknown }).content === 'string') {
-              content = (message as unknown as { content: string }).content;
-            }
+            const content = getMessageTextContent(message);
 
             // Build metadata bundle: thinking, sources, attachments
             const metadata: Record<string, unknown> = {};
@@ -349,7 +341,7 @@ export function CatalystChat({ open, onOpenChange }: CatalystChatProps) {
                 );
                 newSavedIds.add(message.id);
               } catch (error) {
-                console.error('Error saving message:', error);
+                console.error('Error saving message', { event: 'message_save_failed', sessionId, messageId: message.id, role: message.role, error });
                 // Continue trying to save other messages
               }
             }
@@ -362,16 +354,7 @@ export function CatalystChat({ open, onOpenChange }: CatalystChatProps) {
         if (messages.length <= 2 && !sessions.find(s => s.id === sessionId)?.title) {
           const firstUserMessage = messages.find((m) => m.role === 'user');
           if (firstUserMessage) {
-            let title = '';
-            if (firstUserMessage.parts && firstUserMessage.parts.length > 0) {
-              title = firstUserMessage.parts
-                .filter((p) => p.type === 'text')
-                .map((p) => ('text' in p ? p.text : ''))
-                .join('')
-                .slice(0, 50);
-            } else if (typeof (firstUserMessage as unknown as { content?: unknown }).content === 'string') {
-              title = (firstUserMessage as unknown as { content: string }).content.slice(0, 50);
-            }
+            const title = getMessageTextContent(firstUserMessage).slice(0, 50);
 
             if (title.trim()) {
               try {
@@ -379,7 +362,7 @@ export function CatalystChat({ open, onOpenChange }: CatalystChatProps) {
                 // Refresh sessions list to show updated title
                 await loadSessions();
               } catch (error) {
-                console.error('Error updating session title:', error);
+                console.error('Error updating session title', { event: 'session_title_update_failed', sessionId, error });
               }
             }
           }
@@ -441,7 +424,9 @@ export function CatalystChat({ open, onOpenChange }: CatalystChatProps) {
         recordRumEvent('user_first_chat', {});
         window.sessionStorage.setItem('n9_first_chat_sent', '1');
       }
-    } catch {}
+    } catch (err) {
+      console.warn('Failed to record RUM event', { event: 'user_first_chat', err });
+    }
 
     // Sending a new message is an explicit "I want to see what comes next"
     // signal — re-pin so the user's own message + the streamed reply scroll
@@ -578,16 +563,24 @@ export function CatalystChat({ open, onOpenChange }: CatalystChatProps) {
     setInput(e.target.value);
   };
 
-  // Extract text content from message parts
-  const getMessageContent = (message: typeof messages[0]): string => {
+  // Single typed extraction helper used by every text-extraction site below.
+  // The AI SDK message may carry either a `parts` array (live/hydrated) or a
+  // legacy `content` string; this guards both shapes once so call sites don't
+  // re-cast `as unknown as { content?: unknown }` repeatedly.
+  const getMessageTextContent = (message: typeof messages[0]): string => {
     if (message.parts && message.parts.length > 0) {
       return message.parts
         .filter((p) => p.type === 'text')
         .map((p) => ('text' in p ? p.text : ''))
         .join('');
     }
-    return 'content' in message ? String((message as unknown as { content: unknown }).content) : '';
+    const content = (message as { content?: unknown }).content;
+    return typeof content === 'string' ? content : '';
   };
+
+  // Extract text content from message parts
+  const getMessageContent = (message: typeof messages[0]): string =>
+    getMessageTextContent(message);
 
   const getMessageSources = (message: typeof messages[0]): Array<Record<string, unknown>> => {
     if (!message.parts) return [];

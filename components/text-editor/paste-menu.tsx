@@ -13,6 +13,16 @@ interface PasteMenuProps {
     editor: Editor
 }
 
+/**
+ * Shape of the paste-handler extension's Tiptap storage that this menu reads.
+ * Tiptap leaves `editor.storage` untyped, so we narrow it locally instead of
+ * casting to `any`. Mirrors the storage written by the paste-handler plugin.
+ */
+interface PasteHandlerStorage {
+    isPasteMenuOpen?: boolean
+    lastPasteRange?: { from: number; to: number } | null
+}
+
 export const PasteMenu = ({ editor }: PasteMenuProps) => {
     const [isOpen, setIsOpen] = useState(false)
     const [position, setPosition] = useState({ top: 0, left: 0 })
@@ -22,7 +32,7 @@ export const PasteMenu = ({ editor }: PasteMenuProps) => {
         if (!editor) return
 
         const update = () => {
-            const storage = (editor.storage as any).pasteHandler
+            const storage = (editor.storage as unknown as { pasteHandler?: PasteHandlerStorage })?.pasteHandler
             if (storage?.isPasteMenuOpen && storage.lastPasteRange) {
                 setIsOpen(true)
 
@@ -38,7 +48,12 @@ export const PasteMenu = ({ editor }: PasteMenuProps) => {
                         left: coords.left
                     })
                 } catch (e) {
-                    // Fallback if coordsAtPos fails (e.g. if range is invalid)
+                    // Fallback if coordsAtPos fails (e.g. if range is invalid).
+                    // Close the menu rather than render at a stale position.
+                    console.error(
+                        `PasteMenu: coordsAtPos failed at pos ${storage.lastPasteRange?.to}`,
+                        e,
+                    )
                     setIsOpen(false)
                 }
             } else {

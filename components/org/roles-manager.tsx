@@ -107,8 +107,16 @@ export function RolesManager({
           setSelectedPermissionIds(data.permissionIds)
         }
       }
-    } catch {
-      // Silently fail — user can still set permissions manually
+    } catch (err) {
+      // Non-fatal: user can still set permissions manually. Surface a warning
+      // so a failed load isn't completely invisible, and log for monitoring.
+      console.warn("roles-manager: failed to load current permissions", err)
+      toast({
+        title: "Warning",
+        description:
+          "Could not load this role's current permissions. You may need to re-select them.",
+        variant: "destructive",
+      })
     } finally {
       setLoadingPermissions(false)
     }
@@ -118,6 +126,17 @@ export function RolesManager({
     const trimmedName = roleName.trim()
     if (!trimmedName) {
       setRoleNameError("Role name is required")
+      return
+    }
+    // Client-side duplicate-name guard so the user gets immediate feedback
+    // instead of waiting for the API 409. Exclude the role being edited.
+    const isDuplicate = roles.some(
+      (r) =>
+        r.id !== editingRole?.id &&
+        r.name.trim().toLowerCase() === trimmedName.toLowerCase(),
+    )
+    if (isDuplicate) {
+      setRoleNameError("A role with this name already exists")
       return
     }
     if (selectedPermissionIds.length === 0) {
@@ -342,13 +361,17 @@ export function RolesManager({
                   if (roleNameError) setRoleNameError("")
                 }}
                 aria-invalid={!!roleNameError}
-                aria-describedby={roleNameError ? "role-name-error" : undefined}
+                aria-describedby={roleNameError ? "role-name-error" : "role-name-help"}
                 disabled={isSaving}
               />
-              {roleNameError && (
+              {roleNameError ? (
                 <p id="role-name-error" className="text-sm text-destructive">
                   {roleNameError}
                 </p>
+              ) : (
+                <span id="role-name-help" className="sr-only">
+                  Enter a unique name for this role.
+                </span>
               )}
             </div>
 

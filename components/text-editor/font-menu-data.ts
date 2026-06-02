@@ -26,7 +26,7 @@ export const DEFAULT_TEXT_STYLE_FONT_LABEL = "Calibri"
 /** Common system / office fonts at the top of the Text menu. */
 export const FONT_QUICK_VARIANTS: FontMenuVariant[] = [
   { label: "Default (inherit)", value: "" },
-  { label: "Calibri", value: "Calibri, 'Segoe UI', sans-serif" },
+  { label: DEFAULT_TEXT_STYLE_FONT_LABEL, value: DEFAULT_TEXT_STYLE_FONT_STACK },
   { label: "Arial", value: "Arial, Helvetica, sans-serif" },
   { label: "Times New Roman", value: "'Times New Roman', Times, serif" },
   { label: "Comic Sans MS", value: "'Comic Sans MS', 'Comic Sans', cursive" },

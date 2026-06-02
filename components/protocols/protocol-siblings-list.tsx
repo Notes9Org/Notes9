@@ -117,6 +117,14 @@ export function ProtocolSiblingsList({
       setRenameTargetId(null)
       return
     }
+    if (trimmed.length > 255) {
+      toast({
+        title: "Name too long",
+        description: "Protocol names must be 255 characters or fewer.",
+        variant: "destructive",
+      })
+      return
+    }
     const { error } = await supabase
       .from("protocols")
       .update({ name: trimmed, updated_at: new Date().toISOString() })

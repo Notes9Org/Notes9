@@ -103,6 +103,8 @@ export function NewLabNoteDialog({
             if (!error) setProjects(data || [])
           }
         }
+      } catch (err) {
+        console.error("Failed to load projects for new lab note", err)
       } finally {
         setLoadingProjects(false)
       }
@@ -124,7 +126,11 @@ export function NewLabNoteDialog({
       .eq("project_id", selectedProjectId)
       .order("name")
       .then(({ data, error }) => {
-        if (!error) setExperiments(data || [])
+        if (error) {
+          console.error("Failed to load experiments for project", error)
+        } else {
+          setExperiments(data || [])
+        }
         setLoadingExperiments(false)
       })
   }, [selectedProjectId, supabase])

@@ -103,7 +103,7 @@ function SettingsSection({
 const settingsFieldClass = "h-11 text-base md:text-base"
 const settingsLabelClass = "text-sm font-medium"
 
-export default function SettingsPage() {
+export default function SettingsPage(): ReactNode {
   const user = useAuthUser();
   const router = useRouter()
   const { theme, setTheme } = useTheme()
@@ -134,31 +134,40 @@ export default function SettingsPage() {
 
   useEffect(() => {
     const loadProfile = async () => {
-      const supabase = createClient()
-      if (user) {
-        const { data } = await supabase
-          .from("profiles")
-          .select("*")
-          .eq("id", user.id)
-          .single()
+      try {
+        const supabase = createClient()
+        if (user) {
+          const { data, error } = await supabase
+            .from("profiles")
+            .select("*")
+            .eq("id", user.id)
+            .single()
 
-        setProfile(data)
-        if (data) {
-          setFirstName(data.first_name ?? "")
-          setLastName(data.last_name ?? "")
-          setRole(data.role ?? "researcher")
-          // avatar_url stores either a legacy public URL or (post-051) a storage
-          // path; sign whichever it is so the bucket can stay private.
-          if (data.avatar_url) {
-            const { createBucketSignedUrl } = await import("@/lib/storage-signed-url")
-            const signed = await createBucketSignedUrl(supabase, USER_STORAGE_BUCKET, data.avatar_url)
-            setAvatarUrl(signed)
-          } else {
-            setAvatarUrl(null)
+          if (error) {
+            console.error("Failed to load profile", error)
+          }
+
+          setProfile(data)
+          if (data) {
+            setFirstName(data.first_name ?? "")
+            setLastName(data.last_name ?? "")
+            setRole(data.role ?? "researcher")
+            // avatar_url stores either a legacy public URL or (post-051) a storage
+            // path; sign whichever it is so the bucket can stay private.
+            if (data.avatar_url) {
+              const { createBucketSignedUrl } = await import("@/lib/storage-signed-url")
+              const signed = await createBucketSignedUrl(supabase, USER_STORAGE_BUCKET, data.avatar_url)
+              setAvatarUrl(signed)
+            } else {
+              setAvatarUrl(null)
+            }
           }
         }
+      } catch (err) {
+        console.error("Unexpected error loading profile", err)
+      } finally {
+        setLoading(false)
       }
-      setLoading(false)
     }
 
     loadProfile()

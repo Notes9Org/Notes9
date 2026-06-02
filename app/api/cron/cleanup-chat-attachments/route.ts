@@ -106,44 +106,53 @@ export async function GET(request: Request): Promise<NextResponse> {
 
     if (!rows || rows.length === 0) break;
 
+    // Try to remove the storage objects first. If that fails, we still
+    // tombstone the rows — an orphaned storage object is recoverable
+    // (manual cleanup), but a non-tombstoned expired row would keep
+    // serving the file via read_document forever.
+    //
+    // Group paths by bucket so we issue one `remove([...])` per bucket per
+    // batch instead of one round-trip per row. `remove` accepts an array of
+    // paths, so a 500-row batch collapses from 500 storage calls to ~1–2.
+    const pathsByBucket = new Map<string, string[]>();
     for (const row of rows) {
-      const { id, storage_bucket: bucket, storage_path: path } = row;
-
-      // Try to remove the storage object first. If that fails, we still
-      // tombstone the row — an orphaned storage object is recoverable
-      // (manual cleanup), but a non-tombstoned expired row would keep
-      // serving the file via read_document forever.
+      const { storage_bucket: bucket, storage_path: path } = row;
       if (bucket && path) {
-        const { error: rmErr } = await supabase.storage
-          .from(bucket)
-          .remove([path]);
-        if (rmErr) {
-          failures.push({
-            id,
-            bucket,
-            path,
-            error: rmErr.message,
-          });
-          console.warn(
-            "chat_attachment_storage_delete_failed",
-            { id, bucket, path, error: rmErr.message },
-          );
-        }
+        const existing = pathsByBucket.get(bucket);
+        if (existing) existing.push(path);
+        else pathsByBucket.set(bucket, [path]);
       }
+    }
 
+    for (const [bucket, paths] of pathsByBucket) {
+      const { error: rmErr } = await supabase.storage
+        .from(bucket)
+        .remove(paths);
+      if (rmErr) {
+        failures.push({ bucket, error: rmErr.message });
+        console.warn(
+          "chat_attachment_storage_delete_failed",
+          { bucket, paths, error: rmErr.message },
+        );
+      }
+    }
+
+    // Bulk-tombstone every row in the batch with a single update keyed by id.
+    const batchIds = rows.map((r) => r.id).filter(Boolean);
+    if (batchIds.length > 0) {
       const { error: updErr } = await supabase
         .from("chat_attachments")
         .update({ deleted_at: new Date().toISOString() })
-        .eq("id", id);
+        .in("id", batchIds);
 
       if (updErr) {
-        failures.push({ id, error: `tombstone_update: ${updErr.message}` });
+        failures.push({ error: `tombstone_update: ${updErr.message}` });
         console.error(
           "chat_attachment_tombstone_update_failed",
-          { id, error: updErr.message },
+          { ids: batchIds, error: updErr.message },
         );
       } else {
-        expiredSoftDeleted += 1;
+        expiredSoftDeleted += batchIds.length;
       }
     }
 

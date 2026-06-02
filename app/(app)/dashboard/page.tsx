@@ -200,7 +200,7 @@ export default async function DashboardPage() {
     if (orgRes.data) {
       const members = membersRes.data ?? []
       const rawForAdmin: OrgMemberPerm[] = members.map((m) => {
-        const row = m as {
+        const row = m as unknown as {
           user_id: string
           role_id: string | null
           is_active: boolean
@@ -224,7 +224,7 @@ export default async function DashboardPage() {
         memberCount: memberCountRes.count ?? members.length,
         pendingInviteCount: invitationsRes.count ?? 0,
         previewMembers: members.map((m) => {
-          const row = m as {
+          const row = m as unknown as {
             id: string
             profiles: {
               first_name: string | null
@@ -255,9 +255,14 @@ export default async function DashboardPage() {
 
   // First-name lives in user_metadata too; avoid an extra profiles round-trip
   // just for the greeting.
+  const metadata = user.user_metadata ?? {}
+  const firstName =
+    typeof metadata.first_name === "string" ? metadata.first_name : undefined
+  const fullName =
+    typeof metadata.full_name === "string" ? metadata.full_name : undefined
   const greetingName =
-    (user.user_metadata?.first_name as string | undefined) ||
-    (user.user_metadata?.full_name as string | undefined)?.split(" ")[0] ||
+    firstName ||
+    fullName?.split(" ")[0] ||
     user.email?.split("@")[0] ||
     "Researcher"
 

@@ -49,7 +49,13 @@ export function createHealthCheckHandler() {
       response.end(JSON.stringify({ status: "error", message }));
     }
 
-    // Throw empty error to prevent Hocuspocus default response handler
+    // Throw a FALSY value to suppress the Hocuspocus default response handler.
+    // Hocuspocus's requestHandler only re-throws truthy errors (`if (error) throw error`);
+    // a falsy throw signals "handled, stop processing" without surfacing an error.
+    // This must stay falsy — throwing a real Error here would be re-thrown by
+    // Hocuspocus and crash the request handler. The 200/503 response has already
+    // been written above, so there is nothing left to report to error trackers.
+    // eslint-disable-next-line no-throw-literal
     throw "";
   };
 }

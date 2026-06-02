@@ -14,7 +14,6 @@ import {
 import { Textarea } from "@/components/ui/textarea"
 import { Flag, Loader2 } from "lucide-react"
 import { toast } from "sonner"
-import { createClient } from "@/lib/supabase/client"
 import { useAuthUser } from "@/components/auth/auth-provider"
 
 export function ReportIssueDialog() {
@@ -32,7 +31,6 @@ export function ReportIssueDialog() {
     setSending(true)
     try {
       // Get user email for reply-to
-      const supabase = createClient()
       const userEmail = user?.email || "unknown@user.com"
 
       const res = await fetch("/api/contact", {
@@ -52,7 +50,8 @@ export function ReportIssueDialog() {
       toast.success("Report sent! We'll look into it.")
       setMessage("")
       setOpen(false)
-    } catch {
+    } catch (err) {
+      console.error("[ReportIssueDialog] Failed to send report:", err)
       toast.error("Could not send your report. Please try again.")
     } finally {
       setSending(false)

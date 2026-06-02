@@ -25,6 +25,15 @@ export function TermsAcceptanceModal() {
         setIsLoading(true)
         try {
             await acceptTermsAction()
+            // acceptTermsAction updates user_metadata.terms_accepted_version
+            // server-side, but the app layout reads that version from the JWT
+            // access token (local verification, refreshed only on expiry). Without
+            // forcing a token refresh, router.refresh() re-reads the STALE token,
+            // mustAcceptTerms stays true, and this modal re-appears — the user gets
+            // stuck on "Agree and Proceed". Refresh the session so the new metadata
+            // is minted into a fresh token before we re-render.
+            const supabase = createClient()
+            await supabase.auth.refreshSession()
             toast.success("Terms accepted successfully")
             router.refresh()
         } catch (error) {

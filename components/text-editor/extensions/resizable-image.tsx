@@ -22,7 +22,7 @@ export type ImageCommentAttrs = {
 
 declare module "@tiptap/core" {
   interface Commands<ReturnType> {
-    image: {
+    resizableImage: {
       setImageAlign: (align: ImageAlign) => ReturnType
       setImageComment: (attrs: {
         author: string

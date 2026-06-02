@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useState, type ComponentType } from "react"
 import { useRouter } from "next/navigation"
 import {
   FileEdit,
@@ -22,7 +22,8 @@ import { withFromDashboard } from "@/lib/from-dashboard"
 type QuickAction = {
   id: string
   label: string
-  icon: typeof FolderOpen
+  // Both lucide icons and ClipboardInfoIcon accept className + aria-hidden.
+  icon: ComponentType<{ className?: string; "aria-hidden"?: boolean }>
   href?: string
   dialog?: "lab_note" | "report"
 }
@@ -39,7 +40,7 @@ const QUICK_ACTIONS: QuickAction[] = [
   {
     id: "protocol",
     label: "Protocol",
-    icon: ClipboardInfoIcon as unknown as typeof FolderOpen,
+    icon: ClipboardInfoIcon,
     href: "/protocols/new",
   },
   { id: "lab_note", label: "Lab note", icon: NotebookPen, dialog: "lab_note" },

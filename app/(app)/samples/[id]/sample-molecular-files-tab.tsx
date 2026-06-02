@@ -222,7 +222,7 @@ export function SampleMolecularFilesTab({ sampleId, initialFiles }: SampleMolecu
 
       const sampleFileId = crypto.randomUUID()
       const storagePath = createSampleFileStoragePath(
-        organizationId,
+        organizationId ?? "",
         sampleId,
         sampleFileId,
         file.name

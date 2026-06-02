@@ -28,27 +28,34 @@ export async function GET() {
 
     const [experimentsRes, notesRes, papersRes, protocolsRes, tasksRes, samplesRes] =
       await Promise.all([
+        // Every query is scoped to the calling user via created_by. RLS alone is
+        // org-wide for these tables, so without this filter a member's personal
+        // AI activity summary would surface colleagues' recent work.
         supabase
           .from('experiments')
           .select('name, status, updated_at')
+          .eq('created_by', user.id)
           .gte('updated_at', since)
           .order('updated_at', { ascending: false })
           .limit(5),
         supabase
           .from('lab_notes')
           .select('title, updated_at')
+          .eq('created_by', user.id)
           .gte('updated_at', since)
           .order('updated_at', { ascending: false })
           .limit(5),
         supabase
           .from('papers')
           .select('title, updated_at')
+          .eq('created_by', user.id)
           .gte('updated_at', since)
           .order('updated_at', { ascending: false })
           .limit(5),
         supabase
           .from('protocols')
           .select('name, updated_at')
+          .eq('created_by', user.id)
           .gte('updated_at', since)
           .order('updated_at', { ascending: false })
           .limit(5),
@@ -59,9 +66,11 @@ export async function GET() {
           .gte('updated_at', since)
           .order('updated_at', { ascending: false })
           .limit(5),
+        // samples has no `name` column — the unique identifier is sample_code.
         supabase
           .from('samples')
-          .select('name, updated_at')
+          .select('sample_code, updated_at')
+          .eq('created_by', user.id)
           .gte('updated_at', since)
           .order('updated_at', { ascending: false })
           .limit(3),
@@ -91,7 +100,7 @@ export async function GET() {
       events.push(`Pending task(s) to be done: ${pendingTasks.map(t => t.title).join(', ')}`);
     }
     for (const sample of samplesRes.data ?? []) {
-      events.push(`Recorded sample "${sample.name || 'Untitled'}"`);
+      events.push(`Recorded sample "${sample.sample_code || 'Untitled'}"`);
     }
 
     // ─── 3. Handle empty activity ────────────────────────────────────

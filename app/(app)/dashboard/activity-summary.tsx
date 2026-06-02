@@ -21,11 +21,21 @@ function readCache(): CachedSummary | null {
   try {
     const raw = localStorage.getItem(CACHE_KEY)
     if (!raw) return null
-    const parsed = JSON.parse(raw) as CachedSummary
-    if (!parsed.summary || !parsed.cachedAt) return null
-    if (Date.now() - parsed.cachedAt > STALE_MS) return null
-    return parsed
-  } catch {
+    const parsed: unknown = JSON.parse(raw)
+    if (
+      typeof parsed !== "object" ||
+      parsed === null ||
+      typeof (parsed as { summary?: unknown }).summary !== "string" ||
+      typeof (parsed as { cachedAt?: unknown }).cachedAt !== "number"
+    ) {
+      return null
+    }
+    const valid = parsed as CachedSummary
+    if (!valid.summary || !valid.cachedAt) return null
+    if (Date.now() - valid.cachedAt > STALE_MS) return null
+    return valid
+  } catch (err) {
+    console.warn("Activity summary cache read failed:", err)
     return null
   }
 }

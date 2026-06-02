@@ -28,9 +28,9 @@ vi.mock("@hocuspocus/provider", () => {
           onConnect: opts.onConnect as () => void,
           onDisconnect: opts.onDisconnect as () => void,
           onClose: opts.onClose as () => void,
-          onAuthenticationFailed: opts.onAuthenticationFailed as (data: { reason: string }) => void,
+          onAuthenticationFailed: opts.onAuthenticationFailed as (...args: unknown[]) => void,
           onAwarenessChange: opts.onAwarenessChange as () => void,
-          onStatus: opts.onStatus as (data: { status: string }) => void,
+          onStatus: opts.onStatus as (...args: unknown[]) => void,
         };
       }
     },

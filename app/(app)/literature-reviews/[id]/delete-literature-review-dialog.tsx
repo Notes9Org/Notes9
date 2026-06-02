@@ -36,7 +36,10 @@ export function DeleteLiteratureReviewDialog({
       const response = await fetch(`/api/literature/${literatureId}`, {
         method: "DELETE",
       })
-      const data = await response.json().catch(() => ({}))
+      const data = await response.json().catch((err) => {
+        console.warn("Failed to parse delete-literature response body", err)
+        return {} as { error?: string }
+      })
       if (!response.ok) {
         throw new Error(typeof data.error === "string" ? data.error : "Delete failed")
       }
@@ -51,10 +54,11 @@ export function DeleteLiteratureReviewDialog({
       setTimeout(() => {
         window.location.href = "/literature-reviews"
       }, 500)
-    } catch (error: any) {
+    } catch (error: unknown) {
+      console.error("Failed to delete literature reference", error)
       toast({
         title: "Error",
-        description: error.message,
+        description: error instanceof Error ? error.message : "Delete failed",
         variant: "destructive",
       })
       setIsLoading(false)

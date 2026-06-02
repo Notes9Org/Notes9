@@ -69,8 +69,10 @@ export async function GET(_request: Request, context: { params: Promise<{ id: st
       )
     }
 
-    const buf = await blob.arrayBuffer()
-    return new NextResponse(buf, {
+    // Stream the Blob straight through instead of buffering the whole PDF into
+    // a Node Buffer via arrayBuffer(). Same bytes, same headers, but a large
+    // PDF no longer has to be fully resident in function memory at once.
+    return new NextResponse(blob.stream(), {
       status: 200,
       headers: {
         "Content-Type": "application/pdf",

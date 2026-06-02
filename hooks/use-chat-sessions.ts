@@ -26,7 +26,13 @@ function formatSupabaseErr(error: unknown): string {
   try {
     return JSON.stringify(error);
   } catch {
-    return String(error);
+    // JSON.stringify can throw on circular refs; String() can throw if the
+    // value has a broken toString(). Guard both so logging never crashes.
+    try {
+      return String(error);
+    } catch {
+      return "[unserializable error]";
+    }
   }
 }
 

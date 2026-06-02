@@ -48,7 +48,8 @@ async function supabaseRequest(
 const RETRY_DELAYS_MS = [500, 1000, 2000];
 
 function jitter(ms: number): number {
-  // ±20% jitter
+  // ±20% jitter (0.8–1.2x) to desynchronize retries across clients and avoid
+  // a thundering herd hitting Supabase in lockstep after a transient failure.
   return ms * (0.8 + Math.random() * 0.4);
 }
 
@@ -61,12 +62,14 @@ async function withRetry<T>(
   documentId: string,
   fn: () => Promise<T>
 ): Promise<T> {
-  let lastError: unknown;
+  let lastError: Error = new Error("withRetry failed before first attempt");
   for (let attempt = 1; attempt <= RETRY_DELAYS_MS.length + 1; attempt++) {
     try {
       return await fn();
     } catch (error) {
-      lastError = error;
+      // Normalize to an Error so .message/.stack are always safe to access,
+      // even when a non-Error value (string, null, etc.) is thrown.
+      lastError = error instanceof Error ? error : new Error(String(error));
       if (attempt <= RETRY_DELAYS_MS.length) {
         const delay = jitter(RETRY_DELAYS_MS[attempt - 1]);
         console.warn(
@@ -75,7 +78,9 @@ async function withRetry<T>(
             op,
             documentId,
             attempt,
-            error: error instanceof Error ? error.message : String(error),
+            error: lastError.message,
+            stack: lastError.stack,
+            timestamp: new Date().toISOString(),
           })
         );
         await sleep(delay);
@@ -89,7 +94,9 @@ async function withRetry<T>(
       documentId,
       attempt: RETRY_DELAYS_MS.length + 1,
       final: true,
-      error: lastError instanceof Error ? lastError.message : String(lastError),
+      error: lastError.message,
+      stack: lastError.stack,
+      timestamp: new Date().toISOString(),
     })
   );
   throw lastError;
@@ -101,8 +108,12 @@ async function withRetry<T>(
  * - `fetch`: Loads HTML from `papers.content` and converts to Yjs state on first connection.
  * - `store`: Renders Yjs doc to HTML and saves back to `papers.content`.
  *
- * Note: We skip the paper_yjs_documents table for now (bytea encoding issues with REST API).
- * The Yjs state lives in memory while the server is running. HTML is the persistence layer.
+ * Note: We intentionally do NOT persist to the paper_yjs_documents table.
+ * Supabase's PostgREST REST API cannot round-trip the binary (bytea) Yjs state
+ * cleanly, so HTML in papers.content is the durable persistence layer and the
+ * Yjs state lives in memory only while the server is running. This is a
+ * deliberate design decision, not a temporary workaround; revisit only if we
+ * move Yjs persistence off the REST API (e.g. to a direct Postgres connection).
  */
 export function createDatabaseExtension(): Database {
   return new Database({

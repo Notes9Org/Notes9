@@ -2,6 +2,11 @@ import { createServerClient } from "@supabase/ssr"
 import { NextResponse, type NextRequest } from "next/server"
 import { verifyAccessTokenLocally } from "@/lib/auth/verify-token"
 
+// One-time warning so ops is alerted when local JWT verification is disabled
+// and every authenticated request falls back to the auth-server getUser()
+// round-trip (the pattern that previously exhausted the connection pool).
+let warnedMissingJwtSecret = false
+
 export async function updateSession(request: NextRequest) {
   let supabaseResponse = NextResponse.next({
     request,
@@ -88,6 +93,15 @@ export async function updateSession(request: NextRequest) {
     } = await supabase.auth.getSession()
     const token = session?.access_token
     const secret = process.env.SUPABASE_JWT_SECRET
+
+    if (!secret && !warnedMissingJwtSecret) {
+      warnedMissingJwtSecret = true
+      console.warn(
+        "[middleware] SUPABASE_JWT_SECRET is unset; authenticated requests will " +
+        "fall back to auth-server getUser() round-trips. Set the secret to enable " +
+        "local JWT verification and avoid connection-pool pressure.",
+      )
+    }
 
     if (token) {
       if (secret) {

@@ -85,7 +85,13 @@ export async function GET(req: NextRequest) {
 
                 return NextResponse.json({
                     type: 'experiment',
-                    context: formatExperimentContext(experiment)
+                    // Supabase types embedded relations (project, lab_notes) as
+                    // arrays, but this single-row query returns them as objects —
+                    // the shape the formatter reads at runtime. Cast through
+                    // unknown to that runtime shape without widening access.
+                    context: formatExperimentContext(
+                        experiment as unknown as ExperimentContextRow,
+                    )
                 });
             }
 
@@ -115,7 +121,10 @@ export async function GET(req: NextRequest) {
 
                 return NextResponse.json({
                     type: 'lab_note',
-                    context: formatLabNoteContext(labNote)
+                    // Same Supabase array-vs-object relation typing as above.
+                    context: formatLabNoteContext(
+                        labNote as unknown as LabNoteContextRow,
+                    )
                 });
             }
 
@@ -134,7 +143,67 @@ export async function GET(req: NextRequest) {
     }
 }
 
-function formatProjectContext(project: any): string {
+// Shapes below mirror the `.select(...)` projections used in the GET handler.
+// Nested Supabase relations may arrive as an object or a single-element array
+// depending on cardinality typing, so relation fields are typed permissively.
+interface ProjectExperimentRow {
+    id?: string;
+    name?: string;
+    description?: string | null;
+    status?: string | null;
+}
+
+interface ProjectContextRow {
+    id?: string;
+    name?: string;
+    description?: string | null;
+    status?: string | null;
+    priority?: string | null;
+    start_date?: string | null;
+    end_date?: string | null;
+    created_at?: string | null;
+    experiments?: ProjectExperimentRow[] | null;
+}
+
+interface ProjectRelationRow {
+    id?: string;
+    name?: string;
+}
+
+interface ExperimentLabNoteRow {
+    id?: string;
+    title?: string | null;
+    note_type?: string | null;
+}
+
+interface ExperimentContextRow {
+    id?: string;
+    name?: string;
+    description?: string | null;
+    status?: string | null;
+    hypothesis?: string | null;
+    methodology?: string | null;
+    results?: string | null;
+    conclusions?: string | null;
+    start_date?: string | null;
+    completion_date?: string | null;
+    project?: ProjectRelationRow | null;
+    lab_notes?: ExperimentLabNoteRow[] | null;
+}
+
+interface LabNoteContextRow {
+    id?: string;
+    title?: string | null;
+    content?: string | null;
+    note_type?: string | null;
+    created_at?: string | null;
+    updated_at?: string | null;
+    experiment?:
+        | (ProjectRelationRow & { project?: ProjectRelationRow | null })
+        | null;
+}
+
+function formatProjectContext(project: ProjectContextRow | null): string {
     if (!project) return '';
 
     let context = `## Project: ${project.name}\n\n`;
@@ -159,7 +228,7 @@ function formatProjectContext(project: any): string {
 
     if (project.experiments && project.experiments.length > 0) {
         context += `\n### Experiments (${project.experiments.length}):\n`;
-        project.experiments.forEach((exp: any) => {
+        project.experiments.forEach((exp) => {
             context += `- **${exp.name}** (${exp.status || 'unknown status'})\n`;
             if (exp.description) {
                 context += `  ${exp.description}\n`;
@@ -170,7 +239,7 @@ function formatProjectContext(project: any): string {
     return context;
 }
 
-function formatExperimentContext(experiment: any): string {
+function formatExperimentContext(experiment: ExperimentContextRow | null): string {
     if (!experiment) return '';
 
     let context = `## Experiment: ${experiment.name}\n\n`;
@@ -203,7 +272,7 @@ function formatExperimentContext(experiment: any): string {
 
     if (experiment.lab_notes && experiment.lab_notes.length > 0) {
         context += `\n### Lab Notes (${experiment.lab_notes.length}):\n`;
-        experiment.lab_notes.forEach((note: any) => {
+        experiment.lab_notes.forEach((note) => {
             context += `- ${note.title || 'Untitled'} (${note.note_type || 'general'})\n`;
         });
     }
@@ -211,7 +280,7 @@ function formatExperimentContext(experiment: any): string {
     return context;
 }
 
-function formatLabNoteContext(labNote: any): string {
+function formatLabNoteContext(labNote: LabNoteContextRow | null): string {
     if (!labNote) return '';
 
     let context = `## Lab Note: ${labNote.title || 'Untitled'}\n\n`;

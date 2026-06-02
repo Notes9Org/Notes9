@@ -365,6 +365,10 @@ function mergeUniqueTags(
 // hold zero DB connections for the mention catalog. The data is identical
 // across mounts (same org-scoped lists), so behavior is unchanged.
 type MentionItem = { kind: CatalystMentionKind; id: string; title: string };
+// Lazily-populated cache of the static SVG markup for each mention-chip icon.
+// The icons are constant, so we render each kind once and reuse the string on
+// every subsequent chip insertion (see mentionIconMarkup).
+const MENTION_ICON_MARKUP_CACHE: Partial<Record<CatalystMentionKind, string>> = {};
 const MENTION_ITEMS_TTL_MS = 60_000;
 let mentionItemsCache: { fetchedAt: number; items: MentionItem[] } | null = null;
 let mentionItemsInflight: Promise<MentionItem[]> | null = null;
@@ -658,12 +662,19 @@ export function RightSidebar({
       try {
         const merged = await mentionItemsInflight;
         if (!cancelled) setAllMentionItems(merged);
+      } catch (err) {
+        // One of the 5 mention-catalog queries failed (network/auth/RLS).
+        // Leave the existing (possibly empty) list in place rather than
+        // crashing the sidebar; surface the cause for debugging.
+        console.error('[RightSidebar] Failed to load @-mention catalog:', err);
       } finally {
         mentionItemsInflight = null;
       }
     };
 
-    loadMentionItems();
+    loadMentionItems().catch((err) => {
+      console.error('[RightSidebar] loadMentionItems failed:', err);
+    });
     return () => {
       cancelled = true;
     };
@@ -773,20 +784,26 @@ export function RightSidebar({
   }, [allMentionItems, mentionQuery]);
 
   const mentionIconMarkup = useCallback((kind: CatalystMentionKind): string => {
+    // The 5 icon variants are fixed and their markup is deterministic, so we
+    // render each one through renderToStaticMarkup at most once and reuse the
+    // cached string. This keeps the appendMentionToInput hot path off React's
+    // server renderer on every chip insertion while producing byte-identical
+    // output.
+    const cached = MENTION_ICON_MARKUP_CACHE[kind];
+    if (cached !== undefined) return cached;
     const common = 'h-3.5 w-3.5 shrink-0 text-muted-foreground';
-    if (kind === 'literature_review') {
-      return renderToStaticMarkup(<BookOpen className={common} />);
-    }
-    if (kind === 'lab_note') {
-      return renderToStaticMarkup(<NotebookPen className={common} />);
-    }
-    if (kind === 'experiment') {
-      return renderToStaticMarkup(<FlaskConical className={common} />);
-    }
-    if (kind === 'project') {
-      return renderToStaticMarkup(<FolderOpen className={common} />);
-    }
-    return renderToStaticMarkup(<ClipboardInfoIcon className={common} />);
+    const markup =
+      kind === 'literature_review'
+        ? renderToStaticMarkup(<BookOpen className={common} />)
+        : kind === 'lab_note'
+          ? renderToStaticMarkup(<NotebookPen className={common} />)
+          : kind === 'experiment'
+            ? renderToStaticMarkup(<FlaskConical className={common} />)
+            : kind === 'project'
+              ? renderToStaticMarkup(<FolderOpen className={common} />)
+              : renderToStaticMarkup(<ClipboardInfoIcon className={common} />);
+    MENTION_ICON_MARKUP_CACHE[kind] = markup;
+    return markup;
   }, []);
 
   const appendMentionToInput = useCallback(
@@ -1039,6 +1056,9 @@ export function RightSidebar({
         .in('catalog_placement', ['staging', 'repository'])
         .order('updated_at', { ascending: false })
         .limit(300);
+      if (error) {
+        console.error('[RightSidebar] Failed to load literature mention candidates:', error);
+      }
       if (cancelled || error || !data) return;
       setFallbackMentionCandidates(
         data.map((row) => ({

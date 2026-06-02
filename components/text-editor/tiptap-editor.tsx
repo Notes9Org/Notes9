@@ -1013,8 +1013,11 @@ export const Indent = Extension.create<IndentOptions>({
 
   addKeyboardShortcuts() {
     return {
-      Tab: () => (this.editor.commands as any).setIndent(),
-      'Shift-Tab': () => (this.editor.commands as any).unsetIndent(),
+      // @ts-expect-error Tiptap's Commands augmentation isn't surfaced on the
+      // SingleCommands type inside addKeyboardShortcuts; setIndent is declared above.
+      Tab: () => this.editor.commands.setIndent(),
+      // @ts-expect-error see above — unsetIndent is declared in the module augmentation.
+      'Shift-Tab': () => this.editor.commands.unsetIndent(),
     };
   },
 });
@@ -1201,6 +1204,20 @@ declare module '@tiptap/core' {
       unsetComment: () => ReturnType;
       deleteComment: (id: string) => ReturnType;
     };
+    // Re-declared here so the ResizableImage commands resolve in this module's
+    // type-check context. The runtime commands are implemented in
+    // ./extensions/resizable-image; signatures mirror that file exactly.
+    resizableImage: {
+      setImageAlign: (align: "left" | "center" | "right") => ReturnType;
+      setImageComment: (attrs: {
+        author: string;
+        content: string;
+        id?: string;
+        createdAt?: number;
+      }) => ReturnType;
+      clearImageComment: () => ReturnType;
+      deleteImageCommentById: (id: string) => ReturnType;
+    };
   }
 }
 
@@ -1288,7 +1305,7 @@ export const Comment = Mark.create<CommentOptions>({
       setComment:
         (attributes: any) =>
           ({ commands }: { commands: any }) => {
-            const id = `comment-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+            const id = `comment-${typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.floor(Math.random() * 1000)}`}`;
             return commands.setMark(this.name, {
               ...attributes,
               id,
@@ -1623,9 +1640,17 @@ export function TiptapEditor({
   useEffect(() => {
     if (!editorContainer) return
     let hideTimeout: any
+    // Throttle to one layout-reading pass per animation frame. mousemove fires
+    // 30-60x/s and each pass runs closest('table') + contains() (forces style
+    // recalc); coalescing to the latest event per frame yields the same final
+    // activeTable without thrashing layout on every intermediate event.
+    let rafId: number | null = null
+    let pendingTarget: HTMLElement | null = null
 
-    const onMouseMove = (e: MouseEvent) => {
-      const target = e.target as HTMLElement
+    const process = () => {
+      rafId = null
+      const target = pendingTarget
+      if (!target) return
       const table = target.closest('table')
 
       // Only track if the table is inside THIS editor container
@@ -1647,9 +1672,17 @@ export function TiptapEditor({
       }
     }
 
+    const onMouseMove = (e: MouseEvent) => {
+      pendingTarget = e.target as HTMLElement
+      if (rafId === null) {
+        rafId = requestAnimationFrame(process)
+      }
+    }
+
     document.addEventListener('mousemove', onMouseMove)
     return () => {
       document.removeEventListener('mousemove', onMouseMove)
+      if (rafId !== null) cancelAnimationFrame(rafId)
       clearTimeout(hideTimeout)
     }
   }, [editorContainer])
@@ -1899,7 +1932,9 @@ export function TiptapEditor({
       }
     },
     onCreate: () => {
-      console.log('TiptapEditor: created')
+      if (process.env.NODE_ENV === 'development') {
+        console.log('TiptapEditor: created')
+      }
     },
     editorProps: {
       attributes: {

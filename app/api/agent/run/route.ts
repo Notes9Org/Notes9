@@ -75,7 +75,7 @@ export async function POST(req: Request) {
       data = await response.json();
     } catch (parseErr) {
       const rawText = await response.text().catch(() => '');
-      console.error(JSON.stringify({ event: 'upstream_non_json', route: 'agent/run', status: response.status, snippet: rawText.slice(0, 500) }));
+      console.error(JSON.stringify({ event: 'upstream_non_json', route: 'agent/run', status: response.status, parseError: parseErr instanceof Error ? parseErr.message : String(parseErr), snippet: rawText.slice(0, 500), rawTextLength: rawText.length }));
       return NextResponse.json({ error: 'Upstream returned non-JSON response', status: response.status }, { status: 502 });
     }
     const dataObj = data as Record<string, unknown>;

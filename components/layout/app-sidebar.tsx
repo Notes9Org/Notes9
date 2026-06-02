@@ -222,12 +222,14 @@ export function AppSidebar() {
       // Get current user from the AuthProvider (already verified server-side
       // in app/(app)/layout.tsx); no extra /auth/v1/user round-trip.
       const currentUser = authUser
-      setUser(currentUser as User)
-
       if (!currentUser) {
+        // Clear any previously-set user (e.g. on logout) and bail before any
+        // code that dereferences user.user_metadata.
+        setUser(null)
         setLoading(false)
         return
       }
+      setUser(currentUser as User)
 
       // Profile + organization are guaranteed by the server-side
       // ensureUserProfile() call in app/(app)/layout.tsx. We just read here.

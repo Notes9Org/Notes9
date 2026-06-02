@@ -79,7 +79,18 @@ export function hasUniverWorkbookApi(value: unknown): value is {
   )
 }
 
-export function buildDefaultWorkbook(fileName?: string) {
+/** Univer workbook snapshot produced by {@link buildDefaultWorkbook}. */
+export type WorkbookSnapshot = {
+  id: string
+  name: string
+  appVersion: string
+  locale: string
+  styles: Record<string, unknown>
+  sheetOrder: string[]
+  sheets: Record<string, unknown>
+}
+
+export function buildDefaultWorkbook(fileName?: string): WorkbookSnapshot {
   const workbookId = `spreadsheet-${Math.random().toString(36).slice(2, 10)}`
   const sheetId = `sheet-${Math.random().toString(36).slice(2, 8)}`
 
@@ -118,12 +129,12 @@ export function buildDefaultWorkbook(fileName?: string) {
 }
 
 /** Empty Univer workbook snapshot (new experiment file or blank grid). */
-export function createEmptyWorkbookSnapshot(displayFileName: string) {
+export function createEmptyWorkbookSnapshot(displayFileName: string): WorkbookSnapshot {
   const base = displayFileName.replace(/\.[^.]+$/, "").trim() || "Spreadsheet"
   return buildDefaultWorkbook(base)
 }
 
-export function normalizeWorkbookSnapshot(workbook: any, fileName?: string) {
+export function normalizeWorkbookSnapshot(workbook: any, fileName?: string): WorkbookSnapshot {
   const fallback = buildDefaultWorkbook(fileName)
   if (!workbook || typeof workbook !== "object") {
     return fallback

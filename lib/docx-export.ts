@@ -27,6 +27,38 @@ import {
 } from '@/lib/export-formatting'
 import { prepareHtmlForExport } from '@/lib/print-export'
 
+// A paragraph-level run can be a plain TextRun or one of the comment-range
+// markers, all of which are valid `Paragraph` children in docx v9.
+type ParagraphRun = TextRun | CommentRangeStart | CommentRangeEnd
+
+// Convert a CSS color (rgb()/rgba() or #hex) to a 6-digit hex string without
+// the leading '#', as docx shading/color options expect. Returns undefined
+// for values that can't be parsed so callers fall back to no color.
+function rgbToHex(color: string): string | undefined {
+  const trimmed = color.trim()
+  if (!trimmed) return undefined
+  const hexMatch = trimmed.match(/^#?([0-9a-fA-F]{6})$/)
+  if (hexMatch) return hexMatch[1].toUpperCase()
+  const shortHex = trimmed.match(/^#?([0-9a-fA-F]{3})$/)
+  if (shortHex) {
+    return shortHex[1]
+      .split('')
+      .map((c) => c + c)
+      .join('')
+      .toUpperCase()
+  }
+  const rgbMatch = trimmed.match(/rgba?\(\s*(\d{1,3})\s*,\s*(\d{1,3})\s*,\s*(\d{1,3})/i)
+  if (rgbMatch) {
+    const toHex = (n: number) => Math.max(0, Math.min(255, n)).toString(16).padStart(2, '0')
+    return (
+      toHex(Number(rgbMatch[1])) +
+      toHex(Number(rgbMatch[2])) +
+      toHex(Number(rgbMatch[3]))
+    ).toUpperCase()
+  }
+  return undefined
+}
+
 // Parse HTML content and convert to DOCX elements
 export async function exportHtmlToDocx(html: string, title: string) {
   const preparedHtml = prepareHtmlForExport(html)
@@ -438,7 +470,7 @@ const INLINE_CONTAINER_TAGS = new Set([
 function walkInlineNodes(
   parent: Element,
   inherited: ExportInlineStyle,
-  runs: TextRun[],
+  runs: ParagraphRun[],
   comments: ICommentOptions[]
 ): void {
   for (const node of parent.childNodes) {
@@ -519,8 +551,8 @@ function parseInlineContent(
   el: Element,
   comments: ICommentOptions[],
   baseStyle: ExportInlineStyle = DEFAULT_EXPORT_INLINE_STYLE
-): TextRun[] {
-  const runs: TextRun[] = []
+): ParagraphRun[] {
+  const runs: ParagraphRun[] = []
   walkInlineNodes(el, baseStyle, runs, comments)
   return runs.length > 0 ? runs : [textRunFromStyle('', baseStyle)]
 }

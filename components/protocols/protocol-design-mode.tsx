@@ -163,12 +163,19 @@ export function ProtocolDesignMode({
     const run = async () => {
       const supabase = createClient()
       if (!user || cancelled) return
-      const { data: profile } = await supabase
-        .from("profiles")
-        .select("organization_id")
-        .eq("id", user.id)
-        .single()
-      if (!cancelled) setOrganizationId(profile?.organization_id ?? null)
+      try {
+        const { data: profile, error } = await supabase
+          .from("profiles")
+          .select("organization_id")
+          .eq("id", user.id)
+          .single()
+        if (error) {
+          console.error("protocol_design_mode_org_load_failed", error)
+        }
+        if (!cancelled) setOrganizationId(profile?.organization_id ?? null)
+      } catch (err) {
+        console.error("protocol_design_mode_org_load_failed", err)
+      }
     }
     void run()
     return () => {
@@ -781,6 +788,8 @@ export function ProtocolDesignMode({
                       title={protocol.name}
                       minHeight="100%"
                       fillParentHeight
+                      // @ts-expect-error TiptapEditor types `samples` as EntityItem[] (requires a
+                      // `type` discriminant added internally); protocol samples omit it by design.
                       samples={samples}
                       fullscreenWorkspaceRef={protocolDesignWorkspaceRef}
                       leadingToolbarSlot={protocolFullscreenToolbarLeading}

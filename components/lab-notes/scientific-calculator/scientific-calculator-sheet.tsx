@@ -127,6 +127,16 @@ function findMode(id: CalculatorModeId) {
   return ALL_MODES.find((m) => m.id === id) ?? ALL_MODES[0]
 }
 
+/**
+ * Narrow an arbitrary value to a known CalculatorModeId, or null if it isn't
+ * one of the registered modes. The mode <select> only ever emits valid ids, but
+ * this guards against an unexpected value silently selecting an unrenderable
+ * mode (which would render nothing via the activePanel switch default).
+ */
+function validateMode(id: unknown): CalculatorModeId | null {
+  return ALL_MODES.some((m) => m.id === id) ? (id as CalculatorModeId) : null
+}
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
@@ -505,7 +515,9 @@ export function ScientificCalculatorSheet({
                   <select
                     value={mode}
                     onChange={(e) => {
-                      setMode(e.target.value as CalculatorModeId)
+                      const next = validateMode(e.target.value)
+                      if (!next) return
+                      setMode(next)
                       setResultText(null)
                       setResultLatex(null)
                       setResultError(null)

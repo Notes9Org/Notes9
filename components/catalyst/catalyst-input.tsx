@@ -35,9 +35,6 @@ interface CatalystInputProps {
   /** General mode only: enable web-grounded answers (default on). */
   webSearchEnabled: boolean;
   onWebSearchEnabledChange: (enabled: boolean) => void;
-  /** @deprecated Model selector hidden when using external chat API */
-  selectedModelId?: string;
-  onModelChange?: (modelId: string) => void;
 }
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
@@ -127,7 +124,7 @@ export function CatalystInput({
         chatAttachmentId: data.chatAttachmentId ?? undefined,
       };
     } catch (error) {
-      console.error('Upload error:', error);
+      console.error('Upload error', { event: 'file_upload_failed', fileName: file.name, fileType: file.type, fileSize: file.size, error });
       toast.error(error instanceof Error ? error.message : 'Failed to upload file');
       return null;
     }

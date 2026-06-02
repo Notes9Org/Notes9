@@ -20,10 +20,13 @@ export function useSmoothTextStream(
   options: UseSmoothTextStreamOptions = {}
 ) {
   const {
-    minDelay = 8,
-    maxQueueSize = 500,
     enabled = true,
   } = options;
+  // Clamp to sane bounds so a misconfigured 0/negative value can't break the
+  // flush logic (never-flush or always-flush). Defaults are unchanged for
+  // valid inputs.
+  const minDelay = Math.max(0, options.minDelay ?? 8);
+  const maxQueueSize = Math.max(1, options.maxQueueSize ?? 500);
 
   const [displayText, setDisplayText] = useState('');
   // Ref mirror of displayText — read inside effects/RAF without re-triggering deps.

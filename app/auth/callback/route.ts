@@ -107,11 +107,12 @@ export async function GET(request: NextRequest) {
   try {
     return await handleAuthCallback(request)
   } catch (err) {
+    // Log the full error server-side; return only a generic description to the
+    // client so internal details are never leaked into the redirect URL.
     console.error("[auth/callback] unhandled error:", err)
-    const message = err instanceof Error ? err.message : "Unexpected error"
     return NextResponse.redirect(
       new URL(
-        `/auth/error?error=server_error&description=${encodeURIComponent(message)}`,
+        `/auth/error?error=server_error&description=${encodeURIComponent("An unexpected error occurred. Please try again.")}`,
         request.url
       )
     )

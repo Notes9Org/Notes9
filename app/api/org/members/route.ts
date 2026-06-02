@@ -4,6 +4,7 @@ import { z } from "zod"
 import { createClient } from "@/lib/supabase/server"
 import { getCurrentUser } from "@/lib/auth/current-user"
 import { createServiceRoleClient } from "@/lib/supabase-service-role"
+import { isSystemAdminRow } from "@/lib/org/require-admin"
 
 const deleteMemberSchema = z.object({
   memberId: z.string().uuid("Invalid member ID"),
@@ -52,7 +53,7 @@ async function authenticateAdmin() {
   if (
     memberError ||
     !membership ||
-    !(membership.org_roles as any)?.is_system_role
+    !isSystemAdminRow(membership.org_roles)
   ) {
     return {
       error: NextResponse.json(
@@ -108,7 +109,7 @@ export async function DELETE(req: NextRequest) {
     }
 
     // If the target member is an admin, check they are not the last active admin
-    if ((member.org_roles as any)?.is_system_role) {
+    if (isSystemAdminRow(member.org_roles)) {
       const { count: adminCount, error: countError } = await admin
         .from("org_members")
         .select("id, org_roles!inner(is_system_role)", { count: "exact", head: true })

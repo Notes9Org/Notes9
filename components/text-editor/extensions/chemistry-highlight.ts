@@ -21,6 +21,7 @@ export const ChemistryHighlight = Extension.create<ChemistryHighlightOptions>({
       new Plugin({
         key: new PluginKey('chemistryHighlight'),
         props: {
+          // @ts-expect-error prosemirror version split between root and collaboration-server — runtime types are identical
           decorations: (state) => {
             const decorations: Decoration[] = []
             const { doc } = state
@@ -95,6 +96,7 @@ export const ChemistryHighlight = Extension.create<ChemistryHighlightOptions>({
               }
             })
 
+            // @ts-expect-error prosemirror version split between root and collaboration-server — runtime types are identical
             return DecorationSet.create(doc, decorations)
           },
         },

@@ -106,6 +106,11 @@ export default function LabNotesPage() {
       }
 
       const normalized =
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Supabase
+        // generated types model the nested project/experiment joins as arrays,
+        // which conflicts with the object-shaped runtime payload; `any` keeps the
+        // defensive optional-chained access below honest without fighting the
+        // generated row type.
         notesRes.data?.map((note: any) => {
           const resolved_project_id =
             note.project_id ??

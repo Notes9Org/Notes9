@@ -7,6 +7,7 @@ import Link from 'next/link'
 import { LiteratureTabs } from '@/components/literature-reviews/literature-tabs'
 import type { StagingLiteratureRow } from "@/components/literature-reviews/staged-paper-view"
 import { UploadLiteraturePdfDialog } from "@/components/literature-reviews/upload-literature-pdf-dialog"
+import type { LiteratureRecordSummary } from "@/types/literature-pdf"
 import { resolveInitialProjectIdParam } from "@/lib/url-project-param"
 import { SetPageBreadcrumb } from "@/components/layout/breadcrumb-context"
 
@@ -99,7 +100,7 @@ export default async function LiteratureReviewsPage({
         </div>
         <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
           <UploadLiteraturePdfDialog
-            literatureReviews={(literatureReviews ?? []) as any}
+            literatureReviews={(literatureReviews ?? []) as LiteratureRecordSummary[]}
             projects={safeProjects}
             experiments={safeExperiments}
           />

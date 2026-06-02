@@ -106,8 +106,9 @@ export function PaperDetailClient({ activePaperId }: { activePaperId: string }) 
         router.push(projectId ? `/papers?project=${projectId}` : "/papers")
       }
       setDeleteTarget(null)
-    } catch (err: any) {
-      toast.error(`Error: ${err.message}`)
+    } catch (err: unknown) {
+      console.error("Failed to delete paper", err)
+      toast.error(`Error: ${err instanceof Error ? err.message : "Failed to delete paper"}`)
     } finally {
       setIsDeleting(false)
     }

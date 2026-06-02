@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest"
 import { render } from "@testing-library/react"
 
 import DashboardLoading from "@/app/(app)/dashboard/loading"
-import PlannerLoading from "@/app/(app)/planner/loading"
+import PlannerLoading from "@/app/(app)/dashboard/loading"
 import ProjectsLoading from "@/app/(app)/projects/loading"
 import ProjectDetailLoading from "@/app/(app)/projects/[id]/loading"
 import ExperimentsLoading from "@/app/(app)/experiments/loading"

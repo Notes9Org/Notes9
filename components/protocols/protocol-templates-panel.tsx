@@ -232,8 +232,14 @@ export function ProtocolTemplatesPanel() {
         if (uploadedPath && uploadBucket) {
           try {
             await supabase.storage.from(uploadBucket).remove([uploadedPath])
-          } catch {
-            /* best-effort cleanup when upload/finalize failed after storage put */
+          } catch (cleanupErr) {
+            // best-effort cleanup when upload/finalize failed after storage put.
+            // Log so an orphaned storage object isn't silently swallowed.
+            console.warn(
+              "protocol_template_cleanup_failed",
+              { bucket: uploadBucket, path: uploadedPath },
+              cleanupErr
+            )
           }
         }
         throw e

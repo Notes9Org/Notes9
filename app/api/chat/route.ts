@@ -28,8 +28,9 @@ function normalizeContentToPlainText(raw: string): string {
       const parsed = JSON.parse(s) as Array<{ type?: string; text?: string }>;
       if (!Array.isArray(parsed)) break;
       const text = parsed
-        .filter((p) => p?.type === 'text' && typeof p.text === 'string')
-        .map((p) => p.text!)
+        .flatMap((p) =>
+          p?.type === 'text' && typeof p.text === 'string' ? [p.text] : []
+        )
         .join('');
       if (text === s) break;
       s = text;
@@ -48,8 +49,9 @@ function getPlainTextFromMessage(msg: {
   if (typeof msg.content === 'string') return normalizeContentToPlainText(msg.content);
   if (Array.isArray(msg.parts)) {
     const text = msg.parts
-      .filter((p) => p?.type === 'text' && typeof p.text === 'string')
-      .map((p) => p.text!)
+      .flatMap((p) =>
+        p?.type === 'text' && typeof p.text === 'string' ? [p.text] : []
+      )
       .join('\n');
     if (text) return normalizeContentToPlainText(text);
   }

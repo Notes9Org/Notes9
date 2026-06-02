@@ -150,7 +150,7 @@ export function PaperWorkspace({ paperId, backLink, leftControls, onPaperMutated
   }, [id, paper?.title])
 
   const handleAutoSave = useCallback(
-    async (newContent: string) => {
+    async (newContent: string): Promise<void> => {
       const supabase = createClient()
       const { error } = await supabase
         .from("papers")
@@ -254,8 +254,9 @@ export function PaperWorkspace({ paperId, backLink, leftControls, onPaperMutated
       if (authorsMatch) {
         try {
           authors = JSON.parse(authorsMatch[1].replace(/&quot;/g, '"'))
-        } catch {
-          /* ignore */
+        } catch (err) {
+          console.warn("Failed to parse citation authors metadata", err)
+          authors = []
         }
       }
 
@@ -519,8 +520,14 @@ export function PaperWorkspace({ paperId, backLink, leftControls, onPaperMutated
       <div style={{ height: "calc(100dvh - 180px)" }}>
         <FileDropzone
           onFilesDrop={(files) => {
+            const MAX_IMPORT_BYTES = 5 * 1024 * 1024
             const texFile = files.find(f => f.name.endsWith('.tex'))
             const bibFile = files.find(f => f.name.endsWith('.bib'))
+            const candidate = texFile || bibFile
+            if (candidate && candidate.size > MAX_IMPORT_BYTES) {
+              toast.error("File too large (max 5MB)")
+              return
+            }
             if (texFile) {
               const reader = new FileReader()
               reader.onload = (ev) => {
