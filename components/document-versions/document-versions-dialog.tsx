@@ -48,7 +48,6 @@ function buildLineDiff(prevHtml: string, nextHtml: string): Row[] {
   const rows: Row[] = []
   for (const part of parts) {
     const lines = part.value.split("\n")
-    // diffLines keeps a trailing "" after the final newline — drop it.
     if (lines.length > 0 && lines[lines.length - 1] === "") lines.pop()
     for (const line of lines) {
       if (part.added) rows.push({ kind: "add", text: line })
@@ -74,26 +73,33 @@ const actionBadge: Record<DocumentVersion["action"], { label: string; cls: strin
   delete: { label: "Deleted", cls: "bg-destructive/10 text-destructive border-destructive/20" },
 }
 
-export function LabNoteVersionsDialog({
+/**
+ * Generic version-history viewer for any record that the
+ * trg_write_document_version trigger versions into document_versions (lab notes,
+ * protocols, …). Shows a GitHub-PR-style line diff between consecutive versions
+ * and lets the caller restore a prior snapshot.
+ */
+export function DocumentVersionsDialog({
   open,
   onOpenChange,
   versions,
   loading,
   error,
-  /** The live, possibly-uncommitted editor body — used as the "current" side of the newest diff. */
   currentContent,
   onRestore,
+  recordNoun = "document",
 }: {
   open: boolean
   onOpenChange: (open: boolean) => void
   versions: DocumentVersion[]
   loading: boolean
   error: string | null
+  /** The live, possibly-uncommitted editor body — used as the "current" side of the newest diff. */
   currentContent: string
   onRestore: (version: DocumentVersion) => Promise<void>
+  /** Noun used in copy, e.g. "lab note" or "protocol". */
+  recordNoun?: string
 }) {
-  // versions arrive newest-first. The selected version is diffed against the one
-  // immediately before it (or empty for v1).
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [restoring, setRestoring] = useState<string | null>(null)
   const [confirmRestore, setConfirmRestore] = useState<DocumentVersion | null>(null)
@@ -105,15 +111,12 @@ export function LabNoteVersionsDialog({
 
   const selected = versions.find((v) => v.id === selectedId) ?? versions[0] ?? null
   const selectedIdx = selected ? versions.findIndex((v) => v.id === selected.id) : -1
-  // Newest-first array → the "previous" version sits at idx+1.
   const previous = selectedIdx >= 0 ? versions[selectedIdx + 1] ?? null : null
   const isNewest = selectedIdx === 0
 
   const diffRows = useMemo(() => {
     if (!open || !selected) return []
     const prevBody = previous?.content ?? ""
-    // For the newest version, compare against the live editor body so the user
-    // sees any still-uncommitted edits too; otherwise compare snapshot→snapshot.
     const nextBody = isNewest ? currentContent : selected.content ?? ""
     return buildLineDiff(prevBody, nextBody)
   }, [open, selected, previous, isNewest, currentContent])
@@ -140,7 +143,7 @@ export function LabNoteVersionsDialog({
             Version history
           </DialogTitle>
           <DialogDescription className="sr-only">
-            Browse, compare, and restore previous versions of this lab note.
+            Browse, compare, and restore previous versions of this {recordNoun}.
           </DialogDescription>
         </DialogHeader>
 
@@ -154,7 +157,9 @@ export function LabNoteVersionsDialog({
             ) : error ? (
               <div className="p-4 text-sm text-destructive">{error}</div>
             ) : versions.length === 0 ? (
-              <div className="p-4 text-sm text-muted-foreground">No versions yet. Press Save to create one.</div>
+              <div className="p-4 text-sm text-muted-foreground">
+                No versions yet. Save to create one.
+              </div>
             ) : (
               <ul className="flex flex-col">
                 {versions.map((v) => {
@@ -172,6 +177,9 @@ export function LabNoteVersionsDialog({
                       >
                         <div className="flex w-full items-center gap-2">
                           <span className="font-medium tabular-nums">v{v.version_no}</span>
+                          {v.protocol_version && (
+                            <span className="text-2xs text-muted-foreground tabular-nums">({v.protocol_version})</span>
+                          )}
                           <Badge variant="outline" className={cn("text-2xs", badge.cls)}>
                             {badge.label}
                           </Badge>
@@ -254,7 +262,7 @@ export function LabNoteVersionsDialog({
                           <span className="shrink-0 select-none opacity-60">
                             {r.kind === "add" ? "+" : r.kind === "del" ? "-" : " "}
                           </span>
-                          <span className="min-w-0 break-words">{r.text || " "}</span>
+                          <span className="min-w-0 break-words">{r.text || " "}</span>
                         </div>
                       ))}
                     </pre>
@@ -275,7 +283,7 @@ export function LabNoteVersionsDialog({
           <AlertDialogHeader>
             <AlertDialogTitle>Restore v{confirmRestore?.version_no}?</AlertDialogTitle>
             <AlertDialogDescription>
-              This replaces the note's current content with the v{confirmRestore?.version_no} snapshot and records it as a
+              This replaces the {recordNoun}'s current content with the v{confirmRestore?.version_no} snapshot and records it as a
               new, audited "restore" version. Nothing is deleted — the current content stays in history.
             </AlertDialogDescription>
           </AlertDialogHeader>

@@ -21,6 +21,7 @@ export interface DocumentVersion {
   row_hash: string
   title: string | null
   note_type: string | null
+  protocol_version: string | null
   change_summary: string | null
   words_added: number
   words_removed: number

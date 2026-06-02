@@ -2,7 +2,6 @@
 
 import { useEffect, useMemo, useState } from "react"
 import { createClient } from "@/lib/supabase/client"
-import { useAuthUser } from "@/components/auth/auth-provider"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -43,7 +42,6 @@ export function DuplicateExperimentDialog({
   open: externalOpen,
   onOpenChange
 }: DuplicateExperimentDialogProps) {
-  const user = useAuthUser();
   const { toast } = useToast()
   const router = useRouter()
   const supabase = useMemo(() => createClient(), [])
@@ -78,7 +76,8 @@ export function DuplicateExperimentDialog({
     setIsDuplicating(true)
 
     try {
-      if (!user) throw new Error("Not authenticated")
+      const { data: authData } = await supabase.auth.getUser()
+      if (!authData.user) throw new Error("Not authenticated")
 
       // Create duplicate experiment
       const { data: newExperiment, error: experimentError } = await supabase
@@ -92,7 +91,7 @@ export function DuplicateExperimentDialog({
           assigned_to: experiment.assigned_to,
           start_date: null, // Reset dates
           completion_date: null,
-          created_by: user.id,
+          created_by: authData.user.id,
         })
         .select()
         .single()

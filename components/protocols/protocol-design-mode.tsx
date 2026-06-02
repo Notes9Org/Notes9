@@ -12,6 +12,8 @@ import { createClient } from "@/lib/supabase/client"
 import { useAuthUser } from "@/components/auth/auth-provider"
 import { useToast } from "@/hooks/use-toast"
 import { useContentDiffs } from "@/hooks/use-content-diffs"
+import { useDocumentVersions, type DocumentVersion } from "@/hooks/use-document-versions"
+import { DocumentVersionsDialog } from "@/components/document-versions/document-versions-dialog"
 import { TiptapEditor } from "@/components/text-editor/tiptap-editor"
 import { NoteExportMenu } from "@/components/note-export-menu"
 import { Button } from "@/components/ui/button"
@@ -24,14 +26,13 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet"
-import { ChevronLeft, Download, FileStack, List, X } from "lucide-react"
+import { ChevronLeft, Download, FileStack, GitCompare, List, X } from "lucide-react"
 import { ProtocolChangeApprovalBar } from "./protocol-change-approval"
 import { ProtocolSiblingsList } from "./protocol-siblings-list"
 // ProtocolAiSidechat + ProtocolLiteraturePanel are no longer mounted in edit mode.
 import { extractProtocolTemplateShell } from "@/lib/extract-protocol-template-shell"
 import { sanitizeHtml } from "@/lib/sanitize-html"
 import { buildProtocolDraftHtmlFromExtracted } from "@/lib/build-protocol-draft-from-template"
-import { updateProtocolWithOptionalContext } from "@/lib/protocol-context-supabase"
 import {
   ProtocolTemplatePicker,
   type ProtocolTemplateChoice,
@@ -111,6 +112,18 @@ export function ProtocolDesignMode({
   const [savedContent, setSavedContent] = useState(protocol.content)
   const historyBaselineRef = useRef(protocol.content)
   const { recordDiff } = useContentDiffs("protocol", protocol.id)
+  // Immutable version history (document_versions) — written by the
+  // trg_write_document_version trigger on every committed content change.
+  const {
+    versions,
+    loading: versionsLoading,
+    error: versionsError,
+    loadVersions,
+  } = useDocumentVersions("protocol", protocol.id)
+  const [versionsOpen, setVersionsOpen] = useState(false)
+  // Bumped on Restore to force a fresh TiptapEditor mount (the editor's
+  // lastEmittedHtmlRef guard can otherwise suppress restored content).
+  const [editorRemountNonce, setEditorRemountNonce] = useState(0)
   const [currentVersion, setCurrentVersion] = useState(protocol.version)
   const [isEditingTitle, setIsEditingTitle] = useState(false)
   const titleInputRef = useRef<HTMLInputElement>(null)
@@ -226,13 +239,34 @@ export function ProtocolDesignMode({
       const supabase = createClient()
       if (!user) throw new Error("Not authenticated")
 
-      const { error: upErr } = await updateProtocolWithOptionalContext(supabase, protocol.id, {
-        content: newContent,
-        version: newVersion,
-        name: protocol.name,
-        document_template_id: draftDocumentTemplateId,
+      // commit_protocol sets app.force_version so the trigger writes an immutable
+      // version even inside its 3-minute throttle window, then updates the
+      // protocol — one transaction, no double-write. The trigger owns versioning.
+      const { error: upErr } = await supabase.rpc("commit_protocol", {
+        p_id: protocol.id,
+        p_content: newContent,
+        p_version: newVersion,
+        p_name: protocol.name,
+        p_document_template_id: draftDocumentTemplateId,
+        p_user_agent: typeof navigator !== "undefined" ? navigator.userAgent : null,
       })
-      if (upErr) throw upErr
+      // upErr from .rpc() is a PostgrestError object, not an Error. Throwing it
+      // raw bubbles to the Next.js overlay as "[object Object]"; instead toast a
+      // real message and bail without advancing the saved baseline (so the
+      // approval bar stays "pending" and the user can retry). The hint covers
+      // the case where migration 067 hasn't been run yet.
+      if (upErr) {
+        const msg = upErr.message || "Failed to save protocol."
+        toast({
+          title: "Couldn't save protocol",
+          description: /commit_protocol|function .* does not exist/i.test(msg)
+            ? `${msg} — run scripts/067_protocol_versions.sql.`
+            : msg,
+          variant: "destructive",
+        })
+        return
+      }
+      if (versionsOpen) void loadVersions()
 
       supabase.from("audit_log").insert({
         table_name: "protocols",
@@ -273,7 +307,51 @@ export function ProtocolDesignMode({
       draftTemplateLabel,
       toast,
       onSaved,
+      versionsOpen,
+      loadVersions,
     ]
+  )
+
+  const handleOpenVersions = useCallback(() => {
+    setVersionsOpen(true)
+    void loadVersions()
+  }, [loadVersions])
+
+  // Restore a prior version: re-commit its content as a new (bumped) version via
+  // commit_protocol; the trigger records it. Mirror the result into local state.
+  const handleRestoreVersion = useCallback(
+    async (version: DocumentVersion) => {
+      const supabase = createClient()
+      const restoredContent = version.content ?? ""
+      // Bump the patch number so the restore lands as a new protocol version.
+      const parts = (currentVersion || "1.0").split(".")
+      const last = parseInt(parts[parts.length - 1] ?? "0", 10)
+      const restoredVersion = isNaN(last)
+        ? `${currentVersion}.1`
+        : [...parts.slice(0, -1), String(last + 1)].join(".")
+      const { error } = await supabase.rpc("commit_protocol", {
+        p_id: protocol.id,
+        p_content: restoredContent,
+        p_version: restoredVersion,
+        p_name: protocol.name,
+        p_document_template_id: savedDocumentTemplateId,
+        p_user_agent: typeof navigator !== "undefined" ? navigator.userAgent : null,
+      })
+      if (error) {
+        toast({ title: "Restore failed", description: error.message, variant: "destructive" })
+        return
+      }
+      setDraftContent(restoredContent)
+      setSavedContent(restoredContent)
+      historyBaselineRef.current = restoredContent
+      setCurrentVersion(restoredVersion)
+      setEditorRemountNonce((n) => n + 1) // force the editor to show the restored body
+      setVersionsOpen(false)
+      onSaved()
+      void loadVersions()
+      toast({ title: "Version restored", description: `Restored v${version.version_no} as protocol v${restoredVersion}.` })
+    },
+    [protocol.id, protocol.name, currentVersion, savedDocumentTemplateId, onSaved, loadVersions, toast],
   )
 
   const handleReject = useCallback(() => {
@@ -619,6 +697,17 @@ export function ProtocolDesignMode({
                   <Badge variant="outline" className="shrink-0 text-2xs font-normal">
                     v{currentVersion}
                   </Badge>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon-sm"
+                    className="text-muted-foreground hover:text-foreground"
+                    onClick={handleOpenVersions}
+                    aria-label="Version history"
+                    title="Version history"
+                  >
+                    <GitCompare className="h-4 w-4" />
+                  </Button>
                   {/* Template picker collapsed into a small icon button — replaces
                       the loud horizontal "Document template" strip so the header
                       visually matches lab notes. Hover/title reveals the current
@@ -685,7 +774,7 @@ export function ProtocolDesignMode({
                 <CardContent className="flex min-h-0 min-w-0 flex-1 flex-col space-y-3 overflow-hidden px-4 sm:px-6">
                   <div className="relative min-h-0 min-w-0 flex-1 overflow-hidden">
                     <TiptapEditor
-                      key={protocol.id}
+                      key={`${protocol.id}:${editorRemountNonce}`}
                       content={draftContent}
                       onChange={setDraftContent}
                       placeholder="Write your protocol here... Use @ to tag protocols or samples"
@@ -799,6 +888,17 @@ export function ProtocolDesignMode({
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <DocumentVersionsDialog
+        open={versionsOpen}
+        onOpenChange={setVersionsOpen}
+        versions={versions}
+        loading={versionsLoading}
+        error={versionsError}
+        currentContent={draftContent}
+        onRestore={handleRestoreVersion}
+        recordNoun="protocol"
+      />
     </>
   )
 }

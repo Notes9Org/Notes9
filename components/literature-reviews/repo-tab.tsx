@@ -518,13 +518,26 @@ export function RepoTab({
                   >
                     <FileText className="h-4 w-4 opacity-50 flex-shrink-0" />
                     <span className="truncate text-xs font-semibold">{lit?.title || "Paper"}</span>
-                    <button 
-                      type="button"
-                      className="flex-shrink-0 p-1 rounded-md hover:bg-muted text-muted-foreground/60 hover:text-rose-500 transition-all opacity-0 group-hover:opacity-100 focus:opacity-100" 
+                    {/* role="button" span (not <button>) — a TabsTrigger is itself a
+                        <button>, and nesting <button> inside it is invalid HTML and
+                        causes a hydration error. stopPropagation on pointer-down keeps
+                        the close click from also activating/switching the tab. */}
+                    <span
+                      role="button"
+                      tabIndex={0}
+                      aria-label="Close tab"
+                      className="flex-shrink-0 p-1 rounded-md hover:bg-muted text-muted-foreground/60 hover:text-rose-500 transition-all opacity-0 group-hover:opacity-100 focus:opacity-100"
+                      onPointerDown={(e) => e.stopPropagation()}
                       onClick={(e) => handleCloseTab(id, e)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" || e.key === " ") {
+                          e.preventDefault();
+                          handleCloseTab(id, e);
+                        }
+                      }}
                     >
                       <X className="h-3 w-3" />
-                    </button>
+                    </span>
                   </TabsTrigger>
                 )
               })}

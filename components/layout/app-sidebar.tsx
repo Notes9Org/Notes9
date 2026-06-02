@@ -66,6 +66,7 @@ import { cn } from "@/lib/utils"
 import { Notes9Brand } from "@/components/brand/notes9-brand"
 import { ClipboardInfoIcon } from "@/components/ui/clipboard-info-icon"
 import { APP_PRIMARY_NAV } from "@/lib/app-primary-nav"
+import { TOUR, navTourKey } from "@/lib/tour/anchors"
 import { colorFromId as projectDotColor, useProjectScope } from "@/contexts/project-scope-context"
 import { toast } from "sonner"
 import { Button } from "../ui/button"
@@ -433,7 +434,7 @@ export function AppSidebar() {
           <SidebarGroupContent className="px-2">
             <Popover open={searchQuery.length >= 2}>
               <PopoverAnchor asChild>
-                <div className="relative" id="tour-search">
+                <div className="relative" id="tour-search" data-tour={TOUR.sidebarSearch}>
                   {/* Icon offset is tuned to sit ~9px inside the input's
                       visible left edge — `left-2.5` instead of the prior
                       `left-4` which left a noticeable dead-space gap. */}
@@ -529,7 +530,7 @@ export function AppSidebar() {
               <SidebarMenuItem>
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
-                    <SidebarMenuButton className="w-full justify-start gap-2 bg-[#e4ecd9] text-[#4f5f42] hover:bg-[#d6e3c7] hover:text-[#3d4a35] dark:bg-[#3d4a35] dark:text-[#e4ecd9] dark:hover:bg-[#4f5f42] transition-colors font-semibold shadow-sm">
+                    <SidebarMenuButton data-tour={TOUR.createNew} className="w-full justify-start gap-2 bg-[#e4ecd9] text-[#4f5f42] hover:bg-[#d6e3c7] hover:text-[#3d4a35] dark:bg-[#3d4a35] dark:text-[#e4ecd9] dark:hover:bg-[#4f5f42] transition-colors font-semibold shadow-sm">
                       <Plus className="size-4 shrink-0" />
                       <span>Create new...</span>
                     </SidebarMenuButton>
@@ -589,7 +590,7 @@ export function AppSidebar() {
           )}
         >
           <SidebarGroupContent className={cn(isIconMode && "w-full flex flex-col items-center")}>
-            <SidebarMenu className={cn(isIconMode && "flex w-full flex-col items-center gap-0.5")} id="tour-main-nav">
+            <SidebarMenu className={cn(isIconMode && "flex w-full flex-col items-center gap-0.5")} id="tour-main-nav" data-tour={TOUR.sidebarNav}>
               {navigation.map((item) => {
                 const Icon = item.icon
                 const pathMatches =
@@ -604,7 +605,7 @@ export function AppSidebar() {
                 const ActiveIcon = isProjectItemWithScope ? (isProjectExpanded ? FolderOpen : Folder) : Icon;
 
                     return (
-                      <SidebarMenuItem key={item.name}>
+                      <SidebarMenuItem key={item.name} data-tour={navTourKey(item.href)}>
                         <SidebarMenuButton
                           asChild
                           isActive={isActive}
@@ -643,7 +644,7 @@ export function AppSidebar() {
                             </div>
                           ) : (
                             <Link
-                              href={(item.name === "Literature" && scope.projectId) ? `${item.href}${scope.scopedQueryString}` : item.href}
+                              href={(mounted && item.name === "Literature" && scope.projectId) ? `${item.href}${scope.scopedQueryString}` : item.href}
                               aria-label={isIconMode ? item.name : undefined}
                               className="flex-1 flex items-center pr-6"
                             >

@@ -1017,7 +1017,8 @@ body > [data-radix-popper-content-wrapper] {
 
 @media (prefers-reduced-motion: reduce) {
   .n9-conn-flow,
-  .n9-hub-dash-flow {
+  .n9-hub-dash-flow,
+  .tour-mascot-animate {
     animation: none;
   }
 }

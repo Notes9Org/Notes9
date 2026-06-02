@@ -92,24 +92,32 @@ export function ContentChangeApprovalBar(props: ContentChangeApprovalBarProps) {
     if (!isDirty) setIsExpanded(false)
   }, [isDirty])
 
-  const diffResult = useMemo(() => {
-    let savedText = htmlToDiffPlainText(savedContent)
-    let draftText = htmlToDiffPlainText(draftContent)
-    if (savedText.length > MAX_DIFF_TEXT_LEN) savedText = savedText.slice(0, MAX_DIFF_TEXT_LEN)
-    if (draftText.length > MAX_DIFF_TEXT_LEN) draftText = draftText.slice(0, MAX_DIFF_TEXT_LEN)
-    return diffWords(savedText, draftText)
-  }, [savedContent, draftContent])
+  const [diffResult, setDiffResult] = useState<import("diff").Change[]>([])
+  const [changeStats, setChangeStats] = useState({ added: 0, removed: 0 })
 
-  const changeStats = useMemo(() => {
-    let added = 0
-    let removed = 0
-    for (const part of diffResult) {
-      const wordCount = part.value.trim().split(/\s+/).filter(Boolean).length
-      if (part.added) added += wordCount
-      if (part.removed) removed += wordCount
-    }
-    return { added, removed }
-  }, [diffResult])
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      let savedText = htmlToDiffPlainText(savedContent)
+      let draftText = htmlToDiffPlainText(draftContent)
+      if (savedText.length > MAX_DIFF_TEXT_LEN) savedText = savedText.slice(0, MAX_DIFF_TEXT_LEN)
+      if (draftText.length > MAX_DIFF_TEXT_LEN) draftText = draftText.slice(0, MAX_DIFF_TEXT_LEN)
+      
+      const diff = diffWords(savedText, draftText)
+      
+      let added = 0
+      let removed = 0
+      for (const part of diff) {
+        const wordCount = part.value.trim().split(/\s+/).filter(Boolean).length
+        if (part.added) added += wordCount
+        if (part.removed) removed += wordCount
+      }
+      
+      setDiffResult(diff)
+      setChangeStats({ added, removed })
+    }, 400) // Debounce so typing isn't blocked by massive text diffing
+
+    return () => clearTimeout(timer)
+  }, [savedContent, draftContent])
 
   const handleAccept = async () => {
     setIsAccepting(true)

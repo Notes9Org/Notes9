@@ -405,7 +405,7 @@ export function ContentDiffHistoryDialog({
 }: ContentDiffHistoryDialogProps) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="flex h-[min(90dvh,92vh)] w-[calc(100vw-1rem)] max-w-3xl flex-col gap-0 overflow-hidden p-0 sm:h-auto sm:max-h-[80vh]">
+      <DialogContent className="flex h-[min(90dvh,92vh)] w-[calc(100vw-1rem)] max-w-[95vw] sm:max-w-[95vw] flex-col gap-0 overflow-hidden p-0 sm:h-auto sm:max-h-[80vh]">
         <DialogHeader className="shrink-0 border-b border-border/60 px-3 py-3 sm:px-4">
           <DialogTitle className="flex items-center gap-2 text-sm font-semibold">
             <History className="h-4 w-4 text-muted-foreground" />

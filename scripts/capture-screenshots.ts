@@ -107,6 +107,7 @@ async function login(page: Page): Promise<boolean> {
   // Prevent the Notes9 tour from appearing in screenshots
   await page.evaluate((theme: string) => {
     localStorage.setItem("notes9_tour_completed", "true")
+    localStorage.setItem("notes9_welcome_seen", "true")
     localStorage.setItem("theme", theme)
     document.documentElement.classList.toggle("dark", theme === "dark")
     document.documentElement.style.colorScheme = theme === "dark" ? "dark" : "light"

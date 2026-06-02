@@ -148,7 +148,7 @@ export function useContentDiffs(
         return false
       }
     },
-    [loadDiffs]
+    [loadDiffs, user]
   )
 
   return { diffs, loading, error, loadDiffs, recordDiff }

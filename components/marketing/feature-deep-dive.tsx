@@ -6,7 +6,7 @@ import { useTheme } from "next-themes"
 import { motion, useScroll, useTransform, useMotionValue, useSpring, useMotionTemplate } from "framer-motion"
 import { BookOpen, ClipboardList, PenLine } from "lucide-react"
 import type { LucideIcon } from "lucide-react"
-import { resolveDemoScreenshot } from "@/components/marketing/demo-asset"
+import { resolveDemoScreenshot, useStableDemoTheme } from "@/components/marketing/demo-asset"
 
 interface Feature {
   id: string
@@ -52,7 +52,7 @@ const features: Feature[] = [
 ]
 
 function FeatureRow({ feature, index }: { feature: Feature; index: number }) {
-  const { resolvedTheme } = useTheme()
+  const resolvedTheme = useStableDemoTheme()
   const ref = useRef<HTMLDivElement>(null)
   const { scrollYProgress } = useScroll({
     target: ref,

@@ -67,9 +67,12 @@ export async function updateProtocolWithOptionalContext(
   let contextSaved = true
 
   for (let attempt = 0; attempt < 6; attempt++) {
-    const { error } = await supabase.from("protocols").update(current).eq("id", id)
+    const { data, error } = await supabase.from("protocols").update(current).eq("id", id).select("id")
 
     if (!error) {
+      if (!data?.length) {
+        return { error: new Error("Save blocked by permissions or protocol not found"), contextSaved: false }
+      }
       return { error: null, contextSaved }
     }
 

@@ -40,7 +40,7 @@ export function TermsAcceptanceModal() {
         try {
             const supabase = createClient()
             await supabase.auth.signOut()
-            router.push("/auth/login")
+            window.location.href = "/auth/login"
         } catch (err) {
             toast.error("Failed to sign out. Please refresh the page.")
             console.error(err)
