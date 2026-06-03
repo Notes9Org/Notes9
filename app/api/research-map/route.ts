@@ -20,6 +20,7 @@ const ALL_KINDS: ResearchMapNodeKind[] = [
   "paper",
   "report",
   "sample",
+  "data_file",
 ]
 
 function parseIncludeTypes(raw: string | null): Set<ResearchMapNodeKind> {
@@ -521,6 +522,42 @@ export async function GET(req: NextRequest) {
           }
         }
       }
+
+      // Experiment data files — each file becomes a leaf node hanging off its
+      // experiment so the map shows what data backs each run.
+      if (includeTypes.has("data_file") && experimentIds.length > 0) {
+        const dataFiles = await selectIn<{
+          id: string
+          file_name: string | null
+          experiment_id: string | null
+        }>(
+          (ids) =>
+            supabase
+              .from("experiment_data")
+              .select("id, file_name, experiment_id")
+              .in("experiment_id", ids),
+          experimentIds,
+        )
+        for (const f of dataFiles) {
+          if (!f.experiment_id) continue
+          addNode({
+            id: nodeId("data_file", f.id),
+            kind: "data_file",
+            label: f.file_name || "Untitled file",
+            href: `/experiments/${f.experiment_id}?tab=data`,
+            meta: {},
+          })
+          if (includeTypes.has("experiment")) {
+            queueEdge({
+              id: `experiment_data_file:${f.experiment_id}:${f.id}`,
+              source: nodeId("experiment", f.experiment_id),
+              target: nodeId("data_file", f.id),
+              kind: "experiment_has_data_file",
+              label: "Data file",
+            })
+          }
+        }
+      }
     } else {
       // These four top-level fetches are independent of one another — issue them
       // concurrently instead of four sequential round-trips. Org projects are
@@ -995,6 +1032,44 @@ export async function GET(req: NextRequest) {
               target: nodeId("sample", pair.sample_id),
               kind: "project_has_sample",
               label: "Sample",
+            })
+          }
+        }
+      }
+
+      // Experiment data files (org-wide) — one leaf node per file, linked to its
+      // experiment.
+      if (includeTypes.has("data_file")) {
+        const includedExpIds = allExperiments.map((e) => e.id)
+        const dataFiles = await selectIn<{
+          id: string
+          file_name: string | null
+          experiment_id: string | null
+        }>(
+          (ids) =>
+            supabase
+              .from("experiment_data")
+              .select("id, file_name, experiment_id")
+              .in("experiment_id", ids),
+          includedExpIds,
+        )
+        const includedExpIdSet = new Set(includedExpIds)
+        for (const f of dataFiles) {
+          if (!f.experiment_id || !includedExpIdSet.has(f.experiment_id)) continue
+          addNode({
+            id: nodeId("data_file", f.id),
+            kind: "data_file",
+            label: f.file_name || "Untitled file",
+            href: `/experiments/${f.experiment_id}?tab=data`,
+            meta: {},
+          })
+          if (includeTypes.has("experiment")) {
+            queueEdge({
+              id: `experiment_data_file:${f.experiment_id}:${f.id}`,
+              source: nodeId("experiment", f.experiment_id),
+              target: nodeId("data_file", f.id),
+              kind: "experiment_has_data_file",
+              label: "Data file",
             })
           }
         }

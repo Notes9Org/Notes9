@@ -64,31 +64,56 @@ export function CatalystSectionHero({
   const { projectId, projectName } = useProjectScope()
   const { isOpen: catalystPanelOpen } = useCatalystPanelState()
 
-  // Detect scroll on the nearest scrollable ancestor (<main> with overflow-auto)
+  // Detect scroll on the nearest scrollable ancestor (the app layout's <main>
+  // with overflow-auto). We identify it by its overflow STYLE alone — not by
+  // `scrollHeight > clientHeight`, which depends on the current window size and
+  // whether content has loaded yet. Gating on that made the lookup fall back to
+  // `window` on short pages or large windows, so the shrink effect only worked
+  // on the (tall) dashboard and broke when the window was resized.
   useEffect(() => {
     if (!shrinkOnScroll) return
     const el = containerRef.current
     if (!el) return
-    // Walk up the DOM to find the nearest scrollable ancestor
-    let scrollParent: HTMLElement | null = el.parentElement
-    while (scrollParent) {
-      const style = getComputedStyle(scrollParent)
-      if (
-        scrollParent.scrollHeight > scrollParent.clientHeight &&
-        (style.overflowY === 'auto' || style.overflowY === 'scroll')
-      ) {
-        break
+
+    const findScrollParent = (): HTMLElement | null => {
+      let node: HTMLElement | null = el.parentElement
+      while (node) {
+        const overflowY = getComputedStyle(node).overflowY
+        if (overflowY === 'auto' || overflowY === 'scroll') return node
+        node = node.parentElement
       }
-      scrollParent = scrollParent.parentElement
+      return null
     }
-    const target = scrollParent || window
+
+    let scrollParent = findScrollParent()
+    let target: HTMLElement | Window = scrollParent ?? window
+
     const handler = () => {
       const scrollTop = scrollParent ? scrollParent.scrollTop : window.scrollY
       setIsScrolled(scrollTop > 40)
     }
+
+    // The layout's scroll container can change across breakpoints (e.g. when the
+    // window is resized between mobile/desktop), so re-resolve it on resize and
+    // re-evaluate the scrolled state.
+    const onResize = () => {
+      const next = findScrollParent()
+      if (next !== scrollParent) {
+        target.removeEventListener('scroll', handler)
+        scrollParent = next
+        target = scrollParent ?? window
+        target.addEventListener('scroll', handler, { passive: true })
+      }
+      handler()
+    }
+
     target.addEventListener('scroll', handler, { passive: true })
+    window.addEventListener('resize', onResize, { passive: true })
     handler() // check initial state
-    return () => target.removeEventListener('scroll', handler)
+    return () => {
+      target.removeEventListener('scroll', handler)
+      window.removeEventListener('resize', onResize)
+    }
   }, [shrinkOnScroll])
 
   const { start: startMic, stop: stopMic, isListening, getWaveformData } = useAwsTranscribe({

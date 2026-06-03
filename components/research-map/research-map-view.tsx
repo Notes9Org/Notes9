@@ -77,19 +77,16 @@ function LabelledEdge({
   label,
   selected,
 }: EdgeProps) {
-  const dagrePoints = (data?.points as { x: number; y: number }[]) || []
-  
-  // Replace Dagre's center-based start/end points with ReactFlow's precise handle positions
-  const points = dagrePoints.length >= 2
-    ? [
-        { x: sourceX, y: sourceY },
-        ...dagrePoints.slice(1, -1),
-        { x: targetX, y: targetY }
-      ]
-    : [
-        { x: sourceX, y: sourceY },
-        { x: targetX, y: targetY }
-      ]
+  // Route orthogonally between ReactFlow's LIVE handle positions. We deliberately
+  // ignore Dagre's stored intermediate waypoints (data.points): those are
+  // absolute coordinates captured once at layout time, so when a node is dragged
+  // only the endpoints (sourceX/Y, targetX/Y) update while the frozen waypoints
+  // stay put — making the line appear to "half move". Deriving the whole path
+  // from the current endpoints means the full line follows the node on drag.
+  const points = [
+    { x: sourceX, y: sourceY },
+    { x: targetX, y: targetY },
+  ]
 
   let edgePath = `M ${points[0].x} ${points[0].y}`
   for (let i = 1; i < points.length; i++) {
@@ -178,12 +175,14 @@ const KINDS: ResearchMapNodeKind[] = [
   "paper",
   "report",
   "sample",
+  "data_file",
 ]
 
 /** Tables whose changes affect the research map graph (requires Realtime enabled in Supabase). */
 const RESEARCH_MAP_REALTIME_TABLES = [
   "projects",
   "experiments",
+  "experiment_data",
   "protocols",
   "literature_reviews",
   "lab_notes",
@@ -404,6 +403,7 @@ function ResearchMapCanvas() {
     paper: true,
     report: true,
     sample: true,
+    data_file: true,
   })
   const [labelQuery, setLabelQuery] = useState("")
   const [debouncedQuery, setDebouncedQuery] = useState("")
