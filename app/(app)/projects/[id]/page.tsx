@@ -231,7 +231,7 @@ export default async function ProjectDetailPage({
           </div>
         </div>
 
-        <CatalystSectionHero size="lg" scope="project" />
+        <CatalystSectionHero size="lg" scope="project" shrinkOnScroll />
 
         <ProjectWorkspace
           projectId={id}

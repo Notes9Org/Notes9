@@ -26,7 +26,7 @@ export function ViewModeToggle({
   className,
 }: ViewModeToggleProps) {
   return (
-    <div className={cn('inline-flex gap-1 rounded-lg border p-1', className)}>
+    <div data-tour="view-mode" className={cn('inline-flex gap-1 rounded-lg border p-1', className)}>
       <Button
         variant={value === 'grid' ? 'default' : 'ghost'}
         size="sm"

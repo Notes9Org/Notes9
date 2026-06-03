@@ -60,7 +60,7 @@ export function ResourceListFilter({
 
 export function ResourceFilterRow({ children }: { children: ReactNode }) {
   return (
-    <div className="mb-4 flex flex-col gap-3 border-b border-border/60 pb-4 sm:flex-row sm:flex-wrap sm:items-end">
+    <div data-tour="resource-filters" className="mb-4 flex flex-col gap-3 border-b border-border/60 pb-4 sm:flex-row sm:flex-wrap sm:items-end">
       {children}
     </div>
   )

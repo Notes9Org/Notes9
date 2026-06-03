@@ -89,6 +89,7 @@ export function EquipmentPageContent({ equipment, statusCount }: EquipmentPageCo
             asChild
             size="icon"
             variant="ghost"
+            data-tour="create-equipment"
             className="size-8 rounded-md text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
             aria-label="New equipment"
           >
@@ -125,7 +126,7 @@ export function EquipmentPageContent({ equipment, statusCount }: EquipmentPageCo
         )}
       </ResourceFilterRow>
 
-      <div className="grid gap-4 grid-cols-2 md:grid-cols-4">
+      <div data-tour="equipment-stats" className="grid gap-4 grid-cols-2 md:grid-cols-4">
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">Available</CardTitle>

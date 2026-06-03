@@ -22,6 +22,9 @@ export type CatalystLaunchDetail = {
   projectId?: string
   attachments?: CatalystLaunchAttachment[]
   webSearch?: boolean
+  /** When true, the sidebar submits the query immediately instead of only
+   *  pre-filling its composer — i.e. the user already clicked Send. */
+  autoSend?: boolean
 }
 
 export const CATALYST_OPEN_EVENT = "notes9:open-catalyst"

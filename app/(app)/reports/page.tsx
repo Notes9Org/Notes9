@@ -54,7 +54,7 @@ export default async function ReportsPage() {
 
   return (
     <div className="space-y-4 md:space-y-6">
-      <CatalystSectionHero size="sm" scope="reports" />
+      <CatalystSectionHero size="sm" scope="reports" shrinkOnScroll />
       <ReportsPageClient
         reports={(reports ?? []) as ReportRow[]}
         projects={safeProjects}

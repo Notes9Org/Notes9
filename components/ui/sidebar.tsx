@@ -148,6 +148,7 @@ function SidebarProvider({
     <SidebarContext.Provider value={contextValue}>
       <TooltipProvider delayDuration={0}>
         <div
+          suppressHydrationWarning
           data-slot="sidebar-wrapper"
           style={
             {

@@ -755,6 +755,7 @@ function ResearchMapCanvas() {
           />
           <Panel
             position="top-left"
+            data-tour="map-controls"
             className="m-2 flex max-w-[calc(100%-1rem)] flex-nowrap items-center gap-2 overflow-x-auto rounded-lg border bg-card/95 py-1.5 pl-2 pr-2 shadow-sm backdrop-blur-sm [scrollbar-width:thin]"
           >
             <Select

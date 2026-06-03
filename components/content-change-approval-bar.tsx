@@ -290,6 +290,7 @@ export function ContentChangeApprovalBar(props: ContentChangeApprovalBarProps) {
 
             <Button
               size="sm"
+              data-tour="accept-save"
               className="min-h-10 min-w-0 gap-1 px-2 text-micro touch-manipulation sm:min-h-6 sm:px-2.5"
               onClick={handleAccept}
               disabled={isAccepting}

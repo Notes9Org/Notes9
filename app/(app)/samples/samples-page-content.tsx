@@ -178,7 +178,7 @@ export function SamplesPageContent({ samples, statusCount }: SamplesPageContentP
         </p>
         <div className="flex items-center gap-2 shrink-0">
           <ViewModeToggle value={viewMode} onChange={setViewMode} tableDisabled={isMobile} />
-          <Button asChild size="sm" className="gap-2" aria-label="New sample">
+          <Button asChild size="sm" className="gap-2" aria-label="New sample" data-tour="create-sample">
             <Link href="/samples/new">
               <Plus className="size-4" />
               New sample
@@ -221,7 +221,7 @@ export function SamplesPageContent({ samples, statusCount }: SamplesPageContentP
       </ResourceFilterRow>
 
       {/* Status Overview - same as experiments-style spacing */}
-      <div className="grid gap-4 grid-cols-2 md:grid-cols-4">
+      <div data-tour="sample-stats" className="grid gap-4 grid-cols-2 md:grid-cols-4">
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">Available</CardTitle>

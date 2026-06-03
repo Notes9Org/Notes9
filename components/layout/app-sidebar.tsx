@@ -614,7 +614,7 @@ export function AppSidebar() {
                           className="group transition-all duration-150 hover:bg-[color:color-mix(in_oklab,var(--background)_78%,var(--primary)_22%)] hover:text-sidebar-foreground active:scale-[0.985] active:bg-[color:color-mix(in_oklab,var(--background)_70%,var(--primary)_30%)] dark:hover:bg-sidebar-accent dark:hover:text-sidebar-accent-foreground dark:active:scale-[0.985] dark:active:bg-sidebar-accent/90 data-[active=true]:bg-transparent data-[active=true]:text-sidebar-foreground"
                         >
                           {isProjectItemWithScope && !isIconMode ? (
-                            <div className="flex items-center w-full">
+                            <Link href={`/projects/${scope.projectId}`} className="flex items-center w-full">
                               <div
                                 role="button"
                                 tabIndex={0}
@@ -635,15 +635,12 @@ export function AppSidebar() {
                               >
                                 <ActiveIcon className="size-4" />
                               </div>
-                              <Link
-                                href={`/projects/${scope.projectId}`}
-                                className="flex-1 flex items-center min-w-0 pr-6 h-full"
-                              >
+                              <div className="flex-1 flex items-center min-w-0 pr-6 h-full ml-1.5">
                                 <span className={cn("truncate", isActive && "font-semibold")}>
                                   {item.name} / {scope.projectName}
                                 </span>
-                              </Link>
-                            </div>
+                              </div>
+                            </Link>
                           ) : (
                             <Link
                               href={(mounted && item.name === "Literature" && scope.projectId) ? `${item.href}${scope.scopedQueryString}` : item.href}

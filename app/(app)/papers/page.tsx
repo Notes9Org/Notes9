@@ -26,7 +26,7 @@ export default async function PapersPage() {
 
   return (
     <div className="space-y-6">
-      <CatalystSectionHero size="sm" scope="writing" />
+      <CatalystSectionHero size="sm" scope="writing" shrinkOnScroll />
       <Suspense
         fallback={
           <div className="text-sm text-muted-foreground">

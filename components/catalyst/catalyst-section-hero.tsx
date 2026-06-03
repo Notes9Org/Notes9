@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useTransition, useCallback, useRef, type FormEvent, type KeyboardEvent } from "react"
+import { useState, useEffect, useTransition, useCallback, useRef, type FormEvent, type KeyboardEvent } from "react"
 import { usePathname, useRouter } from "next/navigation"
 import { ArrowUp, Paperclip, Mic, X, FileText, ImageIcon, Globe } from "lucide-react"
 import { Switch } from "@/components/ui/switch"
@@ -40,6 +40,7 @@ type Props = {
   placeholder?: string
   /** When "inline", the composer scrolls with the page instead of sticking. */
   formPlacement?: "sticky" | "inline"
+  shrinkOnScroll?: boolean
 }
 
 export function CatalystSectionHero({
@@ -47,17 +48,48 @@ export function CatalystSectionHero({
   scope = "lab",
   placeholder = "How can I help you today?",
   formPlacement = "inline",
+  shrinkOnScroll = false,
 }: Props) {
   const [input, setInput] = useState("")
   const [webSearchEnabled, setWebSearchEnabled] = useState(false)
   const [attachments, setAttachments] = useState<CatalystLaunchAttachment[]>([])
   const [uploadQueue, setUploadQueue] = useState<string[]>([])
+  const [isFocused, setIsFocused] = useState(false)
   const [, startTransition] = useTransition()
   const router = useRouter()
   const pathname = usePathname()
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const containerRef = useRef<HTMLDivElement>(null)
+  const [isScrolled, setIsScrolled] = useState(false)
   const { projectId, projectName } = useProjectScope()
   const { isOpen: catalystPanelOpen } = useCatalystPanelState()
+
+  // Detect scroll on the nearest scrollable ancestor (<main> with overflow-auto)
+  useEffect(() => {
+    if (!shrinkOnScroll) return
+    const el = containerRef.current
+    if (!el) return
+    // Walk up the DOM to find the nearest scrollable ancestor
+    let scrollParent: HTMLElement | null = el.parentElement
+    while (scrollParent) {
+      const style = getComputedStyle(scrollParent)
+      if (
+        scrollParent.scrollHeight > scrollParent.clientHeight &&
+        (style.overflowY === 'auto' || style.overflowY === 'scroll')
+      ) {
+        break
+      }
+      scrollParent = scrollParent.parentElement
+    }
+    const target = scrollParent || window
+    const handler = () => {
+      const scrollTop = scrollParent ? scrollParent.scrollTop : window.scrollY
+      setIsScrolled(scrollTop > 40)
+    }
+    target.addEventListener('scroll', handler, { passive: true })
+    handler() // check initial state
+    return () => target.removeEventListener('scroll', handler)
+  }, [shrinkOnScroll])
 
   const { start: startMic, stop: stopMic, isListening, getWaveformData } = useAwsTranscribe({
     onFinal: (text) => setInput((prev) => (prev ? `${prev} ${text}` : text).trimStart()),
@@ -101,6 +133,9 @@ export function CatalystSectionHero({
         projectId: projectId ?? undefined,
         attachments: attachments.length > 0 ? attachments : undefined,
         webSearch: webSearchEnabled || undefined,
+        // The user already pressed Send here — the sidebar should submit the
+        // prompt automatically rather than make them click Send a second time.
+        autoSend: true,
       }
       if (pathname?.startsWith("/catalyst")) {
         const params = new URLSearchParams()
@@ -130,8 +165,9 @@ export function CatalystSectionHero({
 
   const canSend = input.trim().length > 0 || attachments.length > 0
   const isUploading = uploadQueue.length > 0
-  const minBoxHeight = size === "lg" ? "min-h-[132px]" : "min-h-[112px]"
-  const contentWidth = cn("mx-auto w-full", size === "lg" ? "max-w-4xl" : "max-w-3xl")
+  const shouldShrink = shrinkOnScroll && isScrolled && !isFocused && input.trim() === "" && !canSend && !isUploading
+  const minBoxHeight = shouldShrink ? "min-h-[44px]" : (size === "lg" ? "min-h-[132px]" : "min-h-[112px]")
+  const contentWidth = cn("mx-auto w-full transition-all duration-500 ease-in-out", size === "lg" ? "max-w-4xl" : "max-w-3xl", shouldShrink && "max-w-2xl")
   const effectivePlaceholder = projectName
     ? `How can I help with ${projectName} today?`
     : placeholder
@@ -140,7 +176,13 @@ export function CatalystSectionHero({
     <form
       onSubmit={handleSubmit}
       aria-label="Ask Catalyst"
-      className={cn(composerShell, minBoxHeight)}
+      className={cn(
+        composerShell, 
+        "transition-all duration-500 ease-in-out",
+        shouldShrink
+          ? "min-h-0 p-2 bg-violet-50 dark:bg-[hsl(260,30%,14%)] border-violet-300 dark:border-violet-500/60"
+          : cn(minBoxHeight, "p-3")
+      )}
     >
       {/* Attachment chips */}
       {(attachments.length > 0 || uploadQueue.length > 0) && (
@@ -181,13 +223,16 @@ export function CatalystSectionHero({
         value={input}
         onChange={(e) => setInput(e.target.value)}
         onKeyDown={handleKeyDown}
+        onFocus={() => setIsFocused(true)}
+        onBlur={() => setIsFocused(false)}
         placeholder={effectivePlaceholder}
         rows={1}
         aria-label="Ask Catalyst"
         className={cn(
-          "min-h-[44px] w-full flex-1 resize-none border-0 bg-transparent px-1 pt-0.5 text-foreground outline-none ring-0",
-          "placeholder:text-muted-foreground/80",
+          "w-full resize-none border-0 bg-transparent px-1 pt-0.5 text-foreground outline-none ring-0",
+          "placeholder:text-muted-foreground/80 transition-all duration-500 ease-in-out",
           size === "lg" ? "text-base" : "text-[15px]",
+          shouldShrink ? "min-h-[36px] flex-none" : "min-h-[44px] flex-1"
         )}
       />
 
@@ -202,7 +247,10 @@ export function CatalystSectionHero({
         disabled={isUploading}
       />
 
-      <div className="mt-2 flex items-center justify-between">
+      <div className={cn(
+        "flex items-center justify-between transition-all duration-500 ease-in-out",
+        shouldShrink ? "mt-0" : "mt-2"
+      )}>
         <div className="flex items-center gap-1.5">
           <Globe className={cn("size-3.5 shrink-0 transition-colors", webSearchEnabled ? "text-violet-600 dark:text-violet-400" : "text-muted-foreground")} aria-hidden />
           <Switch
@@ -286,19 +334,30 @@ export function CatalystSectionHero({
     // composer's content and clipped the bottom toolbar (Catalyst badge +
     // send button). A plain opacity fade has no such measurement hazard.
     return (
-      <AnimatePresence initial={false}>
-        {!catalystPanelOpen && (
-          <motion.div
-            key="catalyst-composer"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.15 }}
-          >
-            <div className={contentWidth}>{composerForm}</div>
-          </motion.div>
+      <div
+        ref={containerRef}
+        className={cn(
+          "transition-all duration-500 ease-in-out",
+          shrinkOnScroll && "sticky -top-3 sm:-top-4 md:-top-6 z-40 -mx-3 px-3 sm:-mx-4 sm:px-4 md:-mx-6 md:px-6 py-2 md:py-4",
+          shrinkOnScroll && (shouldShrink
+            ? "bg-transparent border-transparent"
+            : "bg-background/80 backdrop-blur-md border-b border-border/50")
         )}
-      </AnimatePresence>
+      >
+        <AnimatePresence initial={false}>
+          {!catalystPanelOpen && (
+            <motion.div
+              key="catalyst-composer"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.15 }}
+            >
+              <div className={contentWidth}>{composerForm}</div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
     )
   }
 
@@ -308,7 +367,7 @@ export function CatalystSectionHero({
   )
 
   return (
-    <div className={stickyShell}>
+    <div ref={containerRef} className={stickyShell}>
       <AnimatePresence initial={false} mode="wait">
         {catalystPanelOpen ? null : (
           <motion.div key="catalyst-hero" {...collapseMotion}>

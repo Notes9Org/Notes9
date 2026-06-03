@@ -394,6 +394,7 @@ export function PaperWorkspace({ paperId, backLink, leftControls, onPaperMutated
                 ;(e.target as HTMLInputElement).blur()
               }
             }}
+            data-tour="paper-title"
             aria-label="Paper title"
             className="min-w-0 flex-1 border-0 bg-transparent px-0 py-0.5 text-2xl font-bold shadow-none focus-visible:ring-1 focus-visible:ring-ring/40 md:text-2xl"
           />
@@ -406,7 +407,7 @@ export function PaperWorkspace({ paperId, backLink, leftControls, onPaperMutated
           {/* Import dropdown */}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="outline" size="icon" title="Import">
+              <Button variant="outline" size="icon" title="Import" data-tour="paper-import">
                 <Download className="h-4 w-4" />
               </Button>
             </DropdownMenuTrigger>
@@ -433,7 +434,7 @@ export function PaperWorkspace({ paperId, backLink, leftControls, onPaperMutated
           {/* Export dropdown */}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="outline" size="icon" title="Export">
+              <Button variant="outline" size="icon" title="Export" data-tour="paper-export">
                 <Upload className="h-4 w-4" />
               </Button>
             </DropdownMenuTrigger>

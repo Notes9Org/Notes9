@@ -69,7 +69,7 @@ export function SampleTabs({
       onValueChange={handleChange}
       className="space-y-4"
     >
-      <TabsList className="flex h-auto flex-wrap justify-start">
+      <TabsList data-tour="sample-tabs" className="flex h-auto flex-wrap justify-start">
         <TabsTrigger value="overview">Overview</TabsTrigger>
         <TabsTrigger value="molecular">Molecular Files</TabsTrigger>
         <TabsTrigger value="links">Links</TabsTrigger>

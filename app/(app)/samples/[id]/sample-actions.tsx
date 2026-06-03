@@ -31,7 +31,7 @@ export function SampleActions({
 }: SampleActionsProps) {
   return (
     <TooltipProvider>
-      <div className="flex items-center gap-1">
+      <div data-tour="sample-actions" className="flex items-center gap-1">
         <Tooltip>
           <TooltipTrigger asChild>
             <span className="inline-flex">

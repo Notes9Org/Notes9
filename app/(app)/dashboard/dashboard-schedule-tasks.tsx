@@ -33,7 +33,7 @@ export function DashboardScheduleTasks({
   )
 
   return (
-    <article className="flex h-full min-h-0 flex-col overflow-hidden rounded-[calc(var(--radius)+4px)] border border-border bg-card">
+    <article data-tour="dash-schedule" className="flex h-full min-h-0 flex-col overflow-hidden rounded-[calc(var(--radius)+4px)] border border-border bg-card">
       <Tabs defaultValue="schedule" className="flex h-full min-h-0 flex-col">
         <header className="flex items-center justify-between gap-2 px-4 py-3 border-b border-border">
           <TabsList className="h-8 bg-muted/60">

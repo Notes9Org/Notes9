@@ -23,6 +23,60 @@ export const TOUR = {
   aiToggle: "ai-toggle",
   createProject: "create-project",
   createExperiment: "create-experiment",
+  // Page-level primary actions (list-page "New X" buttons + shared controls).
+  // Each lives on a single route, so contextual tours can highlight the exact
+  // button a user sees on that page. Missing anchors are skipped by the engine.
+  createLabNote: "create-lab-note",
+  createProtocol: "create-protocol",
+  createSample: "create-sample",
+  createEquipment: "create-equipment",
+  addLiterature: "add-literature",
+  createPaper: "create-paper",
+  generateReport: "generate-report",
+  viewMode: "view-mode",
+  // Dashboard widgets — each is spotlighted on the dashboard help tour.
+  dashSchedule: "dash-schedule",
+  dashRecentWork: "dash-recent-work",
+  dashWhiteboard: "dash-whiteboard",
+  dashRecentlyEdited: "dash-recently-edited",
+  dashMyLab: "dash-my-lab",
+  // Literature feature anchors.
+  litTabs: "lit-tabs",
+  uploadPdf: "upload-pdf",
+  // Shared list-page filter row (Projects, Experiments, Lab notes, Protocols,
+  // Samples, Equipment, Reports all render it — one anchor covers them all).
+  resourceFilters: "resource-filters",
+  // Page-specific feature anchors.
+  sampleStats: "sample-stats",
+  equipmentStats: "equipment-stats",
+  settingsTabs: "settings-tabs",
+  mapControls: "map-controls",
+  // Experiment detail page: the tab bar + the Data & Files tab controls. The
+  // individual tab triggers/panels are targeted by their existing ids
+  // (#tab-trigger-<value> / #tab-content-<value>).
+  experimentTabs: "experiment-tabs",
+  dataFiles: "data-files",
+  dataActions: "data-actions",
+  // Shared TipTap editor (lab notes + protocol editor).
+  editorToolbar: "editor-toolbar",
+  editorCalculator: "editor-calculator",
+  editorCite: "editor-cite",
+  editorBibliography: "editor-bibliography",
+  editorContent: "editor-content",
+  // Versioning + save controls shared by the lab-notes and protocol editors.
+  versionHistory: "version-history",
+  acceptSave: "accept-save",
+  // Sample detail page: tab bar, quick-info header, actions, molecular viewer.
+  sampleTabs: "sample-tabs",
+  sampleQuickInfo: "sample-quickinfo",
+  sampleActions: "sample-actions",
+  molecularUpload: "molecular-upload",
+  molecularViewer: "molecular-viewer",
+  // Writing (papers) editor: title, import/export, status menu.
+  paperTitle: "paper-title",
+  paperImport: "paper-import",
+  paperExport: "paper-export",
+  paperStatus: "paper-status",
 } as const
 
 export type TourKey = (typeof TOUR)[keyof typeof TOUR]

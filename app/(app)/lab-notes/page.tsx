@@ -249,7 +249,7 @@ export default function LabNotesPage() {
 
   return (
     <div className="space-y-6">
-      <CatalystSectionHero size="sm" scope="lab-notes" />
+      <CatalystSectionHero size="sm" scope="lab-notes" shrinkOnScroll />
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <p className="text-muted-foreground">
           Access and manage lab notes across your experiments.
@@ -259,6 +259,7 @@ export default function LabNotesPage() {
           <Button
             size="sm"
             onClick={handleNewNote}
+            data-tour="create-lab-note"
             className="gap-2"
             aria-label="New lab note — choose project and experiment"
             title="New lab note — choose project and experiment"

@@ -36,9 +36,10 @@ interface UploadLiteraturePdfDialogProps {
   experiments?: { id: string; name: string; project_id: string }[]
   currentLiterature?: LiteratureRecordSummary | null
   triggerLabel?: string
+  initialProjectId?: string | null
 }
 
-function draftFromMetadata(metadata: LiteraturePdfExtractedMetadata): NewLiteratureRecordDraft {
+function draftFromMetadata(metadata: LiteraturePdfExtractedMetadata, initialProjectId?: string | null): NewLiteratureRecordDraft {
   return {
     title: metadata.title ?? "",
     authors: metadata.authors ?? "",
@@ -49,7 +50,7 @@ function draftFromMetadata(metadata: LiteraturePdfExtractedMetadata): NewLiterat
     abstract: metadata.abstract ?? "",
     personal_notes: "",
     url: metadata.url ?? "",
-    project_id: "",
+    project_id: initialProjectId ?? "",
     experiment_id: "",
   }
 }
@@ -60,6 +61,7 @@ export function UploadLiteraturePdfDialog({
   experiments = [],
   currentLiterature = null,
   triggerLabel = "Upload PDF",
+  initialProjectId = null,
 }: UploadLiteraturePdfDialogProps) {
   const router = useRouter()
   const { toast } = useToast()
@@ -83,7 +85,7 @@ export function UploadLiteraturePdfDialog({
     url: "",
     pageCount: null,
     previewText: "",
-  }))
+  }, initialProjectId))
 
   const availableRecords = useMemo(
     () => analysis?.availableRecords ?? literatureReviews,
@@ -118,7 +120,7 @@ export function UploadLiteraturePdfDialog({
         url: "",
         pageCount: null,
         previewText: "",
-      })
+      }, initialProjectId)
     )
   }
 
@@ -183,7 +185,7 @@ export function UploadLiteraturePdfDialog({
 
       setAnalysis(data)
       setDisplayTitle(data.extractedMetadata.title ?? file.name.replace(/\.pdf$/i, ""))
-      setCreateDraft(draftFromMetadata(data.extractedMetadata))
+      setCreateDraft(draftFromMetadata(data.extractedMetadata, initialProjectId))
       if (data.status === "matched" && data.matchCandidates[0]) {
         setSelectedExistingId(data.matchCandidates[0].id)
       }
@@ -423,7 +425,7 @@ export function UploadLiteraturePdfDialog({
       }}
     >
       <DialogTrigger asChild>
-        <Button variant="outline">
+        <Button variant="outline" data-tour="upload-pdf">
           <Upload className="mr-2 h-4 w-4" />
           {triggerLabel}
         </Button>

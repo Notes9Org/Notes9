@@ -218,7 +218,7 @@ export function ExperimentTabs({ experiment, initialTab, experimentPageHref }: E
       onValueChange={handleTabChange}
       className="flex min-h-0 flex-1 flex-col gap-4"
     >
-      <TabsList>
+      <TabsList data-tour="experiment-tabs">
         <TabsTrigger
           value="overview"
           id="tab-trigger-overview"
