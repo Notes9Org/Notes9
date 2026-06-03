@@ -3,7 +3,7 @@
 import { Handle, Position, type Node, type NodeProps } from "@xyflow/react"
 import { cn } from "@/lib/utils"
 import type { ResearchMapNodeKind } from "@/lib/research-map-types"
-import { kindAccentClass, kindDotClass, kindLabel, kindTintClass } from "@/lib/research-map-layout"
+import { kindAccentClass, kindDotClass, kindLabel, kindTintClass } from "@/lib/research-map-kinds"
 
 export type ResearchEntityNodeData = {
   kind: ResearchMapNodeKind

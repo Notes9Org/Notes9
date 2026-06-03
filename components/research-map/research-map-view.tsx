@@ -27,14 +27,13 @@ import {
   ResearchMapResponse,
 } from "@/lib/research-map-types"
 import { useProjectScope } from "@/contexts/project-scope-context"
+import { layoutResearchMap, RESEARCH_NODE_DIM } from "@/lib/research-map-layout"
 import {
-  layoutResearchMap,
-  RESEARCH_NODE_DIM,
   edgeColorForKind,
   kindDotClass,
   kindHexColor,
   kindLabel,
-} from "@/lib/research-map-layout"
+} from "@/lib/research-map-kinds"
 import { ResearchEntityNode } from "@/components/research-map/research-entity-node"
 import type { ResearchEntityNodeData } from "@/components/research-map/research-entity-node"
 import { Checkbox } from "@/components/ui/checkbox"
