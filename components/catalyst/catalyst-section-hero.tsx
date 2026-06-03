@@ -133,6 +133,9 @@ export function CatalystSectionHero({
         projectId: projectId ?? undefined,
         attachments: attachments.length > 0 ? attachments : undefined,
         webSearch: webSearchEnabled || undefined,
+        // The user already pressed Send here — the sidebar should submit the
+        // prompt automatically rather than make them click Send a second time.
+        autoSend: true,
       }
       if (pathname?.startsWith("/catalyst")) {
         const params = new URLSearchParams()

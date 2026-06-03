@@ -1759,6 +1759,12 @@ export function RightSidebar({
     }
   };
 
+  // Latest-ref to handleSubmit (recreated every render) so callbacks like
+  // applyCatalystLaunch can fire a send that reads the current input/attachments
+  // without listing handleSubmit as a dependency.
+  const handleSubmitRef = useRef(handleSubmit);
+  handleSubmitRef.current = handleSubmit;
+
   const handleEditMessage = useCallback(
     async (messageId: string, newContent: string) => {
       const messageIndex = messages.findIndex((m) => m.id === messageId);
@@ -2367,7 +2373,7 @@ export function RightSidebar({
   }, [isPageVariant, initialSessionId, mounted]);
 
   const applyCatalystLaunch = useCallback(
-    (launch: { query?: string; projectId?: string; attachments?: Array<{ url: string; name: string; contentType: string; size?: number }>; webSearch?: boolean }) => {
+    (launch: { query?: string; projectId?: string; attachments?: Array<{ url: string; name: string; contentType: string; size?: number }>; webSearch?: boolean; autoSend?: boolean }) => {
       const q = launch.query?.trim();
       if (q) {
         setInput(q);
@@ -2387,6 +2393,14 @@ export function RightSidebar({
           }
           inputRef.current?.focus();
           resizeInput();
+          // The prompt arrived from an external composer where the user already
+          // hit Send — submit it now (using the latest handleSubmit, which sees
+          // the just-seeded input) so they don't have to click Send again.
+          if (launch.autoSend) {
+            handleSubmitRef.current?.({
+              preventDefault() {},
+            } as unknown as React.FormEvent);
+          }
         });
       }
       const projectId = launch.projectId?.trim();
@@ -2432,6 +2446,7 @@ export function RightSidebar({
       projectId: pendingLaunch.projectId,
       attachments: pendingLaunch.attachments,
       webSearch: pendingLaunch.webSearch,
+      autoSend: pendingLaunch.autoSend,
     });
     onPendingLaunchConsumed?.();
   }, [
