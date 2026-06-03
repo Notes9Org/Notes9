@@ -2,9 +2,13 @@
 
 import { useEffect, useState, useCallback, useRef } from "react"
 import { Sparkles } from "lucide-react"
+import { useAuthUser } from "@/components/auth/auth-provider"
 
-/** Cache key for localStorage. */
-const CACHE_KEY = "n9:activity-summary"
+/** Per-user cache keys. Scoping by user id is required so that signing into a
+ *  different Notes9 account in the same browser never shows the previous
+ *  account's summary. (Mirrors the per-user tour keys in components/tour/app-tour.tsx.) */
+const cacheKey = (userId: string) => `n9:activity-summary:${userId}`
+const sessionFlagKey = (userId: string) => `n9:activity-summary-fetched:${userId}`
 /** Summary is considered stale after 2 days. */
 const STALE_MS = 2 * 24 * 60 * 60 * 1000
 
@@ -14,12 +18,12 @@ type CachedSummary = {
 }
 
 /**
- * Reads the cached summary from localStorage.
+ * Reads the cached summary for the given user from localStorage.
  * Returns null if missing, corrupted, or stale (>2 days).
  */
-function readCache(): CachedSummary | null {
+function readCache(userId: string): CachedSummary | null {
   try {
-    const raw = localStorage.getItem(CACHE_KEY)
+    const raw = localStorage.getItem(cacheKey(userId))
     if (!raw) return null
     const parsed: unknown = JSON.parse(raw)
     if (
@@ -40,10 +44,10 @@ function readCache(): CachedSummary | null {
   }
 }
 
-function writeCache(summary: string) {
+function writeCache(userId: string, summary: string) {
   try {
     const entry: CachedSummary = { summary, cachedAt: Date.now() }
-    localStorage.setItem(CACHE_KEY, JSON.stringify(entry))
+    localStorage.setItem(cacheKey(userId), JSON.stringify(entry))
   } catch {
     // localStorage full or unavailable — ignore
   }
@@ -61,12 +65,14 @@ function writeCache(summary: string) {
  * - Gracefully hidden if the API fails — never blocks the dashboard.
  */
 export function ActivitySummary() {
+  const user = useAuthUser()
+  const userId = user?.id ?? null
   const [summary, setSummary] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [isVisible, setIsVisible] = useState(false)
   const fetchRef = useRef(false)
 
-  const fetchSummary = useCallback(async () => {
+  const fetchSummary = useCallback(async (uid: string) => {
     if (fetchRef.current) return
     fetchRef.current = true
     try {
@@ -75,7 +81,7 @@ export function ActivitySummary() {
       const data = (await res.json()) as { summary?: string }
       if (data.summary) {
         setSummary(data.summary)
-        writeCache(data.summary)
+        writeCache(uid, data.summary)
         requestAnimationFrame(() => setIsVisible(true))
       }
     } catch (err) {
@@ -87,11 +93,26 @@ export function ActivitySummary() {
   }, [])
 
   useEffect(() => {
-    // 1. Check localStorage cache
-    const cached = readCache()
+    // The summary is per-user. Without a signed-in user id we have nothing to
+    // show and nothing to cache — clear any stale state and wait.
+    if (!userId) {
+      setSummary(null)
+      setIsVisible(false)
+      setIsLoading(true)
+      return
+    }
 
-    // 2. Check if this is a fresh login session (no sessionStorage flag)
-    const sessionFetched = sessionStorage.getItem("n9:activity-summary-fetched")
+    // Switching accounts in the same browser: drop the previous user's summary
+    // from view immediately, then resolve this user's own cache below.
+    setSummary(null)
+    setIsVisible(false)
+    setIsLoading(true)
+
+    // 1. Check this user's localStorage cache
+    const cached = readCache(userId)
+
+    // 2. Check if this is a fresh login session for this user (no flag)
+    const sessionFetched = sessionStorage.getItem(sessionFlagKey(userId))
 
     if (cached && sessionFetched) {
       // Cache is fresh AND we already fetched this session → show cached
@@ -106,15 +127,15 @@ export function ActivitySummary() {
       setSummary(cached.summary)
       setIsLoading(false)
       requestAnimationFrame(() => setIsVisible(true))
-      sessionStorage.setItem("n9:activity-summary-fetched", "1")
-      fetchSummary()
+      sessionStorage.setItem(sessionFlagKey(userId), "1")
+      void fetchSummary(userId)
       return
     }
 
     // No cache or expired → fetch fresh
-    sessionStorage.setItem("n9:activity-summary-fetched", "1")
-    fetchSummary()
-  }, [fetchSummary])
+    sessionStorage.setItem(sessionFlagKey(userId), "1")
+    void fetchSummary(userId)
+  }, [userId, fetchSummary])
 
   // ─── Loading skeleton ────────────────────────────────────────────
   if (isLoading && !summary) {
