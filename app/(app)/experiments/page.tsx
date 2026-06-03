@@ -74,7 +74,7 @@ export default async function ExperimentsPage({
           <SetPageBreadcrumb segments={[]} />
         )}
 
-        <CatalystSectionHero size="sm" scope="experiments" />
+        <CatalystSectionHero size="sm" scope="experiments" shrinkOnScroll />
 
         {experiments && experiments.length > 0 ? (
           <ExperimentsPageContent

@@ -271,9 +271,7 @@ export default async function DashboardPage() {
       {/* Wish greeting ("Morning, <name>") */}
       <DashboardGreeting name={greetingName} />
       {/* Catalyst AI composer */}
-      <div className="sticky -top-3 sm:-top-4 md:-top-6 z-40 -mx-3 px-3 sm:-mx-4 sm:px-4 md:-mx-6 md:px-6 py-2 md:py-4 bg-background/80 backdrop-blur-md border-b border-border/50 transition-all">
-        <CatalystSectionHero size="lg" scope="lab" />
-      </div>
+      <CatalystSectionHero size="lg" scope="lab" shrinkOnScroll />
 
       {/* AI-generated one-liner summarising recent lab activity */}
       <div className="mt-2 flex flex-col gap-3">

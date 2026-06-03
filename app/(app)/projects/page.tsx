@@ -39,7 +39,7 @@ export default async function ProjectsPage() {
     <div className="flex flex-col gap-6 md:gap-8 pb-8">
       <SetPageBreadcrumb segments={[]} />
 
-      <CatalystSectionHero size="sm" scope="lab" />
+      <CatalystSectionHero size="sm" scope="lab" shrinkOnScroll />
 
       {projects && projects.length > 0 ? (
         <ProjectsPageContent projects={projects} />

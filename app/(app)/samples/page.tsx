@@ -59,7 +59,7 @@ export default async function SamplesPage() {
 
   return (
     <div className="space-y-6">
-      <CatalystSectionHero size="sm" scope="samples" />
+      <CatalystSectionHero size="sm" scope="samples" shrinkOnScroll />
       {safeSamples.length > 0 ? (
         <SamplesPageContent samples={safeSamples} statusCount={statusCount} />
       ) : (

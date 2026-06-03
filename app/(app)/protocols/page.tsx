@@ -95,7 +95,7 @@ export default async function ProtocolsPage({
 
   return (
     <div className="space-y-6">
-      <CatalystSectionHero size="sm" scope="protocols" />
+      <CatalystSectionHero size="sm" scope="protocols" shrinkOnScroll />
 
       <Suspense
         fallback={

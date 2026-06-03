@@ -103,6 +103,7 @@ export default async function LiteratureReviewsPage({
             literatureReviews={(literatureReviews ?? []) as LiteratureRecordSummary[]}
             projects={safeProjects}
             experiments={safeExperiments}
+            initialProjectId={initialProjectId}
           />
           <Button asChild className="w-full sm:w-auto">
             <Link
