@@ -231,7 +231,7 @@ export function ReportsPageClient({ reports: initialReports, projects, experimen
   const pageHeader = (
     <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
       {titleBlock}
-      <Button onClick={() => setDialogOpen(true)} className="w-full sm:w-auto">
+      <Button onClick={() => setDialogOpen(true)} data-tour="generate-report" className="w-full sm:w-auto">
         <Sparkles className="h-4 w-4 mr-2" />
         Generate AI report
       </Button>

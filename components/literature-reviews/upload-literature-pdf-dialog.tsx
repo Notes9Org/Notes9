@@ -425,7 +425,7 @@ export function UploadLiteraturePdfDialog({
       }}
     >
       <DialogTrigger asChild>
-        <Button variant="outline">
+        <Button variant="outline" data-tour="upload-pdf">
           <Upload className="mr-2 h-4 w-4" />
           {triggerLabel}
         </Button>

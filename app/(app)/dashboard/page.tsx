@@ -298,7 +298,7 @@ export default async function DashboardPage() {
         </div>
 
         {/* Bottom Right: Recently Edited */}
-        <Card className="flex flex-col min-w-0">
+        <Card data-tour="dash-recently-edited" className="flex flex-col min-w-0">
           <CardHeader>
             <CardTitle className="text-base">Recently edited</CardTitle>
           </CardHeader>

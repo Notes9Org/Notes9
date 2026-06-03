@@ -143,7 +143,7 @@ export function ProtocolsPageContent({
         </p>
         <div className="flex items-center gap-2 shrink-0 self-end sm:self-auto">
           <ViewModeToggle value={viewMode} onChange={setViewMode} tableDisabled={isMobile} />
-          <Button asChild size="sm" className="gap-2" aria-label="New protocol">
+          <Button asChild size="sm" className="gap-2" aria-label="New protocol" data-tour="create-protocol">
             <Link href={newProtocolHref}>
               <Plus className="size-4" />
               New protocol

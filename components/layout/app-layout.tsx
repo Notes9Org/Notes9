@@ -426,7 +426,12 @@ function AppLayoutBody({ children }: AppLayoutProps) {
                 size="icon"
                 data-tour={TOUR.help}
                 className="size-8 sm:size-9 text-muted-foreground hover:text-foreground"
-                onClick={() => requestPageHelp(pathname ?? "/dashboard")}
+                onClick={() =>
+                  requestPageHelp(
+                    (pathname ?? "/dashboard") +
+                      (typeof window !== "undefined" ? window.location.search : ""),
+                  )
+                }
                 aria-label="Help: tour this page"
                 title="Help: take a quick tour of this page"
               >

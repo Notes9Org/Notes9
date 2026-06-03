@@ -20,6 +20,7 @@ export function DashboardLabSection({
   return (
     <section
       id="my-lab"
+      data-tour="dash-my-lab"
       aria-labelledby="my-lab-heading"
       className={cn(
         "scroll-mt-20 rounded-xl border border-primary/20 bg-[color-mix(in_oklab,var(--primary)_8%,var(--card)_92%)] p-5 shadow-sm md:p-6",

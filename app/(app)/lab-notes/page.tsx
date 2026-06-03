@@ -259,6 +259,7 @@ export default function LabNotesPage() {
           <Button
             size="sm"
             onClick={handleNewNote}
+            data-tour="create-lab-note"
             className="gap-2"
             aria-label="New lab note — choose project and experiment"
             title="New lab note — choose project and experiment"

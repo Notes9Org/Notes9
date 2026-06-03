@@ -1368,6 +1368,7 @@ export function LabNotesTab({
           <Button
             variant="ghost"
             size="icon-sm"
+            data-tour="version-history"
             className="shrink-0 text-muted-foreground hover:text-foreground"
             onClick={handleOpenVersions}
             aria-label="Version history"
@@ -1801,6 +1802,7 @@ export function LabNotesTab({
                         <Button
                           variant="ghost"
                           size="icon-sm"
+                          data-tour="version-history"
                           className="text-muted-foreground hover:text-foreground"
                           onClick={handleOpenVersions}
                           aria-label="Version history"

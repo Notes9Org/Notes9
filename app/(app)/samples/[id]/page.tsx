@@ -323,7 +323,7 @@ export default async function SampleDetailPage({
       </div>
 
       {/* Quick info cards */}
-      <div className="grid gap-3 grid-cols-1 sm:grid-cols-2 md:grid-cols-4">
+      <div data-tour="sample-quickinfo" className="grid gap-3 grid-cols-1 sm:grid-cols-2 md:grid-cols-4">
         <Card className="py-2">
           <CardHeader className="pb-1 pt-2 px-4">
             <CardTitle className="text-xs font-medium text-muted-foreground uppercase tracking-wide">

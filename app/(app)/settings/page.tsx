@@ -317,7 +317,7 @@ export default function SettingsPage(): ReactNode {
         </div>
 
         <Tabs defaultValue="profile" className="flex w-full min-w-0 flex-col gap-4">
-          <TabsList className="h-auto w-full max-w-md gap-1 self-start p-1">
+          <TabsList data-tour="settings-tabs" className="h-auto w-full max-w-md gap-1 self-start p-1">
             <TabsTrigger value="profile" className="flex-1 px-4 py-2 text-sm sm:text-base">
               Profile
             </TabsTrigger>

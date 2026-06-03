@@ -4231,6 +4231,7 @@ export function TiptapEditor({
                 type="button"
                 variant="ghost"
                 size="sm"
+                data-tour="editor-calculator"
                 className="h-8 w-8 shrink-0 rounded-lg p-0"
                 onClick={onOpenScientificCalculator}
                 aria-label="Scientific calculator"
@@ -4248,7 +4249,7 @@ export function TiptapEditor({
           <Separator orientation="vertical" className="mx-px h-5 shrink-0" />
           <Tooltip>
             <TooltipTrigger asChild>
-              <Button variant="ghost" size="sm" className="h-8 gap-1 rounded-lg px-2 shrink-0" onClick={aiCite} disabled={isCiteProcessing}>
+              <Button variant="ghost" size="sm" data-tour="editor-cite" className="h-8 gap-1 rounded-lg px-2 shrink-0" onClick={aiCite} disabled={isCiteProcessing}>
                 {isCiteProcessing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Quote className="h-4 w-4" />}
                 <span className="text-xs hidden sm:inline">Cite</span>
               </Button>
@@ -4272,7 +4273,7 @@ export function TiptapEditor({
           </Tooltip>
           <Tooltip>
             <TooltipTrigger asChild>
-              <Button variant="ghost" size="sm" className="h-8 gap-1 rounded-lg px-2 shrink-0" onClick={handleGenerateBibliography} disabled={isCiteProcessing}>
+              <Button variant="ghost" size="sm" data-tour="editor-bibliography" className="h-8 gap-1 rounded-lg px-2 shrink-0" onClick={handleGenerateBibliography} disabled={isCiteProcessing}>
                 <BookOpen className="h-4 w-4" />
                 <span className="text-xs hidden sm:inline">Bibliography</span>
               </Button>
@@ -4387,6 +4388,7 @@ export function TiptapEditor({
         {!hideToolbar && editor && (
           <div
             ref={toolbarPositionContainerRef}
+            data-tour="editor-toolbar"
             className={cn(
               "shrink-0 border-b border-border/70 bg-background/95 backdrop-blur-sm",
               toolbarMergedLayout
@@ -4511,6 +4513,7 @@ export function TiptapEditor({
         >
           {/* Editor Content - add right padding to prevent text from going under TOC */}
           <div
+            data-tour="editor-content"
             className="overflow-y-auto overflow-x-auto px-2 pb-2 pr-20 h-full min-h-0 relative w-full max-w-full"
             style={
               panelEmbed || fillParentHeight || editorRegionFullscreen

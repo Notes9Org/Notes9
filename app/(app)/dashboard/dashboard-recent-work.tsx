@@ -136,7 +136,7 @@ export function DashboardRecentWork({
   const showEmpty = !loading && activeWorkItems.length === 0
 
   return (
-    <Card className="flex min-w-0 flex-col">
+    <Card data-tour="dash-recent-work" className="flex min-w-0 flex-col">
       <CardHeader>
         <CardTitle className="text-base">Recent projects & experiments</CardTitle>
       </CardHeader>

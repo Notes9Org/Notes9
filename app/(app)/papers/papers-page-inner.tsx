@@ -138,7 +138,7 @@ export function PapersPageInner({ projects = [] }: PapersPageInnerProps = {}) {
         <p className="text-muted-foreground">
           Draft and export research papers with project-based filtering.
         </p>
-        <Button asChild className="shrink-0">
+        <Button asChild className="shrink-0" data-tour="create-paper">
           <Link href={projectFilter !== FILTER_ALL ? `/papers/new?project=${projectFilter}` : "/papers/new"}>
             <Plus className="mr-2 h-4 w-4" />
             New Paper

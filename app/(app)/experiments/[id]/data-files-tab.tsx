@@ -410,7 +410,7 @@ export function DataFilesTab({ experimentId }: { experimentId: string }) {
         fileType={previewFile.file_type}
       />
     )}
-    <Card>
+    <Card data-tour="data-files">
       <CardHeader>
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
@@ -419,7 +419,7 @@ export function DataFilesTab({ experimentId }: { experimentId: string }) {
               Uploaded experimental data and results
             </CardDescription>
           </div>
-          <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
+          <div data-tour="data-actions" className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
             {selectedIds.length > 0 && (
               <Button
                 variant="ghost"

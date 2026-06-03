@@ -574,7 +574,8 @@ export function DashboardWhiteboard({
   }
 
   const content = (
-    <article 
+    <article
+      data-tour="dash-whiteboard"
       className={cn(
         "flex min-h-0 flex-col overflow-hidden bg-card transition-all",
         isFullscreen ? "w-full h-full shadow-2xl rounded-2xl border-2 border-border" : "rounded-[calc(var(--radius)+4px)] border border-border h-full"

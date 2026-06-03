@@ -483,6 +483,7 @@ export function SampleMolecularFilesTab({ sampleId, initialFiles }: SampleMolecu
           <Button
             type="button"
             size="sm"
+            data-tour="molecular-upload"
             onClick={() => inputRef.current?.click()}
             disabled={uploading}
           >
@@ -580,7 +581,7 @@ export function SampleMolecularFilesTab({ sampleId, initialFiles }: SampleMolecu
           </Card>
           ) : null}
 
-          <Card className="min-w-0 overflow-hidden">
+          <Card data-tour="molecular-viewer" className="min-w-0 overflow-hidden">
             <CardHeader className="border-b bg-muted/30 px-4 py-3.5 sm:px-6">
               <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
                 <div className="flex min-w-0 flex-1 items-start gap-3 sm:items-center sm:gap-4">

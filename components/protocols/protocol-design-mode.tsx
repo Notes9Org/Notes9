@@ -708,6 +708,7 @@ export function ProtocolDesignMode({
                     type="button"
                     variant="ghost"
                     size="icon-sm"
+                    data-tour="version-history"
                     className="text-muted-foreground hover:text-foreground"
                     onClick={handleOpenVersions}
                     aria-label="Version history"
