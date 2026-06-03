@@ -3,7 +3,7 @@
 import { Handle, Position, type Node, type NodeProps } from "@xyflow/react"
 import { cn } from "@/lib/utils"
 import type { ResearchMapNodeKind } from "@/lib/research-map-types"
-import { kindAccentClass, kindDotClass, kindLabel } from "@/lib/research-map-layout"
+import { kindAccentClass, kindDotClass, kindLabel, kindTintClass } from "@/lib/research-map-kinds"
 
 export type ResearchEntityNodeData = {
   kind: ResearchMapNodeKind
@@ -32,7 +32,10 @@ export function ResearchEntityNode({
   return (
     <div
       className={cn(
-        "group relative box-border flex h-full w-full flex-col overflow-hidden rounded-md shadow-sm",
+        // `isolate` + an opaque `bg-card` base keep the connecting edges (which
+        // ReactFlow paints in a layer behind the nodes) from showing through the
+        // node and covering its text. The kind color is a tint overlay below.
+        "group relative isolate box-border flex h-full w-full flex-col overflow-hidden rounded-md bg-card shadow-sm",
         "transition-[opacity,box-shadow,transform] duration-150 ease-out",
         "hover:z-[2] hover:-translate-y-[1px] hover:shadow-md dark:hover:shadow-black/40",
         href && "cursor-pointer",
@@ -44,6 +47,12 @@ export function ResearchEntityNode({
         href ? `${displayLabel} — Double-click to open` : displayLabel
       }
     >
+      {/* Kind tint, painted over the opaque base but behind the content. */}
+      <div
+        aria-hidden
+        className={cn("pointer-events-none absolute inset-0 -z-10", kindTintClass(kind))}
+      />
+
       <Handle
         type="target"
         position={Position.Left}

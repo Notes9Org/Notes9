@@ -7,6 +7,7 @@ export type ResearchMapNodeKind =
   | "paper"
   | "report"
   | "sample"
+  | "data_file"
 
 export interface ResearchMapNode {
   id: string
