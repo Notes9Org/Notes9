@@ -120,7 +120,7 @@ export function SectionHeader({
     title
   )
   return (
-    <div className={cn("relative z-10 max-w-2xl", align === "center" && "mx-auto text-center", className)}>
+    <div className={cn("n9-readable relative z-10 max-w-2xl", align === "center" && "mx-auto text-center", className)}>
       {badge ? (
         <span className="mb-5 inline-flex items-center gap-2 rounded-full border border-[var(--n9-accent)]/20 bg-[var(--n9-accent-light)] px-3.5 py-1.5 text-[14px] font-semibold uppercase tracking-[0.2em] text-[var(--n9-accent)]">
           <span className="h-1.5 w-1.5 rounded-full bg-[var(--n9-accent)]" />

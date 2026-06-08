@@ -158,6 +158,26 @@
     url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='90' height='90'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.08'/%3E%3C/svg%3E");
 }
 
+/* Localized readability scrim: a soft frosted blur that hugs ONLY the text /
+   illustration it wraps (not the whole section), so the sticky-note backdrop
+   stays visible around it while the content stays legible. Mirrors the hero
+   treatment. Apply `n9-readable` to a text block or embed. */
+.marketing-theme .n9-readable {
+  position: relative;
+}
+.marketing-theme .n9-readable::before {
+  content: "";
+  position: absolute;
+  inset: -0.85rem -1.15rem;
+  z-index: -1;
+  background: color-mix(in oklab, var(--background) 52%, transparent);
+  -webkit-backdrop-filter: blur(7px);
+  backdrop-filter: blur(7px);
+  -webkit-mask-image: radial-gradient(125% 125% at 50% 50%, #000 52%, transparent 100%);
+  mask-image: radial-gradient(125% 125% at 50% 50%, #000 52%, transparent 100%);
+  pointer-events: none;
+}
+
 /* Soft radial accent glow placed behind a signature section. */
 .marketing-theme .n9-glow::after {
   content: "";

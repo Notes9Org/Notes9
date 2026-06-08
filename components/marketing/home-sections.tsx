@@ -46,14 +46,7 @@ function Section({
 }) {
   return (
     <section id={id} className={cn("relative container mx-auto px-4 py-20 sm:px-6 sm:py-28 lg:px-8", className)}>
-      {/* Subtle frosted scrim: blurs the sticky-note backdrop behind the text for
-          readability while keeping it faintly visible. Soft radial mask feathers
-          every edge so it reads as a gentle wash, not a hard card. */}
-      <div
-        aria-hidden
-        className="pointer-events-none absolute inset-0 bg-background/45 backdrop-blur-[7px] dark:bg-background/35 [mask-image:radial-gradient(115%_115%_at_50%_50%,#000_56%,transparent_100%)]"
-      />
-      <div className="relative z-10">{children}</div>
+      {children}
     </section>
   )
 }
@@ -83,7 +76,7 @@ export function PainSection() {
             badge="The problem"
             title="Your data survives. The reason behind it doesn't."
           />
-          <p className="mt-5 text-[20px] leading-8 text-muted-foreground">
+          <p className="n9-readable mt-5 text-[20px] leading-8 text-muted-foreground">
             Protocol in one folder, plate map in a spreadsheet, rationale in a reference manager,
             notes somewhere else. Three months on, no one on the team can say{" "}
             <em>why condition B</em>.

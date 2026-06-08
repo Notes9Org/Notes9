@@ -102,7 +102,10 @@ export function MemoryHubFlow({ className }: { className?: string }) {
   return (
     <div
       className={cn(
-        "h-[420px] w-full overflow-hidden rounded-2xl border border-border/60 bg-card",
+        // Frosted glass instead of a solid white panel: blurs the sticky-note
+        // backdrop behind it (like the hero) while staying transparent enough
+        // to keep it visible.
+        "h-[420px] w-full overflow-hidden rounded-2xl border border-border/60 bg-background/45 backdrop-blur-[7px] dark:bg-background/35",
         dottedBg,
         className,
       )}
