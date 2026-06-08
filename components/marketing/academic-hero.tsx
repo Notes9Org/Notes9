@@ -35,7 +35,14 @@ export function AcademicHero() {
           style={{ y: heroY }}
           className="mt-2 grid w-full min-w-0 items-start gap-6 sm:mt-4 sm:gap-8 lg:mt-10 lg:grid-cols-2 lg:gap-10 xl:grid-cols-[5fr_7fr] xl:gap-12"
         >
-          <div className="order-2 min-w-0 space-y-5 sm:space-y-7 lg:order-1 lg:pt-2 xl:pt-4">
+          <div className="relative order-2 min-w-0 lg:order-1 lg:pt-2 xl:pt-4">
+            {/* Frosted scrim: blurs the sticky-note backdrop behind the hero copy
+                for readability while keeping it faintly visible. */}
+            <div
+              aria-hidden
+              className="pointer-events-none absolute -inset-x-4 -inset-y-6 bg-background/45 backdrop-blur-[7px] dark:bg-background/35 [mask-image:radial-gradient(120%_115%_at_42%_50%,#000_50%,transparent_100%)]"
+            />
+            <div className="relative z-10 space-y-5 sm:space-y-7">
             <div className="max-w-3xl text-left font-serif text-[2.35rem] font-bold tracking-tight text-foreground sm:text-5xl lg:text-[3.45rem] lg:leading-[1.14] leading-[1.12]">
               <PretextReveal text="The research workspace" />
               <motion.span
@@ -110,11 +117,20 @@ export function AcademicHero() {
                 <ArrowRight className="h-3.5 w-3.5 text-[var(--n9-accent)]/60 transition-transform group-hover:translate-x-0.5" />
               </Link>
             </motion.div>
+            </div>
           </div>
 
           <div className="order-1 min-w-0 lg:order-2">
-            <div className="mx-auto w-full max-w-[92vw] sm:max-w-none">
-              <ConnectedResearchSystemDiagram className="w-full min-w-0" />
+            <div className="relative mx-auto w-full max-w-[92vw] sm:max-w-none">
+              {/* Opaque card backing so the illustration reads clearly over the
+                  sticky-note backdrop. */}
+              <div
+                aria-hidden
+                className="pointer-events-none absolute inset-x-1 inset-y-3 rounded-[2rem] border border-border/60 bg-card shadow-[0_30px_90px_-44px_rgba(44,36,24,0.4)] dark:shadow-[0_30px_90px_-44px_rgba(0,0,0,0.65)]"
+              />
+              <div className="relative z-10">
+                <ConnectedResearchSystemDiagram className="w-full min-w-0" />
+              </div>
             </div>
           </div>
         </motion.div>
