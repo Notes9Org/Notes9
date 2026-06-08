@@ -38,7 +38,7 @@ export function FeaturesSection() {
                 {m.value}
               </div>
               <p className="mt-3 text-sm leading-6 text-muted-foreground">{m.label}</p>
-              <p className="mt-3 text-[11px] uppercase tracking-[0.16em] text-muted-foreground/60">
+              <p className="mt-3 text-xs uppercase tracking-[0.16em] text-muted-foreground/60">
                 {m.source}
               </p>
             </div>

@@ -4,10 +4,13 @@ import * as React from "react"
 import Link from "next/link"
 import { ArrowRight, LucideIcon } from "lucide-react"
 
+import { motion } from "framer-motion"
+
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import { MinimalCard } from "@/components/marketing/three-d-card"
+import { PretextReveal } from "@/components/ui/fluid-text"
 
 type ButtonVariant = React.ComponentProps<typeof Button>["variant"]
 
@@ -40,7 +43,7 @@ export function PageHero({
         <div className="max-w-2xl">
           <Badge
             variant="outline"
-            className="mb-6 rounded-full border-[var(--n9-accent)]/30 bg-[var(--n9-accent-light)] px-4 py-1 text-[0.7rem] font-semibold uppercase tracking-[0.24em] text-[var(--n9-accent)]"
+            className="mb-6 rounded-full border-[var(--n9-accent)]/30 bg-[var(--n9-accent-light)] px-4 py-1 text-xs font-semibold uppercase tracking-[0.24em] text-[var(--n9-accent)]"
           >
             {badge}
           </Badge>
@@ -84,23 +87,53 @@ export function SectionHeader({
   description,
   align = "left",
   className,
+  reveal = false,
+  gradient = false,
 }: {
   badge?: string
   title: string
   description?: string
   align?: "left" | "center"
   className?: string
+  /** Animate the title in line-by-line with the pretext reveal. */
+  reveal?: boolean
+  /** Render the title in the warm gradient accent. */
+  gradient?: boolean
 }) {
+  // Gradient titles render as STATIC text (no per-word transforms) with a block
+  // fade-in: `background-clip: text` only paints reliably over untransformed
+  // glyphs, so wrapping a per-word PretextReveal in the gradient clip makes the
+  // text invisible. Non-gradient titles keep the line-aware pretext reveal.
+  const titleNode = gradient ? (
+    <motion.span
+      className="n9-gradient-text inline-block"
+      initial={{ opacity: 0, y: 16 }}
+      whileInView={{ opacity: 1, y: 0 }}
+      viewport={{ once: true, margin: "-60px" }}
+      transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
+    >
+      {title}
+    </motion.span>
+  ) : reveal ? (
+    <PretextReveal text={title} />
+  ) : (
+    title
+  )
   return (
-    <div className={cn("max-w-2xl", align === "center" && "mx-auto text-center", className)}>
+    <div className={cn("relative z-10 max-w-2xl", align === "center" && "mx-auto text-center", className)}>
       {badge ? (
-        <p className="mb-3 text-xs font-semibold uppercase tracking-[0.24em] text-[var(--n9-accent)]">
+        <span className="mb-5 inline-flex items-center gap-2 rounded-full border border-[var(--n9-accent)]/20 bg-[var(--n9-accent-light)] px-3.5 py-1.5 text-xs font-semibold uppercase tracking-[0.2em] text-[var(--n9-accent)]">
+          <span className="h-1.5 w-1.5 rounded-full bg-[var(--n9-accent)]" />
           {badge}
-        </p>
+        </span>
       ) : null}
-      <h2 className="font-serif text-3xl tracking-tight text-foreground sm:text-4xl">{title}</h2>
+      <h2 className="font-serif text-[2rem] font-semibold leading-[1.28] tracking-tight text-foreground sm:text-[2.6rem] lg:text-[3rem]">
+        {titleNode}
+      </h2>
       {description ? (
-        <p className="mt-4 text-base leading-7 text-muted-foreground sm:text-lg">{description}</p>
+        <p className="mt-5 text-lg leading-8 text-muted-foreground sm:text-xl sm:leading-9">
+          {description}
+        </p>
       ) : null}
     </div>
   )
@@ -120,7 +153,7 @@ export function StatCard({
       <div className="text-3xl font-bold tracking-tight text-foreground">{value}</div>
       <p className="mt-2 text-sm leading-6 text-muted-foreground">{label}</p>
       {source ? (
-        <p className="mt-4 text-[11px] uppercase tracking-[0.18em] text-muted-foreground/70">{source}</p>
+        <p className="mt-4 text-xs uppercase tracking-[0.18em] text-muted-foreground/70">{source}</p>
       ) : null}
     </MinimalCard>
   )

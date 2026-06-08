@@ -1176,7 +1176,7 @@ export function ConnectedResearchSystemDiagram({ className = "" }: { className?:
         /* ── Mobile: preserve the connection story as a vertical flow ── */
         <div className="relative z-[5] flex h-full flex-col px-3 pb-5 pt-4" aria-labelledby="n9-diagram-mobile-title">
           <div className="pb-4 text-center">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-[var(--n9-accent)]">
+            <p className="text-xs font-semibold uppercase tracking-[0.22em] text-[var(--n9-accent)]">
               Research context flowing together
             </p>
             <p className="mt-1 text-sm leading-6 text-muted-foreground">

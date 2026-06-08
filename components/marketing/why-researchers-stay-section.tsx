@@ -613,7 +613,7 @@ function PostTrustCtaBlock() {
         <div className="text-left">
           <span
             className={cn(
-              "inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-[11px] font-semibold tracking-wide",
+              "inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-semibold tracking-wide",
               "border-emerald-600/35 bg-emerald-50/80 text-[#1f6b49]",
               "dark:border-emerald-400/45 dark:bg-emerald-500/10 dark:text-emerald-300",
             )}
