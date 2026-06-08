@@ -36,18 +36,18 @@ const POS: { x: number; y: number; rot: number }[] = [
   { x: 27, y: 42, rot: 4 },
   { x: 82, y: 47, rot: -3 },
   { x: 47, y: 55, rot: 3 },
-  { x: 13, y: 63, rot: -4 },
-  { x: 68, y: 69, rot: 4 },
-  { x: 34, y: 78, rot: -3 },
-  { x: 85, y: 84, rot: 3 },
-  { x: 54, y: 92, rot: -4 },
+  { x: 13, y: 60, rot: -4 },
+  { x: 68, y: 66, rot: 4 },
+  { x: 34, y: 73, rot: -3 },
+  { x: 85, y: 79, rot: 3 },
+  { x: 54, y: 85, rot: -4 },
 ]
 
 const NOTES = POS.map((p, i) => ({ ...p, name: SHOTS[i % SHOTS.length] }))
 
-// A web: connect each note to its two nearest neighbours (deduped), so multiple
-// notes link to each other at once. Edges are ordered by their lower endpoint so
-// the web fills in top→bottom as the page scrolls.
+// A dense web: connect each note to its eight nearest neighbours (deduped), so
+// many notes link to each other at once. Edges are ordered by their lower
+// endpoint so the web fills in top→bottom as the page scrolls.
 const EDGES: [number, number][] = (() => {
   const out: [number, number][] = []
   const seen = new Set<string>()
@@ -55,7 +55,7 @@ const EDGES: [number, number][] = (() => {
     NOTES.map((m, j) => ({ j, d: (m.x - n.x) ** 2 + (m.y - n.y) ** 2 }))
       .filter((o) => o.j !== i)
       .sort((a, b) => a.d - b.d)
-      .slice(0, 2)
+      .slice(0, 8)
       .forEach(({ j }) => {
         const key = i < j ? `${i}-${j}` : `${j}-${i}`
         if (seen.has(key)) return
@@ -107,7 +107,7 @@ export function ScreenBackdrop({ className }: { className?: string }) {
       {/* A web of thin connections that fills in (more notes link to each other)
           as the page scrolls. */}
       <svg
-        className="absolute inset-0 h-full w-full opacity-55 blur-[1px]"
+        className="absolute inset-0 h-full w-full opacity-45 blur-[3px]"
         viewBox="0 0 100 100"
         preserveAspectRatio="none"
       >
@@ -115,19 +115,20 @@ export function ScreenBackdrop({ className }: { className?: string }) {
           d={WEB_D}
           fill="none"
           stroke="var(--n9-accent)"
-          strokeWidth={1}
+          strokeWidth={0.7}
           strokeLinecap="round"
           vectorEffect="non-scaling-stroke"
           style={{ pathLength: scrollYProgress }}
         />
       </svg>
 
-      {/* sticky notes — lightly blurred so they still read as notes */}
-      <div className="absolute inset-0 opacity-[0.5] blur-[1px] dark:opacity-[0.38]">
+      {/* sticky notes — anchored at their TOP-MIDDLE (so the web meets the top of
+          each note) and opaque enough to hide the web running behind them */}
+      <div className="absolute inset-0 opacity-[0.82] blur-[1px] dark:opacity-[0.62]">
         {NOTES.map((n, i) => (
           <div
             key={`${n.name}-${i}`}
-            className="absolute -translate-x-1/2 -translate-y-1/2"
+            className="absolute -translate-x-1/2"
             style={{ left: `${n.x}%`, top: `${n.y}%` }}
           >
             <StickyNote name={n.name} rot={n.rot} />
