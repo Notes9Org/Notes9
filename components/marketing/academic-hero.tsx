@@ -36,21 +36,6 @@ export function AcademicHero() {
           className="mt-2 grid w-full min-w-0 items-start gap-6 sm:mt-4 sm:gap-8 lg:mt-10 lg:grid-cols-2 lg:gap-10 xl:grid-cols-[5fr_7fr] xl:gap-12"
         >
           <div className="order-2 min-w-0 space-y-5 sm:space-y-7 lg:order-1 lg:pt-2 xl:pt-4">
-            <motion.div
-              initial={{ opacity: 0, y: 12 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.5 }}
-              className="flex justify-start"
-            >
-              <span className="inline-flex items-center gap-2 rounded-full border border-[var(--n9-accent)]/30 bg-[var(--n9-accent-light)] px-4 py-1.5 text-[14px] font-semibold uppercase tracking-[0.16em] text-[var(--n9-accent)]">
-                <span className="relative flex h-2 w-2">
-                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[var(--n9-accent)] opacity-75" />
-                  <span className="relative inline-flex h-2 w-2 rounded-full bg-[var(--n9-accent)]" />
-                </span>
-                Built for life-science research teams
-              </span>
-            </motion.div>
-
             <div className="max-w-3xl text-left font-serif text-[2.35rem] font-bold tracking-tight text-foreground sm:text-5xl lg:text-[3.45rem] lg:leading-[1.14] leading-[1.12]">
               <PretextReveal text="The research workspace" />
               <motion.span

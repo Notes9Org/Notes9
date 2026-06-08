@@ -19,7 +19,7 @@ export function FloatingPageMenu() {
 
   return (
     <div className="pointer-events-none fixed right-4 top-24 z-40 hidden xl:block">
-      <nav className="pointer-events-auto group flex flex-col gap-2 rounded-2xl border border-border/60 bg-background/88 p-2 shadow-[0_18px_50px_-18px_rgba(0,0,0,0.35)] backdrop-blur-xl">
+      <nav className="pointer-events-auto group flex flex-col gap-2 rounded-2xl border border-border/60 bg-background p-2 shadow-[0_18px_50px_-18px_rgba(0,0,0,0.35)] backdrop-blur-xl">
         {pageLinks.map((link) => {
           const isActive = pathname === link.href
           const Icon = link.icon

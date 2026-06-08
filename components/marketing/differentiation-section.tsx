@@ -37,7 +37,7 @@ function InteractiveGlowCard({ point, index }: { point: typeof points[0]; index:
       transition={{ duration: 0.5, delay: 0.2 + index * 0.1 }}
       viewport={{ once: true }}
       onMouseMove={handleMouseMove}
-      className="group relative flex flex-col gap-3 overflow-hidden rounded-2xl border border-border/50 bg-background/50 p-6 shadow-sm transition-colors hover:border-[var(--n9-accent)]/40 hover:bg-background"
+      className="group relative flex flex-col gap-3 overflow-hidden rounded-2xl border border-border/50 bg-background p-6 shadow-sm transition-colors hover:border-[var(--n9-accent)]/40 hover:bg-background"
     >
       <motion.div
         className="pointer-events-none absolute -inset-px opacity-0 transition duration-500 group-hover:opacity-100"

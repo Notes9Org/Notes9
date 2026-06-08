@@ -98,8 +98,12 @@ export default async function HomePage({
           <IcpBenefitsSection />
           <DifferentiationSection />
           <PricingTeaserSection />
-          <section id="contact">
-            <div className="container mx-auto px-4 py-20 sm:px-6 lg:px-8">
+          <section id="contact" className="relative">
+            <div
+              aria-hidden
+              className="pointer-events-none absolute inset-0 bg-background/45 backdrop-blur-[7px] dark:bg-background/35 [mask-image:radial-gradient(115%_115%_at_50%_50%,#000_56%,transparent_100%)]"
+            />
+            <div className="relative z-10 container mx-auto px-4 py-20 sm:px-6 lg:px-8">
               <div className="mx-auto max-w-2xl text-center">
                 <h2 className="font-serif text-3xl tracking-tight text-foreground sm:text-4xl">
                   Get in touch

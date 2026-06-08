@@ -275,21 +275,21 @@ export function PlatformDifferentiationSection({
               Disconnected phases force teams to reconstruct rationale, repeat handoffs, and lose continuity. Notes9 keeps the workflow connected from literature to experiments to writing.
             </p>
             <div className="mt-6 flex flex-wrap gap-3 text-[14px] font-semibold uppercase tracking-[0.18em] text-muted-foreground/70 dark:text-slate-400">
-              <span className="rounded-full border border-border/60 bg-background/75 px-3 py-2 dark:border-white/10 dark:bg-white/[0.04]">fragmentation costs time</span>
-              <span className="rounded-full border border-border/60 bg-background/75 px-3 py-2 dark:border-white/10 dark:bg-white/[0.04]">handoffs break provenance</span>
-              <span className="rounded-full border border-border/60 bg-background/75 px-3 py-2 dark:border-white/10 dark:bg-white/[0.04]">reconstruction slows decisions</span>
+              <span className="rounded-full border border-border/60 bg-background px-3 py-2 dark:border-white/10 dark:bg-white/[0.04]">fragmentation costs time</span>
+              <span className="rounded-full border border-border/60 bg-background px-3 py-2 dark:border-white/10 dark:bg-white/[0.04]">handoffs break provenance</span>
+              <span className="rounded-full border border-border/60 bg-background px-3 py-2 dark:border-white/10 dark:bg-white/[0.04]">reconstruction slows decisions</span>
             </div>
             <div className="mt-8 w-full max-w-none">
               <ConnectedResearchSystemDiagram className="w-full" />
             </div>
             <div className="mt-6 grid gap-3 text-[14px] font-semibold uppercase tracking-[0.2em] text-muted-foreground/65 dark:text-slate-400 sm:grid-cols-3">
-              <div className="rounded-[18px] border border-border/50 bg-background/70 px-4 py-3 dark:border-white/10 dark:bg-white/[0.04]">
+              <div className="rounded-[18px] border border-border/50 bg-background px-4 py-3 dark:border-white/10 dark:bg-white/[0.04]">
                 Evidence stays linked
               </div>
-              <div className="rounded-[18px] border border-border/50 bg-background/70 px-4 py-3 dark:border-white/10 dark:bg-white/[0.04]">
+              <div className="rounded-[18px] border border-border/50 bg-background px-4 py-3 dark:border-white/10 dark:bg-white/[0.04]">
                 Catalyst AI sees full context
               </div>
-              <div className="rounded-[18px] border border-border/50 bg-background/70 px-4 py-3 dark:border-white/10 dark:bg-white/[0.04]">
+              <div className="rounded-[18px] border border-border/50 bg-background px-4 py-3 dark:border-white/10 dark:bg-white/[0.04]">
                 Writing reflects the work
               </div>
             </div>
@@ -445,8 +445,8 @@ export function PricingMarketingPage() {
             badge="What's included"
             title="Everything's open while we're in early access"
           />
-          <div className="mx-auto mt-10 max-w-3xl overflow-hidden rounded-2xl border border-border/60 bg-card/70 backdrop-blur-sm">
-            <div className="grid grid-cols-[1.6fr_0.7fr_0.7fr] items-center gap-2 border-b border-border/60 bg-muted/40 px-4 py-3 text-[14px] font-semibold uppercase tracking-wide text-muted-foreground sm:px-6">
+          <div className="mx-auto mt-10 max-w-3xl overflow-hidden rounded-2xl border border-border/60 bg-card backdrop-blur-sm">
+            <div className="grid grid-cols-[1.6fr_0.7fr_0.7fr] items-center gap-1 border-b border-border/60 bg-muted/40 px-3 py-3 text-[12px] font-semibold uppercase tracking-wide text-muted-foreground sm:gap-2 sm:px-6 sm:text-[14px]">
               <span>Capability</span>
               <span className="text-center">Free</span>
               <span className="text-center text-[var(--n9-accent)]">Lab &amp; Inst.</span>
@@ -454,7 +454,7 @@ export function PricingMarketingPage() {
             {PRICING_INCLUDED.map((r, i) => (
               <div
                 key={r.cap}
-                className={`grid grid-cols-[1.6fr_0.7fr_0.7fr] items-center gap-2 px-4 py-3.5 text-[16px] sm:px-6 ${i % 2 ? "bg-muted/20" : ""}`}
+                className={`grid grid-cols-[1.6fr_0.7fr_0.7fr] items-center gap-1 px-3 py-3.5 text-[14px] sm:gap-2 sm:px-6 sm:text-[16px] ${i % 2 ? "bg-muted/20" : ""}`}
               >
                 <span className="font-medium text-foreground">{r.cap}</span>
                 <span className="flex justify-center">
@@ -579,7 +579,7 @@ export function ResourcesMarketingPage() {
             title="Module-by-module guidance"
             description="Each section below distills the older resources content into practical guidance for how that part of the workflow should be used."
           />
-          <div className="mt-10 rounded-2xl border border-border/50 bg-background/80 px-6 py-2 shadow-sm backdrop-blur-sm sm:px-8">
+          <div className="mt-10 rounded-2xl border border-border/50 bg-background px-6 py-2 shadow-sm backdrop-blur-sm sm:px-8">
             <Accordion type="single" collapsible className="w-full">
               {resourceGuides.map((guide) => (
                 <AccordionItem key={guide.id} value={guide.id}>

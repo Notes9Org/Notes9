@@ -95,7 +95,7 @@ export function MemoryHubFlow({ className }: { className?: string }) {
   return (
     <div
       className={cn(
-        "h-[300px] w-full overflow-hidden rounded-2xl border border-border/60 bg-card/70",
+        "h-[300px] w-full overflow-hidden rounded-2xl border border-border/60 bg-card",
         dottedBg,
         className,
       )}
@@ -131,7 +131,7 @@ export function MiniKnowledgeFlow({ className }: { className?: string }) {
   }, [])
 
   return (
-    <div className={cn("h-[150px] w-full overflow-hidden rounded-xl border border-border/60 bg-card/70", dottedBg, className)}>
+    <div className={cn("h-[150px] w-full overflow-hidden rounded-xl border border-border/60 bg-card", dottedBg, className)}>
       <ReactFlow
         nodes={nodes}
         edges={edges}

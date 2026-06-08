@@ -66,7 +66,7 @@ export function StatusSection() {
             <motion.div
               key={m.value}
               variants={itemVariants}
-              className="group relative overflow-hidden rounded-2xl border border-border/50 bg-card/80 p-6 text-center backdrop-blur-sm transition-colors duration-300 hover:border-[var(--n9-accent)]/30 dark:bg-card/60"
+              className="group relative overflow-hidden rounded-2xl border border-border/50 bg-card p-6 text-center backdrop-blur-sm transition-colors duration-300 hover:border-[var(--n9-accent)]/30 dark:bg-card"
             >
               <div className="text-4xl font-bold tracking-tight text-[var(--n9-accent)]">
                 <AnimatedCounter value={m.value} />

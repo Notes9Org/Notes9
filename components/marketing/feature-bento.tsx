@@ -95,7 +95,7 @@ export function FeatureBento() {
             <motion.div
               key={f.id}
               variants={itemVariants}
-              className={`group relative overflow-hidden rounded-2xl border border-border/50 bg-card/80 backdrop-blur-sm transition-shadow duration-300 hover:shadow-lg dark:bg-card/60 cursor-pointer ${f.span}`}
+              className={`group relative overflow-hidden rounded-2xl border border-border/50 bg-card backdrop-blur-sm transition-shadow duration-300 hover:shadow-lg dark:bg-card cursor-pointer ${f.span}`}
             >
               {/* Screenshot */}
               <div className={`relative ${f.aspect} overflow-hidden`}>

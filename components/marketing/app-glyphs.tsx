@@ -100,7 +100,7 @@ function RailGlyph({
   return (
     <motion.div
       style={{ opacity, scale }}
-      className="relative z-10 rounded-xl bg-background/85 shadow-[0_8px_22px_-10px_rgba(20,18,16,0.35)] backdrop-blur-sm"
+      className="relative z-10 rounded-xl bg-background shadow-[0_8px_22px_-10px_rgba(20,18,16,0.35)] backdrop-blur-sm"
     >
       <AppGlyph kind={kind} compact />
     </motion.div>

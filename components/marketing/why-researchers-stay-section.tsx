@@ -403,7 +403,7 @@ function ToolPanel({
   return (
     <div
       className={cn(
-        "flex h-full min-h-[428px] w-[164px] shrink-0 flex-col self-stretch rounded-[18px] border bg-white px-4 pb-6 pt-5 transition-colors duration-300 sm:min-h-[440px] sm:w-[172px] sm:px-4 sm:pb-7 sm:pt-5 dark:bg-card/95",
+        "flex h-full min-h-[428px] w-[164px] shrink-0 flex-col self-stretch rounded-[18px] border bg-white px-4 pb-6 pt-5 transition-colors duration-300 sm:min-h-[440px] sm:w-[172px] sm:px-4 sm:pb-7 sm:pt-5 dark:bg-card",
         isEln
           ? "border-[#e8e2d8] hover:border-[#d87474]/45 hover:shadow-[0_20px_50px_-28px_rgba(216,116,116,0.3)] dark:border-border/60 dark:hover:border-rose-500/35"
           : "border-[#e8e2d8] hover:border-[#6ea4df]/45 hover:shadow-[0_20px_50px_-28px_rgba(110,164,223,0.3)] dark:border-border/60 dark:hover:border-blue-500/35",
@@ -815,7 +815,7 @@ export function WhyResearchersStaySection() {
                       key={c.id}
                       variants={itemVariants}
                       className={cn(
-                        "flex h-full min-h-0 flex-1 flex-col items-center rounded-[18px] border bg-white px-5 pb-6 pt-5 text-center transition-colors duration-300 dark:bg-card/95",
+                        "flex h-full min-h-0 flex-1 flex-col items-center rounded-[18px] border bg-white px-5 pb-6 pt-5 text-center transition-colors duration-300 dark:bg-card",
                         ts.border,
                         ts.hover,
                       )}
@@ -849,7 +849,7 @@ export function WhyResearchersStaySection() {
               <article
                 key={c.id}
                 className={cn(
-                  "flex flex-col items-center rounded-[18px] border bg-white px-5 pb-6 pt-5 text-center dark:bg-card/95",
+                  "flex flex-col items-center rounded-[18px] border bg-white px-5 pb-6 pt-5 text-center dark:bg-card",
                   ts.border,
                 )}
               >

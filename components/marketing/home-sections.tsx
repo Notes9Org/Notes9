@@ -45,8 +45,15 @@ function Section({
   children: React.ReactNode
 }) {
   return (
-    <section id={id} className={cn("container mx-auto px-4 py-20 sm:px-6 sm:py-28 lg:px-8", className)}>
-      {children}
+    <section id={id} className={cn("relative container mx-auto px-4 py-20 sm:px-6 sm:py-28 lg:px-8", className)}>
+      {/* Subtle frosted scrim: blurs the sticky-note backdrop behind the text for
+          readability while keeping it faintly visible. Soft radial mask feathers
+          every edge so it reads as a gentle wash, not a hard card. */}
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-0 bg-background/45 backdrop-blur-[7px] dark:bg-background/35 [mask-image:radial-gradient(115%_115%_at_50%_50%,#000_56%,transparent_100%)]"
+      />
+      <div className="relative z-10">{children}</div>
     </section>
   )
 }
@@ -486,7 +493,7 @@ export function DifferentiationSection() {
 export function TrustSection() {
   return (
     <Section id="trust">
-      <div className="rounded-2xl border border-border/50 bg-card/70 p-8 backdrop-blur-sm sm:p-10">
+      <div className="rounded-2xl border border-border/50 bg-card p-8 backdrop-blur-sm sm:p-10">
         <div className="grid gap-8 lg:grid-cols-[1fr_1.3fr] lg:items-start">
           <div>
             <div className="mb-4 inline-flex h-11 w-11 items-center justify-center rounded-xl bg-[var(--n9-accent-light)] text-[var(--n9-accent)]">
@@ -562,7 +569,7 @@ export function PricingTiers() {
               "flex h-full flex-col rounded-2xl border p-7",
               tier.primary
                 ? "border-[var(--n9-accent)]/40 bg-[var(--n9-accent-light)]/60 shadow-[0_24px_60px_-30px_var(--n9-accent-glow)]"
-                : "border-border/60 bg-card/70",
+                : "border-border/60 bg-card",
             )}
           >
             <div className="flex items-center justify-between">
@@ -655,7 +662,7 @@ export function FaqSection() {
   return (
     <Section id="faq">
       <SectionHeader reveal align="center" className="mx-auto" badge="FAQ" title="Questions, answered plainly" />
-      <div className="mx-auto mt-10 max-w-2xl divide-y divide-border/60 rounded-2xl border border-border/60 bg-card/60">
+      <div className="mx-auto mt-10 max-w-2xl divide-y divide-border/60 rounded-2xl border border-border/60 bg-card">
         {FAQS.map((f) => (
           <details key={f.q} className="group px-5 py-4 sm:px-6">
             <summary className="flex cursor-pointer list-none items-center justify-between gap-4 text-[16px] font-semibold text-foreground">

@@ -58,7 +58,7 @@ const CHAIN = [
 function ChainPill({ label, icon: Icon }: { label: string; icon: typeof BookOpen }) {
   return (
     <div className="flex shrink-0 items-center gap-2">
-      <div className="flex items-center gap-2 rounded-full border border-border/60 bg-card/80 px-4 py-2 shadow-sm backdrop-blur-sm">
+      <div className="flex items-center gap-2 rounded-full border border-border/60 bg-card px-4 py-2 shadow-sm backdrop-blur-sm">
         <span className="flex h-6 w-6 items-center justify-center rounded-full bg-[var(--n9-accent-light)] text-[var(--n9-accent)]">
           <Icon className="h-3.5 w-3.5" />
         </span>
@@ -117,7 +117,7 @@ export function ScatteredToConnected({ className }: { className?: string }) {
     <div
       ref={ref}
       className={cn(
-        "relative aspect-[4/3] w-full overflow-hidden rounded-2xl border border-border/60 bg-card/70 p-4 backdrop-blur-sm sm:aspect-[16/10]",
+        "relative aspect-[4/3] w-full overflow-hidden rounded-2xl border border-border/60 bg-card p-4 backdrop-blur-sm sm:aspect-[16/10]",
         className,
       )}
     >
@@ -255,7 +255,7 @@ export function RoleUseCaseSwitcher() {
                 "group inline-flex items-center gap-2.5 rounded-xl border px-4 py-3 text-left text-[16px] font-medium transition-all",
                 isActive
                   ? "border-[var(--n9-accent)]/40 bg-[var(--n9-accent-light)] text-[var(--n9-accent)] shadow-sm"
-                  : "border-border/50 bg-card/60 text-foreground hover:border-[var(--n9-accent)]/30",
+                  : "border-border/50 bg-card text-foreground hover:border-[var(--n9-accent)]/30",
               )}
             >
               <span
@@ -272,7 +272,7 @@ export function RoleUseCaseSwitcher() {
         })}
       </div>
 
-      <div className="rounded-2xl border border-border/50 bg-card/80 p-6 backdrop-blur-sm sm:p-8">
+      <div className="rounded-2xl border border-border/50 bg-card p-6 backdrop-blur-sm sm:p-8">
         <AnimatePresence mode="wait">
           <motion.div
             key={role.key}
@@ -330,8 +330,8 @@ function Cell({ on }: { on: boolean }) {
 
 export function ElnVsAiVsNotes9() {
   return (
-    <div className="overflow-hidden rounded-2xl border border-border/60 bg-card/70 backdrop-blur-sm">
-      <div className="grid grid-cols-[1.4fr_repeat(3,0.8fr)] items-center gap-2 border-b border-border/60 bg-muted/40 px-4 py-3 text-[14px] font-semibold uppercase tracking-wide text-muted-foreground sm:px-6">
+    <div className="overflow-hidden rounded-2xl border border-border/60 bg-card backdrop-blur-sm">
+      <div className="grid grid-cols-[1.5fr_repeat(3,0.7fr)] items-center gap-1 border-b border-border/60 bg-muted/40 px-3 py-3 text-[12px] font-semibold uppercase tracking-wide text-muted-foreground sm:grid-cols-[1.4fr_repeat(3,0.8fr)] sm:gap-2 sm:px-6 sm:text-[14px]">
         <span>Capability</span>
         <span className="text-center">ELN</span>
         <span className="text-center">AI chat</span>
@@ -341,7 +341,7 @@ export function ElnVsAiVsNotes9() {
         <div
           key={r.cap}
           className={cn(
-            "grid grid-cols-[1.4fr_repeat(3,0.8fr)] items-center gap-2 px-4 py-3.5 text-[16px] sm:px-6",
+            "grid grid-cols-[1.5fr_repeat(3,0.7fr)] items-center gap-1 px-3 py-3.5 text-[14px] sm:grid-cols-[1.4fr_repeat(3,0.8fr)] sm:gap-2 sm:px-6 sm:text-[16px]",
             i % 2 === 1 && "bg-muted/20",
           )}
         >
@@ -431,7 +431,7 @@ export function DemoStoryStepper() {
       </ol>
 
       {/* mock panel */}
-      <div className="relative overflow-hidden rounded-2xl border border-border/60 bg-card/80 p-5 backdrop-blur-sm">
+      <div className="relative overflow-hidden rounded-2xl border border-border/60 bg-card p-5 backdrop-blur-sm">
         <div className="flex items-center gap-1.5 border-b border-border/50 pb-3">
           <span className="h-2.5 w-2.5 rounded-full bg-muted-foreground/30" />
           <span className="h-2.5 w-2.5 rounded-full bg-muted-foreground/30" />
@@ -475,7 +475,7 @@ export function DemoStoryStepper() {
 
 export function CatalystAnswerCard({ className }: { className?: string }) {
   return (
-    <div className={cn("rounded-2xl border border-border/60 bg-card/80 p-5 backdrop-blur-sm", className)}>
+    <div className={cn("rounded-2xl border border-border/60 bg-card p-5 backdrop-blur-sm", className)}>
       <div className="flex items-center gap-2 border-b border-border/50 pb-3">
         <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-[var(--n9-accent)] text-white">
           <Sparkles className="h-4 w-4" />
@@ -613,7 +613,7 @@ function Bar({ w, tone = "muted" }: { w: string; tone?: "muted" | "accent" }) {
 
 function MockFrame({ children, label }: { children: React.ReactNode; label: string }) {
   return (
-    <div className="rounded-xl border border-border/60 bg-card/80 p-3 shadow-sm">
+    <div className="rounded-xl border border-border/60 bg-card p-3 shadow-sm">
       <div className="mb-2 flex items-center gap-1">
         <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground/30" />
         <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground/30" />
@@ -799,7 +799,7 @@ export function BioCatalystDemo() {
 
       {/* Interactive chat */}
       <TiltCard max={5}>
-        <div className="rounded-2xl border border-border/60 bg-card/85 p-5 shadow-[0_24px_60px_-32px_rgba(44,36,24,0.25)] backdrop-blur-sm">
+        <div className="rounded-2xl border border-border/60 bg-card p-5 shadow-[0_24px_60px_-32px_rgba(44,36,24,0.25)] backdrop-blur-sm">
           <div className="flex items-center gap-2 border-b border-border/50 pb-3">
             <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-[var(--n9-accent)] text-white">
               <Sparkles className="h-4 w-4" />
@@ -1015,7 +1015,7 @@ export function AcademicNarrative() {
   return (
     <div
       ref={ref}
-      className="rounded-xl border border-border/60 bg-card/80 p-4 shadow-[0_18px_50px_-30px_rgba(44,36,24,0.3)]"
+      className="rounded-xl border border-border/60 bg-card p-4 shadow-[0_18px_50px_-30px_rgba(44,36,24,0.3)]"
     >
       {/* the question */}
       <div className="flex items-center gap-2">
@@ -1092,7 +1092,7 @@ export function StartupNarrative() {
   return (
     <div
       ref={ref}
-      className="rounded-xl border border-border/60 bg-card/80 p-4 shadow-[0_18px_50px_-30px_rgba(44,36,24,0.3)]"
+      className="rounded-xl border border-border/60 bg-card p-4 shadow-[0_18px_50px_-30px_rgba(44,36,24,0.3)]"
     >
       <div className="flex items-center justify-between">
         <span className="text-[14px] font-semibold uppercase tracking-wide text-muted-foreground/70">

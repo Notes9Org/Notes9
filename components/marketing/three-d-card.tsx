@@ -31,7 +31,7 @@ export function MinimalCard({
   return (
     <div
       className={cn(
-        "rounded-2xl border border-border/50 bg-card/80 p-6 backdrop-blur-sm dark:bg-card/60",
+        "rounded-2xl border border-border/50 bg-card p-6 backdrop-blur-sm dark:bg-card",
         className,
       )}
     >
