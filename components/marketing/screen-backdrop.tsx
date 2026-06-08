@@ -44,7 +44,34 @@ const POS: { x: number; y: number; rot: number }[] = [
 ]
 
 const NOTES = POS.map((p, i) => ({ ...p, name: SHOTS[i % SHOTS.length] }))
-const THREAD_D = NOTES.map((n, i) => `${i === 0 ? "M" : "L"} ${n.x} ${n.y}`).join(" ")
+
+// A web: connect each note to its two nearest neighbours (deduped), so multiple
+// notes link to each other at once. Edges are ordered by their lower endpoint so
+// the web fills in top→bottom as the page scrolls.
+const EDGES: [number, number][] = (() => {
+  const out: [number, number][] = []
+  const seen = new Set<string>()
+  NOTES.forEach((n, i) => {
+    NOTES.map((m, j) => ({ j, d: (m.x - n.x) ** 2 + (m.y - n.y) ** 2 }))
+      .filter((o) => o.j !== i)
+      .sort((a, b) => a.d - b.d)
+      .slice(0, 2)
+      .forEach(({ j }) => {
+        const key = i < j ? `${i}-${j}` : `${j}-${i}`
+        if (seen.has(key)) return
+        seen.add(key)
+        out.push([Math.min(i, j), Math.max(i, j)])
+      })
+  })
+  return out.sort(
+    (a, b) =>
+      Math.max(NOTES[a[0]].y, NOTES[a[1]].y) - Math.max(NOTES[b[0]].y, NOTES[b[1]].y),
+  )
+})()
+
+const WEB_D = EDGES.map(
+  ([a, b]) => `M ${NOTES[a].x} ${NOTES[a].y} L ${NOTES[b].x} ${NOTES[b].y}`,
+).join(" ")
 
 function StickyNote({ name, rot }: { name: string; rot: number }) {
   return (
@@ -77,20 +104,19 @@ export function ScreenBackdrop({ className }: { className?: string }) {
         className,
       )}
     >
-      {/* ONE continuous thread — grows in length as the page scrolls (blurrier
-          than the notes) */}
+      {/* A web of thin connections that fills in (more notes link to each other)
+          as the page scrolls. */}
       <svg
-        className="absolute inset-0 h-full w-full opacity-60 blur-[2.5px]"
+        className="absolute inset-0 h-full w-full opacity-55 blur-[1px]"
         viewBox="0 0 100 100"
         preserveAspectRatio="none"
       >
         <motion.path
-          d={THREAD_D}
+          d={WEB_D}
           fill="none"
           stroke="var(--n9-accent)"
-          strokeWidth={2.2}
+          strokeWidth={1}
           strokeLinecap="round"
-          strokeLinejoin="round"
           vectorEffect="non-scaling-stroke"
           style={{ pathLength: scrollYProgress }}
         />
