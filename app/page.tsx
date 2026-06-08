@@ -102,7 +102,7 @@ export default async function HomePage({
                 <h2 className="font-serif text-3xl tracking-tight text-foreground sm:text-4xl">
                   Get in touch
                 </h2>
-                <p className="mt-4 text-lg leading-7 text-muted-foreground">
+                <p className="mt-4 text-[20px] leading-7 text-muted-foreground">
                   Tell us about your lab and where friction shows up today.
                 </p>
               </div>

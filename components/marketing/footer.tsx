@@ -44,11 +44,11 @@ export function Footer() {
               <Notes9Brand showIcon textClassName="h-8 w-auto" />
             </Link>
 
-            <p className="text-foreground/80 mb-6 text-sm leading-relaxed">
+            <p className="text-foreground/80 mb-6 text-[16px] leading-relaxed">
               Workflow-aware software for research teams that need better continuity across literature, execution, memory, and reporting.
             </p>
 
-            <div className="space-y-2 text-sm text-foreground/80">
+            <div className="space-y-2 text-[16px] text-foreground/80">
               <div className="flex items-center space-x-2">
                 <MapPin className="h-4 w-4" />
                 <span>Distributed team · India, United States & United Kingdom</span>
@@ -84,7 +84,7 @@ export function Footer() {
               <ul className="space-y-2">
                 {footerLinks.product.map((link) => (
                   <li key={link.name}>
-                    <Link href={link.href} className="text-sm text-foreground/80 hover:text-foreground transition-colors">
+                    <Link href={link.href} className="text-[16px] text-foreground/80 hover:text-foreground transition-colors">
                       {link.name}
                     </Link>
                   </li>
@@ -97,7 +97,7 @@ export function Footer() {
               <ul className="space-y-2">
                 {footerLinks.company.map((link) => (
                   <li key={link.name}>
-                    <Link href={link.href} className="text-sm text-foreground/80 hover:text-foreground transition-colors">
+                    <Link href={link.href} className="text-[16px] text-foreground/80 hover:text-foreground transition-colors">
                       {link.name}
                     </Link>
                   </li>
@@ -108,7 +108,7 @@ export function Footer() {
         </div>
 
         <div className="border-t border-border/60 pt-8 text-center md:text-left">
-          <span className="text-sm text-foreground/80">
+          <span className="text-[16px] text-foreground/80">
             Notes9 is built by a multidisciplinary team spanning scientific research, AI systems, and product engineering.
           </span>
         </div>

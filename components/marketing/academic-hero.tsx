@@ -42,7 +42,7 @@ export function AcademicHero() {
               transition={{ duration: 0.5 }}
               className="flex justify-start"
             >
-              <span className="inline-flex items-center gap-2 rounded-full border border-[var(--n9-accent)]/30 bg-[var(--n9-accent-light)] px-4 py-1.5 text-xs font-semibold uppercase tracking-[0.16em] text-[var(--n9-accent)]">
+              <span className="inline-flex items-center gap-2 rounded-full border border-[var(--n9-accent)]/30 bg-[var(--n9-accent-light)] px-4 py-1.5 text-[14px] font-semibold uppercase tracking-[0.16em] text-[var(--n9-accent)]">
                 <span className="relative flex h-2 w-2">
                   <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[var(--n9-accent)] opacity-75" />
                   <span className="relative inline-flex h-2 w-2 rounded-full bg-[var(--n9-accent)]" />
@@ -67,7 +67,7 @@ export function AcademicHero() {
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.6, delay: 0.2 }}
-              className="max-w-2xl text-left text-[1.05rem] leading-relaxed text-muted-foreground sm:text-xl sm:leading-relaxed"
+              className="max-w-2xl text-left text-[1.05rem] leading-relaxed text-muted-foreground sm:text-[22px] sm:leading-relaxed"
             >
               <p className="text-pretty">
                 Notes9 connects your{" "}
@@ -114,7 +114,7 @@ export function AcademicHero() {
             >
               <Link
                 href="/#catalyst"
-                className="group inline-flex items-center gap-2.5 rounded-full border border-[var(--n9-accent)]/20 bg-[var(--n9-accent-light)]/70 px-3.5 py-1.5 text-sm text-muted-foreground transition-colors hover:border-[var(--n9-accent)]/40"
+                className="group inline-flex items-center gap-2.5 rounded-full border border-[var(--n9-accent)]/20 bg-[var(--n9-accent-light)]/70 px-3.5 py-1.5 text-[16px] text-muted-foreground transition-colors hover:border-[var(--n9-accent)]/40"
               >
                 <span className="flex h-5 w-5 items-center justify-center rounded-full bg-[var(--n9-accent)] text-white">
                   <Sparkles className="h-3 w-3" />
@@ -138,7 +138,7 @@ export function AcademicHero() {
 
       <div className="h-auto min-h-16 py-4 sm:h-20 sm:min-h-0 sm:py-0">
         <div className="container mx-auto flex h-full items-center px-4 sm:px-6 lg:px-8">
-          <p className="max-w-4xl text-sm text-muted-foreground/95 sm:text-base">
+          <p className="max-w-4xl text-[16px] text-muted-foreground/95 sm:text-[18px]">
             For researchers tired of scattered papers, notes, protocols, spreadsheets, and disconnected AI tools.
           </p>
         </div>

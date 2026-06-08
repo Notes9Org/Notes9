@@ -180,7 +180,7 @@ export function FeatureDeepDive() {
           <h2 className="font-serif text-3xl tracking-tight text-foreground sm:text-4xl">
             From literature review to lab work to reporting, <span className="text-[var(--n9-accent)]">Notes9</span> keeps every step connected - and every insight preserved.
           </h2>
-          <p className="mt-4 text-lg leading-7 text-muted-foreground">
+          <p className="mt-4 text-[20px] leading-7 text-muted-foreground">
             A connected workflow for the full research journey.
           </p>
         </motion.div>

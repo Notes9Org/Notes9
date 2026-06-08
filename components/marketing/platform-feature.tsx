@@ -55,7 +55,7 @@ export function PlatformFeature({
                                 {title}
                             </h2>
 
-                            <p className="text-lg text-muted-foreground leading-relaxed text-pretty">
+                            <p className="text-[20px] text-muted-foreground leading-relaxed text-pretty">
                                 {description}
                             </p>
                         </div>
@@ -70,7 +70,7 @@ export function PlatformFeature({
                                         <h3 className="font-semibold text-foreground mb-1">
                                             {feature.title}
                                         </h3>
-                                        <p className="text-sm text-muted-foreground leading-relaxed">
+                                        <p className="text-[16px] text-muted-foreground leading-relaxed">
                                             {feature.description}
                                         </p>
                                     </div>

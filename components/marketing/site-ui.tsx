@@ -43,14 +43,14 @@ export function PageHero({
         <div className="max-w-2xl">
           <Badge
             variant="outline"
-            className="mb-6 rounded-full border-[var(--n9-accent)]/30 bg-[var(--n9-accent-light)] px-4 py-1 text-xs font-semibold uppercase tracking-[0.24em] text-[var(--n9-accent)]"
+            className="mb-6 rounded-full border-[var(--n9-accent)]/30 bg-[var(--n9-accent-light)] px-4 py-1 text-[14px] font-semibold uppercase tracking-[0.24em] text-[var(--n9-accent)]"
           >
             {badge}
           </Badge>
           <h1 className="font-serif text-4xl tracking-tight text-foreground sm:text-5xl lg:text-[3.5rem] lg:leading-[1.08]">
             {title}
           </h1>
-          <p className="mt-6 max-w-xl text-base leading-7 text-muted-foreground sm:text-lg">
+          <p className="mt-6 max-w-xl text-[18px] leading-7 text-muted-foreground sm:text-[20px]">
             {description}
           </p>
           {actions.length > 0 ? (
@@ -122,7 +122,7 @@ export function SectionHeader({
   return (
     <div className={cn("relative z-10 max-w-2xl", align === "center" && "mx-auto text-center", className)}>
       {badge ? (
-        <span className="mb-5 inline-flex items-center gap-2 rounded-full border border-[var(--n9-accent)]/20 bg-[var(--n9-accent-light)] px-3.5 py-1.5 text-xs font-semibold uppercase tracking-[0.2em] text-[var(--n9-accent)]">
+        <span className="mb-5 inline-flex items-center gap-2 rounded-full border border-[var(--n9-accent)]/20 bg-[var(--n9-accent-light)] px-3.5 py-1.5 text-[14px] font-semibold uppercase tracking-[0.2em] text-[var(--n9-accent)]">
           <span className="h-1.5 w-1.5 rounded-full bg-[var(--n9-accent)]" />
           {badge}
         </span>
@@ -131,7 +131,7 @@ export function SectionHeader({
         {titleNode}
       </h2>
       {description ? (
-        <p className="mt-5 text-lg leading-8 text-muted-foreground sm:text-xl sm:leading-9">
+        <p className="mt-5 text-[20px] leading-8 text-muted-foreground sm:text-[22px] sm:leading-9">
           {description}
         </p>
       ) : null}
@@ -151,9 +151,9 @@ export function StatCard({
   return (
     <MinimalCard>
       <div className="text-3xl font-bold tracking-tight text-foreground">{value}</div>
-      <p className="mt-2 text-sm leading-6 text-muted-foreground">{label}</p>
+      <p className="mt-2 text-[16px] leading-6 text-muted-foreground">{label}</p>
       {source ? (
-        <p className="mt-4 text-xs uppercase tracking-[0.18em] text-muted-foreground/70">{source}</p>
+        <p className="mt-4 text-[14px] uppercase tracking-[0.18em] text-muted-foreground/70">{source}</p>
       ) : null}
     </MinimalCard>
   )
@@ -173,8 +173,8 @@ export function FeatureCard({
       <div className="mb-4 inline-flex h-10 w-10 items-center justify-center rounded-xl bg-[var(--n9-accent-light)] text-[var(--n9-accent)]">
         <Icon className="h-5 w-5" />
       </div>
-      <h3 className="text-lg font-semibold text-foreground">{title}</h3>
-      <p className="mt-2 text-sm leading-6 text-muted-foreground">{description}</p>
+      <h3 className="text-[20px] font-semibold text-foreground">{title}</h3>
+      <p className="mt-2 text-[16px] leading-6 text-muted-foreground">{description}</p>
     </MinimalCard>
   )
 }
@@ -190,11 +190,11 @@ export function WorkflowStep({
 }) {
   return (
     <MinimalCard className="h-full">
-      <div className="mb-3 inline-flex rounded-full border border-[var(--n9-accent)]/30 bg-[var(--n9-accent-light)] px-3 py-1 text-xs font-semibold uppercase tracking-[0.2em] text-[var(--n9-accent)]">
+      <div className="mb-3 inline-flex rounded-full border border-[var(--n9-accent)]/30 bg-[var(--n9-accent-light)] px-3 py-1 text-[14px] font-semibold uppercase tracking-[0.2em] text-[var(--n9-accent)]">
         {step}
       </div>
-      <h3 className="text-lg font-semibold text-foreground">{title}</h3>
-      <p className="mt-2 text-sm leading-6 text-muted-foreground">{description}</p>
+      <h3 className="text-[20px] font-semibold text-foreground">{title}</h3>
+      <p className="mt-2 text-[16px] leading-6 text-muted-foreground">{description}</p>
     </MinimalCard>
   )
 }
@@ -210,9 +210,9 @@ export function ComparisonRow({
 }) {
   return (
     <div className="grid gap-3 rounded-xl border border-border/40 bg-muted/30 p-4 sm:grid-cols-[0.7fr_1fr_1fr]">
-      <p className="text-sm font-semibold text-foreground">{label}</p>
-      <p className="text-sm leading-6 text-muted-foreground">{legacy}</p>
-      <p className="text-sm leading-6 text-foreground">{notes9}</p>
+      <p className="text-[16px] font-semibold text-foreground">{label}</p>
+      <p className="text-[16px] leading-6 text-muted-foreground">{legacy}</p>
+      <p className="text-[16px] leading-6 text-foreground">{notes9}</p>
     </div>
   )
 }
@@ -232,14 +232,14 @@ export function LinkCard({
 }) {
   return (
     <MinimalCard className="flex h-full flex-col">
-      <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[var(--n9-accent)]">
+      <p className="text-[14px] font-semibold uppercase tracking-[0.2em] text-[var(--n9-accent)]">
         {eyebrow}
       </p>
-      <h3 className="mt-3 text-lg font-semibold text-foreground">{title}</h3>
-      <p className="mt-2 flex-1 text-sm leading-6 text-muted-foreground">{description}</p>
+      <h3 className="mt-3 text-[20px] font-semibold text-foreground">{title}</h3>
+      <p className="mt-2 flex-1 text-[16px] leading-6 text-muted-foreground">{description}</p>
       <Link
         href={href}
-        className="mt-5 inline-flex items-center text-sm font-medium text-[var(--n9-accent)] transition-colors hover:text-[var(--n9-accent-hover)]"
+        className="mt-5 inline-flex items-center text-[16px] font-medium text-[var(--n9-accent)] transition-colors hover:text-[var(--n9-accent-hover)]"
       >
         {hrefLabel}
         <ArrowRight className="ml-1.5 h-3.5 w-3.5" />
@@ -262,7 +262,7 @@ export function CTAPanel({
   return (
     <div className="rounded-2xl border border-border/40 bg-[var(--n9-accent-light)] p-8 text-center dark:bg-muted/20 lg:p-12">
       <h2 className="font-serif text-2xl tracking-tight text-foreground sm:text-3xl">{title}</h2>
-      <p className="mx-auto mt-3 max-w-xl text-sm leading-6 text-muted-foreground sm:text-base">{description}</p>
+      <p className="mx-auto mt-3 max-w-xl text-[16px] leading-6 text-muted-foreground sm:text-[18px]">{description}</p>
       <div className="mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row">
         <Button
           asChild

@@ -55,7 +55,7 @@ function InteractiveGlowCard({ point, index }: { point: typeof points[0]; index:
         <CheckCircle2 className="mt-1 h-5 w-5 shrink-0 text-[var(--n9-accent)]" />
         <div>
           <h3 className="font-semibold text-foreground">{point.title}</h3>
-          <p className="mt-2 text-sm leading-6 text-muted-foreground">{point.desc}</p>
+          <p className="mt-2 text-[16px] leading-6 text-muted-foreground">{point.desc}</p>
         </div>
       </div>
     </motion.div>
@@ -81,7 +81,7 @@ export function DifferentiationSection() {
             whileInView={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.5, delay: 0.1 }}
             viewport={{ once: true }}
-            className="mt-6 text-lg leading-8 text-muted-foreground mx-auto max-w-2xl"
+            className="mt-6 text-[20px] leading-8 text-muted-foreground mx-auto max-w-2xl"
           >
             Walk us through your current workflow. We&apos;ll show you where Notes9 saves time, organizes messy folders, and reduces manual friction.
           </motion.p>
@@ -102,7 +102,7 @@ export function DifferentiationSection() {
             <Button
               asChild
               size="lg"
-              className="h-14 rounded-full bg-[var(--n9-accent)] px-10 text-white text-base shadow-[0_12px_40px_-12px_var(--n9-accent-glow)] hover:bg-[var(--n9-accent-hover)] transition-all hover:scale-105 hover:shadow-[0_20px_50px_-12px_var(--n9-accent-glow)] cursor-pointer"
+              className="h-14 rounded-full bg-[var(--n9-accent)] px-10 text-white text-[18px] shadow-[0_12px_40px_-12px_var(--n9-accent-glow)] hover:bg-[var(--n9-accent-hover)] transition-all hover:scale-105 hover:shadow-[0_20px_50px_-12px_var(--n9-accent-glow)] cursor-pointer"
             >
               <Link href="/#contact">
                 Request a personalized demo

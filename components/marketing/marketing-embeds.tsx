@@ -62,7 +62,7 @@ function ChainPill({ label, icon: Icon }: { label: string; icon: typeof BookOpen
         <span className="flex h-6 w-6 items-center justify-center rounded-full bg-[var(--n9-accent-light)] text-[var(--n9-accent)]">
           <Icon className="h-3.5 w-3.5" />
         </span>
-        <span className="text-sm font-medium text-foreground">{label}</span>
+        <span className="text-[16px] font-medium text-foreground">{label}</span>
       </div>
       <ArrowRight className="h-4 w-4 shrink-0 text-[var(--n9-accent)]/50" />
     </div>
@@ -121,7 +121,7 @@ export function ScatteredToConnected({ className }: { className?: string }) {
         className,
       )}
     >
-      <div className="absolute left-4 top-4 z-20 text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground/70">
+      <div className="absolute left-4 top-4 z-20 text-[14px] font-semibold uppercase tracking-[0.18em] text-muted-foreground/70">
         {connected ? "Connected in Notes9" : "Today: scattered context"}
       </div>
 
@@ -172,7 +172,7 @@ export function ScatteredToConnected({ className }: { className?: string }) {
         className="absolute left-1/2 top-1/2 z-10 flex -translate-x-1/2 -translate-y-1/2 flex-col items-center gap-1 rounded-2xl border border-[var(--n9-accent)]/30 bg-[var(--n9-accent-light)] px-5 py-3 text-center shadow-[0_12px_40px_-16px_var(--n9-accent-glow)]"
       >
         <Database className="h-5 w-5 text-[var(--n9-accent)]" />
-        <span className="text-xs font-semibold text-[var(--n9-accent)]">Project memory</span>
+        <span className="text-[14px] font-semibold text-[var(--n9-accent)]">Project memory</span>
       </motion.div>
 
       {/* tool chips */}
@@ -188,8 +188,8 @@ export function ScatteredToConnected({ className }: { className?: string }) {
             className="absolute z-10 flex -translate-x-1/2 -translate-y-1/2 items-center gap-1.5 rounded-lg border border-border/60 bg-card px-2.5 py-1.5 shadow-sm"
           >
             <Icon className="h-3.5 w-3.5 text-muted-foreground" />
-            <span className="text-xs font-medium text-foreground">{s.label}</span>
-            <span className="hidden text-xs text-muted-foreground/70 sm:inline">{s.sub}</span>
+            <span className="text-[14px] font-medium text-foreground">{s.label}</span>
+            <span className="hidden text-[14px] text-muted-foreground/70 sm:inline">{s.sub}</span>
           </motion.div>
         )
       })}
@@ -252,7 +252,7 @@ export function RoleUseCaseSwitcher() {
               type="button"
               onClick={() => setActive(i)}
               className={cn(
-                "group inline-flex items-center gap-2.5 rounded-xl border px-4 py-3 text-left text-sm font-medium transition-all",
+                "group inline-flex items-center gap-2.5 rounded-xl border px-4 py-3 text-left text-[16px] font-medium transition-all",
                 isActive
                   ? "border-[var(--n9-accent)]/40 bg-[var(--n9-accent-light)] text-[var(--n9-accent)] shadow-sm"
                   : "border-border/50 bg-card/60 text-foreground hover:border-[var(--n9-accent)]/30",
@@ -284,13 +284,13 @@ export function RoleUseCaseSwitcher() {
             <div className="mb-4 inline-flex h-11 w-11 items-center justify-center rounded-xl bg-[var(--n9-accent-light)] text-[var(--n9-accent)]">
               <Icon className="h-5 w-5" />
             </div>
-            <p className="text-xl font-semibold text-foreground sm:text-2xl">{role.outcome}</p>
+            <p className="text-[22px] font-semibold text-foreground sm:text-2xl">{role.outcome}</p>
             <div className="mt-5 [transform:translateZ(24px)]">{role.mock}</div>
             <div className="mt-5 flex flex-wrap gap-1.5">
               {role.chips.map((c) => (
                 <span
                   key={c}
-                  className="inline-flex items-center gap-1 rounded-full border border-[var(--n9-accent)]/20 bg-[var(--n9-accent-light)] px-2.5 py-1 text-xs font-medium text-[var(--n9-accent)]"
+                  className="inline-flex items-center gap-1 rounded-full border border-[var(--n9-accent)]/20 bg-[var(--n9-accent-light)] px-2.5 py-1 text-[14px] font-medium text-[var(--n9-accent)]"
                 >
                   <Check className="h-3 w-3" />
                   {c}
@@ -331,7 +331,7 @@ function Cell({ on }: { on: boolean }) {
 export function ElnVsAiVsNotes9() {
   return (
     <div className="overflow-hidden rounded-2xl border border-border/60 bg-card/70 backdrop-blur-sm">
-      <div className="grid grid-cols-[1.4fr_repeat(3,0.8fr)] items-center gap-2 border-b border-border/60 bg-muted/40 px-4 py-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground sm:px-6">
+      <div className="grid grid-cols-[1.4fr_repeat(3,0.8fr)] items-center gap-2 border-b border-border/60 bg-muted/40 px-4 py-3 text-[14px] font-semibold uppercase tracking-wide text-muted-foreground sm:px-6">
         <span>Capability</span>
         <span className="text-center">ELN</span>
         <span className="text-center">AI chat</span>
@@ -341,7 +341,7 @@ export function ElnVsAiVsNotes9() {
         <div
           key={r.cap}
           className={cn(
-            "grid grid-cols-[1.4fr_repeat(3,0.8fr)] items-center gap-2 px-4 py-3.5 text-sm sm:px-6",
+            "grid grid-cols-[1.4fr_repeat(3,0.8fr)] items-center gap-2 px-4 py-3.5 text-[16px] sm:px-6",
             i % 2 === 1 && "bg-muted/20",
           )}
         >
@@ -403,14 +403,14 @@ export function DemoStoryStepper() {
               >
                 <span
                   className={cn(
-                    "flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-xs font-bold",
+                    "flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-[14px] font-bold",
                     isActive ? "bg-[var(--n9-accent)] text-white" : "bg-muted text-muted-foreground",
                   )}
                 >
                   {i + 1}
                 </span>
                 <span>
-                  <span className={cn("flex items-center gap-2 text-sm font-semibold", isActive ? "text-[var(--n9-accent)]" : "text-foreground")}>
+                  <span className={cn("flex items-center gap-2 text-[16px] font-semibold", isActive ? "text-[var(--n9-accent)]" : "text-foreground")}>
                     <Icon className="h-3.5 w-3.5" />
                     {s.t}
                   </span>
@@ -418,7 +418,7 @@ export function DemoStoryStepper() {
                     <motion.span
                       initial={{ opacity: 0, height: 0 }}
                       animate={{ opacity: 1, height: "auto" }}
-                      className="mt-1 block text-xs leading-5 text-muted-foreground"
+                      className="mt-1 block text-[14px] leading-5 text-muted-foreground"
                     >
                       {s.d}
                     </motion.span>
@@ -436,7 +436,7 @@ export function DemoStoryStepper() {
           <span className="h-2.5 w-2.5 rounded-full bg-muted-foreground/30" />
           <span className="h-2.5 w-2.5 rounded-full bg-muted-foreground/30" />
           <span className="h-2.5 w-2.5 rounded-full bg-muted-foreground/30" />
-          <span className="ml-3 text-xs font-medium text-muted-foreground">Antibody expression · project memory</span>
+          <span className="ml-3 text-[14px] font-medium text-muted-foreground">Antibody expression · project memory</span>
         </div>
         <AnimatePresence mode="wait">
           <motion.div
@@ -450,13 +450,13 @@ export function DemoStoryStepper() {
             <div className="mb-3 inline-flex h-9 w-9 items-center justify-center rounded-xl bg-[var(--n9-accent-light)] text-[var(--n9-accent)]">
               <ActiveIcon className="h-4 w-4" />
             </div>
-            <p className="text-sm font-semibold text-foreground">{STORY[active].t}</p>
-            <p className="mt-1.5 text-sm leading-6 text-muted-foreground">{STORY[active].d}</p>
+            <p className="text-[16px] font-semibold text-foreground">{STORY[active].t}</p>
+            <p className="mt-1.5 text-[16px] leading-6 text-muted-foreground">{STORY[active].d}</p>
             <div className="mt-4 flex flex-wrap gap-1.5">
               {STORY.slice(0, active + 1).map((s) => (
                 <span
                   key={s.t}
-                  className="rounded-full border border-[var(--n9-accent)]/20 bg-[var(--n9-accent-light)] px-2.5 py-1 text-xs font-medium text-[var(--n9-accent)]"
+                  className="rounded-full border border-[var(--n9-accent)]/20 bg-[var(--n9-accent-light)] px-2.5 py-1 text-[14px] font-medium text-[var(--n9-accent)]"
                 >
                   {s.t}
                 </span>
@@ -480,12 +480,12 @@ export function CatalystAnswerCard({ className }: { className?: string }) {
         <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-[var(--n9-accent)] text-white">
           <Sparkles className="h-4 w-4" />
         </span>
-        <span className="text-sm font-semibold text-foreground">Catalyst</span>
-        <span className="ml-auto rounded-full bg-[var(--n9-accent-light)] px-2 py-0.5 text-xs font-semibold uppercase tracking-wide text-[var(--n9-accent)]">
+        <span className="text-[16px] font-semibold text-foreground">Catalyst</span>
+        <span className="ml-auto rounded-full bg-[var(--n9-accent-light)] px-2 py-0.5 text-[14px] font-semibold uppercase tracking-wide text-[var(--n9-accent)]">
           Biology-first
         </span>
       </div>
-      <div className="space-y-2 pt-4 text-sm leading-6 text-muted-foreground">
+      <div className="space-y-2 pt-4 text-[16px] leading-6 text-muted-foreground">
         <p className="text-foreground">Why was condition B chosen for the transfection?</p>
         <p>
           Condition B used a 3:1 PEI-to-DNA ratio because it gave the highest transient yield in your
@@ -493,7 +493,7 @@ export function CatalystAnswerCard({ className }: { className?: string }) {
         </p>
       </div>
       <div className="mt-4 border-t border-border/50 pt-3">
-        <p className="mb-2 text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground/70">
+        <p className="mb-2 text-[14px] font-semibold uppercase tracking-[0.16em] text-muted-foreground/70">
           Sources
         </p>
         <div className="flex flex-wrap gap-1.5">
@@ -505,7 +505,7 @@ export function CatalystAnswerCard({ className }: { className?: string }) {
             <span
               key={c.label}
               className={cn(
-                "inline-flex items-center gap-1 rounded-md border px-2 py-1 text-xs",
+                "inline-flex items-center gap-1 rounded-md border px-2 py-1 text-[14px]",
                 c.internal
                   ? "border-[var(--n9-accent)]/25 bg-[var(--n9-accent-light)] text-[var(--n9-accent)]"
                   : "border-border/60 bg-muted/40 text-muted-foreground",
@@ -617,7 +617,7 @@ function MockFrame({ children, label }: { children: React.ReactNode; label: stri
       <div className="mb-2 flex items-center gap-1">
         <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground/30" />
         <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground/30" />
-        <span className="ml-auto text-xs font-semibold uppercase tracking-wide text-muted-foreground/60">
+        <span className="ml-auto text-[14px] font-semibold uppercase tracking-wide text-muted-foreground/60">
           {label}
         </span>
       </div>
@@ -634,9 +634,9 @@ export function MiniNoteMock() {
         <Bar w="70%" />
         <Bar w="92%" />
         <div className="flex flex-wrap items-center gap-1 py-0.5">
-          <span className="rounded bg-[var(--n9-accent-light)] px-1.5 py-0.5 text-xs font-medium text-[var(--n9-accent)]">@protocol</span>
+          <span className="rounded bg-[var(--n9-accent-light)] px-1.5 py-0.5 text-[14px] font-medium text-[var(--n9-accent)]">@protocol</span>
           <Bar w="28%" />
-          <span className="rounded bg-[var(--n9-accent-light)] px-1.5 py-0.5 text-xs font-medium text-[var(--n9-accent)]">@sample</span>
+          <span className="rounded bg-[var(--n9-accent-light)] px-1.5 py-0.5 text-[14px] font-medium text-[var(--n9-accent)]">@sample</span>
         </div>
         <Bar w="84%" />
       </div>
@@ -657,7 +657,7 @@ export function MiniChatMock() {
           <div className="mt-1"><Bar w="60%" tone="accent" /></div>
         </div>
         <div className="flex gap-1">
-          <span className="inline-flex items-center gap-0.5 rounded border border-[var(--n9-accent)]/25 bg-[var(--n9-accent-light)] px-1 py-0.5 text-xs text-[var(--n9-accent)]">
+          <span className="inline-flex items-center gap-0.5 rounded border border-[var(--n9-accent)]/25 bg-[var(--n9-accent-light)] px-1 py-0.5 text-[14px] text-[var(--n9-accent)]">
             <Quote className="h-2 w-2" /> source
           </span>
         </div>
@@ -778,10 +778,10 @@ export function BioCatalystDemo() {
       {/* Mascot + positioning copy */}
       <div className="flex flex-col items-start gap-4">
         <IceMascot className="w-28 drop-shadow-[0_16px_30px_rgba(150,80,52,0.25)] sm:w-36" />
-        <span className="inline-flex items-center gap-2 rounded-full border border-[var(--n9-accent)]/25 bg-[var(--n9-accent-light)] px-3 py-1 text-xs font-semibold text-[var(--n9-accent)]">
+        <span className="inline-flex items-center gap-2 rounded-full border border-[var(--n9-accent)]/25 bg-[var(--n9-accent-light)] px-3 py-1 text-[14px] font-semibold text-[var(--n9-accent)]">
           <Sparkles className="h-3.5 w-3.5" /> Biology-first AI
         </span>
-        <p className="text-base leading-7 text-muted-foreground">
+        <p className="text-[18px] leading-7 text-muted-foreground">
           Tuned for the life sciences. It reads your context fast and answers in the language of the
           bench.
         </p>
@@ -789,7 +789,7 @@ export function BioCatalystDemo() {
           {["Genomics", "Proteomics", "Cell culture", "Assays", "Constructs"].map((d) => (
             <span
               key={d}
-              className="rounded-full border border-[var(--n9-accent)]/20 bg-[var(--n9-accent-light)]/70 px-2.5 py-1 text-xs font-medium text-[var(--n9-accent)]"
+              className="rounded-full border border-[var(--n9-accent)]/20 bg-[var(--n9-accent-light)]/70 px-2.5 py-1 text-[14px] font-medium text-[var(--n9-accent)]"
             >
               {d}
             </span>
@@ -804,8 +804,8 @@ export function BioCatalystDemo() {
             <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-[var(--n9-accent)] text-white">
               <Sparkles className="h-4 w-4" />
             </span>
-            <span className="text-sm font-semibold text-foreground">Catalyst</span>
-            <span className="ml-auto rounded-full bg-[var(--n9-accent-light)] px-2 py-0.5 text-xs font-semibold uppercase tracking-wide text-[var(--n9-accent)]">
+            <span className="text-[16px] font-semibold text-foreground">Catalyst</span>
+            <span className="ml-auto rounded-full bg-[var(--n9-accent-light)] px-2 py-0.5 text-[14px] font-semibold uppercase tracking-wide text-[var(--n9-accent)]">
               Biology-first
             </span>
           </div>
@@ -818,7 +818,7 @@ export function BioCatalystDemo() {
                 type="button"
                 onClick={() => setActive(i)}
                 className={cn(
-                  "rounded-full border px-2.5 py-1 text-xs font-medium transition-colors",
+                  "rounded-full border px-2.5 py-1 text-[14px] font-medium transition-colors",
                   i === active
                     ? "border-[var(--n9-accent)]/40 bg-[var(--n9-accent-light)] text-[var(--n9-accent)]"
                     : "border-border/60 bg-muted/30 text-muted-foreground hover:text-foreground",
@@ -830,7 +830,7 @@ export function BioCatalystDemo() {
           </div>
 
           {/* Answer */}
-          <div className="mt-4 min-h-[6.5rem] space-y-2 text-sm leading-6">
+          <div className="mt-4 min-h-[6.5rem] space-y-2 text-[16px] leading-6">
             <p className="font-medium text-foreground">{qa.q}</p>
             <p className="text-muted-foreground">
               {typed}
@@ -847,7 +847,7 @@ export function BioCatalystDemo() {
               animate={{ opacity: 1, y: 0 }}
               className="mt-3 border-t border-border/50 pt-3"
             >
-              <p className="mb-2 text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground/70">
+              <p className="mb-2 text-[14px] font-semibold uppercase tracking-[0.16em] text-muted-foreground/70">
                 Sources
               </p>
               <div className="flex flex-wrap gap-1.5">
@@ -855,7 +855,7 @@ export function BioCatalystDemo() {
                   <span
                     key={s}
                     className={cn(
-                      "inline-flex items-center gap-1 rounded-md border px-2 py-1 text-xs",
+                      "inline-flex items-center gap-1 rounded-md border px-2 py-1 text-[14px]",
                       i < qa.sources.length - 1
                         ? "border-[var(--n9-accent)]/25 bg-[var(--n9-accent-light)] text-[var(--n9-accent)]"
                         : "border-border/60 bg-muted/40 text-muted-foreground",
@@ -897,18 +897,18 @@ export function AcademicMock() {
   return (
     <MockFrame label="Manuscript">
       <div className="space-y-1.5">
-        <span className="text-xs font-semibold text-[var(--n9-accent)]">Methods</span>
+        <span className="text-[14px] font-semibold text-[var(--n9-accent)]">Methods</span>
         <Bar w="94%" />
         <div className="flex items-center gap-1">
           <Bar w="58%" />
-          <span className="rounded bg-[var(--n9-accent-light)] px-1 text-xs font-bold text-[var(--n9-accent)]">[1]</span>
+          <span className="rounded bg-[var(--n9-accent-light)] px-1 text-[14px] font-bold text-[var(--n9-accent)]">[1]</span>
         </div>
         <Bar w="86%" />
         <div className="flex items-center gap-1">
           <Bar w="44%" />
-          <span className="rounded bg-[var(--n9-accent-light)] px-1 text-xs font-bold text-[var(--n9-accent)]">[2]</span>
+          <span className="rounded bg-[var(--n9-accent-light)] px-1 text-[14px] font-bold text-[var(--n9-accent)]">[2]</span>
         </div>
-        <p className="pt-0.5 text-xs text-muted-foreground/70">Drafted from your notes · auto-cited</p>
+        <p className="pt-0.5 text-[14px] text-muted-foreground/70">Drafted from your notes · auto-cited</p>
       </div>
     </MockFrame>
   )
@@ -935,7 +935,7 @@ function AccelTrack({
   const inView = useInView(ref, { once: true, margin: "-40px" })
   return (
     <div>
-      <div className="mb-1.5 flex items-center justify-between text-xs">
+      <div className="mb-1.5 flex items-center justify-between text-[14px]">
         <span className={accent ? "font-semibold text-[var(--n9-accent)]" : "text-muted-foreground"}>{label}</span>
         <span className={accent ? "font-semibold text-[var(--n9-accent)]" : "text-muted-foreground/70"}>{value}</span>
       </div>
@@ -955,10 +955,10 @@ export function AccelerateDiscovery() {
   return (
     <div className="n9-card p-6 sm:p-7">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <span className="inline-flex items-center gap-1.5 rounded-full border border-[var(--n9-accent)]/25 bg-[var(--n9-accent-light)] px-3 py-1 text-xs font-semibold text-[var(--n9-accent)]">
+        <span className="inline-flex items-center gap-1.5 rounded-full border border-[var(--n9-accent)]/25 bg-[var(--n9-accent-light)] px-3 py-1 text-[14px] font-semibold text-[var(--n9-accent)]">
           <Sparkles className="h-3.5 w-3.5" /> Biology-first AI
         </span>
-        <span className="inline-flex items-center gap-1.5 text-sm font-semibold text-foreground">
+        <span className="inline-flex items-center gap-1.5 text-[16px] font-semibold text-foreground">
           <Zap className="h-4 w-4 text-[var(--n9-accent)]" /> Weeks → days
         </span>
       </div>
@@ -966,7 +966,7 @@ export function AccelerateDiscovery() {
       <div className="mt-5 flex flex-wrap items-center gap-1.5">
         {ACCEL_PATH.map((s, i) => (
           <Fragment key={s}>
-            <span className="rounded-lg border border-border/60 bg-card px-2.5 py-1 text-xs font-medium text-foreground">
+            <span className="rounded-lg border border-border/60 bg-card px-2.5 py-1 text-[14px] font-medium text-foreground">
               {s}
             </span>
             {i < ACCEL_PATH.length - 1 ? <ArrowRight className="h-3.5 w-3.5 text-[var(--n9-accent)]/50" /> : null}
@@ -979,7 +979,7 @@ export function AccelerateDiscovery() {
         <AccelTrack label="With Catalyst" value="~9 days" pct={26} accent />
       </div>
 
-      <p className="mt-5 text-sm leading-6 text-muted-foreground">
+      <p className="mt-5 text-[16px] leading-6 text-muted-foreground">
         From question to validated insight — Catalyst reasons over your bio context to cut the
         busywork, not the rigor.
       </p>
@@ -1019,10 +1019,10 @@ export function AcademicNarrative() {
     >
       {/* the question */}
       <div className="flex items-center gap-2">
-        <span className="flex h-6 w-6 items-center justify-center rounded-full bg-muted text-xs font-bold text-muted-foreground">
+        <span className="flex h-6 w-6 items-center justify-center rounded-full bg-muted text-[14px] font-bold text-muted-foreground">
           PI
         </span>
-        <span className="rounded-lg rounded-bl-sm bg-muted/60 px-2.5 py-1.5 text-xs text-foreground">
+        <span className="rounded-lg rounded-bl-sm bg-muted/60 px-2.5 py-1.5 text-[14px] text-foreground">
           Why was condition B chosen?
         </span>
       </div>
@@ -1035,10 +1035,10 @@ export function AcademicNarrative() {
               initial={{ opacity: 0, y: 6, scale: 0.96 }}
               animate={{ opacity: 1, y: 0, scale: 1 }}
               transition={{ delay: base * i * 0.5, duration: 0.4 }}
-              className="inline-flex items-center gap-1 rounded-lg border border-[var(--n9-accent)]/25 bg-[var(--n9-accent-light)] px-2 py-1 text-xs font-semibold text-[var(--n9-accent)]"
+              className="inline-flex items-center gap-1 rounded-lg border border-[var(--n9-accent)]/25 bg-[var(--n9-accent-light)] px-2 py-1 text-[14px] font-semibold text-[var(--n9-accent)]"
             >
               {c.label}
-              {c.cite ? <sup className="text-xs">[{c.cite}]</sup> : null}
+              {c.cite ? <sup className="text-[14px]">[{c.cite}]</sup> : null}
             </motion.span>
             {i < chain.length - 1 ? (
               <motion.span
@@ -1059,7 +1059,7 @@ export function AcademicNarrative() {
         initial={{ opacity: 0, y: 4 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: base * (chain.length * 0.5 + 0.2) }}
-        className="mt-3 inline-flex items-center gap-1.5 rounded-md bg-[var(--n9-accent)] px-2.5 py-1 text-xs font-semibold text-white"
+        className="mt-3 inline-flex items-center gap-1.5 rounded-md bg-[var(--n9-accent)] px-2.5 py-1 text-[14px] font-semibold text-white"
       >
         <Check className="h-3 w-3" /> Reconstructed, with citations
       </motion.div>
@@ -1095,7 +1095,7 @@ export function StartupNarrative() {
       className="rounded-xl border border-border/60 bg-card/80 p-4 shadow-[0_18px_50px_-30px_rgba(44,36,24,0.3)]"
     >
       <div className="flex items-center justify-between">
-        <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground/70">
+        <span className="text-[14px] font-semibold uppercase tracking-wide text-muted-foreground/70">
           Quarter {q + 1}
         </span>
         <span className="flex -space-x-1.5">
@@ -1103,7 +1103,7 @@ export function StartupNarrative() {
             <span
               key={m.id}
               className={cn(
-                "flex h-5 w-5 items-center justify-center rounded-full border-2 border-card bg-muted text-xs font-bold text-muted-foreground",
+                "flex h-5 w-5 items-center justify-center rounded-full border-2 border-card bg-muted text-[14px] font-bold text-muted-foreground",
                 m.left && "opacity-30 line-through",
               )}
             >
@@ -1115,7 +1115,7 @@ export function StartupNarrative() {
 
       {/* memory meter — grows and stays full even as A leaves */}
       <div className="mt-4">
-        <div className="mb-1 flex items-center justify-between text-xs text-muted-foreground">
+        <div className="mb-1 flex items-center justify-between text-[14px] text-muted-foreground">
           <span>Project memory</span>
           <span className="font-semibold text-[var(--n9-accent)]">{cur.items} items</span>
         </div>
@@ -1128,7 +1128,7 @@ export function StartupNarrative() {
         </div>
       </div>
 
-      <p className="mt-3 text-xs leading-5 text-muted-foreground">
+      <p className="mt-3 text-[14px] leading-5 text-muted-foreground">
         A rotated out — the work, rationale and results <span className="font-semibold text-foreground">stayed</span>.
       </p>
     </div>
@@ -1153,9 +1153,9 @@ export function StartupMock() {
               />
             ))}
           </div>
-          <span className="text-xs text-muted-foreground/70">people rotate</span>
+          <span className="text-[14px] text-muted-foreground/70">people rotate</span>
           <ArrowRight className="ml-auto h-3.5 w-3.5 text-[var(--n9-accent)]/60" />
-          <span className="inline-flex items-center gap-1 rounded-md border border-[var(--n9-accent)]/30 bg-[var(--n9-accent-light)] px-2 py-1 text-xs font-semibold text-[var(--n9-accent)]">
+          <span className="inline-flex items-center gap-1 rounded-md border border-[var(--n9-accent)]/30 bg-[var(--n9-accent-light)] px-2 py-1 text-[14px] font-semibold text-[var(--n9-accent)]">
             <Database className="h-3 w-3" /> memory
           </span>
         </div>

@@ -48,7 +48,7 @@ export function ScrollFeature({ title, description, icon: Icon, image, align = "
                             <h2 className="text-4xl md:text-5xl font-bold tracking-tight text-foreground text-balance leading-tight">
                                 {title}
                             </h2>
-                            <p className="text-xl text-muted-foreground leading-relaxed">
+                            <p className="text-[22px] text-muted-foreground leading-relaxed">
                                 {description}
                             </p>
                             <motion.div
@@ -77,7 +77,7 @@ export function ScrollFeature({ title, description, icon: Icon, image, align = "
                                     <div className="w-3 h-3 rounded-full bg-[#28C840] border border-[#1AAB29]" />
                                 </div>
                                 {/* Mock Search Bar */}
-                                <div className="ml-4 flex-1 max-w-[60%] h-6 bg-muted/50 rounded-md flex items-center justify-center text-xs text-muted-foreground/50 font-medium">
+                                <div className="ml-4 flex-1 max-w-[60%] h-6 bg-muted/50 rounded-md flex items-center justify-center text-[14px] text-muted-foreground/50 font-medium">
                                     notes9.app/{image.split('.')[0]}
                                 </div>
                             </div>

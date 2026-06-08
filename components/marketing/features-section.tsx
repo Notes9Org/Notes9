@@ -26,7 +26,7 @@ export function FeaturesSection() {
           <h2 className="font-serif text-3xl tracking-tight text-foreground sm:text-4xl">
             The problem is real and measurable
           </h2>
-          <p className="mt-4 text-base leading-7 text-muted-foreground">
+          <p className="mt-4 text-[18px] leading-7 text-muted-foreground">
             Fragmented workflows cost small labs real time and money every week.
           </p>
         </div>
@@ -37,8 +37,8 @@ export function FeaturesSection() {
               <div className="text-4xl font-bold tracking-tight text-[var(--n9-accent)]">
                 {m.value}
               </div>
-              <p className="mt-3 text-sm leading-6 text-muted-foreground">{m.label}</p>
-              <p className="mt-3 text-xs uppercase tracking-[0.16em] text-muted-foreground/60">
+              <p className="mt-3 text-[16px] leading-6 text-muted-foreground">{m.label}</p>
+              <p className="mt-3 text-[14px] uppercase tracking-[0.16em] text-muted-foreground/60">
                 {m.source}
               </p>
             </div>

@@ -71,7 +71,7 @@ export function Header() {
                   key={link.href}
                   href={link.href}
                   onClick={() => setIsMenuOpen(false)}
-                  className="flex h-11 items-center px-4 text-base font-medium text-foreground hover:bg-muted"
+                  className="flex h-11 items-center px-4 text-[18px] font-medium text-foreground hover:bg-muted"
                 >
                   {link.label}
                 </Link>

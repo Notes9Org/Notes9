@@ -146,6 +146,20 @@
     0 28px 70px -38px rgba(0, 0, 0, 0.6);
 }
 
+/* Sticky-note paper: warm stock + faint fractal-noise grain + a top-left light. */
+.marketing-theme .n9-sticky {
+  background-color: #fbf2da;
+  background-image:
+    radial-gradient(130% 110% at 0% 0%, rgba(255, 255, 255, 0.55), transparent 55%),
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='90' height='90'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.06'/%3E%3C/svg%3E");
+}
+.dark .marketing-theme .n9-sticky {
+  background-color: #2c2820;
+  background-image:
+    radial-gradient(130% 110% at 0% 0%, rgba(255, 255, 255, 0.06), transparent 55%),
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='90' height='90'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.08'/%3E%3C/svg%3E");
+}
+
 /* Soft radial accent glow placed behind a signature section. */
 .marketing-theme .n9-glow::after {
   content: "";

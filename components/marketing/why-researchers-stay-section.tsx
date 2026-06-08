@@ -587,7 +587,7 @@ function AdoptionIntroBlock() {
       viewport={{ once: true, margin: "-32px" }}
       className="mx-auto mt-12 max-w-3xl text-center sm:mt-14 lg:mt-16"
     >
-      <p className="text-[13px] font-semibold leading-snug text-[#2a5740] dark:text-[var(--n9-accent)] sm:text-sm">
+      <p className="text-[13px] font-semibold leading-snug text-[#2a5740] dark:text-[var(--n9-accent)] sm:text-[16px]">
         Practical to adopt. Serious about research data.
       </p>
     </motion.div>
@@ -613,7 +613,7 @@ function PostTrustCtaBlock() {
         <div className="text-left">
           <span
             className={cn(
-              "inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-semibold tracking-wide",
+              "inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-[14px] font-semibold tracking-wide",
               "border-emerald-600/35 bg-emerald-50/80 text-[#1f6b49]",
               "dark:border-emerald-400/45 dark:bg-emerald-500/10 dark:text-emerald-300",
             )}
@@ -626,7 +626,7 @@ function PostTrustCtaBlock() {
           <h3 className="mt-5 text-[1.65rem] font-bold leading-tight tracking-tight text-[#1a1a1a] dark:text-[#f5f0e8] sm:text-3xl lg:text-[1.75rem] lg:leading-snug">
             See how <span className="text-[var(--n9-accent)]">connected</span> research can feel in practice
           </h3>
-          <p className="mt-3 max-w-xl text-pretty text-[0.9375rem] leading-relaxed text-[#555] sm:text-base dark:text-[#f5f0e8]/92">
+          <p className="mt-3 max-w-xl text-pretty text-[0.9375rem] leading-relaxed text-[#555] sm:text-[18px] dark:text-[#f5f0e8]/92">
             If your team is juggling with papers, protocols, notes, data, and reporting across too many tools, <span className="text-[var(--n9-accent)]">Notes9</span> can help bringing that workflow together. Start free, request a demo or see how it works.
           </p>
           <div className="mt-7 flex flex-col gap-3 sm:mt-9 sm:flex-row sm:flex-wrap sm:items-center">
@@ -742,7 +742,7 @@ function TrustApproachStrip() {
             >
               <item.Icon className="h-6 w-6 sm:h-7 sm:w-7" strokeWidth={1.5} aria-hidden />
             </div>
-            <p className="mt-3 max-w-[15rem] text-[0.8125rem] leading-relaxed text-[#555] sm:mt-3.5 sm:max-w-none sm:text-sm sm:leading-relaxed dark:text-[#f5f0e8]/92">
+            <p className="mt-3 max-w-[15rem] text-[0.8125rem] leading-relaxed text-[#555] sm:mt-3.5 sm:max-w-none sm:text-[16px] sm:leading-relaxed dark:text-[#f5f0e8]/92">
               {item.body}
             </p>
           </div>
@@ -778,7 +778,7 @@ export function WhyResearchersStaySection() {
             <br />
             Not just another AI tool.
           </h2>
-          <p className="mt-3.5 text-base font-normal text-[#555] dark:text-muted-foreground sm:text-[16px]">
+          <p className="mt-3.5 text-[18px] font-normal text-[#555] dark:text-muted-foreground sm:text-[16px]">
           Traditional ELNs are good at recordkeeping. Current Al tools are good at general tasks, literature search, and writing assistance. Notes bridges that gap by connecting
           literature review, experiment work, and research writing in one Al-native workspace.
           </p>
@@ -854,8 +854,8 @@ export function WhyResearchersStaySection() {
                 )}
               >
                 <CardIllustration cardId={c.id} markerId={markerId} />
-                <h3 className={cn("mt-1 text-lg font-bold", ts.title)}>{c.title}</h3>
-                <p className="text-sm leading-relaxed text-[#666] dark:text-muted-foreground">{c.body}</p>
+                <h3 className={cn("mt-1 text-[20px] font-bold", ts.title)}>{c.title}</h3>
+                <p className="text-[16px] leading-relaxed text-[#666] dark:text-muted-foreground">{c.body}</p>
               </article>
             )
           })}

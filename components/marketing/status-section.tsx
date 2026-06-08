@@ -50,7 +50,7 @@ export function StatusSection() {
           <h2 className="font-serif text-3xl tracking-tight text-foreground sm:text-4xl">
             The problem is real and measurable
           </h2>
-          <p className="mt-4 text-lg leading-7 text-muted-foreground">
+          <p className="mt-4 text-[20px] leading-7 text-muted-foreground">
             Fragmented workflows cost labs real time and money every week.
           </p>
         </motion.div>
@@ -71,10 +71,10 @@ export function StatusSection() {
               <div className="text-4xl font-bold tracking-tight text-[var(--n9-accent)]">
                 <AnimatedCounter value={m.value} />
               </div>
-              <p className="mt-3 text-sm leading-6 text-muted-foreground">
+              <p className="mt-3 text-[16px] leading-6 text-muted-foreground">
                 {m.label}
               </p>
-              <p className="mt-3 text-xs uppercase tracking-[0.16em] text-muted-foreground/60">
+              <p className="mt-3 text-[14px] uppercase tracking-[0.16em] text-muted-foreground/60">
                 {m.source}
               </p>
             </motion.div>

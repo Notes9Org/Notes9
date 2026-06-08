@@ -56,7 +56,7 @@ export function ConnectedChainSection() {
   return (
     <div className="border-y border-border/50 bg-background py-8">
       <div className="container mx-auto mb-5 px-4 sm:px-6 lg:px-8">
-        <p className="text-center text-xs font-semibold uppercase tracking-[0.22em] text-muted-foreground/70">
+        <p className="text-center text-[14px] font-semibold uppercase tracking-[0.22em] text-muted-foreground/70">
           One connected thread, from first paper to final report
         </p>
       </div>
@@ -76,14 +76,14 @@ export function PainSection() {
             badge="The problem"
             title="Your data survives. The reason behind it doesn't."
           />
-          <p className="mt-5 text-lg leading-8 text-muted-foreground">
+          <p className="mt-5 text-[20px] leading-8 text-muted-foreground">
             Protocol in one folder, plate map in a spreadsheet, rationale in a reference manager,
             notes somewhere else. Three months on, no one on the team can say{" "}
             <em>why condition B</em>.
           </p>
         </div>
         <div>
-          <p className="mb-4 text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground/60">
+          <p className="mb-4 text-[14px] font-semibold uppercase tracking-[0.18em] text-muted-foreground/60">
             Your stack today
           </p>
           <ScatteredStack />
@@ -114,12 +114,12 @@ function BeforeAfter() {
     <div className="mt-12 grid gap-6 lg:grid-cols-2">
       <Reveal3D>
         <div className="n9-card h-full p-7">
-          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground/70">
+          <p className="text-[14px] font-semibold uppercase tracking-[0.18em] text-muted-foreground/70">
             Without Notes9
           </p>
           <ul className="mt-5 space-y-3.5">
             {WITHOUT_NOTES9.map((x) => (
-              <li key={x} className="flex items-start gap-3 text-sm leading-6 text-muted-foreground">
+              <li key={x} className="flex items-start gap-3 text-[16px] leading-6 text-muted-foreground">
                 <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground/60">
                   <X className="h-3 w-3" />
                 </span>
@@ -131,12 +131,12 @@ function BeforeAfter() {
       </Reveal3D>
       <Reveal3D delay={0.1}>
         <div className="relative h-full overflow-hidden rounded-3xl border border-[var(--n9-accent)]/30 bg-[linear-gradient(135deg,var(--n9-accent-light),color-mix(in_oklab,var(--n9-accent)_10%,var(--card)))] p-7 shadow-[0_36px_100px_-46px_var(--n9-accent-glow)]">
-          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[var(--n9-accent)]">
+          <p className="text-[14px] font-semibold uppercase tracking-[0.18em] text-[var(--n9-accent)]">
             With Notes9
           </p>
           <ul className="mt-5 space-y-3.5">
             {WITH_NOTES9.map((x) => (
-              <li key={x} className="flex items-start gap-3 text-sm font-medium leading-6 text-foreground">
+              <li key={x} className="flex items-start gap-3 text-[16px] font-medium leading-6 text-foreground">
                 <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[var(--n9-accent)] text-white">
                   <Check className="h-3 w-3" />
                 </span>
@@ -199,14 +199,14 @@ function ProblemStats() {
                 value={s.value}
                 className="font-serif text-5xl font-bold tracking-tight text-[var(--n9-accent)] sm:text-6xl"
               />
-              <p className="mx-auto mt-3 max-w-xs text-sm leading-6 text-muted-foreground sm:mx-0">
+              <p className="mx-auto mt-3 max-w-xs text-[16px] leading-6 text-muted-foreground sm:mx-0">
                 {s.label}
               </p>
             </div>
           </Reveal3D>
         ))}
       </div>
-      <p className="mt-8 text-xs text-muted-foreground/60">
+      <p className="mt-8 text-[14px] text-muted-foreground/60">
         Reproducibility figures: Nature survey of 1,576 researchers (2016).
       </p>
     </div>
@@ -252,7 +252,7 @@ export function OutcomesSection() {
             <TiltCard className="h-full">
               <div className="n9-card flex h-full flex-col p-5">
                 <div className="[transform:translateZ(40px)]">{c.mock}</div>
-                <h3 className="mt-4 text-sm font-semibold text-foreground">{c.label}</h3>
+                <h3 className="mt-4 text-[16px] font-semibold text-foreground">{c.label}</h3>
               </div>
             </TiltCard>
           </Reveal3D>
@@ -303,8 +303,8 @@ export function ContextEngineeringSection() {
                   <div className="mb-4 inline-flex h-11 w-11 items-center justify-center rounded-xl bg-[var(--n9-accent)] text-white">
                     <Icon className="h-5 w-5" />
                   </div>
-                  <h3 className="text-base font-semibold text-foreground">{p.title}</h3>
-                  <p className="mt-2 text-sm leading-6 text-muted-foreground">{p.body}</p>
+                  <h3 className="text-[18px] font-semibold text-foreground">{p.title}</h3>
+                  <p className="mt-2 text-[16px] leading-6 text-muted-foreground">{p.body}</p>
                 </div>
               </TiltCard>
             </Reveal3D>
@@ -359,7 +359,7 @@ export function CatalystSection() {
               "Every response lists its sources at the bottom — your internal documents and web results — so you can verify each claim instead of trusting a black box.",
               "Drag a saved paper straight into Catalyst to ask questions grounded in that exact source.",
             ].map((t) => (
-              <li key={t} className="flex items-start gap-3 text-sm leading-6 text-muted-foreground">
+              <li key={t} className="flex items-start gap-3 text-[16px] leading-6 text-muted-foreground">
                 <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[var(--n9-accent-light)] text-[var(--n9-accent)]">
                   <Check className="h-3 w-3" />
                 </span>
@@ -417,8 +417,8 @@ export function IcpBenefitsSection() {
                     <Icon className="h-5 w-5" />
                   </span>
                   <div>
-                    <p className="text-base font-semibold text-foreground">{icp.who}</p>
-                    <p className="text-sm text-muted-foreground">{icp.line}</p>
+                    <p className="text-[18px] font-semibold text-foreground">{icp.who}</p>
+                    <p className="text-[16px] text-muted-foreground">{icp.line}</p>
                   </div>
                 </div>
                 <div className="mt-5 [transform:translateZ(34px)]">{icp.mock}</div>
@@ -426,7 +426,7 @@ export function IcpBenefitsSection() {
                   {icp.chips.map((c) => (
                     <span
                       key={c}
-                      className="inline-flex items-center gap-1 rounded-full border border-[var(--n9-accent)]/20 bg-[var(--n9-accent-light)] px-2.5 py-1 text-xs font-medium text-[var(--n9-accent)]"
+                      className="inline-flex items-center gap-1 rounded-full border border-[var(--n9-accent)]/20 bg-[var(--n9-accent-light)] px-2.5 py-1 text-[14px] font-medium text-[var(--n9-accent)]"
                     >
                       <Check className="h-3 w-3" />
                       {c}
@@ -496,7 +496,7 @@ export function TrustSection() {
               Honest about where Notes9 fits today
             </h2>
           </div>
-          <div className="space-y-4 text-sm leading-7 text-muted-foreground">
+          <div className="space-y-4 text-[16px] leading-7 text-muted-foreground">
             <p>
               Notes9 is currently best suited for <span className="font-medium text-foreground">non-clinical research workflow pilots</span> —
               literature-linked project organisation, protocol planning, experiment tracking, and
@@ -566,16 +566,16 @@ export function PricingTiers() {
             )}
           >
             <div className="flex items-center justify-between">
-              <h3 className="text-lg font-semibold text-foreground">{tier.name}</h3>
-              <span className="rounded-full border border-[var(--n9-accent)]/25 bg-[var(--n9-accent-light)] px-2.5 py-0.5 text-xs font-semibold uppercase tracking-wide text-[var(--n9-accent)]">
+              <h3 className="text-[20px] font-semibold text-foreground">{tier.name}</h3>
+              <span className="rounded-full border border-[var(--n9-accent)]/25 bg-[var(--n9-accent-light)] px-2.5 py-0.5 text-[14px] font-semibold uppercase tracking-wide text-[var(--n9-accent)]">
                 {tier.tag}
               </span>
             </div>
             <div className="mt-3 font-serif text-3xl text-foreground">{tier.price}</div>
-            <p className="mt-2 text-sm leading-6 text-muted-foreground">{tier.blurb}</p>
+            <p className="mt-2 text-[16px] leading-6 text-muted-foreground">{tier.blurb}</p>
             <ul className="mt-5 flex-1 space-y-2.5">
               {tier.points.map((p) => (
-                <li key={p} className="flex items-start gap-2.5 text-sm leading-6 text-muted-foreground">
+                <li key={p} className="flex items-start gap-2.5 text-[16px] leading-6 text-muted-foreground">
                   <Check className="mt-0.5 h-4 w-4 shrink-0 text-[var(--n9-accent)]" />
                   {p}
                 </li>
@@ -601,7 +601,7 @@ export function PricingTiers() {
           </Reveal3D>
         ))}
       </div>
-      <p className="mx-auto mt-6 max-w-2xl text-center text-xs text-muted-foreground/70">
+      <p className="mx-auto mt-6 max-w-2xl text-center text-[14px] text-muted-foreground/70">
         A middle “Team” tier is on the way. Until then, every feature is available free while we’re in
         early access.
       </p>
@@ -658,13 +658,13 @@ export function FaqSection() {
       <div className="mx-auto mt-10 max-w-2xl divide-y divide-border/60 rounded-2xl border border-border/60 bg-card/60">
         {FAQS.map((f) => (
           <details key={f.q} className="group px-5 py-4 sm:px-6">
-            <summary className="flex cursor-pointer list-none items-center justify-between gap-4 text-sm font-semibold text-foreground">
+            <summary className="flex cursor-pointer list-none items-center justify-between gap-4 text-[16px] font-semibold text-foreground">
               {f.q}
               <span className="text-[var(--n9-accent)] transition-transform duration-200 group-open:rotate-45">
                 <ArrowRight className="h-4 w-4 rotate-45" />
               </span>
             </summary>
-            <p className="mt-3 text-sm leading-6 text-muted-foreground">{f.a}</p>
+            <p className="mt-3 text-[16px] leading-6 text-muted-foreground">{f.a}</p>
           </details>
         ))}
       </div>
@@ -682,7 +682,7 @@ export function FinalCtaSection() {
             Turn scattered research work into{" "}
             <span className="n9-gradient-text">reusable scientific memory</span>
           </h2>
-          <p className="mx-auto mt-4 max-w-xl text-base leading-7 text-muted-foreground">
+          <p className="mx-auto mt-4 max-w-xl text-[18px] leading-7 text-muted-foreground">
             Preserve not just what happened, but why — from literature review to experiment to final
             report.
           </p>

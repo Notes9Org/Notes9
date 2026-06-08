@@ -80,11 +80,11 @@ export function ContactForm() {
         return (
             <div className="rounded-2xl border border-border/50 bg-card/80 p-6 backdrop-blur-sm dark:bg-card/60 sm:p-8">
                 <div className="mb-6">
-                    <h3 className="flex items-center gap-2 text-lg font-semibold text-foreground">
+                    <h3 className="flex items-center gap-2 text-[20px] font-semibold text-foreground">
                         <Send className="h-4 w-4 text-[var(--n9-accent)]" />
                         Book a workflow conversation
                     </h3>
-                    <p className="mt-1 text-sm text-muted-foreground">
+                    <p className="mt-1 text-[16px] text-muted-foreground">
                         Tell us about your lab and where friction shows up today. Messages go to admin@notes9.com.
                     </p>
                 </div>
@@ -114,11 +114,11 @@ export function ContactForm() {
     return (
         <div className="rounded-2xl border border-border/50 bg-card/80 p-6 backdrop-blur-sm dark:bg-card/60 sm:p-8">
             <div className="mb-6">
-                <h3 className="flex items-center gap-2 text-lg font-semibold text-foreground">
+                <h3 className="flex items-center gap-2 text-[20px] font-semibold text-foreground">
                     <Send className="h-4 w-4 text-[var(--n9-accent)]" />
                     Book a workflow conversation
                 </h3>
-                <p className="mt-1 text-sm text-muted-foreground">
+                <p className="mt-1 text-[16px] text-muted-foreground">
                     Tell us about your lab and where friction shows up today. Messages go to admin@notes9.com.
                 </p>
             </div>

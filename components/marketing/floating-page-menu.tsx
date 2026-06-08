@@ -39,7 +39,7 @@ export function FloatingPageMenu() {
               <Icon className="h-4 w-4 shrink-0" />
               <span
                 className={cn(
-                  "ml-3 whitespace-nowrap text-sm font-medium opacity-0 transition-opacity duration-150 group-hover:opacity-100",
+                  "ml-3 whitespace-nowrap text-[16px] font-medium opacity-0 transition-opacity duration-150 group-hover:opacity-100",
                 )}
               >
                 {link.label}
