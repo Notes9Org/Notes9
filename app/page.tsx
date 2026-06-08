@@ -6,6 +6,7 @@ import { AcademicHero } from "@/components/marketing/academic-hero"
 import { ContactForm } from "@/components/marketing/contact-form"
 import { FloatingPageMenu } from "@/components/marketing/floating-page-menu"
 import { ScreenBackdrop } from "@/components/marketing/screen-backdrop"
+import { AppGlyphRail } from "@/components/marketing/app-glyphs"
 import {
   CatalystShowcaseSection,
   ConnectedChainSection,
@@ -85,6 +86,7 @@ export default async function HomePage({
       <div className="relative z-10 flex flex-col min-h-screen">
         <Header />
         <FloatingPageMenu />
+        <AppGlyphRail />
         <main className="flex-1 pt-16">
           <AcademicHero />
           <ConnectedChainSection />
