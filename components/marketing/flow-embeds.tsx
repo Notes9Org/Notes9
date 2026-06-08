@@ -25,7 +25,7 @@ function ChipNodeComp({ data }: NodeProps<ChipNode>) {
   return (
     <div
       className={cn(
-        "rounded-xl border px-3 py-2 text-[12px] font-semibold shadow-sm",
+        "rounded-xl border px-3 py-2 text-center text-[12px] font-semibold shadow-sm",
         data.hub
           ? "border-[var(--n9-accent)]/40 bg-[var(--n9-accent)] text-white shadow-[0_10px_30px_-12px_var(--n9-accent-glow)]"
           : "border-border/60 bg-card text-foreground",
@@ -71,20 +71,27 @@ const dottedBg =
 export function MemoryHubFlow({ className }: { className?: string }) {
   const { nodes, edges } = useMemo(() => {
     const sources = ["Literature", "Protocols", "Experiments", "Lab notes", "Data"]
-    const gap = 64
+    const gap = 78
+    // Uniform width so every source's right-side handle sits at the SAME x —
+    // otherwise the shorter labels (e.g. "Data") start their line further left
+    // and look out of line with the rest of the fan into the hub.
+    const SRC_W = 158
+    const HUB_W = 168
     const ns: Node[] = sources.map((label, i) => ({
       id: `s${i}`,
       type: "chip",
       position: { x: 0, y: i * gap },
       data: { label },
+      style: { width: SRC_W },
       sourcePosition: Position.Right,
       targetPosition: Position.Left,
     }))
     ns.push({
       id: "hub",
       type: "chip",
-      position: { x: 300, y: ((sources.length - 1) * gap) / 2 },
+      position: { x: 380, y: ((sources.length - 1) * gap) / 2 },
       data: { label: "Project memory", hub: true },
+      style: { width: HUB_W },
       sourcePosition: Position.Right,
       targetPosition: Position.Left,
     })
@@ -95,7 +102,7 @@ export function MemoryHubFlow({ className }: { className?: string }) {
   return (
     <div
       className={cn(
-        "h-[300px] w-full overflow-hidden rounded-2xl border border-border/60 bg-card",
+        "h-[420px] w-full overflow-hidden rounded-2xl border border-border/60 bg-card",
         dottedBg,
         className,
       )}
@@ -103,7 +110,7 @@ export function MemoryHubFlow({ className }: { className?: string }) {
       <ReactFlow
         nodes={nodes}
         edges={edges}
-        fitViewOptions={{ padding: 0.16 }}
+        fitViewOptions={{ padding: 0.12 }}
         className="h-full w-full"
         {...STATIC_FLOW_PROPS}
       />
