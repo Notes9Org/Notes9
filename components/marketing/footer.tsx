@@ -1,8 +1,25 @@
 "use client"
 
-import { Mail, MapPin } from "lucide-react"
+import { Instagram, Linkedin, Mail, MapPin, Youtube } from "lucide-react"
 import Link from "next/link"
 import { Notes9Brand } from "@/components/brand/notes9-brand"
+
+/** X (formerly Twitter) logo — not in lucide, so inline. */
+function XIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="currentColor" className={className} aria-hidden>
+      <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
+    </svg>
+  )
+}
+
+const socials: { label: string; href: string; Icon: React.ComponentType<{ className?: string }> }[] = [
+  { label: "YouTube", href: "https://www.youtube.com/@Notes9-catalyst", Icon: Youtube },
+  { label: "LinkedIn", href: "https://www.linkedin.com/company/notes9", Icon: Linkedin },
+  { label: "X (Twitter)", href: "https://x.com/CatalystAI_N9", Icon: XIcon },
+  { label: "Instagram", href: "https://www.instagram.com/notes9_ai/", Icon: Instagram },
+  { label: "Email", href: "mailto:admin@notes9.com", Icon: Mail },
+]
 
 const footerLinks = {
   product: [
@@ -42,6 +59,22 @@ export function Footer() {
                   admin@notes9.com
                 </a>
               </div>
+            </div>
+
+            <div className="mt-6 flex items-center gap-3">
+              {socials.map(({ label, href, Icon }) => (
+                <a
+                  key={label}
+                  href={href}
+                  aria-label={label}
+                  title={label}
+                  target={href.startsWith("mailto:") ? undefined : "_blank"}
+                  rel={href.startsWith("mailto:") ? undefined : "noopener noreferrer"}
+                  className="flex h-9 w-9 items-center justify-center rounded-full border border-border/60 bg-card text-foreground/70 transition-colors hover:border-[var(--n9-accent)]/40 hover:text-[var(--n9-accent)]"
+                >
+                  <Icon className="h-4 w-4" />
+                </a>
+              ))}
             </div>
           </div>
 
