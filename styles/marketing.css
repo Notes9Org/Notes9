@@ -184,9 +184,11 @@
 }
 
 /* Seamless horizontal marquee for the connected-research chain embed */
+/* Scroll left → right, in the direction the chain arrows point. The track is
+   duplicated copies, so animating from -50% back to 0 loops seamlessly. */
 @keyframes n9-marquee {
-  from { transform: translateX(0); }
-  to   { transform: translateX(-50%); }
+  from { transform: translateX(-50%); }
+  to   { transform: translateX(0); }
 }
 .marketing-theme .n9-marquee-track {
   animation: n9-marquee 32s linear infinite;
