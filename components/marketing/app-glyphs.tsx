@@ -81,8 +81,8 @@ export function AppGlyph({
   )
 }
 
-/** One rail glyph that pops in (spring scale + fade) once the page scrolls past
- *  its threshold. */
+/** One rail glyph that eases in (soft scale + fade + rise) once the page scrolls
+ *  past its threshold. */
 function RailGlyph({
   kind,
   progress,
@@ -92,14 +92,17 @@ function RailGlyph({
   progress: MotionValue<number>
   start: number
 }) {
-  const opacity = useTransform(progress, [start, start + 0.05], [0, 1])
-  const scale = useSpring(useTransform(progress, [start, start + 0.05], [0.2, 1]), {
-    stiffness: 320,
-    damping: 16,
-  })
+  // Slow, refined entrance: gentle fade + soft scale and rise across a wide
+  // scroll window, eased with an over-damped spring so it glides in smoothly
+  // instead of popping.
+  const end = start + 0.16
+  const spring = { stiffness: 60, damping: 26, mass: 0.9 } as const
+  const opacity = useTransform(progress, [start, end], [0, 1])
+  const scale = useSpring(useTransform(progress, [start, end], [0.72, 1]), spring)
+  const y = useSpring(useTransform(progress, [start, end], [14, 0]), spring)
   return (
     <motion.div
-      style={{ opacity, scale }}
+      style={{ opacity, scale, y }}
       className="relative z-10 rounded-xl bg-background shadow-[0_8px_22px_-10px_rgba(20,18,16,0.35)] backdrop-blur-sm"
     >
       <AppGlyph kind={kind} compact />
@@ -114,7 +117,12 @@ function RailGlyph({
 export function AppGlyphRail() {
   const { scrollYProgress } = useScroll()
   const rail: AppKind[] = ["pdf", "spreadsheet", "doc", "note", "chat", "slides", "email", "calendar"]
-  const lineScale = useTransform(scrollYProgress, [0.05, 0.55], [0, 1])
+  // Smooth, unhurried line growth that trails the glyphs as they ease in.
+  const lineScale = useSpring(useTransform(scrollYProgress, [0.05, 0.72], [0, 1]), {
+    stiffness: 55,
+    damping: 24,
+    mass: 0.9,
+  })
   return (
     <div className="pointer-events-none fixed left-6 top-28 bottom-16 z-30 hidden flex-col items-center justify-between xl:flex">
       {/* connecting line behind the glyphs — grows to link them */}
@@ -129,7 +137,7 @@ export function AppGlyphRail() {
           key={kind}
           kind={kind}
           progress={scrollYProgress}
-          start={0.05 + (i / rail.length) * 0.45}
+          start={0.05 + (i / rail.length) * 0.6}
         />
       ))}
     </div>

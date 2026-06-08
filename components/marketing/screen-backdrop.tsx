@@ -8,7 +8,7 @@
  * screens only. Light/dark screenshots swap via `dark:`.
  */
 
-import { motion, useScroll } from "framer-motion"
+import { motion, useScroll, useTransform, type MotionValue } from "framer-motion"
 import { cn } from "@/lib/utils"
 
 // Screenshots that exist in BOTH /public/demo and /public/demo/light.
@@ -69,9 +69,86 @@ const EDGES: [number, number][] = (() => {
   )
 })()
 
-const WEB_D = EDGES.map(
-  ([a, b]) => `M ${NOTES[a].x} ${NOTES[a].y} L ${NOTES[b].x} ${NOTES[b].y}`,
-).join(" ")
+// Growth order: instead of revealing every connection at once, start from a
+// central seed note and repeatedly attach the NEAREST edge that touches the
+// already-connected set. The web therefore begins with a few notes and keeps
+// spreading outward from the notes connected so far. Each edge is oriented
+// from its already-connected endpoint → the new one, so the line visibly grows
+// outward from the existing web.
+const ORDERED: { fx: number; fy: number; tx: number; ty: number }[] = (() => {
+  const dist2 = (a: number, b: number) =>
+    (NOTES[a].x - NOTES[b].x) ** 2 + (NOTES[a].y - NOTES[b].y) ** 2
+  // central-most note as the seed (smallest total distance to the others)
+  let seed = 0
+  let best = Infinity
+  NOTES.forEach((_, i) => {
+    let s = 0
+    NOTES.forEach((_n, j) => {
+      if (i !== j) s += Math.sqrt(dist2(i, j))
+    })
+    if (s < best) {
+      best = s
+      seed = i
+    }
+  })
+  const connected = new Set<number>([seed])
+  const remaining = EDGES.map(([a, b]) => ({ a, b, d: dist2(a, b) }))
+  const out: { fx: number; fy: number; tx: number; ty: number }[] = []
+  while (remaining.length) {
+    let pickIdx = 0
+    let pickRank = Infinity
+    remaining.forEach((e, idx) => {
+      const touches = connected.has(e.a) || connected.has(e.b)
+      // prefer edges touching the connected frontier; among those, nearest first
+      const rank = (touches ? 0 : 1e9) + e.d
+      if (rank < pickRank) {
+        pickRank = rank
+        pickIdx = idx
+      }
+    })
+    const e = remaining.splice(pickIdx, 1)[0]
+    const from = connected.has(e.a) ? e.a : e.b
+    const to = from === e.a ? e.b : e.a
+    connected.add(e.a)
+    connected.add(e.b)
+    out.push({ fx: NOTES[from].x, fy: NOTES[from].y, tx: NOTES[to].x, ty: NOTES[to].y })
+  }
+  return out
+})()
+
+/** One web connection that draws itself (from its connected endpoint outward)
+ *  during its slice of the scroll progress. */
+function WebEdge({
+  fx,
+  fy,
+  tx,
+  ty,
+  start,
+  end,
+  progress,
+}: {
+  fx: number
+  fy: number
+  tx: number
+  ty: number
+  start: number
+  end: number
+  progress: MotionValue<number>
+}) {
+  const pathLength = useTransform(progress, [start, end], [0, 1])
+  return (
+    <motion.path
+      d={`M ${fx} ${fy} L ${tx} ${ty}`}
+      fill="none"
+      stroke="var(--n9-accent)"
+      strokeWidth={0.7}
+      strokeLinecap="round"
+      vectorEffect="non-scaling-stroke"
+      initial={false}
+      style={{ pathLength }}
+    />
+  )
+}
 
 function StickyNote({ name, rot }: { name: string; rot: number }) {
   return (
@@ -104,22 +181,20 @@ export function ScreenBackdrop({ className }: { className?: string }) {
         className,
       )}
     >
-      {/* A web of thin connections that fills in (more notes link to each other)
-          as the page scrolls. */}
+      {/* A web of thin connections that spreads outward from a few seed notes —
+          each connection draws in turn as the page scrolls, growing from the
+          notes already linked. */}
       <svg
         className="absolute inset-0 h-full w-full opacity-45 blur-[3px]"
         viewBox="0 0 100 100"
         preserveAspectRatio="none"
       >
-        <motion.path
-          d={WEB_D}
-          fill="none"
-          stroke="var(--n9-accent)"
-          strokeWidth={0.7}
-          strokeLinecap="round"
-          vectorEffect="non-scaling-stroke"
-          style={{ pathLength: scrollYProgress }}
-        />
+        {ORDERED.map((e, i) => {
+          const start = (i / ORDERED.length) * 0.8
+          return (
+            <WebEdge key={i} {...e} start={start} end={start + 0.12} progress={scrollYProgress} />
+          )
+        })}
       </svg>
 
       {/* sticky notes — anchored at their TOP-MIDDLE (so the web meets the top of
