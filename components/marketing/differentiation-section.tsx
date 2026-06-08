@@ -102,7 +102,7 @@ export function DifferentiationSection() {
             <Button
               asChild
               size="lg"
-              className="h-14 rounded-full bg-[var(--n9-accent)] px-10 text-white text-[18px] shadow-[0_12px_40px_-12px_var(--n9-accent-glow)] hover:bg-[var(--n9-accent-hover)] transition-all hover:scale-105 hover:shadow-[0_20px_50px_-12px_var(--n9-accent-glow)] cursor-pointer"
+              className="h-14 rounded-full bg-[var(--n9-accent)] px-10 text-white text-[18px] shadow-[0_12px_40px_-12px_var(--n9-accent-glow)] hover:bg-[var(--n9-accent-hover)] transition-colors hover:shadow-[0_20px_50px_-12px_var(--n9-accent-glow)] cursor-pointer"
             >
               <Link href="/#contact">
                 Request a personalized demo
