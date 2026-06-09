@@ -211,7 +211,7 @@
   to   { transform: translateX(0); }
 }
 .marketing-theme .n9-marquee-track {
-  animation: n9-marquee 32s linear infinite;
+  animation: n9-marquee 120s linear infinite;
 }
 .marketing-theme .n9-marquee-track:hover {
   animation-play-state: paused;

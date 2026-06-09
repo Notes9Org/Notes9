@@ -62,13 +62,13 @@ export function PageHero({
                   size="lg"
                   variant={action.variant ?? (index === 0 ? "default" : "outline")}
                   className={cn(
-                    "h-11 rounded-full px-6",
+                    "h-14 w-full rounded-full px-10 text-[17px] font-semibold sm:w-auto",
                     index === 0 && "bg-[var(--n9-accent)] text-white shadow-[0_12px_40px_-12px_var(--n9-accent-glow)] hover:bg-[var(--n9-accent-hover)]",
                   )}
                 >
                   <Link href={action.href}>
                     {action.label}
-                    {index === 0 ? <ArrowRight className="ml-2 h-4 w-4" /> : null}
+                    {index === 0 ? <ArrowRight className="ml-2 h-5 w-5" /> : null}
                   </Link>
                 </Button>
               ))}
@@ -267,15 +267,15 @@ export function CTAPanel({
         <Button
           asChild
           size="lg"
-          className="h-11 rounded-full bg-[var(--n9-accent)] px-6 text-white shadow-[0_12px_40px_-12px_var(--n9-accent-glow)] hover:bg-[var(--n9-accent-hover)]"
+          className="h-14 w-full rounded-full bg-[var(--n9-accent)] px-10 text-[17px] font-semibold text-white shadow-[0_12px_40px_-12px_var(--n9-accent-glow)] hover:bg-[var(--n9-accent-hover)] sm:w-auto"
         >
           <Link href={primary.href}>
             {primary.label}
-            <ArrowRight className="ml-2 h-4 w-4" />
+            <ArrowRight className="ml-2 h-5 w-5" />
           </Link>
         </Button>
         {secondary ? (
-          <Button asChild size="lg" variant="outline" className="h-11 rounded-full px-6">
+          <Button asChild size="lg" variant="outline" className="h-14 w-full rounded-full px-10 text-[17px] font-semibold sm:w-auto">
             <Link href={secondary.href}>{secondary.label}</Link>
           </Button>
         ) : null}

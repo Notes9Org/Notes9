@@ -3,7 +3,7 @@
 import { useRef } from "react"
 import Link from "next/link"
 import { motion, useScroll, useTransform } from "framer-motion"
-import { ArrowRight, Play, Sparkles } from "lucide-react"
+import { ArrowRight, Play } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { ConnectedResearchSystemDiagram } from "@/components/marketing/connected-research-system-diagram"
 import { HeroMolecules } from "@/components/marketing/hero-molecules"
@@ -43,15 +43,23 @@ export function AcademicHero() {
               className="pointer-events-none absolute -inset-x-4 -inset-y-6 bg-background/45 backdrop-blur-[7px] dark:bg-background/35 [mask-image:radial-gradient(120%_115%_at_42%_50%,#000_50%,transparent_100%)]"
             />
             <div className="relative z-10 space-y-5 sm:space-y-7">
+            <motion.p
+              initial={{ opacity: 0, y: 12 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.6, delay: 0.1 }}
+              className="text-[13px] font-semibold uppercase tracking-[0.22em] text-[var(--n9-accent)]"
+            >
+              AI-native lab notebook
+            </motion.p>
             <div className="max-w-3xl text-left font-serif text-[2.35rem] font-bold tracking-tight text-foreground sm:text-5xl lg:text-[3.45rem] lg:leading-[1.14] leading-[1.12]">
-              <PretextReveal text="The research workspace" />
+              <PretextReveal text="AI that answers from" />{" "}
               <motion.span
                 className="n9-gradient-text inline-block"
                 initial={{ opacity: 0, y: 16 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.6, delay: 0.45, ease: [0.22, 1, 0.36, 1] }}
               >
-                that remembers why.
+                your lab&rsquo;s actual work.
               </motion.span>
             </div>
 
@@ -62,10 +70,9 @@ export function AcademicHero() {
               className="max-w-2xl text-left text-[1.05rem] leading-relaxed text-muted-foreground sm:text-[22px] sm:leading-relaxed"
             >
               <p className="text-pretty">
-                Notes9 connects your{" "}
-                <span className="font-medium text-foreground">papers, protocols, experiments, notes, and reports</span>{" "}
-                into one traceable project memory — so the reasoning behind every result is never lost
-                across PDFs, spreadsheets, ELNs, and scattered AI chats.
+                <span className="font-semibold text-foreground">Stop re-explaining your science to AI.</span>{" "}
+                Notes9 connects your papers, experiments and notes into one memory Catalyst reasons
+                over — and cites.
               </p>
             </motion.div>
 
@@ -78,44 +85,24 @@ export function AcademicHero() {
               <Button
                 asChild
                 size="lg"
-                className="group h-12 w-full rounded-full bg-[linear-gradient(115deg,var(--n9-accent),color-mix(in_oklab,var(--n9-accent)_58%,#d9a24a))] px-8 text-white shadow-[0_14px_44px_-12px_var(--n9-accent-glow)] transition-all duration-300 hover:opacity-95 hover:shadow-[0_22px_56px_-12px_var(--n9-accent-glow)] sm:w-auto"
+                className="group h-14 w-full rounded-full px-10 text-[17px] font-semibold bg-[linear-gradient(115deg,var(--n9-accent),color-mix(in_oklab,var(--n9-accent)_58%,#d9a24a))] text-white shadow-[0_14px_44px_-12px_var(--n9-accent-glow)] transition-all duration-300 hover:opacity-95 hover:shadow-[0_22px_56px_-12px_var(--n9-accent-glow)] sm:w-auto"
               >
                 <Link href="/auth/sign-up">
                   Start free
-                  <ArrowRight className="ml-2 h-4 w-4 transition-transform duration-200 group-hover:translate-x-1" />
+                  <ArrowRight className="ml-2 h-5 w-5 transition-transform duration-200 group-hover:translate-x-1" />
                 </Link>
               </Button>
               <Button
                 asChild
                 variant="outline"
                 size="lg"
-                className="h-12 w-full rounded-full border-border/60 px-8 transition-colors duration-200 hover:border-[var(--n9-accent)]/40 sm:w-auto"
+                className="h-14 w-full rounded-full border-border/60 px-10 text-[17px] font-semibold transition-colors duration-200 hover:border-[var(--n9-accent)]/40 sm:w-auto"
               >
                 <Link href="/#contact">
-                  <Play className="mr-2 h-4 w-4" />
+                  <Play className="mr-2 h-5 w-5" />
                   Book a demo
                 </Link>
               </Button>
-            </motion.div>
-
-            <motion.div
-              initial={{ opacity: 0, y: 12 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.6, delay: 0.45 }}
-              className="flex justify-start pt-1"
-            >
-              <Link
-                href="/#catalyst"
-                className="group inline-flex items-center gap-2.5 rounded-full border border-[var(--n9-accent)]/20 bg-[var(--n9-accent-light)]/70 px-3.5 py-1.5 text-[16px] text-muted-foreground transition-colors hover:border-[var(--n9-accent)]/40"
-              >
-                <span className="flex h-5 w-5 items-center justify-center rounded-full bg-[var(--n9-accent)] text-white">
-                  <Sparkles className="h-3 w-3" />
-                </span>
-                Powered by{" "}
-                <span className="font-semibold text-[var(--n9-accent)]">Catalyst</span>
-                <span className="hidden sm:inline">— biology-first AI</span>
-                <ArrowRight className="h-3.5 w-3.5 text-[var(--n9-accent)]/60 transition-transform group-hover:translate-x-0.5" />
-              </Link>
             </motion.div>
             </div>
           </div>
@@ -140,7 +127,7 @@ export function AcademicHero() {
       <div className="h-auto min-h-16 py-4 sm:h-20 sm:min-h-0 sm:py-0">
         <div className="container mx-auto flex h-full items-center px-4 sm:px-6 lg:px-8">
           <p className="max-w-4xl text-[16px] text-muted-foreground/95 sm:text-[18px]">
-            For researchers tired of scattered papers, notes, protocols, spreadsheets, and disconnected AI tools.
+            For researchers already using AI — but tired of scattered context.
           </p>
         </div>
       </div>

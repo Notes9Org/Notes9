@@ -39,7 +39,6 @@ import {
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { IceMascot } from "@/components/ui/ice-mascot"
-import { MiniKnowledgeFlow } from "@/components/marketing/flow-embeds"
 
 // ---------------------------------------------------------------------------
 // 1. Connected-research chain — a seamless marquee of the research lifecycle.
@@ -57,14 +56,14 @@ const CHAIN = [
 
 function ChainPill({ label, icon: Icon }: { label: string; icon: typeof BookOpen }) {
   return (
-    <div className="flex shrink-0 items-center gap-2">
-      <div className="flex items-center gap-2 rounded-full border border-border/60 bg-card px-4 py-2 shadow-sm backdrop-blur-sm">
-        <span className="flex h-6 w-6 items-center justify-center rounded-full bg-[var(--n9-accent-light)] text-[var(--n9-accent)]">
-          <Icon className="h-3.5 w-3.5" />
+    <div className="flex shrink-0 items-center gap-4">
+      <div className="flex items-center gap-3 rounded-full border border-border/60 bg-card px-7 py-4 shadow-sm backdrop-blur-sm">
+        <span className="flex h-10 w-10 items-center justify-center rounded-full bg-[var(--n9-accent-light)] text-[var(--n9-accent)]">
+          <Icon className="h-5 w-5" />
         </span>
-        <span className="text-[16px] font-medium text-foreground">{label}</span>
+        <span className="text-[18px] font-medium text-foreground">{label}</span>
       </div>
-      <ArrowRight className="h-4 w-4 shrink-0 text-[var(--n9-accent)]/50" />
+      <ArrowRight className="h-6 w-6 shrink-0 text-[var(--n9-accent)]/50" />
     </div>
   )
 }
@@ -78,8 +77,8 @@ export function ConnectedChainMarquee() {
     <div className="relative w-full overflow-hidden py-2">
       {/* edge fades — matched to the page background so the strip never looks
           like it "ends" */}
-      <div className="pointer-events-none absolute inset-y-0 left-0 z-10 w-20 bg-gradient-to-r from-[var(--background)] to-transparent" />
-      <div className="pointer-events-none absolute inset-y-0 right-0 z-10 w-20 bg-gradient-to-l from-[var(--background)] to-transparent" />
+      <div className="pointer-events-none absolute inset-y-0 left-0 z-10 w-10 bg-gradient-to-r from-[var(--background)] to-transparent sm:w-20" />
+      <div className="pointer-events-none absolute inset-y-0 right-0 z-10 w-10 bg-gradient-to-l from-[var(--background)] to-transparent sm:w-20" />
       <div className="n9-marquee-track flex w-max items-center gap-3">
         {sequence.map((item, i) => (
           <ChainPill key={`${item.label}-${i}`} label={item.label} icon={item.icon} />
@@ -208,31 +207,31 @@ const ROLES = [
     icon: GraduationCap,
     outcome: "Make months of work defensible.",
     chips: ["Trace every result", "Reconstruct decisions", "Draft methods"],
-    mock: <MiniNoteMock />,
+    mock: <PhdTraceMock />,
   },
   {
     key: "pi",
     label: "PI",
     icon: Users,
-    outcome: "Walk in with the full trail.",
-    chips: ["See every run", "Ask your lab", "PI-ready updates"],
-    mock: <MiniChatMock />,
+    outcome: "Walk into any meeting with the full trail.",
+    chips: ["Oversee every project", "Reconstruct any decision", "Cited PI updates"],
+    mock: <PiBriefMock />,
   },
   {
     key: "lab-manager",
     label: "Lab manager",
     icon: Boxes,
-    outcome: "Keep everything traceable.",
-    chips: ["Versioned protocols", "Linked samples", "Easy onboarding"],
-    mock: <MiniKnowledgeFlow />,
+    outcome: "Keep every protocol, sample and result traceable.",
+    chips: ["Versioned protocols", "Samples linked to runs", "Fast onboarding"],
+    mock: <LabOpsMock />,
   },
   {
     key: "biotech",
     label: "Biotech R&D",
     icon: FlaskConical,
     outcome: "Keep knowledge as people rotate.",
-    chips: ["Rationale kept", "Cited reports", "Audit-friendly"],
-    mock: <MiniReportMock />,
+    chips: ["Decision trail kept", "Cited reports", "Audit-friendly"],
+    mock: <BiotechDecisionMock />,
   },
 ] as const
 
@@ -709,6 +708,189 @@ export function MiniGraphMock() {
           />
         ))}
       </svg>
+    </MockFrame>
+  )
+}
+
+/** PhD view: a single result reconstructed back through the exact chain that
+ *  produced it — paper → protocol → experiment → figure — so months of work
+ *  stay defensible in a thesis or viva. */
+export function PhdTraceMock() {
+  const chain = [
+    { icon: BookOpen, label: "Longo 2023" },
+    { icon: ClipboardList, label: "Protocol v3" },
+    { icon: FlaskConical, label: "Expt #14" },
+    { icon: BarChart3, label: "Fig 3.2" },
+  ]
+  return (
+    <MockFrame label="Viva-ready trace">
+      <div className="space-y-2">
+        <div className="flex items-center gap-1.5">
+          <span className="text-[14px] font-semibold text-foreground">Why “Fig 3.2”?</span>
+          <span className="inline-flex items-center gap-0.5 rounded bg-[var(--n9-accent-light)] px-1.5 py-0.5 text-[12px] font-semibold text-[var(--n9-accent)]">
+            <Check className="h-2.5 w-2.5" />
+            traceable
+          </span>
+        </div>
+        <div className="flex flex-wrap items-center gap-1">
+          {chain.map((c, i) => {
+            const CIcon = c.icon
+            return (
+              <Fragment key={c.label}>
+                <span className="inline-flex items-center gap-1 rounded-md border border-border/50 bg-background/60 px-1.5 py-0.5 text-[12px] text-foreground">
+                  <CIcon className="h-2.5 w-2.5 text-[var(--n9-accent)]" />
+                  {c.label}
+                </span>
+                {i < chain.length - 1 ? (
+                  <ArrowRight className="h-2.5 w-2.5 text-[var(--n9-accent)]/50" />
+                ) : null}
+              </Fragment>
+            )
+          })}
+        </div>
+        <span className="inline-flex items-center gap-1 rounded-md bg-[var(--n9-accent)] px-2 py-1 text-[12px] font-semibold text-white">
+          <FileSignature className="h-3 w-3" />
+          Draft methods from chain
+        </span>
+      </div>
+    </MockFrame>
+  )
+}
+
+/** Biotech R&D view: a decision log where each call keeps its rationale and
+ *  source — so the "why" survives even as scientists rotate, and reports stay
+ *  audit-friendly. */
+export function BiotechDecisionMock() {
+  const rows = [
+    { what: "Vector: pET-28a", why: "best expression in the screen", src: "Expt #9" },
+    { what: "Buffer: +1 mM TCEP", why: "kept cysteines reduced", src: "Protocol P-07" },
+  ]
+  return (
+    <MockFrame label="Decision log">
+      <div className="space-y-1.5">
+        {rows.map((r) => (
+          <div key={r.what} className="rounded-lg border border-border/50 bg-background/60 px-2 py-1.5">
+            <div className="flex items-center gap-1.5">
+              <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-[var(--n9-accent)]" />
+              <span className="text-[14px] font-semibold text-foreground">{r.what}</span>
+              <span className="ml-auto inline-flex shrink-0 items-center gap-0.5 rounded border border-[var(--n9-accent)]/25 bg-[var(--n9-accent-light)] px-1 text-[12px] text-[var(--n9-accent)]">
+                <Quote className="h-2 w-2" />
+                {r.src}
+              </span>
+            </div>
+            <p className="mt-0.5 pl-3 text-[14px] text-muted-foreground">{r.why}</p>
+          </div>
+        ))}
+        <div className="flex items-center gap-1 pt-0.5 text-[12px] text-muted-foreground/70">
+          <Check className="h-3 w-3 text-[var(--n9-accent)]" />
+          Rationale retained as the team rotates
+        </div>
+      </div>
+    </MockFrame>
+  )
+}
+
+/** PI view: oversee several projects and people at once, each line backed by a
+ *  source — so a PI can reconstruct any decision and walk into a meeting,
+ *  committee or grant with the full trail, without chasing anyone. */
+export function PiBriefMock() {
+  const rows = [
+    {
+      proj: "Project Vega",
+      who: "AC",
+      status: "On track",
+      ok: true,
+      note: "Yield ↑ 18% vs. last run",
+      src: "Expt #14",
+    },
+    {
+      proj: "Project Orion",
+      who: "RP",
+      status: "Blocked",
+      ok: false,
+      note: "Awaiting sequencing",
+      src: "Note · 3 Apr",
+    },
+  ]
+  return (
+    <MockFrame label="Weekly lab briefing">
+      <div className="space-y-1.5">
+        {rows.map((r) => (
+          <div
+            key={r.proj}
+            className="flex items-center gap-2 rounded-lg border border-border/50 bg-background/60 px-2 py-1.5"
+          >
+            <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[var(--n9-accent-light)] text-[12px] font-bold text-[var(--n9-accent)]">
+              {r.who}
+            </span>
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-1.5">
+                <span className="truncate text-[14px] font-semibold text-foreground">{r.proj}</span>
+                <span
+                  className={cn(
+                    "rounded px-1.5 py-0.5 text-[12px] font-semibold",
+                    r.ok
+                      ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400"
+                      : "bg-amber-500/15 text-amber-600 dark:text-amber-400",
+                  )}
+                >
+                  {r.status}
+                </span>
+              </div>
+              <div className="mt-0.5 flex items-center gap-1 text-[14px] text-muted-foreground">
+                <span className="truncate">{r.note}</span>
+                <span className="inline-flex shrink-0 items-center gap-0.5 rounded border border-[var(--n9-accent)]/25 bg-[var(--n9-accent-light)] px-1 text-[12px] text-[var(--n9-accent)]">
+                  <Quote className="h-2 w-2" />
+                  {r.src}
+                </span>
+              </div>
+            </div>
+          </div>
+        ))}
+        <div className="flex items-center justify-between pt-0.5">
+          <span className="inline-flex items-center gap-1 rounded-md bg-[var(--n9-accent)] px-2 py-1 text-[12px] font-semibold text-white">
+            <FileSignature className="h-3 w-3" />
+            Generate PI update
+          </span>
+          <span className="text-[12px] text-muted-foreground/70">6 cited sources</span>
+        </div>
+      </div>
+    </MockFrame>
+  )
+}
+
+/** Lab-manager view: the operational spine — protocols kept versioned (which SOP
+ *  is current), samples traceable to the experiment that used them, and new
+ *  members onboarded onto the right procedures. */
+export function LabOpsMock() {
+  return (
+    <MockFrame label="Lab operations">
+      <div className="space-y-1.5">
+        <div className="flex items-center gap-2 rounded-lg border border-border/50 bg-background/60 px-2 py-1.5">
+          <ClipboardList className="h-3.5 w-3.5 shrink-0 text-[var(--n9-accent)]" />
+          <span className="text-[14px] font-medium text-foreground">Transfection SOP</span>
+          <span className="ml-auto flex items-center gap-1">
+            <span className="rounded bg-[var(--n9-accent-light)] px-1.5 py-0.5 text-[12px] font-semibold text-[var(--n9-accent)]">
+              v3 · current
+            </span>
+            <span className="text-[12px] text-muted-foreground/50 line-through">v2</span>
+          </span>
+        </div>
+        <div className="flex items-center gap-2 rounded-lg border border-border/50 bg-background/60 px-2 py-1.5">
+          <Boxes className="h-3.5 w-3.5 shrink-0 text-[var(--n9-accent)]" />
+          <span className="text-[14px] font-medium text-foreground">HEK293T · vial P12</span>
+          <span className="ml-auto inline-flex items-center gap-1 rounded border border-[var(--n9-accent)]/25 bg-[var(--n9-accent-light)] px-1.5 py-0.5 text-[12px] font-medium text-[var(--n9-accent)]">
+            <ArrowRight className="h-2.5 w-2.5" />
+            Expt #14
+          </span>
+        </div>
+        <div className="flex items-center gap-2 rounded-lg border border-border/50 bg-background/60 px-2 py-1.5">
+          <Users className="h-3.5 w-3.5 shrink-0 text-[var(--n9-accent)]" />
+          <span className="text-[14px] text-muted-foreground">
+            New member onboarded — <span className="font-medium text-foreground">4 protocols</span> linked
+          </span>
+        </div>
+      </div>
     </MockFrame>
   )
 }

@@ -7,6 +7,7 @@
  * scattered stack" without implying any endorsement or infringing a mark.
  */
 
+import { useCallback, useEffect, useRef, useState } from "react"
 import {
   Calendar,
   Code2,
@@ -20,7 +21,15 @@ import {
   Presentation,
   StickyNote,
 } from "lucide-react"
-import { motion, useScroll, useSpring, useTransform, type MotionValue } from "framer-motion"
+import {
+  motion,
+  useAnimationControls,
+  useReducedMotion,
+  useScroll,
+  useSpring,
+  useTransform,
+  type MotionValue,
+} from "framer-motion"
 import { cn } from "@/lib/utils"
 
 export type AppKind =
@@ -123,8 +132,30 @@ export function AppGlyphRail() {
     damping: 24,
     mass: 0.9,
   })
+
+  // The rail is fixed to the viewport, so without this it would float over the
+  // footer at the bottom of the page. Watch the footer and fade the rail out the
+  // moment it scrolls into view, so the connector runs the whole way down and
+  // then ENDS just before the footer.
+  const [footerInView, setFooterInView] = useState(false)
+  useEffect(() => {
+    const footer = document.querySelector("footer")
+    if (!footer || typeof IntersectionObserver === "undefined") return
+    const io = new IntersectionObserver(
+      ([entry]) => setFooterInView(entry.isIntersecting),
+      { rootMargin: "0px 0px -24px 0px" },
+    )
+    io.observe(footer)
+    return () => io.disconnect()
+  }, [])
+
   return (
-    <div className="pointer-events-none fixed left-6 top-28 bottom-16 z-30 hidden flex-col items-center justify-between xl:flex">
+    <div
+      className={cn(
+        "pointer-events-none fixed left-6 top-28 bottom-16 z-30 hidden flex-col items-center justify-between transition-opacity duration-500 xl:flex",
+        footerInView ? "opacity-0" : "opacity-100",
+      )}
+    >
       {/* connecting line behind the glyphs — grows to link them */}
       <div className="absolute left-1/2 top-3 bottom-3 w-[2px] -translate-x-1/2 overflow-hidden rounded-full bg-border/50">
         <motion.div
@@ -144,7 +175,76 @@ export function AppGlyphRail() {
   )
 }
 
-/** A loose, slightly-rotated cluster of glyphs — "today: scattered". */
+/** One glyph that continuously falls, disappears and reappears on its own —
+ *  staggered by index so the cluster falls IN ORDER — dramatising "apps failing
+ *  to maintain context". Hovering it accelerates the fall on demand. */
+function FallingGlyph({ kind, rot, index }: { kind: AppKind; rot: number; index: number }) {
+  const controls = useAnimationControls()
+  const reduce = useReducedMotion()
+  const busy = useRef(false)
+
+  // Endless loop: hold → fall + fade out → teleport to the top (instant) →
+  // reappear → hold. `delay` phase-shifts each glyph so they cascade in order.
+  const startLoop = useCallback(
+    (delay: number) => {
+      if (reduce) {
+        controls.set({ opacity: 1, y: 0, rotate: rot })
+        return
+      }
+      controls.start({
+        y: [0, 0, 130, -28, 0, 0],
+        opacity: [1, 1, 0, 0, 1, 1],
+        rotate: [rot, rot, rot + 28, rot, rot, rot],
+        transition: {
+          duration: 3,
+          times: [0, 0.2, 0.46, 0.46, 0.72, 1],
+          ease: ["easeInOut", "easeIn", "linear", "easeOut", "linear"],
+          repeat: Infinity,
+          delay,
+        },
+      })
+    },
+    [controls, reduce, rot],
+  )
+
+  useEffect(() => {
+    startLoop(index * 0.24)
+    return () => controls.stop()
+  }, [startLoop, controls, index])
+
+  // Hover = make this one fall right now, fast, then rejoin the loop.
+  const handleHoverStart = async () => {
+    if (busy.current || reduce) return
+    busy.current = true
+    await controls.start({
+      y: 130,
+      rotate: rot + 28,
+      opacity: 0,
+      transition: { duration: 0.3, ease: "easeIn" },
+    })
+    controls.set({ y: -28, rotate: rot, opacity: 0 })
+    await controls.start({
+      y: 0,
+      opacity: 1,
+      transition: { duration: 0.35, ease: "easeOut" },
+    })
+    busy.current = false
+    startLoop(0)
+  }
+
+  return (
+    <motion.div
+      animate={controls}
+      initial={{ opacity: 1, y: 0, rotate: rot }}
+      onHoverStart={handleHoverStart}
+      className="cursor-pointer will-change-transform"
+    >
+      <AppGlyph kind={kind} withLabel />
+    </motion.div>
+  )
+}
+
+/** A loose, slightly-rotated cluster of glyphs — "today: scattered", falling. */
 export function ScatteredStack({ className }: { className?: string }) {
   const items: { kind: AppKind; rot: number }[] = [
     { kind: "pdf", rot: -7 },
@@ -162,17 +262,7 @@ export function ScatteredStack({ className }: { className?: string }) {
   return (
     <div className={cn("flex flex-wrap items-end gap-3.5", className)}>
       {items.map((it, i) => (
-        <motion.div
-          key={it.kind}
-          initial={{ opacity: 0, y: 8 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true, margin: "-60px" }}
-          transition={{ delay: i * 0.05 }}
-          style={{ rotate: it.rot }}
-          whileHover={{ rotate: 0, y: -3 }}
-        >
-          <AppGlyph kind={it.kind} withLabel />
-        </motion.div>
+        <FallingGlyph key={it.kind} kind={it.kind} rot={it.rot} index={i} />
       ))}
     </div>
   )

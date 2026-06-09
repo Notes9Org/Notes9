@@ -1,124 +1,58 @@
 "use client"
 
 /**
- * Ambient backdrop: product screens shown as paper sticky notes, scattered at
- * random (no grid), connected by ONE continuous thread that grows in length as
- * the page scrolls (top → bottom) — a progress line that connects more notes the
- * further you scroll. Decorative only (aria-hidden, pointer-events-none), large
- * screens only. Light/dark screenshots swap via `dark:`.
+ * Ambient backdrop: nine product screens shown as paper sticky notes, scattered
+ * at random and joined by a dense web of solid threads that GROW as the page
+ * scrolls (top → bottom). Decorative only (aria-hidden, pointer-events-none),
+ * large screens only. Light/dark screenshots swap via `dark:`.
  */
 
 import { motion, useScroll, useTransform, type MotionValue } from "framer-motion"
 import { cn } from "@/lib/utils"
 
-// Screenshots that exist in BOTH /public/demo and /public/demo/light.
-const SHOTS = [
-  "dashboard",
-  "literature-search",
-  "projects",
-  "experiment-details",
-  "lab-memory",
-  "project-report",
-  "experiments-list",
-  "new-lab-note",
-  "literature-list",
+// Nine notes at random-looking (but deterministic, so SSR/CSR match) positions.
+const NOTES = [
+  { name: "dashboard", x: 12, y: 11, rot: -6 },
+  { name: "literature-search", x: 43, y: 8, rot: 4 },
+  { name: "projects", x: 73, y: 14, rot: -3 },
+  { name: "experiment-details", x: 90, y: 33, rot: 5 },
+  { name: "lab-memory", x: 26, y: 38, rot: -4 },
+  { name: "project-report", x: 58, y: 45, rot: 3 },
+  { name: "experiments-list", x: 83, y: 60, rot: -5 },
+  { name: "new-lab-note", x: 17, y: 67, rot: 4 },
+  { name: "literature-list", x: 50, y: 82, rot: -3 },
 ]
 
-// Hand-placed (deterministic, so SSR/CSR match) scattered positions, ordered
-// top→bottom so the single thread flows downward as the user scrolls.
-const POS: { x: number; y: number; rot: number }[] = [
-  { x: 16, y: 6, rot: -5 },
-  { x: 73, y: 8, rot: 4 },
-  { x: 41, y: 15, rot: -3 },
-  { x: 89, y: 22, rot: 5 },
-  { x: 8, y: 28, rot: 3 },
-  { x: 58, y: 33, rot: -4 },
-  { x: 27, y: 42, rot: 4 },
-  { x: 82, y: 47, rot: -3 },
-  { x: 47, y: 55, rot: 3 },
-  { x: 13, y: 60, rot: -4 },
-  { x: 68, y: 66, rot: 4 },
-  { x: 34, y: 73, rot: -3 },
-  { x: 85, y: 79, rot: 3 },
-  { x: 54, y: 85, rot: -4 },
-]
-
-const NOTES = POS.map((p, i) => ({ ...p, name: SHOTS[i % SHOTS.length] }))
-
-// A dense web: connect each note to its eight nearest neighbours (deduped), so
-// many notes link to each other at once. Edges are ordered by their lower
-// endpoint so the web fills in top→bottom as the page scrolls.
-const EDGES: [number, number][] = (() => {
-  const out: [number, number][] = []
+// A dense web: connect each note to its three nearest neighbours (deduped).
+// Each edge is oriented from its UPPER endpoint → its LOWER endpoint, and the
+// whole set is ordered top→bottom, so the web visibly grows downward on scroll.
+const EDGES: { fx: number; fy: number; tx: number; ty: number }[] = (() => {
+  const k = 3
+  const pairs: [number, number][] = []
   const seen = new Set<string>()
   NOTES.forEach((n, i) => {
     NOTES.map((m, j) => ({ j, d: (m.x - n.x) ** 2 + (m.y - n.y) ** 2 }))
       .filter((o) => o.j !== i)
       .sort((a, b) => a.d - b.d)
-      .slice(0, 8)
+      .slice(0, k)
       .forEach(({ j }) => {
         const key = i < j ? `${i}-${j}` : `${j}-${i}`
         if (seen.has(key)) return
         seen.add(key)
-        out.push([Math.min(i, j), Math.max(i, j)])
+        pairs.push([Math.min(i, j), Math.max(i, j)])
       })
   })
-  return out.sort(
-    (a, b) =>
-      Math.max(NOTES[a[0]].y, NOTES[a[1]].y) - Math.max(NOTES[b[0]].y, NOTES[b[1]].y),
-  )
+  return pairs
+    .map(([a, b]) => {
+      const [upper, lower] = NOTES[a].y <= NOTES[b].y ? [a, b] : [b, a]
+      return { fx: NOTES[upper].x, fy: NOTES[upper].y, tx: NOTES[lower].x, ty: NOTES[lower].y }
+    })
+    .sort((e1, e2) => Math.max(e1.fy, e1.ty) - Math.max(e2.fy, e2.ty))
 })()
 
-// Growth order: instead of revealing every connection at once, start from a
-// central seed note and repeatedly attach the NEAREST edge that touches the
-// already-connected set. The web therefore begins with a few notes and keeps
-// spreading outward from the notes connected so far. Each edge is oriented
-// from its already-connected endpoint → the new one, so the line visibly grows
-// outward from the existing web.
-const ORDERED: { fx: number; fy: number; tx: number; ty: number }[] = (() => {
-  const dist2 = (a: number, b: number) =>
-    (NOTES[a].x - NOTES[b].x) ** 2 + (NOTES[a].y - NOTES[b].y) ** 2
-  // central-most note as the seed (smallest total distance to the others)
-  let seed = 0
-  let best = Infinity
-  NOTES.forEach((_, i) => {
-    let s = 0
-    NOTES.forEach((_n, j) => {
-      if (i !== j) s += Math.sqrt(dist2(i, j))
-    })
-    if (s < best) {
-      best = s
-      seed = i
-    }
-  })
-  const connected = new Set<number>([seed])
-  const remaining = EDGES.map(([a, b]) => ({ a, b, d: dist2(a, b) }))
-  const out: { fx: number; fy: number; tx: number; ty: number }[] = []
-  while (remaining.length) {
-    let pickIdx = 0
-    let pickRank = Infinity
-    remaining.forEach((e, idx) => {
-      const touches = connected.has(e.a) || connected.has(e.b)
-      // prefer edges touching the connected frontier; among those, nearest first
-      const rank = (touches ? 0 : 1e9) + e.d
-      if (rank < pickRank) {
-        pickRank = rank
-        pickIdx = idx
-      }
-    })
-    const e = remaining.splice(pickIdx, 1)[0]
-    const from = connected.has(e.a) ? e.a : e.b
-    const to = from === e.a ? e.b : e.a
-    connected.add(e.a)
-    connected.add(e.b)
-    out.push({ fx: NOTES[from].x, fy: NOTES[from].y, tx: NOTES[to].x, ty: NOTES[to].y })
-  }
-  return out
-})()
-
-/** One web connection that draws itself (from its connected endpoint outward)
- *  during its slice of the scroll progress. */
-function WebEdge({
+/** One thread that draws itself (upper → lower endpoint) during its slice of
+ *  the page-scroll progress. */
+function GrowEdge({
   fx,
   fy,
   tx,
@@ -137,9 +71,11 @@ function WebEdge({
 }) {
   const pathLength = useTransform(progress, [start, end], [0, 1])
   return (
-    <motion.path
-      d={`M ${fx} ${fy} L ${tx} ${ty}`}
-      fill="none"
+    <motion.line
+      x1={fx}
+      y1={fy}
+      x2={tx}
+      y2={ty}
       stroke="var(--n9-accent)"
       strokeWidth={0.7}
       strokeLinecap="round"
@@ -181,25 +117,23 @@ export function ScreenBackdrop({ className }: { className?: string }) {
         className,
       )}
     >
-      {/* A web of thin connections that spreads outward from a few seed notes —
-          each connection draws in turn as the page scrolls, growing from the
-          notes already linked. */}
+      {/* solid threads that grow downward as the page scrolls */}
       <svg
-        className="absolute inset-0 h-full w-full opacity-45 blur-[3px]"
+        className="absolute inset-0 h-full w-full opacity-50 blur-[2px]"
         viewBox="0 0 100 100"
         preserveAspectRatio="none"
       >
-        {ORDERED.map((e, i) => {
-          const start = (i / ORDERED.length) * 0.8
+        {EDGES.map((e, i) => {
+          const start = (i / EDGES.length) * 0.85
           return (
-            <WebEdge key={i} {...e} start={start} end={start + 0.12} progress={scrollYProgress} />
+            <GrowEdge key={i} {...e} start={start} end={start + 0.18} progress={scrollYProgress} />
           )
         })}
       </svg>
 
-      {/* sticky notes — anchored at their TOP-MIDDLE (so the web meets the top of
-          each note) and opaque enough to hide the web running behind them */}
-      <div className="absolute inset-0 opacity-[0.82] blur-[1px] dark:opacity-[0.62]">
+      {/* sticky notes — anchored at their TOP-MIDDLE so the thread meets the top.
+          Softly blurred so they sit behind the foreground content. */}
+      <div className="absolute inset-0 opacity-[0.82] blur-[2px] dark:opacity-[0.62]">
         {NOTES.map((n, i) => (
           <div
             key={`${n.name}-${i}`}

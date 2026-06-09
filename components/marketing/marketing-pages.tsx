@@ -28,16 +28,13 @@ import {
   SectionHeader,
   WorkflowStep,
 } from "@/components/marketing/site-ui"
-import { ConnectedResearchSystemDiagram } from "@/components/marketing/connected-research-system-diagram"
 import { MinimalCard, ProductFrame } from "@/components/marketing/three-d-card"
 import { ProductShowcase } from "@/components/marketing/video-showcase"
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion"
 import {
-  CatalystShowcaseSection,
   DemoStorySection,
   FaqSection,
   PricingTiers,
-  TrustSection,
   UseCasesSection,
 } from "@/components/marketing/home-sections"
 
@@ -206,10 +203,10 @@ export function AboutMarketingPage() {
 
       <section className="border-t border-border/40">
         <div className="container mx-auto px-4 py-16 sm:px-6 lg:px-8">
-          <SectionHeader badge="Why we exist" title="Modern research teams do not need more fragmented software." />
+          <SectionHeader badge="Why we exist" title="Give research teams a memory they can trust." />
           <div className="mt-10 grid gap-6 md:grid-cols-3">
-            <FeatureCard icon={Workflow} title="Fragmented context" description="Important decisions disappear between PDFs, spreadsheets, instruments, and disconnected notes." />
-            <FeatureCard icon={Workflow} title="Structured continuity" description="Notes9 links evidence, experiment work, and reporting so teams move without losing the trail." />
+            <FeatureCard icon={Workflow} title="Continuity by design" description="We keep the full research trail — literature, decisions, experiments, and reporting — connected as one memory." />
+            <FeatureCard icon={Database} title="Provenance you can inspect" description="Every output stays tied to the evidence behind it, so work can always be traced and reused." />
             <FeatureCard icon={ShieldCheck} title="Trustworthy assistance" description="AI support is most useful when researchers can inspect provenance, preserve oversight, and reuse context safely." />
           </div>
         </div>
@@ -256,50 +253,6 @@ export function AboutMarketingPage() {
   )
 }
 
-export function PlatformDifferentiationSection({
-  className = "border-t border-border/40",
-}: {
-  className?: string
-}) {
-  return (
-    <section className={className}>
-      <div className="container mx-auto px-4 py-16 sm:px-6 lg:px-8">
-        <div className="mx-auto max-w-[88rem]">
-          <div className="flex flex-col rounded-[36px] border border-[var(--n9-accent)]/15 bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(247,242,236,0.92))] p-6 shadow-[0_28px_90px_-44px_rgba(44,36,24,0.24)] backdrop-blur-sm dark:border-[var(--n9-accent)]/12 dark:bg-[radial-gradient(circle_at_top,rgba(184,121,69,0.09),transparent_30%),linear-gradient(180deg,rgba(19,18,20,0.98),rgba(12,12,14,0.99))] dark:shadow-[0_32px_100px_-44px_rgba(0,0,0,0.72)] sm:p-8 lg:p-10">
-            <SectionHeader
-              badge="Connected Research System"
-              title="Research slows down when context breaks between tools"
-              className="max-w-none text-left"
-            />
-            <p className="mt-4 w-full text-justify text-[18px] leading-7 text-muted-foreground sm:text-[20px]">
-              Disconnected phases force teams to reconstruct rationale, repeat handoffs, and lose continuity. Notes9 keeps the workflow connected from literature to experiments to writing.
-            </p>
-            <div className="mt-6 flex flex-wrap gap-3 text-[14px] font-semibold uppercase tracking-[0.18em] text-muted-foreground/70 dark:text-slate-400">
-              <span className="rounded-full border border-border/60 bg-background px-3 py-2 dark:border-white/10 dark:bg-white/[0.04]">fragmentation costs time</span>
-              <span className="rounded-full border border-border/60 bg-background px-3 py-2 dark:border-white/10 dark:bg-white/[0.04]">handoffs break provenance</span>
-              <span className="rounded-full border border-border/60 bg-background px-3 py-2 dark:border-white/10 dark:bg-white/[0.04]">reconstruction slows decisions</span>
-            </div>
-            <div className="mt-8 w-full max-w-none">
-              <ConnectedResearchSystemDiagram className="w-full" />
-            </div>
-            <div className="mt-6 grid gap-3 text-[14px] font-semibold uppercase tracking-[0.2em] text-muted-foreground/65 dark:text-slate-400 sm:grid-cols-3">
-              <div className="rounded-[18px] border border-border/50 bg-background px-4 py-3 dark:border-white/10 dark:bg-white/[0.04]">
-                Evidence stays linked
-              </div>
-              <div className="rounded-[18px] border border-border/50 bg-background px-4 py-3 dark:border-white/10 dark:bg-white/[0.04]">
-                Catalyst AI sees full context
-              </div>
-              <div className="rounded-[18px] border border-border/50 bg-background px-4 py-3 dark:border-white/10 dark:bg-white/[0.04]">
-                Writing reflects the work
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </section>
-  )
-}
-
 export function PlatformMarketingPage() {
   return (
     <MarketingPageFrame>
@@ -318,13 +271,11 @@ export function PlatformMarketingPage() {
         ]}
       />
 
-      <PlatformDifferentiationSection />
-
-      <DemoStorySection />
-
       <ProductShowcase />
 
-      <section className="border-t border-border/40 bg-muted/20">
+      <UseCasesSection />
+
+      <section className="border-t border-border/40">
         <div className="container mx-auto px-4 py-16 sm:px-6 lg:px-8">
           <SectionHeader
             badge="See Notes9"
@@ -383,11 +334,7 @@ export function PlatformMarketingPage() {
         </div>
       </section>
 
-      <CatalystShowcaseSection />
-
-      <UseCasesSection />
-
-      <TrustSection />
+      <DemoStorySection />
 
       <section className="border-t border-border/40 bg-muted/20">
         <div className="container mx-auto px-4 py-16 sm:px-6 lg:px-8">
@@ -421,13 +368,13 @@ export function PricingMarketingPage() {
         title={
           <>
             Start free.{" "}
-            <span className="text-[var(--n9-accent)]">Talk to us</span> when your lab is ready.
+            <span className="text-[var(--n9-accent)]">Go Enterprise</span> when your lab is ready.
           </>
         }
-        description="We're shaping Notes9 with early design partners, so there are no hard prices yet — just a clear path from a solo pilot to a lab-wide deployment."
+        description="Two plans, no surprises: a free researcher tier today, and Enterprise for lab-wide deployment, security review and onboarding when you scale."
         actions={[
           { href: "/auth/sign-up", label: "Start free" },
-          { href: cta, label: "Book a demo", variant: "outline" },
+          { href: cta, label: "Talk to us", variant: "outline" },
         ]}
       />
 
@@ -449,7 +396,7 @@ export function PricingMarketingPage() {
             <div className="grid grid-cols-[1.6fr_0.7fr_0.7fr] items-center gap-1 border-b border-border/60 bg-muted/40 px-3 py-3 text-[12px] font-semibold uppercase tracking-wide text-muted-foreground sm:gap-2 sm:px-6 sm:text-[14px]">
               <span>Capability</span>
               <span className="text-center">Free</span>
-              <span className="text-center text-[var(--n9-accent)]">Lab &amp; Inst.</span>
+              <span className="text-center text-[var(--n9-accent)]">Enterprise</span>
             </div>
             {PRICING_INCLUDED.map((r, i) => (
               <div

@@ -45,7 +45,7 @@ function Section({
   children: React.ReactNode
 }) {
   return (
-    <section id={id} className={cn("relative container mx-auto px-4 py-20 sm:px-6 sm:py-28 lg:px-8", className)}>
+    <section id={id} className={cn("relative container mx-auto px-4 py-16 sm:px-6 sm:py-28 lg:px-8", className)}>
       {children}
     </section>
   )
@@ -74,19 +74,27 @@ export function PainSection() {
           <SectionHeader
             reveal
             badge="The problem"
-            title="Your data survives. The reason behind it doesn't."
+            title="You already use AI. It just can't see your work."
           />
           <p className="n9-readable mt-5 text-[20px] leading-8 text-muted-foreground">
-            Protocol in one folder, plate map in a spreadsheet, rationale in a reference manager,
-            notes somewhere else. Three months on, no one on the team can say{" "}
-            <em>why condition B</em>.
+            Researchers have embraced AI for reading and writing — but it works outside the lab,
+            blind to your project. So you paste the same context in every week, the reasoning behind{" "}
+            <em>why condition B</em> scatters, and months later no one can reconstruct it.
           </p>
         </div>
-        <div>
-          <p className="mb-4 text-[14px] font-semibold uppercase tracking-[0.18em] text-muted-foreground/60">
-            Your stack today
-          </p>
-          <ScatteredStack />
+        <div className="relative">
+          {/* Frosted scrim so the glyph cluster reads clearly over the
+              sticky-note backdrop behind it. */}
+          <div
+            aria-hidden
+            className="pointer-events-none absolute -inset-5 rounded-3xl bg-background/50 backdrop-blur-[8px] dark:bg-background/40"
+          />
+          <div className="relative">
+            <p className="mb-4 text-[14px] font-semibold uppercase tracking-[0.18em] text-muted-foreground/60">
+              Your stack today
+            </p>
+            <ScatteredStack />
+          </div>
         </div>
       </div>
 
@@ -100,12 +108,14 @@ const WITHOUT_NOTES9 = [
   "Context scattered across five tools",
   "The “why” lost between people",
   "Weeks to reconstruct an old result",
+  "Pasting the same context into ChatGPT every time",
   "Onboarding a new member takes weeks",
 ]
 const WITH_NOTES9 = [
   "One traceable project memory",
   "Every result linked to its rationale",
   "Recall the full chain in seconds",
+  "AI that already sees your project — and cites it",
   "Onboard a new member in minutes",
 ]
 
@@ -161,7 +171,7 @@ export function SolutionSection() {
           className="mx-auto"
           badge="The fix"
           title="One connected memory for your whole team"
-          description="Notes9 links every paper, protocol, experiment, note and result — so the reasoning behind your work is always one click away, for everyone."
+          description="Every paper, protocol, experiment and result, linked — so the reasoning is always one click away."
         />
         <Reveal3D className="mt-12">
           <MemoryHubFlow />
@@ -172,28 +182,53 @@ export function SolutionSection() {
   )
 }
 
-/** Quantify the cost of scattered research context (grounded in real data). */
+/** The problem in numbers: AI adoption is high, yet research context still
+ *  scatters and results still don't reproduce. Figures are sourced and cited. */
 const PROBLEM_STATS = [
+  { value: "84%", label: "of researchers now use AI in their work", cite: 1 },
+  { value: "61%", label: "use it to find and summarise the latest research", cite: 2 },
+  { value: "77%", label: "of biologists have failed to reproduce another lab's experiment", cite: 3 },
+  { value: "50%+", label: "of scientists can't reproduce their own published results", cite: 3 },
+]
+
+const PROBLEM_SOURCES = [
   {
-    value: "77%",
-    label: "of biologists have tried and failed to reproduce another lab's experiment",
+    n: 1,
+    label: "Wiley, “ExplanAItions” researcher survey (2025) — AI use among researchers rose to 84%.",
+    href: "https://www.businesswire.com/news/home/20251007928124/en/AI-Adoption-Jumps-to-84-Among-Researchers-as-Expectations-Undergo-Significant-Reality-Check",
   },
   {
-    value: "50%+",
-    label: "of scientists can't even reproduce their own published results",
+    n: 2,
+    label: "Elsevier, “Researcher of the Future” global survey of 3,200+ researchers (2025).",
+    href: "https://www.elsevier.com/about/press-releases/elseviers-global-survey-of-3-000-researchers-reveals-less-than-half-have",
   },
   {
-    value: "5+",
-    label: "disconnected tools where a single project's context quietly gets lost",
+    n: 3,
+    label: "Baker, M. “1,500 scientists lift the lid on reproducibility.” Nature 533, 452–454 (2016).",
+    href: "https://www.nature.com/articles/533452a",
   },
 ]
 
+const sourceHref = (n: number) => PROBLEM_SOURCES.find((s) => s.n === n)?.href
+
 function ProblemStats() {
   return (
-    <div className="mt-16 border-t border-border/50 pt-12">
-      <div className="grid gap-8 sm:grid-cols-3">
+    <div className="relative mt-16 border-t border-border/50 pt-12">
+      {/* Frosted scrim so the stats, labels and sources stay legible over the
+          sticky-note backdrop behind them. */}
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-x-[-1.25rem] bottom-[-1.25rem] top-6 rounded-3xl bg-background/50 backdrop-blur-[8px] dark:bg-background/40"
+      />
+      <div className="relative">
+      <p className="mb-8 max-w-2xl text-[18px] leading-7 text-muted-foreground">
+        AI adoption is already mainstream. The gap isn&rsquo;t whether researchers use AI — it&rsquo;s
+        that their AI is disconnected from the work, so context still scatters and results still
+        don&rsquo;t reproduce.
+      </p>
+      <div className="grid gap-8 sm:grid-cols-2 lg:grid-cols-4">
         {PROBLEM_STATS.map((s, i) => (
-          <Reveal3D key={s.value} delay={i * 0.08}>
+          <Reveal3D key={s.label} delay={i * 0.08}>
             <div className="text-center sm:text-left">
               <AnimatedCounter
                 value={s.value}
@@ -201,14 +236,42 @@ function ProblemStats() {
               />
               <p className="mx-auto mt-3 max-w-xs text-[16px] leading-6 text-muted-foreground sm:mx-0">
                 {s.label}
+                <sup>
+                  <a
+                    href={sourceHref(s.cite)}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="ml-0.5 font-semibold text-[var(--n9-accent)] hover:underline"
+                  >
+                    {s.cite}
+                  </a>
+                </sup>
               </p>
             </div>
           </Reveal3D>
         ))}
       </div>
-      <p className="mt-8 text-[14px] text-muted-foreground/60">
-        Reproducibility figures: Nature survey of 1,576 researchers (2016).
-      </p>
+      <div className="mt-10 border-t border-border/50 pt-6">
+        <p className="text-[13px] font-semibold uppercase tracking-[0.18em] text-muted-foreground/60">
+          Sources
+        </p>
+        <ol className="mt-3 space-y-1.5">
+          {PROBLEM_SOURCES.map((src) => (
+            <li key={src.n} className="text-[13px] leading-5 text-muted-foreground/70">
+              <span className="font-semibold text-[var(--n9-accent)]">{src.n}.</span>{" "}
+              <a
+                href={src.href}
+                target="_blank"
+                rel="noreferrer"
+                className="hover:text-foreground hover:underline"
+              >
+                {src.label}
+              </a>
+            </li>
+          ))}
+        </ol>
+      </div>
+      </div>
     </div>
   )
 }
@@ -291,7 +354,7 @@ export function ContextEngineeringSection() {
         className="mx-auto"
         badge="Why the AI is better"
         title="Better context, not bigger prompts"
-        description="An AI is only as good as the context it's given. Because your whole project lives in one connected memory, Catalyst gets complete, structured context automatically — the discipline AI teams call context engineering, built into the platform."
+        description="Your whole project lives in one connected memory — so Catalyst gets complete, structured context automatically. No giant prompts required."
       />
       <div className="mt-12 grid gap-5 md:grid-cols-3">
         {CONTEXT_POINTS.map((p, i) => {
@@ -327,7 +390,7 @@ export function CatalystShowcaseSection() {
           className="mx-auto"
           badge="Catalyst AI"
           title="Biology-first AI that accelerates discovery"
-          description="Catalyst reasons over your lab in the language of the bench — turning weeks of digging into days, with every claim backed by a checkable source."
+          description="Catalyst reasons over your lab in the language of the bench — every claim backed by a checkable source."
         />
         <div className="mt-12 space-y-12">
           <Reveal3D>
@@ -472,6 +535,7 @@ export function DifferentiationSection() {
         className="mx-auto"
         badge="Why Notes9"
         title="ELNs record what happened. Notes9 remembers why."
+        description="Not another static ELN. Not another empty AI chat. Notes9 is connected research memory your AI can actually read — and cite."
       />
       <Reveal3D className="mx-auto mt-10 max-w-3xl">
         <TiltCard max={4}>
@@ -518,34 +582,34 @@ export function TrustSection() {
   )
 }
 
-/** Pricing teaser — Free + Lab/Institution, early access. */
+/** Pricing teaser — Free + Enterprise. */
 const PRICING = [
   {
-    name: "Free — Researcher",
-    tag: "Early access",
+    name: "Free",
+    tag: "For researchers",
     price: "Free",
-    blurb: "For individual researchers and small teams testing Notes9 on one workflow.",
+    blurb: "For individual researchers and small teams building their first connected project memory.",
     cta: { label: "Start free", href: "/auth/sign-up" },
     primary: true,
     points: [
-      "Full product on one live workflow",
+      "Full product on a live workflow",
       "Projects, experiments, lab notes, protocols, samples",
       "Catalyst AI with cited answers",
       "No credit card",
     ],
   },
   {
-    name: "Lab & Institution",
-    tag: "Design partner",
-    price: "Let's talk",
-    blurb: "For labs, biotech and universities that want onboarding and shared workspaces.",
-    cta: { label: "Book a demo", href: "/#contact" },
+    name: "Enterprise",
+    tag: "For teams & institutions",
+    price: "Custom",
+    blurb: "For labs, biotech and universities that need shared workspaces, onboarding and security review.",
+    cta: { label: "Talk to us", href: "/#contact" },
     primary: false,
     points: [
+      "Shared projects across your whole team",
       "Onboarding & workflow mapping",
-      "Shared projects across the team",
       "Data controls, security review, SSO",
-      "Free while in early access",
+      "Priority support & design-partner pilots",
     ],
   },
 ]
@@ -602,8 +666,8 @@ export function PricingTiers() {
         ))}
       </div>
       <p className="mx-auto mt-6 max-w-2xl text-center text-[14px] text-muted-foreground/70">
-        A middle “Team” tier is on the way. Until then, every feature is available free while we’re in
-        early access.
+        Every feature is free while we’re in early access. Enterprise adds team-wide deployment,
+        security review and onboarding support when your lab is ready to scale.
       </p>
     </>
   )
@@ -617,8 +681,8 @@ export function PricingTeaserSection() {
         align="center"
         className="mx-auto"
         badge="Pricing"
-        title="Start free. Talk to us when you scale."
-        description="No hard prices yet — a clear path from a solo pilot to a lab-wide deployment."
+        title="Start free. Go Enterprise when you scale."
+        description="Two plans, no surprises — a free researcher tier today, and Enterprise for lab-wide deployment, security and support."
       />
       <div className="mt-10">
         <PricingTiers />
@@ -631,7 +695,7 @@ export function PricingTeaserSection() {
 const FAQS = [
   {
     q: "Is it free?",
-    a: "Yes — the Researcher tier is free during early access, no credit card. Labs and institutions that want onboarding, shared workspaces and security review can book a demo.",
+    a: "Yes — the free tier is free during early access, no credit card. Teams and institutions that want shared workspaces, onboarding and security review can talk to us about Enterprise.",
   },
   {
     q: "Is this an ELN, a literature tool, or an AI assistant?",
@@ -690,14 +754,14 @@ export function FinalCtaSection() {
             <Button
               asChild
               size="lg"
-              className="h-12 rounded-full bg-[linear-gradient(115deg,var(--n9-accent),color-mix(in_oklab,var(--n9-accent)_58%,#d9a24a))] px-8 text-white shadow-[0_16px_44px_-14px_var(--n9-accent-glow)] hover:opacity-95"
+              className="h-14 w-full rounded-full bg-[linear-gradient(115deg,var(--n9-accent),color-mix(in_oklab,var(--n9-accent)_58%,#d9a24a))] px-10 text-[17px] font-semibold text-white shadow-[0_16px_44px_-14px_var(--n9-accent-glow)] hover:opacity-95 sm:w-auto"
             >
               <Link href="/auth/sign-up">
                 Start free
-                <ArrowRight className="ml-2 h-4 w-4" />
+                <ArrowRight className="ml-2 h-5 w-5" />
               </Link>
             </Button>
-            <Button asChild size="lg" variant="outline" className="h-12 rounded-full px-8">
+            <Button asChild size="lg" variant="outline" className="h-14 w-full rounded-full px-10 text-[17px] font-semibold sm:w-auto">
               <Link href="/#contact">Book a 15-min demo</Link>
             </Button>
           </div>
