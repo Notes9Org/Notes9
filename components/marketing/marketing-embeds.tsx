@@ -560,8 +560,6 @@ export function TiltCard({
       ref={ref}
       onMouseMove={onMove}
       onMouseLeave={reset}
-      whileHover={reduce ? undefined : { scale: 1.015 }}
-      transition={{ type: "spring", stiffness: 200, damping: 18 }}
       style={{ rotateX: srx, rotateY: sry, transformPerspective: 1100 }}
       className={cn("[transform-style:preserve-3d] will-change-transform", className)}
     >
