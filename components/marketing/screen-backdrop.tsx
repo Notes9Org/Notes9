@@ -131,7 +131,7 @@ export function ScreenBackdrop({ className }: { className?: string }) {
         })}
       </svg>
 
-      {/* sticky notes — anchored at their TOP-MIDDLE so the thread meets the top.
+      {/* sticky notes - anchored at their TOP-MIDDLE so the thread meets the top.
           Softly blurred so they sit behind the foreground content. */}
       <div className="absolute inset-0 opacity-[0.82] blur-[2px] dark:opacity-[0.62]">
         {NOTES.map((n, i) => (

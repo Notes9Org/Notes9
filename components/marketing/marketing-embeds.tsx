@@ -1,7 +1,7 @@
 "use client"
 
 /**
- * HTML/CSS-based marketing embeds — animated UI mockups in the spirit of the
+ * HTML/CSS-based marketing embeds - animated UI mockups in the spirit of the
  * hero's ConnectedResearchSystemDiagram. No WebGL: everything here is DOM +
  * framer-motion + CSS so the bundle stays light and the look matches the app.
  *
@@ -41,7 +41,7 @@ import { cn } from "@/lib/utils"
 import { IceMascot } from "@/components/ui/ice-mascot"
 
 // ---------------------------------------------------------------------------
-// 1. Connected-research chain — a seamless marquee of the research lifecycle.
+// 1. Connected-research chain - a seamless marquee of the research lifecycle.
 // ---------------------------------------------------------------------------
 
 const CHAIN = [
@@ -75,7 +75,7 @@ export function ConnectedChainMarquee() {
   const sequence = [...CHAIN, ...CHAIN, ...CHAIN, ...CHAIN]
   return (
     <div className="relative w-full overflow-hidden py-2">
-      {/* edge fades — matched to the page background so the strip never looks
+      {/* edge fades - matched to the page background so the strip never looks
           like it "ends" */}
       <div className="pointer-events-none absolute inset-y-0 left-0 z-10 w-10 bg-gradient-to-r from-[var(--background)] to-transparent sm:w-20" />
       <div className="pointer-events-none absolute inset-y-0 right-0 z-10 w-10 bg-gradient-to-l from-[var(--background)] to-transparent sm:w-20" />
@@ -89,7 +89,7 @@ export function ConnectedChainMarquee() {
 }
 
 // ---------------------------------------------------------------------------
-// 2. Scattered → connected — the "pain" embed. Tool chips fly into one memory.
+// 2. Scattered → connected - the "pain" embed. Tool chips fly into one memory.
 // ---------------------------------------------------------------------------
 
 const SCATTERED = [
@@ -197,7 +197,7 @@ export function ScatteredToConnected({ className }: { className?: string }) {
 }
 
 // ---------------------------------------------------------------------------
-// 3. Role use-case switcher — tabs of who Notes9 is for + the outcome.
+// 3. Role use-case switcher - tabs of who Notes9 is for + the outcome.
 // ---------------------------------------------------------------------------
 
 const ROLES = [
@@ -304,7 +304,7 @@ export function RoleUseCaseSwitcher() {
 }
 
 // ---------------------------------------------------------------------------
-// 4. ELN vs AI chat vs Notes9 — sharp differentiation table.
+// 4. ELN vs AI chat vs Notes9 - sharp differentiation table.
 // ---------------------------------------------------------------------------
 
 const DIFF_ROWS = [
@@ -355,7 +355,7 @@ export function ElnVsAiVsNotes9() {
 }
 
 // ---------------------------------------------------------------------------
-// 5. Demo-story stepper — the antibody-expression walkthrough, auto-advancing.
+// 5. Demo-story stepper - the antibody-expression walkthrough, auto-advancing.
 // ---------------------------------------------------------------------------
 
 const STORY = [
@@ -364,7 +364,7 @@ const STORY = [
   { t: "Attach the protocol", d: "Link a versioned transfection protocol to the run.", icon: ClipboardList },
   { t: "Record conditions & samples", d: "Capture transfection conditions and the constructs used.", icon: FlaskConical },
   { t: "Link purification data", d: "Drop yield data in; it stays attached to the run that produced it.", icon: BarChart3 },
-  { t: "Generate the PI update", d: "A cited summary of yield differences — with the full decision trail intact.", icon: FileSignature },
+  { t: "Generate the PI update", d: "A cited summary of yield differences, with the full decision trail intact.", icon: FileSignature },
 ] as const
 
 export function DemoStoryStepper() {
@@ -469,7 +469,7 @@ export function DemoStoryStepper() {
 }
 
 // ---------------------------------------------------------------------------
-// 6. Catalyst answer card — biology-first answer with citations at the bottom.
+// 6. Catalyst answer card - biology-first answer with citations at the bottom.
 // ---------------------------------------------------------------------------
 
 export function CatalystAnswerCard({ className }: { className?: string }) {
@@ -497,7 +497,7 @@ export function CatalystAnswerCard({ className }: { className?: string }) {
         </p>
         <div className="flex flex-wrap gap-1.5">
           {[
-            { label: "Expt #14 — PEI screen", internal: true },
+            { label: "Expt #14 Â· PEI screen", internal: true },
             { label: "Lab note · 12 Mar", internal: true },
             { label: "Longo et al., 2023", internal: false },
           ].map((c) => (
@@ -521,7 +521,7 @@ export function CatalystAnswerCard({ className }: { className?: string }) {
 }
 
 // ---------------------------------------------------------------------------
-// 7. TiltCard — interactive 3D perspective tilt that follows the pointer.
+// 7. TiltCard - interactive 3D perspective tilt that follows the pointer.
 // ---------------------------------------------------------------------------
 
 export function TiltCard({
@@ -568,7 +568,7 @@ export function TiltCard({
   )
 }
 
-/** Scroll-in 3D reveal — content rises and rotates up into place. Stack on top
+/** Scroll-in 3D reveal - content rises and rotates up into place. Stack on top
  *  of TiltCard for entrance-3D + interactive-3D. */
 export function Reveal3D({
   children,
@@ -596,7 +596,7 @@ export function Reveal3D({
 }
 
 // ---------------------------------------------------------------------------
-// 8. Mini illustrative mocks — tiny skeleton UIs for the capability bento.
+// 8. Mini illustrative mocks - tiny skeleton UIs for the capability bento.
 // ---------------------------------------------------------------------------
 
 function Bar({ w, tone = "muted" }: { w: string; tone?: "muted" | "accent" }) {
@@ -663,7 +663,7 @@ export function MiniChatMock() {
   )
 }
 
-/** A tiny animated knowledge graph — nodes + edges drawn in one SVG coordinate
+/** A tiny animated knowledge graph - nodes + edges drawn in one SVG coordinate
  *  space so the lines always meet the nodes exactly. */
 export function MiniGraphMock() {
   const nodes = [
@@ -711,7 +711,7 @@ export function MiniGraphMock() {
 }
 
 /** PhD view: a single result reconstructed back through the exact chain that
- *  produced it — paper → protocol → experiment → figure — so months of work
+ *  produced it - paper → protocol → experiment → figure - so months of work
  *  stay defensible in a thesis or viva. */
 export function PhdTraceMock() {
   const chain = [
@@ -756,7 +756,7 @@ export function PhdTraceMock() {
 }
 
 /** Biotech R&D view: a decision log where each call keeps its rationale and
- *  source — so the "why" survives even as scientists rotate, and reports stay
+ *  source - so the "why" survives even as scientists rotate, and reports stay
  *  audit-friendly. */
 export function BiotechDecisionMock() {
   const rows = [
@@ -789,7 +789,7 @@ export function BiotechDecisionMock() {
 }
 
 /** PI view: oversee several projects and people at once, each line backed by a
- *  source — so a PI can reconstruct any decision and walk into a meeting,
+ *  source - so a PI can reconstruct any decision and walk into a meeting,
  *  committee or grant with the full trail, without chasing anyone. */
 export function PiBriefMock() {
   const rows = [
@@ -857,7 +857,7 @@ export function PiBriefMock() {
   )
 }
 
-/** Lab-manager view: the operational spine — protocols kept versioned (which SOP
+/** Lab-manager view: the operational spine - protocols kept versioned (which SOP
  *  is current), samples traceable to the experiment that used them, and new
  *  members onboarded onto the right procedures. */
 export function LabOpsMock() {
@@ -885,7 +885,7 @@ export function LabOpsMock() {
         <div className="flex items-center gap-2 rounded-lg border border-border/50 bg-background/60 px-2 py-1.5">
           <Users className="h-3.5 w-3.5 shrink-0 text-[var(--n9-accent)]" />
           <span className="text-[14px] text-muted-foreground">
-            New member onboarded — <span className="font-medium text-foreground">4 protocols</span> linked
+            New member onboarded onto <span className="font-medium text-foreground">4 protocols</span>
           </span>
         </div>
       </div>
@@ -894,14 +894,14 @@ export function LabOpsMock() {
 }
 
 // ---------------------------------------------------------------------------
-// 9. BioCatalystDemo — interactive, biology-first AI showcase with the mascot.
+// 9. BioCatalystDemo - interactive, biology-first AI showcase with the mascot.
 // ---------------------------------------------------------------------------
 
 const BIO_QA = [
   {
     q: "Why did condition B win?",
-    a: "Condition B used a 3:1 PEI:DNA ratio — it gave the highest transient yield in your earlier screen and matches the ratio in the two papers you saved.",
-    sources: ["Expt #14 — PEI screen", "Lab note · 12 Mar", "Longo et al., 2023"],
+    a: "Condition B used a 3:1 PEI:DNA ratio because it gave the highest transient yield in your earlier screen and matches the ratio in the two papers you saved.",
+    sources: ["Expt #14 Â· PEI screen", "Lab note · 12 Mar", "Longo et al., 2023"],
   },
   {
     q: "Design primers for this construct",
@@ -910,7 +910,7 @@ const BIO_QA = [
   },
   {
     q: "Summarize today's Western blot",
-    a: "Your ~52 kDa target is clearly enriched in lane 3; the loading control is even — consistent with successful induction. Quantify by densitometry to confirm.",
+    a: "Your ~52 kDa target is clearly enriched in lane 3; the loading control is even, consistent with successful induction. Quantify by densitometry to confirm.",
     sources: ["blot.tif", "Expt #21"],
   },
   {
@@ -1072,7 +1072,7 @@ export function MiniReportMock() {
   )
 }
 
-/** Academic ICP — a manuscript with auto-cited methods drafted from notes. */
+/** Academic ICP - a manuscript with auto-cited methods drafted from notes. */
 export function AcademicMock() {
   return (
     <MockFrame label="Manuscript">
@@ -1095,7 +1095,7 @@ export function AcademicMock() {
 }
 
 // ---------------------------------------------------------------------------
-// 9b. AccelerateDiscovery — bio-first AI compresses the path to insight.
+// 9b. AccelerateDiscovery - bio-first AI compresses the path to insight.
 // ---------------------------------------------------------------------------
 
 const ACCEL_PATH = ["Literature", "Hypothesis", "Experiment", "Insight"] as const
@@ -1160,7 +1160,7 @@ export function AccelerateDiscovery() {
       </div>
 
       <p className="mt-5 text-[16px] leading-6 text-muted-foreground">
-        From question to validated insight — Catalyst reasons over your bio context to cut the
+        From question to validated insight, Catalyst reasons over your bio context to cut the
         busywork, not the rigor.
       </p>
     </div>
@@ -1168,7 +1168,7 @@ export function AccelerateDiscovery() {
 }
 
 // ---------------------------------------------------------------------------
-// 10. ICP narratives — richer animated stories, not single tool glimpses.
+// 10. ICP narratives - richer animated stories, not single tool glimpses.
 // ---------------------------------------------------------------------------
 
 /** Academics: a PI's "why?" is reconstructed as a cited chain, step by step. */
@@ -1248,7 +1248,7 @@ export function AcademicNarrative() {
 }
 
 /** Startup labs: people rotate quarter to quarter, but the shared memory keeps
- *  filling and never drops — knowledge compounds. */
+ *  filling and never drops - knowledge compounds. */
 export function StartupNarrative() {
   const ref = useRef<HTMLDivElement>(null)
   const inView = useInView(ref, { margin: "-80px" })
@@ -1293,7 +1293,7 @@ export function StartupNarrative() {
         </span>
       </div>
 
-      {/* memory meter — grows and stays full even as A leaves */}
+      {/* memory meter - grows and stays full even as A leaves */}
       <div className="mt-4">
         <div className="mb-1 flex items-center justify-between text-[14px] text-muted-foreground">
           <span>Project memory</span>
@@ -1309,13 +1309,13 @@ export function StartupNarrative() {
       </div>
 
       <p className="mt-3 text-[14px] leading-5 text-muted-foreground">
-        A rotated out — the work, rationale and results <span className="font-semibold text-foreground">stayed</span>.
+        A rotated out, but the work, rationale, and results <span className="font-semibold text-foreground">stayed</span>.
       </p>
     </div>
   )
 }
 
-/** Startup ICP — people rotate in and out; the shared memory persists. Clean
+/** Startup ICP - people rotate in and out; the shared memory persists. Clean
  *  flex layout (no diagonal lines to misalign). */
 export function StartupMock() {
   return (

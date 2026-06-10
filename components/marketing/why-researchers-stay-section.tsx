@@ -760,7 +760,7 @@ export function WhyResearchersStaySection() {
   return (
     <section className="border-t border-[#e8e2d8]/80 bg-[#f8f5f0] dark:border-border/40 dark:bg-muted/20">
       <div className="container mx-auto px-4 py-16 sm:px-6 sm:py-20 lg:px-8">
-        {/* Header — typography aligned with HTML mock */}
+        {/* Header - typography aligned with HTML mock */}
         <motion.div
           initial={{ opacity: 0, y: 12 }}
           whileInView={{ opacity: 1, y: 0 }}
@@ -784,7 +784,7 @@ export function WhyResearchersStaySection() {
           </p>
         </motion.div>
 
-        {/* Desktop scene — layout from Notes9 Marketing Page.html */}
+        {/* Desktop scene - layout from Notes9 Marketing Page.html */}
         <motion.div
           initial={{ opacity: 0, y: 18 }}
           whileInView={{ opacity: 1, y: 0 }}

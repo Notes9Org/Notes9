@@ -3,7 +3,7 @@
 import { motion, useReducedMotion, useScroll, useSpring } from "framer-motion"
 
 /**
- * Thin top progress line (similar to high-contrast SaaS landings) — reads scroll depth without clutter.
+ * Thin top progress line (similar to high-contrast SaaS landings) - reads scroll depth without clutter.
  */
 export function MarketingScrollProgress() {
   const reduceMotion = useReducedMotion()

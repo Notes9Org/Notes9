@@ -55,7 +55,7 @@ const slides = [
     icon: TestTube2,
     title: "Reusable protocols, living SOPs",
     description:
-      "Centralize SOPs where they are actually used — tied to experiments instead of a static PDF shelf.",
+      "Centralise SOPs where they are actually used, tied to experiments instead of a static PDF shelf.",
     screenshot: "/demo/protocols.png",
     alt: "Notes9 protocol library",
   },
@@ -88,7 +88,7 @@ export function ProductShowcase() {
 
   return (
     <section id="explore" className="relative py-24 sm:py-32 bg-transparent">
-      {/* Subtle document grid — doc-parsing / “precision” cue without extra screenshots */}
+      {/* Subtle document grid - doc-parsing / “precision” cue without extra screenshots */}
       <div
         className="pointer-events-none absolute inset-0 opacity-[0.35] dark:opacity-[0.2]"
         style={{
@@ -111,7 +111,7 @@ export function ProductShowcase() {
           </h2>
           <p className="mt-6 text-[22px] leading-8 text-muted-foreground italic">
             <PretextReveal
-              text="Flexible modules for literature, execution, and reporting — in one connected workspace."
+              text="Flexible modules for literature, execution, and reporting, all in one connected workspace."
               delay={0.15}
             />
           </p>
@@ -208,7 +208,7 @@ export function ProductShowcase() {
             })}
           </div>
 
-          {/* Right: Single preview — unique assets vs hero */}
+          {/* Right: Single preview - unique assets vs hero */}
           <div className="relative lg:sticky lg:top-32 lg:col-span-7">
             <div className="absolute -inset-4 rounded-3xl bg-[var(--n9-accent)]/[0.04] blur-2xl" />
 

@@ -205,7 +205,7 @@ export function AboutMarketingPage() {
         <div className="container mx-auto px-4 py-16 sm:px-6 lg:px-8">
           <SectionHeader badge="Why we exist" title="Give research teams a memory they can trust." />
           <div className="mt-10 grid gap-6 md:grid-cols-3">
-            <FeatureCard icon={Workflow} title="Continuity by design" description="We keep the full research trail — literature, decisions, experiments, and reporting — connected as one memory." />
+            <FeatureCard icon={Workflow} title="Continuity by design" description="We keep the full research trail (literature, decisions, experiments, and reporting) connected as one memory." />
             <FeatureCard icon={Database} title="Provenance you can inspect" description="Every output stays tied to the evidence behind it, so work can always be traced and reused." />
             <FeatureCard icon={ShieldCheck} title="Trustworthy assistance" description="AI support is most useful when researchers can inspect provenance, preserve oversight, and reuse context safely." />
           </div>
@@ -264,7 +264,7 @@ export function PlatformMarketingPage() {
             <span className="text-[var(--n9-accent)]">literature, lab work, memory, and reporting</span>.
           </>
         }
-        description="Capture work in structure, retrieve context in seconds, and move from scattered notes to decision-ready outputs — with every step traceable."
+        description="Capture work in structure, retrieve context in seconds, and move from scattered notes to decision-ready outputs, with every step traceable."
         actions={[
           { href: "/auth/sign-up", label: "Start free" },
           { href: cta, label: "Book a demo", variant: "outline" },
@@ -389,8 +389,8 @@ export function PricingMarketingPage() {
           <SectionHeader
             align="center"
             className="mx-auto"
-            badge="What's included"
-            title="Everything's open while we're in early access"
+            badge="What is included"
+            title="Everything is open while we are in early access"
           />
           <div className="mx-auto mt-10 max-w-3xl overflow-hidden rounded-2xl border border-border/60 bg-card backdrop-blur-sm">
             <div className="grid grid-cols-[1.6fr_0.7fr_0.7fr] items-center gap-1 border-b border-border/60 bg-muted/40 px-3 py-3 text-[12px] font-semibold uppercase tracking-wide text-muted-foreground sm:gap-2 sm:px-6 sm:text-[14px]">

@@ -23,7 +23,7 @@ export function Header() {
       <div className="container mx-auto px-4 sm:px-6 lg:px-8">
         <div className="relative flex h-16 items-center overflow-visible">
 
-          {/* Logo — left */}
+          {/* Logo - left */}
           <Link href="/" className="group flex shrink-0 items-center">
             <Notes9Brand
               textClassName="h-8 w-auto"
@@ -31,10 +31,10 @@ export function Header() {
             />
           </Link>
 
-          {/* Spacer — pushes controls to the right */}
+          {/* Spacer - pushes controls to the right */}
           <div className="flex-1" />
 
-          {/* Controls — right (desktop) */}
+          {/* Controls - right (desktop) */}
           <div className="hidden lg:flex items-center space-x-3 shrink-0">
             <Button variant="ghost" size="sm" asChild>
               <Link href="/auth/login">Sign In</Link>
@@ -52,7 +52,7 @@ export function Header() {
             <ModeToggle />
           </div>
 
-          {/* Hamburger — mobile */}
+          {/* Hamburger - mobile */}
           <button
             aria-label="Toggle navigation"
             className="lg:hidden text-foreground"
