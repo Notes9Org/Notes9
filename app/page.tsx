@@ -3,11 +3,22 @@ import { getCurrentUser } from "@/lib/auth/current-user"
 import { Header } from "@/components/marketing/header"
 import { Footer } from "@/components/marketing/footer"
 import { AcademicHero } from "@/components/marketing/academic-hero"
-import { StatusSection } from "@/components/marketing/status-section"
-import { FeatureDeepDive } from "@/components/marketing/feature-deep-dive"
-import { WhyResearchersStaySection } from "@/components/marketing/why-researchers-stay-section"
 import { ContactForm } from "@/components/marketing/contact-form"
 import { FloatingPageMenu } from "@/components/marketing/floating-page-menu"
+import { ScreenBackdrop } from "@/components/marketing/screen-backdrop"
+import { AppGlyphRail } from "@/components/marketing/app-glyphs"
+import {
+  CatalystShowcaseSection,
+  ConnectedChainSection,
+  ContextEngineeringSection,
+  DifferentiationSection,
+  FinalCtaSection,
+  IcpBenefitsSection,
+  OutcomesSection,
+  PainSection,
+  PricingTeaserSection,
+  SolutionSection,
+} from "@/components/marketing/home-sections"
 
 import { InteractiveParticles } from "@/components/ui/interactive-particles"
 
@@ -69,23 +80,31 @@ export default async function HomePage({
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(websiteJsonLd) }}
       />
+      <ScreenBackdrop />
       <InteractiveParticles variant="marketing" />
       <div className="marketing-mesh pointer-events-none absolute inset-0 opacity-[0.15] dark:opacity-[0.08]" />
       <div className="relative z-10 flex flex-col min-h-screen">
         <Header />
         <FloatingPageMenu />
+        <AppGlyphRail />
         <main className="flex-1 pt-16">
           <AcademicHero />
-          <StatusSection />
-          <FeatureDeepDive />
-          <WhyResearchersStaySection />
+          <ConnectedChainSection />
+          <PainSection />
+          <SolutionSection />
+          <CatalystShowcaseSection />
+          <ContextEngineeringSection />
+          <OutcomesSection />
+          <IcpBenefitsSection />
+          <DifferentiationSection />
+          <PricingTeaserSection />
           <section id="contact">
-            <div className="container mx-auto px-4 py-24 sm:px-6 lg:px-8">
-              <div className="mx-auto max-w-2xl text-center">
+            <div className="container mx-auto px-4 py-20 sm:px-6 lg:px-8">
+              <div className="n9-readable mx-auto max-w-2xl text-center">
                 <h2 className="font-serif text-3xl tracking-tight text-foreground sm:text-4xl">
                   Get in touch
                 </h2>
-                <p className="mt-4 text-lg leading-7 text-muted-foreground">
+                <p className="mt-4 text-[20px] leading-7 text-muted-foreground">
                   Tell us about your lab and where friction shows up today.
                 </p>
               </div>
@@ -94,6 +113,7 @@ export default async function HomePage({
               </div>
             </div>
           </section>
+          <FinalCtaSection />
         </main>
         <Footer />
       </div>

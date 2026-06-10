@@ -79,7 +79,7 @@ export function FeatureBento() {
           <h2 className="font-serif text-3xl tracking-tight text-foreground sm:text-4xl">
             Everything your lab needs, connected
           </h2>
-          <p className="mt-4 text-lg leading-7 text-muted-foreground">
+          <p className="mt-4 text-[20px] leading-7 text-muted-foreground">
             From literature discovery to final reports, every step stays linked.
           </p>
         </div>
@@ -95,7 +95,7 @@ export function FeatureBento() {
             <motion.div
               key={f.id}
               variants={itemVariants}
-              className={`group relative overflow-hidden rounded-2xl border border-border/50 bg-card/80 backdrop-blur-sm transition-shadow duration-300 hover:shadow-lg dark:bg-card/60 cursor-pointer ${f.span}`}
+              className={`group relative overflow-hidden rounded-2xl border border-border/50 bg-card backdrop-blur-sm transition-shadow duration-300 hover:shadow-lg dark:bg-card cursor-pointer ${f.span}`}
             >
               {/* Screenshot */}
               <div className={`relative ${f.aspect} overflow-hidden`}>
@@ -110,11 +110,11 @@ export function FeatureBento() {
 
               {/* Text overlay */}
               <div className="relative -mt-16 px-5 pb-5 z-10">
-                <div className="mb-2 inline-flex items-center gap-2 rounded-full border border-[var(--n9-accent)]/30 bg-[var(--n9-accent-light)] px-3 py-1 text-xs font-semibold uppercase tracking-[0.15em] text-[var(--n9-accent)]">
+                <div className="mb-2 inline-flex items-center gap-2 rounded-full border border-[var(--n9-accent)]/30 bg-[var(--n9-accent-light)] px-3 py-1 text-[14px] font-semibold uppercase tracking-[0.15em] text-[var(--n9-accent)]">
                   <f.icon className="h-3 w-3" />
                   {f.label}
                 </div>
-                <p className="text-sm leading-6 text-muted-foreground">
+                <p className="text-[16px] leading-6 text-muted-foreground">
                   {f.description}
                 </p>
               </div>

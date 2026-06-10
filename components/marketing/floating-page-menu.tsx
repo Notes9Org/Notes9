@@ -19,7 +19,7 @@ export function FloatingPageMenu() {
 
   return (
     <div className="pointer-events-none fixed right-4 top-24 z-40 hidden xl:block">
-      <nav className="pointer-events-auto group flex flex-col gap-2 rounded-2xl border border-border/60 bg-background/88 p-2 shadow-[0_18px_50px_-18px_rgba(0,0,0,0.35)] backdrop-blur-xl">
+      <nav className="pointer-events-auto group flex flex-col gap-2 rounded-2xl border border-border/60 bg-background p-2 shadow-[0_18px_50px_-18px_rgba(0,0,0,0.35)] backdrop-blur-xl">
         {pageLinks.map((link) => {
           const isActive = pathname === link.href
           const Icon = link.icon
@@ -39,7 +39,7 @@ export function FloatingPageMenu() {
               <Icon className="h-4 w-4 shrink-0" />
               <span
                 className={cn(
-                  "ml-3 whitespace-nowrap text-sm font-medium opacity-0 transition-opacity duration-150 group-hover:opacity-100",
+                  "ml-3 whitespace-nowrap text-[16px] font-medium opacity-0 transition-opacity duration-150 group-hover:opacity-100",
                 )}
               >
                 {link.label}

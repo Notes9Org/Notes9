@@ -1,50 +1,16 @@
 "use client"
 
-import { useEffect, useRef, useState } from "react"
+import { useRef } from "react"
 import Link from "next/link"
-import { AnimatePresence, motion, useReducedMotion, useScroll, useTransform } from "framer-motion"
+import { motion, useScroll, useTransform } from "framer-motion"
 import { ArrowRight, Play } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { ConnectedResearchSystemDiagram } from "@/components/marketing/connected-research-system-diagram"
 import { HeroMolecules } from "@/components/marketing/hero-molecules"
 import { PretextReveal } from "@/components/ui/fluid-text"
 
-const SUB_HERO_WORDS = [
-  "Literature search",
-  "Protocol design",
-  "Experiment planning",
-  "Lab notes",
-  "Data analysis",
-  "Reports & Publications",
-] as const
-
-const SUB_HERO_INTERVAL_MS = 4200
-
-const SUB_HERO_LAYOUT_ANCHOR = SUB_HERO_WORDS.reduce((a, b) =>
-  a.length >= b.length ? a : b,
-)
-
 export function AcademicHero() {
   const sectionRef = useRef<HTMLElement>(null)
-  const reduceMotion = useReducedMotion()
-  const [subHeroIndex, setSubHeroIndex] = useState(0)
-  const subHeroTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const subWordCount = SUB_HERO_WORDS.length
-
-  const advanceSubHero = () => {
-    setSubHeroIndex((i) => (i + 1) % subWordCount)
-  }
-
-  useEffect(() => {
-    if (reduceMotion) return
-    if (subHeroTimerRef.current) clearTimeout(subHeroTimerRef.current)
-    subHeroTimerRef.current = setTimeout(advanceSubHero, SUB_HERO_INTERVAL_MS)
-    return () => {
-      if (subHeroTimerRef.current) clearTimeout(subHeroTimerRef.current)
-    }
-  }, [subHeroIndex, reduceMotion, subWordCount])
-
-  const subWord = SUB_HERO_WORDS[subHeroIndex % subWordCount] ?? SUB_HERO_WORDS[0]
 
   const { scrollYProgress } = useScroll({
     target: sectionRef,
@@ -69,67 +35,45 @@ export function AcademicHero() {
           style={{ y: heroY }}
           className="mt-2 grid w-full min-w-0 items-start gap-6 sm:mt-4 sm:gap-8 lg:mt-10 lg:grid-cols-2 lg:gap-10 xl:grid-cols-[5fr_7fr] xl:gap-12"
         >
-          <div className="order-2 min-w-0 space-y-5 sm:space-y-7 lg:order-1 lg:pt-2 xl:pt-4">
-            <motion.div
+          <div className="relative order-2 min-w-0 lg:order-1 lg:pt-2 xl:pt-4">
+            {/* Frosted scrim: blurs the sticky-note backdrop behind the hero copy
+                for readability while keeping it faintly visible. */}
+            <div
+              aria-hidden
+              className="pointer-events-none absolute -inset-x-4 -inset-y-6 bg-background/45 backdrop-blur-[7px] dark:bg-background/35 [mask-image:radial-gradient(120%_115%_at_42%_50%,#000_50%,transparent_100%)]"
+            />
+            <div className="relative z-10 space-y-5 sm:space-y-7">
+            <motion.p
               initial={{ opacity: 0, y: 12 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.5 }}
-              className="flex justify-start"
+              transition={{ duration: 0.6, delay: 0.1 }}
+              className="text-[13px] font-semibold uppercase tracking-[0.22em] text-[var(--n9-accent)]"
             >
-              <span className="inline-flex items-center gap-2 rounded-full border border-[var(--n9-accent)]/30 bg-[var(--n9-accent-light)] px-4 py-1.5 text-xs font-semibold uppercase tracking-[0.16em] text-[var(--n9-accent)]">
-                <span className="relative flex h-2 w-2">
-                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[var(--n9-accent)] opacity-75" />
-                  <span className="relative inline-flex h-2 w-2 rounded-full bg-[var(--n9-accent)]" />
-                </span>
-                Built for life-science research teams
-              </span>
-            </motion.div>
-
-            <div className="max-w-3xl text-left font-serif text-[2.35rem] tracking-tight text-foreground sm:text-5xl lg:text-[3.45rem] lg:leading-[1.07] leading-[1.06]">
-              <PretextReveal text="Where research stays connected, and AI catalyzes it." />
+              AI-native lab notebook
+            </motion.p>
+            <div className="max-w-3xl text-left font-serif text-[2.35rem] font-bold tracking-tight text-foreground sm:text-5xl lg:text-[3.45rem] lg:leading-[1.14] leading-[1.12]">
+              <PretextReveal text="AI that answers from" />{" "}
+              <motion.span
+                className="n9-gradient-text inline-block"
+                initial={{ opacity: 0, y: 16 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.6, delay: 0.45, ease: [0.22, 1, 0.36, 1] }}
+              >
+                your lab&rsquo;s actual work.
+              </motion.span>
             </div>
 
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.6, delay: 0.2 }}
-              className="max-w-2xl text-left text-[1.08rem] leading-relaxed text-muted-foreground sm:text-[1.875rem] sm:leading-relaxed"
+              className="max-w-2xl text-left text-[1.05rem] leading-relaxed text-muted-foreground sm:text-[22px] sm:leading-relaxed"
             >
-              {reduceMotion ? (
-                <p className="text-pretty">
-                  <span className="text-muted-foreground">One place for your </span>
-                  <span className="font-medium text-[var(--n9-accent)]">
-                    Literature search
-                  </span>
-                  <span className="text-muted-foreground">.</span>
-                </p>
-              ) : (
-                <p className="text-pretty flex flex-wrap items-baseline gap-x-1">
-                  <span className="shrink-0 text-muted-foreground">One place for your </span>
-                  <span className="inline-grid min-w-0 max-w-full grid-cols-1 grid-rows-1 align-baseline leading-snug">
-                    <span
-                      className="invisible col-start-1 row-start-1 max-w-full font-medium leading-snug"
-                      aria-hidden
-                    >
-                      {SUB_HERO_LAYOUT_ANCHOR}
-                    </span>
-                    <span className="relative col-start-1 row-start-1 max-w-full min-h-0 self-stretch overflow-hidden">
-                      <AnimatePresence mode="wait">
-                        <motion.span
-                          key={subWord}
-                          initial={{ y: "100%", opacity: 0 }}
-                          animate={{ y: "0%", opacity: 1 }}
-                          exit={{ y: "-100%", opacity: 0 }}
-                          transition={{ duration: 0.35, ease: "easeOut" }}
-                          className="absolute left-0 top-0 block max-w-full font-medium leading-snug text-[var(--n9-accent)]"
-                        >
-                          {subWord}
-                        </motion.span>
-                      </AnimatePresence>
-                    </span>
-                  </span>
-                </p>
-              )}
+              <p className="text-pretty">
+                <span className="font-semibold text-foreground">Stop re-explaining your science to AI.</span>{" "}
+                Notes9 connects your papers, experiments and notes into one memory Catalyst reasons
+                over — and cites.
+              </p>
             </motion.div>
 
             <motion.div
@@ -141,30 +85,39 @@ export function AcademicHero() {
               <Button
                 asChild
                 size="lg"
-                className="group h-12 w-full rounded-full bg-[var(--n9-accent)] px-8 text-white shadow-[0_12px_40px_-12px_var(--n9-accent-glow)] transition-all duration-300 hover:bg-[var(--n9-accent-hover)] hover:shadow-[0_20px_50px_-12px_var(--n9-accent-glow)] sm:w-auto"
+                className="group h-14 w-full rounded-full px-10 text-[17px] font-semibold bg-[linear-gradient(115deg,var(--n9-accent),color-mix(in_oklab,var(--n9-accent)_58%,#d9a24a))] text-white shadow-[0_14px_44px_-12px_var(--n9-accent-glow)] transition-all duration-300 hover:opacity-95 hover:shadow-[0_22px_56px_-12px_var(--n9-accent-glow)] sm:w-auto"
               >
                 <Link href="/auth/sign-up">
                   Start free
-                  <ArrowRight className="ml-2 h-4 w-4 transition-transform duration-200 group-hover:translate-x-1" />
+                  <ArrowRight className="ml-2 h-5 w-5 transition-transform duration-200 group-hover:translate-x-1" />
                 </Link>
               </Button>
               <Button
                 asChild
                 variant="outline"
                 size="lg"
-                className="h-12 w-full rounded-full border-border/60 px-8 transition-colors duration-200 hover:border-[var(--n9-accent)]/40 sm:w-auto"
+                className="h-14 w-full rounded-full border-border/60 px-10 text-[17px] font-semibold transition-colors duration-200 hover:border-[var(--n9-accent)]/40 sm:w-auto"
               >
                 <Link href="/#contact">
-                  <Play className="mr-2 h-4 w-4" />
-                  Request a demo
+                  <Play className="mr-2 h-5 w-5" />
+                  Book a demo
                 </Link>
               </Button>
             </motion.div>
+            </div>
           </div>
 
           <div className="order-1 min-w-0 lg:order-2">
-            <div className="mx-auto w-full max-w-[92vw] sm:max-w-none">
-              <ConnectedResearchSystemDiagram className="w-full min-w-0" />
+            <div className="relative mx-auto w-full max-w-[92vw] sm:max-w-none">
+              {/* Opaque card backing so the illustration reads clearly over the
+                  sticky-note backdrop. */}
+              <div
+                aria-hidden
+                className="pointer-events-none absolute inset-x-1 inset-y-3 rounded-[2rem] border border-border/60 bg-card shadow-[0_30px_90px_-44px_rgba(44,36,24,0.4)] dark:shadow-[0_30px_90px_-44px_rgba(0,0,0,0.65)]"
+              />
+              <div className="relative z-10">
+                <ConnectedResearchSystemDiagram className="w-full min-w-0" />
+              </div>
             </div>
           </div>
         </motion.div>
@@ -173,8 +126,8 @@ export function AcademicHero() {
 
       <div className="h-auto min-h-16 py-4 sm:h-20 sm:min-h-0 sm:py-0">
         <div className="container mx-auto flex h-full items-center px-4 sm:px-6 lg:px-8">
-          <p className="max-w-4xl text-sm text-muted-foreground/95 sm:text-base">
-            For researchers tired of scattered papers, notes, protocols, spreadsheets, and disconnected AI tools.
+          <p className="max-w-4xl text-[16px] text-muted-foreground/95 sm:text-[18px]">
+            For researchers already using AI — but tired of scattered context.
           </p>
         </div>
       </div>

@@ -13,7 +13,7 @@ export function PrivacyContent() {
             </div>
 
             <section>
-                <h2 className="text-xl font-semibold mb-3">1. Purpose of this pilot</h2>
+                <h2 className="text-[22px] font-semibold mb-3">1. Purpose of this pilot</h2>
                 <p>
                     Notes9 is running a limited pilot to evaluate a research workflow tool for creating and organising lab notes, protocols, and literature-linked research records.
                 </p>
@@ -23,7 +23,7 @@ export function PrivacyContent() {
             </section>
 
             <section>
-                <h2 className="text-xl font-semibold mb-3">2. Pilot restrictions (what you must NOT upload)</h2>
+                <h2 className="text-[22px] font-semibold mb-3">2. Pilot restrictions (what you must NOT upload)</h2>
                 <p>
                     To keep the pilot low-risk and appropriate for early-stage testing, you agree not to upload or store in Notes9 during the pilot:
                 </p>
@@ -40,7 +40,7 @@ export function PrivacyContent() {
             </section>
 
             <section>
-                <h2 className="text-xl font-semibold mb-3">3. Roles: who is Controller / Processor</h2>
+                <h2 className="text-[22px] font-semibold mb-3">3. Roles: who is Controller / Processor</h2>
                 <p>
                     For research content you upload (“Customer Content”), the organisation or your lab/institute/company or firm typically determines why and how that content is processed. In that case:
                 </p>
@@ -54,8 +54,8 @@ export function PrivacyContent() {
             </section>
 
             <section>
-                <h2 className="text-xl font-semibold mb-3">4. What data we collect</h2>
-                <h3 className="text-lg font-medium mt-4 mb-2">4.1 Account & admin data (service operation)</h3>
+                <h2 className="text-[22px] font-semibold mb-3">4. What data we collect</h2>
+                <h3 className="text-[20px] font-medium mt-4 mb-2">4.1 Account & admin data (service operation)</h3>
                 <ul className="list-disc pl-6 space-y-1">
                     <li>Name and email address (for accounts)</li>
                     <li>Organisation/department (if provided)</li>
@@ -63,22 +63,22 @@ export function PrivacyContent() {
                     <li>Basic support communications (messages you send to us)</li>
                 </ul>
 
-                <h3 className="text-lg font-medium mt-4 mb-2">4.2 Customer Content (research content you upload)</h3>
+                <h3 className="text-[20px] font-medium mt-4 mb-2">4.2 Customer Content (research content you upload)</h3>
                 <ul className="list-disc pl-6 space-y-1">
                     <li>Notes, protocols, experiment metadata</li>
                     <li>Attachments you upload (files, images, tables)</li>
                     <li>Links/annotations to papers or internal references</li>
                 </ul>
 
-                <h3 className="text-lg font-medium mt-4 mb-2">4.3 What we do NOT want in the pilot</h3>
+                <h3 className="text-[20px] font-medium mt-4 mb-2">4.3 What we do NOT want in the pilot</h3>
                 <p>
                     See Section 2 (disallowed data). We also strongly discourage storing direct identifiers about third parties.
                 </p>
             </section>
 
             <section>
-                <h2 className="text-xl font-semibold mb-3">5. How we use data (and lawful basis)</h2>
-                <h3 className="text-lg font-medium mt-4 mb-2">5.1 Account & admin data</h3>
+                <h2 className="text-[22px] font-semibold mb-3">5. How we use data (and lawful basis)</h2>
+                <h3 className="text-[20px] font-medium mt-4 mb-2">5.1 Account & admin data</h3>
                 <p>We use account/admin data to:</p>
                 <ul className="list-disc pl-6 space-y-1">
                     <li>provide access to the pilot service</li>
@@ -89,14 +89,14 @@ export function PrivacyContent() {
                     Lawful basis typically includes performance of a contract (providing the service) and legitimate interests (security and service improvement).
                 </p>
 
-                <h3 className="text-lg font-medium mt-4 mb-2">5.2 Customer Content</h3>
+                <h3 className="text-[20px] font-medium mt-4 mb-2">5.2 Customer Content</h3>
                 <p>
                     We process Customer Content to provide the features you use (storage, retrieval, collaboration, search, and optional AI functions if enabled by your pilot admin).
                 </p>
             </section>
 
             <section>
-                <h2 className="text-xl font-semibold mb-3">6. AI features (pilot-safe version)</h2>
+                <h2 className="text-[22px] font-semibold mb-3">6. AI features (pilot-safe version)</h2>
                 <p>If AI features are enabled for your pilot:</p>
                 <ul className="list-disc pl-6 space-y-1">
                     <li>Customer Content may be processed to generate outputs (summaries, suggestions, structured fields).</li>
@@ -107,7 +107,7 @@ export function PrivacyContent() {
             </section>
 
             <section>
-                <h2 className="text-xl font-semibold mb-3">7. Security measures (baseline commitments for the pilot)</h2>
+                <h2 className="text-[22px] font-semibold mb-3">7. Security measures (baseline commitments for the pilot)</h2>
                 <p>During the pilot, Notes9 will implement reasonable technical and organisational measures, including:</p>
                 <ul className="list-disc pl-6 space-y-1">
                     <li>access limited to authorised personnel on a need-to-know basis</li>
@@ -119,7 +119,7 @@ export function PrivacyContent() {
             </section>
 
             <section>
-                <h2 className="text-xl font-semibold mb-3">8. Incident management and notification</h2>
+                <h2 className="text-[22px] font-semibold mb-3">8. Incident management and notification</h2>
                 <p>If we become aware of a suspected or confirmed security incident affecting University data in the pilot, we will:</p>
                 <ul className="list-disc pl-6 space-y-1">
                     <li>notify the University pilot owner without undue delay, and</li>
@@ -131,7 +131,7 @@ export function PrivacyContent() {
             </section>
 
             <section>
-                <h2 className="text-xl font-semibold mb-3">9. Data retention and deletion</h2>
+                <h2 className="text-[22px] font-semibold mb-3">9. Data retention and deletion</h2>
                 <p>
                     Customer Content is retained only for the pilot period or if a user wants to delete their account of Notes9, unless the organisation/user requests an extension in writing.
                 </p>
@@ -148,7 +148,7 @@ export function PrivacyContent() {
             </section>
 
             <section>
-                <h2 className="text-xl font-semibold mb-3">10. Sub-processors and where data is processed</h2>
+                <h2 className="text-[22px] font-semibold mb-3">10. Sub-processors and where data is processed</h2>
                 <p>
                     Notes9 may use vetted service providers (e.g., hosting, logging, email). We will provide a current sub-processor list on request.
                 </p>
@@ -159,7 +159,7 @@ export function PrivacyContent() {
             </section>
 
             <section>
-                <h2 className="text-xl font-semibold mb-3">11. Your responsibilities</h2>
+                <h2 className="text-[22px] font-semibold mb-3">11. Your responsibilities</h2>
                 <p>You agree to:</p>
                 <ul className="list-disc pl-6 space-y-1">
                     <li>follow the Pilot Restrictions (Section 2)</li>
@@ -170,7 +170,7 @@ export function PrivacyContent() {
             </section>
 
             <section>
-                <h2 className="text-xl font-semibold mb-3">12. Individual rights and how requests are handled</h2>
+                <h2 className="text-[22px] font-semibold mb-3">12. Individual rights and how requests are handled</h2>
                 <p>Because the organisation is typically the Controller for Customer Content:</p>
                 <ul className="list-disc pl-6 space-y-1">
                     <li>requests to access/erase/rectify Customer Content should usually be directed to your organisational contact</li>
@@ -179,7 +179,7 @@ export function PrivacyContent() {
             </section>
 
             <section>
-                <h2 className="text-xl font-semibold mb-3">13. Confidentiality</h2>
+                <h2 className="text-[22px] font-semibold mb-3">13. Confidentiality</h2>
                 <p>
                     We treat Customer Content as confidential and do not disclose it to third parties except:
                 </p>
@@ -191,14 +191,14 @@ export function PrivacyContent() {
             </section>
 
             <section>
-                <h2 className="text-xl font-semibold mb-3">14. Changes to these terms</h2>
+                <h2 className="text-[22px] font-semibold mb-3">14. Changes to these terms</h2>
                 <p>
                     We may update these Pilot Terms to reflect pilot learnings or security requirements. If changes materially affect data handling, we will notify the organisations's owner.
                 </p>
             </section>
 
             <section>
-                <h2 className="text-xl font-semibold mb-3">15. Contact and complaints</h2>
+                <h2 className="text-[22px] font-semibold mb-3">15. Contact and complaints</h2>
                 <p>
                     Privacy: <a href="mailto:admin@notes9.com" className="text-primary hover:underline">admin@notes9.com</a><br />
                     Security: <a href="mailto:admin@notes9.com" className="text-primary hover:underline">admin@notes9.com</a>

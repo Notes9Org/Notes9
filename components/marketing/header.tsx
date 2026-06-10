@@ -40,7 +40,7 @@ export function Header() {
               <Link href="/auth/login">Sign In</Link>
             </Button>
             <Button variant="outline" size="sm" asChild className="rounded-full">
-              <Link href="/#contact">Request a demo</Link>
+              <Link href="/#contact">Book a demo</Link>
             </Button>
             <Button
               size="sm"
@@ -71,7 +71,7 @@ export function Header() {
                   key={link.href}
                   href={link.href}
                   onClick={() => setIsMenuOpen(false)}
-                  className="flex h-11 items-center px-4 text-base font-medium text-foreground hover:bg-muted"
+                  className="flex h-11 items-center px-4 text-[18px] font-medium text-foreground hover:bg-muted"
                 >
                   {link.label}
                 </Link>
@@ -93,7 +93,7 @@ export function Header() {
                   className="w-full justify-center rounded-full"
                   asChild
                 >
-                  <Link href="/#contact">Request a demo</Link>
+                  <Link href="/#contact">Book a demo</Link>
                 </Button>
                 <div className="flex justify-center pt-2">
                   <ModeToggle />

@@ -94,6 +94,132 @@
 .marketing-theme .scrollbar-none::-webkit-scrollbar { display: none; }
 .marketing-theme .scrollbar-none { -ms-overflow-style: none; scrollbar-width: none; }
 
+/* ── Premium design language ─────────────────────────────────────────────
+   Warm gradient accent text, glass cards with a luminous top hairline, and a
+   soft radial glow for signature sections. */
+
+.marketing-theme .n9-gradient-text {
+  background-image: linear-gradient(
+    115deg,
+    var(--n9-accent) 0%,
+    color-mix(in oklab, var(--n9-accent) 50%, #d9a24a) 55%,
+    var(--n9-accent) 100%
+  );
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.marketing-theme .n9-card {
+  position: relative;
+  border-radius: 1.5rem;
+  border: 1px solid var(--border);
+  background: var(--card);
+  box-shadow:
+    0 1px 0 0 rgba(255, 255, 255, 0.5) inset,
+    0 28px 70px -38px rgba(44, 36, 24, 0.3);
+  transition: transform 0.3s ease, box-shadow 0.3s ease, border-color 0.3s ease;
+}
+.marketing-theme .n9-card::before {
+  content: "";
+  position: absolute;
+  inset: 0 12% auto 12%;
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    color-mix(in oklab, var(--n9-accent) 65%, transparent),
+    transparent
+  );
+}
+.marketing-theme .n9-card:hover {
+  border-color: color-mix(in oklab, var(--n9-accent) 35%, var(--border));
+  box-shadow:
+    0 1px 0 0 rgba(255, 255, 255, 0.5) inset,
+    0 36px 90px -40px var(--n9-accent-glow);
+}
+.dark .marketing-theme .n9-card {
+  box-shadow:
+    0 1px 0 0 rgba(255, 255, 255, 0.05) inset,
+    0 28px 70px -38px rgba(0, 0, 0, 0.6);
+}
+
+/* Sticky-note paper: warm stock + faint fractal-noise grain + a top-left light. */
+.marketing-theme .n9-sticky {
+  background-color: #fbf2da;
+  background-image:
+    radial-gradient(130% 110% at 0% 0%, rgba(255, 255, 255, 0.55), transparent 55%),
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='90' height='90'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.06'/%3E%3C/svg%3E");
+}
+.dark .marketing-theme .n9-sticky {
+  background-color: #2c2820;
+  background-image:
+    radial-gradient(130% 110% at 0% 0%, rgba(255, 255, 255, 0.06), transparent 55%),
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='90' height='90'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.08'/%3E%3C/svg%3E");
+}
+
+/* Localized readability scrim: a soft frosted blur that hugs ONLY the text /
+   illustration it wraps (not the whole section), so the sticky-note backdrop
+   stays visible around it while the content stays legible. Mirrors the hero
+   treatment. Apply `n9-readable` to a text block or embed. */
+.marketing-theme .n9-readable {
+  position: relative;
+}
+.marketing-theme .n9-readable::before {
+  content: "";
+  position: absolute;
+  inset: -0.85rem -1.15rem;
+  z-index: -1;
+  background: color-mix(in oklab, var(--background) 52%, transparent);
+  -webkit-backdrop-filter: blur(7px);
+  backdrop-filter: blur(7px);
+  -webkit-mask-image: radial-gradient(125% 125% at 50% 50%, #000 52%, transparent 100%);
+  mask-image: radial-gradient(125% 125% at 50% 50%, #000 52%, transparent 100%);
+  pointer-events: none;
+}
+
+/* Soft radial accent glow placed behind a signature section. */
+.marketing-theme .n9-glow::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background: radial-gradient(
+    60% 50% at 50% 0%,
+    var(--n9-accent-glow),
+    transparent 70%
+  );
+}
+
+/* Gently floating "pinned" sticky-note backdrop. Rotation is carried in a CSS
+   var so the float animation and the per-note tilt don't fight over transform. */
+@keyframes n9-note-float {
+  0%, 100% { transform: rotate(var(--n9-rot, 0deg)) translateY(0); }
+  50%      { transform: rotate(var(--n9-rot, 0deg)) translateY(-9px); }
+}
+.marketing-theme .n9-note {
+  transform: rotate(var(--n9-rot, 0deg));
+  animation: n9-note-float 8s ease-in-out infinite;
+}
+
+/* Seamless horizontal marquee for the connected-research chain embed */
+/* Scroll left → right, in the direction the chain arrows point. The track is
+   duplicated copies, so animating from -50% back to 0 loops seamlessly. */
+@keyframes n9-marquee {
+  from { transform: translateX(-50%); }
+  to   { transform: translateX(0); }
+}
+.marketing-theme .n9-marquee-track {
+  animation: n9-marquee 120s linear infinite;
+}
+.marketing-theme .n9-marquee-track:hover {
+  animation-play-state: paused;
+}
+@media (prefers-reduced-motion: reduce) {
+  .marketing-theme .n9-marquee-track { animation: none; }
+}
+
 /* Video/media resilience on the marketing homepage */
 .marketing-theme video,
 .marketing-theme img {

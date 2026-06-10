@@ -109,7 +109,7 @@ export function ProductShowcase() {
           <h2 className="font-serif text-4xl tracking-tight text-foreground sm:text-5xl lg:text-6xl text-balance">
             <PretextReveal text="Free your data from static notebooks." />
           </h2>
-          <p className="mt-6 text-xl leading-8 text-muted-foreground italic">
+          <p className="mt-6 text-[22px] leading-8 text-muted-foreground italic">
             <PretextReveal
               text="Flexible modules for literature, execution, and reporting — in one connected workspace."
               delay={0.15}
@@ -131,10 +131,10 @@ export function ProductShowcase() {
                 key={slide.id}
                 type="button"
                 onClick={() => setActive(i)}
-                className={`rounded-full border px-4 py-2 text-sm font-medium transition-all duration-200 cursor-pointer ${
+                className={`rounded-full border px-4 py-2 text-[16px] font-medium transition-all duration-200 cursor-pointer ${
                   on
                     ? "border-[var(--n9-accent)]/50 bg-[var(--n9-accent-light)] text-[var(--n9-accent)] shadow-sm"
-                    : "border-border/60 bg-background/60 text-muted-foreground hover:border-[var(--n9-accent)]/30 hover:text-foreground"
+                    : "border-border/60 bg-background text-muted-foreground hover:border-[var(--n9-accent)]/30 hover:text-foreground"
                 }`}
               >
                 {slide.label}
@@ -173,7 +173,7 @@ export function ProductShowcase() {
                       <Icon className="h-5 w-5" />
                     </div>
                     <span
-                      className={`text-xl font-semibold tracking-tight transition-colors ${
+                      className={`text-[22px] font-semibold tracking-tight transition-colors ${
                         isActive
                           ? "text-foreground"
                           : "text-muted-foreground group-hover:text-foreground"
@@ -193,7 +193,7 @@ export function ProductShowcase() {
                         className="px-6 pb-6 pt-0"
                       >
                         <div className="pl-0 sm:pl-14">
-                          <div className="text-base leading-relaxed text-muted-foreground">
+                          <div className="text-[18px] leading-relaxed text-muted-foreground">
                             <strong className="mb-1 block font-medium text-foreground">
                               <PretextReveal text={slide.title} stagger={0.01} />
                             </strong>
@@ -212,7 +212,7 @@ export function ProductShowcase() {
           <div className="relative lg:sticky lg:top-32 lg:col-span-7">
             <div className="absolute -inset-4 rounded-3xl bg-[var(--n9-accent)]/[0.04] blur-2xl" />
 
-            <div className="group relative flex aspect-[4/3] items-center justify-center overflow-hidden rounded-2xl border border-border/40 bg-background/50 p-2 shadow-2xl shadow-black/5 ring-1 ring-black/5 backdrop-blur-sm dark:ring-white/10 sm:p-6">
+            <div className="group relative flex aspect-[4/3] items-center justify-center overflow-hidden rounded-2xl border border-border/40 bg-background p-2 shadow-2xl shadow-black/5 ring-1 ring-black/5 backdrop-blur-sm dark:ring-white/10 sm:p-6">
               <AnimatePresence mode="popLayout">
                 <motion.div
                   key={current.id}

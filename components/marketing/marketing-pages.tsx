@@ -2,6 +2,7 @@
 import {
   BookOpen,
   Bot,
+  Check,
   Database,
   FileSearch,
   FileText,
@@ -10,6 +11,7 @@ import {
   GraduationCap,
   LayoutDashboard,
   Microscope,
+  Minus,
   Settings,
   ShieldCheck,
   TestTube2,
@@ -26,10 +28,15 @@ import {
   SectionHeader,
   WorkflowStep,
 } from "@/components/marketing/site-ui"
-import { ConnectedResearchSystemDiagram } from "@/components/marketing/connected-research-system-diagram"
 import { MinimalCard, ProductFrame } from "@/components/marketing/three-d-card"
 import { ProductShowcase } from "@/components/marketing/video-showcase"
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion"
+import {
+  DemoStorySection,
+  FaqSection,
+  PricingTiers,
+  UseCasesSection,
+} from "@/components/marketing/home-sections"
 
 const cta = "/#contact"
 const resourceGuides = [
@@ -196,10 +203,10 @@ export function AboutMarketingPage() {
 
       <section className="border-t border-border/40">
         <div className="container mx-auto px-4 py-16 sm:px-6 lg:px-8">
-          <SectionHeader badge="Why we exist" title="Modern research teams do not need more fragmented software." />
+          <SectionHeader badge="Why we exist" title="Give research teams a memory they can trust." />
           <div className="mt-10 grid gap-6 md:grid-cols-3">
-            <FeatureCard icon={Workflow} title="Fragmented context" description="Important decisions disappear between PDFs, spreadsheets, instruments, and disconnected notes." />
-            <FeatureCard icon={Workflow} title="Structured continuity" description="Notes9 links evidence, experiment work, and reporting so teams move without losing the trail." />
+            <FeatureCard icon={Workflow} title="Continuity by design" description="We keep the full research trail — literature, decisions, experiments, and reporting — connected as one memory." />
+            <FeatureCard icon={Database} title="Provenance you can inspect" description="Every output stays tied to the evidence behind it, so work can always be traced and reused." />
             <FeatureCard icon={ShieldCheck} title="Trustworthy assistance" description="AI support is most useful when researchers can inspect provenance, preserve oversight, and reuse context safely." />
           </div>
         </div>
@@ -221,12 +228,12 @@ export function AboutMarketingPage() {
         <div className="container mx-auto px-4 py-16 sm:px-6 lg:px-8">
           <div className="grid gap-6 lg:grid-cols-2 lg:items-stretch">
             <MinimalCard className="h-full">
-              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[var(--n9-accent)]">Mission</p>
-              <p className="mt-4 text-lg leading-8 text-foreground">Make rigorous scientific work easier to run, trace, and reuse across the full research cycle.</p>
+              <p className="text-[14px] font-semibold uppercase tracking-[0.2em] text-[var(--n9-accent)]">Mission</p>
+              <p className="mt-4 text-[20px] leading-8 text-foreground">Make rigorous scientific work easier to run, trace, and reuse across the full research cycle.</p>
             </MinimalCard>
             <MinimalCard className="h-full">
-              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[var(--n9-accent)]">Vision</p>
-              <p className="mt-4 text-lg leading-8 text-foreground">Give every research team a trusted operating layer for decisions, documentation, and discovery.</p>
+              <p className="text-[14px] font-semibold uppercase tracking-[0.2em] text-[var(--n9-accent)]">Vision</p>
+              <p className="mt-4 text-[20px] leading-8 text-foreground">Give every research team a trusted operating layer for decisions, documentation, and discovery.</p>
             </MinimalCard>
           </div>
         </div>
@@ -246,50 +253,6 @@ export function AboutMarketingPage() {
   )
 }
 
-export function PlatformDifferentiationSection({
-  className = "border-t border-border/40",
-}: {
-  className?: string
-}) {
-  return (
-    <section className={className}>
-      <div className="container mx-auto px-4 py-16 sm:px-6 lg:px-8">
-        <div className="mx-auto max-w-[88rem]">
-          <div className="flex flex-col rounded-[36px] border border-[var(--n9-accent)]/15 bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(247,242,236,0.92))] p-6 shadow-[0_28px_90px_-44px_rgba(44,36,24,0.24)] backdrop-blur-sm dark:border-[var(--n9-accent)]/12 dark:bg-[radial-gradient(circle_at_top,rgba(184,121,69,0.09),transparent_30%),linear-gradient(180deg,rgba(19,18,20,0.98),rgba(12,12,14,0.99))] dark:shadow-[0_32px_100px_-44px_rgba(0,0,0,0.72)] sm:p-8 lg:p-10">
-            <SectionHeader
-              badge="Connected Research System"
-              title="Research slows down when context breaks between tools"
-              className="max-w-none text-left"
-            />
-            <p className="mt-4 w-full text-justify text-base leading-7 text-muted-foreground sm:text-lg">
-              Disconnected phases force teams to reconstruct rationale, repeat handoffs, and lose continuity. Notes9 keeps the workflow connected from literature to experiments to writing.
-            </p>
-            <div className="mt-6 flex flex-wrap gap-3 text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground/70 dark:text-slate-400">
-              <span className="rounded-full border border-border/60 bg-background/75 px-3 py-2 dark:border-white/10 dark:bg-white/[0.04]">fragmentation costs time</span>
-              <span className="rounded-full border border-border/60 bg-background/75 px-3 py-2 dark:border-white/10 dark:bg-white/[0.04]">handoffs break provenance</span>
-              <span className="rounded-full border border-border/60 bg-background/75 px-3 py-2 dark:border-white/10 dark:bg-white/[0.04]">reconstruction slows decisions</span>
-            </div>
-            <div className="mt-8 w-full max-w-none">
-              <ConnectedResearchSystemDiagram className="w-full" />
-            </div>
-            <div className="mt-6 grid gap-3 text-[11px] font-semibold uppercase tracking-[0.2em] text-muted-foreground/65 dark:text-slate-400 sm:grid-cols-3">
-              <div className="rounded-[18px] border border-border/50 bg-background/70 px-4 py-3 dark:border-white/10 dark:bg-white/[0.04]">
-                Evidence stays linked
-              </div>
-              <div className="rounded-[18px] border border-border/50 bg-background/70 px-4 py-3 dark:border-white/10 dark:bg-white/[0.04]">
-                Catalyst AI sees full context
-              </div>
-              <div className="rounded-[18px] border border-border/50 bg-background/70 px-4 py-3 dark:border-white/10 dark:bg-white/[0.04]">
-                Writing reflects the work
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </section>
-  )
-}
-
 export function PlatformMarketingPage() {
   return (
     <MarketingPageFrame>
@@ -297,25 +260,27 @@ export function PlatformMarketingPage() {
         badge="Platform"
         title={
           <>
-            One workflow layer for{" "}
+            One connected layer for{" "}
             <span className="text-[var(--n9-accent)]">literature, lab work, memory, and reporting</span>.
           </>
         }
-        description="Notes9 helps research teams capture work in a structured way, retrieve context quickly, and move from fragmented notes to decision-ready outputs."
+        description="Capture work in structure, retrieve context in seconds, and move from scattered notes to decision-ready outputs — with every step traceable."
         actions={[
-          { href: cta, label: "Request a demo" },
-          { href: "/resources", label: "Review resources", variant: "outline" },
+          { href: "/auth/sign-up", label: "Start free" },
+          { href: cta, label: "Book a demo", variant: "outline" },
         ]}
       />
 
       <ProductShowcase />
 
-      <section className="border-t border-border/40 bg-muted/20">
+      <UseCasesSection />
+
+      <section className="border-t border-border/40">
         <div className="container mx-auto px-4 py-16 sm:px-6 lg:px-8">
           <SectionHeader
             badge="See Notes9"
-            title="Watch how research work stays connected"
-            description="Short product moments that show how Notes9 turns scattered lab work into one continuous system."
+            title="Short product moments"
+            description="How scattered lab work becomes one continuous, connected system."
             align="center"
           />
           <div className="mt-10 grid gap-6 md:grid-cols-2">
@@ -325,7 +290,7 @@ export function PlatformMarketingPage() {
                 className="group overflow-hidden rounded-[28px] border-border/60 bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(244,239,233,0.88))] p-0 shadow-[0_28px_80px_-34px_rgba(44,36,24,0.18)] transition-transform duration-300 hover:-translate-y-1 dark:bg-[linear-gradient(180deg,rgba(24,20,16,0.96),rgba(36,28,22,0.9))] dark:shadow-[0_28px_80px_-34px_rgba(0,0,0,0.45)]"
               >
                 <div className="px-5 py-5">
-                  <div className="mb-4 inline-flex rounded-full border border-[var(--n9-accent)]/20 bg-[var(--n9-accent-light)] px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.24em] text-[var(--n9-accent)]">
+                  <div className="mb-4 inline-flex rounded-full border border-[var(--n9-accent)]/20 bg-[var(--n9-accent-light)] px-3 py-1 text-[14px] font-semibold uppercase tracking-[0.24em] text-[var(--n9-accent)]">
                     {clip.eyebrow}
                   </div>
                   <div className="flex items-center gap-3">
@@ -333,8 +298,8 @@ export function PlatformMarketingPage() {
                       <clip.icon className="h-5 w-5" />
                     </div>
                     <div>
-                      <h3 className="text-lg font-semibold tracking-tight text-foreground">{clip.title}</h3>
-                      <p className="mt-1 text-sm leading-6 text-muted-foreground">{clip.description}</p>
+                      <h3 className="text-[20px] font-semibold tracking-tight text-foreground">{clip.title}</h3>
+                      <p className="mt-1 text-[16px] leading-6 text-muted-foreground">{clip.description}</p>
                     </div>
                   </div>
                 </div>
@@ -369,19 +334,31 @@ export function PlatformMarketingPage() {
         </div>
       </section>
 
+      <DemoStorySection />
+
       <section className="border-t border-border/40 bg-muted/20">
         <div className="container mx-auto px-4 py-16 sm:px-6 lg:px-8">
           <CTAPanel
             title="See the platform through your own workflow."
-            description="We can map Notes9 against your current process to show where value is most immediate."
-            primary={{ href: cta, label: "Request a demo" }}
-            secondary={{ href: "/pricing", label: "See engagement options" }}
+            description="We can map Notes9 against your current process to show where value lands first."
+            primary={{ href: "/auth/sign-up", label: "Start free" }}
+            secondary={{ href: cta, label: "Book a demo" }}
           />
         </div>
       </section>
     </MarketingPageFrame>
   )
 }
+
+const PRICING_INCLUDED = [
+  { cap: "Projects, experiments, lab notes, protocols, samples", free: true, lab: true },
+  { cap: "Catalyst AI with cited answers", free: true, lab: true },
+  { cap: "Literature reader, PDF reading & annotations", free: true, lab: true },
+  { cap: "Research map", free: true, lab: true },
+  { cap: "Shared projects across a team", free: false, lab: true },
+  { cap: "Onboarding & workflow mapping", free: false, lab: true },
+  { cap: "Data controls, security review, SSO", free: false, lab: true },
+]
 
 export function PricingMarketingPage() {
   return (
@@ -390,63 +367,72 @@ export function PricingMarketingPage() {
         badge="Pricing"
         title={
           <>
-            Engagements structured around{" "}
-            <span className="text-[var(--n9-accent)]">lab scope and workflow depth</span>.
+            Start free.{" "}
+            <span className="text-[var(--n9-accent)]">Go Enterprise</span> when your lab is ready.
           </>
         }
-        description="Notes9 pricing is scoped around workflow complexity, team size, and enablement needs."
+        description="Two plans, no surprises: a free researcher tier today, and Enterprise for lab-wide deployment, security review and onboarding when you scale."
         actions={[
-          { href: cta, label: "Discuss fit and pricing" },
-          { href: "/platform", label: "Review platform", variant: "outline" },
+          { href: "/auth/sign-up", label: "Start free" },
+          { href: cta, label: "Talk to us", variant: "outline" },
         ]}
       />
 
+      <section className="border-t border-border/40">
+        <div className="container mx-auto px-4 py-16 sm:px-6 lg:px-8">
+          <PricingTiers />
+        </div>
+      </section>
+
       <section className="border-t border-border/40 bg-muted/20">
         <div className="container mx-auto px-4 py-16 sm:px-6 lg:px-8">
-          <SectionHeader badge="Engagement models" title="A clearer path from evaluation to team rollout" align="center" />
-          <div className="mt-10 grid gap-6 lg:grid-cols-3">
-            {[
-              { title: "Pilot engagement", icon: FlaskConical, points: ["Focused evaluation for a single team", "Hands-on workflow mapping", "Best for labs validating fit"] },
-              { title: "Team deployment", icon: Users, points: ["Shared operating model across collaborators", "Repeatable documentation and retrieval", "Best for labs needing operational consistency"] },
-              { title: "Research operations", icon: ShieldCheck, points: ["Broader workflow design and governance", "Suitable for complex research operations", "Best for multi-project environments"] },
-            ].map((item) => (
-              <MinimalCard key={item.title}>
-                <div className="mb-4 inline-flex h-10 w-10 items-center justify-center rounded-xl bg-[var(--n9-accent-light)] text-[var(--n9-accent)]">
-                  <item.icon className="h-5 w-5" />
-                </div>
-                <h3 className="text-lg font-semibold text-foreground">{item.title}</h3>
-                <ul className="mt-4 space-y-2 text-sm leading-6 text-muted-foreground">
-                  {item.points.map((p) => (
-                    <li key={p} className="flex items-start gap-2">
-                      <span className="mt-1.5 block h-1.5 w-1.5 shrink-0 rounded-full bg-[var(--n9-accent)]" />
-                      {p}
-                    </li>
-                  ))}
-                </ul>
-              </MinimalCard>
+          <SectionHeader
+            align="center"
+            className="mx-auto"
+            badge="What's included"
+            title="Everything's open while we're in early access"
+          />
+          <div className="mx-auto mt-10 max-w-3xl overflow-hidden rounded-2xl border border-border/60 bg-card backdrop-blur-sm">
+            <div className="grid grid-cols-[1.6fr_0.7fr_0.7fr] items-center gap-1 border-b border-border/60 bg-muted/40 px-3 py-3 text-[12px] font-semibold uppercase tracking-wide text-muted-foreground sm:gap-2 sm:px-6 sm:text-[14px]">
+              <span>Capability</span>
+              <span className="text-center">Free</span>
+              <span className="text-center text-[var(--n9-accent)]">Enterprise</span>
+            </div>
+            {PRICING_INCLUDED.map((r, i) => (
+              <div
+                key={r.cap}
+                className={`grid grid-cols-[1.6fr_0.7fr_0.7fr] items-center gap-1 px-3 py-3.5 text-[14px] sm:gap-2 sm:px-6 sm:text-[16px] ${i % 2 ? "bg-muted/20" : ""}`}
+              >
+                <span className="font-medium text-foreground">{r.cap}</span>
+                <span className="flex justify-center">
+                  {r.free ? (
+                    <Check className="h-4 w-4 text-[var(--n9-accent)]" />
+                  ) : (
+                    <Minus className="h-4 w-4 text-muted-foreground/40" />
+                  )}
+                </span>
+                <span className="flex justify-center">
+                  {r.lab ? (
+                    <Check className="h-4 w-4 text-[var(--n9-accent)]" />
+                  ) : (
+                    <Minus className="h-4 w-4 text-muted-foreground/40" />
+                  )}
+                </span>
+              </div>
             ))}
           </div>
         </div>
       </section>
 
-      <section className="border-t border-border/40">
-        <div className="container mx-auto px-4 py-16 sm:px-6 lg:px-8">
-          <SectionHeader badge="Buyer clarity" title="What buyers can expect" align="center" />
-          <div className="mt-10 grid gap-6 md:grid-cols-3">
-            <FeatureCard icon={Workflow} title="Workflow-led scoping" description="Pricing conversations begin with the workflows you want to improve." />
-            <FeatureCard icon={GraduationCap} title="Enablement included" description="Implementation and education are part of the discussion." />
-            <FeatureCard icon={ShieldCheck} title="Clear expectations" description="We align on support and rollout approach early." />
-          </div>
-        </div>
-      </section>
+      <FaqSection />
 
       <section className="border-t border-border/40 bg-muted/20">
         <div className="container mx-auto px-4 py-16 sm:px-6 lg:px-8">
           <CTAPanel
-            title="Get a pricing conversation grounded in your workflow."
-            description="Share your team shape and workflow goals, and we will scope a practical engagement path."
-            primary={{ href: cta, label: "Discuss fit and pricing" }}
-            secondary={{ href: "/resources", label: "Review enablement surfaces" }}
+            title="Start free, or bring your whole lab."
+            description="Spin up a solo pilot today, or book a demo to map Notes9 across your team."
+            primary={{ href: "/auth/sign-up", label: "Start free" }}
+            secondary={{ href: cta, label: "Book a demo" }}
           />
         </div>
       </section>
@@ -523,8 +509,8 @@ export function ResourcesMarketingPage() {
               <div className="mt-8 flex-1 grid gap-4">
                 {resourceFaqs.map((faq) => (
                   <MinimalCard key={faq.question}>
-                    <h3 className="text-base font-semibold text-foreground">{faq.question}</h3>
-                    <p className="mt-2 text-sm leading-6 text-muted-foreground">{faq.answer}</p>
+                    <h3 className="text-[18px] font-semibold text-foreground">{faq.question}</h3>
+                    <p className="mt-2 text-[16px] leading-6 text-muted-foreground">{faq.answer}</p>
                   </MinimalCard>
                 ))}
               </div>
@@ -540,7 +526,7 @@ export function ResourcesMarketingPage() {
             title="Module-by-module guidance"
             description="Each section below distills the older resources content into practical guidance for how that part of the workflow should be used."
           />
-          <div className="mt-10 rounded-2xl border border-border/50 bg-background/80 px-6 py-2 shadow-sm backdrop-blur-sm sm:px-8">
+          <div className="mt-10 rounded-2xl border border-border/50 bg-background px-6 py-2 shadow-sm backdrop-blur-sm sm:px-8">
             <Accordion type="single" collapsible className="w-full">
               {resourceGuides.map((guide) => (
                 <AccordionItem key={guide.id} value={guide.id}>
@@ -550,14 +536,14 @@ export function ResourcesMarketingPage() {
                         <guide.icon className="h-5 w-5" />
                       </div>
                       <div className="min-w-0">
-                        <h3 className="text-base font-semibold text-foreground">{guide.title}</h3>
-                        <p className="mt-1 text-sm leading-6 text-muted-foreground">{guide.description}</p>
+                        <h3 className="text-[18px] font-semibold text-foreground">{guide.title}</h3>
+                        <p className="mt-1 text-[16px] leading-6 text-muted-foreground">{guide.description}</p>
                       </div>
                     </div>
                   </AccordionTrigger>
                   <AccordionContent>
                     <div className="pb-4 pl-0 sm:pl-14">
-                      <ul className="space-y-3 text-sm leading-6 text-muted-foreground">
+                      <ul className="space-y-3 text-[16px] leading-6 text-muted-foreground">
                         {guide.bullets.map((bullet) => (
                           <li key={bullet} className="flex items-start gap-3">
                             <span className="mt-2 block h-1.5 w-1.5 shrink-0 rounded-full bg-[var(--n9-accent)]" />

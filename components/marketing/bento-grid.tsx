@@ -42,17 +42,17 @@ export const BentoGridItem = ({
             transition={{ duration: 0.4 }}
             viewport={{ once: true }}
             className={cn(
-                "row-span-1 flex h-full flex-col justify-between space-y-4 overflow-hidden rounded-2xl border border-border/50 bg-card/80 p-5 backdrop-blur-sm transition-shadow duration-300 hover:shadow-md dark:bg-card/60",
+                "row-span-1 flex h-full flex-col justify-between space-y-4 overflow-hidden rounded-2xl border border-border/50 bg-card p-5 backdrop-blur-sm transition-shadow duration-300 hover:shadow-md dark:bg-card",
                 className
             )}
         >
             {header}
             <div>
                 {icon}
-                <div className="mb-2 mt-3 text-lg font-semibold text-foreground">
+                <div className="mb-2 mt-3 text-[20px] font-semibold text-foreground">
                     {title}
                 </div>
-                <div className="text-sm leading-6 text-muted-foreground">
+                <div className="text-[16px] leading-6 text-muted-foreground">
                     {description}
                 </div>
             </div>

@@ -92,7 +92,7 @@ export function WorkflowDemoStrip({
           />
           <div className="absolute inset-0 bg-gradient-to-t from-black/72 via-black/10 to-transparent sm:from-black/60 sm:via-transparent" />
           <div className="absolute bottom-0 left-0 right-0 p-3 sm:p-4">
-            <span className="inline-flex rounded-full border border-[var(--n9-accent)]/40 bg-[var(--n9-accent-light)] px-3 py-1.5 text-xs font-semibold text-[var(--n9-accent)] sm:px-4 sm:text-sm">
+            <span className="inline-flex rounded-full border border-[var(--n9-accent)]/40 bg-[var(--n9-accent-light)] px-3 py-1.5 text-[14px] font-semibold text-[var(--n9-accent)] sm:px-4 sm:text-[16px]">
               Research workflow in action
             </span>
           </div>
@@ -138,7 +138,7 @@ export function WorkflowDemoStrip({
         <div className="absolute bottom-0 left-0 right-0 p-3 sm:p-4">
           <span
             key={step.label}
-            className="inline-flex rounded-full border border-[var(--n9-accent)]/40 bg-[var(--n9-accent-light)] px-3 py-1.5 text-xs font-semibold text-[var(--n9-accent)] transition-opacity duration-300 sm:px-4 sm:text-sm"
+            className="inline-flex rounded-full border border-[var(--n9-accent)]/40 bg-[var(--n9-accent-light)] px-3 py-1.5 text-[14px] font-semibold text-[var(--n9-accent)] transition-opacity duration-300 sm:px-4 sm:text-[16px]"
           >
             {step.label}
           </span>
