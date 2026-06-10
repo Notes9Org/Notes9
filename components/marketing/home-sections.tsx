@@ -74,12 +74,12 @@ export function PainSection() {
           <SectionHeader
             reveal
             badge="The problem"
-            title="You already use AI. It just can't see your work."
+            title="You already use AI. It simply cannot see your work."
           />
           <p className="n9-readable mt-5 text-[20px] leading-8 text-muted-foreground">
-            Researchers have embraced AI for reading and writing — but it works outside the lab,
-            blind to your project. So you paste the same context in every week, the reasoning behind{" "}
-            <em>why condition B</em> scatters, and months later no one can reconstruct it.
+            Researchers have embraced AI for reading and writing, but it works outside the lab,
+            blind to the project. So the same context is pasted in week after week, the reasoning
+            behind <em>why condition B</em> scatters, and months later no one can reconstruct it.
           </p>
         </div>
         <div className="relative">
@@ -103,7 +103,7 @@ export function PainSection() {
   )
 }
 
-/** The fix — what Notes9 actually does for a research team. */
+/** The fix - what Notes9 actually does for a research team. */
 const WITHOUT_NOTES9 = [
   "Context scattered across five tools",
   "The “why” lost between people",
@@ -115,7 +115,7 @@ const WITH_NOTES9 = [
   "One traceable project memory",
   "Every result linked to its rationale",
   "Recall the full chain in seconds",
-  "AI that already sees your project — and cites it",
+  "AI that already sees your project and cites it",
   "Onboard a new member in minutes",
 ]
 
@@ -171,7 +171,7 @@ export function SolutionSection() {
           className="mx-auto"
           badge="The fix"
           title="One connected memory for your whole team"
-          description="Every paper, protocol, experiment and result, linked — so the reasoning is always one click away."
+          description="Every paper, protocol, experiment, and result is linked, so the reasoning is always one click away."
         />
         <Reveal3D className="mt-12">
           <MemoryHubFlow />
@@ -188,13 +188,13 @@ const PROBLEM_STATS = [
   { value: "84%", label: "of researchers now use AI in their work", cite: 1 },
   { value: "61%", label: "use it to find and summarise the latest research", cite: 2 },
   { value: "77%", label: "of biologists have failed to reproduce another lab's experiment", cite: 3 },
-  { value: "50%+", label: "of scientists can't reproduce their own published results", cite: 3 },
+  { value: "50%+", label: "of scientists cannot reproduce their own published results", cite: 3 },
 ]
 
 const PROBLEM_SOURCES = [
   {
     n: 1,
-    label: "Wiley, “ExplanAItions” researcher survey (2025) — AI use among researchers rose to 84%.",
+    label: "Wiley, “ExplanAItions” researcher survey (2025): AI use among researchers rose to 84%.",
     href: "https://www.businesswire.com/news/home/20251007928124/en/AI-Adoption-Jumps-to-84-Among-Researchers-as-Expectations-Undergo-Significant-Reality-Check",
   },
   {
@@ -222,9 +222,9 @@ function ProblemStats() {
       />
       <div className="relative">
       <p className="mb-8 max-w-2xl text-[18px] leading-7 text-muted-foreground">
-        AI adoption is already mainstream. The gap isn&rsquo;t whether researchers use AI — it&rsquo;s
-        that their AI is disconnected from the work, so context still scatters and results still
-        don&rsquo;t reproduce.
+        AI adoption is already mainstream. The gap is not whether researchers use AI; it is that
+        their AI is disconnected from the work, so context still scatters and results still fail to
+        reproduce.
       </p>
       <div className="grid gap-8 sm:grid-cols-2 lg:grid-cols-4">
         {PROBLEM_STATS.map((s, i) => (
@@ -276,7 +276,7 @@ function ProblemStats() {
   )
 }
 
-/** Concrete demo story — the antibody-expression walkthrough. */
+/** Concrete demo story - the antibody-expression walkthrough. */
 export function DemoStorySection() {
   return (
     <div className="border-y border-border/50 bg-muted/20">
@@ -287,7 +287,7 @@ export function DemoStorySection() {
           className="mx-auto"
           badge="See it on a real project"
           title="Eight papers to a cited PI update"
-          description="One antibody-expression project, captured end to end — every step linked to its source."
+          description="One antibody-expression project, captured end to end, with every step linked to its source."
         />
         <div className="mt-12">
           <DemoStoryStepper />
@@ -297,7 +297,7 @@ export function DemoStorySection() {
   )
 }
 
-/** Capability bento — illustrative mini-mockups, almost no copy. */
+/** Capability bento - illustrative mini-mockups, almost no copy. */
 const CAPS = [
   { label: "Read & cite papers", mock: <MiniNoteMock /> },
   { label: "Ask your lab, get sources", mock: <MiniChatMock /> },
@@ -325,22 +325,22 @@ export function OutcomesSection() {
   )
 }
 
-/** Context engineering advantage — one platform → complete AI context. */
+/** Context engineering advantage - one platform → complete AI context. */
 const CONTEXT_POINTS = [
   {
     icon: Database,
     title: "One source of truth",
-    body: "Papers, protocols, experiments, notes and results live together — not across five apps.",
+    body: "Papers, protocols, experiments, notes, and results live together, not across five apps.",
   },
   {
     icon: Share2,
     title: "Structured & linked",
-    body: "Everything is connected, so Catalyst gets precise context — not a pile of files to guess from.",
+    body: "Everything is connected, so Catalyst receives precise context rather than a pile of files to guess from.",
   },
   {
     icon: BadgeCheck,
     title: "Grounded, cited answers",
-    body: "It reasons over your real work and shows its sources, so you can trust — and verify — the output.",
+    body: "It reasons over your real work and shows its sources, so you can both trust and verify the output.",
   },
 ]
 
@@ -354,7 +354,7 @@ export function ContextEngineeringSection() {
         className="mx-auto"
         badge="Why the AI is better"
         title="Better context, not bigger prompts"
-        description="Your whole project lives in one connected memory — so Catalyst gets complete, structured context automatically. No giant prompts required."
+        description="Because your whole project lives in one connected memory, Catalyst receives complete, structured context automatically, without giant prompts."
       />
       <div className="mt-12 grid gap-5 md:grid-cols-3">
         {CONTEXT_POINTS.map((p, i) => {
@@ -378,7 +378,7 @@ export function ContextEngineeringSection() {
   )
 }
 
-/** Catalyst showcase — the interactive, biology-first AI demo with the mascot. */
+/** Catalyst showcase - the interactive, biology-first AI demo with the mascot. */
 export function CatalystShowcaseSection() {
   return (
     <div className="relative overflow-hidden border-y border-border/50 bg-muted/20 n9-glow">
@@ -390,7 +390,7 @@ export function CatalystShowcaseSection() {
           className="mx-auto"
           badge="Catalyst AI"
           title="Biology-first AI that accelerates discovery"
-          description="Catalyst reasons over your lab in the language of the bench — every claim backed by a checkable source."
+          description="Catalyst reasons over your lab in the language of the bench, with every claim backed by a checkable source."
         />
         <div className="mt-12 space-y-12">
           <Reveal3D>
@@ -405,7 +405,7 @@ export function CatalystShowcaseSection() {
   )
 }
 
-/** Catalyst — biology-first answers with citations you can check. */
+/** Catalyst - biology-first answers with citations you can check. */
 export function CatalystSection() {
   return (
     <Section id="catalyst">
@@ -418,8 +418,8 @@ export function CatalystSection() {
           />
           <ul className="mt-6 space-y-4">
             {[
-              "Biology-first by design — biological questions get biology-specific answers, and that's where its accuracy is strongest.",
-              "Every response lists its sources at the bottom — your internal documents and web results — so you can verify each claim instead of trusting a black box.",
+              "Biology-first by design: biological questions receive biology-specific answers, which is where its accuracy is strongest.",
+              "Every response lists its sources at the bottom (your internal documents and web results), so you can verify each claim instead of trusting a black box.",
               "Drag a saved paper straight into Catalyst to ask questions grounded in that exact source.",
             ].map((t) => (
               <li key={t} className="flex items-start gap-3 text-[16px] leading-6 text-muted-foreground">
@@ -439,7 +439,7 @@ export function CatalystSection() {
   )
 }
 
-/** Benefits for the two core ICPs — academics and startup labs. */
+/** Benefits for the two core ICPs - academics and startup labs. */
 const ICPS = [
   {
     icon: GraduationCap,
@@ -465,7 +465,7 @@ export function IcpBenefitsSection() {
         gradient
         align="center"
         className="mx-auto"
-        badge="Who it's for"
+        badge="Who it is for"
         title="Built for the people who live in the lab"
       />
       <div className="mt-12 grid gap-6 lg:grid-cols-2">
@@ -514,7 +514,7 @@ export function UseCasesSection() {
         <SectionHeader
           reveal
           badge="Made for your role"
-          title="Whatever you're trying to get done today"
+          title="Whatever you are trying to get done today"
         />
         <div className="mt-10">
           <RoleUseCaseSwitcher />
@@ -535,7 +535,7 @@ export function DifferentiationSection() {
         className="mx-auto"
         badge="Why Notes9"
         title="ELNs record what happened. Notes9 remembers why."
-        description="Not another static ELN. Not another empty AI chat. Notes9 is connected research memory your AI can actually read — and cite."
+        description="Not another static ELN. Not another empty AI chat. Notes9 is connected research memory that your AI can actually read and cite."
       />
       <Reveal3D className="mx-auto mt-10 max-w-3xl">
         <TiltCard max={4}>
@@ -562,17 +562,17 @@ export function TrustSection() {
           </div>
           <div className="space-y-4 text-[16px] leading-7 text-muted-foreground">
             <p>
-              Notes9 is currently best suited for <span className="font-medium text-foreground">non-clinical research workflow pilots</span> —
+              Notes9 is currently best suited for <span className="font-medium text-foreground">non-clinical research workflow pilots</span> -
               literature-linked project organisation, protocol planning, experiment tracking, and
               internal research documentation.
             </p>
             <p>
               It is <span className="font-medium text-foreground">not</span> yet positioned as a regulated ELN
-              replacement for GMP/GLP environments, and you shouldn't upload patient data, special-category
+              replacement for GMP/GLP environments, and you should not upload patient data, special-category
               data, or export-controlled material during the pilot.
             </p>
             <p>
-              That honesty is the point: your research context is connected and traceable, and we're clear
+              That honesty is the point: your research context is connected and traceable, and we are clear
               about the compliance path rather than overpromising it.
             </p>
           </div>
@@ -582,7 +582,7 @@ export function TrustSection() {
   )
 }
 
-/** Pricing teaser — Free + Enterprise. */
+/** Pricing teaser - Free + Enterprise. */
 const PRICING = [
   {
     name: "Free",
@@ -629,9 +629,9 @@ export function PricingTiers() {
                 : "border-border/60 bg-card",
             )}
           >
-            <div className="flex items-center justify-between">
+            <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
               <h3 className="text-[20px] font-semibold text-foreground">{tier.name}</h3>
-              <span className="rounded-full border border-[var(--n9-accent)]/25 bg-[var(--n9-accent-light)] px-2.5 py-0.5 text-[14px] font-semibold uppercase tracking-wide text-[var(--n9-accent)]">
+              <span className="shrink-0 whitespace-nowrap rounded-full border border-[var(--n9-accent)]/25 bg-[var(--n9-accent-light)] px-2.5 py-0.5 text-[12px] font-semibold uppercase tracking-wide text-[var(--n9-accent)]">
                 {tier.tag}
               </span>
             </div>
@@ -682,7 +682,7 @@ export function PricingTeaserSection() {
         className="mx-auto"
         badge="Pricing"
         title="Start free. Go Enterprise when you scale."
-        description="Two plans, no surprises — a free researcher tier today, and Enterprise for lab-wide deployment, security and support."
+        description="Two plans, no surprises: a free researcher tier today, and Enterprise for lab-wide deployment, security, and support."
       />
       <div className="mt-10">
         <PricingTiers />
@@ -691,11 +691,11 @@ export function PricingTeaserSection() {
   )
 }
 
-/** FAQ — native details/summary, no extra deps. */
+/** FAQ - native details/summary, no extra deps. */
 const FAQS = [
   {
     q: "Is it free?",
-    a: "Yes — the free tier is free during early access, no credit card. Teams and institutions that want shared workspaces, onboarding and security review can talk to us about Enterprise.",
+    a: "Yes. The free tier is free during early access, with no credit card required. Teams and institutions that want shared workspaces, onboarding, and security review can contact us about Enterprise.",
   },
   {
     q: "Is this an ELN, a literature tool, or an AI assistant?",
@@ -707,11 +707,11 @@ const FAQS = [
   },
   {
     q: "Can I put sensitive or clinical data in it?",
-    a: "Not during the pilot. Notes9 is for non-clinical research workflows right now — please don't upload patient data, special-category data, or export-controlled material.",
+    a: "Not during the pilot. Notes9 is currently intended for non-clinical research workflows, so please do not upload patient data, special-category data, or export-controlled material.",
   },
   {
     q: "How is it different from ChatGPT or a normal ELN?",
-    a: "An ELN records what happened; a generic AI chat forgets your context between sessions. Notes9 remembers why — it answers from your lab's connected research memory and traces every output back to its sources.",
+    a: "An ELN records what happened; a generic AI chat forgets your context between sessions. Notes9 remembers why: it answers from your lab's connected research memory and traces every output back to its sources.",
   },
 ]
 
@@ -747,7 +747,7 @@ export function FinalCtaSection() {
             <span className="n9-gradient-text">reusable scientific memory</span>
           </h2>
           <p className="mx-auto mt-4 max-w-xl text-[18px] leading-7 text-muted-foreground">
-            Preserve not just what happened, but why — from literature review to experiment to final
+            Preserve not just what happened, but why: from literature review to experiment to final
             report.
           </p>
           <div className="mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row">

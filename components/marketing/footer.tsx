@@ -4,7 +4,7 @@ import { Instagram, Linkedin, Mail, MapPin, Youtube } from "lucide-react"
 import Link from "next/link"
 import { Notes9Brand } from "@/components/brand/notes9-brand"
 
-/** X (formerly Twitter) logo — not in lucide, so inline. */
+/** X (formerly Twitter) logo - not in lucide, so inline. */
 function XIcon({ className }: { className?: string }) {
   return (
     <svg viewBox="0 0 24 24" fill="currentColor" className={className} aria-hidden>

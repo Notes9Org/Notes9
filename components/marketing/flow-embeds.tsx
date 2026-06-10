@@ -1,7 +1,7 @@
 "use client"
 
 /**
- * Marketing "research-map" diagram — mirrors the in-app Research Map: a
+ * Marketing "research-map" diagram - mirrors the in-app Research Map: a
  * left→right hierarchy of colored, ribboned entity cards.
  *
  *                  Literature ┐          ┌ Data
@@ -11,8 +11,8 @@
  * Nodes and edges share ONE 0–100 coordinate space: each card is positioned by
  * its CENTRE (left/top %) and every edge is drawn centre-to-centre in a matching
  * SVG viewBox (preserveAspectRatio="none"). Cards are opaque and sit above the
- * edges, so only the segment between two cards shows — exactly like the product
- * map — and the wiring can never fall out of alignment at any size or zoom.
+ * edges, so only the segment between two cards shows - exactly like the product
+ * map - and the wiring can never fall out of alignment at any size or zoom.
  */
 
 import { motion, useReducedMotion } from "framer-motion"
@@ -91,7 +91,7 @@ export function MemoryHubFlow({ className }: { className?: string }) {
         className,
       )}
     >
-      {/* edges — same 0–100 space as the card centres */}
+      {/* edges - same 0–100 space as the card centres */}
       <svg
         className="absolute inset-0 h-full w-full"
         viewBox="0 0 100 100"

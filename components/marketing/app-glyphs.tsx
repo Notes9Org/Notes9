@@ -2,7 +2,7 @@
 
 /**
  * Legal-safe, stylized representations of the everyday tools researchers juggle.
- * These are deliberately GENERIC category glyphs — not the trademarked logos of
+ * These are deliberately GENERIC category glyphs - not the trademarked logos of
  * Excel / Word / Notion / Zotero / ChatGPT / etc. They read instantly as "your
  * scattered stack" without implying any endorsement or infringing a mark.
  */
@@ -120,7 +120,7 @@ function RailGlyph({
 }
 
 /** A vertical rail of the tech-stack glyphs on the LEFT edge: each glyph pops up
- *  and the connecting line grows to link them as the page scrolls — as if the
+ *  and the connecting line grows to link them as the page scrolls - as if the
  *  scattered tools from the problem section line up and get connected.
  *  Decorative, large screens only. */
 export function AppGlyphRail() {
@@ -156,7 +156,7 @@ export function AppGlyphRail() {
         footerInView ? "opacity-0" : "opacity-100",
       )}
     >
-      {/* connecting line behind the glyphs — grows to link them */}
+      {/* connecting line behind the glyphs - grows to link them */}
       <div className="absolute left-1/2 top-3 bottom-3 w-[2px] -translate-x-1/2 overflow-hidden rounded-full bg-border/50">
         <motion.div
           className="h-full w-full origin-top bg-[var(--n9-accent)]"
@@ -175,8 +175,8 @@ export function AppGlyphRail() {
   )
 }
 
-/** One glyph that continuously falls, disappears and reappears on its own —
- *  staggered by index so the cluster falls IN ORDER — dramatising "apps failing
+/** One glyph that continuously falls, disappears and reappears on its own -
+ *  staggered by index so the cluster falls IN ORDER - dramatising "apps failing
  *  to maintain context". Hovering it accelerates the fall on demand. */
 function FallingGlyph({ kind, rot, index }: { kind: AppKind; rot: number; index: number }) {
   const controls = useAnimationControls()
@@ -244,7 +244,7 @@ function FallingGlyph({ kind, rot, index }: { kind: AppKind; rot: number; index:
   )
 }
 
-/** A loose, slightly-rotated cluster of glyphs — "today: scattered", falling. */
+/** A loose, slightly-rotated cluster of glyphs - "today: scattered", falling. */
 export function ScatteredStack({ className }: { className?: string }) {
   const items: { kind: AppKind; rot: number }[] = [
     { kind: "pdf", rot: -7 },

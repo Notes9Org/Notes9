@@ -71,8 +71,8 @@ export function AcademicHero() {
             >
               <p className="text-pretty">
                 <span className="font-semibold text-foreground">Stop re-explaining your science to AI.</span>{" "}
-                Notes9 connects your papers, experiments and notes into one memory Catalyst reasons
-                over — and cites.
+                Notes9 connects your papers, experiments, and notes into one memory that Catalyst
+                reasons over and cites.
               </p>
             </motion.div>
 
@@ -127,7 +127,7 @@ export function AcademicHero() {
       <div className="h-auto min-h-16 py-4 sm:h-20 sm:min-h-0 sm:py-0">
         <div className="container mx-auto flex h-full items-center px-4 sm:px-6 lg:px-8">
           <p className="max-w-4xl text-[16px] text-muted-foreground/95 sm:text-[18px]">
-            For researchers already using AI — but tired of scattered context.
+            For researchers already using AI, but tired of scattered context.
           </p>
         </div>
       </div>

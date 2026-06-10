@@ -397,14 +397,14 @@ function CardSkeleton({ cardKey }: { cardKey: FlowCardKey }) {
 
 const DECK_CARD_W = 196
 const DECK_CARD_H = 230
-/** Fixed left gate (layout px) — same for every card. */
+/** Fixed left gate (layout px) - same for every card. */
 const DECK_SPAWN_LEFT_PX = -DECK_CARD_W - 20
-/** Fixed row heights (fraction of lane) — cycles for a conveyor, not random Y. */
+/** Fixed row heights (fraction of lane) - cycles for a conveyor, not random Y. */
 const DECK_LANE_SLOT_FRACS = [0.17, 0.34, 0.51, 0.68] as const
 
 /** Lane's own right inset from the strip edge (Tailwind right-2 = 0.5 rem = 8 px).
  *  The strip right edge == the violet rail at `DESKTOP_RAIL_LEFT_PCT`% of 1200 px. */
-/** Strip padding: lane `right-2` (Tailwind) — distance from lane inner edge to strip / rail edge. */
+/** Strip padding: lane `right-2` (Tailwind) - distance from lane inner edge to strip / rail edge. */
 const LANE_R_INSET_PX = 8
 /** Horizontal travel must be at least this wide so opacity keyframes stay sane. */
 const DECK_MIN_TRAVEL_X = 120
@@ -804,7 +804,7 @@ export function ConnectedResearchSystemDiagram({ className = "" }: { className?:
   const wrapRef = useRef<HTMLDivElement>(null)
   const catRef = useRef<HTMLDivElement>(null)
   const n9Ref = useRef<HTMLDivElement>(null)
-  /** First marquee card (left strip) — rail height = 140% of this */
+  /** First marquee card (left strip) - rail height = 140% of this */
   const flowDeckCardRef = useRef<HTMLDivElement>(null)
   const rightPanelRef = useRef<HTMLDivElement>(null)
   const chipRefs = [useRef<HTMLDivElement>(null), useRef<HTMLDivElement>(null), useRef<HTMLDivElement>(null), useRef<HTMLDivElement>(null), useRef<HTMLDivElement>(null), useRef<HTMLDivElement>(null)]
@@ -831,7 +831,7 @@ export function ConnectedResearchSystemDiagram({ className = "" }: { className?:
   const [hubSize, setHubSize] = useState(640)
 
   const deckLaneRef = useRef<HTMLDivElement>(null)
-  /** Whole diagram wrapper — avoids false negatives when the flow strip alone barely intersects the viewport. */
+  /** Whole diagram wrapper - avoids false negatives when the flow strip alone barely intersects the viewport. */
   const stripInView = useInView(wrapRef, { once: false, margin: "100px" })
 
 
@@ -879,7 +879,7 @@ export function ConnectedResearchSystemDiagram({ className = "" }: { className?:
     /**
      * Hub lives under `transform: scale(desktopFitScale)`. getBoundingClientRect is in
      * viewport pixels; the SVG uses layout width/height (inset-0) = pre-transform CSS px.
-     * Without dividing by scale, viewBox coords don't match the painted box — strokes clip
+     * Without dividing by scale, viewBox coords don't match the painted box - strokes clip
      * oddly and markerEnd triangles look "random" vs the cards.
      */
     const svgW = Math.max(1, panel.offsetWidth)
@@ -1419,7 +1419,7 @@ export function ConnectedResearchSystemDiagram({ className = "" }: { className?:
             />
           </div>
 
-          {/* Violet rail — above deck, below Notes9 */}
+          {/* Violet rail - above deck, below Notes9 */}
           <div
             className="pointer-events-none absolute bottom-0 top-0 z-[13] w-0 -translate-x-1/2"
             style={{ left: `${DESKTOP_RAIL_LEFT_PCT}%` }}
