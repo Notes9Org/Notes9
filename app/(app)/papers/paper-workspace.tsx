@@ -369,15 +369,23 @@ export function PaperWorkspace({ paperId, backLink, leftControls, onPaperMutated
           return
         }
         const editor = editorRef.current
+        let nextContent: string
         if (editor) {
           // Insert at the cursor so it composes with existing content.
           editor.chain().focus().insertContent(html).run()
+          nextContent = editor.getHTML()
         } else {
-          setContent((prev) => {
-            const updated = (prev || "") + html
-            debouncedSave(updated)
-            return updated
-          })
+          nextContent = (contentRef.current || content || "") + html
+        }
+        setContent(nextContent)
+        contentRef.current = nextContent
+        debouncedSave(nextContent)
+        // Autosave is gated while collaborating, so persist the import directly
+        // to make sure it isn't lost.
+        try {
+          await handleAutoSave(nextContent)
+        } catch (saveErr) {
+          console.error("Failed to persist imported document", saveErr)
         }
         toast.success(`Imported ${file.name}`)
       } catch (err) {
@@ -385,7 +393,7 @@ export function PaperWorkspace({ paperId, backLink, leftControls, onPaperMutated
         toast.error("Import failed", { description: "Could not read this document." })
       }
     },
-    [debouncedSave]
+    [content, debouncedSave, handleAutoSave]
   )
 
   if (loading) {

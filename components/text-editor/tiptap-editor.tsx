@@ -2577,15 +2577,28 @@ export function TiptapEditor({
       if (anchor) {
         const href = anchor.getAttribute("href") || ""
         if (href.startsWith("#cite-ref-")) {
-          const refEl = editorContainer.querySelector(`[id="${href.slice(1)}"]`) as HTMLElement | null
+          const num = href.slice("#cite-ref-".length)
+          // Prefer the preserved id; fall back to the reference paragraph that
+          // starts with "[N] " (the id can be stripped by the editor schema).
+          let refEl = editorContainer.querySelector(`[id="${href.slice(1)}"]`) as HTMLElement | null
+          if (!refEl && /^\d+$/.test(num)) {
+            const startRe = new RegExp(`^\\s*\\[${num}\\]\\s`)
+            refEl =
+              (Array.from(editorContainer.querySelectorAll("p, li")).find(
+                (el) => startRe.test(el.textContent || ""),
+              ) as HTMLElement | undefined) ?? null
+          }
           if (refEl) {
             refEl.scrollIntoView({ behavior: "smooth", block: "center" })
             refEl.classList.add("cite-ref-flash")
-            window.setTimeout(() => refEl.classList.remove("cite-ref-flash"), 1200)
+            window.setTimeout(() => refEl?.classList.remove("cite-ref-flash"), 1200)
             e.preventDefault()
             return
           }
-        } else if (/^https?:\/\//i.test(href) && anchor.closest('[id^="cite-ref-"]')) {
+        } else if (
+          /^https?:\/\//i.test(href) &&
+          (anchor.closest('[id^="cite-ref-"]') || /^\s*\[\d+\]\s/.test(anchor.closest("p, li")?.textContent || ""))
+        ) {
           window.open(href, "_blank", "noopener,noreferrer")
           e.preventDefault()
           return
