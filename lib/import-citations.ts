@@ -64,13 +64,16 @@ function attr(value: string): string {
 }
 
 function citationAnchor(meta: RefMeta, label: string): string {
-  const href = meta.url || "#"
+  // Inline citations link to the in-document reference entry (the editor scrolls
+  // to it on click); the reference entry then links out to the DOI/URL. The
+  // source URL is still carried in data-paper-doi so the citation system and
+  // exports retain it.
   const authorsJson = JSON.stringify(meta.authors || []).replace(/"/g, "&quot;")
   return (
-    `<a href="${attr(href)}" data-paper-id="imported-ref-${meta.number}"` +
+    `<a href="#cite-ref-${meta.number}" data-paper-id="imported-ref-${meta.number}"` +
     ` data-paper-title="${attr(meta.title)}" data-paper-authors="${authorsJson}"` +
     ` data-paper-year="${meta.year || ""}" data-paper-journal=""` +
-    ` data-paper-doi="${attr(meta.doi)}" target="_blank" rel="noopener noreferrer">${label}</a>`
+    ` data-paper-doi="${attr(meta.doi)}">${label}</a>`
   )
 }
 

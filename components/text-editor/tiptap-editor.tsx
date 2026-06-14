@@ -1687,6 +1687,26 @@ function formatToolbarShortcutLabel(isMac: boolean, key: string) {
   return `\\ ${key.toUpperCase()}`
 }
 
+// Preserve an `id` on paragraphs/headings so imported reference entries
+// (id="cite-ref-N") survive in the editor and inline citations can scroll to them.
+const NodeId = Extension.create({
+  name: "nodeId",
+  addGlobalAttributes() {
+    return [
+      {
+        types: ["paragraph", "heading"],
+        attributes: {
+          id: {
+            default: null,
+            parseHTML: (element) => element.getAttribute("id") || null,
+            renderHTML: (attributes) => (attributes.id ? { id: attributes.id } : {}),
+          },
+        },
+      },
+    ]
+  },
+})
+
 export function TiptapEditor({
   content = "",
   onChange,
@@ -2186,6 +2206,7 @@ export function TiptapEditor({
       // and rendered with the .mention-literature CSS class.
       Indent,
       Comment,
+      NodeId,
       ...(collaborationEnabled && ydoc && provider ? [
         Collaboration.configure({
           fragment: ydoc.getXmlFragment('default'),
@@ -2223,6 +2244,29 @@ export function TiptapEditor({
         class: "prose prose-sm sm:prose lg:prose-lg xl:prose-2xl focus:outline-none p-4",
         spellcheck: "true",
         tabindex: "0",
+      },
+      // Imported citations: clicking an inline [N] scrolls to its reference
+      // entry; clicking the DOI/URL inside a reference entry opens the source.
+      handleClick: (view, _pos, event) => {
+        const anchor = (event.target as HTMLElement | null)?.closest("a")
+        if (!anchor) return false
+        const href = anchor.getAttribute("href") || ""
+        if (href.startsWith("#cite-ref-")) {
+          const target = view.dom.querySelector(`[id="${href.slice(1)}"]`)
+          if (target) {
+            target.scrollIntoView({ behavior: "smooth", block: "center" })
+            ;(target as HTMLElement).classList.add("cite-ref-flash")
+            window.setTimeout(() => (target as HTMLElement).classList.remove("cite-ref-flash"), 1200)
+            event.preventDefault()
+            return true
+          }
+        }
+        if (/^https?:\/\//i.test(href) && anchor.closest('[id^="cite-ref-"]')) {
+          window.open(href, "_blank", "noopener,noreferrer")
+          event.preventDefault()
+          return true
+        }
+        return false
       },
       handleDrop: (view, event, _slice, _moved) => {
         const dt = event.dataTransfer
@@ -5143,7 +5187,15 @@ export function TiptapEditor({
           .ProseMirror table .selectedCell {
             background: rgba(59, 130, 246, 0.1);
           }
-          
+          /* Brief highlight when an inline citation scrolls to its reference. */
+          .ProseMirror .cite-ref-flash {
+            background: color-mix(in srgb, var(--primary) 18%, transparent);
+            border-radius: 4px;
+            transition: background 1s ease;
+          }
+          /* Imported reference entries are scroll targets for inline citations. */
+          .ProseMirror [id^="cite-ref-"] { scroll-margin-top: 1rem; }
+
           /* Monochrome gradient border animation for Cite with AI button */
           @keyframes rainbow-border {
             0% {
