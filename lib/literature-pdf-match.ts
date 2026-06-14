@@ -31,6 +31,44 @@ function splitAuthorString(raw: string | null) {
     .filter(Boolean)
 }
 
+/**
+ * Best-effort isolation of the real abstract from raw PDF text.
+ *
+ * Previously the "abstract" was just the first 4000 characters of the whole
+ * document, which dragged in the title, authors, affiliations, the start of the
+ * introduction, etc. Here we locate the "Abstract" heading and capture text up
+ * to the first section that conventionally follows it (Keywords / Introduction /
+ * copyright line …). Inline structured-abstract labels (Background:, Methods:,
+ * Results:, Conclusions:) are intentionally NOT treated as stops since they are
+ * part of the abstract itself.
+ *
+ * Returns null when no plausible abstract can be isolated — an empty,
+ * user-editable field is better than a wall of body text.
+ */
+function extractAbstractSection(text: string): string | null {
+  if (!text) return null
+
+  // Match a standalone "Abstract" heading (case-insensitive), but not the
+  // "Abstract" inside "Graphical Abstract".
+  const startRe = /(?<!graphical\s)\bAbstract\b\s*[:.—-]?\s*/i
+  const startMatch = startRe.exec(text)
+  if (!startMatch) return null
+
+  const afterStart = text.slice(startMatch.index + startMatch[0].length)
+
+  // Stop at the first section that reliably comes after an abstract.
+  const stopRe =
+    /\b(?:Keywords?|Key\s*words|Index\s*terms|Introduction|Graphical\s+abstract|Highlights|Article\s+history|Received\b|©|©)\b|\b\d{1,2}\.?\s+Introduction\b/i
+  const stopMatch = stopRe.exec(afterStart)
+  let body = normalizeWhitespace(stopMatch ? afterStart.slice(0, stopMatch.index) : afterStart)
+
+  // Too short → we likely matched a stray "Abstract" label, not the section.
+  if (body.length < 80) return null
+  // No stop boundary found → cap so we never dump full body text.
+  if (body.length > 3500) body = `${body.slice(0, 3500).trim()}…`
+  return body
+}
+
 function inferTitleFromText(text: string, fallbackName: string) {
   const lines = text
     .split("\n")
@@ -93,7 +131,7 @@ async function extractPdfTextAndMetadata(buffer: ArrayBuffer, fileName: string):
     publicationYear: yearMatch ? Number.parseInt(yearMatch[0], 10) : null,
     doi: clampText(normalizeDoi(doiMatch?.[1] ?? null), "doi"),
     pmid: clampText(pmidMatch?.[1] ?? null, "pmid"),
-    abstract: clampText(normalizedText.slice(0, 4000) || null, "abstract"),
+    abstract: clampText(extractAbstractSection(normalizedText), "abstract"),
     keywords: keywords.slice(0, 20),
     url: null,
     pageCount: pdf.numPages ?? null,

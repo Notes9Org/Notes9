@@ -1,7 +1,9 @@
 "use client"
 
-import { useMemo, useState } from "react"
+import { useMemo, useRef, useState } from "react"
 import { useRouter } from "next/navigation"
+import Link from "next/link"
+import type { Editor } from "@tiptap/react"
 import { createClient } from "@/lib/supabase/client"
 import { Button } from "@/components/ui/button"
 import {
@@ -24,10 +26,11 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Switch } from "@/components/ui/switch"
-import { Pencil } from "lucide-react"
+import { Pencil, Plus } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { TiptapEditor } from "@/components/text-editor/tiptap-editor"
-import { NoteExportMenu } from "@/components/note-export-menu"
+import { NoteExportMenu, NotePrintButton } from "@/components/note-export-menu"
+import { NoteImportButton } from "@/components/note-import-button"
 import { Download } from "lucide-react"
 
 const PROTOCOL_CATEGORIES = [
@@ -58,6 +61,7 @@ export function EditProtocolDialog({ protocol }: EditProtocolDialogProps) {
   const supabase = useMemo(() => createClient(), [])
   const [open, setOpen] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
+  const editorRef = useRef<Editor | null>(null)
   
   const [formData, setFormData] = useState({
     name: protocol.name,
@@ -186,15 +190,44 @@ export function EditProtocolDialog({ protocol }: EditProtocolDialogProps) {
           <div className="space-y-2">
             <div className="flex items-center justify-between gap-2">
               <Label htmlFor="content">Protocol Content</Label>
-              <NoteExportMenu
-                title={formData.name || "protocol"}
-                htmlContent={formData.content || ""}
-                trigger={
-                  <Button type="button" variant="ghost" size="icon-sm" className="shrink-0" aria-label="Export">
-                    <Download className="h-4 w-4" />
-                  </Button>
-                }
-              />
+              <div className="flex items-center gap-1 shrink-0">
+                <Button
+                  asChild
+                  type="button"
+                  variant="ghost"
+                  size="icon-sm"
+                  className="text-muted-foreground hover:text-foreground"
+                  aria-label="New protocol"
+                  title="New protocol"
+                >
+                  <Link href="/protocols/new">
+                    <Plus className="h-4 w-4" />
+                  </Link>
+                </Button>
+                <NotePrintButton
+                  title={formData.name || "protocol"}
+                  htmlContent={formData.content || ""}
+                  size="icon-sm"
+                  className="text-muted-foreground hover:text-foreground"
+                />
+                <NoteImportButton
+                  className="text-muted-foreground hover:text-foreground"
+                  onImportHtml={(html) => {
+                    const editor = editorRef.current
+                    if (editor) editor.chain().focus().insertContent(html).run()
+                    else setFormData((prev) => ({ ...prev, content: (prev.content || "") + html }))
+                  }}
+                />
+                <NoteExportMenu
+                  title={formData.name || "protocol"}
+                  htmlContent={formData.content || ""}
+                  trigger={
+                    <Button type="button" variant="ghost" size="icon-sm" className="shrink-0 text-muted-foreground hover:text-foreground" aria-label="Export">
+                      <Download className="h-4 w-4" />
+                    </Button>
+                  }
+                />
+              </div>
             </div>
             <TiptapEditor
               content={formData.content}
@@ -206,6 +239,7 @@ export function EditProtocolDialog({ protocol }: EditProtocolDialogProps) {
               minHeight="300px"
               showAITools={true}
               showAiWritingDropdown={false}
+              onEditorReady={(ed) => { editorRef.current = ed }}
             />
           </div>
 

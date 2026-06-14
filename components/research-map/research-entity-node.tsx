@@ -3,7 +3,7 @@
 import { Handle, Position, type Node, type NodeProps } from "@xyflow/react"
 import { cn } from "@/lib/utils"
 import type { ResearchMapNodeKind } from "@/lib/research-map-types"
-import { kindAccentClass, kindDotClass, kindLabel, kindTintClass } from "@/lib/research-map-kinds"
+import { kindAccentClass, kindIcon, kindIconClass, kindLabel, kindTintClass } from "@/lib/research-map-kinds"
 
 export type ResearchEntityNodeData = {
   kind: ResearchMapNodeKind
@@ -28,6 +28,7 @@ export function ResearchEntityNode({
   selected,
 }: NodeProps<ResearchEntityRFNode>) {
   const { kind, displayLabel, href, dimmed, ring } = data
+  const KindIcon = kindIcon(kind)
 
   return (
     <div
@@ -63,13 +64,7 @@ export function ResearchEntityNode({
           map is zoomed out. Mirrors the dot legend in the filter panel so a
           user can map the two views together. */}
       <div className="flex items-center gap-1.5 px-2 pt-1.5">
-        <span
-          className={cn(
-            "size-1.5 shrink-0 rounded-full",
-            kindDotClass(kind),
-          )}
-          aria-hidden
-        />
+        <KindIcon className={cn("size-3 shrink-0", kindIconClass(kind))} aria-hidden />
         <span className="text-[9px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
           {kindLabel(kind)}
         </span>

@@ -6,6 +6,7 @@ import { SearchPaper } from "@/types/paper-search"
 import { BookOpen, Database, ExternalLink, FileText, Loader2, Trash2, Search } from "lucide-react"
 import { LiteraturePdfPanel } from "./literature-pdf-panel"
 import { UploadLiteraturePdfDialog } from "./upload-literature-pdf-dialog"
+import { decodeHtmlEntities } from "@/lib/literature-abstract-display"
 
 export type StagingLiteratureRow = Record<string, unknown>
 
@@ -101,9 +102,10 @@ export function StagedPaperView({
       <div className="flex flex-col gap-4">
         <div className="flex items-start justify-between">
           <div className="space-y-1">
-            <h3 className="text-xl font-bold text-foreground">{lit.title}</h3>
+            <h3 className="text-xl font-bold text-foreground">{lit.title ? decodeHtmlEntities(lit.title) : lit.title}</h3>
             <p className="text-sm text-muted-foreground">
-              {lit.authors || "Unknown Author"} • {lit.journal || "No journal"} (
+              {lit.authors ? decodeHtmlEntities(lit.authors) : "Unknown Author"} •{" "}
+              {lit.journal ? decodeHtmlEntities(lit.journal) : "No journal"} (
               {lit.publication_year || "n.d."})
             </p>
           </div>

@@ -251,29 +251,34 @@ export default async function SampleDetailPage({
   )
 
   const breadcrumbProject = sample.experiment?.project ?? linkedProjectsList[0] ?? null
+  const breadcrumbExperiment = sample.experiment ?? null
+
+  // Route "back" to the experiment the sample belongs to (when known) instead of
+  // always returning to the full samples list, so users land where they came from.
+  const backHref = breadcrumbExperiment?.id
+    ? `/experiments/${breadcrumbExperiment.id}`
+    : "/samples"
+
+  const breadcrumbSegments = [
+    { label: "Samples", href: "/samples" },
+    ...(breadcrumbProject
+      ? [{ label: breadcrumbProject.name, href: `/projects/${breadcrumbProject.id}` }]
+      : []),
+    ...(breadcrumbExperiment
+      ? [{ label: breadcrumbExperiment.name, href: `/experiments/${breadcrumbExperiment.id}` }]
+      : []),
+    { label: sample.sample_code },
+  ]
 
   return (
     <div className="space-y-4 md:space-y-6">
-      <SetPageBreadcrumb
-        segments={
-          breadcrumbProject
-            ? [
-                { label: "Samples", href: "/samples" },
-                {
-                  label: breadcrumbProject.name,
-                  href: `/projects/${breadcrumbProject.id}`,
-                },
-                { label: sample.sample_code },
-              ]
-            : [{ label: "Samples", href: "/samples" }, { label: sample.sample_code }]
-        }
-      />
+      <SetPageBreadcrumb segments={breadcrumbSegments} />
 
       {/* Header */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
         <div className="flex items-start gap-3 min-w-0">
           <Button variant="ghost" size="icon" asChild className="shrink-0">
-            <Link href="/samples">
+            <Link href={backHref}>
               <ArrowLeft className="h-4 w-4" />
             </Link>
           </Button>

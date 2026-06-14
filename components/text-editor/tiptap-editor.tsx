@@ -36,6 +36,9 @@ import { Separator } from "@/components/ui/separator"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { sanitizeHtml } from "@/lib/sanitize-html"
+import { importFileToEditorHtml } from "@/lib/import-file-to-html"
+import type { SearchPaper } from "@/types/paper-search"
+import { createClient } from "@/lib/supabase/client"
 import {
   Bold,
   Italic,
@@ -56,6 +59,7 @@ import {
   Sparkles,
   WandSparkles,
   Loader2,
+  Globe,
   FlaskConical,
   Sigma,
   Calculator,
@@ -180,12 +184,18 @@ import {
 } from "./use-citation-store"
 import {
   writePaperCitationStyle,
+  readPaperCitationStyle,
   PAPER_CITATION_STYLE_EVENT,
   isValidTiptapCitationStyle,
 } from "./paper-citation-style-sync"
 
+// Until the user explicitly picks a citation style, citations are NOT rolled up
+// into a references/bibliography section. This flag (persisted) records whether
+// a style has ever been chosen.
+const CITATION_STYLE_CHOSEN_KEY = "notes9-citation-style-chosen"
+
 interface Paper {
-  id: number
+  id: string
   title: string
   authors: string[]
   year: number | null
@@ -318,6 +328,28 @@ const ExtendedTableHeader = TableHeader.extend({
   },
 })
 
+// Table rows gain a persistent `height` attribute so manual row-height drags
+// survive ProseMirror redraws (and reloads), the same way column widths persist
+// via the built-in `colwidth` cell attribute.
+const ResizableTableRow = TableRow.extend({
+  addAttributes() {
+    return {
+      ...this.parent?.(),
+      height: {
+        default: null,
+        parseHTML: (element) => {
+          const el = element as HTMLElement
+          return el.style.height || el.getAttribute("height") || null
+        },
+        renderHTML: (attributes) => {
+          if (!attributes.height) return {}
+          return { style: `height: ${attributes.height}` }
+        },
+      },
+    }
+  },
+})
+
 interface CommentItem {
   id: string
   text: string
@@ -424,6 +456,73 @@ const syncCellAttributes = (table: HTMLTableElement, view: any) => {
     console.warn('Failed to sync cell attributes:', e)
   }
   return false
+}
+
+/**
+ * Persist a manual column-width and/or row-height drag into the document model
+ * so it survives ProseMirror redraws and reloads. Column widths are written to
+ * the standard `colwidth` cell attribute (rendered by the table's colgroup);
+ * row heights to the row's `height` attribute. Column indexes are DOM-cell
+ * indexes, which match visual columns for tables without merged cells.
+ */
+const persistTableDimensions = (
+  table: HTMLTableElement,
+  view: any,
+  opts: { colIndex?: number; colWidth?: number; rowIndex?: number; rowHeight?: number },
+  addToHistory: boolean = true,
+) => {
+  try {
+    const pos = view.posAtDOM(table, 0)
+    if (pos < 0) return
+    const $pos = view.state.doc.resolve(pos)
+    let tablePos = -1
+    for (let d = $pos.depth; d >= 0; d--) {
+      const node = $pos.node(d)
+      if (node && node.type.name === 'table') {
+        tablePos = $pos.before(d)
+        break
+      }
+    }
+    if (tablePos === -1) {
+      const nodeAt = view.state.doc.nodeAt(pos)
+      if (nodeAt?.type.name === 'table') tablePos = pos
+    }
+    if (tablePos < 0) return
+
+    const tableNode = view.state.doc.nodeAt(tablePos)
+    if (!tableNode || tableNode.type.name !== 'table') return
+
+    const tr = view.state.tr
+    let changed = false
+    let rowIdx = 0
+    tableNode.forEach((rowNode: any, rowOffset: number) => {
+      const rowPos = tablePos + 1 + rowOffset
+      if (opts.rowIndex === rowIdx && opts.rowHeight != null) {
+        tr.setNodeMarkup(rowPos, undefined, { ...rowNode.attrs, height: `${opts.rowHeight}px` })
+        changed = true
+      }
+      if (opts.colIndex != null && opts.colWidth != null) {
+        let colIdx = 0
+        rowNode.forEach((cellNode: any, cellOffset: number) => {
+          const cellPos = rowPos + 1 + cellOffset
+          const colspan = cellNode.attrs.colspan || 1
+          if (colIdx === opts.colIndex && colspan === 1) {
+            tr.setNodeMarkup(cellPos, undefined, { ...cellNode.attrs, colwidth: [opts.colWidth] })
+            changed = true
+          }
+          colIdx += colspan
+        })
+      }
+      rowIdx++
+    })
+
+    if (changed) {
+      if (!addToHistory) tr.setMeta('addToHistory', false)
+      view.dispatch(tr)
+    }
+  } catch (e) {
+    console.warn('Failed to persist table dimensions:', e)
+  }
 }
 
 function CommentSidebar({ editor, open, onClose }: { editor: any; open: boolean; onClose: () => void }) {
@@ -561,13 +660,21 @@ const ResizableTable = Table.extend({
 const TableControlsOverlay = ({
   table,
   editor,
-  view
+  view,
+  boundary,
 }: {
   table: HTMLTableElement,
   editor: any,
-  view: any
+  view: any,
+  /** The editor's visible viewport; the overlay is clipped to this so handles
+   *  and controls never render outside the editor. */
+  boundary?: HTMLElement | null,
 }) => {
   const [rect, setRect] = useState<DOMRect | null>(null)
+  const [clipRect, setClipRect] = useState<DOMRect | null>(null)
+  // Live cursor position (viewport coords) so handles only reveal near a border
+  // line — they stay out of the way while typing in a cell.
+  const [mouse, setMouse] = useState<{ x: number; y: number } | null>(null)
   const [dragState, setDragState] = useState<{
     type: 'col' | 'row' | 'both'
     colIndex: number
@@ -578,15 +685,38 @@ const TableControlsOverlay = ({
     startRowHeights: number[]
   } | null>(null)
 
+  useEffect(() => {
+    let raf: number | null = null
+    let latest: { x: number; y: number } | null = null
+    const onMove = (e: MouseEvent) => {
+      latest = { x: e.clientX, y: e.clientY }
+      if (raf === null) {
+        raf = requestAnimationFrame(() => {
+          raf = null
+          setMouse(latest)
+        })
+      }
+    }
+    window.addEventListener('mousemove', onMove, { passive: true })
+    return () => {
+      window.removeEventListener('mousemove', onMove)
+      if (raf !== null) cancelAnimationFrame(raf)
+    }
+  }, [])
+
   // Observe size + position changes rather than polling at 10Hz. The old
   // `setInterval(updateRect, 100)` forced a layout reflow ten times per second
   // for every visible table; ResizeObserver fires only when geometry changes.
   useEffect(() => {
-    const updateRect = () => setRect(table.getBoundingClientRect())
+    const updateRect = () => {
+      setRect(table.getBoundingClientRect())
+      setClipRect(boundary ? boundary.getBoundingClientRect() : null)
+    }
     updateRect()
 
     const ro = new ResizeObserver(updateRect)
     ro.observe(table)
+    if (boundary) ro.observe(boundary)
 
     // Picks up scroll-induced position changes that ResizeObserver misses.
     window.addEventListener('scroll', updateRect, { passive: true, capture: true })
@@ -597,54 +727,62 @@ const TableControlsOverlay = ({
       window.removeEventListener('scroll', updateRect, { capture: true } as AddEventListenerOptions)
       window.removeEventListener('resize', updateRect)
     }
-  }, [table])
+  }, [table, boundary])
 
   useEffect(() => {
-    const onMouseMove = (e: MouseEvent) => {
-      if (!dragState) return
+    if (!dragState) return
+    let frame: number | null = null
+    let latest: { dx: number; dy: number } | null = null
 
-      const dx = e.clientX - dragState.startX
-      const dy = e.clientY - dragState.startY
+    // Drive the resize through the document model (colwidth / row height) — the
+    // same path the built-in column resizer uses — so it actually renders under
+    // `table-layout` + colgroup and persists. Pure DOM style tweaks get
+    // overridden by the colgroup and the cells' `min-width`, which is why
+    // dragging appeared to do nothing.
+    const apply = (addToHistory: boolean) => {
+      if (!latest) return
       const { type, colIndex, rowIndex, startColWidths, startRowHeights } = dragState
-
+      const opts: { colIndex?: number; colWidth?: number; rowIndex?: number; rowHeight?: number } = {}
       if (type === 'col' || type === 'both') {
-        const newWidth = Math.max(50, startColWidths[colIndex] + dx)
-        const rows = table.querySelectorAll('tr')
-        rows.forEach(row => {
-          const cells = row.querySelectorAll('td, th')
-          if (cells[colIndex]) {
-            (cells[colIndex] as HTMLElement).style.width = `${newWidth}px`
-          }
-        })
+        opts.colIndex = colIndex
+        opts.colWidth = Math.max(75, Math.round((startColWidths[colIndex] ?? 175) + latest.dx))
       }
-
       if (type === 'row' || type === 'both') {
-        const newHeight = Math.max(24, startRowHeights[rowIndex] + dy)
-        const rows = table.querySelectorAll('tr')
-        if (rows[rowIndex]) {
-          (rows[rowIndex] as HTMLElement).style.height = `${newHeight}px`
-        }
+        opts.rowIndex = rowIndex
+        opts.rowHeight = Math.max(24, Math.round((startRowHeights[rowIndex] ?? 32) + latest.dy))
+      }
+      persistTableDimensions(table, view, opts, addToHistory)
+    }
+
+    const onMouseMove = (e: MouseEvent) => {
+      latest = { dx: e.clientX - dragState.startX, dy: e.clientY - dragState.startY }
+      if (frame === null) {
+        frame = requestAnimationFrame(() => {
+          frame = null
+          apply(false)
+        })
       }
     }
 
     const onMouseUp = () => {
-      if (dragState) {
-        syncTableSize(table, view)
-        setDragState(null)
-        document.body.style.cursor = ''
-        document.body.style.userSelect = ''
+      if (frame !== null) {
+        cancelAnimationFrame(frame)
+        frame = null
       }
+      apply(true) // final commit lands as a single undo step
+      setDragState(null)
+      document.body.style.cursor = ''
+      document.body.style.userSelect = ''
     }
 
-    if (dragState) {
-      window.addEventListener('mousemove', onMouseMove)
-      window.addEventListener('mouseup', onMouseUp)
-    }
+    window.addEventListener('mousemove', onMouseMove)
+    window.addEventListener('mouseup', onMouseUp)
     return () => {
       window.removeEventListener('mousemove', onMouseMove)
       window.removeEventListener('mouseup', onMouseUp)
+      if (frame !== null) cancelAnimationFrame(frame)
     }
-  }, [dragState, editor, table])
+  }, [dragState, table, view])
 
   const getColWidths = () => {
     const firstRow = table.querySelector('tr')
@@ -681,92 +819,160 @@ const TableControlsOverlay = ({
 
   if (!rect) return null
 
-  // Get cell handles
+  // All overlay coordinates are relative to the clip box (the editor viewport),
+  // and the outer container clips to it — so handles/controls never escape the
+  // editor even when the table sits at its edge or is scrolled.
+  const clip = clipRect ?? rect
+
   const handles: React.ReactNode[] = []
-  const rows = Array.from(table.querySelectorAll('tr'))
+  const rows = Array.from(table.querySelectorAll('tr')) as HTMLElement[]
+  const firstRow = rows[0]
+  const firstRowCells = firstRow ? (Array.from(firstRow.querySelectorAll('td, th')) as HTMLElement[]) : []
 
-  rows.forEach((row, rowIndex) => {
-    const cells = Array.from(row.querySelectorAll('td, th'))
-    cells.forEach((cellEl, colIndex) => {
-      const cell = cellEl as HTMLElement
-      const cellRect = cell.getBoundingClientRect()
-      const relativeTop = cellRect.top - rect.top
-      const relativeLeft = cellRect.left - rect.left
+  // A handle only reveals when the cursor is within REVEAL_PX of its border line
+  // (or it's the one being dragged), so handles never sit over the cells while
+  // you're typing — they appear only near the table lines.
+  const REVEAL_PX = 8
+  const isDragging = !!dragState
+  const mx = mouse?.x ?? -Infinity
+  const my = mouse?.y ?? -Infinity
+  // Vertical span the cursor must be within for a column line to reveal, and the
+  // horizontal span for a row line.
+  const withinTableY = my >= rect.top - REVEAL_PX && my <= rect.bottom + REVEAL_PX
+  const withinTableX = mx >= rect.left - REVEAL_PX && mx <= rect.right + REVEAL_PX
 
-      // Vertical handle (Right edge)
-      handles.push(
+  // Column handles — one per column boundary, spanning the FULL table height.
+  firstRowCells.forEach((cell, colIndex) => {
+    const cellRect = cell.getBoundingClientRect()
+    const boundaryX = cellRect.right
+    const colActive =
+      isDragging && (dragState!.type === 'col' || dragState!.type === 'both') && dragState!.colIndex === colIndex
+    const nearBoundary = withinTableY && Math.abs(mx - boundaryX) <= REVEAL_PX && !isDragging
+    if (!colActive && !nearBoundary) return
+    const colWidth = cellRect.width
+    handles.push(
+      <div
+        key={`col-${colIndex}`}
+        className="absolute pointer-events-auto cursor-col-resize"
+        style={{ top: rect.top - clip.top, left: boundaryX - clip.left - 5, width: 10, height: rect.height, zIndex: 1001 }}
+        title="Drag to resize column"
+        onMouseDown={(e) => handleStartDrag('col', colIndex, 0, e)}
+      >
+        {/* Column highlight band (covers the column being resized). */}
         <div
-          key={`col-${rowIndex}-${colIndex}`}
-          className="absolute cursor-col-resize hover:bg-blue-400 opacity-0 hover:opacity-100 transition-opacity"
-          style={{
-            top: relativeTop,
-            left: relativeLeft + cellRect.width - 2,
-            width: 4,
-            height: cellRect.height,
-            zIndex: 1001,
-          }}
-          onMouseDown={(e) => handleStartDrag('col', colIndex, rowIndex, e)}
+          className={cn('pointer-events-none absolute top-0 h-full', colActive ? 'bg-primary/10' : 'bg-primary/5')}
+          style={{ right: 5, width: colWidth }}
         />
-      )
-
-      // Horizontal handle (Bottom edge)
-      handles.push(
+        {/* Crisp guide line down the full column boundary. */}
         <div
-          key={`row-${rowIndex}-${colIndex}`}
-          className="absolute cursor-row-resize hover:bg-blue-400 opacity-0 hover:opacity-100 transition-opacity"
-          style={{
-            top: relativeTop + cellRect.height - 2,
-            left: relativeLeft,
-            width: cellRect.width,
-            height: 4,
-            zIndex: 1001,
-          }}
-          onMouseDown={(e) => handleStartDrag('row', colIndex, rowIndex, e)}
+          className={cn(
+            'pointer-events-none absolute inset-y-0 left-1/2 -translate-x-1/2 w-[2px] rounded-full',
+            colActive ? 'bg-primary' : 'bg-primary/70',
+          )}
         />
-      )
-
-      // Diagonal handle
-      if (colIndex === cells.length - 1 && rowIndex === rows.length - 1) {
-        handles.push(
-          <div
-            key={`diag-${rowIndex}-${colIndex}`}
-            className="absolute cursor-nwse-resize opacity-40 hover:opacity-100"
-            style={{
-              top: relativeTop + cellRect.height - 6,
-              left: relativeLeft + cellRect.width - 6,
-              width: 12,
-              height: 12,
-              background: 'linear-gradient(135deg, transparent 50%, #3b82f6 50%)',
-              zIndex: 1002,
-              borderRadius: '0 0 3px 0'
-            }}
-            onMouseDown={(e) => handleStartDrag('both', colIndex, rowIndex, e)}
-          />
-        )
-      }
-    })
+      </div>
+    )
   })
+
+  // Row handles — one per row boundary, spanning the FULL table width.
+  rows.forEach((row, rowIndex) => {
+    const rowRect = row.getBoundingClientRect()
+    const boundaryY = rowRect.bottom
+    const rowActive =
+      isDragging && (dragState!.type === 'row' || dragState!.type === 'both') && dragState!.rowIndex === rowIndex
+    const nearBoundary = withinTableX && Math.abs(my - boundaryY) <= REVEAL_PX && !isDragging
+    if (!rowActive && !nearBoundary) return
+    const rowHeight = rowRect.height
+    handles.push(
+      <div
+        key={`row-${rowIndex}`}
+        className="absolute pointer-events-auto cursor-row-resize"
+        style={{ top: boundaryY - clip.top - 5, left: rect.left - clip.left, width: rect.width, height: 10, zIndex: 1001 }}
+        title="Drag to resize row"
+        onMouseDown={(e) => handleStartDrag('row', 0, rowIndex, e)}
+      >
+        {/* Row highlight band (covers the row being resized). */}
+        <div
+          className={cn('pointer-events-none absolute left-0 w-full', rowActive ? 'bg-primary/10' : 'bg-primary/5')}
+          style={{ bottom: 5, height: rowHeight }}
+        />
+        {/* Crisp guide line across the full row boundary. */}
+        <div
+          className={cn(
+            'pointer-events-none absolute inset-x-0 top-1/2 -translate-y-1/2 h-[2px] rounded-full',
+            rowActive ? 'bg-primary' : 'bg-primary/70',
+          )}
+        />
+      </div>
+    )
+  })
+
+  // Corner handle (bottom-right of the table) — resize both at once. Reveals only
+  // when the cursor is near the bottom-right corner.
+  const lastRow = rows[rows.length - 1]
+  const lastRowCells = lastRow ? (Array.from(lastRow.querySelectorAll('td, th')) as HTMLElement[]) : []
+  const cornerCell = lastRowCells[lastRowCells.length - 1]
+  if (cornerCell && firstRowCells.length > 0) {
+    const cornerRect = cornerCell.getBoundingClientRect()
+    const cornerActive = isDragging && dragState!.type === 'both'
+    const nearCorner =
+      !isDragging && Math.abs(mx - cornerRect.right) <= 14 && Math.abs(my - cornerRect.bottom) <= 14
+    if (cornerActive || nearCorner) {
+      const lastColIndex = firstRowCells.length - 1
+      const lastRowIndex = rows.length - 1
+      handles.push(
+        <div
+          key="corner"
+          className="absolute pointer-events-auto cursor-nwse-resize flex items-end justify-end"
+          style={{
+            top: cornerRect.bottom - clip.top - 9,
+            left: cornerRect.right - clip.left - 9,
+            width: 16,
+            height: 16,
+            zIndex: 1002,
+          }}
+          title="Drag to resize row and column"
+          onMouseDown={(e) => handleStartDrag('both', lastColIndex, lastRowIndex, e)}
+        >
+          <div
+            className={cn(
+              'size-2.5 rounded-[3px] border-b-2 border-r-2',
+              cornerActive ? 'border-primary' : 'border-primary/60',
+            )}
+          />
+        </div>
+      )
+    }
+  }
+
+  // Anchor the Edit Table button just below the table's bottom-right. The
+  // container's overflow:hidden keeps it from spilling outside the editor; we
+  // keep it anchored to the table (not the viewport corner) so moving off the
+  // table dismisses the controls.
+  const editBtnTop = rect.bottom - clip.top + 6
+  const editBtnRight = Math.max(0, clip.right - rect.right)
 
   return (
     <div
-      className="absolute pointer-events-none select-none"
+      data-table-overlay=""
+      className="absolute pointer-events-none select-none overflow-hidden"
       style={{
-        top: rect.top + window.scrollY,
-        left: rect.left + window.scrollX,
-        width: rect.width,
-        height: rect.height,
+        top: clip.top + window.scrollY,
+        left: clip.left + window.scrollX,
+        width: clip.width,
+        height: clip.height,
         zIndex: 1000,
       }}
     >
       <div className="relative w-full h-full">
         {handles}
 
-        {/* Minimalistic Edit Table Trigger - Bottom Right Outside */}
+        {/* Edit Table trigger — anchored to the table, clamped inside the editor. */}
         <div
           className="table-controls-overlay absolute pointer-events-auto"
           style={{
-            bottom: -32,
-            right: 0,
+            top: editBtnTop,
+            right: editBtnRight,
             zIndex: 1005
           }}
         >
@@ -1424,6 +1630,52 @@ function normalizeUrl(url: string) {
   return `https://${trimmed}`
 }
 
+/**
+ * Make plain-text math safe to render with KaTeX.
+ *
+ * Users typically type ordinary expressions like `EE% = ((Total-Free)/Total)*100`
+ * rather than escaped LaTeX. KaTeX treats `%` as a comment start (silently
+ * dropping the rest of the line), and `#`/`&` as macro/alignment control
+ * characters, so an unescaped one breaks the whole equation. Escape only those
+ * special characters that aren't already escaped, leaving intentional LaTeX
+ * (`^`, `_`, `\frac`, braces, …) untouched.
+ */
+function sanitizeLatexInput(latex: string): string {
+  return latex.replace(/(?<!\\)([%#&])/g, "\\$1")
+}
+
+// Common English words that carry no topical signal for citation matching.
+const CITE_STOPWORDS = new Set([
+  "the", "and", "for", "that", "this", "with", "from", "into", "onto", "over",
+  "under", "are", "was", "were", "been", "being", "have", "has", "had", "does",
+  "did", "done", "which", "while", "where", "when", "what", "whom", "whose",
+  "than", "then", "they", "their", "them", "these", "those", "such", "also",
+  "because", "however", "therefore", "between", "within", "among", "across",
+  "using", "used", "based", "study", "studies", "results", "result", "method",
+  "methods", "analysis", "data", "show", "shown", "showed", "can", "could",
+  "would", "should", "may", "might", "will", "shall", "not", "but", "its",
+  "our", "your", "his", "her", "each", "other", "more", "most", "some", "many",
+  "much", "very", "both", "about", "after", "before", "during", "through",
+])
+
+/**
+ * Pull the most topical keywords out of a selected sentence/claim so we can
+ * match it against saved papers (and seed a web search). Keeps unique words of
+ * length ≥ 4 that aren't stopwords, in order, capped to keep filters small.
+ */
+function extractCiteKeywords(text: string): string[] {
+  const matches = text.toLowerCase().match(/[a-z][a-z0-9-]{3,}/g) ?? []
+  const seen = new Set<string>()
+  const out: string[] = []
+  for (const w of matches) {
+    if (CITE_STOPWORDS.has(w) || seen.has(w)) continue
+    seen.add(w)
+    out.push(w)
+    if (out.length >= 8) break
+  }
+  return out
+}
+
 function isMacLikePlatform() {
   if (typeof navigator === "undefined") return false
   const platform = navigator.platform || ""
@@ -1655,7 +1907,10 @@ export function TiptapEditor({
 
       // Only track if the table is inside THIS editor container
       const isOurTable = table && editorContainer.contains(table)
-      const overlay = target.closest('.table-controls-overlay')
+      // Resize handles + the Edit Table button live in a body-level portal, so
+      // they aren't inside `table`; matching the overlay marker keeps the
+      // controls alive while the cursor is on them (incl. during a drag).
+      const overlay = target.closest('[data-table-overlay]')
 
       if (isOurTable) {
         clearTimeout(hideTimeout)
@@ -1705,6 +1960,33 @@ export function TiptapEditor({
   const [foundPapers, setFoundPapers] = useState<Paper[]>([])
   const [selectedPapers, setSelectedPapers] = useState<Set<number>>(new Set())
   const [citationInsertPosition, setCitationInsertPosition] = useState<number>(0)
+  // Where the currently-shown citation results came from, and the query that
+  // produced them (so the modal can offer a web search when the repository
+  // had nothing useful).
+  const [citationSource, setCitationSource] = useState<"repository" | "web" | null>(null)
+  const [lastCiteQuery, setLastCiteQuery] = useState<string>("")
+  // Whether the user has explicitly chosen a citation style. Until they have,
+  // the bibliography stays empty and references are never auto-populated. A
+  // previously-saved style (or a prior choice) counts as chosen.
+  const [citationStyleChosen, setCitationStyleChosen] = useState<boolean>(() => {
+    if (typeof window === "undefined") return false
+    const saved = readPaperCitationStyle()
+    if (saved && isValidTiptapCitationStyle(saved)) return true
+    try {
+      return window.localStorage.getItem(CITATION_STYLE_CHOSEN_KEY) === "1"
+    } catch {
+      return false
+    }
+  })
+
+  const markCitationStyleChosen = useCallback(() => {
+    setCitationStyleChosen(true)
+    try {
+      window.localStorage.setItem(CITATION_STYLE_CHOSEN_KEY, "1")
+    } catch {
+      /* ignore persistence failures */
+    }
+  }, [])
   // Citation store (single source of truth for citations + style)
   const [citationState, citationDispatch] = useCitationReducer(paperMode)
   const selectedCitationStyle = citationState.style
@@ -1845,7 +2127,7 @@ export function TiptapEditor({
         cellMinWidth: 75,
         lastColumnResizable: true,
       }),
-      TableRow,
+      ResizableTableRow,
       ExtendedTableHeader,
       ExtendedTableCell,
       ...(enableMath ? [Mathematics.configure({
@@ -1974,6 +2256,12 @@ export function TiptapEditor({
 
         if (!dt?.files?.length) return false
         const files = Array.from(dt.files)
+        const pdf = files.find((f) => f.name.toLowerCase().endsWith(".pdf") || f.type === "application/pdf")
+        if (pdf) {
+          event.preventDefault()
+          insertPdfFromFile(pdf)
+          return true
+        }
         const docx = files.find((f) => f.name.toLowerCase().endsWith(".docx"))
         if (docx) {
           event.preventDefault()
@@ -2014,6 +2302,12 @@ export function TiptapEditor({
         const files = event.clipboardData?.files
         if (files && files.length) {
           const arr = Array.from(files)
+          const pdf = arr.find((f) => f.name.toLowerCase().endsWith(".pdf") || f.type === "application/pdf")
+          if (pdf) {
+            event.preventDefault()
+            insertPdfFromFile(pdf)
+            return true
+          }
           const docx = arr.find((f) => f.name.toLowerCase().endsWith(".docx"))
           if (docx) {
             event.preventDefault()
@@ -2082,6 +2376,9 @@ export function TiptapEditor({
 
   const applyCitationStyleChange = useCallback(
     (newStyle: string) => {
+      // Choosing/changing the style is the trigger that lets citations roll up
+      // into a references section.
+      markCitationStyleChosen()
       if (!editor) {
         citationDispatch({ type: "SET_STYLE", style: newStyle })
         if (paperMode) {
@@ -2128,7 +2425,7 @@ export function TiptapEditor({
         editor.commands.setContent(updated)
       }
     },
-    [paperMode, editor, citationDispatch]
+    [paperMode, editor, citationDispatch, markCitationStyleChosen]
   )
 
   useEffect(() => {
@@ -2332,6 +2629,113 @@ export function TiptapEditor({
   // stopped using any Google APIs. `aiCite` below uses an independent citation-
   // search endpoint and is intentionally kept.
 
+  // 1) Repository first: look for an already-saved paper that matches the
+  // selected text. This is a fast, local Supabase lookup (RLS-scoped to the
+  // user's organization) so common "cite a paper I already have" cases resolve
+  // instantly without hitting the web.
+  const searchRepositoryCitations = useCallback(async (rawQuery: string): Promise<Paper[]> => {
+    const keywords = extractCiteKeywords(rawQuery)
+    if (keywords.length === 0) return []
+    // Strip characters that would break PostgREST's `.or()` filter grammar.
+    const safe = keywords.map((k) => k.replace(/[(),*%:]/g, "")).filter((k) => k.length >= 4)
+    if (safe.length === 0) return []
+
+    const supabase = createClient()
+    const orFilter = safe.map((k) => `title.ilike.%${k}%,abstract.ilike.%${k}%`).join(",")
+    const { data, error } = await supabase
+      .from("literature_reviews")
+      .select("id,title,authors,journal,publication_year,doi,pmid,url,abstract,catalog_placement")
+      .eq("catalog_placement", "repository")
+      .or(orFilter)
+      .limit(50)
+    if (error || !data) return []
+
+    // Rank candidates by keyword hits (title weighted over abstract).
+    const scored = data
+      .map((row: any) => {
+        const title = String(row.title ?? "").toLowerCase()
+        const abstract = String(row.abstract ?? "").toLowerCase()
+        let score = 0
+        for (const k of safe) {
+          if (title.includes(k)) score += 3
+          if (abstract.includes(k)) score += 1
+        }
+        return { row, score }
+      })
+      .filter((s) => s.score > 0)
+      .sort((a, b) => b.score - a.score)
+      .slice(0, 10)
+
+    return scored.map(({ row }) => {
+      const bareDoi = row.doi ? String(row.doi).replace(/^https?:\/\/(dx\.)?doi\.org\//i, "").trim() : ""
+      const sourceUrl =
+        (row.url ? String(row.url) : "") ||
+        (bareDoi ? `https://doi.org/${bareDoi}` : "") ||
+        (row.pmid ? `https://pubmed.ncbi.nlm.nih.gov/${row.pmid}/` : "")
+      const authors =
+        typeof row.authors === "string" && row.authors.trim()
+          ? row.authors.split(/[;,]/).map((a: string) => a.trim()).filter(Boolean)
+          : []
+      const year =
+        typeof row.publication_year === "number"
+          ? row.publication_year
+          : row.publication_year
+            ? Number(row.publication_year) || null
+            : null
+      return {
+        id: String(row.id),
+        title: String(row.title ?? ""),
+        authors,
+        year,
+        journal: String(row.journal ?? ""),
+        source_url: sourceUrl,
+        doi: bareDoi,
+      }
+    })
+  }, [])
+
+  // 2) Web fallback: the in-app, web-enabled literature search (Catalyst, with
+  // a legacy PubMed/Europe PMC/OpenAlex fallback inside the route).
+  const searchWebCitations = useCallback(async (rawQuery: string): Promise<Paper[]> => {
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), 120000)
+    try {
+      const query = rawQuery.trim().slice(0, 1000)
+      const response = await fetch(`/api/search-papers?query=${encodeURIComponent(query)}`, {
+        signal: controller.signal,
+      })
+      if (!response.ok) throw new Error("Citation search failed")
+      const payload = (await response.json()) as { papers?: SearchPaper[] }
+      const papers = payload.papers ?? []
+
+      const seen = new Set<string>()
+      const uniqueData: Paper[] = []
+      for (const p of papers) {
+        const key = (p.title || "").trim().toLowerCase()
+        if (!key || seen.has(key)) continue
+        seen.add(key)
+        const bareDoi = p.doi ? p.doi.replace(/^https?:\/\/(dx\.)?doi\.org\//i, "").trim() : ""
+        const sourceUrl =
+          p.articlePageUrl ||
+          p.pdfUrl ||
+          (bareDoi ? `https://doi.org/${bareDoi}` : "") ||
+          (p.pmid ? `https://pubmed.ncbi.nlm.nih.gov/${p.pmid}/` : "")
+        uniqueData.push({
+          id: p.id || bareDoi || p.pmid || key,
+          title: p.title,
+          authors: p.authors ?? [],
+          year: p.year ?? null,
+          journal: p.journal ?? "",
+          source_url: sourceUrl,
+          doi: bareDoi,
+        })
+      }
+      return uniqueData
+    } finally {
+      clearTimeout(timeoutId)
+    }
+  }, [])
+
   const aiCite = useCallback(async () => {
     if (!editor) return
     const { from, to } = editor.state.selection
@@ -2346,47 +2750,29 @@ export function TiptapEditor({
       return
     }
 
+    const query = selectedText.trim().slice(0, 1000)
+    setCitationInsertPosition(to)
+    setLastCiteQuery(query)
+
     try {
       setIsCiteProcessing(true)
 
-      // Call the citation search API
-      const controller = new AbortController()
-      const timeoutId = setTimeout(() => controller.abort(), 60000)
-      const response = await fetch(
-        `https://z3thrlksg0.execute-api.us-east-1.amazonaws.com/citations_ddg`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            text: `${selectedText} -site:wikipedia.org -site:en.wikipedia.org scholarly peer-reviewed research article`,
-          }),
-          signal: controller.signal,
-        }
-      )
-      clearTimeout(timeoutId)
-
-      if (!response.ok) {
-        throw new Error('Citation search failed')
+      // Repository first — instant if the paper is already saved.
+      const repoResults = await searchRepositoryCitations(query)
+      if (repoResults.length > 0) {
+        setFoundPapers(repoResults)
+        setSelectedPapers(new Set())
+        setCitationSource("repository")
+        setCitationModalOpen(true)
+        return
       }
 
-      const data: Paper[] = await response.json()
-
-      // Deduplicate by title (case-insensitive)
-      const seen = new Set<string>()
-      const uniqueData = data.filter((paper) => {
-        const key = (paper.title || '').trim().toLowerCase()
-        if (!key || seen.has(key)) return false
-        seen.add(key)
-        return true
-      })
-
-      if (uniqueData && uniqueData.length > 0) {
-        // Store papers and open modal
-        setFoundPapers(uniqueData)
+      // Otherwise search the web-enabled literature service.
+      const webResults = await searchWebCitations(query)
+      if (webResults.length > 0) {
+        setFoundPapers(webResults)
         setSelectedPapers(new Set())
-        setCitationInsertPosition(to)
+        setCitationSource("web")
         setCitationModalOpen(true)
       } else {
         toast.error('No citations found for the selected text', {
@@ -2395,17 +2781,38 @@ export function TiptapEditor({
         })
       }
     } catch (error) {
+      const aborted = error instanceof DOMException && error.name === "AbortError"
       console.error('Citation search error:', error)
-      toast.error('Failed to fetch citations', {
+      toast.error(aborted ? 'Citation search timed out' : 'Failed to fetch citations', {
         duration: 4000,
         description: 'Please check your connection and try again.'
       })
     } finally {
       setIsCiteProcessing(false)
+      setToolbarClusterMenu(null)
     }
+  }, [editor, searchRepositoryCitations, searchWebCitations])
 
-    setToolbarClusterMenu(null)
-  }, [editor])
+  // Triggered from the modal when the repository results aren't what the user
+  // wants and they choose to search the web instead.
+  const runWebCitationSearch = useCallback(async () => {
+    if (!lastCiteQuery) return
+    try {
+      setIsCiteProcessing(true)
+      const webResults = await searchWebCitations(lastCiteQuery)
+      if (webResults.length > 0) {
+        setFoundPapers(webResults)
+        setSelectedPapers(new Set())
+        setCitationSource("web")
+      } else {
+        toast.error('No web citations found for the selected text', { duration: 4000 })
+      }
+    } catch {
+      toast.error('Web citation search failed', { duration: 4000 })
+    } finally {
+      setIsCiteProcessing(false)
+    }
+  }, [lastCiteQuery, searchWebCitations])
 
   const handleCiteSelected = useCallback(() => {
     if (!editor || selectedPapers.size === 0) return
@@ -2488,6 +2895,16 @@ export function TiptapEditor({
   const handleGenerateBibliography = useCallback(async () => {
     if (!editor) return
 
+    // Citations only roll up into a references/bibliography once the user has
+    // picked a citation style. Until then the bibliography stays empty.
+    if (!citationStyleChosen) {
+      toast.info('Choose a citation style first', {
+        description: 'Pick a citation style (APA, MLA, …) from the dropdown to build your references. Citations stay out of the bibliography until then.',
+        duration: 5000,
+      })
+      return
+    }
+
     const html = editor.getHTML()
     const citations = parseCitationsFromHtml(html)
 
@@ -2524,7 +2941,7 @@ export function TiptapEditor({
     } finally {
       setIsCiteProcessing(false)
     }
-  }, [editor])
+  }, [editor, citationStyleChosen, citationDispatch])
 
   const handleInsertBibliography = useCallback(() => {
     if (!editor || citationState.entries.length === 0) return
@@ -2552,18 +2969,13 @@ export function TiptapEditor({
   }, [editor])
 
   // Download functions
-  const downloadAsMarkdown = useCallback(() => {
+  const downloadAsMarkdown = useCallback(async () => {
     if (!editor) return
-    const text = editor.getText()
-    const blob = new Blob([text], { type: "text/markdown" })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement("a")
-    a.href = url
-    a.download = `${title}.md`
-    document.body.appendChild(a)
-    a.click()
-    document.body.removeChild(a)
-    URL.revokeObjectURL(url)
+    // Convert the editor HTML to Markdown (headings, bold/italic, lists, tables,
+    // links, code) instead of dumping plain text — keeps the export faithful to
+    // what's in the editor.
+    const { exportNoteAsMarkdown } = await import("@/lib/note-export")
+    await exportNoteAsMarkdown(editor.getHTML(), title)
   }, [editor, title])
 
   const downloadAsHTML = useCallback(async () => {
@@ -3297,10 +3709,22 @@ export function TiptapEditor({
       toast.error("Enter an image URL before inserting it.")
       return
     }
-    editor.chain().focus().setImage({ src, alt: imageAltInput.trim() }).run()
-    setImageInsertDialogOpen(false)
-    setImageUrlInput("")
-    setImageAltInput("")
+    // Verify the URL actually resolves to an image before inserting. A common
+    // cause of "image URL doesn't work" is pasting a webpage/search-result URL
+    // rather than a direct link to the image file — preloading lets us give
+    // clear feedback instead of silently inserting a broken image.
+    const alt = imageAltInput.trim()
+    const probe = new window.Image()
+    probe.onload = () => {
+      editor.chain().focus().setImage({ src, alt }).run()
+      setImageInsertDialogOpen(false)
+      setImageUrlInput("")
+      setImageAltInput("")
+    }
+    probe.onerror = () => {
+      toast.error("That URL didn't load as an image. Use a direct link to the image file (ending in .png, .jpg, .gif, …).")
+    }
+    probe.src = src
   }, [editor, imageAltInput, imageUrlInput])
 
   const insertImagesFromFileList = (files: FileList | File[]) => {
@@ -3334,14 +3758,16 @@ export function TiptapEditor({
     e.target.value = ""
   }
 
-  const insertDocxFromFile = async (file: File) => {
-    if (!editor || !file.name.toLowerCase().endsWith(".docx")) return
-    const arrayBuffer = await file.arrayBuffer()
-    // Dynamic import keeps mammoth out of the initial editor bundle.
-    const mammoth = await import("mammoth")
-    const { value: html } = await mammoth.convertToHtml({ arrayBuffer })
-    editor.chain().focus().insertContent(html).run()
+  // All document-style imports (PDF / Word / Markdown / plain text / HTML) go
+  // through the shared converter so every editor surface behaves identically.
+  const insertImportedFile = async (file: File) => {
+    if (!editor) return
+    const html = await importFileToEditorHtml(file)
+    if (html) editor.chain().focus().insertContent(html).run()
   }
+
+  const insertDocxFromFile = insertImportedFile
+  const insertPdfFromFile = insertImportedFile
 
   const insertSpreadsheetFromFile = async (file: File) => {
     if (!editor) return
@@ -3364,36 +3790,33 @@ export function TiptapEditor({
       .run()
   }
 
-  const insertPlainTextFromFile = async (file: File) => {
-    const text = await file.text()
-    editor?.chain().focus().insertContent(text).run()
-  }
+  const insertPlainTextFromFile = insertImportedFile
 
+  // Kept for AI-generated markdown insertion (not file import).
   const insertMarkdownText = useCallback(async (text: string) => {
     if (!editor) return
     const html = await markdownToHtml(text)
-    editor.chain().focus().insertContent(html).run()
+    // Copy externally-linked markdown images (![](http…)) into the note.
+    const { embedImagesInHtml } = await import("@/lib/embed-import-images")
+    const embedded = await embedImagesInHtml(html)
+    editor.chain().focus().insertContent(embedded).run()
   }, [editor])
 
-  const insertMarkdownFromFile = async (file: File) => {
-    const text = await file.text()
-    await insertMarkdownText(text)
-  }
+  const insertMarkdownFromFile = insertImportedFile
 
-  const insertHtmlFromFile = async (file: File) => {
-    const html = await file.text()
-    editor?.chain().focus().insertContent(html).run()
-  }
+  const insertHtmlFromFile = insertImportedFile
 
   const handleFilePicker = () => {
     const input = document.createElement("input")
     input.type = "file"
-    input.accept = ".docx,.txt,.md,.markdown,.html,.htm,.xls,.xlsx,.csv"
+    input.accept = ".pdf,.docx,.txt,.md,.markdown,.html,.htm,.xls,.xlsx,.csv"
     input.onchange = async () => {
       const file = input.files?.[0]
       if (file) {
         const lower = file.name.toLowerCase()
-        if (lower.endsWith(".docx")) {
+        if (lower.endsWith(".pdf")) {
+          await insertPdfFromFile(file)
+        } else if (lower.endsWith(".docx")) {
           await insertDocxFromFile(file)
         } else if (lower.endsWith(".xlsx") || lower.endsWith(".xls") || lower.endsWith(".csv")) {
           await insertSpreadsheetFromFile(file)
@@ -4164,10 +4587,12 @@ export function TiptapEditor({
             onClick={() => {
               const { from, to } = editor.state.selection
               const selectedText = editor.state.doc.textBetween(from, to, " ")
-              if (selectedText) {
-                const formatted = formatChemicalFormula(selectedText)
-                editor.chain().focus().deleteRange({ from, to }).insertContent(formatted).run()
+              if (!selectedText.trim()) {
+                toast.info("Select the text to format first (e.g. H2O, CO2), then choose Chemical formula.")
+                return
               }
+              const formatted = formatChemicalFormula(selectedText)
+              editor.chain().focus().deleteRange({ from, to }).insertContent(formatted).run()
             }}
           >
             <FlaskConical className="mr-2 h-4 w-4" />
@@ -4180,7 +4605,7 @@ export function TiptapEditor({
                   const { from, to } = editor.state.selection
                   const selectedText = from !== to ? editor.state.doc.textBetween(from, to, " ") : "x^2"
                   if (from !== to) editor.chain().focus().deleteRange({ from, to }).run()
-                  editor.chain().focus().insertInlineMath({ latex: selectedText }).run()
+                  editor.chain().focus().insertInlineMath({ latex: sanitizeLatexInput(selectedText) }).run()
                 }}
               >
                 <Sigma className="mr-2 h-4 w-4" />
@@ -4192,7 +4617,7 @@ export function TiptapEditor({
                   const selectedText =
                     from !== to ? editor.state.doc.textBetween(from, to, " ") : "\\sum_{i=1}^{n} x_i"
                   if (from !== to) editor.chain().focus().deleteRange({ from, to }).run()
-                  editor.chain().focus().insertBlockMath({ latex: selectedText }).run()
+                  editor.chain().focus().insertBlockMath({ latex: sanitizeLatexInput(selectedText) }).run()
                 }}
               >
                 <Sigma className="mr-2 h-4 w-4" />
@@ -4259,11 +4684,20 @@ export function TiptapEditor({
           <Tooltip>
             <TooltipTrigger asChild>
               <select
-                value={selectedCitationStyle}
-                onChange={(e) => applyCitationStyleChange(e.target.value)}
-                className="h-8 px-2 rounded-lg border border-border bg-background text-xs cursor-pointer shrink-0 max-w-[100px]"
+                value={citationStyleChosen ? selectedCitationStyle : ""}
+                onChange={(e) => {
+                  const value = e.target.value
+                  if (!value) return
+                  applyCitationStyleChange(value)
+                }}
+                className="h-8 px-2 rounded-lg border border-border bg-background text-xs cursor-pointer shrink-0 max-w-[120px]"
                 title="Citation style"
               >
+                {!citationStyleChosen && (
+                  <option value="" disabled>
+                    Citation style…
+                  </option>
+                )}
                 {CITATION_STYLE_OPTIONS.map(opt => (
                   <option key={opt.value} value={opt.value}>{opt.label}</option>
                 ))}
@@ -4528,6 +4962,7 @@ export function TiptapEditor({
                 table={activeTable}
                 editor={editor}
                 view={editor.view}
+                boundary={editorContainer}
               />,
               document.body
             )}
@@ -4659,9 +5094,22 @@ export function TiptapEditor({
             color: var(--muted-foreground);
             font-style: italic;
           }
+          /* Keep wide tables inside the editor: the wrapper scrolls horizontally
+             instead of letting the table overflow past the editor bounds. */
+          .ProseMirror .tableWrapper {
+            overflow-x: auto;
+            max-width: 100%;
+            margin: 1rem 0;
+          }
+          .ProseMirror .tableWrapper table {
+            margin: 0;
+          }
           .ProseMirror table {
             border-collapse: collapse;
-            table-layout: auto;
+            /* Fixed layout makes the colgroup (our drag-set column widths)
+               authoritative, so columns resize in both directions immediately
+               instead of being pinned to the cells' default width. */
+            table-layout: fixed;
             width: auto;
             min-width: 175px !important;
             margin: 1rem 0;
@@ -4678,21 +5126,19 @@ export function TiptapEditor({
             min-width: 75px !important;
             width: 175px;
             position: relative;
+            overflow-wrap: break-word;
+            word-break: break-word;
           }
           .ProseMirror table th {
             background: var(--muted);
             color: var(--foreground);
             font-weight: 600;
           }
+          /* The built-in column-resize handle is hidden: our overlay provides the
+             single resize guide line. The plugin stays enabled so the colgroup
+             (which actually renders column widths) keeps working. */
           .ProseMirror table .column-resize-handle {
-            position: absolute;
-            right: -2px;
-            top: 0;
-            bottom: -2px;
-            width: 4px;
-            background-color: var(--primary);
-            pointer-events: none;
-            z-index: 20;
+            display: none !important;
           }
           .ProseMirror table .selectedCell {
             background: rgba(59, 130, 246, 0.1);
@@ -4963,7 +5409,9 @@ export function TiptapEditor({
             <DialogHeader>
               <DialogTitle>Select Citations</DialogTitle>
               <DialogDescription>
-                Choose which sources you want to cite. Click on a source to select/deselect it.
+                {citationSource === "repository"
+                  ? "Matches from your saved repository. Click a source to select it, or search the web for more."
+                  : "Results from the web. Click a source to select/deselect it."}
               </DialogDescription>
             </DialogHeader>
 
@@ -5015,7 +5463,7 @@ export function TiptapEditor({
               })}
             </div>
 
-            <DialogFooter>
+            <DialogFooter className="gap-2 sm:justify-between">
               <Button
                 variant="outline"
                 onClick={() => {
@@ -5025,12 +5473,25 @@ export function TiptapEditor({
               >
                 Cancel
               </Button>
-              <Button
-                onClick={handleCiteSelected}
-                disabled={selectedPapers.size === 0}
-              >
-                Cite Selected ({selectedPapers.size})
-              </Button>
+              <div className="flex gap-2">
+                {citationSource === "repository" && (
+                  <Button
+                    variant="ghost"
+                    onClick={runWebCitationSearch}
+                    disabled={isCiteProcessing}
+                    className="gap-1.5"
+                  >
+                    {isCiteProcessing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Globe className="h-4 w-4" />}
+                    Search the web
+                  </Button>
+                )}
+                <Button
+                  onClick={handleCiteSelected}
+                  disabled={selectedPapers.size === 0}
+                >
+                  Cite Selected ({selectedPapers.size})
+                </Button>
+              </div>
             </DialogFooter>
           </DialogContent>
         </Dialog>

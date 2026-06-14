@@ -14,8 +14,10 @@ import { useToast } from "@/hooks/use-toast"
 import { useContentDiffs } from "@/hooks/use-content-diffs"
 import { useDocumentVersions, type DocumentVersion } from "@/hooks/use-document-versions"
 import { DocumentVersionsDialog } from "@/components/document-versions/document-versions-dialog"
+import Link from "next/link"
 import { TiptapEditor } from "@/components/text-editor/tiptap-editor"
-import { NoteExportMenu } from "@/components/note-export-menu"
+import { NoteExportMenu, NotePrintButton } from "@/components/note-export-menu"
+import { NoteImportButton } from "@/components/note-import-button"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
@@ -26,7 +28,7 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet"
-import { ChevronLeft, Download, FileStack, GitCompare, List, X } from "lucide-react"
+import { ChevronLeft, Download, FileStack, GitCompare, List, Plus } from "lucide-react"
 import { ProtocolChangeApprovalBar } from "./protocol-change-approval"
 import { ProtocolSiblingsList } from "./protocol-siblings-list"
 // ProtocolAiSidechat + ProtocolLiteraturePanel are no longer mounted in edit mode.
@@ -456,6 +458,33 @@ export function ProtocolDesignMode({
       <Badge variant="outline" className="shrink-0 text-2xs font-normal">
         v{currentVersion}
       </Badge>
+      <Button
+        asChild
+        type="button"
+        variant="ghost"
+        size="icon-sm"
+        className="shrink-0 text-muted-foreground hover:text-foreground"
+        aria-label="New protocol"
+        title="New protocol"
+      >
+        <Link href="/protocols/new">
+          <Plus className="h-4 w-4" />
+        </Link>
+      </Button>
+      <NotePrintButton
+        title={protocol.name}
+        htmlContent={draftContent}
+        size="icon-sm"
+        className="shrink-0 text-muted-foreground hover:text-foreground"
+      />
+      <NoteImportButton
+        className="shrink-0 text-muted-foreground hover:text-foreground"
+        onImportHtml={(html) => {
+          const editor = protocolEditorRef.current
+          if (editor) editor.chain().focus().insertContent(html).run()
+          else setDraftContent((prev) => (prev || "") + html)
+        }}
+      />
       <NoteExportMenu
         title={protocol.name}
         htmlContent={draftContent}
@@ -471,19 +500,6 @@ export function ProtocolDesignMode({
           </Button>
         }
       />
-      {onExitDesignMode ? (
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon-sm"
-          className="shrink-0 text-muted-foreground hover:text-foreground"
-          onClick={onExitDesignMode}
-          aria-label="Exit design mode"
-          title="Exit design mode"
-        >
-          <X className="h-4 w-4" />
-        </Button>
-      ) : null}
     </>
   ) : undefined
 
@@ -745,6 +761,33 @@ export function ProtocolDesignMode({
                   >
                     <FileStack className="h-4 w-4" />
                   </Button>
+                  <Button
+                    asChild
+                    type="button"
+                    variant="ghost"
+                    size="icon-sm"
+                    className="text-muted-foreground hover:text-foreground"
+                    aria-label="New protocol"
+                    title="New protocol"
+                  >
+                    <Link href="/protocols/new">
+                      <Plus className="h-4 w-4" />
+                    </Link>
+                  </Button>
+                  <NotePrintButton
+                    title={protocol.name}
+                    htmlContent={draftContent}
+                    size="icon-sm"
+                    className="text-muted-foreground hover:text-foreground"
+                  />
+                  <NoteImportButton
+                    className="text-muted-foreground hover:text-foreground"
+                    onImportHtml={(html) => {
+                      const editor = protocolEditorRef.current
+                      if (editor) editor.chain().focus().insertContent(html).run()
+                      else setDraftContent((prev) => (prev || "") + html)
+                    }}
+                  />
                   <NoteExportMenu
                     title={protocol.name}
                     htmlContent={draftContent}
@@ -760,19 +803,6 @@ export function ProtocolDesignMode({
                       </Button>
                     }
                   />
-                  {onExitDesignMode && (
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon-sm"
-                      className="text-muted-foreground hover:text-foreground"
-                      onClick={onExitDesignMode}
-                      aria-label="Exit design mode"
-                      title="Exit design mode"
-                    >
-                      <X className="h-4 w-4" />
-                    </Button>
-                  )}
                 </div>
               </div>
                 </CardHeader>

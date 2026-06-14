@@ -119,6 +119,12 @@ function workspaceRoute(sourceType: string, sourceId: string): string {
       return `/experiments/${sourceId}`;
     case 'lab_note':
       return `/lab-notes/${sourceId}`;
+    case 'report':
+      return `/reports/${sourceId}`;
+    case 'sample':
+      return `/samples/${sourceId}`;
+    case 'equipment':
+      return `/equipment/${sourceId}`;
     default:
       return '';
   }

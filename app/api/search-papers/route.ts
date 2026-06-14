@@ -8,6 +8,21 @@ import {
   CatalystUnavailableError,
 } from '@/lib/catalyst-client'
 import { searchPapersWithMeta } from '@/lib/paper-search'
+import { cleanScrapedAbstract, decodeHtmlEntities } from '@/lib/literature-abstract-display'
+
+/** Decode HTML entities (e.g. "15&#xa0;years", "M&#xfc;ller") that upstream
+ *  sources leave in the title/authors/journal, and trim body text that web
+ *  scraping leaks into the abstract — so search results (and anything staged
+ *  from them) display and store cleanly. */
+function withCleanedPapers(papers: SearchPaper[]): SearchPaper[] {
+  return papers.map((paper) => ({
+    ...paper,
+    title: paper.title ? decodeHtmlEntities(paper.title) : paper.title,
+    journal: paper.journal ? decodeHtmlEntities(paper.journal) : paper.journal,
+    authors: Array.isArray(paper.authors) ? paper.authors.map((a) => decodeHtmlEntities(a)) : paper.authors,
+    abstract: paper.abstract ? cleanScrapedAbstract(paper.abstract) ?? paper.abstract : paper.abstract,
+  }))
+}
 
 // The web-search literature agent can run well over a minute. Allow the route
 // enough wall-clock so it isn't killed before catalyst responds (Vercel clamps
@@ -92,7 +107,7 @@ export async function GET(request: NextRequest) {
       )
 
       return NextResponse.json({
-        papers: data.papers,
+        papers: withCleanedPapers(data.papers),
         totalCount: data.totalCount,
         ...(data.pipeline ? { pipeline: data.pipeline } : {}),
       })
@@ -103,10 +118,15 @@ export async function GET(request: NextRequest) {
       // Logged so operators can see how often it fires.
       const isAbort =
         catalystErr instanceof DOMException && catalystErr.name === "AbortError"
+      // A failed fetch (catalyst not running, connection refused, DNS, TLS) throws
+      // a TypeError rather than one of our typed errors — treat it as unavailable
+      // so the UI still gets results instead of a hard failure.
+      const isNetworkError = catalystErr instanceof TypeError
       const shouldFallback =
         catalystErr instanceof CatalystUnavailableError ||
         (catalystErr instanceof CatalystHttpError && catalystErr.status >= 500) ||
-        isAbort
+        isAbort ||
+        isNetworkError
       if (!shouldFallback) throw catalystErr
 
       console.warn(
@@ -119,7 +139,7 @@ export async function GET(request: NextRequest) {
         ...(recentYears !== undefined ? { recentYears } : {}),
       })
       return NextResponse.json({
-        papers: legacy.papers,
+        papers: withCleanedPapers(legacy.papers),
         totalCount: legacy.papers.length,
         pipeline: {
           cache_hit: false,

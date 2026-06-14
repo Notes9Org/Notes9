@@ -31,8 +31,9 @@ import {
 } from "@/components/ui/alert-dialog"
 import { TiptapEditor } from "@/components/text-editor/tiptap-editor"
 import { Card, CardContent } from "@/components/ui/card"
-import { NoteExportMenu } from "@/components/note-export-menu"
-import { Download, FlaskConical, FolderOpen, History, Save } from "lucide-react"
+import { NoteExportMenu, NotePrintButton } from "@/components/note-export-menu"
+import { NoteImportButton } from "@/components/note-import-button"
+import { Download, FlaskConical, FolderOpen, History, Plus, Save } from "lucide-react"
 import { ProtocolDesignMode } from "@/components/protocols/protocol-design-mode"
 import {
   DOCUMENT_HIGHLIGHT_EVENT,
@@ -475,6 +476,33 @@ export function ProtocolEditor({
                     <History className="h-3.5 w-3.5" />
                     Change history
                   </Button>
+                  <Button
+                    asChild
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="h-9 w-9 touch-manipulation sm:h-8 sm:w-8 text-muted-foreground hover:text-foreground"
+                    aria-label="New protocol"
+                    title="New protocol"
+                  >
+                    <Link href="/protocols/new">
+                      <Plus className="h-4 w-4" />
+                    </Link>
+                  </Button>
+                  <NotePrintButton
+                    title={protocol.name || "protocol"}
+                    htmlContent={protocol.content || ""}
+                    size="icon"
+                    className="h-9 w-9 touch-manipulation sm:h-8 sm:w-8 text-muted-foreground hover:text-foreground"
+                  />
+                  <NoteImportButton
+                    size="icon"
+                    className="h-9 w-9 touch-manipulation sm:h-8 sm:w-8"
+                    onImportHtml={(html) => {
+                      const editor = protocolEditorRef.current
+                      if (editor) editor.chain().focus().insertContent(html).run()
+                    }}
+                  />
                   <NoteExportMenu
                     title={protocol.name || "protocol"}
                     htmlContent={protocol.content || ""}

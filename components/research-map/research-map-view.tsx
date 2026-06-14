@@ -30,8 +30,9 @@ import { useProjectScope } from "@/contexts/project-scope-context"
 import { layoutResearchMap, RESEARCH_NODE_DIM } from "@/lib/research-map-layout"
 import {
   edgeColorForKind,
-  kindDotClass,
   kindHexColor,
+  kindIcon,
+  kindIconClass,
   kindLabel,
 } from "@/lib/research-map-kinds"
 import { ResearchEntityNode } from "@/components/research-map/research-entity-node"
@@ -796,7 +797,9 @@ function ResearchMapCanvas() {
               className="h-8 w-[min(140px,28vw)] shrink-0 text-xs"
               aria-label="Filter by name"
             />
-            {KINDS.map((k) => (
+            {KINDS.map((k) => {
+              const LegendIcon = kindIcon(k)
+              return (
               <label
                 key={k}
                 className="flex shrink-0 cursor-pointer items-center gap-1 text-micro whitespace-nowrap"
@@ -813,13 +816,12 @@ function ResearchMapCanvas() {
                   className="size-3.5"
                 />
                 <span className="inline-flex items-center gap-1 font-medium">
-                  <span
-                    className={cn("size-1.5 shrink-0 rounded-full", kindDotClass(k))}
-                  />
+                  <LegendIcon className={cn("size-3 shrink-0", kindIconClass(k))} aria-hidden />
                   {kindLabel(k)}
                 </span>
               </label>
-            ))}
+              )
+            })}
           </Panel>
         </ReactFlow>
         </div>

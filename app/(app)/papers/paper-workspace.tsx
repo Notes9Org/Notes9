@@ -26,6 +26,8 @@ import { JOURNAL_TEMPLATES } from "@/lib/latex-templates"
 import { downloadBibtex, parseBibtex, parseAuthors, type CitationForBib, type BibEntry } from "@/lib/bibtex"
 import { getEffectivePublicationYear } from "@/components/text-editor/citation-utils"
 import { latexToHtml } from "@/lib/latex-import"
+import { importFileToEditorHtml, IMPORT_ACCEPT } from "@/lib/import-file-to-html"
+import { NotePrintButton } from "@/components/note-export-menu"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -97,6 +99,7 @@ export function PaperWorkspace({ paperId, backLink, leftControls, onPaperMutated
   const [userId, setUserId] = useState("")
   const bibInputRef = useRef<HTMLInputElement>(null)
   const texInputRef = useRef<HTMLInputElement>(null)
+  const docInputRef = useRef<HTMLInputElement>(null)
   const editorRef = useRef<any>(null)
   const contentRef = useRef("")
   const paperAI = usePaperAI()
@@ -352,6 +355,39 @@ export function PaperWorkspace({ paperId, backLink, leftControls, onPaperMutated
     [debouncedSave]
   )
 
+  // Generic document import (PDF, Word, Markdown, plain text, HTML) — the same
+  // converter used by lab notes / protocols / reports, so behavior is consistent.
+  const handleDocImport = useCallback(
+    async (e: React.ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0]
+      e.target.value = ""
+      if (!file) return
+      try {
+        const html = await importFileToEditorHtml(file)
+        if (!html || !html.trim()) {
+          toast.error("Could not import this file", { description: "Unsupported or empty document." })
+          return
+        }
+        const editor = editorRef.current
+        if (editor) {
+          // Insert at the cursor so it composes with existing content.
+          editor.chain().focus().insertContent(html).run()
+        } else {
+          setContent((prev) => {
+            const updated = (prev || "") + html
+            debouncedSave(updated)
+            return updated
+          })
+        }
+        toast.success(`Imported ${file.name}`)
+      } catch (err) {
+        console.error("Document import failed", err)
+        toast.error("Import failed", { description: "Could not read this document." })
+      }
+    },
+    [debouncedSave]
+  )
+
   if (loading) {
     return (
       <div className="flex h-64 items-center justify-center">
@@ -404,15 +440,31 @@ export function PaperWorkspace({ paperId, backLink, leftControls, onPaperMutated
           <CollaboratorAvatars collaborators={collaborators} />
         )}
         <div className="flex shrink-0 items-center gap-2">
+          {/* Print / save as PDF */}
+          <NotePrintButton
+            title={titleInput.trim() || ((paper.title as string) || "Untitled Paper")}
+            getHtmlContent={() => contentRef.current || content}
+            variant="outline"
+            size="icon"
+            className="text-foreground"
+          />
           {/* Import dropdown */}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="outline" size="icon" title="Import" data-tour="paper-import">
-                <Download className="h-4 w-4" />
+              <Button variant="outline" size="icon" title="Import" aria-label="Import" data-tour="paper-import">
+                <Upload className="h-4 w-4" />
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-64">
               <DropdownMenuLabel>Import Documents</DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={() => docInputRef.current?.click()}>
+                <Download className="mr-2 h-4 w-4" />
+                <div className="flex flex-col gap-0.5">
+                  <span className="text-sm">Import document…</span>
+                  <span className="text-xs text-muted-foreground">PDF, Word, Markdown, text, HTML — insert at cursor</span>
+                </div>
+              </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem onClick={() => texInputRef.current?.click()}>
                 <Download className="mr-2 h-4 w-4" />
@@ -434,8 +486,8 @@ export function PaperWorkspace({ paperId, backLink, leftControls, onPaperMutated
           {/* Export dropdown */}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="outline" size="icon" title="Export" data-tour="paper-export">
-                <Upload className="h-4 w-4" />
+              <Button variant="outline" size="icon" title="Export" aria-label="Export" data-tour="paper-export">
+                <Download className="h-4 w-4" />
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="max-h-96 w-64 overflow-y-auto">
@@ -637,6 +689,13 @@ export function PaperWorkspace({ paperId, backLink, leftControls, onPaperMutated
         accept=".tex"
         className="hidden"
         onChange={handleTexImport}
+      />
+      <input
+        ref={docInputRef}
+        type="file"
+        accept={IMPORT_ACCEPT}
+        className="hidden"
+        onChange={handleDocImport}
       />
     </div>
   )

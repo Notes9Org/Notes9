@@ -370,6 +370,7 @@ export function ReportsPageClient({ reports: initialReports, projects, experimen
         projects={projects ?? []}
         experiments={experiments ?? []}
         userId={userId ?? ""}
+        scopedProjectId={projectId ?? null}
       />
 
       <AlertDialog open={deleteTarget !== null} onOpenChange={(o) => !o && setDeleteTarget(null)}>

@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Download, ExternalLink, FileText, Lock, Unlock, ChevronDown, ChevronUp, Plus, Database, X, Loader2 } from 'lucide-react';
 import { useState } from 'react';
-import { formatLiteratureAbstractPlain } from '@/lib/literature-abstract-display';
+import { decodeHtmlEntities, formatLiteratureAbstractPlain } from '@/lib/literature-abstract-display';
 
 function stripDoiToBare(doi: string): string {
   return doi
@@ -52,6 +52,11 @@ interface PaperSearchCardProps {
 export function PaperSearchCard({ paper, onStage, onOpenStaged, onSave, onSaveToRepository, onRemove, isStaged = false, isSaving = false, isStaging = false, hideActions = false, compact = false }: PaperSearchCardProps) {
   const [isExpanded, setIsExpanded] = useState(false);
   const abstractPlain = formatLiteratureAbstractPlain(paper.abstract);
+  // Upstream sources (PubMed/Europe PMC/OpenAlex) return author and journal
+  // names with raw HTML entities (e.g. "M&#xfc;ller"); decode them for display.
+  const journalDisplay = paper.journal ? decodeHtmlEntities(paper.journal) : paper.journal;
+  const authorsDisplay = paper.authors.map((a) => decodeHtmlEntities(a)).join(', ');
+  const titleDisplay = paper.title ? decodeHtmlEntities(paper.title) : paper.title;
 
   const getSourceColor = (source: string) => {
     switch (source) {
@@ -101,7 +106,7 @@ export function PaperSearchCard({ paper, onStage, onOpenStaged, onSave, onSaveTo
               )}
             </Badge>
             <span className="text-xs text-muted-foreground">
-              {paper.journal} • {paper.year}
+              {journalDisplay} • {paper.year}
             </span>
           </div>
         </div>
@@ -114,15 +119,15 @@ export function PaperSearchCard({ paper, onStage, onOpenStaged, onSave, onSaveTo
               rel="noopener noreferrer"
               className="text-foreground hover:underline underline-offset-2 decoration-foreground/50"
             >
-              {paper.title}
+              {titleDisplay}
             </a>
           ) : (
-            paper.title
+            titleDisplay
           )}
         </h3>
 
         <p className="text-sm text-muted-foreground mb-3">
-          {paper.authors.join(', ')}
+          {authorsDisplay}
         </p>
 
         {paper.citedByCount != null && paper.citedByCount > 0 && (

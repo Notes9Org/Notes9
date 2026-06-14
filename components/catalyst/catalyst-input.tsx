@@ -280,6 +280,7 @@ export function CatalystInput({
               )}
               onClick={() => onAgentModeChange('notes9')}
               disabled={isLoading}
+              title="Answer using only your Notes9 workspace (lab notes, experiments, samples, protocols, literature)"
             >
               <NotebookPen className="size-3.5" />
               Notes9
@@ -294,6 +295,7 @@ export function CatalystInput({
               )}
               onClick={() => onAgentModeChange('general')}
               disabled={isLoading}
+              title="General-purpose assistant; optionally grounded with web search"
             >
               <MessageSquare className="size-3.5" />
               General
@@ -303,6 +305,9 @@ export function CatalystInput({
           {agentMode === 'general' && (
             <div className="flex items-center justify-end gap-2 px-3 py-2 border-b border-border/50 bg-muted/10">
               <Globe className="size-3.5 shrink-0 text-muted-foreground" aria-hidden />
+              <span className="text-xs font-medium text-muted-foreground" title="Let the assistant search the public web for up-to-date answers">
+                Web search
+              </span>
               <Switch
                 checked={webSearchEnabled}
                 onCheckedChange={onWebSearchEnabledChange}

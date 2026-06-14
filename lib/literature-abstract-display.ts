@@ -40,6 +40,48 @@ export function decodeHtmlEntities(text: string): string {
 }
 
 /**
+ * Trim body text that leaks into an "abstract" from web scraping / full-text
+ * extraction (title + authors + affiliations prepended, or the introduction and
+ * later sections appended).
+ *
+ * This is deliberately conservative: a normal-length abstract (≤ 2500 chars) is
+ * returned untouched so we never truncate a legitimate abstract. Only when the
+ * text is suspiciously long do we try to isolate the real abstract by (a)
+ * dropping any leading junk before an "Abstract" heading and (b) cutting at the
+ * first section that conventionally follows an abstract (Keywords /
+ * Introduction / …). Inline structured-abstract labels (Background:, Methods:,
+ * Results:, Conclusions:) are NOT treated as stops. Falls back to the original
+ * text if isolation would leave too little behind.
+ */
+export function cleanScrapedAbstract(raw: string | null | undefined): string | null {
+  if (raw == null) return raw ?? null
+  const original = raw
+  let text = raw.trim()
+  if (!text) return original
+  // Normal abstract length — leave it completely alone.
+  if (text.length <= 2500) return original
+
+  // (a) Strip a leading title/author/affiliation block before an "Abstract"
+  // heading, but only when that heading appears near the very start.
+  const headingRe = /(?<!graphical\s)\bAbstract\b\s*[:.—-]?\s*/i
+  const headingMatch = headingRe.exec(text)
+  if (headingMatch && headingMatch.index <= 800) {
+    text = text.slice(headingMatch.index + headingMatch[0].length).trim()
+  }
+
+  // (b) Cut trailing body text at the first post-abstract section boundary,
+  // keeping at least a substantial chunk so we don't chop a short abstract.
+  const stopRe =
+    /\b(?:Keywords?|Key\s*words|Index\s*terms|Introduction|Graphical\s+abstract|Highlights)\b|\b\d{1,2}\.?\s+Introduction\b/i
+  const stopMatch = stopRe.exec(text)
+  if (stopMatch && stopMatch.index >= 120) {
+    text = text.slice(0, stopMatch.index).trim()
+  }
+
+  return text.length >= 80 ? text : original
+}
+
+/**
  * Decode entities and strip/simplify HTML so the abstract reads clearly in a single text block.
  */
 export function formatLiteratureAbstractPlain(raw: string): string {
