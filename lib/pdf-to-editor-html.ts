@@ -43,9 +43,18 @@ const fontIsItalic = (name: string) => /italic|oblique/i.test(name)
 
 export async function pdfFileToEditorHtml(file: File): Promise<string> {
   const pdfjsLib: any = await import("pdfjs-dist/legacy/build/pdf.mjs")
-  if (typeof window === "undefined" && !(globalThis as any).pdfjsWorker?.WorkerMessageHandler) {
-    const workerModule: any = await import("pdfjs-dist/build/pdf.worker.min.mjs")
-    ;(globalThis as any).pdfjsWorker = { WorkerMessageHandler: workerModule.WorkerMessageHandler }
+  // Wire up the worker once. In the browser pdfjs needs a real Worker (mirrors
+  // the PDF viewer); on the server we install the worker message handler.
+  if (typeof window === "undefined") {
+    if (!(globalThis as any).pdfjsWorker?.WorkerMessageHandler) {
+      const workerModule: any = await import("pdfjs-dist/build/pdf.worker.min.mjs")
+      ;(globalThis as any).pdfjsWorker = { WorkerMessageHandler: workerModule.WorkerMessageHandler }
+    }
+  } else if (!pdfjsLib.GlobalWorkerOptions.workerPort && !pdfjsLib.GlobalWorkerOptions.workerSrc) {
+    pdfjsLib.GlobalWorkerOptions.workerPort = new Worker(
+      new URL("pdfjs-dist/build/pdf.worker.min.mjs", import.meta.url),
+      { type: "module" },
+    )
   }
   const OPS = pdfjsLib.OPS
 
