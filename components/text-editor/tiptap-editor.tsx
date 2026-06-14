@@ -2245,32 +2245,6 @@ export function TiptapEditor({
         spellcheck: "true",
         tabindex: "0",
       },
-      // Imported citations: clicking an inline [N] scrolls to its reference
-      // entry; clicking the DOI/URL inside a reference entry opens the source.
-      handleClick: (view, _pos, event) => {
-        const targetNode = event.target as Node | null
-        const startEl =
-          targetNode instanceof Element ? targetNode : (targetNode?.parentElement ?? null)
-        const anchor = startEl?.closest("a")
-        if (!anchor) return false
-        const href = anchor.getAttribute("href") || ""
-        if (href.startsWith("#cite-ref-")) {
-          const target = view.dom.querySelector(`[id="${href.slice(1)}"]`)
-          if (target) {
-            target.scrollIntoView({ behavior: "smooth", block: "center" })
-            ;(target as HTMLElement).classList.add("cite-ref-flash")
-            window.setTimeout(() => (target as HTMLElement).classList.remove("cite-ref-flash"), 1200)
-            event.preventDefault()
-            return true
-          }
-        }
-        if (/^https?:\/\//i.test(href) && anchor.closest('[id^="cite-ref-"]')) {
-          window.open(href, "_blank", "noopener,noreferrer")
-          event.preventDefault()
-          return true
-        }
-        return false
-      },
       handleDrop: (view, event, _slice, _moved) => {
         const dt = event.dataTransfer
 
@@ -2596,6 +2570,28 @@ export function TiptapEditor({
 
     const handleClick = (e: MouseEvent) => {
       const target = e.target as HTMLElement
+
+      // Imported citations: inline [N] scrolls to its reference entry; a DOI/URL
+      // inside a reference entry opens the source.
+      const anchor = target.closest("a") as HTMLAnchorElement | null
+      if (anchor) {
+        const href = anchor.getAttribute("href") || ""
+        if (href.startsWith("#cite-ref-")) {
+          const refEl = editorContainer.querySelector(`[id="${href.slice(1)}"]`) as HTMLElement | null
+          if (refEl) {
+            refEl.scrollIntoView({ behavior: "smooth", block: "center" })
+            refEl.classList.add("cite-ref-flash")
+            window.setTimeout(() => refEl.classList.remove("cite-ref-flash"), 1200)
+            e.preventDefault()
+            return
+          }
+        } else if (/^https?:\/\//i.test(href) && anchor.closest('[id^="cite-ref-"]')) {
+          window.open(href, "_blank", "noopener,noreferrer")
+          e.preventDefault()
+          return
+        }
+      }
+
       const commentEl =
         (target.closest('.comment-mark') as HTMLElement | null) ??
         (target.closest('[data-image-comment]') as HTMLElement | null)
