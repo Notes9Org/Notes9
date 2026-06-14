@@ -4,6 +4,10 @@
     {
       "path": "/api/cron/cleanup-chat-attachments",
       "schedule": "0 3 * * *"
+    },
+    {
+      "path": "/api/cron/cleanup-agent-drafts",
+      "schedule": "10 3 * * *"
     }
   ]
 }

@@ -8,8 +8,16 @@ import {
   mergeGroundingAndRagItems,
 } from '@/components/catalyst/agent-citations-panel';
 import { AgentToolCards } from '@/components/catalyst/agent-tool-cards';
+import { AgentArtifactList } from '@/components/catalyst/agent-artifact-card';
+import { AgentReasoningPanel } from '@/components/catalyst/agent-reasoning-panel';
 import type { ThinkingPayload, RagChunksPayload, DonePayload } from '@/lib/agent-stream-types';
-import type { CitationsManifest, ThinkingStage, ToolCard, SynthesisPlan } from '@/hooks/use-agent-stream';
+import type {
+  CitationsManifest,
+  ThinkingStage,
+  ToolCard,
+  SynthesisPlan,
+  AgentArtifact,
+} from '@/hooks/use-agent-stream';
 
 /** Escape a string for safe interpolation into a RegExp literal. */
 function escapeRegExp(s: string): string {
@@ -31,6 +39,11 @@ interface AgentStreamReplyProps {
   currentThinkingDetail?: string | null;
   /** Live tool cards from tool_start / tool_result / tool_call events */
   toolCards?: ToolCard[];
+  /** Files the agent generated this turn (from `artifact` events). */
+  artifacts?: AgentArtifact[];
+  /** Accumulated reasoning from `thinking_token` events — shown in a collapsible
+   * "Thinking" panel, kept out of the answer bubble. */
+  reasoning?: string;
   /** Biomni-style synthesis checklist (synthesis_plan / synthesis_step) */
   synthesisPlan?: SynthesisPlan | null;
   sql: string | null;
@@ -68,6 +81,8 @@ export function AgentStreamReply({
   currentStage,
   currentThinkingMessage,
   toolCards = [],
+  artifacts = [],
+  reasoning = '',
   synthesisPlan = null,
   sql,
   ragChunks,
@@ -131,6 +146,10 @@ export function AgentStreamReply({
 
   return (
     <div className={cn('flex flex-col gap-2.5', compact && 'gap-2')}>
+
+      {/* ── Thinking panel — the agent's live reasoning (thinking_token stream),
+            kept OUT of the answer bubble. Collapses once the turn settles. ── */}
+      <AgentReasoningPanel reasoning={reasoning} streaming={isStreaming} />
 
       {/* ── Tool calls — single vertical stack. Every call rendered as a
             Cursor/Claude-style bordered block with status, args preview, and
@@ -287,6 +306,10 @@ export function AgentStreamReply({
           )}
         </div>
       )}
+
+      {/* ── Generated files (PDF/DOCX/XLSX/figures). Drafts show a
+            "Save to Data files" action; appear live as the agent emits them. ── */}
+      {artifacts.length > 0 && <AgentArtifactList artifacts={artifacts} />}
 
       {/* ── Citations panel ── */}
       {hasCitationPanel ? (

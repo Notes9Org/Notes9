@@ -3568,6 +3568,8 @@ export function RightSidebar({
                                 currentStage={agentStream.currentStage}
                                 currentThinkingMessage={agentStream.currentThinkingMessage}
                                 toolCards={agentStream.toolCards}
+                                artifacts={agentStream.artifacts}
+                                reasoning={agentStream.thinkingTokenBuffer}
                                 synthesisPlan={agentStream.synthesisPlan}
                                 sql={agentStream.sql}
                                 ragChunks={agentStream.ragChunks}
