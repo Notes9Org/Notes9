@@ -2248,7 +2248,10 @@ export function TiptapEditor({
       // Imported citations: clicking an inline [N] scrolls to its reference
       // entry; clicking the DOI/URL inside a reference entry opens the source.
       handleClick: (view, _pos, event) => {
-        const anchor = (event.target as HTMLElement | null)?.closest("a")
+        const targetNode = event.target as Node | null
+        const startEl =
+          targetNode instanceof Element ? targetNode : (targetNode?.parentElement ?? null)
+        const anchor = startEl?.closest("a")
         if (!anchor) return false
         const href = anchor.getAttribute("href") || ""
         if (href.startsWith("#cite-ref-")) {

@@ -17,7 +17,8 @@ import { escapeHtml } from "@/lib/sanitize-html"
  * ids; the reference entries still carry ids for exported HTML.
  */
 
-const REF_HEADING_RE = /^(references|bibliography|works cited|literature cited|citations)$/i
+const REF_HEADING_RE =
+  /^(?:\d+\.?\s+|[ivxlc]+\.?\s+)?(references|reference list|bibliography|works cited|literature cited|cited references)\b/i
 
 type RefMeta = {
   number: number
