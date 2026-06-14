@@ -1,5 +1,6 @@
 import { sanitizeHtml, escapeHtml } from "@/lib/sanitize-html"
 import { embedImagesInHtml } from "@/lib/embed-import-images"
+import { linkImportedCitations } from "@/lib/import-citations"
 import { markdownToHtml } from "@/lib/markdown-to-editor-html"
 import { pdfFileToEditorHtml } from "@/lib/pdf-to-editor-html"
 
@@ -56,31 +57,35 @@ function textToParagraphsHtml(text: string): string {
  * types. The result is ready to drop straight into a TipTap editor.
  */
 export async function importFileToEditorHtml(file: File): Promise<string | null> {
+  let raw: string | null = null
   switch (importKindForFile(file)) {
-    case "pdf": {
-      const html = await pdfFileToEditorHtml(file)
-      return sanitizeHtml(html)
-    }
+    case "pdf":
+      raw = await pdfFileToEditorHtml(file)
+      break
     case "docx": {
       const mammoth = await import("mammoth")
       const arrayBuffer = await file.arrayBuffer()
       const { value } = await mammoth.convertToHtml({ arrayBuffer }, { styleMap: DOCX_STYLE_MAP })
-      return sanitizeHtml(await embedImagesInHtml(value))
+      raw = await embedImagesInHtml(value)
+      break
     }
     case "markdown": {
       const text = await file.text()
-      const html = await markdownToHtml(text)
-      return sanitizeHtml(await embedImagesInHtml(html))
+      raw = await embedImagesInHtml(await markdownToHtml(text))
+      break
     }
     case "html": {
-      const html = await file.text()
-      return sanitizeHtml(await embedImagesInHtml(html))
+      raw = await embedImagesInHtml(await file.text())
+      break
     }
-    case "text": {
-      const text = await file.text()
-      return textToParagraphsHtml(text)
-    }
+    case "text":
+      raw = textToParagraphsHtml(await file.text())
+      break
     default:
       return null
   }
+  if (raw == null) return null
+  // Wire up any references section + inline [N] citations so they render as
+  // proper, style-aware, source-linked citations.
+  return sanitizeHtml(linkImportedCitations(raw))
 }
