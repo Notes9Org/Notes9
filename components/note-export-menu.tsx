@@ -42,6 +42,8 @@ export type NotePrintButtonProps = {
   pdfMarginsMm?: NoteExportPdfOptions["marginsMm"]
   disabled?: boolean
   className?: string
+  variant?: React.ComponentProps<typeof Button>["variant"]
+  size?: React.ComponentProps<typeof Button>["size"]
 }
 
 /** Opens the browser print dialog (save as PDF from there). Separate from the Export formats menu. */
@@ -53,14 +55,16 @@ export function NotePrintButton({
   pdfMarginsMm,
   disabled,
   className,
+  variant = "ghost",
+  size = "icon",
 }: NotePrintButtonProps) {
   return (
     <Tooltip>
       <TooltipTrigger asChild>
         <Button
           type="button"
-          variant="ghost"
-          size="icon"
+          variant={variant}
+          size={size}
           className={className ?? "h-8 w-8 text-muted-foreground hover:text-foreground"}
           disabled={disabled}
           aria-label="Print"

@@ -118,6 +118,14 @@ function SidebarProvider({
         event.key === SIDEBAR_KEYBOARD_SHORTCUT &&
         (event.metaKey || event.ctrlKey)
       ) {
+        // Don't hijack Cmd/Ctrl+B while the user is typing in an editor or input
+        // field — there it means "bold", not "toggle sidebar".
+        const target = event.target as HTMLElement | null
+        const isEditingContext =
+          !!target &&
+          (target.isContentEditable ||
+            target.closest('[contenteditable="true"], input, textarea, select') !== null)
+        if (isEditingContext) return
         event.preventDefault()
         toggleSidebar()
       }

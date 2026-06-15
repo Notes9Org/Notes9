@@ -46,10 +46,12 @@ import {
   FilePlus,
   Upload,
   Loader2,
+  Plus,
 } from "lucide-react"
 import Link from "next/link"
 import { TiptapEditor } from "@/components/text-editor/tiptap-editor"
-import { NoteExportMenu } from "@/components/note-export-menu"
+import { NoteExportMenu, NotePrintButton } from "@/components/note-export-menu"
+import { NoteImportButton } from "@/components/note-import-button"
 import { type ProtocolTemplateChoice, ProtocolTemplatePicker } from "@/components/protocols/protocol-template-picker"
 import { buildProtocolDraftHtmlFromExtracted } from "@/lib/build-protocol-draft-from-template"
 import {
@@ -739,11 +741,38 @@ function NewProtocolForm() {
                         From: {templateLabel(selectedChoice)}
                       </Badge>
                     )}
+                    <Button
+                      asChild
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="h-7 w-7 text-muted-foreground hover:text-foreground"
+                      aria-label="New protocol"
+                      title="New protocol"
+                    >
+                      <Link href="/protocols/new">
+                        <Plus className="h-3.5 w-3.5" />
+                      </Link>
+                    </Button>
+                    <NotePrintButton
+                      title={formData.name || "new-protocol"}
+                      htmlContent={formData.content}
+                      size="icon"
+                      className="h-7 w-7 text-muted-foreground hover:text-foreground"
+                    />
+                    <NoteImportButton
+                      size="icon"
+                      className="h-7 w-7 text-muted-foreground hover:text-foreground"
+                      onImportHtml={(html) => {
+                        if (editorInsertRef.current) editorInsertRef.current(html)
+                        else setFormData((prev) => ({ ...prev, content: (prev.content || "") + html }))
+                      }}
+                    />
                     <NoteExportMenu
                       title={formData.name || "new-protocol"}
                       htmlContent={formData.content}
                       trigger={
-                        <Button type="button" variant="ghost" size="icon" className="h-7 w-7">
+                        <Button type="button" variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-foreground">
                           <Download className="h-3.5 w-3.5" />
                         </Button>
                       }
@@ -989,21 +1018,49 @@ function NewProtocolForm() {
                 <Label htmlFor="content">
                   Protocol Content <span className="text-destructive">*</span>
                 </Label>
-                <NoteExportMenu
-                  title={formData.name || "protocol"}
-                  htmlContent={formData.content || ""}
-                  trigger={
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon-sm"
-                      className="shrink-0"
-                      aria-label="Export"
-                    >
-                      <Download className="h-4 w-4" />
-                    </Button>
-                  }
-                />
+                <div className="flex items-center gap-1 shrink-0">
+                  <Button
+                    asChild
+                    type="button"
+                    variant="ghost"
+                    size="icon-sm"
+                    className="text-muted-foreground hover:text-foreground"
+                    aria-label="New protocol"
+                    title="New protocol"
+                  >
+                    <Link href="/protocols/new">
+                      <Plus className="h-4 w-4" />
+                    </Link>
+                  </Button>
+                  <NotePrintButton
+                    title={formData.name || "protocol"}
+                    htmlContent={formData.content || ""}
+                    size="icon-sm"
+                    className="text-muted-foreground hover:text-foreground"
+                  />
+                  <NoteImportButton
+                    className="text-muted-foreground hover:text-foreground"
+                    onImportHtml={(html) => {
+                      if (editorInsertRef.current) editorInsertRef.current(html)
+                      else setFormData((prev) => ({ ...prev, content: (prev.content || "") + html }))
+                    }}
+                  />
+                  <NoteExportMenu
+                    title={formData.name || "protocol"}
+                    htmlContent={formData.content || ""}
+                    trigger={
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon-sm"
+                        className="shrink-0 text-muted-foreground hover:text-foreground"
+                        aria-label="Export"
+                      >
+                        <Download className="h-4 w-4" />
+                      </Button>
+                    }
+                  />
+                </div>
               </div>
               <TiptapEditor
                 content={formData.content}

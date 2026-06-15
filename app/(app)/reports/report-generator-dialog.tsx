@@ -112,6 +112,9 @@ interface ReportGeneratorDialogProps {
   projects: { id: string; name: string }[]
   experiments: { id: string; name: string; project_id: string }[]
   userId: string
+  /** When the user is already scoped to a project (e.g. opened Reports from
+   *  inside a project), pre-select it and skip the redundant project picker. */
+  scopedProjectId?: string | null
 }
 
 function extractTitle(content: string): string {
@@ -125,12 +128,20 @@ export function ReportGeneratorDialog({
   projects,
   experiments,
   userId,
+  scopedProjectId,
 }: ReportGeneratorDialogProps) {
   const router = useRouter()
   const { isGenerating, content, error, generate, reset } =
     useReportGeneration()
 
-  const [selectedProjectId, setSelectedProjectId] = useState<string>("")
+  // If the user is already inside a project, that project is the only sensible
+  // choice — pre-select it and present the picker as locked instead of asking again.
+  const lockedProject = useMemo(
+    () => (scopedProjectId ? projects.find((p) => p.id === scopedProjectId) ?? null : null),
+    [projects, scopedProjectId],
+  )
+
+  const [selectedProjectId, setSelectedProjectId] = useState<string>(scopedProjectId ?? "")
   const [selectedExperimentIds, setSelectedExperimentIds] = useState<string[]>(
     [],
   )
@@ -268,7 +279,7 @@ export function ReportGeneratorDialog({
   }
 
   const resetForm = () => {
-    setSelectedProjectId("")
+    setSelectedProjectId(scopedProjectId ?? "")
     setSelectedExperimentIds([])
     setQuery("")
     setSaveError(null)
@@ -295,26 +306,35 @@ export function ReportGeneratorDialog({
         </DialogHeader>
 
         <div className="space-y-4">
-          {/* Project select */}
-          <div className="space-y-2">
-            <Label htmlFor="project-select">Project *</Label>
-            <Select
-              value={selectedProjectId}
-              onValueChange={handleProjectChange}
-              disabled={isGenerating}
-            >
-              <SelectTrigger id="project-select">
-                <SelectValue placeholder="Select a project" />
-              </SelectTrigger>
-              <SelectContent>
-                {projects.map((p) => (
-                  <SelectItem key={p.id} value={p.id}>
-                    {p.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
+          {/* Project select — hidden when the user is already scoped to a project */}
+          {lockedProject ? (
+            <div className="space-y-2">
+              <Label>Project</Label>
+              <div className="flex h-9 items-center rounded-md border border-input bg-muted/40 px-3 text-sm text-foreground">
+                {lockedProject.name}
+              </div>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              <Label htmlFor="project-select">Project *</Label>
+              <Select
+                value={selectedProjectId}
+                onValueChange={handleProjectChange}
+                disabled={isGenerating}
+              >
+                <SelectTrigger id="project-select">
+                  <SelectValue placeholder="Select a project" />
+                </SelectTrigger>
+                <SelectContent>
+                  {projects.map((p) => (
+                    <SelectItem key={p.id} value={p.id}>
+                      {p.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
 
           {/* Experiment multi-select via checkboxes */}
           {filteredExperiments.length > 0 && (

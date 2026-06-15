@@ -164,6 +164,7 @@ export function DashboardCalendar({
   const [quickAdd, setQuickAdd] = useState<{
     day: Date
     hour: number
+    minute: number
     title: string
     durationMin: number
     tone: EventTone
@@ -404,6 +405,7 @@ export function DashboardCalendar({
     setQuickAdd({
       day,
       hour,
+      minute: 0,
       title: "",
       durationMin: 30,
       tone: "ink",
@@ -419,7 +421,7 @@ export function DashboardCalendar({
       return
     }
     const start = new Date(quickAdd.day)
-    start.setHours(quickAdd.hour, 0, 0, 0)
+    start.setHours(quickAdd.hour, quickAdd.minute, 0, 0)
     const end = new Date(start.getTime() + quickAdd.durationMin * 60 * 1000)
     const toneOnSubmit = quickAdd.tone
     setQuickAdd(null)
@@ -777,6 +779,22 @@ export function DashboardCalendar({
                           />
                         ))}
                         <span className="flex-1" />
+                        <select
+                          value={quickAdd.minute}
+                          onChange={(e) =>
+                            setQuickAdd((curr) =>
+                              curr ? { ...curr, minute: parseInt(e.target.value, 10) } : curr,
+                            )
+                          }
+                          aria-label="Start minute"
+                          className="rounded-md border border-border bg-background px-1.5 py-1 text-[11px] font-mono uppercase tracking-wider text-muted-foreground"
+                        >
+                          {Array.from({ length: 12 }, (_, i) => i * 5).map((m) => (
+                            <option key={m} value={m}>
+                              {`:${String(m).padStart(2, "0")}`}
+                            </option>
+                          ))}
+                        </select>
                         <select
                           value={quickAdd.durationMin}
                           onChange={(e) =>

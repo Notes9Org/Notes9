@@ -1,6 +1,7 @@
 "use client"
 
-import { useState, useMemo, useCallback } from "react"
+import { useState, useMemo, useCallback, useRef } from "react"
+import type { Editor } from "@tiptap/react"
 import { useRouter } from "next/navigation"
 import { marked } from "marked"
 import { Badge } from "@/components/ui/badge"
@@ -18,7 +19,8 @@ import {
   Download,
 } from "lucide-react"
 import { TiptapEditor } from "@/components/text-editor/tiptap-editor"
-import { NoteExportMenu } from "@/components/note-export-menu"
+import { NoteExportMenu, NotePrintButton } from "@/components/note-export-menu"
+import { NoteImportButton } from "@/components/note-import-button"
 import { SaveStatusIndicator } from "@/components/ui/save-status"
 import { useAutoSave } from "@/hooks/use-auto-save"
 import { createClient } from "@/lib/supabase/client"
@@ -103,6 +105,7 @@ export function ReportDetailView({ report, leftControls, sidebar }: ReportDetail
   }, [report.content])
 
   const [content, setContent] = useState(initialHtml)
+  const editorRef = useRef<Editor | null>(null)
   const statusVariant =
     report.status === "final" ? "default" : report.status === "review" ? "secondary" : "outline"
 
@@ -149,13 +152,32 @@ export function ReportDetailView({ report, leftControls, sidebar }: ReportDetail
           </div>
         </div>
         <div className="flex flex-wrap items-center justify-end gap-2 shrink-0">
+          <NotePrintButton
+            title={exportTitle}
+            htmlContent={content}
+            size="icon-sm"
+            className="text-muted-foreground hover:text-foreground"
+          />
+          <NoteImportButton
+            className="text-muted-foreground hover:text-foreground"
+            onImportHtml={(html) => {
+              const editor = editorRef.current
+              if (editor) editor.chain().focus().insertContent(html).run()
+              else setContent((prev) => (prev || "") + html)
+            }}
+          />
           <NoteExportMenu
             title={exportTitle}
             htmlContent={content}
             trigger={
-              <Button variant="outline" size="sm" title="Download report" className="gap-2">
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                title="Export report"
+                aria-label="Export"
+                className="text-muted-foreground hover:text-foreground"
+              >
                 <Download className="h-4 w-4" />
-                Export
               </Button>
             }
           />
@@ -196,6 +218,7 @@ export function ReportDetailView({ report, leftControls, sidebar }: ReportDetail
                     enableMath
                     hideExportControls
                     leadingToolbarSlot={leftControls}
+                    onEditorReady={(ed) => { editorRef.current = ed }}
                   />
                 ) : (
                   <div className="flex h-full flex-col items-center justify-center text-muted-foreground">

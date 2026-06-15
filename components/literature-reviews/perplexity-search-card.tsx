@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { ExternalLink, Sparkles, Database, Plus, Check, X, Loader2 } from 'lucide-react';
 import { useState } from 'react';
+import { decodeHtmlEntities } from '@/lib/literature-abstract-display';
 
 interface PerplexityPaper {
   rank: number;
@@ -79,7 +80,7 @@ export function PerplexitySearchCard({
 
         {/* Title */}
         <h3 className="text-lg font-semibold text-foreground mb-3 leading-tight">
-          {paper.title}
+          {paper.title ? decodeHtmlEntities(paper.title) : paper.title}
         </h3>
 
         {/* Summary */}

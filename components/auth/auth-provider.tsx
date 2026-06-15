@@ -72,6 +72,11 @@ export function AuthProvider({
 export function useAuthUser(): User | null {
   const ctx = useContext(AuthContext)
   if (!ctx) {
+    // During the server prerender pass the client context provider may not be
+    // wired up yet (Next.js / Turbopack render client components on the server
+    // before hydration). Tolerate that on the server so we don't crash SSR and
+    // force a full client re-render; still guard real misuse on the client.
+    if (typeof window === "undefined") return null
     throw new Error("useAuthUser must be used inside <AuthProvider>")
   }
   return ctx.user

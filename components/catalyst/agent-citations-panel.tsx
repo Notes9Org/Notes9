@@ -104,7 +104,15 @@ function getCitationRoute(citation: { source_type: string; source_id?: string | 
     case 'lab_note':
       return `/lab-notes/${id}`;
     case 'report':
+      return `/reports/${id}`;
+    case 'sample':
+      return `/samples/${id}`;
+    case 'equipment':
+      return `/equipment/${id}`;
     default:
+      // Source types without a dedicated detail page (e.g. data_file,
+      // cat_bio_synthesis) intentionally return '' so the caller renders the
+      // citation as plain text rather than linking to a non-existent route.
       return '';
   }
 }

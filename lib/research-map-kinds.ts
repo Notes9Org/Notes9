@@ -1,3 +1,16 @@
+import {
+  BookOpen,
+  Box,
+  ClipboardList,
+  Database,
+  FileBarChart,
+  FlaskConical,
+  FolderKanban,
+  NotebookPen,
+  PenLine,
+  TestTube,
+  type LucideIcon,
+} from "lucide-react"
 import type { ResearchMapNodeKind } from "@/lib/research-map-types"
 
 /**
@@ -145,6 +158,58 @@ export function kindHexColor(kind: ResearchMapNodeKind): string {
       return "#ea580c" // orange-600
     default:
       return "#9ca3af"
+  }
+}
+
+/** Per-kind icon so nodes are distinguishable by logo, not just color. */
+export function kindIcon(kind: ResearchMapNodeKind): LucideIcon {
+  switch (kind) {
+    case "project":
+      return FolderKanban
+    case "experiment":
+      return FlaskConical
+    case "protocol":
+      return ClipboardList
+    case "literature":
+      return BookOpen
+    case "lab_note":
+      return NotebookPen
+    case "paper":
+      return PenLine
+    case "report":
+      return FileBarChart
+    case "sample":
+      return TestTube
+    case "data_file":
+      return Database
+    default:
+      return Box
+  }
+}
+
+/** Icon tint — mirrors the kind accent hue. */
+export function kindIconClass(kind: ResearchMapNodeKind): string {
+  switch (kind) {
+    case "project":
+      return "text-primary"
+    case "experiment":
+      return "text-blue-600"
+    case "protocol":
+      return "text-yellow-600"
+    case "literature":
+      return "text-green-600"
+    case "lab_note":
+      return "text-red-600"
+    case "paper":
+      return "text-purple-600"
+    case "report":
+      return "text-cyan-600"
+    case "sample":
+      return "text-pink-600"
+    case "data_file":
+      return "text-orange-600"
+    default:
+      return "text-muted-foreground"
   }
 }
 

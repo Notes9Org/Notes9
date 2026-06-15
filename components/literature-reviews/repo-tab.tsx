@@ -41,6 +41,7 @@ import { LITERATURE_DRAG_MIME } from "@/lib/catalyst-agent-types";
 import { CATALYST_MENTION_DRAG_MIME } from "@/lib/catalyst-mention-types";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { useProjectScope } from "@/contexts/project-scope-context";
+import { decodeHtmlEntities } from "@/lib/literature-abstract-display";
 
 interface LiteratureReview {
   id: string;
@@ -517,7 +518,7 @@ export function RepoTab({
                     className="group px-3 py-2 rounded-md data-[state=active]:bg-background data-[state=active]:text-[var(--n9-accent)] data-[state=active]:shadow-sm transition-all flex items-center gap-2 max-w-[240px] border border-transparent data-[state=active]:border-border/50"
                   >
                     <FileText className="h-4 w-4 opacity-50 flex-shrink-0" />
-                    <span className="truncate text-xs font-semibold">{lit?.title || "Paper"}</span>
+                    <span className="truncate text-xs font-semibold">{lit?.title ? decodeHtmlEntities(lit.title) : "Paper"}</span>
                     {/* role="button" span (not <button>) — a TabsTrigger is itself a
                         <button>, and nesting <button> inside it is invalid HTML and
                         causes a hydration error. stopPropagation on pointer-down keeps
@@ -723,9 +724,9 @@ export function RepoTab({
                         <button
                           onClick={() => handleOpenPaper(lit.id)}
                           className="font-semibold text-sm leading-snug text-foreground hover:text-[var(--n9-accent)] text-left transition-colors block w-full overflow-hidden"
-                          title={lit.title}
+                          title={lit.title ? decodeHtmlEntities(lit.title) : lit.title}
                         >
-                          <span className="block truncate w-full">{lit.title}</span>
+                          <span className="block truncate w-full">{lit.title ? decodeHtmlEntities(lit.title) : lit.title}</span>
                         </button>
                         <div className="flex items-center gap-2">
                           <span className="text-micro font-medium text-muted-foreground/80 truncate min-w-0">

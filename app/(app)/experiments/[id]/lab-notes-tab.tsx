@@ -27,6 +27,7 @@ import { AffineBlock } from "@/components/text-editor/affine-block"
 import { TiptapEditor } from "@/components/text-editor/tiptap-editor"
 import type { Editor } from "@tiptap/react"
 import { NoteExportMenu, NotePrintButton } from "@/components/note-export-menu"
+import { NoteImportButton } from "@/components/note-import-button"
 import { useToast } from "@/hooks/use-toast"
 import { useAutoSave } from "@/hooks/use-auto-save"
 import { useContentDiffs } from "@/hooks/use-content-diffs"
@@ -1381,6 +1382,10 @@ export function LabNotesTab({
             title={resolvedExportTitle}
             includeCommentsInPdf
           />
+          <NoteImportButton
+            className="shrink-0 text-muted-foreground hover:text-foreground"
+            onImportHtml={(html) => noteEditorRef.current?.chain().focus().insertContent(html).run()}
+          />
           <NoteExportMenu
             title={resolvedExportTitle}
             htmlContent={formData.content || ""}
@@ -1814,6 +1819,10 @@ export function LabNotesTab({
                           getHtmlContent={() => formData.content || ""}
                           title={resolvedExportTitle}
                           includeCommentsInPdf
+                        />
+                        <NoteImportButton
+                          className="text-muted-foreground hover:text-foreground"
+                          onImportHtml={(html) => noteEditorRef.current?.chain().focus().insertContent(html).run()}
                         />
                         <NoteExportMenu
                           title={resolvedExportTitle}

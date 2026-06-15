@@ -31,7 +31,7 @@ import Link from "next/link";
 import { LiteratureReviewActions } from "@/app/(app)/literature-reviews/[id]/literature-review-actions";
 import { UploadLiteraturePdfDialog } from "@/components/literature-reviews/upload-literature-pdf-dialog";
 import { LiteraturePdfPanel } from "@/components/literature-reviews/literature-pdf-panel";
-import { formatLiteratureAbstractPlain } from "@/lib/literature-abstract-display";
+import { decodeHtmlEntities, formatLiteratureAbstractPlain } from "@/lib/literature-abstract-display";
 
 const NLM_PMC_OA_WEB_SERVICE = "https://pmc.ncbi.nlm.nih.gov/tools/oa-service/";
 const NLM_EUTILS_OVERVIEW = "https://www.ncbi.nlm.nih.gov/books/NBK25501/";
@@ -307,7 +307,7 @@ ER  - `;
           <div className="flex-1">
             <div className="flex items-center gap-2 mb-1">
               <h1 className="text-3xl font-bold tracking-tight text-foreground">
-                {literature.title}
+                {literature.title ? decodeHtmlEntities(literature.title) : literature.title}
               </h1>
             </div>
             <div className="flex items-center gap-2 mt-2">
@@ -351,7 +351,7 @@ ER  - `;
                     Authors
                   </p>
                   <p className="text-sm text-foreground">
-                    {literature.authors || "—"}
+                    {literature.authors ? decodeHtmlEntities(literature.authors) : "—"}
                   </p>
                 </div>
                 <div>
@@ -359,7 +359,7 @@ ER  - `;
                     Journal
                   </p>
                   <p className="text-sm text-foreground">
-                    {literature.journal || "—"}
+                    {literature.journal ? decodeHtmlEntities(literature.journal) : "—"}
                   </p>
                 </div>
                 <div>

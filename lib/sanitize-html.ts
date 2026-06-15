@@ -60,7 +60,7 @@ export function sanitizeHtml(input: string | null | undefined): string {
     ALLOWED_TAGS,
     ALLOWED_ATTR,
     // Enforce safe URL schemes for href/src
-    ALLOWED_URI_REGEXP: /^(?:https?:|mailto:|tel:|data:image\/(?:png|jpe?g|gif|webp|svg\+xml);|#|\/)/i,
+    ALLOWED_URI_REGEXP: /^(?:https?:|mailto:|tel:|data:image\/[a-z0-9.+-]+;|#|\/)/i,
     // Open external links in new tab safely
     ADD_ATTR: ["target", "rel"],
     FORBID_TAGS: ["script", "style", "iframe", "object", "embed", "form", "input", "button"],
