@@ -75,6 +75,29 @@ export async function updateSession(request: NextRequest) {
   // If it's a public or auth route, we don't need to verify the user session in middleware.
   // This avoids slow database roundtrips and connection timeouts on non-protected pages.
   if (isAuthRoute || isPublicRoute) {
+    // Self-heal stale auth cookies. A revoked/expired refresh token makes every
+    // render of a public page (e.g. "/") throw "Invalid Refresh Token: Refresh
+    // Token Not Found": the server component's getCurrentUser() tries to refresh,
+    // the refresh fails, and @supabase/ssr cannot clear the cookie because cookie
+    // writes are swallowed during a Server Component render (see lib/supabase/server.ts).
+    // The middleware CAN write cookies, so run getSession() here once when an auth
+    // cookie is present — that lets @supabase/ssr refresh-or-clear it via setAll —
+    // and explicitly delete the cookie on failure. Routes with no auth cookie stay
+    // fast (no auth-server call). We never redirect on public routes.
+    const authCookies = request.cookies
+      .getAll()
+      .filter((c) => c.name.startsWith("sb-") && c.name.includes("auth-token"))
+    if (authCookies.length > 0) {
+      try {
+        await supabase.auth.getSession()
+      } catch {
+        // Refresh failed (revoked/missing token). Clear the stale cookies so the
+        // loop stops; the user simply appears logged-out on the public page.
+        for (const c of authCookies) {
+          supabaseResponse.cookies.set(c.name, "", { maxAge: 0, path: "/" })
+        }
+      }
+    }
     return supabaseResponse
   }
 

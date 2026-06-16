@@ -87,6 +87,23 @@ export interface ToolResultPayload {
   [key: string]: unknown;
 }
 
+/** SSE event: artifact – a file the agent generated (PDF/DOCX/XLSX/chart/figure).
+ * `draft` true ⇒ staged for review, NOT yet in any experiment's Data files
+ * (the UI shows a "Save to Data files" action). `draft` false ⇒ already attached
+ * to `experiment_id`. */
+export interface ArtifactPayload {
+  data_id: string;
+  file_name: string;
+  mime_type: string;
+  size_bytes?: number;
+  signed_url?: string | null;
+  draft?: boolean;
+  experiment_id?: string | null;
+  generator?: string | null;
+  kind?: string | null;
+  [key: string]: unknown;
+}
+
 /** SSE event: citations_manifest – full citation map for the completed answer */
 export interface CitationsManifestPayload {
   manifest: Record<string, unknown>;
@@ -205,6 +222,7 @@ export type SseEvent =
   | { event: "tool_start"; data: ToolStartPayload }
   | { event: "tool_call"; data: ToolCallPayload }
   | { event: "tool_result"; data: ToolResultPayload }
+  | { event: "artifact"; data: ArtifactPayload }
   | { event: "citations_manifest"; data: CitationsManifestPayload }
   | { event: "citations_update"; data: CitationsUpdatePayload }
   | { event: "done"; data: DonePayload }
@@ -221,6 +239,7 @@ const KNOWN_EVENT_TYPES = new Set([
   "tool_start",
   "tool_call",
   "tool_result",
+  "artifact",
   "citations_manifest",
   "citations_update",
   "done",

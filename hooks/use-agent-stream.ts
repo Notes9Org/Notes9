@@ -144,6 +144,25 @@ export interface ToolCard {
   row_count?: number;
 }
 
+/** A file the agent generated, surfaced via the `artifact` SSE event. */
+export interface AgentArtifact {
+  /** Stable id (experiment_data.id or draft id). Use as React key + commit arg. */
+  dataId: string;
+  fileName: string;
+  mimeType: string;
+  sizeBytes: number;
+  /** Short-lived (~1h) download URL; re-fetch if expired. */
+  signedUrl?: string | null;
+  /** True ⇒ not yet saved to Data files; show "Save to Data files". */
+  draft: boolean;
+  /** Set once committed (or if attached directly). */
+  experimentId?: string | null;
+  /** Tool that produced it, e.g. create_pdf_report. */
+  generator?: string | null;
+  /** Human kind label, e.g. "PDF report". */
+  kind?: string | null;
+}
+
 export interface SynthesisStep {
   id: string;
   label: string;
@@ -188,6 +207,10 @@ export interface AgentStreamState {
   currentStageElapsedS: number | null;
   /** Live tool cards — keyed by tool id */
   toolCards: ToolCard[];
+  /** Files the agent generated this turn (PDF/DOCX/XLSX/chart/figure), in the
+   * order they were produced. Drafts carry `draft: true` and can be saved to an
+   * experiment's Data files from the UI. */
+  artifacts: AgentArtifact[];
   /** Biomni-style synthesis checklist — the ordered steps the design works
    * through, each ticked off live as its section is written. Null until the
    * backend emits a `synthesis_plan`. */
@@ -334,6 +357,7 @@ export function useAgentStream() {
     currentStageProgress: null,
     currentStageElapsedS: null,
     toolCards: [],
+    artifacts: [],
     synthesisPlan: null,
     sql: null,
     ragChunks: null,
@@ -367,6 +391,7 @@ export function useAgentStream() {
         currentStageProgress: null,
         currentStageElapsedS: null,
         toolCards: [],
+        artifacts: [],
         synthesisPlan: null,
         sql: null,
         ragChunks: null,
@@ -599,6 +624,35 @@ export function useAgentStream() {
                       };
                     }),
                   }));
+                }
+                break;
+              }
+              case 'artifact': {
+                if (payload && typeof payload === 'object') {
+                  const p = payload as Record<string, unknown>;
+                  const dataId = typeof p.data_id === 'string' ? p.data_id : '';
+                  const fileName = typeof p.file_name === 'string' ? p.file_name : '';
+                  if (dataId && fileName) {
+                    const artifact: AgentArtifact = {
+                      dataId,
+                      fileName,
+                      mimeType:
+                        typeof p.mime_type === 'string' ? p.mime_type : 'application/octet-stream',
+                      sizeBytes: typeof p.size_bytes === 'number' ? p.size_bytes : 0,
+                      signedUrl: typeof p.signed_url === 'string' ? p.signed_url : null,
+                      draft: p.draft === true,
+                      experimentId: typeof p.experiment_id === 'string' ? p.experiment_id : null,
+                      generator: typeof p.generator === 'string' ? p.generator : null,
+                      kind: typeof p.kind === 'string' ? p.kind : null,
+                    };
+                    setState((s) => ({
+                      ...s,
+                      // Replace on duplicate data_id (idempotent re-emit), else append.
+                      artifacts: s.artifacts.some((a) => a.dataId === dataId)
+                        ? s.artifacts.map((a) => (a.dataId === dataId ? artifact : a))
+                        : [...s.artifacts, artifact],
+                    }));
+                  }
                 }
                 break;
               }
@@ -851,6 +905,7 @@ export function useAgentStream() {
       currentStageProgress: null,
       currentStageElapsedS: null,
       toolCards: [],
+      artifacts: [],
       synthesisPlan: null,
       sql: null,
       ragChunks: null,

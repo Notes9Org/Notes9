@@ -368,6 +368,14 @@ export function CatalystChat({ sessionId }: CatalystChatProps) {
             | 'application/pdf',
           size: a.size ?? 0,
         }));
+      // NOTE: workspace tagged-entity attachments (@-mentioned lab notes,
+      // literature, protocols — the `attachments` body field consumed by the
+      // backend preflight in step 3 of AGENT_OVERHAUL_PLAN.md) are NOT wired
+      // here. This orphan page only forwards *file* attachments. The PRODUCTION
+      // chat surface is CatalystFullPage → RightSidebar, which builds workspace
+      // attachments via tagsToAttachments() and passes them to runStream(). If
+      // this page is ever promoted back to a live route, add `attachments` here
+      // mirroring right-sidebar.tsx.
       const { donePayload, error } = await agentStream.runStream(
         {
           query: text,
@@ -745,6 +753,9 @@ export function CatalystChat({ sessionId }: CatalystChatProps) {
                   agentStream.donePayload != null)
                   ? {
                       thinkingSteps: agentStream.thinkingSteps,
+                      toolCards: agentStream.toolCards,
+                      artifacts: agentStream.artifacts,
+                      thinkingTokenBuffer: agentStream.thinkingTokenBuffer,
                       sql: agentStream.sql,
                       ragChunks: agentStream.ragChunks,
                       streamedAnswer: agentStream.streamedAnswer,

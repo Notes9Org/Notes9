@@ -18,7 +18,7 @@ import {
 import { parseNotes9AssistantStoredContent } from '@/lib/notes9-chat-format';
 import type { Vote } from '@/lib/db/schema';
 import type { ThinkingPayload, RagChunksPayload, DonePayload } from '@/lib/agent-stream-types';
-import type { CitationsManifest } from '@/hooks/use-agent-stream';
+import type { CitationsManifest, ToolCard, AgentArtifact } from '@/hooks/use-agent-stream';
 
 interface CatalystMessagesProps {
   messages: UIMessage[];
@@ -33,6 +33,9 @@ interface CatalystMessagesProps {
   /** When Notes9 stream is active, show AgentStreamReply instead of generic thinking indicator */
   notes9Stream?: {
     thinkingSteps: ThinkingPayload[];
+    toolCards?: ToolCard[];
+    artifacts?: AgentArtifact[];
+    thinkingTokenBuffer?: string;
     sql: string | null;
     ragChunks: RagChunksPayload | null;
     streamedAnswer: string;
@@ -239,6 +242,9 @@ export function CatalystMessages({
                   )}
                   <AgentStreamReply
                     thinkingSteps={notes9Stream.thinkingSteps}
+                    toolCards={notes9Stream.toolCards}
+                    artifacts={notes9Stream.artifacts}
+                    reasoning={notes9Stream.thinkingTokenBuffer}
                     sql={notes9Stream.sql}
                     ragChunks={notes9Stream.ragChunks}
                     streamedAnswer={notes9Stream.streamedAnswer}
