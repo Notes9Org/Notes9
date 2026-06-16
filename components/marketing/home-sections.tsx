@@ -1,14 +1,10 @@
 import Link from "next/link"
 import {
   ArrowRight,
-  BadgeCheck,
   Check,
-  Database,
   GraduationCap,
   Rocket,
-  Share2,
   ShieldCheck,
-  X,
 } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
@@ -16,22 +12,15 @@ import { cn } from "@/lib/utils"
 import { SectionHeader } from "@/components/marketing/site-ui"
 import {
   AcademicNarrative,
-  AccelerateDiscovery,
-  BioCatalystDemo,
   CatalystAnswerCard,
-  ConnectedChainMarquee,
   DemoStoryStepper,
   ElnVsAiVsNotes9,
-  MiniChatMock,
-  MiniGraphMock,
-  MiniNoteMock,
-  MiniReportMock,
   Reveal3D,
   RoleUseCaseSwitcher,
   StartupNarrative,
   TiltCard,
 } from "@/components/marketing/marketing-embeds"
-import { MemoryHubFlow } from "@/components/marketing/flow-embeds"
+import { LinkedRecordsMap } from "@/components/marketing/flow-embeds"
 import { ScatteredStack } from "@/components/marketing/app-glyphs"
 import { AnimatedCounter } from "@/components/marketing/animated-counter"
 
@@ -48,20 +37,6 @@ function Section({
     <section id={id} className={cn("relative container mx-auto px-4 py-16 sm:px-6 sm:py-28 lg:px-8", className)}>
       {children}
     </section>
-  )
-}
-
-/** The research lifecycle as a continuously scrolling chain, right under the hero. */
-export function ConnectedChainSection() {
-  return (
-    <div className="border-y border-border/50 bg-background py-8">
-      <div className="container mx-auto mb-5 px-4 sm:px-6 lg:px-8">
-        <p className="text-center text-[14px] font-semibold uppercase tracking-[0.22em] text-muted-foreground/70">
-          One connected thread, from first paper to final report
-        </p>
-      </div>
-      <ConnectedChainMarquee />
-    </div>
   )
 }
 
@@ -83,80 +58,15 @@ export function PainSection() {
           </p>
         </div>
         <div className="relative">
-          {/* Frosted scrim so the glyph cluster reads clearly over the
-              sticky-note backdrop behind it. */}
-          <div
-            aria-hidden
-            className="pointer-events-none absolute -inset-5 rounded-3xl bg-background/50 backdrop-blur-[8px] dark:bg-background/40"
-          />
-          <div className="relative">
-            <p className="mb-4 text-[14px] font-semibold uppercase tracking-[0.18em] text-muted-foreground/60">
-              Your stack today
-            </p>
-            <ScatteredStack />
-          </div>
+          <p className="mb-4 text-[14px] font-semibold uppercase tracking-[0.18em] text-muted-foreground/60">
+            Your stack today
+          </p>
+          <ScatteredStack />
         </div>
       </div>
 
       <ProblemStats />
     </Section>
-  )
-}
-
-/** The fix - what Notes9 actually does for a research team. */
-const WITHOUT_NOTES9 = [
-  "Context scattered across five tools",
-  "The “why” lost between people",
-  "Weeks to reconstruct an old result",
-  "Pasting the same context into ChatGPT every time",
-  "Onboarding a new member takes weeks",
-]
-const WITH_NOTES9 = [
-  "One traceable project memory",
-  "Every result linked to its rationale",
-  "Recall the full chain in seconds",
-  "AI that already sees your project and cites it",
-  "Onboard a new member in minutes",
-]
-
-function BeforeAfter() {
-  return (
-    <div className="mt-12 grid gap-6 lg:grid-cols-2">
-      <Reveal3D>
-        <div className="n9-card h-full p-7">
-          <p className="text-[14px] font-semibold uppercase tracking-[0.18em] text-muted-foreground/70">
-            Without Notes9
-          </p>
-          <ul className="mt-5 space-y-3.5">
-            {WITHOUT_NOTES9.map((x) => (
-              <li key={x} className="flex items-start gap-3 text-[16px] leading-6 text-muted-foreground">
-                <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground/60">
-                  <X className="h-3 w-3" />
-                </span>
-                {x}
-              </li>
-            ))}
-          </ul>
-        </div>
-      </Reveal3D>
-      <Reveal3D delay={0.1}>
-        <div className="relative h-full overflow-hidden rounded-3xl border border-[var(--n9-accent)]/30 bg-[linear-gradient(135deg,var(--n9-accent-light),color-mix(in_oklab,var(--n9-accent)_10%,var(--card)))] p-7 shadow-[0_36px_100px_-46px_var(--n9-accent-glow)]">
-          <p className="text-[14px] font-semibold uppercase tracking-[0.18em] text-[var(--n9-accent)]">
-            With Notes9
-          </p>
-          <ul className="mt-5 space-y-3.5">
-            {WITH_NOTES9.map((x) => (
-              <li key={x} className="flex items-start gap-3 text-[16px] font-medium leading-6 text-foreground">
-                <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[var(--n9-accent)] text-white">
-                  <Check className="h-3 w-3" />
-                </span>
-                {x}
-              </li>
-            ))}
-          </ul>
-        </div>
-      </Reveal3D>
-    </div>
   )
 }
 
@@ -174,9 +84,8 @@ export function SolutionSection() {
           description="Every paper, protocol, experiment, and result is linked, so the reasoning is always one click away."
         />
         <Reveal3D className="mt-12">
-          <MemoryHubFlow />
+          <LinkedRecordsMap />
         </Reveal3D>
-        <BeforeAfter />
       </Section>
     </div>
   )
@@ -186,7 +95,7 @@ export function SolutionSection() {
  *  scatters and results still don't reproduce. Figures are sourced and cited. */
 const PROBLEM_STATS = [
   { value: "84%", label: "of researchers now use AI in their work", cite: 1 },
-  { value: "61%", label: "use it to find and summarise the latest research", cite: 2 },
+  { value: "7%", label: "trust AI for their research - because nothing connects it to their own work", cite: 2 },
   { value: "77%", label: "of biologists have failed to reproduce another lab's experiment", cite: 3 },
   { value: "50%+", label: "of scientists cannot reproduce their own published results", cite: 3 },
 ]
@@ -214,17 +123,11 @@ const sourceHref = (n: number) => PROBLEM_SOURCES.find((s) => s.n === n)?.href
 function ProblemStats() {
   return (
     <div className="relative mt-16 border-t border-border/50 pt-12">
-      {/* Frosted scrim so the stats, labels and sources stay legible over the
-          sticky-note backdrop behind them. */}
-      <div
-        aria-hidden
-        className="pointer-events-none absolute inset-x-[-1.25rem] bottom-[-1.25rem] top-6 rounded-3xl bg-background/50 backdrop-blur-[8px] dark:bg-background/40"
-      />
       <div className="relative">
       <p className="mb-8 max-w-2xl text-[18px] leading-7 text-muted-foreground">
-        AI adoption is already mainstream. The gap is not whether researchers use AI; it is that
-        their AI is disconnected from the work, so context still scatters and results still fail to
-        reproduce.
+        Adoption is here; trust is the gap. Researchers have embraced AI, yet barely any trust it for
+        their actual research - because every tool is disconnected from their work, so context still
+        scatters and results still fail to reproduce.
       </p>
       <div className="grid gap-8 sm:grid-cols-2 lg:grid-cols-4">
         {PROBLEM_STATS.map((s, i) => (
@@ -297,114 +200,6 @@ export function DemoStorySection() {
   )
 }
 
-/** Capability bento - illustrative mini-mockups, almost no copy. */
-const CAPS = [
-  { label: "Read & cite papers", mock: <MiniNoteMock /> },
-  { label: "Ask your lab, get sources", mock: <MiniChatMock /> },
-  { label: "See how it connects", mock: <MiniGraphMock /> },
-  { label: "Generate cited reports", mock: <MiniReportMock /> },
-]
-
-export function OutcomesSection() {
-  return (
-    <Section id="outcomes">
-      <SectionHeader reveal gradient align="center" className="mx-auto" badge="What you can do" title="Less typing. More science." />
-      <div className="mt-12 grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
-        {CAPS.map((c, i) => (
-          <Reveal3D key={c.label} delay={i * 0.08} className="h-full">
-            <TiltCard className="h-full">
-              <div className="n9-card flex h-full flex-col p-5">
-                <div className="[transform:translateZ(40px)]">{c.mock}</div>
-                <h3 className="mt-4 text-[16px] font-semibold text-foreground">{c.label}</h3>
-              </div>
-            </TiltCard>
-          </Reveal3D>
-        ))}
-      </div>
-    </Section>
-  )
-}
-
-/** Context engineering advantage - one platform → complete AI context. */
-const CONTEXT_POINTS = [
-  {
-    icon: Database,
-    title: "One source of truth",
-    body: "Papers, protocols, experiments, notes, and results live together, not across five apps.",
-  },
-  {
-    icon: Share2,
-    title: "Structured & linked",
-    body: "Everything is connected, so Catalyst receives precise context rather than a pile of files to guess from.",
-  },
-  {
-    icon: BadgeCheck,
-    title: "Grounded, cited answers",
-    body: "It reasons over your real work and shows its sources, so you can both trust and verify the output.",
-  },
-]
-
-export function ContextEngineeringSection() {
-  return (
-    <Section id="context">
-      <SectionHeader
-        reveal
-        gradient
-        align="center"
-        className="mx-auto"
-        badge="Why the AI is better"
-        title="Better context, not bigger prompts"
-        description="Because your whole project lives in one connected memory, Catalyst receives complete, structured context automatically, without giant prompts."
-      />
-      <div className="mt-12 grid gap-5 md:grid-cols-3">
-        {CONTEXT_POINTS.map((p, i) => {
-          const Icon = p.icon
-          return (
-            <Reveal3D key={p.title} delay={i * 0.08} className="h-full">
-              <TiltCard className="h-full">
-                <div className="n9-card flex h-full flex-col p-7">
-                  <div className="mb-4 inline-flex h-11 w-11 items-center justify-center rounded-xl bg-[var(--n9-accent)] text-white">
-                    <Icon className="h-5 w-5" />
-                  </div>
-                  <h3 className="text-[18px] font-semibold text-foreground">{p.title}</h3>
-                  <p className="mt-2 text-[16px] leading-6 text-muted-foreground">{p.body}</p>
-                </div>
-              </TiltCard>
-            </Reveal3D>
-          )
-        })}
-      </div>
-    </Section>
-  )
-}
-
-/** Catalyst showcase - the interactive, biology-first AI demo with the mascot. */
-export function CatalystShowcaseSection() {
-  return (
-    <div className="relative overflow-hidden border-y border-border/50 bg-muted/20 n9-glow">
-      <Section id="catalyst" className="relative z-10">
-        <SectionHeader
-          reveal
-          gradient
-          align="center"
-          className="mx-auto"
-          badge="Catalyst AI"
-          title="Biology-first AI that accelerates discovery"
-          description="Catalyst reasons over your lab in the language of the bench, with every claim backed by a checkable source."
-        />
-        <div className="mt-12 space-y-12">
-          <Reveal3D>
-            <AccelerateDiscovery />
-          </Reveal3D>
-          <Reveal3D delay={0.1}>
-            <BioCatalystDemo />
-          </Reveal3D>
-        </div>
-      </Section>
-    </div>
-  )
-}
-
 /** Catalyst - biology-first answers with citations you can check. */
 export function CatalystSection() {
   return (
@@ -445,15 +240,17 @@ const ICPS = [
     icon: GraduationCap,
     who: "For academics",
     line: "PhDs · postdocs · PIs",
+    blurb: "Literature and writing that know your project, with every claim cited - so papers move faster and a student leaving doesn’t take the project’s memory.",
     mock: <AcademicNarrative />,
     chips: ["Defend results", "Cited drafts", "Fast onboarding"],
   },
   {
     icon: Rocket,
-    who: "For startup labs",
-    line: "Biotech R&D",
+    who: "For early-stage lab startups",
+    line: "Pre-seed biotech R&D",
+    blurb: "Set up your lab’s brain on day one - a 3-person team that moves like a 10-person one, with a clean, investor-ready record of everything you’ve done.",
     mock: <StartupNarrative />,
-    chips: ["Knowledge retained", "Decision trail", "Audit-friendly"],
+    chips: ["Knowledge retained", "Decision trail", "Investor-ready"],
   },
 ]
 
@@ -484,6 +281,7 @@ export function IcpBenefitsSection() {
                     <p className="text-[16px] text-muted-foreground">{icp.line}</p>
                   </div>
                 </div>
+                <p className="mt-4 text-[16px] leading-6 text-muted-foreground">{icp.blurb}</p>
                 <div className="mt-5 [transform:translateZ(34px)]">{icp.mock}</div>
                 <div className="mt-5 flex flex-wrap gap-1.5">
                   {icp.chips.map((c) => (
@@ -535,7 +333,6 @@ export function DifferentiationSection() {
         className="mx-auto"
         badge="Why Notes9"
         title="ELNs record what happened. Notes9 remembers why."
-        description="Not another static ELN. Not another empty AI chat. Notes9 is connected research memory that your AI can actually read and cite."
       />
       <Reveal3D className="mx-auto mt-10 max-w-3xl">
         <TiltCard max={4}>
@@ -743,12 +540,12 @@ export function FinalCtaSection() {
       <div className="relative overflow-hidden rounded-3xl border border-[var(--n9-accent)]/30 bg-[linear-gradient(135deg,var(--n9-accent-light),color-mix(in_oklab,var(--n9-accent)_9%,var(--card)))] p-10 text-center shadow-[0_44px_130px_-54px_var(--n9-accent-glow)] n9-glow sm:p-14">
         <div className="relative z-10">
           <h2 className="mx-auto max-w-2xl font-serif text-3xl tracking-tight text-foreground sm:text-4xl">
-            Turn scattered research work into{" "}
-            <span className="n9-gradient-text">reusable scientific memory</span>
+            Your whole career, from first paper to{" "}
+            <span className="n9-gradient-text">published one</span>
           </h2>
           <p className="mx-auto mt-4 max-w-xl text-[18px] leading-7 text-muted-foreground">
-            Preserve not just what happened, but why: from literature review to experiment to final
-            report.
+            A researcher’s entire project - papers, experiments, data, notes - lives in Notes9, so its
+            AI knows your research and cites every claim.
           </p>
           <div className="mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row">
             <Button
@@ -765,6 +562,9 @@ export function FinalCtaSection() {
               <Link href="/#contact">Book a 15-min demo</Link>
             </Button>
           </div>
+          <p className="mt-5 text-[14px] text-muted-foreground/80">
+            Free for students and postdocs · under a minute to start.
+          </p>
         </div>
       </div>
     </Section>

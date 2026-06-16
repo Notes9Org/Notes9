@@ -144,40 +144,6 @@
     0 28px 70px -38px rgba(0, 0, 0, 0.6);
 }
 
-/* Sticky-note paper: warm stock + faint fractal-noise grain + a top-left light. */
-.marketing-theme .n9-sticky {
-  background-color: #fbf2da;
-  background-image:
-    radial-gradient(130% 110% at 0% 0%, rgba(255, 255, 255, 0.55), transparent 55%),
-    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='90' height='90'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.06'/%3E%3C/svg%3E");
-}
-.dark .marketing-theme .n9-sticky {
-  background-color: #2c2820;
-  background-image:
-    radial-gradient(130% 110% at 0% 0%, rgba(255, 255, 255, 0.06), transparent 55%),
-    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='90' height='90'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.08'/%3E%3C/svg%3E");
-}
-
-/* Localized readability scrim: a soft frosted blur that hugs ONLY the text /
-   illustration it wraps (not the whole section), so the sticky-note backdrop
-   stays visible around it while the content stays legible. Mirrors the hero
-   treatment. Apply `n9-readable` to a text block or embed. */
-.marketing-theme .n9-readable {
-  position: relative;
-}
-.marketing-theme .n9-readable::before {
-  content: "";
-  position: absolute;
-  inset: -0.85rem -1.15rem;
-  z-index: -1;
-  background: color-mix(in oklab, var(--background) 52%, transparent);
-  -webkit-backdrop-filter: blur(7px);
-  backdrop-filter: blur(7px);
-  -webkit-mask-image: radial-gradient(125% 125% at 50% 50%, #000 52%, transparent 100%);
-  mask-image: radial-gradient(125% 125% at 50% 50%, #000 52%, transparent 100%);
-  pointer-events: none;
-}
-
 /* Soft radial accent glow placed behind a signature section. */
 .marketing-theme .n9-glow::after {
   content: "";
@@ -192,16 +158,82 @@
   );
 }
 
-/* Gently floating "pinned" sticky-note backdrop. Rotation is carried in a CSS
-   var so the float animation and the per-note tilt don't fight over transform. */
-@keyframes n9-note-float {
-  0%, 100% { transform: rotate(var(--n9-rot, 0deg)) translateY(0); }
-  50%      { transform: rotate(var(--n9-rot, 0deg)) translateY(-9px); }
+/* ── Laboratory depth-of-field backdrop ──────────────────────────────────
+   Biology/data forms layered at 3D depths and blurred so they sit softly
+   behind the content: a plotting dot-grid base, a slow 3D scene drift, a
+   drifting DNA helix, a rotating molecule, and breathing data nodes. */
+
+.marketing-theme .n9-dotgrid {
+  background-image: radial-gradient(rgba(155, 71, 34, 0.15) 0.6px, transparent 0.7px);
+  background-size: 34px 34px;
 }
-.marketing-theme .n9-note {
-  transform: rotate(var(--n9-rot, 0deg));
-  animation: n9-note-float 8s ease-in-out infinite;
+.dark .marketing-theme .n9-dotgrid {
+  background-image: radial-gradient(rgba(212, 132, 90, 0.14) 0.6px, transparent 0.7px);
 }
+
+/* Whole scene drifts on a gentle 3D float; with the depth planes this yields
+   subtle parallax between layers. */
+@keyframes n9-scene-float {
+  0%, 100% { transform: rotateX(0deg) rotateY(0deg) translate3d(0, 0, 0); }
+  50%      { transform: rotateX(1.6deg) rotateY(-2.4deg) translate3d(0, -10px, 0); }
+}
+.marketing-theme .n9-scene-float {
+  transform-style: preserve-3d;
+  animation: n9-scene-float 30s ease-in-out infinite;
+}
+
+/* Bubbles rise through the liquid and fade. */
+@keyframes n9-bubble {
+  0%   { transform: translateY(0); opacity: 0; }
+  20%  { opacity: 0.8; }
+  100% { transform: translateY(-30px); opacity: 0; }
+}
+.marketing-theme .n9-bubble { animation: n9-bubble 4.5s ease-in infinite; }
+
+/* A droplet falls from the pipette tip into the tube. */
+@keyframes n9-drip {
+  0%   { transform: translateY(0); opacity: 0; }
+  12%  { opacity: 1; }
+  70%  { opacity: 1; }
+  100% { transform: translateY(36px); opacity: 0; }
+}
+.marketing-theme .n9-drip { animation: n9-drip 2.8s ease-in infinite; }
+
+/* Plasmid maps + rotor rotate almost imperceptibly. */
+@keyframes n9-spin {
+  to { transform: rotate(360deg); }
+}
+.marketing-theme .n9-spin-slow {
+  transform-origin: center;
+  animation: n9-spin 110s linear infinite;
+}
+
+/* Flowing connector lines (hero "what Notes9 does" scene). */
+@keyframes n9-flow {
+  to { stroke-dashoffset: -14; }
+}
+.marketing-theme .n9-flow {
+  stroke-dasharray: 2 4;
+  animation: n9-flow 0.9s linear infinite;
+}
+
+/* Bunsen flame flicker. */
+@keyframes n9-flame {
+  0%, 100% { transform: scaleY(1) scaleX(1); opacity: 0.9; }
+  50%      { transform: scaleY(1.08) scaleX(0.94); opacity: 1; }
+}
+.marketing-theme .n9-flame {
+  transform-box: fill-box;
+  transform-origin: bottom center;
+  animation: n9-flame 1.6s ease-in-out infinite;
+}
+
+/* Data nodes breathe in and out of focus. */
+@keyframes n9-twinkle {
+  0%, 100% { opacity: 0.25; transform: translate(-50%, -50%) scale(0.85); }
+  50%      { opacity: 0.9;  transform: translate(-50%, -50%) scale(1.15); }
+}
+.marketing-theme .n9-node { animation: n9-twinkle 5.5s ease-in-out infinite; }
 
 /* Seamless horizontal marquee for the connected-research chain embed */
 /* Scroll left → right, in the direction the chain arrows point. The track is
