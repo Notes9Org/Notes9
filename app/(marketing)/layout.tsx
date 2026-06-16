@@ -2,7 +2,6 @@ import "@/styles/marketing.css"
 import { Header } from "@/components/marketing/header"
 import { Footer } from "@/components/marketing/footer"
 import { FloatingPageMenu } from "@/components/marketing/floating-page-menu"
-import { MarketingParticles } from "@/components/marketing/marketing-particles"
 
 export default function MarketingLayout({
   children,
@@ -17,8 +16,6 @@ export default function MarketingLayout({
         "--font-dm-serif": "var(--font-dm-serif, 'DM Serif Display', serif)",
       } as React.CSSProperties}
     >
-      <MarketingParticles />
-      <div className="marketing-mesh pointer-events-none absolute inset-0 opacity-[0.15] dark:opacity-[0.08]" />
       <div className="relative z-10 flex flex-col min-h-screen">
         <Header />
         <FloatingPageMenu />

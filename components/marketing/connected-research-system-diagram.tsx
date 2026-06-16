@@ -21,7 +21,9 @@ const DESKTOP_DIAGRAM_H = 768
 const DESKTOP_RAIL_LEFT_PCT = 40
 const DESKTOP_FLOW_STRIP_W_PX = Math.round((DESKTOP_DIAGRAM_W * DESKTOP_RAIL_LEFT_PCT) / 100)
 
-const TOTAL_MS = 10000
+// Sped-up so the full deck→hub connection completes well within the hero's
+// processing window (every chip connects to Catalyst before it transitions).
+const TOTAL_MS = 6000
 const CHIP_T = [0.5, 0.54, 0.58, 0.63, 0.68, 0.73] as const
 /** Stroke + marker fill per chip order: Lab notes, Experiments, Data analysis, Literature, Writing, Protocols */
 const CHIP_COLS = ["#059669", "#0284c7", "#b87333", "#7c3aed", "#d97706", "#e11d48"] as const
@@ -196,7 +198,7 @@ const HUB_CHORD_EXTRA = Math.round(50 * HUB_ORBIT_SCALE)
  * Deck: fixed left gate, four vertical slots (conveyor), horizontal run to the
  * violet rail, opacity fades only while crossing the rail. Stagger = ⅓ flight.
  */
-const DECK_FLIGHT_MS = 5800
+const DECK_FLIGHT_MS = 3600
 
 type DeckGeo = { laneW: number; laneH: number }
 
@@ -1430,8 +1432,8 @@ export function ConnectedResearchSystemDiagram({ className = "" }: { className?:
               style={{ height: violetRailPx }}
             >
               {/* Feather uses same height as rail for exact length match. */}
-              <div className="pointer-events-none absolute inset-y-0 left-1/2 w-[26px] -translate-x-full bg-[linear-gradient(90deg,rgba(0,0,0,0)_0%,rgba(0,0,0,0.08)_62%,rgba(0,0,0,0.2)_100%)] dark:bg-[linear-gradient(90deg,rgba(255,255,255,0)_0%,rgba(255,255,255,0.1)_62%,rgba(255,255,255,0.24)_100%)]" />
-              <div className="pointer-events-none absolute inset-y-0 left-1/2 w-[1.5px] -translate-x-1/2 rounded-full bg-black/45 shadow-[0_0_12px_rgba(0,0,0,0.35)] dark:bg-white/55 dark:shadow-[0_0_14px_rgba(255,255,255,0.3)]" />
+              <div className="pointer-events-none absolute inset-y-0 left-1/2 w-[26px] -translate-x-full bg-[linear-gradient(90deg,rgba(124,58,237,0)_0%,rgba(124,58,237,0.1)_62%,rgba(124,58,237,0.22)_100%)] dark:bg-[linear-gradient(90deg,rgba(167,139,250,0)_0%,rgba(167,139,250,0.12)_62%,rgba(167,139,250,0.26)_100%)]" />
+              <div className="pointer-events-none absolute inset-y-0 left-1/2 w-[1.5px] -translate-x-1/2 rounded-full bg-[#8b5cf6] shadow-[0_0_12px_rgba(139,92,246,0.55)] dark:bg-[#a78bfa] dark:shadow-[0_0_14px_rgba(167,139,250,0.55)]" />
             </div>
           </div>
 

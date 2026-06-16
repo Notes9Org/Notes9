@@ -16,9 +16,11 @@ import {
   useMotionValue,
   useReducedMotion,
   useSpring,
+  useTransform,
 } from "framer-motion"
 import {
   ArrowRight,
+  ArrowUpRight,
   BarChart3,
   BookOpen,
   Boxes,
@@ -35,7 +37,6 @@ import {
   Sparkles,
   Users,
   X,
-  Zap,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { IceMascot } from "@/components/ui/ice-mascot"
@@ -309,10 +310,10 @@ export function RoleUseCaseSwitcher() {
 
 const DIFF_ROWS = [
   { cap: "Records what happened", eln: true, ai: false, n9: true },
-  { cap: "Remembers why it happened", eln: false, ai: false, n9: true },
-  { cap: "Answers from your lab's context", eln: false, ai: false, n9: true },
-  { cap: "Traces every output to its sources", eln: false, ai: false, n9: true },
-  { cap: "Links papers → protocols → results", eln: false, ai: false, n9: true },
+  { cap: "Remembers the why", eln: false, ai: false, n9: true },
+  { cap: "Answers from your lab", eln: false, ai: false, n9: true },
+  { cap: "Cites its sources", eln: false, ai: false, n9: true },
+  { cap: "Links your whole project", eln: false, ai: false, n9: true },
 ] as const
 
 function Cell({ on }: { on: boolean }) {
@@ -894,14 +895,16 @@ export function LabOpsMock() {
 }
 
 // ---------------------------------------------------------------------------
-// 9. BioCatalystDemo - interactive, biology-first AI showcase with the mascot.
+// 9. CatalystConsole - the single, 3D liquid-glass AI showcase.
+//    One narrative: ask in the language of the bench, get answers grounded in
+//    your own lab, with sources you can open.
 // ---------------------------------------------------------------------------
 
 const BIO_QA = [
   {
     q: "Why did condition B win?",
     a: "Condition B used a 3:1 PEI:DNA ratio because it gave the highest transient yield in your earlier screen and matches the ratio in the two papers you saved.",
-    sources: ["Expt #14 Â· PEI screen", "Lab note · 12 Mar", "Longo et al., 2023"],
+    sources: ["Expt #14 · PEI screen", "Lab note · 12 Mar", "Longo et al., 2023"],
   },
   {
     q: "Design primers for this construct",
@@ -920,13 +923,36 @@ const BIO_QA = [
   },
 ] as const
 
-export function BioCatalystDemo() {
+export function CatalystConsole() {
   const reduce = useReducedMotion()
   const ref = useRef<HTMLDivElement>(null)
   const inView = useInView(ref, { margin: "-100px" })
   const [active, setActive] = useState(0)
   const [typed, setTyped] = useState<string>(BIO_QA[0].a)
   const qa = BIO_QA[active]
+
+  // Pointer-driven parallax: one set of springs feeds every depth layer.
+  const mx = useMotionValue(0)
+  const my = useMotionValue(0)
+  const sx = useSpring(mx, { stiffness: 120, damping: 18 })
+  const sy = useSpring(my, { stiffness: 120, damping: 18 })
+  const rotateY = useTransform(sx, [-0.5, 0.5], [9, -9])
+  const rotateX = useTransform(sy, [-0.5, 0.5], [-9, 9])
+  const glowX = useTransform(sx, [-0.5, 0.5], [32, -32])
+  const glowY = useTransform(sy, [-0.5, 0.5], [32, -32])
+
+  function onMove(e: React.MouseEvent<HTMLDivElement>) {
+    if (reduce) return
+    const el = ref.current
+    if (!el) return
+    const r = el.getBoundingClientRect()
+    mx.set((e.clientX - r.left) / r.width - 0.5)
+    my.set((e.clientY - r.top) / r.height - 0.5)
+  }
+  function reset() {
+    mx.set(0)
+    my.set(0)
+  }
 
   // Type the answer out character-by-character when the question changes.
   useEffect(() => {
@@ -940,68 +966,76 @@ export function BioCatalystDemo() {
       i += 1
       setTyped(qa.a.slice(0, i))
       if (i >= qa.a.length) clearInterval(id)
-    }, 14)
+    }, 13)
     return () => clearInterval(id)
   }, [active, qa.a, reduce])
 
   // Auto-advance through the questions while in view.
   useEffect(() => {
     if (reduce || !inView) return
-    const id = setTimeout(() => setActive((a) => (a + 1) % BIO_QA.length), 6800)
+    const id = setTimeout(() => setActive((a) => (a + 1) % BIO_QA.length), 7200)
     return () => clearTimeout(id)
   }, [active, reduce, inView])
 
   const typing = !reduce && typed.length < qa.a.length
 
   return (
-    <div ref={ref} className="grid gap-8 lg:grid-cols-[0.8fr_1.2fr] lg:items-center">
-      {/* Mascot + positioning copy */}
-      <div className="flex flex-col items-start gap-4">
-        <IceMascot className="w-28 drop-shadow-[0_16px_30px_rgba(150,80,52,0.25)] sm:w-36" />
-        <span className="inline-flex items-center gap-2 rounded-full border border-[var(--n9-accent)]/25 bg-[var(--n9-accent-light)] px-3 py-1 text-[14px] font-semibold text-[var(--n9-accent)]">
-          <Sparkles className="h-3.5 w-3.5" /> Biology-first AI
-        </span>
-        <p className="text-[18px] leading-7 text-muted-foreground">
-          Tuned for the life sciences. It reads your context fast and answers in the language of the
-          bench.
-        </p>
-        <div className="flex flex-wrap gap-1.5">
-          {["Genomics", "Proteomics", "Cell culture", "Assays", "Constructs"].map((d) => (
-            <span
-              key={d}
-              className="rounded-full border border-[var(--n9-accent)]/20 bg-[var(--n9-accent-light)]/70 px-2.5 py-1 text-[14px] font-medium text-[var(--n9-accent)]"
-            >
-              {d}
-            </span>
-          ))}
-        </div>
-      </div>
+    <div
+      ref={ref}
+      onMouseMove={onMove}
+      onMouseLeave={reset}
+      className="relative mx-auto w-full max-w-3xl [perspective:1400px]"
+    >
+      {/* Drifting liquid-glass glow, parked one layer behind the console. */}
+      <motion.div
+        aria-hidden
+        style={reduce ? undefined : { x: glowX, y: glowY }}
+        className="pointer-events-none absolute -inset-10 -z-10"
+      >
+        <div className="absolute left-1/2 top-1/2 h-[120%] w-[120%] -translate-x-1/2 -translate-y-1/2 rounded-[48%] bg-[radial-gradient(40%_40%_at_30%_32%,var(--n9-accent-glow),transparent_70%),radial-gradient(42%_42%_at_72%_68%,color-mix(in_oklab,var(--n9-accent)_28%,#d9a24a),transparent_70%)] opacity-70 blur-[64px] animate-[drift_18s_ease-in-out_infinite]" />
+      </motion.div>
 
-      {/* Interactive chat */}
-      <TiltCard max={5}>
-        <div className="rounded-2xl border border-border/60 bg-card p-5 shadow-[0_24px_60px_-32px_rgba(44,36,24,0.25)] backdrop-blur-sm">
-          <div className="flex items-center gap-2 border-b border-border/50 pb-3">
-            <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-[var(--n9-accent)] text-white">
-              <Sparkles className="h-4 w-4" />
+      <motion.div
+        style={reduce ? undefined : { rotateX, rotateY, transformPerspective: 1400 }}
+        className="relative [transform-style:preserve-3d] will-change-transform"
+      >
+        <div className="relative rounded-[28px] border border-white/50 bg-[linear-gradient(140deg,color-mix(in_oklab,var(--card)_84%,transparent),color-mix(in_oklab,var(--card)_62%,transparent))] p-5 shadow-[0_50px_120px_-50px_var(--n9-accent-glow)] backdrop-blur-2xl [transform-style:preserve-3d] sm:p-7 dark:border-white/10">
+          {/* iridescent top edge */}
+          <div
+            aria-hidden
+            className="pointer-events-none absolute inset-x-8 top-0 h-px bg-[linear-gradient(90deg,transparent,color-mix(in_oklab,var(--n9-accent)_70%,white),transparent)]"
+          />
+
+          {/* Header - mascot avatar + live, grounded badge */}
+          <div className="flex items-center gap-3 [transform:translateZ(40px)]">
+            <span className="flex h-11 w-11 items-center justify-center overflow-hidden rounded-2xl border border-white/50 bg-[var(--n9-accent-light)] shadow-sm dark:border-white/10">
+              <IceMascot className="h-9 w-9" />
             </span>
-            <span className="text-[16px] font-semibold text-foreground">Catalyst</span>
-            <span className="ml-auto rounded-full bg-[var(--n9-accent-light)] px-2 py-0.5 text-[14px] font-semibold uppercase tracking-wide text-[var(--n9-accent)]">
-              Biology-first
+            <div className="leading-tight">
+              <p className="text-[16px] font-semibold text-foreground">Catalyst</p>
+              <p className="text-[13px] text-muted-foreground">Biology-first AI</p>
+            </div>
+            <span className="ml-auto inline-flex items-center gap-1.5 rounded-full border border-[var(--n9-accent)]/25 bg-[var(--n9-accent-light)] px-3 py-1 text-[13px] font-semibold text-[var(--n9-accent)]">
+              <span className="relative flex h-2 w-2">
+                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[var(--n9-accent)] opacity-60" />
+                <span className="relative inline-flex h-2 w-2 rounded-full bg-[var(--n9-accent)]" />
+              </span>
+              Grounded in your lab
             </span>
           </div>
 
-          {/* Clickable bio questions */}
-          <div className="flex flex-wrap gap-1.5 pt-3">
+          {/* Question chips */}
+          <div className="mt-5 flex flex-wrap gap-1.5 [transform:translateZ(30px)]">
             {BIO_QA.map((item, i) => (
               <button
                 key={item.q}
                 type="button"
                 onClick={() => setActive(i)}
                 className={cn(
-                  "rounded-full border px-2.5 py-1 text-[14px] font-medium transition-colors",
+                  "cursor-pointer rounded-full border px-3 py-1.5 text-[13px] font-medium transition-colors duration-200",
                   i === active
-                    ? "border-[var(--n9-accent)]/40 bg-[var(--n9-accent-light)] text-[var(--n9-accent)]"
-                    : "border-border/60 bg-muted/30 text-muted-foreground hover:text-foreground",
+                    ? "border-[var(--n9-accent)]/40 bg-[var(--n9-accent)] text-white shadow-[0_10px_28px_-12px_var(--n9-accent-glow)]"
+                    : "border-border/60 bg-background/40 text-muted-foreground hover:border-[var(--n9-accent)]/30 hover:text-foreground",
                 )}
               >
                 {item.q}
@@ -1009,47 +1043,68 @@ export function BioCatalystDemo() {
             ))}
           </div>
 
-          {/* Answer */}
-          <div className="mt-4 min-h-[6.5rem] space-y-2 text-[16px] leading-6">
-            <p className="font-medium text-foreground">{qa.q}</p>
-            <p className="text-muted-foreground">
-              {typed}
-              {typing ? (
-                <span className="ml-0.5 inline-block h-4 w-[2px] -translate-y-[1px] animate-pulse bg-[var(--n9-accent)] align-middle" />
-              ) : null}
-            </p>
-          </div>
+          {/* Conversation - the foreground layer */}
+          <div className="mt-5 [transform:translateZ(55px)]">
+            <div className="flex justify-end">
+              <AnimatePresence mode="wait">
+                <motion.p
+                  key={qa.q}
+                  initial={{ opacity: 0, y: 8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -8 }}
+                  transition={{ duration: 0.3 }}
+                  className="max-w-[78%] rounded-2xl rounded-br-md bg-[var(--n9-accent)] px-3.5 py-2 text-[15px] font-medium text-white shadow-[0_12px_30px_-14px_var(--n9-accent-glow)]"
+                >
+                  {qa.q}
+                </motion.p>
+              </AnimatePresence>
+            </div>
 
-          {/* Sources */}
-          {!typing ? (
-            <motion.div
-              initial={{ opacity: 0, y: 6 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="mt-3 border-t border-border/50 pt-3"
-            >
-              <p className="mb-2 text-[14px] font-semibold uppercase tracking-[0.16em] text-muted-foreground/70">
-                Sources
-              </p>
-              <div className="flex flex-wrap gap-1.5">
-                {qa.sources.map((s, i) => (
-                  <span
-                    key={s}
-                    className={cn(
-                      "inline-flex items-center gap-1 rounded-md border px-2 py-1 text-[14px]",
-                      i < qa.sources.length - 1
-                        ? "border-[var(--n9-accent)]/25 bg-[var(--n9-accent-light)] text-[var(--n9-accent)]"
-                        : "border-border/60 bg-muted/40 text-muted-foreground",
-                    )}
-                  >
-                    <Quote className="h-3 w-3" />
-                    {s}
-                  </span>
-                ))}
+            <div className="mt-3 flex gap-2.5">
+              <span className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-xl bg-[var(--n9-accent-light)] text-[var(--n9-accent)]">
+                <Sparkles className="h-4 w-4" />
+              </span>
+              <div className="min-h-[5.75rem] flex-1 rounded-2xl rounded-tl-md border border-border/50 bg-background/55 px-3.5 py-2.5 backdrop-blur-sm">
+                <p className="text-[15px] leading-6 text-foreground">
+                  {typed}
+                  {typing ? (
+                    <span className="ml-0.5 inline-block h-4 w-[2px] -translate-y-[1px] animate-pulse bg-[var(--n9-accent)] align-middle" />
+                  ) : null}
+                </p>
+
+                <AnimatePresence>
+                  {!typing ? (
+                    <motion.div
+                      initial={{ opacity: 0, height: 0 }}
+                      animate={{ opacity: 1, height: "auto" }}
+                      className="mt-3 overflow-hidden border-t border-border/40 pt-2.5"
+                    >
+                      <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground/70">
+                        Sources you can open
+                      </p>
+                      <div className="flex flex-wrap gap-1.5">
+                        {qa.sources.map((s, i) => (
+                          <motion.span
+                            key={s}
+                            initial={{ opacity: 0, y: 8, scale: 0.92 }}
+                            animate={{ opacity: 1, y: 0, scale: 1 }}
+                            transition={{ delay: 0.06 * i, type: "spring", stiffness: 320, damping: 22 }}
+                            className="group inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-[var(--n9-accent)]/25 bg-[var(--n9-accent-light)] px-2 py-1 text-[13px] font-medium text-[var(--n9-accent)] transition-transform duration-200 hover:-translate-y-0.5"
+                          >
+                            <Quote className="h-3 w-3" />
+                            {s}
+                            <ArrowUpRight className="h-3 w-3 opacity-0 transition-opacity duration-200 group-hover:opacity-100" />
+                          </motion.span>
+                        ))}
+                      </div>
+                    </motion.div>
+                  ) : null}
+                </AnimatePresence>
               </div>
-            </motion.div>
-          ) : null}
+            </div>
+          </div>
         </div>
-      </TiltCard>
+      </motion.div>
     </div>
   )
 }
@@ -1091,79 +1146,6 @@ export function AcademicMock() {
         <p className="pt-0.5 text-[14px] text-muted-foreground/70">Drafted from your notes · auto-cited</p>
       </div>
     </MockFrame>
-  )
-}
-
-// ---------------------------------------------------------------------------
-// 9b. AccelerateDiscovery - bio-first AI compresses the path to insight.
-// ---------------------------------------------------------------------------
-
-const ACCEL_PATH = ["Literature", "Hypothesis", "Experiment", "Insight"] as const
-
-function AccelTrack({
-  label,
-  value,
-  pct,
-  accent,
-}: {
-  label: string
-  value: string
-  pct: number
-  accent: boolean
-}) {
-  const ref = useRef<HTMLDivElement>(null)
-  const inView = useInView(ref, { once: true, margin: "-40px" })
-  return (
-    <div>
-      <div className="mb-1.5 flex items-center justify-between text-[14px]">
-        <span className={accent ? "font-semibold text-[var(--n9-accent)]" : "text-muted-foreground"}>{label}</span>
-        <span className={accent ? "font-semibold text-[var(--n9-accent)]" : "text-muted-foreground/70"}>{value}</span>
-      </div>
-      <div ref={ref} className="relative h-2.5 w-full overflow-hidden rounded-full bg-muted">
-        <motion.div
-          className={cn("h-full rounded-full", accent ? "bg-[var(--n9-accent)] shadow-[0_0_12px_var(--n9-accent-glow)]" : "bg-muted-foreground/30")}
-          initial={{ width: 0 }}
-          animate={inView ? { width: `${pct}%` } : {}}
-          transition={{ duration: 1, ease: "easeOut" }}
-        />
-      </div>
-    </div>
-  )
-}
-
-export function AccelerateDiscovery() {
-  return (
-    <div className="n9-card p-6 sm:p-7">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <span className="inline-flex items-center gap-1.5 rounded-full border border-[var(--n9-accent)]/25 bg-[var(--n9-accent-light)] px-3 py-1 text-[14px] font-semibold text-[var(--n9-accent)]">
-          <Sparkles className="h-3.5 w-3.5" /> Biology-first AI
-        </span>
-        <span className="inline-flex items-center gap-1.5 text-[16px] font-semibold text-foreground">
-          <Zap className="h-4 w-4 text-[var(--n9-accent)]" /> Weeks → days
-        </span>
-      </div>
-
-      <div className="mt-5 flex flex-wrap items-center gap-1.5">
-        {ACCEL_PATH.map((s, i) => (
-          <Fragment key={s}>
-            <span className="rounded-lg border border-border/60 bg-card px-2.5 py-1 text-[14px] font-medium text-foreground">
-              {s}
-            </span>
-            {i < ACCEL_PATH.length - 1 ? <ArrowRight className="h-3.5 w-3.5 text-[var(--n9-accent)]/50" /> : null}
-          </Fragment>
-        ))}
-      </div>
-
-      <div className="mt-6 space-y-4">
-        <AccelTrack label="Scattered tools" value="~6 weeks" pct={100} accent={false} />
-        <AccelTrack label="With Catalyst" value="~9 days" pct={26} accent />
-      </div>
-
-      <p className="mt-5 text-[16px] leading-6 text-muted-foreground">
-        From question to validated insight, Catalyst reasons over your bio context to cut the
-        busywork, not the rigor.
-      </p>
-    </div>
   )
 }
 

@@ -5,22 +5,15 @@ import { Footer } from "@/components/marketing/footer"
 import { AcademicHero } from "@/components/marketing/academic-hero"
 import { ContactForm } from "@/components/marketing/contact-form"
 import { FloatingPageMenu } from "@/components/marketing/floating-page-menu"
-import { ScreenBackdrop } from "@/components/marketing/screen-backdrop"
 import { AppGlyphRail } from "@/components/marketing/app-glyphs"
 import {
-  CatalystShowcaseSection,
-  ConnectedChainSection,
-  ContextEngineeringSection,
   DifferentiationSection,
   FinalCtaSection,
   IcpBenefitsSection,
-  OutcomesSection,
   PainSection,
   PricingTeaserSection,
   SolutionSection,
 } from "@/components/marketing/home-sections"
-
-import { InteractiveParticles } from "@/components/ui/interactive-particles"
 
 import "@/styles/marketing.css"
 
@@ -80,21 +73,14 @@ export default async function HomePage({
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(websiteJsonLd) }}
       />
-      <ScreenBackdrop />
-      <InteractiveParticles variant="marketing" />
-      <div className="marketing-mesh pointer-events-none absolute inset-0 opacity-[0.15] dark:opacity-[0.08]" />
       <div className="relative z-10 flex flex-col min-h-screen">
         <Header />
         <FloatingPageMenu />
         <AppGlyphRail />
         <main className="flex-1 pt-16">
           <AcademicHero />
-          <ConnectedChainSection />
           <PainSection />
           <SolutionSection />
-          <CatalystShowcaseSection />
-          <ContextEngineeringSection />
-          <OutcomesSection />
           <IcpBenefitsSection />
           <DifferentiationSection />
           <PricingTeaserSection />
