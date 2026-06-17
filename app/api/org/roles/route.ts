@@ -94,7 +94,10 @@ export async function POST(req: NextRequest) {
       admin: ReturnType<typeof createServiceRoleClient>
     }
 
-    const body = await req.json()
+    const body = await req.json().catch(() => null)
+    if (body === null) {
+      return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 })
+    }
     const parsed = createRoleSchema.safeParse(body)
 
     if (!parsed.success) {
@@ -179,7 +182,10 @@ export async function PUT(req: NextRequest) {
       admin: ReturnType<typeof createServiceRoleClient>
     }
 
-    const body = await req.json()
+    const body = await req.json().catch(() => null)
+    if (body === null) {
+      return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 })
+    }
     const parsed = updateRoleSchema.safeParse(body)
 
     if (!parsed.success) {
@@ -315,7 +321,10 @@ export async function DELETE(req: NextRequest) {
       admin: ReturnType<typeof createServiceRoleClient>
     }
 
-    const body = await req.json()
+    const body = await req.json().catch(() => null)
+    if (body === null) {
+      return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 })
+    }
     const parsed = deleteRoleSchema.safeParse(body)
 
     if (!parsed.success) {

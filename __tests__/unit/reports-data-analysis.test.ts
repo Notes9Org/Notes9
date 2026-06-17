@@ -34,7 +34,7 @@ describe("API route upstream body construction (Req 3.1, 3.5)", () => {
   })
 
   it('generates a session_id with "report-" prefix', () => {
-    expect(routeSource).toMatch(/session_id:\s*`report-/)
+    expect(routeSource).toMatch(/`report-\$\{/)
   })
 })
 
@@ -44,7 +44,9 @@ describe("401 when token missing (Req 3.3)", () => {
   })
 
   it("returns an authorization required error message", () => {
-    expect(routeSource).toContain("Authorization required")
+    // Auth is now session-based: the route reads the access token from the
+    // session cookie and 401s when no active session token is present.
+    expect(routeSource).toContain("No active session token available.")
   })
 })
 
@@ -207,12 +209,17 @@ describe("Navigates to /reports/[id] on view click (Req 4.1)", () => {
 })
 
 describe("Detail page authenticates user (Req 4.1)", () => {
-  it("calls getUser() to authenticate", () => {
-    expect(detailPageSource).toContain("getUser()")
+  it("calls requireUser() to authenticate", () => {
+    // The page now uses the local-JWT requireUser() helper, which redirects
+    // unauthenticated users to /auth/login internally.
+    expect(detailPageSource).toContain("requireUser()")
   })
 
   it("redirects unauthenticated users to /auth/login", () => {
-    expect(detailPageSource).toContain('redirect("/auth/login")')
+    // requireUser() (from @/lib/auth/current-user) performs the
+    // redirect("/auth/login") for unauthenticated users.
+    const currentUserSource = readSource("lib/auth/current-user.ts")
+    expect(currentUserSource).toContain('redirect("/auth/login")')
   })
 })
 
@@ -242,17 +249,21 @@ describe("Error boundary renders error message and retry button (Req 7.2)", () =
   })
 })
 
+// The reports loading skeleton now delegates to the shared
+// CatalystListPageSkeleton component, so the placeholder styling lives there.
+const skeletonSource = readSource("components/loading/page-skeletons.tsx")
+
 describe("Loading skeleton follows existing patterns (Req 7.1)", () => {
   it("uses animate-pulse for skeleton animation", () => {
     expect(loadingSource).toContain("animate-pulse")
   })
 
   it("uses bg-muted for skeleton placeholder backgrounds", () => {
-    expect(loadingSource).toContain("bg-muted")
+    expect(skeletonSource).toContain("bg-muted")
   })
 
   it("uses rounded styling for skeleton elements", () => {
-    const hasRounded = loadingSource.includes("rounded-md") || loadingSource.includes("rounded-xl")
+    const hasRounded = skeletonSource.includes("rounded-md") || skeletonSource.includes("rounded-xl")
     expect(hasRounded).toBe(true)
   })
 })

@@ -7,6 +7,7 @@ import type {
   DonePayload,
   RagChunk,
 } from '@/lib/agent-stream-types';
+import { normalizeSourceNames } from '@/lib/agent-stream-types';
 import { buildNotes9AgentRequestBody } from '@/lib/notes9-agent-request';
 import { splitSseBuffer, parseSseDataJson } from '@/lib/sse-event-blocks';
 import { recordRumEvent } from '@/lib/rum';
@@ -222,6 +223,14 @@ export interface AgentStreamState {
   streamedAnswer: string;
   /** Accumulated thinking/reasoning tokens from `thinking_token` events. */
   thinkingTokenBuffer: string;
+  /** Running count of resolved sources, updated live via `citations_update`
+   * after each tool call. Drives the "Gathering sources… N" ticker while the
+   * turn is in flight; superseded by the final manifest once `done` arrives. */
+  liveCitationCount: number;
+  /** Cancellation handle for this run, set from the `run_started` event (only
+   * emitted when NOTES9_AGENT_HITL is enabled). Null ⇒ no server-side cancel
+   * available, so the Stop button stays hidden. */
+  runId: string | null;
   donePayload: DonePayload | null;
   error: string | null;
   isStreaming: boolean;
@@ -243,6 +252,18 @@ function normalizeNotes9AgentResponse(raw: Record<string, unknown>): DonePayload
     : undefined;
   const confidence = typeof raw.confidence === 'number' ? raw.confidence : undefined;
   const tool_used = raw.tool_used as DonePayload['tool_used'];
+  // Carry the citation-health envelope through normalization. This function
+  // rebuilds the payload field-by-field, so anything not copied here is dropped
+  // before any consumer sees it — which is exactly why the signal was dead.
+  const citations_health =
+    raw.citations_health === 'ok' ||
+    raw.citations_health === 'degraded' ||
+    raw.citations_health === 'floor' ||
+    raw.citations_health === 'failed'
+      ? raw.citations_health
+      : undefined;
+  const tokens_unresolved =
+    typeof raw.tokens_unresolved === 'number' ? raw.tokens_unresolved : undefined;
   return {
     role,
     content,
@@ -251,6 +272,8 @@ function normalizeNotes9AgentResponse(raw: Record<string, unknown>): DonePayload
     citations,
     confidence,
     tool_used: tool_used ?? 'none',
+    citations_health,
+    tokens_unresolved,
   };
 }
 
@@ -365,23 +388,48 @@ export function useAgentStream() {
     toolOutputs: [],
     streamedAnswer: '',
     thinkingTokenBuffer: '',
+    liveCitationCount: 0,
+    runId: null,
     donePayload: null,
     error: null,
     isStreaming: false,
   });
 
   const abortControllerRef = useRef<AbortController | null>(null);
+  /** Latest run id, mirrored outside React state so `cancel()` can read it
+   * synchronously without depending on a re-render. */
+  const runIdRef = useRef<string | null>(null);
+  /** Bearer token from the active run, so `cancel()` can authorize the proxy
+   * POST without the caller having to thread it through again. */
+  const tokenRef = useRef<string | null>(null);
 
   const runStream = useCallback(
     async (
       params: AgentStreamParams,
       token: string
-    ): Promise<{ donePayload: DonePayload | null; error: string | null }> => {
+    ): Promise<{
+      donePayload: DonePayload | null;
+      error: string | null;
+      artifacts: AgentArtifact[];
+      citationsManifest: CitationsManifest | null;
+    }> => {
       if (abortControllerRef.current) {
         try { abortControllerRef.current.abort(); } catch { /* ignore */ }
       }
       abortControllerRef.current = new AbortController();
       const signal = abortControllerRef.current.signal;
+      runIdRef.current = null;
+      tokenRef.current = token;
+
+      // Collect artifacts in a LOCAL array (not just React state) so the caller
+      // can read the FINAL list synchronously when the stream resolves. Reading
+      // the hook's `state.artifacts` from the caller's closure returns the stale
+      // (empty) value captured at render — which is exactly why generated charts
+      // were persisted as nothing and vanished once streaming ended.
+      const collectedArtifacts: AgentArtifact[] = [];
+      // Same stale-closure trap applies to the citations manifest — capture it
+      // locally so the caller persists the FINAL manifest, not the render-time null.
+      let collectedManifest: CitationsManifest | null = null;
 
       setState({
         thinkingSteps: [],
@@ -399,6 +447,8 @@ export function useAgentStream() {
         toolOutputs: [],
         streamedAnswer: '',
         thinkingTokenBuffer: '',
+        liveCitationCount: 0,
+        runId: null,
         donePayload: null,
         error: null,
         isStreaming: true,
@@ -435,13 +485,13 @@ export function useAgentStream() {
             error: errMsg,
             isStreaming: false,
           }));
-          return { donePayload: null, error: errMsg };
+          return { donePayload: null, error: errMsg, artifacts: collectedArtifacts, citationsManifest: collectedManifest };
         }
 
         if (!response.body) {
           const errMsg = 'Agent stream returned an empty body';
           setState((s) => ({ ...s, error: errMsg, isStreaming: false }));
-          return { donePayload: null, error: errMsg };
+          return { donePayload: null, error: errMsg, artifacts: collectedArtifacts, citationsManifest: collectedManifest };
         }
 
         const reader = response.body.getReader();
@@ -462,15 +512,24 @@ export function useAgentStream() {
             switch (ev) {
               case 'ping':
                 break;
+              case 'run_started': {
+                // Carries the cancel handle for this run. Only emitted when the
+                // backend HITL flag is on; absent ⇒ the Stop button stays hidden.
+                if (payload && typeof payload === 'object') {
+                  const rid = (payload as Record<string, unknown>).run_id;
+                  if (typeof rid === 'string' && rid) {
+                    runIdRef.current = rid;
+                    setState((s) => ({ ...s, runId: rid }));
+                  }
+                }
+                break;
+              }
               case 'thinking': {
                 const step = thinkingFromPayload(payload);
                 if (step) {
                   const p = payload as Record<string, unknown>;
                   const stage = normalizeStage(p?.stage);
                   const detail = typeof p?.detail === 'string' ? p.detail as string : undefined;
-                  const node = typeof p?.node === 'string' ? p.node : '';
-                  const status = typeof p?.status === 'string' ? p.status : '';
-                  const message = step.message || '';
                   // Long-run progress signals (Cat-Bio synthesis): fractional
                   // progress 0–1 and elapsed seconds keep the current step
                   // visibly "alive" during a 60s run.
@@ -486,38 +545,14 @@ export function useAgentStream() {
                   // NOT append another visible thinking line.
                   const isHeartbeat = p?.heartbeat === true;
 
+                  // NOTE: source names are NEVER parsed out of this thinking
+                  // message — they arrive as structured fields on tool_result /
+                  // tool_output / rag_chunks and are applied there via
+                  // normalizeSourceNames (AD1). The old "from: …" / ": …" regex
+                  // was fragile (broke on any backend copy change) and is gone.
                   setState((s) => {
-                    let toolCards = s.toolCards;
-
-                    // Extract names from RAG completed thinking message: "Retrieved N chunk(s) from: Name1, Name2"
-                    if (node === 'rag' && status === 'completed' && message.includes(' from: ')) {
-                      const afterFrom = message.split(' from: ')[1] || '';
-                      const rawNames = afterFrom.replace(' and more', '').split(', ').filter(Boolean);
-                      if (rawNames.length > 0) {
-                        toolCards = s.toolCards.map((c) =>
-                          c.id === 'rag_tool' && (!c.source_names || c.source_names.length === 0)
-                            ? { ...c, source_names: rawNames }
-                            : c
-                        );
-                      }
-                    }
-
-                    // Extract names from SQL completed thinking message: "Found N results: Name1, Name2"
-                    if (node === 'sql' && status === 'completed' && message.includes(': ')) {
-                      const afterColon = message.split(': ').slice(1).join(': ');
-                      const rawNames = afterColon.replace(/ and \d+ more$/, '').split(', ').filter(Boolean);
-                      if (rawNames.length > 0) {
-                        toolCards = s.toolCards.map((c) =>
-                          c.id === 'nlp_to_sql_tool' && (!c.source_names || c.source_names.length === 0)
-                            ? { ...c, source_names: rawNames }
-                            : c
-                        );
-                      }
-                    }
-
                     return {
                       ...s,
-                      toolCards,
                       // Heartbeats keep the step list stable — only stage
                       // progress / elapsed are refreshed so the UI shows life
                       // without a flood of duplicate lines.
@@ -605,9 +640,7 @@ export function useAgentStream() {
                   const status = (p.status === 'error' ? 'error' : 'done') as 'done' | 'error';
                   const serverLabel = typeof p.label === 'string' ? p.label : '';
 
-                  const sourceNames = Array.isArray(p.source_names)
-                    ? (p.source_names as unknown[]).filter((n): n is string => typeof n === 'string')
-                    : [];
+                  const sourceNames = normalizeSourceNames(p.source_names);
 
                   setState((s) => ({
                     ...s,
@@ -645,6 +678,13 @@ export function useAgentStream() {
                       generator: typeof p.generator === 'string' ? p.generator : null,
                       kind: typeof p.kind === 'string' ? p.kind : null,
                     };
+                    // Mirror into the local accumulator so runStream can return
+                    // the final list (state reads in the caller's closure are stale).
+                    {
+                      const i = collectedArtifacts.findIndex((a) => a.dataId === dataId);
+                      if (i >= 0) collectedArtifacts[i] = artifact;
+                      else collectedArtifacts.push(artifact);
+                    }
                     setState((s) => ({
                       ...s,
                       // Replace on duplicate data_id (idempotent re-emit), else append.
@@ -715,17 +755,12 @@ export function useAgentStream() {
               case 'rag_chunks': {
                 const rag = ragFromPayload(payload);
                 if (rag) {
-                  // Extract unique source names from chunks to display in tool card
-                  const seenRag = new Set<string>();
-                  const ragSourceNames: string[] = [];
-                  for (const chunk of rag.chunks) {
-                    const n = chunk.source_name?.trim();
-                    if (n && !seenRag.has(n.toLowerCase())) {
-                      seenRag.add(n.toLowerCase());
-                      ragSourceNames.push(n.length > 80 ? n.slice(0, 77) + '…' : n);
-                    }
-                    if (ragSourceNames.length >= 5) break;
-                  }
+                  // Source names come from the structured chunk fields via the
+                  // single normalizer — never parsed from thinking prose (AD1).
+                  const ragSourceNames = normalizeSourceNames(
+                    rag.chunks.map((chunk) => chunk.source_name),
+                    { max: 5 },
+                  );
                   setState((s) => ({
                     ...s,
                     ragChunks: rag,
@@ -749,7 +784,23 @@ export function useAgentStream() {
                   manifest.manifest !== null &&
                   !Array.isArray(manifest.manifest)
                 ) {
+                  collectedManifest = manifest;
                   setState((s) => ({ ...s, citationsManifest: manifest }));
+                }
+                break;
+              }
+              case 'citations_update': {
+                // Running source count emitted after each tool call. Drives the
+                // live "Gathering sources… N" ticker; the final manifest at
+                // `done` supersedes it. Never let the count tick backwards.
+                if (payload && typeof payload === 'object') {
+                  const count = (payload as Record<string, unknown>).count;
+                  if (typeof count === 'number' && Number.isFinite(count)) {
+                    setState((s) => ({
+                      ...s,
+                      liveCitationCount: Math.max(s.liveCitationCount, count),
+                    }));
+                  }
                 }
                 break;
               }
@@ -764,10 +815,11 @@ export function useAgentStream() {
                     details: p,
                   };
 
-                  // Extract source names from document_names (RAG) or file_names (SQL)
-                  const documentNames = Array.isArray(p.document_names)
-                    ? (p.document_names as unknown[]).filter((n): n is string => typeof n === 'string')
-                    : [];
+                  // Structured document/file names → single normalizer (AD1).
+                  // `file_names` is a fallback the old code dropped on the floor.
+                  const documentNames = normalizeSourceNames(
+                    (p.document_names ?? p.file_names) as unknown,
+                  );
                   const rowCount = typeof p.row_count === 'number' ? p.row_count : undefined;
 
                   setState((s) => ({
@@ -846,7 +898,7 @@ export function useAgentStream() {
 
         if (streamError) {
           setState((s) => ({ ...s, isStreaming: false }));
-          return { donePayload: null, error: streamError };
+          return { donePayload: null, error: streamError, artifacts: collectedArtifacts, citationsManifest: collectedManifest };
         }
 
         if (!donePayload) {
@@ -860,20 +912,20 @@ export function useAgentStream() {
               streamedAnswer: synthetic.content,
               isStreaming: false,
             }));
-            return { donePayload: synthetic, error: null };
+            return { donePayload: synthetic, error: null, artifacts: collectedArtifacts, citationsManifest: collectedManifest };
           }
           const errMsg = 'No response from agent stream';
           setState((s) => ({ ...s, error: errMsg, isStreaming: false }));
-          return { donePayload: null, error: errMsg };
+          return { donePayload: null, error: errMsg, artifacts: collectedArtifacts, citationsManifest: collectedManifest };
         }
 
         setState((s) => ({ ...s, isStreaming: false }));
-        return { donePayload, error: null };
+        return { donePayload, error: null, artifacts: collectedArtifacts, citationsManifest: collectedManifest };
       } catch (err) {
         if ((err as Error).name === 'AbortError') {
           recordRumEvent('agent_stream_aborted', {});
           setState((s) => ({ ...s, isStreaming: false }));
-          return { donePayload: null, error: null };
+          return { donePayload: null, error: null, artifacts: collectedArtifacts, citationsManifest: collectedManifest };
         }
         const errMsg = err instanceof Error ? err.message : 'Agent stream failed';
         recordRumEvent('agent_stream_error', { message: errMsg });
@@ -882,7 +934,7 @@ export function useAgentStream() {
           error: errMsg,
           isStreaming: false,
         }));
-        return { donePayload: null, error: errMsg };
+        return { donePayload: null, error: errMsg, artifacts: collectedArtifacts, citationsManifest: collectedManifest };
       } finally {
         abortControllerRef.current = null;
       }
@@ -891,6 +943,25 @@ export function useAgentStream() {
   );
 
   const abort = useCallback(() => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+  }, []);
+
+  /** Stop an in-flight run: ask the backend to cancel it (best-effort, only
+   * effective when a runId was emitted) and abort the local stream so the UI
+   * settles immediately. Safe to call when no run is active. */
+  const cancel = useCallback(() => {
+    const rid = runIdRef.current;
+    const tok = tokenRef.current;
+    if (rid && tok) {
+      // Fire-and-forget: the backend cancel flag is idempotent and the abort
+      // below stops the stream regardless of whether this request lands.
+      fetch(`/api/agent/runs/${encodeURIComponent(rid)}/cancel`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${tok}` },
+      }).catch(() => { /* abort still settles the UI */ });
+    }
     if (abortControllerRef.current) {
       abortControllerRef.current.abort();
     }
@@ -913,16 +984,20 @@ export function useAgentStream() {
       toolOutputs: [],
       streamedAnswer: '',
       thinkingTokenBuffer: '',
+      liveCitationCount: 0,
+      runId: null,
       donePayload: null,
       error: null,
       isStreaming: false,
     });
+    runIdRef.current = null;
   }, []);
 
   return {
     ...state,
     runStream,
     abort,
+    cancel,
     reset,
   };
 }

@@ -3,16 +3,24 @@ import {
   buildBreadcrumbsFromPathname,
   resolveHeaderBreadcrumbs,
 } from "@/lib/breadcrumb-from-path"
+import type { BreadcrumbSegment } from "@/components/layout/breadcrumb-context"
+
+// The builder now enriches crumbs with an `icon` field for the header UI.
+// These tests assert label/href routing only, so we strip the icon before
+// comparison rather than asserting on the icon implementation detail.
+function stripIcons(crumbs: BreadcrumbSegment[]): BreadcrumbSegment[] {
+  return crumbs.map(({ icon: _icon, ...rest }) => rest)
+}
 
 describe("buildBreadcrumbsFromPathname", () => {
   it("shows Dashboard on the home route", () => {
-    expect(buildBreadcrumbsFromPathname("/dashboard")).toEqual([
+    expect(stripIcons(buildBreadcrumbsFromPathname("/dashboard"))).toEqual([
       { label: "Dashboard" },
     ])
   })
 
   it("builds section and new-page crumbs", () => {
-    expect(buildBreadcrumbsFromPathname("/projects/new")).toEqual([
+    expect(stripIcons(buildBreadcrumbsFromPathname("/projects/new"))).toEqual([
       { label: "Projects", href: "/projects" },
       { label: "New Project" },
     ])
@@ -20,7 +28,7 @@ describe("buildBreadcrumbsFromPathname", () => {
 
   it("prepends Dashboard when opened from dashboard quick actions", () => {
     const params = new URLSearchParams("from=dashboard")
-    expect(buildBreadcrumbsFromPathname("/projects/new", params)).toEqual([
+    expect(stripIcons(buildBreadcrumbsFromPathname("/projects/new", params))).toEqual([
       { label: "Dashboard", href: "/dashboard" },
       { label: "Projects", href: "/projects" },
       { label: "New Project" },
@@ -29,9 +37,9 @@ describe("buildBreadcrumbsFromPathname", () => {
 
   it("builds detail-page placeholder crumbs", () => {
     expect(
-      buildBreadcrumbsFromPathname(
+      stripIcons(buildBreadcrumbsFromPathname(
         "/projects/aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
-      ),
+      )),
     ).toEqual([
       { label: "Projects", href: "/projects" },
       { label: "Project" },
@@ -39,10 +47,10 @@ describe("buildBreadcrumbsFromPathname", () => {
   })
 
   it("builds protocols and samples list crumbs", () => {
-    expect(buildBreadcrumbsFromPathname("/protocols")).toEqual([
+    expect(stripIcons(buildBreadcrumbsFromPathname("/protocols"))).toEqual([
       { label: "Protocols" },
     ])
-    expect(buildBreadcrumbsFromPathname("/samples")).toEqual([
+    expect(stripIcons(buildBreadcrumbsFromPathname("/samples"))).toEqual([
       { label: "Samples" },
     ])
   })
@@ -51,10 +59,10 @@ describe("buildBreadcrumbsFromPathname", () => {
     const projectId = "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee"
     const params = new URLSearchParams(`project=${projectId}`)
     expect(
-      buildBreadcrumbsFromPathname("/protocols", params, {
+      stripIcons(buildBreadcrumbsFromPathname("/protocols", params, {
         projectId,
         projectName: "Cell Study",
-      }),
+      })),
     ).toEqual([
       { label: "Projects", href: "/projects" },
       { label: "Cell Study", href: `/projects/${projectId}` },
@@ -71,7 +79,7 @@ describe("buildBreadcrumbsFromPathname", () => {
       { label: "Protocols", href: "/protocols" },
       { label: "New Protocol" },
     ]
-    expect(resolveHeaderBreadcrumbs(auto, page)).toEqual([
+    expect(stripIcons(resolveHeaderBreadcrumbs(auto, page))).toEqual([
       { label: "Dashboard", href: "/dashboard" },
       { label: "Protocols", href: "/protocols" },
       { label: "New Protocol" },

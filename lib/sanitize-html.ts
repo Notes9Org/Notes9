@@ -43,8 +43,10 @@ const ALLOWED_ATTR = [
   "data-cite-n", "data-cite-label", "data-cite-token", "data-cite-type",
   "data-cite-id", "data-cite-name", "data-cite-match", "data-cite-relevance",
   "data-cite-excerpt", "data-cite-provenance", "data-cite-url",
-  // Span-level grounding: exact per-claim snippet + support verdict.
+  // Span-level grounding: exact per-claim snippet + support verdict + the
+  // provenance/offset fields the source viewer & provenance badge read back.
   "data-cite-snippet", "data-cite-support",
+  "data-cite-grounding", "data-cite-char-start", "data-cite-char-end",
   "role", "tabindex", "aria-label",
   // Common chart/embed attrs
   "loading", "decoding", "referrerpolicy",

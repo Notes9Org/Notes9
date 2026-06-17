@@ -35,7 +35,10 @@ export async function GET(_: Request, context: { params: Promise<{ id: string }>
 export async function POST(request: Request, context: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await context.params
-    const payload = await request.json()
+    const payload = await request.json().catch(() => null)
+    if (payload === null) {
+      return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 })
+    }
     const supabase = await createClient()
     const user = await getCurrentUser()
 

@@ -55,9 +55,10 @@ export function VoiceWaveform({ getWaveformData, className }: VoiceWaveformProps
         const x = i * (barW + GAP);
         const y = (LOGICAL_H - barH) / 2;
 
-        // Faint at low amplitude → vivid red at peaks
+        // Faint at low amplitude → vivid at peaks. Brand sienna (#965034 →
+        // rgb(150,80,52)) instead of the old generic red, to match the palette.
         const alpha = 0.25 + amplitude * 0.75;
-        safeCtx.fillStyle = `rgba(239,68,68,${alpha.toFixed(2)})`;
+        safeCtx.fillStyle = `rgba(150,80,52,${alpha.toFixed(2)})`;
 
         const radius = Math.min(barW / 2, barH / 2, 2);
         safeCtx.beginPath();

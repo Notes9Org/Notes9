@@ -1,5 +1,11 @@
 import type { DonePayload, GroundingResource } from '@/lib/agent-stream-types';
-import type { CitationsManifest } from '@/hooks/use-agent-stream';
+import type { CitationsManifest, AgentArtifact } from '@/hooks/use-agent-stream';
+import {
+  NOTES9_ARTIFACTS_MARKER,
+  encodeStoredArtifacts,
+  parseStoredArtifacts,
+  type PersistedArtifact,
+} from '@/lib/agent-artifacts';
 
 /** Chat message rows use DB UUIDs once persisted. */
 export function isPersistedChatMessageId(id: string): boolean {
@@ -85,11 +91,14 @@ function formatNotes9Footer(donePayload: DonePayload): string {
 
 /**
  * Persist assistant turn: answer markdown + footer + opaque grounding payload (like literature agent).
+ * Optionally embeds artifact metadata (without short-lived signed URLs) so cards
+ * can be re-rendered on reload and re-sign on demand.
  * UI parses {@link parseNotes9AssistantStoredContent} to show “All citations” with deep-links.
  */
 export function formatNotes9AssistantMarkdown(
   donePayload: DonePayload,
   citationsManifest?: CitationsManifest | null,
+  artifacts?: AgentArtifact[] | null,
 ): string {
   const refs =
     donePayload.resources?.length
@@ -111,20 +120,42 @@ export function formatNotes9AssistantMarkdown(
     out += NOTES9_MANIFEST_MARKER + manifestPayload;
   }
 
+  // Persist artifact metadata (no signed_url — that expires in ~1 h).
+  // The card re-signs on demand via /api/agent/artifacts/[dataId]/resign.
+  if (artifacts && artifacts.length > 0) {
+    out += NOTES9_ARTIFACTS_MARKER + encodeStoredArtifacts(artifacts);
+  }
+
   return out;
 }
 
 /**
- * Split stored assistant markdown into display body, structured resources, and
- * the citations manifest for {@link AgentCitationsPanel} / MarkdownRenderer.
+ * Split stored assistant markdown into display body, structured resources,
+ * the citations manifest, and any persisted artifact metadata.
+ *
+ * Block order in a fully-encoded message (trailing the visible body):
+ *   §§NOTES9_GROUNDING§§   <base64 resources>
+ *   §§NOTES9_MANIFEST§§    <base64 citations manifest>
+ *   §§NOTES9_ARTIFACTS§§   <base64 artifact array>
  */
 export function parseNotes9AssistantStoredContent(stored: string): {
   bodyMarkdown: string;
   resources: GroundingResource[];
   citationsManifest: CitationsManifest | null;
+  artifacts: PersistedArtifact[];
 } {
-  // Peel off the manifest block first (it always trails the grounding block).
   let working = stored;
+
+  // 1. Peel off artifact block (always last).
+  let artifacts: PersistedArtifact[] = [];
+  const ai = working.lastIndexOf(NOTES9_ARTIFACTS_MARKER);
+  if (ai !== -1) {
+    const artifactsB64 = working.slice(ai + NOTES9_ARTIFACTS_MARKER.length).trim();
+    working = working.slice(0, ai);
+    artifacts = parseStoredArtifacts(artifactsB64);
+  }
+
+  // 2. Peel off the manifest block.
   let citationsManifest: CitationsManifest | null = null;
   const mi = working.lastIndexOf(NOTES9_MANIFEST_MARKER);
   if (mi !== -1) {
@@ -141,12 +172,14 @@ export function parseNotes9AssistantStoredContent(stored: string): {
     }
   }
 
+  // 3. Peel off the grounding block.
   const i = working.lastIndexOf(NOTES9_GROUNDING_MARKER);
   if (i === -1) {
     return {
       bodyMarkdown: stripLegacyMarkdownReferencesSection(working),
       resources: [],
       citationsManifest,
+      artifacts,
     };
   }
 
@@ -157,14 +190,18 @@ export function parseNotes9AssistantStoredContent(stored: string): {
     const json = base64ToUtf8(b64);
     const parsed = JSON.parse(json) as unknown;
     if (!Array.isArray(parsed)) {
-      return { bodyMarkdown, resources: [], citationsManifest };
+      return { bodyMarkdown, resources: [], citationsManifest, artifacts };
     }
     const resources = parsed as GroundingResource[];
-    return { bodyMarkdown, resources, citationsManifest };
+    return { bodyMarkdown, resources, citationsManifest, artifacts };
   } catch {
-    return { bodyMarkdown: working.slice(0, i), resources: [], citationsManifest };
+    return { bodyMarkdown: working.slice(0, i), resources: [], citationsManifest, artifacts };
   }
 }
+
+// Re-export so chat surfaces that only import from notes9-chat-format can
+// still access the low-level artifact helpers without a second import.
+export { parseStoredArtifacts, encodeStoredArtifacts, type PersistedArtifact };
 
 /** Strip grounding appendix before sending assistant turns in Notes9 API history. */
 export function notes9PlainTextForApiHistory(full: string, role: string): string {

@@ -17,6 +17,20 @@ function readSource(relativePath: string): string {
 }
 
 describe("Accessibility: grid/table toggle aria-labels (Req 13.3)", () => {
+  // The grid/table toggle was extracted into the shared
+  // components/ui/view-mode-toggle.tsx component. The aria-labels now live
+  // there, and each list page renders <ViewModeToggle>. We assert the shared
+  // component carries the labels and that each page consumes it.
+  const toggleSource = readSource("components/ui/view-mode-toggle.tsx")
+
+  it('shared ViewModeToggle has aria-label="Switch to grid view"', () => {
+    expect(toggleSource).toContain('aria-label="Switch to grid view"')
+  })
+
+  it('shared ViewModeToggle has aria-label="Switch to table view"', () => {
+    expect(toggleSource).toContain('aria-label="Switch to table view"')
+  })
+
   const pages = [
     { name: "Projects (ProjectsPageContent)", file: "app/(app)/projects/project-list.tsx" },
     { name: "Experiments (ExperimentsPageContent)", file: "app/(app)/experiments/experiment-list.tsx" },
@@ -27,33 +41,11 @@ describe("Accessibility: grid/table toggle aria-labels (Req 13.3)", () => {
   ]
 
   for (const { name, file } of pages) {
-    it(`${name} grid toggle button has aria-label="Switch to grid view"`, () => {
+    it(`${name} renders the accessible ViewModeToggle`, () => {
       const src = readSource(file)
-      expect(src).toContain('aria-label="Switch to grid view"')
-    })
-
-    it(`${name} table toggle button has aria-label="Switch to table view"`, () => {
-      const src = readSource(file)
-      expect(src).toContain('aria-label="Switch to table view"')
+      expect(src).toContain("ViewModeToggle")
     })
   }
-
-  it("ProjectList standalone toggle also has aria-labels", () => {
-    const src = readSource("app/(app)/projects/project-list.tsx")
-    // There should be at least 2 occurrences of each (PageContent + List)
-    const gridMatches = src.match(/aria-label="Switch to grid view"/g)
-    const tableMatches = src.match(/aria-label="Switch to table view"/g)
-    expect(gridMatches!.length).toBeGreaterThanOrEqual(2)
-    expect(tableMatches!.length).toBeGreaterThanOrEqual(2)
-  })
-
-  it("ExperimentList standalone toggle also has aria-labels", () => {
-    const src = readSource("app/(app)/experiments/experiment-list.tsx")
-    const gridMatches = src.match(/aria-label="Switch to grid view"/g)
-    const tableMatches = src.match(/aria-label="Switch to table view"/g)
-    expect(gridMatches!.length).toBeGreaterThanOrEqual(2)
-    expect(tableMatches!.length).toBeGreaterThanOrEqual(2)
-  })
 })
 
 describe("Accessibility: mobile menu button (Req 13.1)", () => {
@@ -80,9 +72,12 @@ describe("Accessibility: NavigationLoader pointer-events (Req 13.4)", () => {
 describe("Accessibility: Right sidebar SheetTitle (Req 13.5)", () => {
   it("Right sidebar Sheet has a visually hidden SheetTitle for screen readers", () => {
     const src = readSource("components/layout/app-layout.tsx")
-    // The SheetHeader wrapping the SheetTitle should have sr-only class
+    // The SheetHeader wrapping the SheetTitle should have sr-only class.
+    // The right drawer hosts two assistants (Protocol AI and Catalyst), each
+    // with its own visually-hidden SheetTitle.
     expect(src).toContain('SheetHeader className="sr-only"')
-    expect(src).toContain("<SheetTitle>AI Assistant</SheetTitle>")
+    expect(src).toContain("<SheetTitle>Protocol AI</SheetTitle>")
+    expect(src).toContain("<SheetTitle>Catalyst</SheetTitle>")
   })
 })
 

@@ -124,6 +124,8 @@ import {
   AgentCitationsPanel,
   groundingResourceToPanelItem,
 } from '@/components/catalyst/agent-citations-panel';
+import { PersistedArtifactList } from '@/components/catalyst/agent-artifact-card';
+import { toPersistedArtifacts, type PersistedArtifact } from '@/lib/agent-artifacts';
 import {
   LiteratureAgentThinkingPanel,
   LiteratureStreamProgressHint,
@@ -1697,7 +1699,7 @@ export function RightSidebar({
           content_type: a.contentType,
           size: a.size ?? 0,
         }));
-      const { donePayload, error } = await agentStream.runStream(
+      const { donePayload, error, artifacts: streamArtifacts, citationsManifest: streamManifest } = await agentStream.runStream(
         {
           query: text,
           session_id: sessionId,
@@ -1715,7 +1717,10 @@ export function RightSidebar({
       setNotes9Loading(false);
 
       if (donePayload) {
-        const formattedAnswer = formatNotes9AssistantMarkdown(donePayload, agentStream.citationsManifest);
+        // Structured linkage (Phase 0): artifacts persist in chat_messages.metadata,
+        // NOT the fragile markdown block. Render reads metadata first.
+        const persistedArts = toPersistedArtifacts(streamArtifacts);
+        const formattedAnswer = formatNotes9AssistantMarkdown(donePayload, streamManifest ?? null, streamArtifacts);
 
         const assistantMessageId = `assistant-${Date.now()}`;
         const assistantMessage = {
@@ -1724,9 +1729,10 @@ export function RightSidebar({
           content: formattedAnswer,
           parts: [{ type: 'text' as const, text: formattedAnswer }],
           createdAt: new Date(),
+          metadata: { artifacts: persistedArts },
         };
         setMessages((prev) => [...prev, assistantMessage]);
-        const savedAsst = await saveMessage(sessionId, 'assistant', formattedAnswer);
+        const savedAsst = await saveMessage(sessionId, 'assistant', formattedAnswer, { artifacts: persistedArts });
         if (savedAsst) {
           setSavedMessageIds((prev) => new Set(prev).add(savedAsst.id));
           setMessages((prev) => {
@@ -1883,7 +1889,7 @@ export function RightSidebar({
         setNotes9Loading(true);
         const parsedEditTags = extractTagItemsFromMarkdown(newContent);
         const requestTags = mergeUniqueTags(selectedMentions, parsedEditTags);
-        const { donePayload, error } = await agentStream.runStream(
+        const { donePayload, error, artifacts: streamArtifacts, citationsManifest: streamManifest } = await agentStream.runStream(
           {
             query: newContent,
             session_id: sid,
@@ -1896,7 +1902,8 @@ export function RightSidebar({
         setNotes9Loading(false);
 
         if (donePayload) {
-          const formattedAnswer = formatNotes9AssistantMarkdown(donePayload, agentStream.citationsManifest);
+          const persistedArts = toPersistedArtifacts(streamArtifacts);
+          const formattedAnswer = formatNotes9AssistantMarkdown(donePayload, streamManifest ?? null, streamArtifacts);
           const assistantMessageId = `assistant-${Date.now()}`;
           setMessages((prev) => [
             ...prev,
@@ -1906,9 +1913,10 @@ export function RightSidebar({
               content: formattedAnswer,
               parts: [{ type: 'text' as const, text: formattedAnswer }],
               createdAt: new Date(),
+              metadata: { artifacts: persistedArts },
             },
           ]);
-          const savedAsst = await saveMessage(sid, 'assistant', formattedAnswer);
+          const savedAsst = await saveMessage(sid, 'assistant', formattedAnswer, { artifacts: persistedArts });
           if (savedAsst) {
             setSavedMessageIds((prev) => new Set(prev).add(savedAsst.id));
             setMessages((prev) => {
@@ -2036,7 +2044,7 @@ export function RightSidebar({
       }
 
       setNotes9Loading(true);
-      const { donePayload, error } = await agentStream.runStream(
+      const { donePayload, error, artifacts: streamArtifacts, citationsManifest: streamManifest } = await agentStream.runStream(
         {
           query,
           session_id: sid,
@@ -2049,7 +2057,8 @@ export function RightSidebar({
       setNotes9Loading(false);
 
       if (donePayload) {
-        const formattedAnswer = formatNotes9AssistantMarkdown(donePayload, agentStream.citationsManifest);
+        const persistedArts = toPersistedArtifacts(streamArtifacts);
+        const formattedAnswer = formatNotes9AssistantMarkdown(donePayload, streamManifest ?? null, streamArtifacts);
         const assistantMessageId = `assistant-${Date.now()}`;
         setMessages((prev) => [
           ...prev,
@@ -2059,9 +2068,10 @@ export function RightSidebar({
             content: formattedAnswer,
             parts: [{ type: 'text' as const, text: formattedAnswer }],
             createdAt: new Date(),
+            metadata: { artifacts: persistedArts },
           },
         ]);
-        const savedAsst = await saveMessage(sid, 'assistant', formattedAnswer);
+        const savedAsst = await saveMessage(sid, 'assistant', formattedAnswer, { artifacts: persistedArts });
         if (savedAsst) {
           setSavedMessageIds((prev) => new Set(prev).add(savedAsst.id));
           setMessages((prev) => {
@@ -2301,6 +2311,9 @@ export function RightSidebar({
           content: text,
           parts: [{ type: 'text' as const, text }],
           createdAt: new Date(m.created_at),
+          // Preserve metadata so persisted artifacts (metadata.artifacts) survive
+          // a history reload — the previous mapping dropped it.
+          metadata: (m as { metadata?: Record<string, unknown> }).metadata,
         };
       });
       setMessages(chatMessages);
@@ -2673,26 +2686,26 @@ export function RightSidebar({
                     <span
                       id="tour-ai-web-search"
                       className={cn(
-                        'inline-flex h-7 shrink-0 cursor-default items-center gap-1.5 rounded-md border px-2 transition-colors',
+                        'inline-flex h-6 shrink-0 cursor-default select-none items-center gap-1 rounded-full border px-2 transition-colors duration-150',
                         webSearchEnabled
-                          ? 'border-primary/25 bg-primary/5 text-foreground'
-                          : 'border-border/50 bg-muted/30 text-muted-foreground'
+                          ? 'border-[color:color-mix(in_srgb,var(--n9-accent)_30%,var(--border))] bg-[color:color-mix(in_srgb,var(--n9-accent)_8%,transparent)] text-foreground'
+                          : 'border-border/40 bg-muted/20 text-muted-foreground'
                       )}
                     >
                       <Globe
                         className={cn(
-                          'size-3.5 shrink-0',
-                          webSearchEnabled ? 'text-primary' : 'text-muted-foreground/70'
+                          'size-3 shrink-0',
+                          webSearchEnabled ? 'text-[color:var(--n9-accent)]' : 'text-muted-foreground/60'
                         )}
                         aria-hidden
                       />
-                      <span className="text-xs font-medium whitespace-nowrap">Web</span>
+                      <span className="text-[11px] font-medium whitespace-nowrap">Web</span>
                       <Switch
                         checked={webSearchEnabled}
                         onCheckedChange={setWebSearchEnabled}
                         disabled={isLoading || notes9Loading}
                         aria-label="Toggle web search"
-                        className="scale-[0.82] data-[state=checked]:bg-primary"
+                        className="scale-[0.75] data-[state=checked]:bg-[color:var(--n9-accent)]"
                       />
                     </span>
                   </TooltipTrigger>
@@ -2706,40 +2719,64 @@ export function RightSidebar({
             )}
           </div>
 
-          <div className="flex h-9 shrink-0 items-center justify-end gap-1">
-            <div className="inline-flex items-center gap-1 mr-1">
-              <Button
-                type="button"
-                size="icon"
-                variant="ghost"
-                className={cn("size-7 text-muted-foreground transition-colors hover:text-primary", micListening && "text-red-500 hover:text-red-600")}
-                onClick={() => micListening ? stopMic() : startMic()}
-                aria-label={micListening ? "Stop dictation" : "Start dictation"}
-                title={micListening ? "Stop dictation" : "Dictate message"}
-              >
-                <Mic className="size-4" />
-              </Button>
+          <div className="flex h-9 shrink-0 items-center justify-end gap-0.5">
+            {/* mic + waveform: flex-row-reverse keeps mic anchored to the right while
+                waveform grows to the LEFT — the mic button never shifts position */}
+            <div className="inline-flex flex-row-reverse items-center gap-1">
+              <TooltipProvider delayDuration={400}>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      type="button"
+                      size="icon"
+                      variant="ghost"
+                      className={cn(
+                        "size-7 rounded-lg transition-colors duration-150",
+                        micListening
+                          ? "text-red-500 hover:bg-red-500/10 hover:text-red-600"
+                          : "text-muted-foreground/70 hover:text-foreground"
+                      )}
+                      onClick={() => micListening ? stopMic() : startMic()}
+                      aria-label={micListening ? "Stop dictation" : "Start dictation"}
+                    >
+                      <Mic className="size-3.5" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent side="top" className="text-xs">
+                    {micListening ? 'Stop dictation' : 'Dictate message'}
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
               {micListening && <VoiceWaveform getWaveformData={getWaveformData} />}
             </div>
 
-            <Button
-              type="button"
-              size="icon"
-              variant="ghost"
-              className="size-7 text-muted-foreground transition-colors hover:text-primary"
-              onClick={() => fileInputRef.current?.click()}
-              disabled={isLoading || isUploading}
-              aria-label="Attach file"
-              title="Attach a file (image, PDF, DOCX, XLSX, CSV)"
-            >
-              <Paperclip className="size-4" />
-            </Button>
+            <TooltipProvider delayDuration={400}>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    type="button"
+                    size="icon"
+                    variant="ghost"
+                    className="size-7 rounded-lg text-muted-foreground/70 transition-colors duration-150 hover:text-foreground"
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={isLoading || isUploading}
+                    aria-label="Attach file"
+                  >
+                    <Paperclip className="size-3.5" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="top" className="text-xs">
+                  Attach a file (image, PDF, DOCX, XLSX, CSV)
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+
             {isLoading ? (
               <Button
                 type="button"
                 size="icon"
-                variant="secondary"
-                className="size-7 animate-pulse"
+                variant="ghost"
+                className="size-7 rounded-lg text-muted-foreground/70 transition-colors duration-150 hover:text-foreground"
                 aria-label="Stop generating"
                 title="Stop generating"
                 onClick={handleStopRequest}
@@ -2752,13 +2789,15 @@ export function RightSidebar({
                 size="icon"
                 variant="ghost"
                 className={cn(
-                  "size-7 text-muted-foreground transition-colors hover:text-primary",
-                  canSend && "text-primary",
+                  "size-7 rounded-lg transition-all duration-150",
+                  canSend
+                    ? "bg-[color:var(--n9-accent)] text-white hover:bg-[color:color-mix(in_srgb,var(--n9-accent)_85%,black)]"
+                    : "text-muted-foreground/40 hover:text-muted-foreground/60"
                 )}
                 onClick={(e) => void handleSubmit(e as React.FormEvent)}
                 disabled={!canSend || isUploading}
               >
-                <ArrowUp className="size-4" />
+                <ArrowUp className="size-3.5" />
               </Button>
             )}
           </div>
@@ -3257,27 +3296,24 @@ export function RightSidebar({
                   </div>
                 ) : (
                   <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-                    <div className="flex flex-1 flex-col items-center justify-center px-4">
-                      <div className="relative mb-3 flex justify-center">
+                    <div className="flex flex-1 flex-col items-center justify-center px-5 pb-2">
+                      <div className="mb-4 flex flex-col items-center gap-2.5">
                         <IceMascot
-                          className="w-16 shrink-0 rounded-full"
+                          className="w-11 shrink-0 rounded-full ring-2 ring-[color:color-mix(in_srgb,var(--n9-accent)_18%,transparent)] ring-offset-2 ring-offset-background"
                           options={{ src: '/notes9-mascot-ui.png' }}
                           aria-label="Catalyst AI"
                         />
+                        <div className="text-center">
+                          <p className="text-[11px] font-semibold uppercase tracking-widest text-[color:var(--n9-accent)] opacity-80">
+                            {emptyStateSubheading ?? 'Catalyst AI'}
+                          </p>
+                        </div>
                       </div>
-                      <h2 className="bg-gradient-to-r from-orange-500 to-pink-600 bg-clip-text text-lg font-bold tracking-tight text-transparent">
-                        Catalyst AI
-                      </h2>
-                      {emptyStateSubheading ? (
-                        <h3 className="bg-gradient-to-r from-orange-500 to-pink-600 bg-clip-text text-sm font-semibold tracking-tight text-transparent">
-                          {emptyStateSubheading}
-                        </h3>
-                      ) : null}
-                      <p className="max-w-xs text-center text-sm text-muted-foreground">
+                      <p className="max-w-[220px] text-center text-[13px] leading-relaxed text-muted-foreground/80">
                         {emptyStateDescription}
                       </p>
                     </div>
-                    <div className="flex-shrink-0 border-t bg-background/95 p-4 backdrop-blur">
+                    <div className="flex-shrink-0 border-t border-border/40 bg-background/95 p-4 backdrop-blur-md">
                       <div className="mx-auto min-w-0 max-w-3xl">{renderCursorInput()}</div>
                     </div>
                   </div>
@@ -3311,6 +3347,13 @@ export function RightSidebar({
                                 literatureParsed?.bodyMarkdown ?? rawContent
                               )
                             : null;
+                        // Prefer structured metadata.artifacts (Phase 0 — the
+                        // reliable source). Fall back to the legacy parsed markdown
+                        // block only for messages saved before this change.
+                        const messageArtifacts: PersistedArtifact[] =
+                          (message as { metadata?: { artifacts?: PersistedArtifact[] } }).metadata?.artifacts
+                          ?? notes9Parsed?.artifacts
+                          ?? [];
                         const content = hasLitRefs
                           ? literatureParsed!.bodyMarkdown
                           : notes9Parsed
@@ -3443,6 +3486,11 @@ export function RightSidebar({
                                       triggerLabel="All citations"
                                       className="mt-2 self-start"
                                     />
+                                  )}
+                                  {messageArtifacts.length > 0 && (
+                                    <div className="mt-3 w-full">
+                                      <PersistedArtifactList artifacts={messageArtifacts} />
+                                    </div>
                                   )}
                                   <div className="mt-1 opacity-0 group-hover/message:opacity-100 transition-opacity px-1">
                                     <MessageActions
@@ -3612,14 +3660,14 @@ export function RightSidebar({
                         type="button"
                         variant="secondary"
                         size="icon"
-                        className="absolute bottom-full left-1/2 z-30 mb-2 h-9 w-9 -translate-x-1/2 rounded-full border border-border/60 bg-background/95 shadow-md backdrop-blur-sm hover:bg-muted"
+                        className="absolute bottom-full left-1/2 z-30 mb-2 h-8 w-8 -translate-x-1/2 rounded-full border border-border/50 bg-background/95 shadow-md backdrop-blur-sm hover:bg-muted"
                         onClick={scrollChatToBottom}
                         aria-label="Scroll to latest message"
                       >
-                        <ChevronDown className="size-4" />
+                        <ChevronDown className="size-3.5" />
                       </Button>
                     ) : null}
-                    <div className="border-t bg-background/95 p-4 backdrop-blur">
+                    <div className="border-t border-border/40 bg-background/95 px-4 py-3 backdrop-blur-md">
                       <div className="max-w-3xl mx-auto min-w-0">
                         {renderCursorInput()}
                       </div>

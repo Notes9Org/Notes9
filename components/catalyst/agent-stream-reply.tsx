@@ -10,6 +10,7 @@ import {
 import { AgentToolCards } from '@/components/catalyst/agent-tool-cards';
 import { AgentArtifactList } from '@/components/catalyst/agent-artifact-card';
 import { AgentReasoningPanel } from '@/components/catalyst/agent-reasoning-panel';
+import { AgentStopButton } from '@/components/catalyst/agent-stop-button';
 import type { ThinkingPayload, RagChunksPayload, DonePayload } from '@/lib/agent-stream-types';
 import type {
   CitationsManifest,
@@ -61,6 +62,14 @@ interface AgentStreamReplyProps {
    * When false, all collected steps are listed (after the stream finishes).
    */
   isThinkingStreaming?: boolean;
+  /** Running count of resolved sources from `citations_update` — drives the
+   * live "Gathering sources… N" ticker while the turn is in flight. */
+  liveCitationCount?: number;
+  /** Server-side cancel handle from `run_started` (HITL only). When present
+   * alongside an active stream, a Stop button is shown. */
+  runId?: string | null;
+  /** Cancels the in-flight run + stream. Wired to the Stop button. */
+  onStop?: () => void;
 }
 
 // Display labels only. Unknown keys fall through to the raw value via the
@@ -92,6 +101,9 @@ export function AgentStreamReply({
   error,
   compact = false,
   isThinkingStreaming = false,
+  liveCitationCount = 0,
+  runId = null,
+  onStop,
 }: AgentStreamReplyProps) {
   const displayAnswer =
     donePayload?.content ?? donePayload?.answer ?? streamedAnswer;
@@ -162,6 +174,24 @@ export function AgentStreamReply({
           cards={toolCards}
           collapsible={!isStreaming}
         />
+      )}
+
+      {/* ── Live source ticker + Stop control. Shown only while streaming and
+            before the final `done` lands; the citation panel below supersedes
+            it once the answer settles. The Stop button appears only when the
+            backend handed us a runId (HITL on) so cancellation is possible. ── */}
+      {isStreaming && !donePayload && (liveCitationCount > 0 || (runId && onStop)) && (
+        <div className="flex items-center gap-2 px-1 text-xs text-muted-foreground">
+          {liveCitationCount > 0 && (
+            <span className="inline-flex items-center gap-1.5">
+              <Loader2 className="size-3 animate-spin" aria-hidden />
+              Gathering sources… {liveCitationCount}
+            </span>
+          )}
+          {runId && onStop && (
+            <AgentStopButton onStop={onStop} className={liveCitationCount > 0 ? 'ml-auto' : ''} />
+          )}
+        </div>
       )}
 
       {/* ── Synthesis checklist — Biomni-style "here's my plan, ticking it off"
@@ -283,7 +313,11 @@ export function AgentStreamReply({
           </div>
 
           {/* Confidence + tool badge */}
-          {donePayload && (donePayload.confidence != null || donePayload.tool_used) && (
+          {donePayload &&
+            (donePayload.confidence != null ||
+              donePayload.tool_used ||
+              donePayload.citations_health === 'degraded' ||
+              donePayload.citations_health === 'failed') && (
             <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
               {donePayload.confidence != null && (
                 <span
@@ -300,6 +334,20 @@ export function AgentStreamReply({
               {donePayload.tool_used && (
                 <span className="rounded-md bg-muted/50 px-2 py-0.5 font-medium">
                   {TOOL_LABELS[donePayload.tool_used] ?? donePayload.tool_used}
+                </span>
+              )}
+              {/* Fail-open observability: surface degraded/failed attribution so an
+                  uncited answer is never silently presented as fully grounded. */}
+              {(donePayload.citations_health === 'degraded' ||
+                donePayload.citations_health === 'failed') && (
+                <span className="rounded-md bg-amber-500/15 px-2 py-0.5 font-medium text-amber-700 dark:text-amber-400/90">
+                  {donePayload.citations_health === 'failed'
+                    ? 'Citations unavailable'
+                    : `Partial citations${
+                        donePayload.tokens_unresolved
+                          ? ` (${donePayload.tokens_unresolved} unresolved)`
+                          : ''
+                      }`}
                 </span>
               )}
             </div>

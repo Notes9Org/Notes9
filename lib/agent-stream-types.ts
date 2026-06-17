@@ -114,6 +114,34 @@ export interface CitationsUpdatePayload {
   count: number;
 }
 
+/** One step in a synthesis plan checklist. */
+export interface SynthesisPlanStepPayload {
+  id: string;
+  label: string;
+  /** Backend seeds every step as "pending"; promoted via synthesis_step. */
+  status?: 'pending' | 'active' | 'done';
+}
+
+/** SSE event: synthesis_plan – Biomni-style ordered checklist the synthesis
+ * will tick off as it works. `tool` is the synthesis correlation id. */
+export interface SynthesisPlanPayload {
+  /** Correlation id of the synthesis run (named `tool` on the wire). */
+  tool: string;
+  title: string;
+  steps: SynthesisPlanStepPayload[];
+  [key: string]: unknown;
+}
+
+/** SSE event: synthesis_step – one plan step's status changed. */
+export interface SynthesisStepPayload {
+  /** Correlation id of the synthesis run (named `tool` on the wire). */
+  tool: string;
+  /** Id of the step whose status changed. */
+  id: string;
+  status: 'pending' | 'active' | 'done';
+  [key: string]: unknown;
+}
+
 /** Grounding item returned inside DonePayload.resources */
 export interface GroundingResource {
   display_label?: string | null;
@@ -160,6 +188,12 @@ export interface DonePayload {
   confidence?: number;
   tool_used?: string;
   debug?: Record<string, unknown> | null;
+  /** Citation health envelope (fail-open observability). Single discriminated
+   * state derived server-side from token-resolution counters. Lets the UI flag
+   * degraded/failed attribution instead of silently rendering an uncited answer. */
+  citations_health?: 'ok' | 'degraded' | 'floor' | 'failed';
+  /** Count of citation tokens the model wrote that did not resolve to a source. */
+  tokens_unresolved?: number;
   [key: string]: unknown;
 }
 
@@ -171,6 +205,12 @@ export interface ErrorPayload {
 /** SSE event: ping – keep-alive */
 export interface PingPayload {
   ts?: number;
+  [key: string]: unknown;
+}
+
+/** Emitted once at the start of an agent run, carrying the run identifier. */
+export interface RunStartedPayload {
+  run_id?: string;
   [key: string]: unknown;
 }
 
@@ -215,6 +255,7 @@ export interface ToolOutputPayload {
 // ── Discriminated union ───────────────────────────────────────────────────────
 
 export type SseEvent =
+  | { event: "run_started"; data: RunStartedPayload }
   | { event: "thinking"; data: ThinkingPayload }
   | { event: "thinking_token"; data: ThinkingTokenPayload }
   | { event: "token"; data: TokenPayload }
@@ -225,13 +266,79 @@ export type SseEvent =
   | { event: "artifact"; data: ArtifactPayload }
   | { event: "citations_manifest"; data: CitationsManifestPayload }
   | { event: "citations_update"; data: CitationsUpdatePayload }
+  | { event: "synthesis_plan"; data: SynthesisPlanPayload }
+  | { event: "synthesis_step"; data: SynthesisStepPayload }
   | { event: "done"; data: DonePayload }
   | { event: "error"; data: ErrorPayload }
   | { event: "ping"; data: PingPayload };
 
+// ── Source-name normalizer (AD1: structured fields → view model) ──────────────
+//
+// The ONE place a source-bearing SSE event becomes the `source_names` shown on a
+// tool card. UI state is derived ONLY from typed wire fields here — never by
+// parsing human-readable `thinking` prose (that heuristic was fragile: any copy
+// change silently emptied the cards). Keeping the extraction in a single typed
+// function means a wording change on the backend can never break the cards, and
+// every source-bearing event (`tool_result`, `tool_output`, `rag_chunks`) flows
+// through the same dedupe/truncate rules.
+
+/**
+ * Clean a raw list of source/document names for display: keep strings only,
+ * trim, drop blanks, dedupe case-insensitively (first spelling wins), and
+ * truncate each to `maxLen` chars. `max` caps the count (Infinity = keep all).
+ */
+export function normalizeSourceNames(
+  raw: unknown,
+  { max = Infinity, maxLen = 80 }: { max?: number; maxLen?: number } = {},
+): string[] {
+  if (!Array.isArray(raw)) return [];
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const item of raw) {
+    if (typeof item !== "string") continue;
+    const name = item.trim();
+    if (!name) continue;
+    const key = name.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(name.length > maxLen ? name.slice(0, maxLen - 1) + "…" : name);
+    if (out.length >= max) break;
+  }
+  return out;
+}
+
+/**
+ * Extract the display source names from a source-bearing SSE event, using ONLY
+ * its structured fields. Returns `[]` for events that carry no structured
+ * sources — including `thinking`, whose message text must never be parsed.
+ */
+export function sourceNamesFromEvent(
+  eventType: string,
+  payload: Record<string, unknown>,
+): string[] {
+  switch (eventType) {
+    case "tool_result":
+      return normalizeSourceNames(payload.source_names);
+    case "tool_output":
+      return normalizeSourceNames(payload.document_names ?? payload.file_names);
+    case "rag_chunks": {
+      const chunks = Array.isArray(payload.chunks) ? payload.chunks : [];
+      const names = chunks.map((c) =>
+        c && typeof c === "object"
+          ? (c as Record<string, unknown>).source_name
+          : null,
+      );
+      return normalizeSourceNames(names, { max: 5 });
+    }
+    default:
+      return [];
+  }
+}
+
 // ── Type guard ────────────────────────────────────────────────────────────────
 
 const KNOWN_EVENT_TYPES = new Set([
+  "run_started",
   "thinking",
   "thinking_token",
   "token",
@@ -242,6 +349,8 @@ const KNOWN_EVENT_TYPES = new Set([
   "artifact",
   "citations_manifest",
   "citations_update",
+  "synthesis_plan",
+  "synthesis_step",
   "done",
   "error",
   "ping",

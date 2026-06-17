@@ -13,6 +13,11 @@ import {
   normalizeAgentRelevance0to1,
   type HighlightTarget,
 } from '@/lib/document-highlight';
+import { GroundingProvenanceBadge, type Grounding } from './grounding-provenance-badge';
+import {
+  CitationSourceViewer,
+  type CitationSourceViewerSource,
+} from './citation-source-viewer';
 import '@/styles/html-content.css';
 
 /** Citation chip metadata read off the clicked/hovered DOM element's data-*. */
@@ -31,6 +36,16 @@ interface ChipData {
   /** Grounding verdict for this specific claim — drives the support badge. */
   supportStatus: 'supported' | 'partial' | 'unsupported' | null;
   provenance: string;
+  /** How the span was located (native / heuristic / none) — drives the
+   * provenance badge in the hover card and the source viewer. */
+  grounding: Grounding;
+  /** Advisory char offsets into the stripped source for the cited span. */
+  charStart: number | null;
+  charEnd: number | null;
+}
+
+function parseGrounding(raw: string | undefined): Grounding {
+  return raw === 'native' || raw === 'heuristic' || raw === 'none' ? raw : null;
 }
 
 function parseSupportStatus(
@@ -42,6 +57,8 @@ function parseSupportStatus(
 function readChipData(el: HTMLElement): ChipData {
   const ds = el.dataset;
   const rel = ds.citeRelevance ? Number(ds.citeRelevance) : NaN;
+  const cs = ds.citeCharStart ? Number(ds.citeCharStart) : NaN;
+  const ce = ds.citeCharEnd ? Number(ds.citeCharEnd) : NaN;
   return {
     label: ds.citeLabel || ds.citeN || '',
     sourceType: ds.citeType || '',
@@ -54,6 +71,9 @@ function readChipData(el: HTMLElement): ChipData {
     citedText: ds.citeSnippet || '',
     supportStatus: parseSupportStatus(ds.citeSupport),
     provenance: ds.citeProvenance || '',
+    grounding: parseGrounding(ds.citeGrounding),
+    charStart: Number.isFinite(cs) ? cs : null,
+    charEnd: Number.isFinite(ce) ? ce : null,
   };
 }
 
@@ -241,6 +261,23 @@ function postProcessHtml(html: string, manifest?: CitationsManifest | null): str
           : entry?.grounding === 'none'
             ? 'unsupported'
             : null;
+      // Span provenance: how the supporting span was located (native exact vs
+      // heuristic approximate vs none). Drives the provenance badge (G5).
+      const grounding =
+        entry?.grounding === 'native' ||
+        entry?.grounding === 'heuristic' ||
+        entry?.grounding === 'none'
+          ? entry.grounding
+          : '';
+      // Advisory char offsets for the cited span (G3 highlight precision).
+      const charStart =
+        typeof entry?.char_start === 'number' && Number.isFinite(entry.char_start)
+          ? String(entry.char_start)
+          : '';
+      const charEnd =
+        typeof entry?.char_end === 'number' && Number.isFinite(entry.char_end)
+          ? String(entry.char_end)
+          : '';
       const relevance =
         typeof entry?.relevance === 'number' && Number.isFinite(entry.relevance)
           ? String(entry.relevance)
@@ -273,6 +310,9 @@ function postProcessHtml(html: string, manifest?: CitationsManifest | null): str
         + (excerpt ? `data-cite-excerpt="${escapeHtmlAttr(excerpt.slice(0, 500))}" ` : '')
         + (citedText ? `data-cite-snippet="${escapeHtmlAttr(citedText.slice(0, 500))}" ` : '')
         + (supportStatus != null ? `data-cite-support="${escapeHtmlAttr(supportStatus)}" ` : '')
+        + (grounding ? `data-cite-grounding="${escapeHtmlAttr(grounding)}" ` : '')
+        + (charStart ? `data-cite-char-start="${escapeHtmlAttr(charStart)}" ` : '')
+        + (charEnd ? `data-cite-char-end="${escapeHtmlAttr(charEnd)}" ` : '')
         + (provenance ? `data-cite-provenance="${escapeHtmlAttr(provenance)}" ` : '');
       // External URL → render as a real anchor so clicking the chip opens
       // the source in a new tab. No URL → styleable <sup> chip; its click +
@@ -310,12 +350,14 @@ function CitationHoverCard({
   containerRect,
   onMouseEnter,
   onMouseLeave,
+  onViewSource,
 }: {
   chip: ChipData;
   anchor: DOMRect;
   containerRect: DOMRect;
   onMouseEnter?: () => void;
   onMouseLeave?: () => void;
+  onViewSource?: () => void;
 }) {
   // Position relative to the renderer container (which is `relative`).
   const top = anchor.bottom - containerRect.top + 6;
@@ -336,13 +378,19 @@ function CitationHoverCard({
       onMouseEnter={onMouseEnter}
       onMouseLeave={onMouseLeave}
     >
-      <div className="flex items-center gap-1.5">
-        <span className="inline-flex items-center rounded-full bg-muted px-1.5 py-0.5 text-2xs font-medium uppercase tracking-wide text-muted-foreground">
+      <div className="flex flex-wrap items-center gap-1.5">
+        <span className="inline-flex items-center rounded-full bg-muted px-1.5 py-0.5 text-xs font-medium uppercase tracking-wide text-muted-foreground">
           {chip.sourceType ? chip.sourceType.replace(/_/g, ' ') : 'Source'}
         </span>
-        <span className="font-mono text-2xs text-muted-foreground tabular-nums">
+        <span className="font-mono text-xs text-muted-foreground tabular-nums">
           [{chip.label}]
         </span>
+        <GroundingProvenanceBadge
+          grounding={chip.grounding}
+          matchKind={chip.matchKind}
+          supportStatus={chip.supportStatus}
+          className="ml-auto"
+        />
       </div>
       {chip.sourceName && (
         <p className="mt-1.5 line-clamp-2 text-xs font-medium text-foreground">
@@ -359,12 +407,43 @@ function CitationHoverCard({
           “{excerpt}”
         </p>
       )}
-      <p className="mt-1.5 text-2xs text-muted-foreground/80">
-        {provenanceLabel(chip)}
-        <span className="ml-1.5 text-primary">Open ↗</span>
-      </p>
+      <div className="mt-1.5 flex items-center justify-between gap-2 text-2xs text-muted-foreground/80">
+        <span>{provenanceLabel(chip)}</span>
+        {(chip.citedText || chip.excerpt) && onViewSource && (
+          <button
+            type="button"
+            onClick={onViewSource}
+            className="rounded-sm font-medium text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            View source
+          </button>
+        )}
+      </div>
     </div>
   );
+}
+
+/** Project the DOM chip metadata into the source-viewer's source shape. */
+function chipToViewerSource(chip: ChipData): CitationSourceViewerSource {
+  const documentHref =
+    !chip.sourceUrl && chip.sourceId
+      ? workspaceRoute(chip.sourceType, chip.sourceId) || null
+      : null;
+  return {
+    label: chip.label,
+    sourceType: chip.sourceType,
+    sourceName: chip.sourceName || null,
+    sourceUrl: chip.sourceUrl || null,
+    sourceBody: null,
+    excerpt: chip.excerpt || null,
+    citedText: chip.citedText || null,
+    charStart: chip.charStart,
+    charEnd: chip.charEnd,
+    documentHref,
+    grounding: chip.grounding,
+    matchKind: chip.matchKind || null,
+    supportStatus: chip.supportStatus,
+  };
 }
 
 export function MarkdownRenderer({
@@ -375,6 +454,9 @@ export function MarkdownRenderer({
 }: MarkdownRendererProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [hover, setHover] = useState<{ chip: ChipData; anchor: DOMRect } | null>(null);
+  // Span-level source viewer (G3): the cited source's text with the exact
+  // supporting span highlighted. null → closed.
+  const [viewerSource, setViewerSource] = useState<CitationSourceViewerSource | null>(null);
   // Deferred dismiss: lets the pointer travel from the chip into the card
   // (so the user can read / click "Open") without the card vanishing.
   const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -433,6 +515,17 @@ export function MarkdownRenderer({
     if (href) window.location.assign(href);
   }, []);
 
+  /** Open the in-app span viewer for a chip (G3). Dismiss any hover card so it
+   * doesn't float over the modal. */
+  const openViewer = useCallback(
+    (chip: ChipData) => {
+      cancelHoverClose();
+      setHover(null);
+      setViewerSource(chipToViewerSource(chip));
+    },
+    [cancelHoverClose]
+  );
+
   const onClick = useCallback(
     (e: React.MouseEvent<HTMLDivElement>) => {
       const chipEl = (e.target as HTMLElement).closest<HTMLElement>('.notes9-cite');
@@ -440,9 +533,17 @@ export function MarkdownRenderer({
       // Anchor variants are real links — let the browser handle them.
       if (chipEl.tagName === 'A') return;
       e.preventDefault();
-      openChip(readChipData(chipEl));
+      const chip = readChipData(chipEl);
+      // When we have a supporting span/excerpt, open the source viewer so the
+      // user can read the exact passage highlighted in context (G3). Otherwise
+      // fall back to the legacy deep-link navigation.
+      if (chip.citedText || chip.excerpt) {
+        openViewer(chip);
+      } else {
+        openChip(chip);
+      }
     },
-    [openChip]
+    [openChip, openViewer]
   );
 
   const onMouseOver = useCallback(
@@ -472,9 +573,14 @@ export function MarkdownRenderer({
       const chipEl = (e.target as HTMLElement).closest<HTMLElement>('.notes9-cite');
       if (!chipEl || chipEl.tagName === 'A') return;
       e.preventDefault();
-      openChip(readChipData(chipEl));
+      const chip = readChipData(chipEl);
+      if (chip.citedText || chip.excerpt) {
+        openViewer(chip);
+      } else {
+        openChip(chip);
+      }
     },
-    [openChip]
+    [openChip, openViewer]
   );
 
   // Clear the preview when the content changes (e.g. live streaming updates).
@@ -517,8 +623,16 @@ export function MarkdownRenderer({
           containerRect={containerRef.current.getBoundingClientRect()}
           onMouseEnter={cancelHoverClose}
           onMouseLeave={scheduleHoverClose}
+          onViewSource={() => openViewer(hover.chip)}
         />
       )}
+      <CitationSourceViewer
+        source={viewerSource}
+        open={viewerSource !== null}
+        onOpenChange={(o) => {
+          if (!o) setViewerSource(null);
+        }}
+      />
     </div>
   );
 }

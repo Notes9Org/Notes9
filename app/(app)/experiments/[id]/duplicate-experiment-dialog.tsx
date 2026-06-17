@@ -19,6 +19,7 @@ import { useRouter } from "next/navigation"
 import { Copy, Loader2 } from "lucide-react"
 import { getUniqueNameErrorMessage } from "@/lib/unique-name-error"
 import { Checkbox } from "@/components/ui/checkbox"
+import { useRequiredUser } from "@/components/auth/auth-provider"
 
 interface Experiment {
   id: string
@@ -45,6 +46,7 @@ export function DuplicateExperimentDialog({
   const { toast } = useToast()
   const router = useRouter()
   const supabase = useMemo(() => createClient(), [])
+  const currentUser = useRequiredUser()
 
   const [internalOpen, setInternalOpen] = useState(false)
   const open = externalOpen !== undefined ? externalOpen : internalOpen
@@ -76,8 +78,7 @@ export function DuplicateExperimentDialog({
     setIsDuplicating(true)
 
     try {
-      const { data: authData } = await supabase.auth.getUser()
-      if (!authData.user) throw new Error("Not authenticated")
+      if (!currentUser) throw new Error("Not authenticated")
 
       // Create duplicate experiment
       const { data: newExperiment, error: experimentError } = await supabase
@@ -91,7 +92,7 @@ export function DuplicateExperimentDialog({
           assigned_to: experiment.assigned_to,
           start_date: null, // Reset dates
           completion_date: null,
-          created_by: authData.user.id,
+          created_by: currentUser.id,
         })
         .select()
         .single()

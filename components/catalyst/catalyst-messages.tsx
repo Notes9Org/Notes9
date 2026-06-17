@@ -15,6 +15,8 @@ import {
   AgentCitationsPanel,
   groundingResourceToPanelItem,
 } from '@/components/catalyst/agent-citations-panel';
+import { PersistedArtifactList } from '@/components/catalyst/agent-artifact-card';
+import type { PersistedArtifact } from '@/lib/agent-artifacts';
 import { parseNotes9AssistantStoredContent } from '@/lib/notes9-chat-format';
 import type { Vote } from '@/lib/db/schema';
 import type { ThinkingPayload, RagChunksPayload, DonePayload } from '@/lib/agent-stream-types';
@@ -43,6 +45,12 @@ interface CatalystMessagesProps {
     citationsManifest?: CitationsManifest | null;
     error: string | null;
     isStreaming: boolean;
+    /** Live source count from `citations_update` events — drives the ticker. */
+    liveCitationCount?: number;
+    /** Server-side cancel handle from `run_started` (HITL) — shows Stop button. */
+    runId?: string | null;
+    /** Cancels the in-flight run + stream. */
+    onStop?: () => void;
   } | null;
 }
 
@@ -114,6 +122,12 @@ export function CatalystMessages({
               message.role === 'assistant'
                 ? parseNotes9AssistantStoredContent(content)
                 : null;
+            // Prefer structured metadata.artifacts (Phase 0); fall back to the
+            // legacy parsed markdown block for messages saved before this change.
+            const messageArtifacts =
+              (message as { metadata?: { artifacts?: PersistedArtifact[] } }).metadata?.artifacts
+              ?? notes9Parsed?.artifacts
+              ?? [];
             const assistantDisplayMarkdown =
               message.role === 'assistant' && notes9Parsed
                 ? notes9Parsed.bodyMarkdown
@@ -182,6 +196,12 @@ export function CatalystMessages({
                                 className="mt-2"
                               />
                             )}
+                            {/* Persisted file/chart artifacts — re-sign their URLs lazily */}
+                            {messageArtifacts.length > 0 && (
+                              <div className="mt-3">
+                                <PersistedArtifactList artifacts={messageArtifacts} />
+                              </div>
+                            )}
                             {/* Blinking cursor at end of streaming text */}
                             {isLastAssistant && isLoading && (
                               <span
@@ -226,7 +246,10 @@ export function CatalystMessages({
                   <Sparkles className="size-4 animate-pulse" />
                 </div>
                 <div className="flex-1 min-w-0 max-w-full space-y-2">
-                  {onStop && (
+                  {/* When HITL is on (runId present) AgentStreamReply renders the
+                      server-side cancel button; suppress this local-abort one to
+                      avoid two stacked Stop buttons. Keep it when runId is absent. */}
+                  {onStop && !notes9Stream.runId && (
                     <div className="flex justify-end">
                       <Button
                         type="button"
@@ -252,6 +275,9 @@ export function CatalystMessages({
                     citationsManifest={notes9Stream.citationsManifest}
                     error={notes9Stream.error}
                     isThinkingStreaming={notes9Stream.isStreaming}
+                    liveCitationCount={notes9Stream.liveCitationCount}
+                    runId={notes9Stream.runId}
+                    onStop={notes9Stream.onStop}
                   />
                 </div>
               </div>

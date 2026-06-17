@@ -17,34 +17,32 @@ function readSource(relativePath: string): string {
   return fs.readFileSync(path.resolve(__dirname, "../..", relativePath), "utf-8")
 }
 
-const dashboardSource = readSource("app/(app)/dashboard/page.tsx")
+const firstRunSource = readSource("app/(app)/dashboard/dashboard-first-run.tsx")
+const recentWorkSource = readSource("app/(app)/dashboard/dashboard-recent-work.tsx")
 
-describe("Dashboard quick actions (Req 10.1)", () => {
-  it('renders a "Create New Project" quick action button', () => {
-    expect(dashboardSource).toContain("Create New Project")
+// The dashboard was redesigned: first-time users see a "Start with a project"
+// empty state (DashboardFirstRun) whose primary CTA creates a project, and the
+// recent-work panel (DashboardRecentWork) shows a fallback when there is no
+// recent activity. These assertions track that current output.
+describe("Dashboard first-run create CTA (Req 10.1)", () => {
+  it('renders a "Create your first project" CTA', () => {
+    expect(firstRunSource).toContain("Create your first project")
   })
 
-  it('renders an "Add Experiment" quick action button', () => {
-    expect(dashboardSource).toContain("Add Experiment")
+  it('the create CTA links to the project creation page', () => {
+    expect(firstRunSource).toContain('href="/projects/new"')
   })
 
-  it('renders a "Record Sample" quick action button', () => {
-    expect(dashboardSource).toContain("Record Sample")
-  })
-
-  it("quick action buttons link to the correct creation pages", () => {
-    expect(dashboardSource).toContain('href="/projects/new"')
-    expect(dashboardSource).toContain('href="/experiments/new"')
-    expect(dashboardSource).toContain('href="/samples/new"')
+  it("surfaces the entity hierarchy (experiments, lab notes, samples, protocols)", () => {
+    expect(firstRunSource).toContain('title="Experiments"')
+    expect(firstRunSource).toContain('title="Lab notes"')
+    expect(firstRunSource).toContain('title="Samples"')
+    expect(firstRunSource).toContain('title="Protocols"')
   })
 })
 
-describe("Dashboard recent items fallback text (Req 10.4, 10.5)", () => {
-  it('displays "No recent experiments" when there are no experiments', () => {
-    expect(dashboardSource).toContain("No recent experiments")
-  })
-
-  it('displays "No recent notes" when there are no lab notes', () => {
-    expect(dashboardSource).toContain("No recent notes")
+describe("Dashboard recent work fallback text (Req 10.4, 10.5)", () => {
+  it('displays a "No recent work" fallback when there is no recent activity', () => {
+    expect(recentWorkSource).toContain("No recent work")
   })
 })

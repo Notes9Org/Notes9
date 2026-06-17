@@ -448,6 +448,7 @@ export function ProtocolAiSidechat({
 
   const {
     runStream,
+    citationsManifest: notes9CitationsManifest,
     error: notes9Error,
     isStreaming: notes9Streaming,
     reset: resetNotes9,
@@ -760,7 +761,7 @@ export function ProtocolAiSidechat({
       }
       if (result.donePayload) {
         const formattedAnswer = stripQuestionsForYouSection(
-          formatNotes9AssistantMarkdown(result.donePayload)
+          formatNotes9AssistantMarkdown(result.donePayload, notes9CitationsManifest)
         )
         if (formattedAnswer.trim()) {
           await appendPlainAssistantFromDb(formattedAnswer)
@@ -1543,8 +1544,18 @@ export function ProtocolAiSidechat({
                     size="icon"
                     className="size-7 animate-pulse"
                     onClick={() => {
+                      // Stop whichever stream is live — was a no-op for the
+                      // notes9 / general paths (button appeared but did nothing).
                       if (isStreaming) {
                         abort()
+                        return
+                      }
+                      if (notes9Streaming) {
+                        resetNotes9()
+                        return
+                      }
+                      if (generalLoading) {
+                        setGeneralLoading(false)
                         return
                       }
                     }}

@@ -4,6 +4,7 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { cn } from '@/lib/utils';
 import type { AgentCitationPanelItem } from './agent-citations-panel';
+import { GroundingProvenanceBadge } from './grounding-provenance-badge';
 
 export interface InlineCitationProps {
   number: number;
@@ -39,7 +40,9 @@ export function InlineCitation({ number, citation, onNavigate, className }: Inli
       )}
       onMouseEnter={() => setShowTooltip(true)}
       onMouseLeave={() => setShowTooltip(false)}
-      role={href ? 'link' : 'note'}
+      // No explicit role: on the href path the wrapping <Link> already provides
+      // link semantics, and a non-focusable role="link" span misleads screen
+      // readers. The aria-label still announces the citation.
       aria-label={citation ? `Citation ${number}: ${citation.title}` : `Citation ${number} loading`}
     >
       [{number}]
@@ -59,7 +62,17 @@ export function InlineCitation({ number, citation, onNavigate, className }: Inli
             )}
             role="tooltip"
           >
-            <p className="font-medium text-foreground">{citation?.title}</p>
+            <div className="flex items-start justify-between gap-1.5">
+              <p className="font-medium text-foreground">{citation?.title}</p>
+              {citation && (
+                <GroundingProvenanceBadge
+                  grounding={citation.grounding}
+                  matchKind={citation.matchKind}
+                  supportStatus={citation.supportStatus}
+                  className="shrink-0"
+                />
+              )}
+            </div>
             {tooltipExcerpt && (
               <p className="mt-1 text-muted-foreground">{tooltipExcerpt}</p>
             )}
@@ -79,6 +92,8 @@ export function InlineCitation({ number, citation, onNavigate, className }: Inli
             onNavigate();
           }
         }}
+        onFocus={() => setShowTooltip(true)}
+        onBlur={() => setShowTooltip(false)}
         className="no-underline"
       >
         {chipContent}
@@ -92,7 +107,17 @@ export function InlineCitation({ number, citation, onNavigate, className }: Inli
           )}
           role="tooltip"
         >
-          <p className="font-medium text-foreground">{citation?.title}</p>
+          <div className="flex items-start justify-between gap-1.5">
+            <p className="font-medium text-foreground">{citation?.title}</p>
+            {citation && (
+              <GroundingProvenanceBadge
+                grounding={citation.grounding}
+                matchKind={citation.matchKind}
+                supportStatus={citation.supportStatus}
+                className="shrink-0"
+              />
+            )}
+          </div>
           {tooltipExcerpt && (
             <p className="mt-1 text-muted-foreground">{tooltipExcerpt}</p>
           )}
