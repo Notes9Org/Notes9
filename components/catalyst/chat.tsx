@@ -12,7 +12,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { Send, Square, Sparkles, PanelLeftClose, PanelLeft, Globe, ChevronDown, Paperclip, Mic } from 'lucide-react';
+import { Send, Square, PanelLeftClose, PanelLeft, Globe, ChevronDown, Paperclip, Mic } from 'lucide-react';
 import { Switch } from '@/components/ui/switch';
 import { useChatSessions } from '@/hooks/use-chat-sessions';
 import { ChatHistory } from './chat-history';
@@ -619,19 +619,19 @@ export function CatalystChat({ open, onOpenChange }: CatalystChatProps) {
     <TooltipProvider>
       <Dialog open={open} onOpenChange={onOpenChange}>
         <DialogContent
-          className="sm:max-w-[900px] h-[85vh] flex flex-col p-0 gap-0"
+          className="sm:max-w-[900px] h-[85vh] flex flex-col p-0 gap-0 overflow-hidden rounded-2xl border-border/50 shadow-2xl"
           onEscapeKeyDown={() => onOpenChange(false)}
         >
-          <DialogHeader className="px-6 py-4 border-b shrink-0">
+          <DialogHeader className="px-5 py-3 border-b border-border/40 shrink-0 bg-background/80 backdrop-blur-sm">
             <div className="flex items-center justify-between">
-              <DialogTitle className="flex items-center gap-2">
-                <Sparkles className="size-5 text-primary" />
+              <DialogTitle className="flex items-center gap-2.5 text-base font-semibold tracking-tight">
+                <img src="/notes9-logo-mark-transparent.png" alt="Catalyst" className="size-5 object-contain dark:invert dark:brightness-125" />
                 Catalyst
               </DialogTitle>
               <Button
                 variant="ghost"
                 size="icon"
-                className="size-8"
+                className="size-8 rounded-lg text-muted-foreground hover:text-foreground transition-colors"
                 onClick={() => setShowHistory(!showHistory)}
                 aria-label={showHistory ? "Hide chat history" : "Show chat history"}
               >
@@ -645,9 +645,14 @@ export function CatalystChat({ open, onOpenChange }: CatalystChatProps) {
           </DialogHeader>
 
           <div className="flex flex-1 overflow-hidden">
-            {/* Chat History Sidebar */}
-            {showHistory && (
-              <div className="w-64 shrink-0">
+            {/* Chat History Sidebar — animated width transition */}
+            <div
+              className={cn(
+                'shrink-0 overflow-hidden border-r border-border/40 transition-all duration-300 ease-in-out',
+                showHistory ? 'w-64 opacity-100' : 'w-0 opacity-0 border-r-0'
+              )}
+            >
+              <div className="w-64">
                 <ChatHistory
                   sessions={sessions}
                   currentSessionId={currentSessionId}
@@ -657,7 +662,7 @@ export function CatalystChat({ open, onOpenChange }: CatalystChatProps) {
                   loading={sessionsLoading}
                 />
               </div>
-            )}
+            </div>
 
             {/* Main Chat Area */}
             <div className="flex-1 flex flex-col min-w-0">
@@ -665,43 +670,45 @@ export function CatalystChat({ open, onOpenChange }: CatalystChatProps) {
               <div
                 ref={scrollViewportRef}
                 onScroll={onMessagesScroll}
-                className="relative flex-1 overflow-y-auto"
+                className="relative flex-1 overflow-y-auto scroll-smooth"
               >
-                <div className="flex flex-col gap-4 p-6">
+                <div className="flex flex-col gap-5 px-6 py-5">
                     {messages.length === 0 ? (
-                      <div className="flex flex-col items-center justify-center min-h-[40vh] py-10 text-center">
-                        <Sparkles className="size-10 text-primary/70 mb-3" />
-                        <h3 className="font-display text-2xl md:text-3xl font-medium tracking-tight text-foreground">
+                      <div className="flex flex-col items-center justify-center min-h-[40vh] py-12 text-center animate-in fade-in duration-500">
+                        <div className="size-14 rounded-2xl bg-primary/5 border border-primary/10 flex items-center justify-center mb-5 shadow-sm">
+                          <img src="/notes9-logo-mark-transparent.png" alt="" className="size-8 object-contain dark:invert dark:brightness-125" />
+                        </div>
+                        <h3 className="font-display text-2xl md:text-3xl font-semibold tracking-tight text-foreground">
                           How can I help you today?
                         </h3>
-                        <p className="text-sm text-muted-foreground mt-2 max-w-md">
+                        <p className="text-sm text-muted-foreground mt-2 max-w-md leading-relaxed">
                           Ask Catalyst about experiments, protocols, chemistry
                           calculations, or anything in your workspace.
                         </p>
-                        <div className="mt-6 grid grid-cols-1 sm:grid-cols-2 gap-2 w-full max-w-md">
+                        <div className="mt-7 grid grid-cols-1 sm:grid-cols-2 gap-2.5 w-full max-w-lg">
                           {EXAMPLE_PROMPTS.map((p) => (
                             <button
                               key={p.label}
                               type="button"
                               onClick={() => sendExamplePrompt(p.prompt)}
                               className={cn(
-                                'rounded-lg border border-border/70 bg-background',
-                                'px-3 py-2.5 text-left text-sm text-foreground/90',
-                                'transition-colors hover:border-primary/40 hover:bg-primary/[0.04]',
+                                'group rounded-xl border border-border/60 bg-background/80',
+                                'px-3.5 py-3 text-left text-sm text-foreground/90',
+                                'transition-all duration-200 hover:border-primary/40 hover:bg-primary/[0.04] hover:shadow-sm hover:-translate-y-0.5',
                                 'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50',
                               )}
                               aria-label={`Send example prompt: ${p.label}`}
                             >
-                              <div className="font-medium">{p.label}</div>
+                              <div className="font-medium group-hover:text-primary transition-colors">{p.label}</div>
                               <div className="text-xs text-muted-foreground mt-0.5 line-clamp-1">
                                 {p.prompt}
                               </div>
                             </button>
                           ))}
                         </div>
-                        <p className="mt-5 text-xs text-muted-foreground/70">
-                          Press <kbd className="rounded border border-border bg-muted px-1.5 py-0.5 font-mono text-2xs">Esc</kbd> to close ·{' '}
-                          <kbd className="rounded border border-border bg-muted px-1.5 py-0.5 font-mono text-2xs">⇧ Enter</kbd> for new line
+                        <p className="mt-6 text-xs text-muted-foreground/60">
+                          Press <kbd className="rounded-md border border-border/60 bg-muted/60 px-1.5 py-0.5 font-mono text-2xs">Esc</kbd> to close ·{' '}
+                          <kbd className="rounded-md border border-border/60 bg-muted/60 px-1.5 py-0.5 font-mono text-2xs">⇧ Enter</kbd> for new line
                         </p>
                       </div>
                     ) : (
@@ -749,22 +756,21 @@ export function CatalystChat({ open, onOpenChange }: CatalystChatProps) {
                       </div>
                     )}
                     {isLoading && messages[messages.length - 1]?.role === 'user' && (
-                      <div className="flex gap-3 justify-start">
-                        <Avatar className="size-8 shrink-0">
+                      <div className="flex gap-3 justify-start animate-in fade-in slide-in-from-bottom-3 duration-300">
+                        <Avatar className="size-8 shrink-0 shadow-sm ring-1 ring-border/50">
                           <AvatarImage
                             src="/notes9-logo-mark-transparent.png"
                             alt=""
-                            className="object-contain p-1.5 dark:invert dark:brightness-125"
+                            className="object-contain p-1.5 dark:invert dark:brightness-125 animate-spin duration-3000 bg-primary/5"
                           />
                           <AvatarFallback className="bg-primary/10 text-primary">
                             <span className="notes9-mascot-mask size-[18px]" aria-hidden />
                           </AvatarFallback>
                         </Avatar>
-                        <div className="flex items-center px-4 py-2.5 text-sm">
-                          <span
-                            className="inline-block h-4 w-1 bg-foreground/70 rounded-sm animate-cursor-blink translate-y-[1px]"
-                            aria-hidden
-                          />
+                        <div className="flex items-center gap-1 px-4 py-3 rounded-2xl bg-muted/30 border border-border/30">
+                          <span className="inline-block size-1.5 rounded-full bg-foreground/50 animate-bounce" style={{ animationDelay: '0ms' }} aria-hidden />
+                          <span className="inline-block size-1.5 rounded-full bg-foreground/50 animate-bounce" style={{ animationDelay: '150ms' }} aria-hidden />
+                          <span className="inline-block size-1.5 rounded-full bg-foreground/50 animate-bounce" style={{ animationDelay: '300ms' }} aria-hidden />
                         </div>
                       </div>
                     )}
@@ -786,10 +792,10 @@ export function CatalystChat({ open, onOpenChange }: CatalystChatProps) {
                 </Button>
               )}
 
-              {/* Input Area */}
-              <div className="border-t p-4 shrink-0 space-y-2">
-                {/* Web search + status row */}
-                <div className="flex items-center justify-between px-0.5">
+              {/* Input Area — elevated floating composer */}
+              <div className="p-3 shrink-0 space-y-2 bg-background/80 backdrop-blur-sm border-t border-border/30">
+                {/* Web search toggle + status — compact row */}
+                <div className="flex items-center justify-between px-1">
                   <div className="flex items-center gap-2 text-xs text-muted-foreground">
                     {isLoading && webSearchEnabled && (
                       <span className="flex items-center gap-1.5 animate-pulse">
@@ -798,17 +804,17 @@ export function CatalystChat({ open, onOpenChange }: CatalystChatProps) {
                     )}
                   </div>
                   <div className="flex items-center gap-2">
-                    <span className={cn("text-xs transition-colors", webSearchEnabled ? "text-primary font-medium" : "text-muted-foreground")}>
+                    <span className={cn("text-xs transition-colors", webSearchEnabled ? "text-primary font-medium" : "text-muted-foreground/70")}>
                       Web Search
                     </span>
-                    <Globe className={cn("size-3.5 shrink-0 transition-colors", webSearchEnabled ? "text-primary" : "text-muted-foreground")} aria-hidden />
+                    <Globe className={cn("size-3.5 shrink-0 transition-colors", webSearchEnabled ? "text-primary" : "text-muted-foreground/50")} aria-hidden />
                     <Switch checked={webSearchEnabled} onCheckedChange={setWebSearchEnabled} disabled={isLoading} aria-label="Toggle web search" className="transition-transform active:scale-95" />
                   </div>
                 </div>
 
                 {/* Attachment previews */}
                 {(attachments.length > 0 || uploadQueue.length > 0) && (
-                  <div className="flex flex-wrap gap-2">
+                  <div className="flex flex-wrap gap-2 px-1">
                     {attachments.map((att, i) => (
                       <PreviewAttachment key={att.url} attachment={att} compact onRemove={() => setAttachments((p) => p.filter((_, idx) => idx !== i))} />
                     ))}
@@ -818,28 +824,28 @@ export function CatalystChat({ open, onOpenChange }: CatalystChatProps) {
                   </div>
                 )}
 
-                {/* Composer */}
-                <div className="relative rounded-xl border border-border bg-background focus-within:border-primary/50 focus-within:shadow-sm transition-all">
+                {/* Composer — elevated with soft glow on focus */}
+                <div className="relative rounded-2xl border border-border/60 bg-background shadow-sm focus-within:border-primary/40 focus-within:shadow-md focus-within:shadow-primary/5 transition-all duration-200">
                   <Textarea
                     ref={textareaRef}
                     value={input}
                     onChange={handleInputChange}
                     onKeyDown={handleKeyDown}
                     placeholder="Ask about your data…"
-                    className="min-h-[52px] max-h-[200px] resize-none border-0 bg-transparent px-3 pt-3 pb-11 text-sm focus-visible:ring-0 focus-visible:ring-offset-0"
+                    className="min-h-[52px] max-h-[200px] resize-none border-0 bg-transparent px-4 pt-3 pb-11 text-sm leading-relaxed placeholder:text-muted-foreground/50 focus-visible:ring-0 focus-visible:ring-offset-0"
                     disabled={isLoading}
                   />
                   {/* Hidden file input */}
                   <input ref={fileInputRef} type="file" multiple accept={ALLOWED_ATTACHMENT_TYPES.join(',')} className="hidden" onChange={handleFileSelect} disabled={isLoading || uploadQueue.length > 0} />
 
                   {/* Bottom toolbar */}
-                  <div className="absolute bottom-0 left-0 right-0 flex items-center justify-between px-2 py-1.5">
+                  <div className="absolute bottom-0 left-0 right-0 flex items-center justify-between px-2.5 py-1.5">
                     <div className="flex items-center gap-0.5">
-                      <Button type="button" variant="ghost" size="icon" className="size-7 text-muted-foreground hover:text-foreground" onClick={() => fileInputRef.current?.click()} disabled={isLoading || uploadQueue.length > 0} aria-label="Attach file">
+                      <Button type="button" variant="ghost" size="icon" className="size-7 rounded-lg text-muted-foreground/70 hover:text-foreground transition-colors" onClick={() => fileInputRef.current?.click()} disabled={isLoading || uploadQueue.length > 0} aria-label="Attach file">
                         <Paperclip className="size-3.5" />
                       </Button>
                       <div className="inline-flex items-center gap-1">
-                        <Button type="button" variant="ghost" size="icon" className={cn("size-7 text-muted-foreground hover:text-foreground", micListening && "text-red-500 hover:text-red-600")} onClick={() => micListening ? stopMic() : startMic()} disabled={isLoading} aria-label={micListening ? "Stop dictation" : "Dictate"}>
+                        <Button type="button" variant="ghost" size="icon" className={cn("size-7 rounded-lg text-muted-foreground/70 hover:text-foreground transition-colors", micListening && "text-red-500 hover:text-red-600")} onClick={() => micListening ? stopMic() : startMic()} disabled={isLoading} aria-label={micListening ? "Stop dictation" : "Dictate"}>
                           <Mic className="size-3.5" />
                         </Button>
                         {micListening && <VoiceWaveform getWaveformData={getWaveformData} />}
@@ -847,11 +853,11 @@ export function CatalystChat({ open, onOpenChange }: CatalystChatProps) {
                     </div>
                     <div>
                       {isLoading ? (
-                        <Button type="button" size="icon" variant="outline" className="size-7 rounded-full" onClick={stop} aria-label="Stop">
+                        <Button type="button" size="icon" variant="outline" className="size-7 rounded-full border-border/60 transition-colors" onClick={stop} aria-label="Stop">
                           <Square className="size-3" />
                         </Button>
                       ) : (
-                        <Button type="button" size="icon" className="size-7 rounded-full bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-40" disabled={!input.trim() && attachments.length === 0} onClick={(e) => onSubmit(e)} aria-label="Send">
+                        <Button type="button" size="icon" className="size-7 rounded-full bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-30 transition-all duration-200 hover:shadow-sm active:scale-95" disabled={!input.trim() && attachments.length === 0} onClick={(e) => onSubmit(e)} aria-label="Send">
                           <Send className="size-3.5" />
                         </Button>
                       )}

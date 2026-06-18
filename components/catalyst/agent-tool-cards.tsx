@@ -16,7 +16,7 @@ import {
   FlaskConical,
   MessageSquare,
   BarChart2,
-  BrainCircuit,
+  Archive,
   Wrench,
   Network,
   type LucideIcon,

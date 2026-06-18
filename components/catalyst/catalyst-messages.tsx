@@ -3,7 +3,7 @@
 import { useCallback, useRef, useState } from 'react';
 import { ChevronDown } from 'lucide-react';
 import type { UIMessage } from 'ai';
-import { Sparkles, Square } from 'lucide-react';
+import { Square } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { MarkdownRenderer } from './markdown-renderer';
@@ -109,7 +109,7 @@ export function CatalystMessages({
         aria-label="Chat messages"
       >
         <div className="mx-auto max-w-3xl px-4 pt-6 pb-4">
-          <div className="flex flex-col gap-4">
+          <div className="flex flex-col gap-5">
           {messages.map((message, index) => {
             const isEditing = editingMessageId === message.id;
             const content = getMessageContent(message);
@@ -147,19 +147,17 @@ export function CatalystMessages({
               <div
                 key={message.id}
                 className={cn(
-                  'group/message flex w-full gap-3',
-                  message.role === 'user' ? 'justify-end' : 'justify-start',
-                  // Each assistant turn lifts gently in on mount so replies
-                  // "arrive" rather than snap in. Keyed rows never re-trigger it
-                  // on streaming updates; reduced-motion disables it (globals).
-                  message.role === 'assistant' && 'animate-n9-turn-in'
+                  'group/message flex w-full gap-3 animate-in fade-in slide-in-from-bottom-4 duration-300',
+                  message.role === 'user' ? 'justify-end' : 'justify-start'
                 )}
               >
                 {/* Assistant Avatar */}
                 {message.role === 'assistant' && (
-                  <div className="mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-sm">
-                    <Sparkles className="size-3.5" />
-                  </div>
+                  <img
+                    src="/notes9-logo-mark-transparent.png"
+                    alt="AI"
+                    className="mt-0.5 size-7 shrink-0 object-contain p-1 rounded-full bg-primary/5 dark:invert dark:brightness-125 shadow-sm ring-1 ring-border/50"
+                  />
                 )}
 
                 {/* Message Content */}
@@ -183,9 +181,9 @@ export function CatalystMessages({
                     <>
                       <div
                         className={cn(
-                          'rounded-2xl px-4 py-2.5 text-sm leading-[1.45]',
+                          'rounded-2xl px-4 py-3 text-sm leading-relaxed',
                           message.role === 'user'
-                            ? 'bg-primary text-primary-foreground'
+                            ? 'bg-primary/95 text-primary-foreground shadow-sm rounded-br-sm'
                             : 'bg-transparent'
                         )}
                       >
@@ -257,10 +255,12 @@ export function CatalystMessages({
           {/* Waiting for first token: show assistant avatar + blinking cursor */}
           {(isLoading || notes9Stream) && messages.at(-1)?.role === 'user' && (
             notes9Stream ? (
-              <div className="flex w-full gap-3 justify-start animate-n9-turn-in">
-                <div className="flex size-8 shrink-0 -translate-y-[5px] items-center justify-center rounded-full bg-primary text-primary-foreground shadow-sm">
-                  <Sparkles className="size-4 animate-pulse" />
-                </div>
+              <div className="flex w-full gap-3 justify-start animate-in fade-in slide-in-from-bottom-2 duration-300">
+                <img
+                  src="/notes9-logo-mark-transparent.png"
+                  alt="AI Thinking"
+                  className="size-8 shrink-0 -translate-y-[5px] object-contain p-1.5 rounded-full bg-primary/10 dark:invert dark:brightness-125 shadow-sm animate-spin"
+                />
                 <div className="flex-1 min-w-0 max-w-full space-y-2">
                   {/* When HITL is on (runId present) AgentStreamReply renders the
                       server-side cancel button; suppress this local-abort one to
@@ -300,21 +300,22 @@ export function CatalystMessages({
                 </div>
               </div>
             ) : (
-              <div className="flex w-full gap-3 justify-start animate-n9-turn-in">
-                <div className="mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-sm">
-                  <Sparkles className="size-3.5" />
-                </div>
-                <div className="flex items-center gap-3 rounded-2xl px-4 py-2.5 text-sm bg-transparent">
-                  <span
-                    className="inline-block w-[3px] h-[1em] bg-foreground/70 rounded-sm animate-cursor-blink translate-y-[1px]"
-                    aria-hidden
-                  />
+              <div className="flex w-full gap-3 justify-start animate-in fade-in slide-in-from-bottom-3 duration-300">
+                <img
+                  src="/notes9-logo-mark-transparent.png"
+                  alt="AI Loading"
+                  className="mt-0.5 size-7 shrink-0 object-contain p-1 rounded-full bg-primary/5 dark:invert dark:brightness-125 shadow-sm ring-1 ring-border/50 animate-spin duration-3000"
+                />
+                <div className="flex items-center gap-1 px-4 py-3 rounded-2xl bg-muted/30 border border-border/30">
+                  <span className="inline-block size-1.5 rounded-full bg-foreground/50 animate-bounce" style={{ animationDelay: '0ms' }} aria-hidden />
+                  <span className="inline-block size-1.5 rounded-full bg-foreground/50 animate-bounce" style={{ animationDelay: '150ms' }} aria-hidden />
+                  <span className="inline-block size-1.5 rounded-full bg-foreground/50 animate-bounce" style={{ animationDelay: '300ms' }} aria-hidden />
                   {onStop && (
                     <Button
                       type="button"
                       variant="outline"
                       size="sm"
-                      className="h-7 gap-1.5 text-xs"
+                      className="h-7 gap-1.5 text-xs ml-3"
                       onClick={onStop}
                     >
                       <Square className="size-2.5 fill-current" />
