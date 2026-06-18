@@ -631,8 +631,7 @@ function RetrievedTextBlock({
   return (
     <div
       className={cn(
-        'space-y-1 border-l-2 border-muted pl-2',
-        !skipTopMargin && 'mt-2',
+        'relative bg-muted/30 border border-border/50 rounded-lg p-3 mt-3',
         listClassName
       )}
     >
@@ -641,24 +640,30 @@ function RetrievedTextBlock({
           href={excerptLinkHref}
           highlightTarget={item.highlightTarget}
           title="Open source document and scroll to this passage"
-          className="group -mx-1 block rounded-sm px-1 py-0.5 transition-colors hover:bg-primary/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          className="group block transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
-          <p className="text-2xs font-medium uppercase tracking-wide text-muted-foreground group-hover:text-primary">
-            {blockLabel}
-          </p>
-          <span className="mt-1 flex items-start gap-1.5 text-xs leading-snug text-primary underline underline-offset-2 decoration-primary/50 group-hover:decoration-primary">
+          <div className="flex items-center gap-2 mb-1.5">
+            <div className="w-1 h-3 rounded-full bg-primary/40 group-hover:bg-primary transition-colors" />
+            <p className="text-2xs font-semibold uppercase tracking-wider text-muted-foreground group-hover:text-primary transition-colors">
+              {blockLabel}
+            </p>
+          </div>
+          <span className="flex items-start gap-2 text-xs leading-relaxed text-foreground/90 group-hover:text-foreground">
             {item.highlightHref && (
-              <MapPin className="size-3 mt-0.5 shrink-0 text-primary" aria-hidden />
+              <MapPin className="size-3.5 mt-0.5 shrink-0 text-primary/70 group-hover:text-primary transition-colors" aria-hidden />
             )}
-            <span className="font-medium">{excerptPreview}</span>
+            <span className="italic">“{excerptPreview}”</span>
           </span>
         </SmartCitationLink>
       ) : (
         <>
-          <p className="text-2xs font-medium uppercase tracking-wide text-muted-foreground">
-            {blockLabel}
-          </p>
-          <p className="text-xs leading-snug text-muted-foreground">{excerptPreview}</p>
+          <div className="flex items-center gap-2 mb-1.5">
+            <div className="w-1 h-3 rounded-full bg-muted-foreground/40" />
+            <p className="text-2xs font-semibold uppercase tracking-wider text-muted-foreground">
+              {blockLabel}
+            </p>
+          </div>
+          <p className="text-xs leading-relaxed text-foreground/80 italic pl-3">“{excerptPreview}”</p>
         </>
       )}
     </div>
@@ -687,6 +692,17 @@ function CitationBlock({ item, isStreaming }: { item: AgentCitationPanelItem; is
   // routes (/lab-notes/…) are intentionally NOT displayed — those go
   // through SPA navigation and the title alone reads better.
   const displayUrl = resolvedItem.sourceUrl;
+
+  let authorYearMatch = null;
+  let displayTitle = resolvedItem.title;
+  if (resolvedItem.sourceType === 'literature_review' || resolvedItem.sourceType === 'web') {
+    const match = resolvedItem.title.match(/^([A-Za-z\s]+(?:et al\.?))\s*\(?(\d{4})\)?\s*[-:]?\s*(.*)$/i);
+    if (match) {
+      authorYearMatch = `${match[1].trim()}, ${match[2]}`;
+      displayTitle = match[3].trim() || displayTitle;
+    }
+  }
+
   return (
     <li
       className={cn(
@@ -699,6 +715,11 @@ function CitationBlock({ item, isStreaming }: { item: AgentCitationPanelItem; is
         {resolvedItem.isResolving && (
           <span className="size-3 shrink-0 animate-spin self-center rounded-full border border-muted-foreground/40 border-t-transparent" aria-hidden />
         )}
+        {authorYearMatch && (
+          <span className="inline-flex items-center rounded-full bg-primary/10 text-primary px-2 py-0.5 text-2xs font-medium border border-primary/20">
+            {authorYearMatch}
+          </span>
+        )}
         {titleHref ? (
           <SmartCitationLink
             href={titleHref}
@@ -708,10 +729,10 @@ function CitationBlock({ item, isStreaming }: { item: AgentCitationPanelItem; is
             {resolvedItem.highlightHref && (
               <MapPin className="size-3 shrink-0 self-center text-primary/70" aria-hidden />
             )}
-            {resolvedItem.title}
+            {displayTitle}
           </SmartCitationLink>
         ) : (
-          <span className="min-w-0 flex-1 font-medium">{resolvedItem.title}</span>
+          <span className="min-w-0 flex-1 font-medium">{displayTitle}</span>
         )}
       </div>
       <div className="mt-1 flex flex-wrap items-center gap-1.5">

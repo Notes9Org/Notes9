@@ -332,7 +332,7 @@ function postProcessHtml(html: string, manifest?: CitationsManifest | null): str
           + `data-cite-url="${escapeHtmlAttr(url)}" `
           + `aria-label="${escapeHtmlAttr(ariaLabel)}" `
           + `title="${escapeHtmlAttr(tip)}"`
-          + `>[${n}]</a>`
+          + `>${n}</a>`
         );
       }
       return (
@@ -341,7 +341,7 @@ function postProcessHtml(html: string, manifest?: CitationsManifest | null): str
         + `aria-label="${escapeHtmlAttr(ariaLabel)}" `
         + dataAttrs
         + (tip ? `title="${escapeHtmlAttr(tip)}"` : '')
-        + `>[${n}]</sup>`
+        + `>${n}</sup>`
       );
     });
   }
@@ -373,6 +373,19 @@ function CitationHoverCard({
   const snippetSource = chip.citedText || chip.excerpt;
   const excerpt =
     snippetSource.length > 180 ? `${snippetSource.slice(0, 179)}…` : snippetSource;
+
+  // Extract Author et al and Year from sourceName if it matches typical formats
+  // e.g., "Smith et al. (2023) - Something" or "Smith et al., 2023"
+  let authorYearMatch = null;
+  let displayTitle = chip.sourceName;
+  if (chip.sourceType === 'literature_review' || chip.provenance === 'web') {
+    const match = chip.sourceName.match(/^([A-Za-z\s]+(?:et al\.?))\s*\(?(\d{4})\)?\s*[-:]?\s*(.*)$/i);
+    if (match) {
+      authorYearMatch = `${match[1].trim()}, ${match[2]}`;
+      displayTitle = match[3].trim() || displayTitle;
+    }
+  }
+
   return (
     <div
       className={cn(
@@ -385,11 +398,16 @@ function CitationHoverCard({
       onMouseLeave={onMouseLeave}
     >
       <div className="flex flex-wrap items-center gap-1.5">
-        <span className="inline-flex items-center rounded-full bg-muted px-1.5 py-0.5 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+        <span className="inline-flex items-center rounded-full bg-muted px-1.5 py-0.5 text-2xs font-medium uppercase tracking-wide text-muted-foreground">
           {chip.sourceType ? chip.sourceType.replace(/_/g, ' ') : 'Source'}
         </span>
-        <span className="font-mono text-xs text-muted-foreground tabular-nums">
-          [{chip.label}]
+        {authorYearMatch && (
+          <span className="inline-flex items-center rounded-full bg-primary/10 text-primary px-1.5 py-0.5 text-2xs font-medium border border-primary/20">
+            {authorYearMatch}
+          </span>
+        )}
+        <span className="font-mono text-2xs text-muted-foreground tabular-nums ml-auto">
+          {chip.label}
         </span>
         <GroundingProvenanceBadge
           grounding={chip.grounding}
@@ -398,9 +416,9 @@ function CitationHoverCard({
           className="ml-auto"
         />
       </div>
-      {chip.sourceName && (
+      {displayTitle && (
         <p className="mt-1.5 line-clamp-2 text-xs font-medium text-foreground">
-          {chip.sourceName}
+          {displayTitle}
         </p>
       )}
       {chip.supportStatus && (

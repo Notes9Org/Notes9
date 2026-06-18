@@ -4,7 +4,7 @@ import { useState, useDeferredValue } from 'react';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
-import { Copy, Check, RefreshCw, ChevronDown, ChevronUp, FileText } from 'lucide-react';
+import { Copy, Check, RefreshCw, ChevronDown, ChevronUp, FileText, FileImage, FileCode, FileArchive, FileAudio, FileVideo, FileSpreadsheet, File } from 'lucide-react';
 import type { Attachment } from './preview-attachment';
 import { cn } from '@/lib/utils';
 import { MarkdownRenderer } from './markdown-renderer';
@@ -78,6 +78,20 @@ export function ChatMessage({
   const [showThinking, setShowThinking] = useState(false);
   const deferredContent = useDeferredValue(content);
 
+  const getAttachmentIcon = (att: Attachment) => {
+    const type = att.contentType?.toLowerCase() || '';
+    const name = att.name?.toLowerCase() || '';
+    if (type.startsWith('image/')) return FileImage;
+    if (type.startsWith('video/')) return FileVideo;
+    if (type.startsWith('audio/')) return FileAudio;
+    if (type.includes('pdf') || name.endsWith('.pdf')) return FileText;
+    if (type.includes('word') || name.endsWith('.doc') || name.endsWith('.docx')) return FileText;
+    if (type.includes('excel') || type.includes('spreadsheet') || type.includes('csv') || name.endsWith('.xls') || name.endsWith('.xlsx') || name.endsWith('.csv')) return FileSpreadsheet;
+    if (type.includes('zip') || type.includes('tar') || type.includes('rar') || name.endsWith('.zip') || name.endsWith('.tar.gz')) return FileArchive;
+    if (type.includes('javascript') || type.includes('json') || type.includes('html') || type.includes('css') || name.match(/\.(js|ts|jsx|tsx|json|html|css|py|java|cpp|c|go|rs)$/)) return FileCode;
+    return File;
+  };
+
   const handleCopy = async () => {
     try {
       await navigator.clipboard.writeText(content);
@@ -97,11 +111,11 @@ export function ChatMessage({
     <div className={cn('group flex gap-3', isUser ? 'justify-end' : 'justify-start')}>
       {/* Assistant Avatar */}
       {!isUser && (
-        <Avatar className="size-8 shrink-0 mt-0.5">
+        <Avatar className="size-8 shrink-0 mt-0.5 shadow-sm ring-1 ring-border/50">
           <AvatarImage
             src="/notes9-logo-mark-transparent.png"
             alt=""
-            className="object-contain p-1.5 dark:invert dark:brightness-125"
+            className="object-contain p-1.5 dark:invert dark:brightness-125 bg-primary/5"
           />
           <AvatarFallback className="bg-primary/10 text-primary">
             <span className="notes9-mascot-mask size-[18px]" aria-hidden />
@@ -145,6 +159,7 @@ export function ChatMessage({
           <div className="flex flex-wrap gap-2 justify-end mb-1">
             {attachments.map((att, i) => {
               const isImage = att.contentType?.startsWith('image/');
+              const Icon = getAttachmentIcon(att);
               return isImage ? (
                 <a
                   key={i}
@@ -169,7 +184,7 @@ export function ChatMessage({
                   className="flex items-center gap-1.5 rounded-lg border border-primary/20 bg-primary/10 px-2 py-1 text-xs text-primary hover:bg-primary/20 transition-colors max-w-[180px]"
                   title={att.name}
                 >
-                  <FileText className="size-3 shrink-0" />
+                  <Icon className="size-3 shrink-0" />
                   <span className="truncate">{att.name}</span>
                 </a>
               );
@@ -182,15 +197,10 @@ export function ChatMessage({
         {(isUser || content || !isStreaming) && (
           <div
             className={cn(
-              'text-sm',
+              'rounded-2xl px-4 py-3 text-sm leading-relaxed',
               isUser
-                ? 'rounded-lg px-4 py-2.5 bg-primary text-primary-foreground'
-                : cn(
-                    // The answer is the product's value — give it the AI surface:
-                    // elevated card, burnt-sienna identity rail, soft apricot glow.
-                    'surface-primary assistant-rail overflow-hidden py-2.5 pl-5 pr-4',
-                    'shadow-[0_1px_2px_rgba(0,0,0,0.05),0_0_20px_-8px_var(--n9-accent-glow)]',
-                  ),
+                ? 'bg-primary/95 text-primary-foreground shadow-sm rounded-br-sm'
+                : 'bg-muted/40 text-foreground overflow-hidden rounded-bl-sm border border-border/40 shadow-sm',
             )}
           >
             {isUser ? (
