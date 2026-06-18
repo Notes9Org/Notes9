@@ -11,6 +11,27 @@
 
 ---
 
+## ✅ Locked decisions (2026-06-17 refinement)
+
+1. **AI visual signature → distinct AI accent, in-palette.** Catalyst surfaces are visually *marked* as AI: burnt-sienna identity rail + soft apricot glow + a hair of tint + a `✨ Catalyst` glyph — all derived from existing tokens, zero new hues. Not pure-cohesion (AI must stand out), not violet (killed).
+2. **Catalyst deep first.** Perfect the AI chat surface end-to-end (the accent system + Waves 1–5 applied to Catalyst), validate it, *then* roll the same language outward to the other ~14 surfaces.
+3. **Both intelligence features are in the core:** Evidence drawer (`rag_chunks`) **and** entity-scoped "Ask Catalyst about this."
+4. **Nav mascot loader → gated behind ~200ms delay.** Fast/cached routes feel instant (their `loading.tsx` carries them); the mascot only appears when a nav is genuinely slow. Keep the moment, drop the tax.
+
+## Refined build sequence (Catalyst-deep-first)
+
+> Each step ends with a real-runtime check (`/browse` or run the app) per the "verify UI before claiming fixed" rule — tsc/green ≠ works.
+
+- **Step 0 — AI design-token foundation** (`globals.css`): AI-signature tokens (`--n9-ai-surface`, `--n9-ai-surface-active`, AI glow), confirm/strengthen `.surface-primary` (apricot-ring hero), `.assistant-rail`, `.ai-shimmer`; motion tokens (`--motion-fast/base/slow`, easings); `@keyframes n9-turn-in`; helpers `.n9-icon-tile(--ai)`, `.ai-entry-label`, `.n9-card-interactive`; add `animate-accordion-*` to the reduced-motion block. *(enables every later step; nothing visual until adopted)*
+- **Step 1 — Wave 1, Catalyst-scoped:** kill violet/blue in `catalyst-section-hero`, `tool-status-bar`, `agent-artifact-card`, `CatalystComposerSkeleton`.
+- **Step 2 — Wave 2, Catalyst:** assistant bubble → `.surface-primary` + `.assistant-rail` + apricot glow + `✨` glyph; running tool cards → `.ai-shimmer`+`.surface-recessed`; reasoning/synthesis/SQL → `.surface-recessed`; live spinner/synthesis → brand shimmer/dot; turn entrance `n9-turn-in`.
+- **Step 3 — Wave 4:** lit-agent Stop; Catalyst error Retry; silent-failure toasts (chat upload/re-sign); create-success toasts.
+- **Step 4 — Wave 5 (Catalyst + nav):** gate nav loader (200ms); real `catalyst/loading.tsx` skeleton; choreograph expand/collapse; shimmer skeletons; replace bare "Loading…" in chat-history/catalyst-sidebar.
+- **Step 5 — Wave 3 (Catalyst):** always-on 4-state trust chip; tool elapsed + shimmer; **evidence drawer** (`rag_chunks`); **entity-scoped "Ask Catalyst"** on papers/notes/samples/map.
+- **Step 6 — Roll outward (Waves 6/7/8):** empty-tile warmth, `PageHeading`/`<Empty>` adoption, card hover, toast/label consistency, a11y batch, motion-token + loader-contract adoption across the other 14 surfaces.
+
+---
+
 ## Executive verdict
 
 Notes9 is **closer to a mature AI product than most early-stage tools** — the Catalyst chat already surfaces ~85% of its backend (streaming, tool cards, per-claim citations + span viewer, grounding badges, Stop, artifacts) and is *ahead* of Perplexity/ChatGPT on citation rigor. The gap to "premium AI product" is **coherence + adoption, not missing capability**:

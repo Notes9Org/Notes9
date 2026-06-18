@@ -104,6 +104,27 @@ export interface ArtifactPayload {
   [key: string]: unknown;
 }
 
+/** SSE event: graph – a structured relationship graph (map_relationships) for
+ * native dagre rendering in chat, replacing a hand-drawn matplotlib PNG.
+ * Nodes: {id, kind, entity_id, label}. Edges: {source, target, relation}. */
+export interface AgentGraphNode {
+  id: string;
+  kind: string;
+  entity_id?: string;
+  label: string;
+}
+export interface AgentGraphEdge {
+  source: string;
+  target: string;
+  relation: string;
+}
+export interface GraphPayload {
+  nodes: AgentGraphNode[];
+  edges: AgentGraphEdge[];
+  truncated?: boolean;
+  [key: string]: unknown;
+}
+
 /** SSE event: citations_manifest – full citation map for the completed answer */
 export interface CitationsManifestPayload {
   manifest: Record<string, unknown>;
@@ -264,6 +285,7 @@ export type SseEvent =
   | { event: "tool_call"; data: ToolCallPayload }
   | { event: "tool_result"; data: ToolResultPayload }
   | { event: "artifact"; data: ArtifactPayload }
+  | { event: "graph"; data: GraphPayload }
   | { event: "citations_manifest"; data: CitationsManifestPayload }
   | { event: "citations_update"; data: CitationsUpdatePayload }
   | { event: "synthesis_plan"; data: SynthesisPlanPayload }
@@ -347,6 +369,7 @@ const KNOWN_EVENT_TYPES = new Set([
   "tool_call",
   "tool_result",
   "artifact",
+  "graph",
   "citations_manifest",
   "citations_update",
   "synthesis_plan",

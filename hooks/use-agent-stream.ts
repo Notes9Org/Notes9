@@ -164,6 +164,25 @@ export interface AgentArtifact {
   kind?: string | null;
 }
 
+/** A structured relationship graph the agent produced via map_relationships,
+ * surfaced through the `graph` SSE event for native dagre rendering in chat. */
+export interface AgentGraphNode {
+  id: string;
+  kind: string;
+  entityId?: string;
+  label: string;
+}
+export interface AgentGraphEdge {
+  source: string;
+  target: string;
+  relation: string;
+}
+export interface AgentGraph {
+  nodes: AgentGraphNode[];
+  edges: AgentGraphEdge[];
+  truncated: boolean;
+}
+
 export interface SynthesisStep {
   id: string;
   label: string;
@@ -212,6 +231,9 @@ export interface AgentStreamState {
    * order they were produced. Drafts carry `draft: true` and can be saved to an
    * experiment's Data files from the UI. */
   artifacts: AgentArtifact[];
+  /** Relationship graphs the agent produced this turn (map_relationships),
+   * rendered natively (interactive dagre) instead of as a static PNG. */
+  graphs: AgentGraph[];
   /** Biomni-style synthesis checklist — the ordered steps the design works
    * through, each ticked off live as its section is written. Null until the
    * backend emits a `synthesis_plan`. */
@@ -381,6 +403,7 @@ export function useAgentStream() {
     currentStageElapsedS: null,
     toolCards: [],
     artifacts: [],
+    graphs: [],
     synthesisPlan: null,
     sql: null,
     ragChunks: null,
@@ -412,6 +435,7 @@ export function useAgentStream() {
       error: string | null;
       artifacts: AgentArtifact[];
       citationsManifest: CitationsManifest | null;
+      graphs: AgentGraph[];
     }> => {
       if (abortControllerRef.current) {
         try { abortControllerRef.current.abort(); } catch { /* ignore */ }
@@ -427,6 +451,9 @@ export function useAgentStream() {
       // (empty) value captured at render — which is exactly why generated charts
       // were persisted as nothing and vanished once streaming ended.
       const collectedArtifacts: AgentArtifact[] = [];
+      // Same stale-closure trap applies to graphs — capture locally so the caller
+      // gets the FINAL list synchronously when the stream resolves.
+      const collectedGraphs: AgentGraph[] = [];
       // Same stale-closure trap applies to the citations manifest — capture it
       // locally so the caller persists the FINAL manifest, not the render-time null.
       let collectedManifest: CitationsManifest | null = null;
@@ -440,6 +467,7 @@ export function useAgentStream() {
         currentStageElapsedS: null,
         toolCards: [],
         artifacts: [],
+        graphs: [],
         synthesisPlan: null,
         sql: null,
         ragChunks: null,
@@ -485,13 +513,13 @@ export function useAgentStream() {
             error: errMsg,
             isStreaming: false,
           }));
-          return { donePayload: null, error: errMsg, artifacts: collectedArtifacts, citationsManifest: collectedManifest };
+          return { donePayload: null, error: errMsg, artifacts: collectedArtifacts, citationsManifest: collectedManifest, graphs: collectedGraphs };
         }
 
         if (!response.body) {
           const errMsg = 'Agent stream returned an empty body';
           setState((s) => ({ ...s, error: errMsg, isStreaming: false }));
-          return { donePayload: null, error: errMsg, artifacts: collectedArtifacts, citationsManifest: collectedManifest };
+          return { donePayload: null, error: errMsg, artifacts: collectedArtifacts, citationsManifest: collectedManifest, graphs: collectedGraphs };
         }
 
         const reader = response.body.getReader();
@@ -692,6 +720,38 @@ export function useAgentStream() {
                         ? s.artifacts.map((a) => (a.dataId === dataId ? artifact : a))
                         : [...s.artifacts, artifact],
                     }));
+                  }
+                }
+                break;
+              }
+              case 'graph': {
+                if (payload && typeof payload === 'object') {
+                  const p = payload as Record<string, unknown>;
+                  const rawNodes = Array.isArray(p.nodes) ? p.nodes : [];
+                  const rawEdges = Array.isArray(p.edges) ? p.edges : [];
+                  const nodes: AgentGraphNode[] = rawNodes
+                    .filter((n): n is Record<string, unknown> => !!n && typeof n === 'object')
+                    .map((n) => ({
+                      id: typeof n.id === 'string' ? n.id : '',
+                      kind: typeof n.kind === 'string' ? n.kind : '',
+                      entityId: typeof n.entity_id === 'string' ? n.entity_id : undefined,
+                      label: typeof n.label === 'string' ? n.label : '',
+                    }))
+                    .filter((n) => n.id);
+                  const edges: AgentGraphEdge[] = rawEdges
+                    .filter((e): e is Record<string, unknown> => !!e && typeof e === 'object')
+                    .map((e) => ({
+                      source: typeof e.source === 'string' ? e.source : '',
+                      target: typeof e.target === 'string' ? e.target : '',
+                      relation: typeof e.relation === 'string' ? e.relation : '',
+                    }))
+                    .filter((e) => e.source && e.target);
+                  if (nodes.length > 0) {
+                    const graph: AgentGraph = { nodes, edges, truncated: p.truncated === true };
+                    // Mirror into the local accumulator so runStream returns the
+                    // final list (caller closure state reads are stale).
+                    collectedGraphs.push(graph);
+                    setState((s) => ({ ...s, graphs: [...s.graphs, graph] }));
                   }
                 }
                 break;
@@ -898,7 +958,7 @@ export function useAgentStream() {
 
         if (streamError) {
           setState((s) => ({ ...s, isStreaming: false }));
-          return { donePayload: null, error: streamError, artifacts: collectedArtifacts, citationsManifest: collectedManifest };
+          return { donePayload: null, error: streamError, artifacts: collectedArtifacts, citationsManifest: collectedManifest, graphs: collectedGraphs };
         }
 
         if (!donePayload) {
@@ -912,20 +972,20 @@ export function useAgentStream() {
               streamedAnswer: synthetic.content,
               isStreaming: false,
             }));
-            return { donePayload: synthetic, error: null, artifacts: collectedArtifacts, citationsManifest: collectedManifest };
+            return { donePayload: synthetic, error: null, artifacts: collectedArtifacts, citationsManifest: collectedManifest, graphs: collectedGraphs };
           }
           const errMsg = 'No response from agent stream';
           setState((s) => ({ ...s, error: errMsg, isStreaming: false }));
-          return { donePayload: null, error: errMsg, artifacts: collectedArtifacts, citationsManifest: collectedManifest };
+          return { donePayload: null, error: errMsg, artifacts: collectedArtifacts, citationsManifest: collectedManifest, graphs: collectedGraphs };
         }
 
         setState((s) => ({ ...s, isStreaming: false }));
-        return { donePayload, error: null, artifacts: collectedArtifacts, citationsManifest: collectedManifest };
+        return { donePayload, error: null, artifacts: collectedArtifacts, citationsManifest: collectedManifest, graphs: collectedGraphs };
       } catch (err) {
         if ((err as Error).name === 'AbortError') {
           recordRumEvent('agent_stream_aborted', {});
           setState((s) => ({ ...s, isStreaming: false }));
-          return { donePayload: null, error: null, artifacts: collectedArtifacts, citationsManifest: collectedManifest };
+          return { donePayload: null, error: null, artifacts: collectedArtifacts, citationsManifest: collectedManifest, graphs: collectedGraphs };
         }
         const errMsg = err instanceof Error ? err.message : 'Agent stream failed';
         recordRumEvent('agent_stream_error', { message: errMsg });
@@ -934,7 +994,7 @@ export function useAgentStream() {
           error: errMsg,
           isStreaming: false,
         }));
-        return { donePayload: null, error: errMsg, artifacts: collectedArtifacts, citationsManifest: collectedManifest };
+        return { donePayload: null, error: errMsg, artifacts: collectedArtifacts, citationsManifest: collectedManifest, graphs: collectedGraphs };
       } finally {
         abortControllerRef.current = null;
       }
@@ -977,6 +1037,7 @@ export function useAgentStream() {
       currentStageElapsedS: null,
       toolCards: [],
       artifacts: [],
+      graphs: [],
       synthesisPlan: null,
       sql: null,
       ragChunks: null,

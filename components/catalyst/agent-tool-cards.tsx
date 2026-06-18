@@ -107,7 +107,10 @@ function ToolCardItem({ card }: ToolCardItemProps) {
     <div
       className={cn(
         'rounded-md border bg-card/40 overflow-hidden transition-colors',
-        isRunning && 'border-primary/40 bg-primary/[0.03]',
+        // Running: the shared brand "working" sweep (.ai-shimmer) replaces the
+        // scattered per-card spinner-only signal so every busy block speaks one
+        // motion vocabulary. Reduced-motion drops the sweep (handled in globals).
+        isRunning && 'ai-shimmer border-primary/40 bg-primary/[0.03]',
         // Failed tool: muted amber, not an alarming full-red — the label
         // text ("Couldn't …") already conveys failure.
         isError && 'border-amber-500/40 bg-amber-500/[0.05]',

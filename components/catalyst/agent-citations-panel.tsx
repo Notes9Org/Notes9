@@ -614,6 +614,12 @@ function RetrievedTextBlock({
   /** When the parent already uses flex `gap-*`, omit extra top margin. */
   skipTopMargin?: boolean;
 }) {
+  // Honest label: a real per-claim grounded span (cited_text + grounding) is the
+  // EXACT text the claim is tied to → "Cited passage". A generic preview (no
+  // span — grounding fell through to the source body) stays "Retrieved text" so
+  // we never imply a claim↔source link that grounding didn't actually establish.
+  const isGroundedSpan = !!item.citedText && item.grounding !== 'none';
+  const blockLabel = isGroundedSpan ? 'Cited passage' : 'Retrieved text';
   return (
     <div
       className={cn(
@@ -630,7 +636,7 @@ function RetrievedTextBlock({
           className="group -mx-1 block rounded-sm px-1 py-0.5 transition-colors hover:bg-primary/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
           <p className="text-2xs font-medium uppercase tracking-wide text-muted-foreground group-hover:text-primary">
-            Retrieved text
+            {blockLabel}
           </p>
           <span className="mt-1 flex items-start gap-1.5 text-xs leading-snug text-primary underline underline-offset-2 decoration-primary/50 group-hover:decoration-primary">
             {item.highlightHref && (
@@ -642,7 +648,7 @@ function RetrievedTextBlock({
       ) : (
         <>
           <p className="text-2xs font-medium uppercase tracking-wide text-muted-foreground">
-            Retrieved text
+            {blockLabel}
           </p>
           <p className="text-xs leading-snug text-muted-foreground">{excerptPreview}</p>
         </>

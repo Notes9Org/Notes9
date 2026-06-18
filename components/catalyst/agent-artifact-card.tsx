@@ -51,7 +51,7 @@ const KIND_LABEL: Record<ArtifactKind, string> = {
 // Restrained alpha so it reads as a tint, not a badge fight.
 const KIND_ACCENT: Record<ArtifactKind, string> = {
   image:
-    'bg-violet-500/10 text-violet-600 dark:bg-violet-400/12 dark:text-violet-400',
+    'bg-primary/10 text-primary dark:bg-primary/15',
   pdf: 'bg-red-500/10 text-red-600 dark:bg-red-400/12 dark:text-red-400',
   word: 'bg-blue-500/10 text-blue-600 dark:bg-blue-400/12 dark:text-blue-400',
   excel:
@@ -62,7 +62,7 @@ const KIND_ACCENT: Record<ArtifactKind, string> = {
 // Thinner left-edge accent bar per type — replaces the broad colored area that
 // dominated the old layout.
 const KIND_BORDER: Record<ArtifactKind, string> = {
-  image: 'border-l-violet-400/60 dark:border-l-violet-500/50',
+  image: 'border-l-primary/50 dark:border-l-primary/50',
   pdf: 'border-l-red-400/60 dark:border-l-red-500/50',
   word: 'border-l-blue-400/60 dark:border-l-blue-500/50',
   excel: 'border-l-emerald-400/60 dark:border-l-emerald-500/50',

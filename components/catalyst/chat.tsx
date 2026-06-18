@@ -275,7 +275,12 @@ export function CatalystChat({ open, onOpenChange }: CatalystChatProps) {
               return next;
             });
           })
-          .catch((err) => console.warn('Attachment re-sign failed', { event: 'attachment_resign_failed', sessionId, pathCount: pathsToSign.length, err }));
+          .catch((err) => {
+            console.warn('Attachment re-sign failed', { event: 'attachment_resign_failed', sessionId, pathCount: pathsToSign.length, err });
+            // Don't leave the user staring at broken/expired attachment previews
+            // with no explanation — surface a quiet, non-blocking notice.
+            toast.error('Some attachments could not be loaded. Try reopening this chat.');
+          });
       }
     } else {
       setMessages([]);

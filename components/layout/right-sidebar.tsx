@@ -67,7 +67,8 @@ import {
   parseLiteratureAssistantStoredContent,
   serializeLiteratureAssistantStoredContent,
 } from '@/lib/literature-assistant-stored';
-import { useAgentStream, type AgentFileAttachment, type CitationsManifest } from '@/hooks/use-agent-stream';
+import { useAgentStream, type AgentFileAttachment, type CitationsManifest, type AgentGraph } from '@/hooks/use-agent-stream';
+import { AgentGraphList } from '@/components/catalyst/agent-graph-view';
 import { usePinnedAutoScroll } from '@/hooks/use-pinned-auto-scroll';
 import { deleteTrailingMessages } from '@/app/(app)/catalyst/actions';
 import { MessageEditor } from '@/components/catalyst/message-editor';
@@ -1699,7 +1700,7 @@ export function RightSidebar({
           content_type: a.contentType,
           size: a.size ?? 0,
         }));
-      const { donePayload, error, artifacts: streamArtifacts, citationsManifest: streamManifest } = await agentStream.runStream(
+      const { donePayload, error, artifacts: streamArtifacts, citationsManifest: streamManifest, graphs: streamGraphs } = await agentStream.runStream(
         {
           query: text,
           session_id: sessionId,
@@ -1729,7 +1730,7 @@ export function RightSidebar({
           content: formattedAnswer,
           parts: [{ type: 'text' as const, text: formattedAnswer }],
           createdAt: new Date(),
-          metadata: { artifacts: persistedArts },
+          metadata: { artifacts: persistedArts, graphs: streamGraphs },
         };
         setMessages((prev) => [...prev, assistantMessage]);
         const savedAsst = await saveMessage(sessionId, 'assistant', formattedAnswer, { artifacts: persistedArts });
@@ -1889,7 +1890,7 @@ export function RightSidebar({
         setNotes9Loading(true);
         const parsedEditTags = extractTagItemsFromMarkdown(newContent);
         const requestTags = mergeUniqueTags(selectedMentions, parsedEditTags);
-        const { donePayload, error, artifacts: streamArtifacts, citationsManifest: streamManifest } = await agentStream.runStream(
+        const { donePayload, error, artifacts: streamArtifacts, citationsManifest: streamManifest, graphs: streamGraphs } = await agentStream.runStream(
           {
             query: newContent,
             session_id: sid,
@@ -1913,7 +1914,7 @@ export function RightSidebar({
               content: formattedAnswer,
               parts: [{ type: 'text' as const, text: formattedAnswer }],
               createdAt: new Date(),
-              metadata: { artifacts: persistedArts },
+              metadata: { artifacts: persistedArts, graphs: streamGraphs },
             },
           ]);
           const savedAsst = await saveMessage(sid, 'assistant', formattedAnswer, { artifacts: persistedArts });
@@ -2044,7 +2045,7 @@ export function RightSidebar({
       }
 
       setNotes9Loading(true);
-      const { donePayload, error, artifacts: streamArtifacts, citationsManifest: streamManifest } = await agentStream.runStream(
+      const { donePayload, error, artifacts: streamArtifacts, citationsManifest: streamManifest, graphs: streamGraphs } = await agentStream.runStream(
         {
           query,
           session_id: sid,
@@ -2068,7 +2069,7 @@ export function RightSidebar({
             content: formattedAnswer,
             parts: [{ type: 'text' as const, text: formattedAnswer }],
             createdAt: new Date(),
-            metadata: { artifacts: persistedArts },
+            metadata: { artifacts: persistedArts, graphs: streamGraphs },
           },
         ]);
         const savedAsst = await saveMessage(sid, 'assistant', formattedAnswer, { artifacts: persistedArts });
@@ -3354,6 +3355,8 @@ export function RightSidebar({
                           (message as { metadata?: { artifacts?: PersistedArtifact[] } }).metadata?.artifacts
                           ?? notes9Parsed?.artifacts
                           ?? [];
+                        const messageGraphs: AgentGraph[] =
+                          (message as { metadata?: { graphs?: AgentGraph[] } }).metadata?.graphs ?? [];
                         const content = hasLitRefs
                           ? literatureParsed!.bodyMarkdown
                           : notes9Parsed
@@ -3365,22 +3368,30 @@ export function RightSidebar({
                         const notes9Sources = (() => {
                           if (!notes9Parsed || notes9Parsed.resources.length === 0) return null;
                           const body = notes9Parsed.bodyMarkdown;
-                          // Only surface resources whose [N] marker appears in the response text.
-                          const cited = notes9Parsed.resources.filter((_, i) =>
-                            new RegExp(`\\[${i + 1}\\]`).test(body)
-                          );
-                          if (cited.length === 0) return null;
-                          // Suppress purely-negated citations: when the agent mentions a resource
-                          // only to say the content has nothing to do with it, the [N] appears
-                          // adjacent to negation phrases. Filter those out.
-                          const NEGATION = /\b(does not|doesn't|not related|nothing to do|no (?:text|information|content|data)|does not reference|not reference|unrelated)\b/i;
-                          const meaningful = cited.filter((_, i) => {
-                            const idx = body.indexOf(`[${i + 1}]`);
-                            if (idx === -1) return false;
-                            const window = body.slice(Math.max(0, idx - 120), idx + 20);
-                            return !NEGATION.test(window);
+                          // Surface resources whose marker is actually present in the
+                          // answer. Key on each resource's cite_label (reliably on the
+                          // wire) and fall back to array position only for legacy blobs.
+                          // The base regex also keeps sub-citations: a source labelled
+                          // "1.2" stays when "[1.2]" (or any "[1.x]") appears. The old
+                          // filter used `[i+1]` (array ordinal) as the label, so when an
+                          // answer had only sub-citations like [1.1] [1.2] … [6.2] and no
+                          // bare [1]…[6], almost every resource was dropped — the reload
+                          // "12 chips but Grounded in 2 sources" bug. This mirrors the
+                          // live-stream path (agent-stream-reply.tsx) so a reloaded
+                          // message shows the SAME sources it did while streaming.
+                          const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                          const cited = notes9Parsed.resources.filter((r, i) => {
+                            const label =
+                              typeof r.cite_label === 'string' && r.cite_label.trim()
+                                ? r.cite_label.trim()
+                                : String(i + 1);
+                            const base = label.split('.')[0];
+                            return (
+                              new RegExp(`\\[${escapeRe(base)}(?:\\.\\d+)?\\]`).test(body) ||
+                              body.includes(`[${label}]`)
+                            );
                           });
-                          return meaningful.length > 0 ? meaningful : null;
+                          return cited.length > 0 ? cited : null;
                         })();
                         const userLiteratureMarkdown =
                           message.role === 'user' &&
@@ -3487,6 +3498,11 @@ export function RightSidebar({
                                       className="mt-2 self-start"
                                     />
                                   )}
+                                  {messageGraphs.length > 0 && (
+                                    <div className="mt-3 w-full">
+                                      <AgentGraphList graphs={messageGraphs} />
+                                    </div>
+                                  )}
                                   {messageArtifacts.length > 0 && (
                                     <div className="mt-3 w-full">
                                       <PersistedArtifactList artifacts={messageArtifacts} />
@@ -3545,6 +3561,7 @@ export function RightSidebar({
                               <LiteratureStreamProgressHint
                                 isStreaming={literatureAgentStream.isStreaming}
                                 upstreamActivityAt={literatureAgentStream.upstreamActivityAt}
+                                onStop={literatureAgentStream.abort}
                               />
                             </div>
                             <LiteratureAgentThinkingPanel steps={literatureAgentStream.steps} />
@@ -3617,6 +3634,7 @@ export function RightSidebar({
                                 currentThinkingMessage={agentStream.currentThinkingMessage}
                                 toolCards={agentStream.toolCards}
                                 artifacts={agentStream.artifacts}
+                                graphs={agentStream.graphs}
                                 reasoning={agentStream.thinkingTokenBuffer}
                                 synthesisPlan={agentStream.synthesisPlan}
                                 sql={agentStream.sql}

@@ -1,6 +1,6 @@
 'use client';
 
-import { Check, Loader2 } from 'lucide-react';
+import { Check, Loader2, RefreshCw } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { MarkdownRenderer } from './markdown-renderer';
 import {
@@ -9,6 +9,7 @@ import {
 } from '@/components/catalyst/agent-citations-panel';
 import { AgentToolCards } from '@/components/catalyst/agent-tool-cards';
 import { AgentArtifactList } from '@/components/catalyst/agent-artifact-card';
+import { AgentGraphList } from '@/components/catalyst/agent-graph-view';
 import { AgentReasoningPanel } from '@/components/catalyst/agent-reasoning-panel';
 import { AgentStopButton } from '@/components/catalyst/agent-stop-button';
 import type { ThinkingPayload, RagChunksPayload, DonePayload } from '@/lib/agent-stream-types';
@@ -18,6 +19,7 @@ import type {
   ToolCard,
   SynthesisPlan,
   AgentArtifact,
+  AgentGraph,
 } from '@/hooks/use-agent-stream';
 
 /** Escape a string for safe interpolation into a RegExp literal. */
@@ -42,6 +44,8 @@ interface AgentStreamReplyProps {
   toolCards?: ToolCard[];
   /** Files the agent generated this turn (from `artifact` events). */
   artifacts?: AgentArtifact[];
+  /** Relationship graphs from `graph` events — rendered as native dagre layouts. */
+  graphs?: AgentGraph[];
   /** Accumulated reasoning from `thinking_token` events — shown in a collapsible
    * "Thinking" panel, kept out of the answer bubble. */
   reasoning?: string;
@@ -70,6 +74,9 @@ interface AgentStreamReplyProps {
   runId?: string | null;
   /** Cancels the in-flight run + stream. Wired to the Stop button. */
   onStop?: () => void;
+  /** Re-runs the last turn. When provided, an error turn offers "Try again"
+   * so a failed run is recoverable in one click instead of a dead end. */
+  onRetry?: () => void;
 }
 
 // Display labels only. Unknown keys fall through to the raw value via the
@@ -91,6 +98,7 @@ export function AgentStreamReply({
   currentThinkingMessage,
   toolCards = [],
   artifacts = [],
+  graphs = [],
   reasoning = '',
   synthesisPlan = null,
   sql,
@@ -104,6 +112,7 @@ export function AgentStreamReply({
   liveCitationCount = 0,
   runId = null,
   onStop,
+  onRetry,
 }: AgentStreamReplyProps) {
   const displayAnswer =
     donePayload?.content ?? donePayload?.answer ?? streamedAnswer;
@@ -152,6 +161,16 @@ export function AgentStreamReply({
       <div className="rounded-2xl px-4 py-3 text-sm bg-destructive/10 text-destructive border border-destructive/20">
         <p className="font-medium">Error</p>
         <p className="mt-1">{error}</p>
+        {onRetry && (
+          <button
+            type="button"
+            onClick={onRetry}
+            className="mt-2.5 inline-flex items-center gap-1.5 rounded-md border border-destructive/30 bg-background/60 px-2.5 py-1 text-xs font-medium text-destructive transition-colors hover:bg-destructive/10"
+          >
+            <RefreshCw className="size-3" aria-hidden />
+            Try again
+          </button>
+        )}
       </div>
     );
   }
@@ -184,7 +203,7 @@ export function AgentStreamReply({
         <div className="flex items-center gap-2 px-1 text-xs text-muted-foreground">
           {liveCitationCount > 0 && (
             <span className="inline-flex items-center gap-1.5">
-              <Loader2 className="size-3 animate-spin" aria-hidden />
+              <span className="size-1.5 rounded-full bg-primary animate-pulse" aria-hidden />
               Gathering sources… {liveCitationCount}
             </span>
           )}
@@ -198,7 +217,7 @@ export function AgentStreamReply({
             view. Each step shows a spinner while active and a check when done,
             so a long protocol design reads as visible progress. ── */}
       {synthesisPlan && synthesisPlan.steps.length > 0 && (
-        <div className="rounded-lg border border-border/60 bg-muted/20 px-3 py-2 text-sm">
+        <div className="surface-recessed px-3 py-2 text-sm">
           <div className="mb-1.5 font-medium text-foreground/80">
             {synthesisPlan.title}
           </div>
@@ -276,7 +295,7 @@ export function AgentStreamReply({
 
       {/* ── SQL query block ── */}
       {sql && (
-        <div className="rounded-xl border border-border/60 overflow-hidden">
+        <div className="surface-recessed overflow-hidden">
           <div className="flex items-center gap-2 px-3 py-2 border-b border-border/50 bg-muted/30">
             <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
               SQL Query
@@ -357,6 +376,7 @@ export function AgentStreamReply({
 
       {/* ── Generated files (PDF/DOCX/XLSX/figures). Drafts show a
             "Save to Data files" action; appear live as the agent emits them. ── */}
+      {graphs.length > 0 && <AgentGraphList graphs={graphs} />}
       {artifacts.length > 0 && <AgentArtifactList artifacts={artifacts} />}
 
       {/* ── Citations panel ── */}

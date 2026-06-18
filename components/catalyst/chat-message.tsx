@@ -182,10 +182,15 @@ export function ChatMessage({
         {(isUser || content || !isStreaming) && (
           <div
             className={cn(
-              'rounded-lg px-4 py-2.5 text-sm',
+              'text-sm',
               isUser
-                ? 'bg-primary text-primary-foreground'
-                : 'bg-muted overflow-hidden',
+                ? 'rounded-lg px-4 py-2.5 bg-primary text-primary-foreground'
+                : cn(
+                    // The answer is the product's value — give it the AI surface:
+                    // elevated card, burnt-sienna identity rail, soft apricot glow.
+                    'surface-primary assistant-rail overflow-hidden py-2.5 pl-5 pr-4',
+                    'shadow-[0_1px_2px_rgba(0,0,0,0.05),0_0_20px_-8px_var(--n9-accent-glow)]',
+                  ),
             )}
           >
             {isUser ? (

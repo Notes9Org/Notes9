@@ -9,6 +9,7 @@ import {
   CollapsibleTrigger,
 } from '@/components/ui/collapsible';
 import { cn } from '@/lib/utils';
+import { AgentStopButton } from '@/components/catalyst/agent-stop-button';
 
 const STEP_MAX_CHARS = 280;
 
@@ -28,9 +29,13 @@ function formatElapsed(totalSec: number) {
 export function LiteratureStreamProgressHint({
   isStreaming,
   upstreamActivityAt,
+  onStop,
 }: {
   isStreaming: boolean;
   upstreamActivityAt: number | null;
+  /** Cancels the in-flight literature run (hook's `abort`). When provided, a
+   * Stop control is shown so a long/wrong run is never a trap. */
+  onStop?: () => void;
 }) {
   const [startedAt, setStartedAt] = useState<number | null>(null);
   const [pulse, setPulse] = useState(0);
@@ -57,6 +62,7 @@ export function LiteratureStreamProgressHint({
         <span>Running</span>
         <span className="font-medium text-foreground/85">{formatElapsed(elapsedSec)}</span>
         <span className="opacity-75">· stream open</span>
+        {onStop && <AgentStopButton onStop={onStop} className="ml-1.5" />}
       </p>
       {upstreamActivityAt == null && elapsedSec >= 6 && (
         <p>Waiting for the first chunk from the server…</p>

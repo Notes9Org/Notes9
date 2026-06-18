@@ -379,7 +379,7 @@ export function CatalystChat({ sessionId }: CatalystChatProps) {
       // attachments via tagsToAttachments() and passes them to runStream(). If
       // this page is ever promoted back to a live route, add `attachments` here
       // mirroring right-sidebar.tsx.
-      const { donePayload, error, artifacts: streamArtifacts, citationsManifest: streamManifest } = await agentStream.runStream(
+      const { donePayload, error, artifacts: streamArtifacts, citationsManifest: streamManifest, graphs: streamGraphs } = await agentStream.runStream(
         {
           query: text,
           session_id: sid,
@@ -406,7 +406,7 @@ export function CatalystChat({ sessionId }: CatalystChatProps) {
         };
         setMessages((prev) => [...prev, assistantMessage]);
 
-        const savedAsst = await saveMessage(sid, 'assistant', formattedAnswer, { artifacts: toPersistedArtifacts(streamArtifacts) });
+        const savedAsst = await saveMessage(sid, 'assistant', formattedAnswer, { artifacts: toPersistedArtifacts(streamArtifacts), graphs: streamGraphs });
         if (savedAsst) {
           setSavedMessageIds((prev) => new Set(prev).add(savedAsst.id));
           setMessages((prev) => {
@@ -529,7 +529,7 @@ export function CatalystChat({ sessionId }: CatalystChatProps) {
         }
 
         setNotes9Loading(true);
-        const { donePayload, error, artifacts: streamArtifacts, citationsManifest: streamManifest } = await agentStream.runStream(
+        const { donePayload, error, artifacts: streamArtifacts, citationsManifest: streamManifest, graphs: streamGraphs } = await agentStream.runStream(
           { query: newContent, session_id: sid, history, options: { web_search: webSearchEnabledRef.current ? 'on' : 'off' } },
           token
         );
@@ -548,7 +548,7 @@ export function CatalystChat({ sessionId }: CatalystChatProps) {
               createdAt: new Date(),
             },
           ]);
-          const savedAsst = await saveMessage(sid, 'assistant', formattedAnswer, { artifacts: toPersistedArtifacts(streamArtifacts) });
+          const savedAsst = await saveMessage(sid, 'assistant', formattedAnswer, { artifacts: toPersistedArtifacts(streamArtifacts), graphs: streamGraphs });
           if (savedAsst) {
             setSavedMessageIds((prev) => new Set(prev).add(savedAsst.id));
             setMessages((prev) => {
@@ -623,7 +623,7 @@ export function CatalystChat({ sessionId }: CatalystChatProps) {
       }
 
       setNotes9Loading(true);
-      const { donePayload, error, artifacts: streamArtifacts, citationsManifest: streamManifest } = await agentStream.runStream(
+      const { donePayload, error, artifacts: streamArtifacts, citationsManifest: streamManifest, graphs: streamGraphs } = await agentStream.runStream(
         { query, session_id: sid, history, options: { web_search: webSearchEnabledRef.current ? 'on' : 'off' } },
         token
       );
@@ -642,7 +642,7 @@ export function CatalystChat({ sessionId }: CatalystChatProps) {
             createdAt: new Date(),
           },
         ]);
-        const savedAsst = await saveMessage(sid, 'assistant', formattedAnswer, { artifacts: toPersistedArtifacts(streamArtifacts) });
+        const savedAsst = await saveMessage(sid, 'assistant', formattedAnswer, { artifacts: toPersistedArtifacts(streamArtifacts), graphs: streamGraphs });
         if (savedAsst) {
           setSavedMessageIds((prev) => new Set(prev).add(savedAsst.id));
           setMessages((prev) => {
@@ -760,6 +760,7 @@ export function CatalystChat({ sessionId }: CatalystChatProps) {
                       thinkingSteps: agentStream.thinkingSteps,
                       toolCards: agentStream.toolCards,
                       artifacts: agentStream.artifacts,
+                      graphs: agentStream.graphs,
                       thinkingTokenBuffer: agentStream.thinkingTokenBuffer,
                       sql: agentStream.sql,
                       ragChunks: agentStream.ragChunks,
