@@ -20,8 +20,8 @@ import { AgentGraphList } from '@/components/catalyst/agent-graph-view';
 import type { PersistedArtifact } from '@/lib/agent-artifacts';
 import { parseNotes9AssistantStoredContent } from '@/lib/notes9-chat-format';
 import type { Vote } from '@/lib/db/schema';
-import type { ThinkingPayload, RagChunksPayload, DonePayload } from '@/lib/agent-stream-types';
-import type { CitationsManifest, ToolCard, AgentArtifact, AgentGraph } from '@/hooks/use-agent-stream';
+import type { ThinkingPayload, RagChunksPayload, DonePayload, GroundingResource } from '@/lib/agent-stream-types';
+import type { CitationsManifest, ToolCard, AgentArtifact, AgentGraph, CitationsManifestEntry } from '@/hooks/use-agent-stream';
 
 interface CatalystMessagesProps {
   messages: UIMessage[];
@@ -108,11 +108,20 @@ export function CatalystMessages({
         role="log"
         aria-label="Chat messages"
       >
-        <div className="mx-auto max-w-3xl px-4 pt-6 pb-4">
+        <div className="mx-auto max-w-5xl 2xl:max-w-6xl px-4 pt-6 pb-4">
           <div className="flex flex-col gap-5">
           {messages.map((message, index) => {
             const isEditing = editingMessageId === message.id;
             const content = getMessageContent(message);
+            const getMessageSources = (msg: typeof message): Array<Record<string, unknown>> => {
+              if (!msg.parts) return [];
+              return msg.parts
+                .filter((p): p is { type: 'data-source'; data: { source: Record<string, unknown> } } =>
+                  (p as { type: string }).type === 'data-source'
+                )
+                .map((p) => (p as { type: string; data: { source: Record<string, unknown> } }).data?.source)
+                .filter(Boolean) as Array<Record<string, unknown>>;
+            };
             const isLastAssistant =
               message.role === 'assistant' && index === messages.length - 1;
             const isLastUserAwaitingReply =
@@ -164,7 +173,7 @@ export function CatalystMessages({
                 <div
                   className={cn(
                     'flex flex-col min-w-0',
-                    message.role === 'user' ? 'items-end max-w-[80%]' : 'items-start max-w-full flex-1'
+                    message.role === 'user' ? 'items-end max-w-[90%]' : 'items-start max-w-full flex-1'
                   )}
                 >
                   {isEditing ? (
@@ -188,42 +197,76 @@ export function CatalystMessages({
                       >
                         {message.role === 'user' ? (
                           <div className="whitespace-pre-wrap">{content}</div>
-                        ) : (
-                          <>
-                            <MarkdownRenderer
-                              content={assistantDisplayMarkdown}
-                              citationsManifest={notes9Parsed?.citationsManifest ?? null}
-                            />
-                            {notes9Sources && (
-                              <AgentCitationsPanel
-                                items={notes9Sources.map((c, i) =>
-                                  groundingResourceToPanelItem(c, i)
-                                )}
-                                triggerLabel="All citations"
-                                className="mt-2"
+                        ) : (() => {
+                          const rawSources = getMessageSources(message);
+                          let effectiveManifest = (notes9Parsed?.citationsManifest as any) ?? null;
+                          if (!effectiveManifest && rawSources.length > 0) {
+                            effectiveManifest = {
+                              manifest: rawSources.reduce((acc, src, i) => {
+                                const label = String(i + 1);
+                                acc[label] = {
+                                  source_name: String(src.title || src.url || 'Source ' + label),
+                                  source_url: typeof src.url === 'string' ? src.url : undefined,
+                                  excerpt: typeof src.snippet === 'string' ? src.snippet : undefined,
+                                  source_type: 'web',
+                                } as CitationsManifestEntry;
+                                return acc;
+                              }, {} as Record<string, CitationsManifestEntry>)
+                            };
+                          }
+
+                          const sourceToGroundingResource = (src: Record<string, unknown>): GroundingResource => ({
+                            source_type: 'web',
+                            source_name: String(src.title || src.url || 'Source'),
+                            source_url: typeof src.url === 'string' ? src.url : undefined,
+                            excerpt: typeof src.snippet === 'string' ? src.snippet : undefined,
+                          });
+                          return (
+                            <>
+                              <MarkdownRenderer
+                                content={assistantDisplayMarkdown}
+                                citationsManifest={effectiveManifest}
                               />
-                            )}
-                            {/* Persisted relationship graphs — native dagre render */}
-                            {messageGraphs.length > 0 && (
-                              <div className="mt-3">
-                                <AgentGraphList graphs={messageGraphs} />
-                              </div>
-                            )}
-                            {/* Persisted file/chart artifacts — re-sign their URLs lazily */}
-                            {messageArtifacts.length > 0 && (
-                              <div className="mt-3">
-                                <PersistedArtifactList artifacts={messageArtifacts} />
-                              </div>
-                            )}
-                            {/* Blinking cursor at end of streaming text */}
-                            {isLastAssistant && isLoading && (
-                              <span
-                                className="inline-block w-[3px] h-[1em] bg-foreground/70 rounded-sm animate-cursor-blink ml-0.5 translate-y-[2px]"
-                                aria-hidden
-                              />
-                            )}
-                          </>
-                        )}
+                              {notes9Sources && (
+                                <AgentCitationsPanel
+                                  items={notes9Sources.map((c, i) =>
+                                    groundingResourceToPanelItem(c, i)
+                                  )}
+                                  triggerLabel="All citations"
+                                  className="mt-2"
+                                />
+                              )}
+                              {!notes9Sources && rawSources.length > 0 && (
+                                <AgentCitationsPanel
+                                  items={rawSources.map((src, i) =>
+                                    groundingResourceToPanelItem(sourceToGroundingResource(src), i)
+                                  )}
+                                  triggerLabel="All citations"
+                                  className="mt-2"
+                                />
+                              )}
+                              {/* Persisted relationship graphs — native dagre render */}
+                              {messageGraphs.length > 0 && (
+                                <div className="mt-3">
+                                  <AgentGraphList graphs={messageGraphs} />
+                                </div>
+                              )}
+                              {/* Persisted file/chart artifacts — re-sign their URLs lazily */}
+                              {messageArtifacts.length > 0 && (
+                                <div className="mt-3">
+                                  <PersistedArtifactList artifacts={messageArtifacts} />
+                                </div>
+                              )}
+                              {/* Blinking cursor at end of streaming text */}
+                              {isLastAssistant && isLoading && (
+                                <span
+                                  className="inline-block w-[3px] h-[1em] bg-foreground/70 rounded-sm animate-cursor-blink ml-0.5 translate-y-[2px]"
+                                  aria-hidden
+                                />
+                              )}
+                            </>
+                          );
+                        })()}
                       </div>
 
                       {/* Message Actions */}

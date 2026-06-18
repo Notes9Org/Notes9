@@ -2,7 +2,7 @@
 
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Plus, MessageSquare, Trash2, Sparkles } from 'lucide-react';
+import { Plus, MessageSquare, Trash2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { ChatSession } from '@/hooks/use-chat-sessions';
 import { formatDistanceToNow } from 'date-fns';
@@ -34,7 +34,11 @@ export function ChatHistory({
         <div className="flex flex-col items-center justify-center py-6 border-b border-border/50 bg-muted/5">
           <div className="relative mb-2">
             <div className="absolute inset-0 animate-pulse rounded-full bg-primary/15 blur-xl" />
-            <Sparkles className="relative size-4 text-primary" />
+            <img 
+              src="/notes9-logo-mark-transparent.png" 
+              alt="Catalyst Logo" 
+              className="relative size-6 object-contain dark:invert dark:brightness-125" 
+            />
           </div>
           <span className="text-xs font-semibold text-primary">
             Catalyst AI

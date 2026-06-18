@@ -23,6 +23,7 @@ import { useAuthUser } from "@/components/auth/auth-provider"
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
 import { extractToolCards } from '@/lib/chat-tool-parts';
+import { parseNotes9AssistantStoredContent } from '@/lib/notes9-chat-format';
 import type { ToolCard } from '@/hooks/use-agent-stream';
 import { usePinnedAutoScroll } from '@/hooks/use-pinned-auto-scroll';
 import { recordRumEvent } from '@/lib/rum';
@@ -619,7 +620,7 @@ export function CatalystChat({ open, onOpenChange }: CatalystChatProps) {
     <TooltipProvider>
       <Dialog open={open} onOpenChange={onOpenChange}>
         <DialogContent
-          className="sm:max-w-[900px] h-[85vh] flex flex-col p-0 gap-0 overflow-hidden rounded-2xl border-border/50 shadow-2xl"
+          className="sm:max-w-[1100px] h-[85vh] flex flex-col p-0 gap-0 overflow-hidden rounded-2xl border-border/50 shadow-2xl"
           onEscapeKeyDown={() => onOpenChange(false)}
         >
           <DialogHeader className="px-5 py-3 border-b border-border/40 shrink-0 bg-background/80 backdrop-blur-sm">
@@ -716,11 +717,21 @@ export function CatalystChat({ open, onOpenChange }: CatalystChatProps) {
                         const isLastAssistant = index === messages.length - 1 && message.role === 'assistant';
                         const showStreamingStatus = isLastAssistant && isLoading;
 
+                        const content = getMessageContent(message);
+                        const notes9Parsed =
+                          message.role === 'assistant'
+                            ? parseNotes9AssistantStoredContent(content)
+                            : null;
+                        const assistantDisplayMarkdown =
+                          message.role === 'assistant' && notes9Parsed
+                            ? notes9Parsed.bodyMarkdown
+                            : content;
+
                         return (
                           <ChatMessage
                             key={message.id}
                             role={message.role as 'user' | 'assistant'}
-                            content={getMessageContent(message)}
+                            content={assistantDisplayMarkdown}
                             attachments={messageAttachments.get(message.id)}
                             sources={getMessageSources(message)}
                             thinking={getMessageThinking(message)}
@@ -731,6 +742,7 @@ export function CatalystChat({ open, onOpenChange }: CatalystChatProps) {
                             onRegenerate={handleRegenerate}
                             isRegenerating={isRegenerating}
                             isStreaming={showStreamingStatus}
+                            citationsManifest={notes9Parsed?.citationsManifest ?? null}
                           />
                         );
                       })
@@ -763,8 +775,8 @@ export function CatalystChat({ open, onOpenChange }: CatalystChatProps) {
                             alt=""
                             className="object-contain p-1.5 dark:invert dark:brightness-125 animate-spin duration-3000 bg-primary/5"
                           />
-                          <AvatarFallback className="bg-primary/10 text-primary">
-                            <span className="notes9-mascot-mask size-[18px]" aria-hidden />
+                          <AvatarFallback className="bg-primary/10 text-primary text-xs font-semibold">
+                            N9
                           </AvatarFallback>
                         </Avatar>
                         <div className="flex items-center gap-1 px-4 py-3 rounded-2xl bg-muted/30 border border-border/30">

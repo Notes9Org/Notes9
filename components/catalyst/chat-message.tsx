@@ -13,7 +13,7 @@ import {
   AgentCitationsPanel,
   groundingResourceToPanelItem,
 } from './agent-citations-panel';
-import type { ToolCard, CitationsManifest } from '@/hooks/use-agent-stream';
+import type { ToolCard, CitationsManifest, CitationsManifestEntry } from '@/hooks/use-agent-stream';
 import type { GroundingResource } from '@/lib/agent-stream-types';
 
 interface SourceItem {
@@ -117,13 +117,13 @@ export function ChatMessage({
             alt=""
             className="object-contain p-1.5 dark:invert dark:brightness-125 bg-primary/5"
           />
-          <AvatarFallback className="bg-primary/10 text-primary">
-            <span className="notes9-mascot-mask size-[18px]" aria-hidden />
+          <AvatarFallback className="bg-primary/10 text-primary text-xs font-semibold">
+            N9
           </AvatarFallback>
         </Avatar>
       )}
 
-      <div className={cn('flex flex-col gap-1.5 min-w-0', isUser ? 'max-w-[85%]' : 'max-w-full flex-1')}>
+      <div className={cn('flex flex-col gap-1.5 min-w-0', isUser ? 'max-w-[85%]' : 'max-w-full flex-1 w-full')}>
         {/* Thinking panel — collapsible */}
         {!isUser && thinking && (
           <button
@@ -194,26 +194,43 @@ export function ChatMessage({
 
         {/* Message Bubble — suppressed when the assistant has only tool cards
             and no answer text yet (avoids an empty grey block while tools run). */}
-        {(isUser || content || !isStreaming) && (
-          <div
-            className={cn(
-              'rounded-2xl px-4 py-3 text-sm leading-relaxed',
-              isUser
-                ? 'bg-primary/95 text-primary-foreground shadow-sm rounded-br-sm'
-                : 'bg-muted/40 text-foreground overflow-hidden rounded-bl-sm border border-border/40 shadow-sm',
-            )}
-          >
-            {isUser ? (
-              <div className="whitespace-pre-wrap break-words overflow-wrap-anywhere">{content}</div>
-            ) : (
-              <MarkdownRenderer
-                content={deferredContent}
-                showCursor={isStreaming}
-                citationsManifest={citationsManifest}
-              />
-            )}
-          </div>
-        )}
+        {(isUser || content || !isStreaming) && (() => {
+          let effectiveManifest = citationsManifest;
+          if (!effectiveManifest && normalizedSources.length > 0) {
+            effectiveManifest = {
+              manifest: normalizedSources.reduce((acc, src, i) => {
+                const label = String(i + 1);
+                acc[label] = {
+                  source_name: String(src.title || src.url || 'Source ' + label),
+                  source_url: typeof src.url === 'string' ? src.url : undefined,
+                  excerpt: typeof src.snippet === 'string' ? src.snippet : undefined,
+                  source_type: 'web',
+                } as CitationsManifestEntry;
+                return acc;
+              }, {} as Record<string, CitationsManifestEntry>)
+            };
+          }
+          return (
+            <div
+              className={cn(
+                'rounded-2xl px-4 py-3 text-sm leading-relaxed',
+                isUser
+                  ? 'bg-primary/95 text-primary-foreground shadow-sm rounded-br-sm'
+                  : 'bg-muted/40 text-foreground overflow-hidden rounded-bl-sm border border-border/40 shadow-sm',
+              )}
+            >
+              {isUser ? (
+                <div className="whitespace-pre-wrap break-words overflow-wrap-anywhere">{content}</div>
+              ) : (
+                <MarkdownRenderer
+                  content={deferredContent}
+                  showCursor={isStreaming}
+                  citationsManifest={effectiveManifest}
+                />
+              )}
+            </div>
+          );
+        })()}
 
         {/* Sources — routed through the shared AgentCitationsPanel so modal
             answers get the same grouped, interactive citation display as the

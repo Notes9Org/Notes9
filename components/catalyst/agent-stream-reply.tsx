@@ -315,20 +315,40 @@ export function AgentStreamReply({
       {(displayAnswer || (!donePayload && streamedAnswer === '')) && (
         <div className="space-y-2">
           <div className="px-1 text-sm text-foreground min-w-0 max-w-full">
-            {displayAnswer ? (
-              <MarkdownRenderer
-                content={displayAnswer}
-                showCursor={!donePayload}
-                className="[&_pre]:max-w-full [&_pre]:overflow-x-auto"
-                citationsManifest={citationsManifest}
-              />
-            ) : (
-              /* No content yet — standalone cursor */
-              <span
-                className="inline-block h-4 w-1 bg-foreground/70 rounded-sm animate-cursor-blink translate-y-[2px]"
-                aria-hidden
-              />
-            )}
+            {(() => {
+              let effectiveManifest = citationsManifest;
+              if (!effectiveManifest && rawGrounding.length > 0) {
+                effectiveManifest = {
+                  manifest: rawGrounding.reduce((acc, r, i) => {
+                    const label = typeof r.cite_label === 'string' && r.cite_label.trim() ? r.cite_label.trim() : String(i + 1);
+                    acc[label] = {
+                      source_id: r.source_id,
+                      source_name: r.source_name || r.display_label || 'Source ' + label,
+                      source_url: r.source_url,
+                      excerpt: r.excerpt,
+                      match_kind: r.match_kind,
+                      support_status: r.support_status,
+                      grounding: r.grounding,
+                    };
+                    return acc;
+                  }, {} as Record<string, any>)
+                };
+              }
+              return displayAnswer ? (
+                <MarkdownRenderer
+                  content={displayAnswer}
+                  showCursor={!donePayload}
+                  className="[&_pre]:max-w-full [&_pre]:overflow-x-auto"
+                  citationsManifest={effectiveManifest}
+                />
+              ) : (
+                /* No content yet — standalone cursor */
+                <span
+                  className="inline-block h-4 w-1 bg-foreground/70 rounded-sm animate-cursor-blink translate-y-[2px]"
+                  aria-hidden
+                />
+              );
+            })()}
           </div>
 
           {/* Confidence + tool badge */}

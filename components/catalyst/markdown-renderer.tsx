@@ -491,8 +491,8 @@ function ReferencesFooter({
   });
 
   return (
-    <div className="mt-4 border-t border-border/40 pt-3">
-      <p className="text-2xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">
+    <div className="mt-8 border-t border-border/40 pt-4">
+      <p className="text-sm font-semibold uppercase tracking-wider text-muted-foreground mb-3">
         References
       </p>
       <ol className="space-y-1.5 list-none m-0 p-0">
@@ -507,8 +507,8 @@ function ReferencesFooter({
           }
 
           return (
-            <li key={label} className="flex items-baseline gap-2 text-xs leading-snug">
-              <span className="shrink-0 font-mono text-2xs text-muted-foreground tabular-nums">
+            <li key={label} className="flex items-baseline gap-2 text-sm leading-snug">
+              <span className="shrink-0 font-mono text-xs text-muted-foreground tabular-nums">
                 [{label}]
               </span>
               <span className="min-w-0">
@@ -530,7 +530,7 @@ function ReferencesFooter({
                   </span>
                 )}
                 {isWeb && domain && name && (
-                  <span className="ml-1.5 text-muted-foreground/50 text-2xs">
+                  <span className="ml-1.5 text-muted-foreground/50 text-xs">
                     {domain}
                   </span>
                 )}
@@ -695,11 +695,12 @@ export function MarkdownRenderer({
       <div
         ref={containerRef}
         className={cn(
-          'prose prose-sm dark:prose-invert max-w-none html-content text-sm text-foreground overflow-x-hidden break-words',
-          '[&_h1]:!text-lg [&_h1]:!font-semibold [&_h1]:!leading-snug [&_h1]:!mt-0 [&_h1]:!mb-2',
-          '[&_h2]:!text-base [&_h2]:!font-semibold [&_h2]:!leading-snug [&_h2]:!mt-4 [&_h2]:!mb-1.5 first:[&_h2]:!mt-0',
-          '[&_h3]:!text-sm [&_h3]:!font-semibold [&_h3]:!leading-snug [&_h3]:!mt-3 [&_h3]:!mb-1',
-          '[&_h4]:!text-sm [&_h4]:!font-medium [&_h4]:!text-muted-foreground',
+          'prose dark:prose-invert max-w-none html-content text-[17px] leading-[1.7] text-foreground overflow-x-hidden break-words',
+          '[&_p]:mb-6 first:[&_p]:mt-0 last:[&_p]:mb-0',
+          '[&_h1]:!text-3xl [&_h1]:!font-semibold [&_h1]:!leading-snug [&_h1]:!mt-10 [&_h1]:!mb-6 first:[&_h1]:!mt-0',
+          '[&_h2]:!text-2xl [&_h2]:!font-semibold [&_h2]:!leading-snug [&_h2]:!mt-10 [&_h2]:!mb-6 first:[&_h2]:!mt-0',
+          '[&_h3]:!text-xl [&_h3]:!font-semibold [&_h3]:!leading-snug [&_h3]:!mt-8 [&_h3]:!mb-4',
+          '[&_h4]:!text-lg [&_h4]:!font-medium [&_h4]:!text-muted-foreground [&_h4]:mt-8 [&_h4]:mb-4',
           '[&_pre]:overflow-x-auto [&_pre]:max-w-full',
           '[&_a]:break-words [&_a]:overflow-wrap-anywhere',
           '[&_table]:table-fixed [&_table]:w-full',
