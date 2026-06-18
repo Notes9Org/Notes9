@@ -221,12 +221,18 @@ export function CatalystMessages({
                             };
                           }
 
-                          const sourceToGroundingResource = (src: Record<string, unknown>): GroundingResource => ({
-                            source_type: 'web',
-                            source_name: String(src.title || src.url || 'Source'),
-                            source_url: typeof src.url === 'string' ? src.url : undefined,
-                            excerpt: typeof src.snippet === 'string' ? src.snippet : undefined,
-                          });
+                          const sourceToGroundingResource = (src: Record<string, unknown> | GroundingResource): GroundingResource => {
+                            const anySrc = src as any;
+                            const url = anySrc.source_url || (typeof anySrc.url === 'string' ? anySrc.url : undefined);
+                            const rawTitle = anySrc.source_name || anySrc.title;
+                            const title = typeof rawTitle === 'string' && rawTitle.trim() ? rawTitle.trim() : url || 'Source';
+                            return {
+                              source_type: anySrc.source_type || 'web',
+                              source_name: String(title),
+                              source_url: url,
+                              excerpt: anySrc.excerpt || (typeof anySrc.snippet === 'string' ? anySrc.snippet : undefined),
+                            };
+                          };
                           return (
                             <>
                               <MarkdownRenderer

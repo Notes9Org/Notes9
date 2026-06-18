@@ -25,15 +25,14 @@ interface SourceItem {
 
 /** Adapt the modal's loose web-source shape into a GroundingResource so the
  * same AgentCitationsPanel renders modal answers identically to the page. */
-function sourceToGroundingResource(src: SourceItem): GroundingResource {
-  const url = typeof src.url === 'string' ? src.url : null;
-  const title =
-    typeof src.title === 'string' && src.title.trim()
-      ? src.title.trim()
-      : url || 'Source';
-  const excerpt = typeof src.snippet === 'string' ? src.snippet : null;
+function sourceToGroundingResource(src: SourceItem | GroundingResource): GroundingResource {
+  const anySrc = src as any;
+  const url = anySrc.source_url || (typeof anySrc.url === 'string' ? anySrc.url : null);
+  const rawTitle = anySrc.source_name || anySrc.title;
+  const title = typeof rawTitle === 'string' && rawTitle.trim() ? rawTitle.trim() : url || 'Source';
+  const excerpt = anySrc.excerpt || (typeof anySrc.snippet === 'string' ? anySrc.snippet : null);
   return {
-    source_type: 'web',
+    source_type: anySrc.source_type || 'web',
     source_name: title,
     display_label: title,
     source_url: url,
