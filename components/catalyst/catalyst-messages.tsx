@@ -199,15 +199,21 @@ export function CatalystMessages({
                           <div className="whitespace-pre-wrap">{content}</div>
                         ) : (() => {
                           const rawSources = getMessageSources(message);
+                          const allSources = [...(notes9Sources ?? []), ...rawSources];
                           let effectiveManifest = (notes9Parsed?.citationsManifest as any) ?? null;
-                          if (!effectiveManifest && rawSources.length > 0) {
+                          if (!effectiveManifest && allSources.length > 0) {
                             effectiveManifest = {
-                              manifest: rawSources.reduce((acc, src, i) => {
+                              manifest: allSources.reduce<Record<string, CitationsManifestEntry>>((acc, src, i) => {
                                 const label = String(i + 1);
+                                // Handle both GroundingResource (from notes9Sources) and data-source parts (from rawSources)
+                                const anySrc = src as any;
+                                const sourceName = anySrc.source_name || anySrc.title || anySrc.url || 'Source ' + label;
+                                const sourceUrl = anySrc.source_url || (typeof anySrc.url === 'string' ? anySrc.url : undefined);
+                                const excerpt = anySrc.excerpt || (typeof anySrc.snippet === 'string' ? anySrc.snippet : undefined);
                                 acc[label] = {
-                                  source_name: String(src.title || src.url || 'Source ' + label),
-                                  source_url: typeof src.url === 'string' ? src.url : undefined,
-                                  excerpt: typeof src.snippet === 'string' ? src.snippet : undefined,
+                                  source_name: String(sourceName),
+                                  source_url: sourceUrl,
+                                  excerpt: excerpt,
                                   source_type: 'web',
                                 } as CitationsManifestEntry;
                                 return acc;

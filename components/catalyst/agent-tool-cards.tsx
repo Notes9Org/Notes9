@@ -17,8 +17,9 @@ import {
   MessageSquare,
   BarChart2,
   Archive,
-  Wrench,
+  BrainCircuit,
   Network,
+  Wrench,
   type LucideIcon,
 } from 'lucide-react';
 import type { ToolCard } from '@/hooks/use-agent-stream';

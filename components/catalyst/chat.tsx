@@ -733,7 +733,7 @@ export function CatalystChat({ open, onOpenChange }: CatalystChatProps) {
                             role={message.role as 'user' | 'assistant'}
                             content={assistantDisplayMarkdown}
                             attachments={messageAttachments.get(message.id)}
-                            sources={getMessageSources(message)}
+                            sources={[...(notes9Parsed?.resources ?? []), ...getMessageSources(message)] as any[]}
                             thinking={getMessageThinking(message)}
                             toolCards={getMessageToolCards(message)}
                             userAvatar={userProfile?.avatar_url}
