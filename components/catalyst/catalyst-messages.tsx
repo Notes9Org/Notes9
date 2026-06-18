@@ -163,9 +163,8 @@ export function CatalystMessages({
                 {/* Message Content */}
                 <div
                   className={cn(
-                    'flex flex-col',
-                    message.role === 'user' ? 'items-end' : 'items-start',
-                    message.role === 'user' ? 'max-w-[80%]' : 'max-w-full flex-1'
+                    'flex flex-col min-w-0',
+                    message.role === 'user' ? 'items-end max-w-[80%]' : 'items-start max-w-full flex-1'
                   )}
                 >
                   {isEditing ? (
@@ -181,7 +180,7 @@ export function CatalystMessages({
                     <>
                       <div
                         className={cn(
-                          'rounded-2xl px-4 py-3 text-sm leading-relaxed',
+                          'rounded-2xl px-4 py-3 text-sm leading-relaxed overflow-hidden',
                           message.role === 'user'
                             ? 'bg-primary/95 text-primary-foreground shadow-sm rounded-br-sm'
                             : 'bg-transparent'

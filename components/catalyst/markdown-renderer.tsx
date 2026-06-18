@@ -469,6 +469,79 @@ function chipToViewerSource(chip: ChipData): CitationSourceViewerSource {
     supportStatus: chip.supportStatus,
   };
 }
+/* ─── References footer ─────────────────────────────────────────────────────
+ * Builds a Nature-style numbered reference list from the CitationsManifest so
+ * readers see the full bibliography at the end of each response, not only the
+ * inline superscript chips.                                                  */
+
+function ReferencesFooter({
+  manifest,
+}: {
+  manifest: CitationsManifest;
+}) {
+  const entries = Object.entries(manifest.manifest);
+  if (entries.length === 0) return null;
+
+  // Sort by numeric label so the list is stable: "1", "2", "3.1", "3.2", …
+  const sorted = entries.sort(([a], [b]) => {
+    const aN = parseFloat(a);
+    const bN = parseFloat(b);
+    if (!Number.isNaN(aN) && !Number.isNaN(bN)) return aN - bN;
+    return a.localeCompare(b);
+  });
+
+  return (
+    <div className="mt-4 border-t border-border/40 pt-3">
+      <p className="text-2xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">
+        References
+      </p>
+      <ol className="space-y-1.5 list-none m-0 p-0">
+        {sorted.map(([label, entry]) => {
+          const name = entry.source_name || '';
+          const url = entry.source_url || '';
+          const sType = entry.source_type?.replace(/_/g, ' ') || '';
+          const isWeb = url && /^https?:\/\//i.test(url);
+          let domain = '';
+          if (isWeb) {
+            try { domain = new URL(url).hostname.replace(/^www\./, ''); } catch { /* ignore */ }
+          }
+
+          return (
+            <li key={label} className="flex items-baseline gap-2 text-xs leading-snug">
+              <span className="shrink-0 font-mono text-2xs text-muted-foreground tabular-nums">
+                [{label}]
+              </span>
+              <span className="min-w-0">
+                {isWeb ? (
+                  <a
+                    href={url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-primary hover:underline break-words"
+                  >
+                    {name || domain || url}
+                  </a>
+                ) : (
+                  <span className="text-foreground/90 break-words">{name || `Source ${label}`}</span>
+                )}
+                {sType && (
+                  <span className="ml-1.5 text-muted-foreground/60 capitalize">
+                    ({sType})
+                  </span>
+                )}
+                {isWeb && domain && name && (
+                  <span className="ml-1.5 text-muted-foreground/50 text-2xs">
+                    {domain}
+                  </span>
+                )}
+              </span>
+            </li>
+          );
+        })}
+      </ol>
+    </div>
+  );
+}
 
 export function MarkdownRenderer({
   content,
@@ -618,17 +691,19 @@ export function MarkdownRenderer({
   if (!html) return null;
 
   return (
-    <div className={cn('relative', hasManifest && 'min-w-0')}>
+    <div className={cn('relative min-w-0', hasManifest && 'min-w-0')}>
       <div
         ref={containerRef}
         className={cn(
-          'prose prose-sm dark:prose-invert max-w-none html-content text-sm text-foreground',
+          'prose prose-sm dark:prose-invert max-w-none html-content text-sm text-foreground overflow-x-hidden break-words',
           '[&_h1]:!text-lg [&_h1]:!font-semibold [&_h1]:!leading-snug [&_h1]:!mt-0 [&_h1]:!mb-2',
           '[&_h2]:!text-base [&_h2]:!font-semibold [&_h2]:!leading-snug [&_h2]:!mt-4 [&_h2]:!mb-1.5 first:[&_h2]:!mt-0',
           '[&_h3]:!text-sm [&_h3]:!font-semibold [&_h3]:!leading-snug [&_h3]:!mt-3 [&_h3]:!mb-1',
           '[&_h4]:!text-sm [&_h4]:!font-medium [&_h4]:!text-muted-foreground',
           '[&_pre]:overflow-x-auto [&_pre]:max-w-full',
           '[&_a]:break-words [&_a]:overflow-wrap-anywhere',
+          '[&_table]:table-fixed [&_table]:w-full',
+          '[&_p]:break-words [&_p]:overflow-wrap-anywhere',
           showCursor && 'notes9-md--streaming',
           className
         )}
@@ -640,6 +715,10 @@ export function MarkdownRenderer({
         onKeyDown={hasManifest ? onKeyDown : undefined}
         dangerouslySetInnerHTML={{ __html: html }}
       />
+      {/* Numbered references footer when citations manifest is available */}
+      {hasManifest && citationsManifest && !showCursor && (
+        <ReferencesFooter manifest={citationsManifest} />
+      )}
       {hover && containerRef.current && (
         <CitationHoverCard
           chip={hover.chip}

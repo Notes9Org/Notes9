@@ -123,7 +123,7 @@ export function ChatMessage({
         </Avatar>
       )}
 
-      <div className="flex flex-col gap-1.5 max-w-[85%]">
+      <div className={cn('flex flex-col gap-1.5 min-w-0', isUser ? 'max-w-[85%]' : 'max-w-full flex-1')}>
         {/* Thinking panel — collapsible */}
         {!isUser && thinking && (
           <button
