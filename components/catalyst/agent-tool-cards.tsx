@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { cn } from '@/lib/utils';
 import {
   ChevronDown,
@@ -18,9 +18,11 @@ import {
   BarChart2,
   BrainCircuit,
   Wrench,
+  Network,
   type LucideIcon,
 } from 'lucide-react';
 import type { ToolCard } from '@/hooks/use-agent-stream';
+import { AgentRelationshipGraph, parseRelationshipGraph } from './agent-relationship-graph';
 
 const TOOL_ICONS: Record<string, LucideIcon> = {
   nlp_to_sql_tool:        Database,
@@ -33,6 +35,7 @@ const TOOL_ICONS: Record<string, LucideIcon> = {
   llm_chat_tool:          MessageSquare,
   extract_data_tool:      BarChart2,
   episodic_memory_tool:   BrainCircuit,
+  map_relationships:      Network,
 };
 
 // Short mono-cased name shown only when the backend gave us a recognized
@@ -50,6 +53,7 @@ const TOOL_NAMES: Record<string, string> = {
   llm_chat_tool:          'reason',
   extract_data_tool:      'extract',
   episodic_memory_tool:   'memory',
+  map_relationships:      'map_graph',
 };
 
 function toolDisplayName(id: string): string | null {
@@ -81,7 +85,18 @@ function ToolCardItem({ card }: ToolCardItemProps) {
   const isError = card.status === 'error';
   const hasSourceNames = (card.source_names?.length ?? 0) > 0;
   const hasArgsPreview = !!card.args_preview;
-  const hasDetail = !isRunning && (card.summary || hasSourceNames);
+  // For map_relationships: graph is the primary detail; computed once via
+  // useMemo so repeated re-renders (streaming label updates) don't re-parse.
+  const isMapRelationships = card.id === 'map_relationships';
+  const graphData = useMemo(() => {
+    if (isRunning || !isMapRelationships) return null;
+    try { return parseRelationshipGraph(card); } catch { return null; }
+    // Depend on the specific fields parseRelationshipGraph reads — NOT the whole
+    // `card` object, which gets a new reference on every streaming label update
+    // and would otherwise re-run the dagre layout on every token.
+  }, [isRunning, isMapRelationships, card.id, card.source_names, card.summary]);
+  const hasGraph = graphData !== null;
+  const hasDetail = !isRunning && (card.summary || hasSourceNames || hasGraph);
   const displayName = toolDisplayName(card.id);
   const sourceCount =
     card.source_names && card.source_names.length > 0
@@ -92,7 +107,10 @@ function ToolCardItem({ card }: ToolCardItemProps) {
     <div
       className={cn(
         'rounded-md border bg-card/40 overflow-hidden transition-colors',
-        isRunning && 'border-primary/40 bg-primary/[0.03]',
+        // Running: the shared brand "working" sweep (.ai-shimmer) replaces the
+        // scattered per-card spinner-only signal so every busy block speaks one
+        // motion vocabulary. Reduced-motion drops the sweep (handled in globals).
+        isRunning && 'ai-shimmer border-primary/40 bg-primary/[0.03]',
         // Failed tool: muted amber, not an alarming full-red — the label
         // text ("Couldn't …") already conveys failure.
         isError && 'border-amber-500/40 bg-amber-500/[0.05]',
@@ -188,7 +206,7 @@ function ToolCardItem({ card }: ToolCardItemProps) {
       {hasArgsPreview && (
         <div className="px-2.5 pb-1.5 -mt-0.5">
           <code
-            className="block rounded bg-muted/60 px-2 py-1 text-2xs font-mono text-muted-foreground/90 break-words leading-relaxed"
+            className="block rounded bg-muted/60 px-2 py-1 text-xs font-mono text-muted-foreground break-words leading-relaxed"
             title={card.args_preview}
           >
             <span className="text-muted-foreground/50 select-none mr-1.5">args</span>
@@ -201,31 +219,37 @@ function ToolCardItem({ card }: ToolCardItemProps) {
 
       {!isRunning && expanded && hasDetail && (
         <div className="px-2.5 pb-2 pt-1 border-t border-border/40 bg-muted/20 space-y-1.5">
-          {card.source_names && card.source_names.length > 0 && (
-            <ul className="space-y-1">
-              {card.source_names.map((entry, i) => {
-                const colonIdx = entry.indexOf(': ');
-                const hasType = colonIdx > 0 && colonIdx < 24;
-                const type = hasType ? entry.slice(0, colonIdx) : '';
-                const name = hasType ? entry.slice(colonIdx + 2) : entry;
-                return (
-                  <li
-                    key={i}
-                    className="text-xs text-muted-foreground/85 leading-relaxed flex items-start gap-2"
-                  >
-                    <span className="mt-1.5 shrink-0 size-1 rounded-full bg-muted-foreground/40" />
-                    {hasType && (
-                      <span className="shrink-0 mt-px rounded-sm border border-border/70 bg-background/80 px-1.5 py-px text-2xs font-medium uppercase tracking-wide text-muted-foreground">
-                        {type}
-                      </span>
-                    )}
-                    <span className="break-words">{name}</span>
-                  </li>
-                );
-              })}
-            </ul>
+          {/* map_relationships: render the inline graph instead of the raw
+              source_names list. The graph already shows node kinds + labels. */}
+          {hasGraph ? (
+            <AgentRelationshipGraph card={card} />
+          ) : (
+            card.source_names && card.source_names.length > 0 && (
+              <ul className="space-y-1">
+                {card.source_names.map((entry, i) => {
+                  const colonIdx = entry.indexOf(': ');
+                  const hasType = colonIdx > 0 && colonIdx < 24;
+                  const type = hasType ? entry.slice(0, colonIdx) : '';
+                  const name = hasType ? entry.slice(colonIdx + 2) : entry;
+                  return (
+                    <li
+                      key={i}
+                      className="text-xs text-muted-foreground/85 leading-relaxed flex items-start gap-2"
+                    >
+                      <span className="mt-1.5 shrink-0 size-1 rounded-full bg-muted-foreground/40" />
+                      {hasType && (
+                        <span className="shrink-0 mt-px rounded-sm border border-border/70 bg-background/80 px-1.5 py-px text-2xs font-medium uppercase tracking-wide text-muted-foreground">
+                          {type}
+                        </span>
+                      )}
+                      <span className="break-words">{name}</span>
+                    </li>
+                  );
+                })}
+              </ul>
+            )
           )}
-          {card.summary && (
+          {card.summary && !hasGraph && (
             <p className="text-xs text-muted-foreground/75 leading-relaxed whitespace-pre-wrap">
               {card.summary}
             </p>

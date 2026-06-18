@@ -23,15 +23,19 @@ const ALLOWED_TYPES = [
   "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
 ]
 
-// Purple "AI" treatment so the composer reads unmistakably as the Catalyst AI
-// feature (distinct from the app's burnt-sienna brand).
+// In-palette "AI" treatment: a burnt-sienna identity ring + soft apricot glow so
+// the composer reads unmistakably as the Catalyst AI surface while staying native
+// to the warm Notes9 brand (the old violet read as a bolted-on 3rd-party widget).
 const composerShell = cn(
   "flex flex-col overflow-hidden rounded-2xl border-2 p-3",
-  "border-violet-300/70 bg-violet-50/50 dark:border-violet-500/40 dark:bg-violet-500/10",
-  "shadow-[0_1px_2px_rgba(80,50,150,0.05),0_8px_28px_-8px_rgba(124,92,255,0.18)]",
+  // Light: warm cream tint. Dark: the 10%-accent token is near-transparent and
+  // bled the content behind it, so use an opaque card surface and let the accent
+  // come from the border + glow (keeps legibility + the AI signature).
+  "border-primary/25 bg-[var(--n9-accent-light)] dark:border-primary/30 dark:bg-card",
+  "shadow-[0_1px_2px_var(--n9-accent-glow),0_8px_28px_-8px_var(--n9-accent-glow)]",
   "transition-[border-color,box-shadow] duration-200",
-  "focus-within:border-violet-400 dark:focus-within:border-violet-400",
-  "focus-within:shadow-[0_8px_28px_-8px_rgba(124,92,255,0.28),0_0_0_3px_rgba(124,92,255,0.18)]",
+  "focus-within:border-primary/50",
+  "focus-within:shadow-[0_8px_28px_-8px_var(--n9-accent-glow),0_0_0_3px_var(--n9-accent-glow)]",
 )
 
 type Props = {
@@ -205,7 +209,7 @@ export function CatalystSectionHero({
         composerShell, 
         "transition-all duration-500 ease-in-out",
         shouldShrink
-          ? "min-h-0 p-2 bg-violet-50 dark:bg-[hsl(260,30%,14%)] border-violet-300 dark:border-violet-500/60"
+          ? "min-h-0 p-2 bg-[var(--n9-accent-light)] dark:bg-card border-primary/30"
           : cn(minBoxHeight, "p-3")
       )}
     >
@@ -217,7 +221,7 @@ export function CatalystSectionHero({
             return (
               <span
                 key={att.url}
-                className="inline-flex items-center gap-1 rounded-lg border border-violet-200 bg-violet-100/60 px-2 py-0.5 text-xs text-violet-800 dark:border-violet-500/30 dark:bg-violet-500/15 dark:text-violet-300 max-w-[180px]"
+                className="inline-flex items-center gap-1 rounded-lg border border-primary/20 bg-primary/10 px-2 py-0.5 text-xs text-primary dark:border-primary/30 dark:bg-primary/15 max-w-[180px]"
               >
                 {isImage ? <ImageIcon className="size-3 shrink-0" /> : <FileText className="size-3 shrink-0" />}
                 <span className="truncate">{att.name}</span>
@@ -235,7 +239,7 @@ export function CatalystSectionHero({
           {uploadQueue.map((name) => (
             <span
               key={name}
-              className="inline-flex items-center gap-1 rounded-lg border border-violet-200 bg-violet-100/60 px-2 py-0.5 text-xs text-violet-600 dark:border-violet-500/30 dark:bg-violet-500/15 animate-pulse max-w-[180px]"
+              className="inline-flex items-center gap-1 rounded-lg border border-primary/20 bg-primary/10 px-2 py-0.5 text-xs text-primary/80 dark:border-primary/30 dark:bg-primary/15 animate-pulse max-w-[180px]"
             >
               <FileText className="size-3 shrink-0" />
               <span className="truncate">{name}</span>
@@ -277,16 +281,14 @@ export function CatalystSectionHero({
         shouldShrink ? "mt-0" : "mt-2"
       )}>
         <div className="flex items-center gap-1.5">
-          <Globe className={cn("size-3.5 shrink-0 transition-colors", webSearchEnabled ? "text-violet-600 dark:text-violet-400" : "text-muted-foreground")} aria-hidden />
+          <Globe className={cn("size-3.5 shrink-0 transition-colors", webSearchEnabled ? "text-primary" : "text-muted-foreground")} aria-hidden />
           <Switch
             checked={webSearchEnabled}
             onCheckedChange={setWebSearchEnabled}
             aria-label="Web search"
-            className="data-[state=checked]:bg-violet-600"
+            title={webSearchEnabled ? "Web search on" : "Web search off"}
+            className="data-[state=checked]:bg-primary"
           />
-          <span className={cn("text-xs transition-colors select-none", webSearchEnabled ? "text-violet-700 dark:text-violet-300 font-medium" : "text-muted-foreground")}>
-            Web
-          </span>
         </div>
 
         <div className="flex items-center gap-1">
@@ -329,7 +331,7 @@ export function CatalystSectionHero({
             className={cn(
               "inline-flex size-9 shrink-0 items-center justify-center rounded-full transition-all",
               canSend && !isUploading
-                ? "bg-violet-600 text-white shadow-sm hover:bg-violet-700 active:scale-[0.96]"
+                ? "bg-primary text-primary-foreground shadow-sm hover:bg-[var(--n9-accent-hover)] active:scale-[0.96]"
                 : "bg-muted text-muted-foreground cursor-not-allowed",
             )}
           >
@@ -365,8 +367,8 @@ export function CatalystSectionHero({
           "transition-all duration-500 ease-in-out",
           shrinkOnScroll && "sticky -top-3 sm:-top-4 md:-top-6 z-40 -mx-3 px-3 sm:-mx-4 sm:px-4 md:-mx-6 md:px-6 py-2 md:py-4",
           shrinkOnScroll && (shouldShrink
-            ? "bg-transparent border-transparent"
-            : "bg-background/80 backdrop-blur-md border-b border-border/50")
+            ? "bg-transparent"
+            : "bg-background/80 backdrop-blur-md")
         )}
       >
         <AnimatePresence initial={false}>

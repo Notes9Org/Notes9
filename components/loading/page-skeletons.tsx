@@ -50,7 +50,7 @@ export function CatalystComposerSkeleton({
     <div className={cn("mx-auto w-full", maxWidth, className)}>
       <div
         className={cn(
-          "flex flex-col overflow-hidden rounded-2xl border-2 border-violet-200/50 bg-violet-50/40 p-3 dark:border-violet-500/25 dark:bg-violet-500/5",
+          "flex flex-col overflow-hidden rounded-2xl border-2 border-primary/20 bg-[var(--n9-accent-light)] p-3 dark:border-primary/25 dark:bg-card",
           minHeight,
         )}
       >

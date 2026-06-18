@@ -15,10 +15,13 @@ import {
   AgentCitationsPanel,
   groundingResourceToPanelItem,
 } from '@/components/catalyst/agent-citations-panel';
+import { PersistedArtifactList } from '@/components/catalyst/agent-artifact-card';
+import { AgentGraphList } from '@/components/catalyst/agent-graph-view';
+import type { PersistedArtifact } from '@/lib/agent-artifacts';
 import { parseNotes9AssistantStoredContent } from '@/lib/notes9-chat-format';
 import type { Vote } from '@/lib/db/schema';
 import type { ThinkingPayload, RagChunksPayload, DonePayload } from '@/lib/agent-stream-types';
-import type { CitationsManifest, ToolCard, AgentArtifact } from '@/hooks/use-agent-stream';
+import type { CitationsManifest, ToolCard, AgentArtifact, AgentGraph } from '@/hooks/use-agent-stream';
 
 interface CatalystMessagesProps {
   messages: UIMessage[];
@@ -35,6 +38,7 @@ interface CatalystMessagesProps {
     thinkingSteps: ThinkingPayload[];
     toolCards?: ToolCard[];
     artifacts?: AgentArtifact[];
+    graphs?: AgentGraph[];
     thinkingTokenBuffer?: string;
     sql: string | null;
     ragChunks: RagChunksPayload | null;
@@ -43,6 +47,12 @@ interface CatalystMessagesProps {
     citationsManifest?: CitationsManifest | null;
     error: string | null;
     isStreaming: boolean;
+    /** Live source count from `citations_update` events — drives the ticker. */
+    liveCitationCount?: number;
+    /** Server-side cancel handle from `run_started` (HITL) — shows Stop button. */
+    runId?: string | null;
+    /** Cancels the in-flight run + stream. */
+    onStop?: () => void;
   } | null;
 }
 
@@ -114,6 +124,16 @@ export function CatalystMessages({
               message.role === 'assistant'
                 ? parseNotes9AssistantStoredContent(content)
                 : null;
+            // Prefer structured metadata.artifacts (Phase 0); fall back to the
+            // legacy parsed markdown block for messages saved before this change.
+            const messageArtifacts =
+              (message as { metadata?: { artifacts?: PersistedArtifact[] } }).metadata?.artifacts
+              ?? notes9Parsed?.artifacts
+              ?? [];
+            // Persisted relationship graphs (metadata.graphs) — re-rendered
+            // natively so they don't vanish when the live stream tears down.
+            const messageGraphs =
+              (message as { metadata?: { graphs?: AgentGraph[] } }).metadata?.graphs ?? [];
             const assistantDisplayMarkdown =
               message.role === 'assistant' && notes9Parsed
                 ? notes9Parsed.bodyMarkdown
@@ -128,7 +148,11 @@ export function CatalystMessages({
                 key={message.id}
                 className={cn(
                   'group/message flex w-full gap-3',
-                  message.role === 'user' ? 'justify-end' : 'justify-start'
+                  message.role === 'user' ? 'justify-end' : 'justify-start',
+                  // Each assistant turn lifts gently in on mount so replies
+                  // "arrive" rather than snap in. Keyed rows never re-trigger it
+                  // on streaming updates; reduced-motion disables it (globals).
+                  message.role === 'assistant' && 'animate-n9-turn-in'
                 )}
               >
                 {/* Assistant Avatar */}
@@ -182,6 +206,18 @@ export function CatalystMessages({
                                 className="mt-2"
                               />
                             )}
+                            {/* Persisted relationship graphs — native dagre render */}
+                            {messageGraphs.length > 0 && (
+                              <div className="mt-3">
+                                <AgentGraphList graphs={messageGraphs} />
+                              </div>
+                            )}
+                            {/* Persisted file/chart artifacts — re-sign their URLs lazily */}
+                            {messageArtifacts.length > 0 && (
+                              <div className="mt-3">
+                                <PersistedArtifactList artifacts={messageArtifacts} />
+                              </div>
+                            )}
                             {/* Blinking cursor at end of streaming text */}
                             {isLastAssistant && isLoading && (
                               <span
@@ -221,12 +257,15 @@ export function CatalystMessages({
           {/* Waiting for first token: show assistant avatar + blinking cursor */}
           {(isLoading || notes9Stream) && messages.at(-1)?.role === 'user' && (
             notes9Stream ? (
-              <div className="flex w-full gap-3 justify-start">
+              <div className="flex w-full gap-3 justify-start animate-n9-turn-in">
                 <div className="flex size-8 shrink-0 -translate-y-[5px] items-center justify-center rounded-full bg-primary text-primary-foreground shadow-sm">
                   <Sparkles className="size-4 animate-pulse" />
                 </div>
                 <div className="flex-1 min-w-0 max-w-full space-y-2">
-                  {onStop && (
+                  {/* When HITL is on (runId present) AgentStreamReply renders the
+                      server-side cancel button; suppress this local-abort one to
+                      avoid two stacked Stop buttons. Keep it when runId is absent. */}
+                  {onStop && !notes9Stream.runId && (
                     <div className="flex justify-end">
                       <Button
                         type="button"
@@ -244,6 +283,7 @@ export function CatalystMessages({
                     thinkingSteps={notes9Stream.thinkingSteps}
                     toolCards={notes9Stream.toolCards}
                     artifacts={notes9Stream.artifacts}
+                    graphs={notes9Stream.graphs}
                     reasoning={notes9Stream.thinkingTokenBuffer}
                     sql={notes9Stream.sql}
                     ragChunks={notes9Stream.ragChunks}
@@ -252,11 +292,15 @@ export function CatalystMessages({
                     citationsManifest={notes9Stream.citationsManifest}
                     error={notes9Stream.error}
                     isThinkingStreaming={notes9Stream.isStreaming}
+                    liveCitationCount={notes9Stream.liveCitationCount}
+                    runId={notes9Stream.runId}
+                    onStop={notes9Stream.onStop}
+                    onRetry={onRegenerate}
                   />
                 </div>
               </div>
             ) : (
-              <div className="flex w-full gap-3 justify-start">
+              <div className="flex w-full gap-3 justify-start animate-n9-turn-in">
                 <div className="mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-sm">
                   <Sparkles className="size-3.5" />
                 </div>

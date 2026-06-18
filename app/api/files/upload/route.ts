@@ -137,11 +137,21 @@ export async function POST(request: Request) {
         .single();
 
       if (attErr) {
-        // Don't fail the upload — the bytes are already in Storage. Surface
-        // the registration failure so the frontend can warn the user that
-        // the file won't be readable by the AI agent. The storage object
-        // still lives in the bucket but lacks a chat_attachments row, so
-        // the cron won't reap it; we log so it can be manually swept later.
+        // Registration failed. The bytes are in Storage but have no
+        // chat_attachments row, so the TTL cron can never reap them — a storage
+        // leak. Delete the just-uploaded object to avoid the orphan, then ask the
+        // user to retry. (Without a row the file also can't be re-signed on reload
+        // or read by read_document in later turns anyway, so keeping it has little
+        // upside.)
+        let removed = false;
+        try {
+          const { error: rmErr } = await supabase.storage
+            .from(USER_STORAGE_BUCKET)
+            .remove([storagePath]);
+          removed = !rmErr;
+        } catch {
+          /* best-effort cleanup */
+        }
         console.warn(
           JSON.stringify({
             event: "chat_attachment_register_failed",
@@ -149,14 +159,12 @@ export async function POST(request: Request) {
             session_id: sessionId,
             storage_path: storagePath,
             error: attErr.message,
+            orphan_object_removed: removed,
           }),
         );
-        // Signal the registration failure to the client so it can warn the
-        // user that the AI agent won't be able to read this attachment. The
-        // bytes are in storage (chatAttachmentId stays null), so behaviour for
-        // the upload itself is unchanged — this is an additive field.
-        attachmentWarning =
-          "File uploaded but could not be registered for AI access. The assistant may not be able to read it.";
+        attachmentWarning = removed
+          ? "Upload could not be registered and was removed. Please try attaching the file again."
+          : "File uploaded but could not be registered for AI access. The assistant may not be able to read it.";
       } else {
         chatAttachmentId = attRow?.id ?? null;
       }

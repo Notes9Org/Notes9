@@ -14,6 +14,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
+import { toast } from "sonner"
 import { cn } from "@/lib/utils"
 import {
   createCalendarEvent,
@@ -392,8 +393,9 @@ export function DashboardCalendar({
           setAdding(false)
         })
         .catch(() => {
-          // Keep draft so the user can retry — surface visible state only.
+          // Keep draft so the user can retry, and tell them it didn't save.
           setAdding(false)
+          toast.error("Couldn't add that event. Your draft is kept — try again.")
         })
     })
   }
@@ -436,7 +438,9 @@ export function DashboardCalendar({
           setEvents((prev) => [...prev, created])
         })
         .catch(() => {
-          // Swallow — event isn't optimistically inserted so nothing to roll back.
+          // Event isn't optimistically inserted so nothing to roll back, but the
+          // user still needs to know the quick-add didn't persist.
+          toast.error("Couldn't add that event. Please try again.")
         })
     })
   }
@@ -448,8 +452,9 @@ export function DashboardCalendar({
     setEvents((prev) => prev.map((e) => (e.id === id ? { ...e, done: next } : e)))
     startTransition(() => {
       setCalendarEventDone(id, next).catch(() => {
-        // Revert optimistic flip on error.
+        // Revert optimistic flip on error and tell the user it didn't stick.
         setEvents((prev) => prev.map((e) => (e.id === id ? { ...e, done: !next } : e)))
+        toast.error("Couldn't update that event. Please try again.")
       })
     })
   }
@@ -458,7 +463,10 @@ export function DashboardCalendar({
     const prev = events
     setEvents((curr) => curr.filter((e) => e.id !== id))
     startTransition(() => {
-      deleteCalendarEvent(id).catch(() => setEvents(prev))
+      deleteCalendarEvent(id).catch(() => {
+        setEvents(prev)
+        toast.error("Couldn't delete that event. Please try again.")
+      })
     })
   }
 
@@ -510,6 +518,7 @@ export function DashboardCalendar({
       }).catch(() => {
         // Roll back on failure so the visible state matches the server.
         setEvents((prev) => prev.map((e) => (e.id === id ? target : e)))
+        toast.error("Couldn't save your changes. Please try again.")
       })
     })
   }

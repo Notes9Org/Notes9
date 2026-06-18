@@ -3,6 +3,7 @@
 import { useState } from "react"
 import { useRouter } from 'next/navigation'
 import { createClient } from "@/lib/supabase/client"
+import { toast } from "sonner"
 import { useAuthUser } from "@/components/auth/auth-provider"
 import { useCreatePageNav } from "@/hooks/use-create-page-nav"
 import { Card, CardContent } from "@/components/ui/card"
@@ -89,6 +90,7 @@ export default function NewProjectPage() {
 
       recordRumEvent('project_created', {})
 
+      toast.success(`Project "${formData.name}" created`)
       router.push(`/projects/${data.id}`)
     } catch (err: any) {
       setError(getUniqueNameErrorMessage(err, "project"))

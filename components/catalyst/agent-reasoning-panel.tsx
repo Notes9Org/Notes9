@@ -40,7 +40,7 @@ export function AgentReasoningPanel({ reasoning, streaming }: AgentReasoningPane
   if (!trimmed) return null;
 
   return (
-    <div className="rounded-xl border border-border/60 bg-muted/20">
+    <div className="surface-recessed">
       <button
         type="button"
         onClick={() => {

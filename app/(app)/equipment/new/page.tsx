@@ -3,6 +3,7 @@
 import { useState } from "react"
 import { useRouter } from 'next/navigation'
 import { createClient } from "@/lib/supabase/client"
+import { toast } from "sonner"
 import { useAuthUser } from "@/components/auth/auth-provider"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -71,6 +72,7 @@ export default function NewEquipmentPage() {
 
       if (insertError) throw insertError
 
+      toast.success(formData.name ? `Equipment "${formData.name}" added` : "Equipment added")
       router.push("/equipment")
     } catch (err: any) {
       setError(err.message)

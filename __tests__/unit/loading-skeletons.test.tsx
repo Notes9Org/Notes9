@@ -29,11 +29,15 @@ describe("Skeleton loading components", () => {
     expect(container.querySelector(".min-h-\\[132px\\]")).toBeInTheDocument()
   })
 
-  it("PlannerLoading has composer and bench", () => {
+  // PlannerLoading resolves to the dashboard loading route (there is no
+  // separate planner route). The dashboard loading now renders the lab grid
+  // skeleton (greeting + composer + 3-card grid), so we assert that layout.
+  it("PlannerLoading renders greeting, composer, and lab grid", () => {
     const { container } = render(<PlannerLoading />)
     expectPulseSkeleton(container)
+    expect(container.querySelector(".xl\\:col-span-4")).toBeInTheDocument()
     expect(container.querySelector(".xl\\:col-span-5")).toBeInTheDocument()
-    expect(container.querySelector(".xl\\:col-span-7")).toBeInTheDocument()
+    expect(container.querySelector(".xl\\:col-span-3")).toBeInTheDocument()
     expect(container.querySelector(".min-h-\\[132px\\]")).toBeInTheDocument()
   })
 

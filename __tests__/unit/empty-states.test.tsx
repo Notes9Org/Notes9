@@ -91,10 +91,10 @@ describe("Empty state messages for resource types", () => {
   /**
    * Requirement 5.4: Samples empty state renders correct message and CTA
    */
-  it('Samples empty state displays "No samples recorded" and "Create First Sample" CTA', () => {
+  it('Samples empty state displays "No samples yet" and "Create first sample" CTA', () => {
     const { container } = render(<SamplesEmptyState />)
-    expect(screen.getByText("No samples recorded")).toBeInTheDocument()
-    expect(screen.getByText("Create First Sample")).toBeInTheDocument()
+    expect(screen.getByText("No samples yet")).toBeInTheDocument()
+    expect(screen.getByText("Create first sample")).toBeInTheDocument()
     // CTA should link to /samples/new
     const link = container.querySelector('a[href="/samples/new"]')
     expect(link).toBeInTheDocument()

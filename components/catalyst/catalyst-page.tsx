@@ -18,6 +18,7 @@ import type { Attachment } from './preview-attachment';
 import { CatalystSidebar } from './catalyst-sidebar';
 import type { Vote } from '@/lib/db/schema';
 import { useAgentStream } from '@/hooks/use-agent-stream';
+import { toPersistedArtifacts } from '@/lib/agent-artifacts';
 import {
   formatNotes9AssistantMarkdown,
   isPersistedChatMessageId,
@@ -145,6 +146,8 @@ export function CatalystChat({ sessionId }: CatalystChatProps) {
           content: m.content,
           parts: [{ type: 'text' as const, text: m.content }],
           createdAt: new Date(m.created_at),
+          // Preserve metadata so persisted artifacts survive reload.
+          metadata: (m as { metadata?: Record<string, unknown> }).metadata,
         }));
         setMessages(chatMessages);
         setSavedMessageIds(new Set(msgs.map((m) => m.id)));
@@ -376,7 +379,7 @@ export function CatalystChat({ sessionId }: CatalystChatProps) {
       // attachments via tagsToAttachments() and passes them to runStream(). If
       // this page is ever promoted back to a live route, add `attachments` here
       // mirroring right-sidebar.tsx.
-      const { donePayload, error } = await agentStream.runStream(
+      const { donePayload, error, artifacts: streamArtifacts, citationsManifest: streamManifest, graphs: streamGraphs } = await agentStream.runStream(
         {
           query: text,
           session_id: sid,
@@ -389,7 +392,9 @@ export function CatalystChat({ sessionId }: CatalystChatProps) {
       setNotes9Loading(false);
 
       if (donePayload) {
-        const formattedAnswer = formatNotes9AssistantMarkdown(donePayload);
+        // Persist WITH the manifest and artifacts, else inline [N] chips and
+        // file cards vanish once the live stream settles.
+        const formattedAnswer = formatNotes9AssistantMarkdown(donePayload, streamManifest ?? null, streamArtifacts);
 
         const assistantMessageId = `assistant-${Date.now()}`;
         const assistantMessage = {
@@ -401,7 +406,7 @@ export function CatalystChat({ sessionId }: CatalystChatProps) {
         };
         setMessages((prev) => [...prev, assistantMessage]);
 
-        const savedAsst = await saveMessage(sid, 'assistant', formattedAnswer);
+        const savedAsst = await saveMessage(sid, 'assistant', formattedAnswer, { artifacts: toPersistedArtifacts(streamArtifacts), graphs: streamGraphs });
         if (savedAsst) {
           setSavedMessageIds((prev) => new Set(prev).add(savedAsst.id));
           setMessages((prev) => {
@@ -524,14 +529,14 @@ export function CatalystChat({ sessionId }: CatalystChatProps) {
         }
 
         setNotes9Loading(true);
-        const { donePayload, error } = await agentStream.runStream(
+        const { donePayload, error, artifacts: streamArtifacts, citationsManifest: streamManifest, graphs: streamGraphs } = await agentStream.runStream(
           { query: newContent, session_id: sid, history, options: { web_search: webSearchEnabledRef.current ? 'on' : 'off' } },
           token
         );
         setNotes9Loading(false);
 
         if (donePayload) {
-          const formattedAnswer = formatNotes9AssistantMarkdown(donePayload);
+          const formattedAnswer = formatNotes9AssistantMarkdown(donePayload, streamManifest ?? null, streamArtifacts);
           const assistantMessageId = `assistant-${Date.now()}`;
           setMessages((prev) => [
             ...prev,
@@ -543,7 +548,7 @@ export function CatalystChat({ sessionId }: CatalystChatProps) {
               createdAt: new Date(),
             },
           ]);
-          const savedAsst = await saveMessage(sid, 'assistant', formattedAnswer);
+          const savedAsst = await saveMessage(sid, 'assistant', formattedAnswer, { artifacts: toPersistedArtifacts(streamArtifacts), graphs: streamGraphs });
           if (savedAsst) {
             setSavedMessageIds((prev) => new Set(prev).add(savedAsst.id));
             setMessages((prev) => {
@@ -618,14 +623,14 @@ export function CatalystChat({ sessionId }: CatalystChatProps) {
       }
 
       setNotes9Loading(true);
-      const { donePayload, error } = await agentStream.runStream(
+      const { donePayload, error, artifacts: streamArtifacts, citationsManifest: streamManifest, graphs: streamGraphs } = await agentStream.runStream(
         { query, session_id: sid, history, options: { web_search: webSearchEnabledRef.current ? 'on' : 'off' } },
         token
       );
       setNotes9Loading(false);
 
       if (donePayload) {
-        const formattedAnswer = formatNotes9AssistantMarkdown(donePayload);
+        const formattedAnswer = formatNotes9AssistantMarkdown(donePayload, streamManifest ?? null, streamArtifacts);
         const assistantMessageId = `assistant-${Date.now()}`;
         setMessages((prev) => [
           ...prev,
@@ -637,7 +642,7 @@ export function CatalystChat({ sessionId }: CatalystChatProps) {
             createdAt: new Date(),
           },
         ]);
-        const savedAsst = await saveMessage(sid, 'assistant', formattedAnswer);
+        const savedAsst = await saveMessage(sid, 'assistant', formattedAnswer, { artifacts: toPersistedArtifacts(streamArtifacts), graphs: streamGraphs });
         if (savedAsst) {
           setSavedMessageIds((prev) => new Set(prev).add(savedAsst.id));
           setMessages((prev) => {
@@ -755,6 +760,7 @@ export function CatalystChat({ sessionId }: CatalystChatProps) {
                       thinkingSteps: agentStream.thinkingSteps,
                       toolCards: agentStream.toolCards,
                       artifacts: agentStream.artifacts,
+                      graphs: agentStream.graphs,
                       thinkingTokenBuffer: agentStream.thinkingTokenBuffer,
                       sql: agentStream.sql,
                       ragChunks: agentStream.ragChunks,
@@ -765,6 +771,10 @@ export function CatalystChat({ sessionId }: CatalystChatProps) {
                       citationsManifest: agentStream.citationsManifest,
                       error: agentStream.error,
                       isStreaming: agentStream.isStreaming,
+                      // Live source ticker and Stop button.
+                      liveCitationCount: agentStream.liveCitationCount,
+                      runId: agentStream.runId,
+                      onStop: agentStream.cancel,
                     }
                   : null
               }

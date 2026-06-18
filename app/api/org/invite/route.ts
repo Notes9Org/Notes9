@@ -8,6 +8,15 @@ import { generateInvitationToken, buildInvitationUrl } from "@/lib/org/invitatio
 import { isSystemAdminRow } from "@/lib/org/require-admin"
 import { resend } from "@/lib/resend"
 
+function escapeHtml(s: string): string {
+  return s
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;")
+}
+
 const inviteSchema = z.object({
   emails: z
     .array(z.string().email("Invalid email address"))
@@ -161,10 +170,10 @@ export async function POST(req: NextRequest) {
           await resend.emails.send({
             from: fromEmail,
             to: [inv.email],
-            subject: `You're invited to join ${orgName} on Notes9`,
+            subject: `You're invited to join ${escapeHtml(orgName)} on Notes9`,
             html: `<div style="font-family:sans-serif;max-width:560px;margin:0 auto;padding:40px 20px;">
               <h2 style="margin:0 0 8px;">You're invited!</h2>
-              <p><strong>${inviterName}</strong> has invited you to join <strong>${orgName}</strong> on Notes9 as a <strong>${roleName}</strong>.</p>
+              <p><strong>${escapeHtml(inviterName)}</strong> has invited you to join <strong>${escapeHtml(orgName)}</strong> on Notes9 as a <strong>${escapeHtml(roleName)}</strong>.</p>
               <p style="margin:24px 0;"><a href="${inviteUrl}" style="display:inline-block;background:#18181b;color:#fff;padding:12px 32px;border-radius:8px;text-decoration:none;font-weight:600;">Accept Invitation</a></p>
               <p style="color:#71717a;font-size:13px;">Or copy this link: ${inviteUrl}</p>
             </div>`,

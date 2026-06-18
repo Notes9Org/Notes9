@@ -76,7 +76,10 @@ export async function DELETE(req: NextRequest) {
       admin: ReturnType<typeof createServiceRoleClient>
     }
 
-    const body = await req.json()
+    const body = await req.json().catch(() => null)
+    if (body === null) {
+      return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 })
+    }
     const parsed = deleteMemberSchema.safeParse(body)
 
     if (!parsed.success) {

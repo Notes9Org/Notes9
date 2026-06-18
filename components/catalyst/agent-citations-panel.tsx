@@ -1,8 +1,8 @@
 'use client';
 
-import { useEffect, useState, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react';
 import Link from 'next/link';
-import { BookOpen, ChevronDown, MapPin } from 'lucide-react';
+import { BookOpen, ChevronDown, MapPin, ScanSearch } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
   Collapsible,
@@ -24,8 +24,66 @@ import {
   type HighlightTarget,
 } from '@/lib/document-highlight';
 import type { GroundingResource, RagChunk } from '@/lib/agent-stream-types';
+import { GroundingProvenanceBadge } from './grounding-provenance-badge';
+import {
+  CitationSourceViewer,
+  type CitationSourceViewerSource,
+} from './citation-source-viewer';
 
 const EXCERPT_PREVIEW = 320;
+
+/** Opens the span-level source viewer for a citation item (G3). Provided by
+ * AgentCitationsPanel; null when no opener is wired (e.g. single-item render). */
+const CitationViewerContext = createContext<
+  ((item: AgentCitationPanelItem) => void) | null
+>(null);
+
+/** Project a panel item into the source-viewer's source shape. */
+function panelItemToViewerSource(
+  item: AgentCitationPanelItem,
+): CitationSourceViewerSource {
+  return {
+    label: item.citeLabel,
+    sourceType: item.sourceType,
+    sourceName: item.sourceName,
+    sourceUrl: item.sourceUrl,
+    sourceBody: null,
+    excerpt: item.excerpt || null,
+    citedText: item.citedText ?? null,
+    charStart: item.charStart ?? null,
+    charEnd: item.charEnd ?? null,
+    documentHref: item.documentHref,
+    grounding: item.grounding ?? null,
+    matchKind: item.matchKind ?? null,
+    supportStatus: item.supportStatus ?? null,
+  };
+}
+
+/** Small "View source" affordance that opens the span viewer (G3). Renders
+ * nothing when there's no opener in context or no text to show. */
+function ViewSourceButton({
+  item,
+  className,
+}: {
+  item: AgentCitationPanelItem;
+  className?: string;
+}) {
+  const open = useContext(CitationViewerContext);
+  if (!open || !(item.citedText || item.excerpt)) return null;
+  return (
+    <button
+      type="button"
+      onClick={() => open(item)}
+      className={cn(
+        'inline-flex items-center gap-1 rounded-sm text-2xs font-medium text-primary/80 hover:text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+        className,
+      )}
+    >
+      <ScanSearch className="size-3 shrink-0" aria-hidden />
+      View source
+    </button>
+  );
+}
 const sourceIdFallbackCache = new Map<string, string | null>();
 
 /** Derive the grounding verdict from the wire fields. `support_status` wins;
@@ -214,6 +272,15 @@ export type AgentCitationPanelItem = {
    * score → no "% match" label); 'semantic' carries a real relevance score. */
   matchKind?: string | null;
   excerpt: string;
+  /** Exact per-claim supporting span (span-level grounding). Preferred over
+   * `excerpt` for the source-viewer highlight. */
+  citedText?: string | null;
+  /** Advisory char offsets into the stripped source for the cited span. */
+  charStart?: number | null;
+  charEnd?: number | null;
+  /** How the span was located (native exact / heuristic approx / none). Drives
+   * the provenance badge (G5). */
+  grounding?: 'native' | 'heuristic' | 'none' | null;
   /** Grounding verdict for this specific claim↔span pairing. Drives the
    * subtle support badge. null/undefined → no badge. */
   supportStatus?: 'supported' | 'partial' | 'unsupported' | null;
@@ -424,6 +491,13 @@ export function groundingResourceToPanelItem(
     relevance,
     matchKind: typeof c.match_kind === 'string' ? c.match_kind : null,
     excerpt,
+    citedText: typeof c.cited_text === 'string' ? c.cited_text : null,
+    charStart: typeof c.char_start === 'number' ? c.char_start : null,
+    charEnd: typeof c.char_end === 'number' ? c.char_end : null,
+    grounding:
+      c.grounding === 'native' || c.grounding === 'heuristic' || c.grounding === 'none'
+        ? c.grounding
+        : null,
     supportStatus: deriveSupportStatus(c),
     documentHref,
     highlightTarget,
@@ -548,6 +622,12 @@ function RetrievedTextBlock({
   /** When the parent already uses flex `gap-*`, omit extra top margin. */
   skipTopMargin?: boolean;
 }) {
+  // Honest label: a real per-claim grounded span (cited_text + grounding) is the
+  // EXACT text the claim is tied to → "Cited passage". A generic preview (no
+  // span — grounding fell through to the source body) stays "Retrieved text" so
+  // we never imply a claim↔source link that grounding didn't actually establish.
+  const isGroundedSpan = !!item.citedText && item.grounding !== 'none';
+  const blockLabel = isGroundedSpan ? 'Cited passage' : 'Retrieved text';
   return (
     <div
       className={cn(
@@ -564,7 +644,7 @@ function RetrievedTextBlock({
           className="group -mx-1 block rounded-sm px-1 py-0.5 transition-colors hover:bg-primary/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
           <p className="text-2xs font-medium uppercase tracking-wide text-muted-foreground group-hover:text-primary">
-            Retrieved text
+            {blockLabel}
           </p>
           <span className="mt-1 flex items-start gap-1.5 text-xs leading-snug text-primary underline underline-offset-2 decoration-primary/50 group-hover:decoration-primary">
             {item.highlightHref && (
@@ -576,7 +656,7 @@ function RetrievedTextBlock({
       ) : (
         <>
           <p className="text-2xs font-medium uppercase tracking-wide text-muted-foreground">
-            Retrieved text
+            {blockLabel}
           </p>
           <p className="text-xs leading-snug text-muted-foreground">{excerptPreview}</p>
         </>
@@ -647,7 +727,13 @@ function CitationBlock({ item, isStreaming }: { item: AgentCitationPanelItem; is
             )
           )}
         </p>
+        <GroundingProvenanceBadge
+          grounding={resolvedItem.grounding}
+          matchKind={resolvedItem.matchKind}
+          supportStatus={resolvedItem.supportStatus}
+        />
         <SupportBadge status={resolvedItem.supportStatus} />
+        <ViewSourceButton item={resolvedItem} className="ml-auto" />
       </div>
       {displayUrl && (
         <a
@@ -687,7 +773,7 @@ function SubCitationRow({ item }: { item: AgentCitationPanelItem }) {
     (resolvedItem.documentHref && excerpt ? resolvedItem.documentHref : null);
 
   const labelEl = (
-    <span className="font-mono text-2xs text-muted-foreground tabular-nums">
+    <span className="font-mono text-xs text-muted-foreground tabular-nums">
       [{resolvedItem.citeLabel}]
     </span>
   );
@@ -696,10 +782,16 @@ function SubCitationRow({ item }: { item: AgentCitationPanelItem }) {
     <li className="py-1.5">
       <div className="flex items-center gap-1.5">
         {labelEl}
+        <GroundingProvenanceBadge
+          grounding={resolvedItem.grounding}
+          matchKind={resolvedItem.matchKind}
+          supportStatus={resolvedItem.supportStatus}
+        />
         <SupportBadge status={resolvedItem.supportStatus} />
         {resolvedItem.isResolving && (
           <span className="size-3 shrink-0 animate-spin self-center rounded-full border border-muted-foreground/40 border-t-transparent" aria-hidden />
         )}
+        <ViewSourceButton item={resolvedItem} className="ml-auto" />
       </div>
       {excerpt &&
         (excerptLinkHref ? (
@@ -818,7 +910,7 @@ function SingleCitationPanel({
     >
       <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
         <BookOpen className="size-3.5 shrink-0" aria-hidden />
-        <span className="font-mono tabular-nums text-muted-foreground/80">[{resolvedItem.citeLabel}]</span>
+        <span className="font-mono tabular-nums text-muted-foreground">[{resolvedItem.citeLabel}]</span>
         {resolvedItem.isResolving && (
           <span className="size-3 shrink-0 animate-spin self-center rounded-full border border-muted-foreground/40 border-t-transparent" aria-hidden />
         )}
@@ -849,7 +941,13 @@ function SingleCitationPanel({
             </p>
           )
         )}
+        <GroundingProvenanceBadge
+          grounding={resolvedItem.grounding}
+          matchKind={resolvedItem.matchKind}
+          supportStatus={resolvedItem.supportStatus}
+        />
         <SupportBadge status={resolvedItem.supportStatus} />
+        <ViewSourceButton item={resolvedItem} className="ml-auto" />
       </div>
       {displayUrl && (
         <a
@@ -985,7 +1083,26 @@ export function AgentCitationsPanel({
   // after the length checks below changed the hook call order and crashed the
   // panel (Rules of Hooks violation).
   const [open, setOpen] = useState(defaultOpen);
+  // Span-level source viewer (G3). null → closed.
+  const [viewerSource, setViewerSource] = useState<CitationSourceViewerSource | null>(null);
+  // Stable identity so the CitationViewerContext value doesn't change every
+  // render (which would re-render every CitationBlock/SubCitationRow consumer
+  // as the panel re-renders during streaming).
+  const openViewer = useCallback(
+    (item: AgentCitationPanelItem) => setViewerSource(panelItemToViewerSource(item)),
+    [],
+  );
   const sorted = [...items].sort((a, b) => a.index - b.index);
+
+  const viewer = (
+    <CitationSourceViewer
+      source={viewerSource}
+      open={viewerSource !== null}
+      onOpenChange={(o) => {
+        if (!o) setViewerSource(null);
+      }}
+    />
+  );
 
   if (sorted.length === 0) {
     if (!showEmptyState) return null;
@@ -998,9 +1115,12 @@ export function AgentCitationsPanel({
 
   if (sorted.length === 1) {
     return (
-      <div className={cn(isStreaming && 'animate-in fade-in-0 slide-in-from-bottom-2 duration-300')}>
-        <SingleCitationPanel item={sorted[0]} className={className} />
-      </div>
+      <CitationViewerContext.Provider value={openViewer}>
+        <div className={cn(isStreaming && 'animate-in fade-in-0 slide-in-from-bottom-2 duration-300')}>
+          <SingleCitationPanel item={sorted[0]} className={className} />
+        </div>
+        {viewer}
+      </CitationViewerContext.Provider>
     );
   }
 
@@ -1012,6 +1132,7 @@ export function AgentCitationsPanel({
   })).filter((g) => g.items.length > 0);
 
   return (
+    <CitationViewerContext.Provider value={openViewer}>
     <Collapsible open={open} onOpenChange={setOpen} className={cn('min-w-0 max-w-full', className)}>
       <CollapsibleTrigger asChild>
         <Button
@@ -1076,5 +1197,7 @@ export function AgentCitationsPanel({
         </div>
       </CollapsibleContent>
     </Collapsible>
+    {viewer}
+    </CitationViewerContext.Provider>
   );
 }

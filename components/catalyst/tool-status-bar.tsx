@@ -11,31 +11,35 @@ export interface ToolStatusBarProps {
   className?: string;
 }
 
+// Tool states share one in-palette accent (burnt-sienna `--primary`) so the AI
+// reads as a single designed surface rather than a rainbow of generic per-tool
+// hues. The icon already differentiates the tools; color carries brand, not
+// taxonomy.
 const TOOL_CONFIG: Record<Exclude<ToolType, null>, { icon: typeof Database; label: string; color: string }> = {
   sql: {
     icon: Database,
     label: 'Querying database',
-    color: 'text-blue-600 dark:text-blue-400',
+    color: 'text-primary',
   },
   rag: {
     icon: Search,
     label: 'Searching documents',
-    color: 'text-purple-600 dark:text-purple-400',
+    color: 'text-primary',
   },
   web_search: {
     icon: Globe,
     label: 'Searching web',
-    color: 'text-green-600 dark:text-green-400',
+    color: 'text-primary',
   },
   full_record: {
     icon: FileText,
     label: 'Fetching records',
-    color: 'text-orange-600 dark:text-orange-400',
+    color: 'text-primary',
   },
   clarify: {
     icon: FileText,
     label: 'Analyzing query',
-    color: 'text-amber-600 dark:text-amber-400',
+    color: 'text-primary',
   },
 };
 

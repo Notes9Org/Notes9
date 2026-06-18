@@ -377,7 +377,12 @@ export function CatalystInput({
                 type="button"
                 variant="ghost"
                 size="icon"
-                className="size-8 rounded-lg text-muted-foreground hover:text-foreground"
+                className={cn(
+                  'size-8 rounded-lg text-muted-foreground hover:text-foreground',
+                  // Hidden while dictating so the left-growing waveform has space
+                  // and never overlaps it; the mic stays anchored in place.
+                  isListening && 'hidden'
+                )}
                 disabled={isLoading || isUploading}
                 onClick={() => fileInputRef.current?.click()}
                 aria-label="Attach file"
@@ -385,7 +390,16 @@ export function CatalystInput({
               >
                 <Paperclip className="size-4" />
               </Button>
-              <div className="inline-flex items-center gap-1">
+              {/* Mic + waveform: the mic NEVER shifts. The waveform sits
+                  absolutely to the LEFT of the mic (right-full) and grows
+                  leftward into the space freed by the hidden paperclip, so it
+                  never displaces the mic or overlaps a button. */}
+              <div className="relative flex items-center">
+                {isListening && (
+                  <div className="pointer-events-none absolute right-full pr-1">
+                    <VoiceWaveform getWaveformData={getWaveformData} />
+                  </div>
+                )}
                 <Button
                   type="button"
                   variant="ghost"
@@ -401,7 +415,6 @@ export function CatalystInput({
                 >
                   <Mic className="size-4" />
                 </Button>
-                {isListening && <VoiceWaveform getWaveformData={getWaveformData} />}
               </div>
             </div>
 

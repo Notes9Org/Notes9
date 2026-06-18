@@ -68,3 +68,4 @@ ruvector.db
 ruvector.db-journal
 agentdb.rvf
 agentdb.rvf.lock
+.gstack/

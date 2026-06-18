@@ -115,7 +115,10 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    const body = await req.json()
+    const body = await req.json().catch(() => null)
+    if (body === null) {
+      return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 })
+    }
     const { query, projectName, experimentNames, experimentData } = body
 
     if (!query) {

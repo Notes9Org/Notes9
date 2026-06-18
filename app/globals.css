@@ -1202,6 +1202,7 @@ body > [data-radix-popper-content-wrapper] {
 
 @media (prefers-reduced-motion: reduce) {
   .animate-page-transition,
+  .animate-n9-turn-in,
   .animate-flow-pipeline,
   .animate-cursor-blink,
   .animate-shimmer,
@@ -1227,8 +1228,14 @@ body > [data-radix-popper-content-wrapper] {
   .loader-writing-grow-3,
   .tour-mascot-animate,
   .rag-chunk-highlight,
-  .pdf-rag-highlight {
+  .pdf-rag-highlight,
+  .ai-shimmer::after {
     animation: none !important;
+  }
+  /* Reduced motion: drop the shimmer overlay entirely rather than freeze it
+     mid-sweep (a static diagonal wash reads as a rendering glitch). */
+  .ai-shimmer::after {
+    display: none !important;
   }
   .notes9-md--streaming > p:last-child::after,
   .notes9-md--streaming > h1:last-child::after,
@@ -1273,4 +1280,90 @@ body > [data-radix-popper-content-wrapper] {
 
 .animate-shimmer {
   animation: shimmer 1.6s ease-in-out infinite;
+}
+
+/* ───────────────────────────────────────────────────────────────────────────
+   Catalyst AI-surface visual language  (AD3 — centralized, not per-component)
+
+   The single themeable vocabulary for the chat's agent turns. Centralizing the
+   surface tiers + motion here (instead of sprinkling Tailwind opacity classes
+   across every component) keeps the hierarchy consistent — answer is the hero,
+   reasoning / tools / evidence are recessed scaffolding — and lets the planned
+   visual pass (P5) adopt them in one place. Every value is token-derived, so
+   light/dark and any future rebrand flow through for free. Pure presentational;
+   no data-layer coupling.
+   ─────────────────────────────────────────────────────────────────────────── */
+
+/* Recessed secondary surface — reasoning / tool / evidence blocks. Values mirror
+   the existing `rounded-lg border border-border/60 bg-muted/20` so adoption is a
+   behaviour-preserving 1:1 swap, not a restyle. */
+.surface-recessed {
+  border-radius: 0.5rem;
+  border: 1px solid color-mix(in oklab, var(--border) 60%, transparent);
+  background-color: color-mix(in oklab, var(--muted) 20%, transparent);
+}
+
+/* Primary surface — the answer is the hero: a crisper border and a hair of lift
+   so it sits above the recessed scaffolding around it. */
+.surface-primary {
+  border-radius: var(--radius);
+  border: 1px solid color-mix(in oklab, var(--border) 90%, transparent);
+  background-color: var(--card);
+  box-shadow: 0 1px 2px color-mix(in oklab, var(--foreground) 6%, transparent);
+}
+
+/* Assistant identity rail — a soft primary-tinted gradient on the left edge of
+   an agent turn; signals "this is Catalyst" without a heavy avatar. */
+.assistant-rail {
+  position: relative;
+}
+.assistant-rail::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  border-radius: 1px;
+  background: linear-gradient(
+    to bottom,
+    color-mix(in oklab, var(--primary) 55%, transparent),
+    color-mix(in oklab, var(--primary) 12%, transparent)
+  );
+}
+
+/* Running-state shimmer — the shared "this block is working" motion. One
+   primary-tinted sweep; pair with .surface-recessed on a running tool / evidence
+   block so every busy surface speaks the same motion vocabulary. Honors
+   prefers-reduced-motion (overlay is removed in the block above). */
+.ai-shimmer {
+  position: relative;
+  overflow: hidden;
+}
+.ai-shimmer::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    color-mix(in oklab, var(--primary) 10%, transparent),
+    transparent
+  );
+  transform: translateX(-100%);
+  animation: shimmer 1.6s ease-in-out infinite;
+}
+
+/* Assistant turn entrance — each new agent turn lifts gently into place (~160ms)
+   so replies "arrive" rather than snap in. GPU-cheap (opacity + transform only).
+   Plays once on mount; keyed message rows never re-trigger it on streaming
+   updates. Honors prefers-reduced-motion (see the block above). */
+@keyframes n9-turn-in {
+  from { opacity: 0; transform: translate3d(0, 6px, 0); }
+  to   { opacity: 1; transform: translate3d(0, 0, 0); }
+}
+.animate-n9-turn-in {
+  animation: n9-turn-in 160ms cubic-bezier(0.22, 1, 0.36, 1);
+  will-change: opacity, transform;
 }

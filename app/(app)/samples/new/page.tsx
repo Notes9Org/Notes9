@@ -3,6 +3,7 @@
 import { Suspense, useEffect, useMemo, useState } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
+import { toast } from "sonner"
 import { useAuthUser } from "@/components/auth/auth-provider"
 import { useCreatePageNav } from "@/hooks/use-create-page-nav"
 import { Button } from "@/components/ui/button"
@@ -258,6 +259,7 @@ function NewSamplePageInner() {
         if (!isSchemaMissingError(linkError)) throw linkError
       }
 
+      toast.success(formData.sample_code ? `Sample "${formData.sample_code}" created` : "Sample created")
       router.push(`/samples/${data.id}`)
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not create sample.")
