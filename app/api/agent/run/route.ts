@@ -4,14 +4,28 @@ import {
   type Notes9AgentHistoryItem,
 } from '@/lib/notes9-agent-request';
 import { verifyBearerToken } from "@/lib/verify-bearer-token";
+import { enforceLimits, checkBodyBytes, checkHistory, checkQueryChars, checkAttachments } from '@/lib/limits/guards';
 
 export const maxDuration = 300;
 
 const NOTES9_API_BASE = process.env.CHAT_API_URL?.replace(/\/$/, '') || '';
 
 export async function POST(req: Request) {
+  // Pre-parse: Content-Length ceiling before the body is buffered.
+  const preParseBlocked = enforceLimits('agent_run', [checkBodyBytes(req)]);
+  if (preParseBlocked) return preParseBlocked;
+
   const headerToken = req.headers.get('Authorization')?.replace(/^Bearer\s+/i, '').trim();
   const body = await req.json().catch(() => ({}));
+
+  // Post-parse: field-level checks.
+  const postParseBlocked = enforceLimits('agent_run', [
+    Array.isArray(body.history) ? checkHistory(body.history) : null,
+    typeof body.query === 'string' ? checkQueryChars(body.query) : null,
+    Array.isArray(body.attachments) ? checkAttachments(body.attachments) : null,
+    Array.isArray(body.file_attachments) ? checkAttachments(body.file_attachments) : null,
+  ]);
+  if (postParseBlocked) return postParseBlocked;
   const { supabaseToken: _bodyToken, ...rest } = body;
   const upstreamBody = buildNotes9AgentRequestBody({
     query: typeof rest.query === 'string' ? rest.query : String(rest.query ?? ''),

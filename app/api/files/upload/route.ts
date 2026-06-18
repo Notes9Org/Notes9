@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server"
 import { getCurrentUser } from "@/lib/auth/current-user"
 import { USER_STORAGE_BUCKET } from "@/lib/user-storage-bucket"
 import { fileTypeFromBuffer } from "file-type"
+import { enforceLimits, checkBodyBytes } from "@/lib/limits/guards"
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10 MB
 
@@ -29,6 +30,10 @@ const ALLOWED_MIME_TYPES = [
 
 export async function POST(request: Request) {
   try {
+    // Pre-parse: 25 MB hard body ceiling (belt-and-suspenders over the 10 MB per-file cap).
+    const preParseBlocked = enforceLimits('files_upload', [checkBodyBytes(request)]);
+    if (preParseBlocked) return preParseBlocked;
+
     const supabase = await createClient();
     const user = await getCurrentUser();
     if (!user) {

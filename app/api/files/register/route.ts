@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { USER_STORAGE_BUCKET } from "@/lib/user-storage-bucket";
+import { enforceLimits, checkBodyBytes, checkRegisterItems } from "@/lib/limits/guards";
 
 // Back-fill chat_attachments rows for files that were uploaded BEFORE a chat
 // session existed (the very first message of a new conversation). The upload
@@ -21,6 +22,10 @@ type RegisterItem = {
 
 export async function POST(request: Request) {
   try {
+    // Pre-parse: Content-Length ceiling before buffering.
+    const preParseBlocked = enforceLimits('files_register', [checkBodyBytes(request)]);
+    if (preParseBlocked) return preParseBlocked;
+
     const user = await getCurrentUser();
     if (!user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -43,6 +48,10 @@ export async function POST(request: Request) {
     if (!Array.isArray(body.items)) {
       return NextResponse.json({ error: "items must be an array" }, { status: 400 });
     }
+
+    // Post-parse: register items ceiling.
+    const postParseBlocked = enforceLimits('files_register', [checkRegisterItems(body.items)]);
+    if (postParseBlocked) return postParseBlocked;
 
     const ownPrefix = `${user.id}/`;
     const rows = (body.items as RegisterItem[])

@@ -13,6 +13,7 @@ import {
 import { splitSseBuffer, parseSseDataJson } from '@/lib/sse-event-blocks';
 import { createClient } from '@/lib/supabase/server';
 import { getCurrentUser } from '@/lib/auth/current-user';
+import { enforceLimits, checkBodyBytes, checkHistory, checkQueryChars } from '@/lib/limits/guards';
 
 export const maxDuration = 300;
 
@@ -64,6 +65,10 @@ export async function POST(req: Request) {
   // verifying the user at all. An unauthenticated attacker could POST here
   // and burn LLM quota billed to the account. We verify the Supabase JWT
   // unconditionally now and only forward upstream once we know who's asking.
+  // Pre-parse: check Content-Length header before buffering the body.
+  const preParseBlocked = enforceLimits('chat', [checkBodyBytes(req)]);
+  if (preParseBlocked) return preParseBlocked;
+
   const supabase = await createClient();
   const user = await getCurrentUser();
   if (!user) {
@@ -75,6 +80,19 @@ export async function POST(req: Request) {
 
   const body = await req.json();
   const { messages, sessionId, webSearch } = body;
+
+  // Post-parse: check field-level limits (history length, last message size).
+  const postParseBlocked = enforceLimits('chat', [
+    Array.isArray(messages) ? checkHistory(messages) : null,
+    Array.isArray(messages) && messages.length > 0
+      ? checkQueryChars(
+          typeof messages[messages.length - 1]?.content === 'string'
+            ? messages[messages.length - 1].content
+            : ''
+        )
+      : null,
+  ]);
+  if (postParseBlocked) return postParseBlocked;
   const webSearchOn = webSearch === true;
   const rawResponseFormat = body.response_format ?? body.responseFormat;
   const notes9ResponseFormat =

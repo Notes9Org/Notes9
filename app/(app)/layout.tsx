@@ -7,6 +7,7 @@ import { TermsAcceptanceModal } from "@/components/marketing/terms-acceptance-mo
 import { CURRENT_TERMS_VERSION } from "@/lib/constants"
 import { AuthEventTracker } from "@/components/auth-event-tracker"
 import { AuthProvider } from "@/components/auth/auth-provider"
+import { FeatureTimerProvider } from "@/components/telemetry/feature-timer-provider"
 
 export default async function AppGroupLayout({
   children,
@@ -41,6 +42,7 @@ export default async function AppGroupLayout({
       <Suspense>
         <AuthEventTracker />
       </Suspense>
+      <FeatureTimerProvider />
       <AppLayout>{children}</AppLayout>
     </AuthProvider>
   )
