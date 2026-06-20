@@ -12,6 +12,33 @@ export interface CitationMeta {
   title: string;
 }
 
+// Known academic publishers / aggregators. A citation pointing at one of these
+// is a paper even when the backend mislabels its source_type (it sometimes tags
+// literature papers as lab notes).
+const ACADEMIC_HOST_RE =
+  /(pubmed|ncbi\.nlm\.nih\.gov|pmc|doi\.org|nature\.com|sciencedirect|springer|wiley|biorxiv|medrxiv|arxiv|cell\.com|nejm|lancet|frontiersin|mdpi|plos|oup\.com|tandfonline|sagepub|jamanetwork|bmj\.com|elifesciences|researchgate|semanticscholar)/i;
+
+/** True when a URL points at a known academic publisher/aggregator. */
+export function isAcademicUrl(url: string | null | undefined): boolean {
+  if (!url) return false;
+  try {
+    return ACADEMIC_HOST_RE.test(new URL(url).hostname.replace(/^www\./, ''));
+  } catch {
+    return false;
+  }
+}
+
+/** Correct an obviously-mislabeled citation type: a canonical type other than
+ * `literature_review` that nonetheless points at an academic publisher is
+ * treated as a paper. Leaves everything else untouched. */
+export function correctAcademicType(
+  canonical: string,
+  url: string | null | undefined,
+): string {
+  if (canonical !== 'literature_review' && isAcademicUrl(url)) return 'literature_review';
+  return canonical;
+}
+
 export function parseCitationMeta(raw: string | null | undefined): CitationMeta {
   const s = (raw ?? '').trim();
   if (!s) return { author: null, year: null, title: '' };

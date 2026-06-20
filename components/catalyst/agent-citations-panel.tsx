@@ -24,7 +24,7 @@ import {
   type HighlightTarget,
 } from '@/lib/document-highlight';
 import type { GroundingResource, RagChunk } from '@/lib/agent-stream-types';
-import { parseCitationMeta } from '@/lib/citation-meta';
+import { parseCitationMeta, correctAcademicType } from '@/lib/citation-meta';
 import { GroundingProvenanceBadge } from './grounding-provenance-badge';
 import {
   CitationSourceViewer,
@@ -447,7 +447,13 @@ export function groundingResourceToPanelItem(
   index: number,
 ): AgentCitationPanelItem {
   const row = c as unknown as Record<string, unknown>;
-  const sourceType = normalizeAgentSourceType(c.source_type);
+  // External URL: actual article link for web/paper citations.
+  const sourceUrl = typeof c.source_url === 'string' && c.source_url.trim()
+    ? c.source_url.trim()
+    : null;
+  // Correct backend mislabels (e.g. a paper tagged as a lab note) when the URL
+  // is clearly an academic publisher/aggregator.
+  const sourceType = correctAcademicType(normalizeAgentSourceType(c.source_type), sourceUrl);
   const sourceId = coalesceAgentSourceId(row);
   const sourceName =
     c.source_name?.trim() ||
@@ -464,12 +470,6 @@ export function groundingResourceToPanelItem(
   const excerpt = coalesceAgentExcerpt(row) ?? (c.excerpt ?? '').trim();
   const relevance =
     typeof c.relevance === 'number' ? normalizeAgentRelevance0to1(c.relevance) : undefined;
-  // External URL: for `web` citations this is the actual article link the
-  // user should be able to click. For workspace records it's usually null
-  // and we fall back to the internal documentHref.
-  const sourceUrl = typeof c.source_url === 'string' && c.source_url.trim()
-    ? c.source_url.trim()
-    : null;
   // Number from the backend-assigned cite_label when present so the panel row
   // matches the inline `[N]`/`[3.2]` marker exactly (ADR-0006). Fall back to
   // the array position only when no label was sent.
@@ -485,7 +485,7 @@ export function groundingResourceToPanelItem(
     citeLabel,
     title,
     sourceType,
-    sourceTypeLabel: sourceTypeLabel(c.source_type),
+    sourceTypeLabel: sourceTypeLabel(sourceType),
     sourceId,
     sourceName,
     chunkId: c.chunk_id ?? null,
@@ -1138,8 +1138,10 @@ const GROUP_LABELS: Record<CitationGroupKey, string> = {
 };
 
 function citationGroup(item: AgentCitationPanelItem): CitationGroupKey {
-  if (item.sourceUrl && /^https?:\/\//i.test(item.sourceUrl)) return 'web';
+  // Papers first so an academic paper with a publisher URL groups under Papers
+  // (not Web). Plain web links fall through to Web; everything else is internal.
   if (normalizeAgentSourceType(item.sourceType) === 'literature_review') return 'papers';
+  if (item.sourceUrl && /^https?:\/\//i.test(item.sourceUrl)) return 'web';
   return 'workspace';
 }
 

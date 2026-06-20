@@ -5,7 +5,7 @@ import { useMemo, useRef, useState, useCallback, useEffect } from 'react';
 import { cn } from '@/lib/utils';
 import { markdownToHtml } from '@/lib/markdown-to-html';
 import { sanitizeHtml } from '@/lib/sanitize-html';
-import { parseCitationMeta } from '@/lib/citation-meta';
+import { parseCitationMeta, correctAcademicType } from '@/lib/citation-meta';
 import { Calendar, User } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import type { CitationsManifest, CitationsManifestEntry } from '@/hooks/use-agent-stream';
@@ -14,6 +14,7 @@ import {
   dispatchDocumentHighlight,
   normalizeAgentSourceType,
   normalizeAgentRelevance0to1,
+  sourceTypeLabel,
   type HighlightTarget,
 } from '@/lib/document-highlight';
 import { GroundingProvenanceBadge, type Grounding } from './grounding-provenance-badge';
@@ -434,9 +435,15 @@ function CitationHoverCard({
     ? chip.sourceUrl
     : workspaceRoute(chip.sourceType, chip.sourceId);
 
+  // Correct backend mislabels (e.g. a paper tagged as a lab note) using the URL.
+  const correctedType = correctAcademicType(
+    normalizeAgentSourceType(chip.sourceType),
+    chip.sourceUrl,
+  );
+  const typeLabel = sourceTypeLabel(correctedType) || 'Source';
   // Best-effort author/year from the source name (no structured fields exist on
   // the wire). Only attempted for papers / web sources.
-  const isAcademic = chip.sourceType === 'literature_review' || chip.provenance === 'web';
+  const isAcademic = correctedType === 'literature_review' || chip.provenance === 'web';
   const meta = parseCitationMeta(chip.sourceName);
   const displayTitle = isAcademic ? meta.title || chip.sourceName : chip.sourceName;
 
@@ -453,7 +460,7 @@ function CitationHoverCard({
     >
       <div className="flex flex-wrap items-center gap-1.5">
         <span className="inline-flex items-center rounded-full bg-muted px-1.5 py-0.5 text-2xs font-medium uppercase tracking-wide text-muted-foreground">
-          {chip.sourceType ? chip.sourceType.replace(/_/g, ' ') : 'Source'}
+          {typeLabel}
         </span>
         {isAcademic && meta.author && (
           <span className="inline-flex items-center gap-1 rounded-full bg-primary/10 text-primary px-1.5 py-0.5 text-2xs font-medium border border-primary/20">
@@ -731,6 +738,13 @@ export function MarkdownRenderer({
           // Each line break gets a small gap below it so multi-line answers
           // breathe instead of stacking flush.
           '[&_br]:block [&_br]:content-[""] [&_br]:mb-[0.5em]',
+          // Lists, quotes, rules and tables — consistent, readable rhythm.
+          '[&_ul]:my-4 [&_ul]:list-disc [&_ul]:pl-6 [&_ol]:my-4 [&_ol]:list-decimal [&_ol]:pl-6',
+          '[&_li]:my-1.5 [&_li]:leading-[1.65] [&_li]:marker:text-muted-foreground/70',
+          '[&_li>ul]:my-1.5 [&_li>ol]:my-1.5',
+          '[&_blockquote]:my-5 [&_blockquote]:border-l-2 [&_blockquote]:border-primary/30 [&_blockquote]:pl-4 [&_blockquote]:text-muted-foreground',
+          '[&_hr]:my-8 [&_hr]:border-border/60',
+          '[&_thead_th]:px-3 [&_thead_th]:py-2 [&_thead_th]:text-left [&_tbody_td]:px-3 [&_tbody_td]:py-2',
           showCursor && 'notes9-md--streaming',
           className
         )}
