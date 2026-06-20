@@ -147,8 +147,14 @@ function LiteratureDetailViewInner({
     inlineHighlightTarget,
   );
   const activeLitHighlight = inlineLitHighlight ?? litHighlight;
+  const hasPdf = !!literature.pdf_storage_path;
+  // Pick the surface to highlight on: with no PDF, always fall back to the
+  // abstract (overview); with a PDF, honor the snippet's content_surface and
+  // default to the PDF (the full text) when the hint is missing.
   const highlightSurface = activeLitHighlight
-    ? activeLitHighlight.contentSurface ?? "pdf"
+    ? !hasPdf
+      ? "abstract"
+      : activeLitHighlight.contentSurface ?? "pdf"
     : null;
 
   const [activeTab, setActiveTab] = useState<string>(initialTab);
