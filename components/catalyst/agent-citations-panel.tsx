@@ -26,7 +26,7 @@ import {
 } from '@/lib/document-highlight';
 import type { GroundingResource, RagChunk } from '@/lib/agent-stream-types';
 import { parseCitationMeta, correctAcademicType } from '@/lib/citation-meta';
-import { resolveTitleFromId, isPlaceholderTitle } from '@/lib/citation-title';
+import { resolveTitleFromId, isPlaceholderTitle, coalesceCitationTitle } from '@/lib/citation-title';
 import { GroundingProvenanceBadge } from './grounding-provenance-badge';
 import {
   CitationSourceViewer,
@@ -482,14 +482,13 @@ export function groundingResourceToPanelItem(
   // Type-aware id so semantic/approx matches on a project/experiment resolve to
   // the parent record's page (not a chunk's generic id, which 404s).
   const sourceId = coalesceAgentSourceIdForType(row, sourceType);
+  // Pick the real title from whichever field the backend used, skipping
+  // "Untitled …" placeholders (the by-id lookup in useResolvedCitationItem is
+  // the final fallback when every field is a placeholder).
+  const titleField = coalesceCitationTitle(row, sourceType);
   const sourceName =
-    c.source_name?.trim() ||
-    lookupNameForSourceType(sourceType, c.display_label) ||
-    null;
-  const title =
-    c.display_label?.trim() ||
-    c.source_name?.trim() ||
-    c.source_type.replace(/_/g, ' ');
+    titleField ?? lookupNameForSourceType(sourceType, c.display_label) ?? null;
+  const title = titleField ?? c.source_type.replace(/_/g, ' ');
   const highlightTarget = buildHighlightTargetFromResource(c);
   const highlightHref = buildHighlightUrlFromResource(c);
   const documentHref =
@@ -542,8 +541,9 @@ export function ragChunkToPanelItem(chunk: RagChunk, i: number): AgentCitationPa
   const row = chunk as unknown as Record<string, unknown>;
   const sourceType = normalizeAgentSourceType(chunk.source_type);
   const sourceId = coalesceAgentSourceIdForType(row, sourceType);
-  const sourceName = chunk.source_name?.trim() || null;
-  const title = chunk.source_name?.trim() || chunk.source_type.replace(/_/g, ' ');
+  const titleField = coalesceCitationTitle(row, sourceType);
+  const sourceName = titleField ?? null;
+  const title = titleField ?? chunk.source_type.replace(/_/g, ' ');
   const highlightTarget = buildHighlightTargetFromResource(chunk);
   const highlightHref = buildHighlightUrlFromResource(chunk);
   const documentHref =

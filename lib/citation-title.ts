@@ -40,6 +40,38 @@ export function isPlaceholderTitle(
   return false;
 }
 
+/**
+ * Pick the best human title from a citation resource, checking the several
+ * fields the backend may use and skipping generic placeholders ("Untitled …").
+ * Returns the first real title, else the first non-empty value, else null.
+ */
+export function coalesceCitationTitle(
+  row: Record<string, unknown>,
+  sourceType: string,
+): string | null {
+  const fields = [
+    'display_label',
+    'source_name',
+    'title',
+    'name',
+    'document_name',
+    'paper_title',
+    'article_title',
+    'label',
+  ];
+  for (const f of fields) {
+    const v = row[f];
+    if (typeof v === 'string' && v.trim() && !isPlaceholderTitle(v, sourceType)) {
+      return v.trim();
+    }
+  }
+  for (const f of fields) {
+    const v = row[f];
+    if (typeof v === 'string' && v.trim()) return v.trim();
+  }
+  return null;
+}
+
 const titleByIdCache = new Map<string, string | null>();
 
 /**
