@@ -1367,3 +1367,53 @@ body > [data-radix-popper-content-wrapper] {
   animation: n9-turn-in 160ms cubic-bezier(0.22, 1, 0.36, 1);
   will-change: opacity, transform;
 }
+
+/* Animated "Thinking…" label — a soft sheen sweeps across the text while the
+   agent works, signalling progress without a spinner. Token-derived so it
+   themes for free; honours prefers-reduced-motion. */
+@keyframes n9-text-shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+.n9-thinking-shimmer {
+  background-image: linear-gradient(
+    90deg,
+    color-mix(in oklab, var(--muted-foreground) 60%, transparent) 0%,
+    var(--foreground) 50%,
+    color-mix(in oklab, var(--muted-foreground) 60%, transparent) 100%
+  );
+  background-size: 200% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: n9-text-shimmer 1.8s linear infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .n9-thinking-shimmer {
+    animation: none;
+    color: var(--muted-foreground);
+  }
+}
+
+/* 3D depth loader — the logo spins anticlockwise on a slightly back-tilted plane
+   (the parent supplies `perspective`), so it reads as a disc turning through 3D
+   space for a continuous "infinity" feel rather than a flat spin. A soft
+   drop-shadow on the wrapper lifts it off the surface. Honors reduced motion. */
+@keyframes n9-loader-3d {
+  from { transform: rotateX(24deg) rotateZ(0deg); }
+  to   { transform: rotateX(24deg) rotateZ(-360deg); }
+}
+.notes9-loader-3d {
+  animation: n9-loader-3d 2.4s linear infinite;
+  transform-origin: center;
+  backface-visibility: hidden;
+}
+.notes9-loader-depth {
+  filter: drop-shadow(0 3px 4px color-mix(in oklab, var(--foreground) 22%, transparent));
+}
+@media (prefers-reduced-motion: reduce) {
+  .notes9-loader-3d {
+    animation: none;
+    transform: rotateX(24deg);
+  }
+}

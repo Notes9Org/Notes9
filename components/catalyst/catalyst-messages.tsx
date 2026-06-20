@@ -17,6 +17,8 @@ import {
 } from '@/components/catalyst/agent-citations-panel';
 import { PersistedArtifactList } from '@/components/catalyst/agent-artifact-card';
 import { AgentGraphList } from '@/components/catalyst/agent-graph-view';
+import { Notes9ChatLoader, toolCardsProgress } from '@/components/catalyst/notes9-chat-loader';
+import { Notes9ThinkingIndicator } from '@/components/catalyst/notes9-thinking-indicator';
 import type { PersistedArtifact } from '@/lib/agent-artifacts';
 import { parseNotes9AssistantStoredContent } from '@/lib/notes9-chat-format';
 import type { Vote } from '@/lib/db/schema';
@@ -156,7 +158,7 @@ export function CatalystMessages({
               <div
                 key={message.id}
                 className={cn(
-                  'group/message flex w-full gap-3 animate-in fade-in slide-in-from-bottom-4 duration-300',
+                  'group/message flex w-full gap-3 animate-in fade-in slide-in-from-bottom-3 duration-500 ease-out',
                   message.role === 'user' ? 'justify-end' : 'justify-start'
                 )}
               >
@@ -210,11 +212,23 @@ export function CatalystMessages({
                                 const sourceName = anySrc.source_name || anySrc.title || anySrc.url || 'Source ' + label;
                                 const sourceUrl = anySrc.source_url || (typeof anySrc.url === 'string' ? anySrc.url : undefined);
                                 const excerpt = anySrc.excerpt || (typeof anySrc.snippet === 'string' ? anySrc.snippet : undefined);
+                                // Honor the real source type/id when present so
+                                // workspace/paper citations route + badge right;
+                                // fall back to 'web' only when truly absent.
+                                const sourceType =
+                                  typeof anySrc.source_type === 'string' && anySrc.source_type.trim()
+                                    ? anySrc.source_type
+                                    : 'web';
+                                const sourceId =
+                                  typeof anySrc.source_id === 'string' && anySrc.source_id.trim()
+                                    ? anySrc.source_id
+                                    : undefined;
                                 acc[label] = {
                                   source_name: String(sourceName),
                                   source_url: sourceUrl,
                                   excerpt: excerpt,
-                                  source_type: 'web',
+                                  source_type: sourceType,
+                                  source_id: sourceId,
                                 } as CitationsManifestEntry;
                                 return acc;
                               }, {} as Record<string, CitationsManifestEntry>)
@@ -310,10 +324,11 @@ export function CatalystMessages({
           {(isLoading || notes9Stream) && messages.at(-1)?.role === 'user' && (
             notes9Stream ? (
               <div className="flex w-full gap-3 justify-start animate-in fade-in slide-in-from-bottom-2 duration-300">
-                <img
-                  src="/notes9-logo-mark-transparent.png"
-                  alt="AI Thinking"
-                  className="size-8 shrink-0 -translate-y-[5px] object-contain p-1.5 rounded-full bg-primary/10 dark:invert dark:brightness-125 shadow-sm animate-spin"
+                <Notes9ChatLoader
+                  size={32}
+                  className="-translate-y-[5px]"
+                  progress={toolCardsProgress(notes9Stream.toolCards)}
+                  error={!!notes9Stream.error}
                 />
                 <div className="flex-1 min-w-0 max-w-full space-y-2">
                   {/* When HITL is on (runId present) AgentStreamReply renders the
@@ -354,29 +369,20 @@ export function CatalystMessages({
                 </div>
               </div>
             ) : (
-              <div className="flex w-full gap-3 justify-start animate-in fade-in slide-in-from-bottom-3 duration-300">
-                <img
-                  src="/notes9-logo-mark-transparent.png"
-                  alt="AI Loading"
-                  className="mt-0.5 size-7 shrink-0 object-contain p-1 rounded-full bg-primary/5 dark:invert dark:brightness-125 shadow-sm ring-1 ring-border/50 animate-spin duration-3000"
-                />
-                <div className="flex items-center gap-1 px-4 py-3 rounded-2xl bg-muted/30 border border-border/30">
-                  <span className="inline-block size-1.5 rounded-full bg-foreground/50 animate-bounce" style={{ animationDelay: '0ms' }} aria-hidden />
-                  <span className="inline-block size-1.5 rounded-full bg-foreground/50 animate-bounce" style={{ animationDelay: '150ms' }} aria-hidden />
-                  <span className="inline-block size-1.5 rounded-full bg-foreground/50 animate-bounce" style={{ animationDelay: '300ms' }} aria-hidden />
-                  {onStop && (
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      className="h-7 gap-1.5 text-xs ml-3"
-                      onClick={onStop}
-                    >
-                      <Square className="size-2.5 fill-current" />
-                      Stop
-                    </Button>
-                  )}
-                </div>
+              <div className="flex w-full items-center gap-3 justify-start animate-in fade-in slide-in-from-bottom-2 duration-500 ease-out">
+                <Notes9ThinkingIndicator query={getMessageContent(messages.at(-1)!)} size={32} />
+                {onStop && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-7 gap-1.5 text-xs ml-1"
+                    onClick={onStop}
+                  >
+                    <Square className="size-2.5 fill-current" />
+                    Stop
+                  </Button>
+                )}
               </div>
             )
           )}

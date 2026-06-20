@@ -1,8 +1,15 @@
 "use client"
 
-import { useState, useMemo, useCallback, useRef } from "react"
+import { useState, useMemo, useCallback, useRef, useEffect } from "react"
 import type { Editor } from "@tiptap/react"
-import { useRouter } from "next/navigation"
+import { useRouter, useSearchParams } from "next/navigation"
+import {
+  DOCUMENT_HIGHLIGHT_EVENT,
+  HIGHLIGHT_PARAM,
+  decodeHighlightParam,
+  normalizeAgentSourceType,
+  type HighlightTarget,
+} from "@/lib/document-highlight"
 import { marked } from "marked"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
@@ -106,6 +113,77 @@ export function ReportDetailView({ report, leftControls, sidebar }: ReportDetail
 
   const [content, setContent] = useState(initialHtml)
   const editorRef = useRef<Editor | null>(null)
+  const [editorReady, setEditorReady] = useState(false)
+  const searchParams = useSearchParams()
+  const [inlineHighlightTarget, setInlineHighlightTarget] = useState<HighlightTarget | null>(null)
+  const highlightFiredRef = useRef<string | null>(null)
+
+  // AI citation deep-link: highlight + scroll to the exact cited passage in the
+  // report body. Prefers an in-app event (no navigation) over the ?highlight= URL.
+  const highlightParam = searchParams.get(HIGHLIGHT_PARAM)
+  const urlHighlightTarget = highlightParam ? decodeHighlightParam(highlightParam) : null
+  const activeHighlightTarget =
+    inlineHighlightTarget &&
+    normalizeAgentSourceType(inlineHighlightTarget.sourceType) === "report" &&
+    inlineHighlightTarget.sourceId === report.id
+      ? inlineHighlightTarget
+      : urlHighlightTarget &&
+          normalizeAgentSourceType(urlHighlightTarget.sourceType) === "report" &&
+          urlHighlightTarget.sourceId === report.id
+        ? urlHighlightTarget
+        : null
+
+  useEffect(() => {
+    const onHighlight = (event: Event) => {
+      const target = (event as CustomEvent<HighlightTarget>).detail
+      if (normalizeAgentSourceType(target.sourceType) !== "report") return
+      if (target.sourceId !== report.id) return
+      event.preventDefault()
+      setInlineHighlightTarget(target)
+      highlightFiredRef.current = null
+    }
+    window.addEventListener(DOCUMENT_HIGHLIGHT_EVENT, onHighlight as EventListener)
+    return () => window.removeEventListener(DOCUMENT_HIGHLIGHT_EVENT, onHighlight as EventListener)
+  }, [report.id])
+
+  useEffect(() => {
+    if (!activeHighlightTarget || !editorReady || !editorRef.current) return
+    const highlightKey = JSON.stringify(activeHighlightTarget)
+    if (highlightFiredRef.current === highlightKey) return
+
+    let cancelled = false
+    const retryDelays = [400, 800, 1500, 2500]
+    let attempt = 0
+
+    const tryHighlight = () => {
+      if (cancelled) return
+      const editor = editorRef.current
+      if (!editor) return
+      editor.commands.setRagHighlight(activeHighlightTarget.excerpt, activeHighlightTarget.charRange ?? null)
+      requestAnimationFrame(() => {
+        if (cancelled) return
+        const el = editor.view.dom.querySelector('.rag-chunk-highlight')
+        if (el) {
+          highlightFiredRef.current = highlightKey
+          el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+          setTimeout(() => {
+            document.querySelectorAll('.rag-chunk-highlight').forEach((e) => e.classList.add('fading'))
+            setTimeout(() => {
+              try { editor.commands.clearRagHighlight() } catch (err) { console.warn('clearRagHighlight failed', err) }
+            }, 1_200)
+          }, 12_000)
+        } else if (attempt < retryDelays.length - 1) {
+          try { editor.commands.clearRagHighlight() } catch (err) { console.warn('clearRagHighlight failed', err) }
+          attempt++
+          setTimeout(tryHighlight, retryDelays[attempt])
+        }
+      })
+    }
+
+    const initialTimer = setTimeout(tryHighlight, retryDelays[0])
+    return () => { cancelled = true; clearTimeout(initialTimer) }
+  }, [activeHighlightTarget, editorReady, report.id])
+
   const statusVariant =
     report.status === "final" ? "default" : report.status === "review" ? "secondary" : "outline"
 
@@ -218,7 +296,7 @@ export function ReportDetailView({ report, leftControls, sidebar }: ReportDetail
                     enableMath
                     hideExportControls
                     leadingToolbarSlot={leftControls}
-                    onEditorReady={(ed) => { editorRef.current = ed }}
+                    onEditorReady={(ed) => { editorRef.current = ed; setEditorReady(true) }}
                   />
                 ) : (
                   <div className="flex h-full flex-col items-center justify-center text-muted-foreground">

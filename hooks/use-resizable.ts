@@ -8,6 +8,9 @@ interface UseResizableOptions {
   maxWidth: number
   direction?: 'left' | 'right' // 'left' = normal behavior, 'right' = inverted for right sidebar
   onResize?: (width: number) => void
+  /** When set, the chosen width is saved to and restored from localStorage so
+   * it persists across sessions and navigations. */
+  persistKey?: string
 }
 
 export function useResizable({
@@ -15,15 +18,37 @@ export function useResizable({
   minWidth,
   maxWidth,
   direction = 'left',
-  onResize
+  onResize,
+  persistKey
 }: UseResizableOptions) {
   const [width, setWidth] = useState(initialWidth)
+  // Only persist once the user has actually dragged the handle — otherwise the
+  // default would be written to storage on first mount and permanently mask any
+  // future change to `initialWidth`.
+  const userResizedRef = useRef(false)
+
+  // Restore a persisted width after mount (kept out of the initial state to
+  // avoid an SSR/client hydration mismatch on the inline width style).
+  useEffect(() => {
+    if (!persistKey || typeof window === 'undefined') return
+    const saved = window.localStorage.getItem(persistKey)
+    if (saved == null) return
+    const n = parseInt(saved, 10)
+    if (Number.isFinite(n)) setWidth(Math.min(Math.max(n, minWidth), maxWidth))
+  }, [persistKey, minWidth, maxWidth])
+
+  // Persist the width on change — but only after a real user resize.
+  useEffect(() => {
+    if (!persistKey || typeof window === 'undefined' || !userResizedRef.current) return
+    window.localStorage.setItem(persistKey, String(width))
+  }, [persistKey, width])
   const [isResizing, setIsResizing] = useState(false)
   const startXRef = useRef(0)
   const startWidthRef = useRef(0)
 
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
     e.preventDefault()
+    userResizedRef.current = true
     setIsResizing(true)
     startXRef.current = e.clientX
     startWidthRef.current = width

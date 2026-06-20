@@ -97,6 +97,9 @@ export function buildHighlightUrl(
     case 'protocol':
       return `/protocols/${encodeURIComponent(target.sourceId)}?${qs}`;
 
+    case 'report':
+      return `/reports/${encodeURIComponent(target.sourceId)}?${qs}`;
+
     case 'lab_note':
       if (extra?.experimentId) {
         return `/experiments/${encodeURIComponent(extra.experimentId)}?tab=notes&noteId=${encodeURIComponent(target.sourceId)}&${qs}`;
@@ -109,7 +112,7 @@ export function buildHighlightUrl(
 }
 
 /** Source types that support opening the document with a fuzzy text highlight. */
-const HIGHLIGHTABLE_SOURCE_TYPES = new Set(['literature_review', 'protocol', 'lab_note']);
+const HIGHLIGHTABLE_SOURCE_TYPES = new Set(['literature_review', 'protocol', 'lab_note', 'report']);
 
 /**
  * Normalize agent / RAG `source_type` strings (e.g. "Literature", "Lab note") to canonical keys.
@@ -130,6 +133,9 @@ export function normalizeAgentSourceType(raw: string): string {
     case 'protocol':
     case 'protocols':
       return 'protocol';
+    case 'report':
+    case 'reports':
+      return 'report';
     case 'experiment':
     case 'experiments':
     case 'exp':

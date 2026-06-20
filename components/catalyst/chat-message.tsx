@@ -107,7 +107,12 @@ export function ChatMessage({
     .map((s) => s as SourceItem);
 
   return (
-    <div className={cn('group flex gap-3', isUser ? 'justify-end' : 'justify-start')}>
+    <div
+      className={cn(
+        'group flex gap-3 animate-in fade-in slide-in-from-bottom-2 duration-500 ease-out',
+        isUser ? 'justify-end' : 'justify-start',
+      )}
+    >
       {/* Assistant Avatar */}
       {!isUser && (
         <Avatar className="size-8 shrink-0 mt-0.5 shadow-sm ring-1 ring-border/50">
@@ -203,11 +208,23 @@ export function ChatMessage({
                 const sourceName = anySrc.source_name || anySrc.title || anySrc.url || 'Source ' + label;
                 const sourceUrl = anySrc.source_url || (typeof anySrc.url === 'string' ? anySrc.url : undefined);
                 const excerpt = anySrc.excerpt || (typeof anySrc.snippet === 'string' ? anySrc.snippet : undefined);
+                // Honor the real source type/id when the stored source carries
+                // them (workspace records, papers) so inline chips route and
+                // badge correctly. Fall back to 'web' only when truly absent.
+                const sourceType =
+                  typeof anySrc.source_type === 'string' && anySrc.source_type.trim()
+                    ? anySrc.source_type
+                    : 'web';
+                const sourceId =
+                  typeof anySrc.source_id === 'string' && anySrc.source_id.trim()
+                    ? anySrc.source_id
+                    : undefined;
                 acc[label] = {
                   source_name: String(sourceName),
                   source_url: sourceUrl,
                   excerpt: excerpt,
-                  source_type: 'web',
+                  source_type: sourceType,
+                  source_id: sourceId,
                 } as CitationsManifestEntry;
                 return acc;
               }, {} as Record<string, CitationsManifestEntry>)

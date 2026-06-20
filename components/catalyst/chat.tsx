@@ -17,6 +17,7 @@ import { Switch } from '@/components/ui/switch';
 import { useChatSessions } from '@/hooks/use-chat-sessions';
 import { ChatHistory } from './chat-history';
 import { ChatMessage } from './chat-message';
+import { Notes9ThinkingIndicator } from './notes9-thinking-indicator';
 import { PreviewAttachment, type Attachment } from './preview-attachment';
 import { createClient } from '@/lib/supabase/client';
 import { useAuthUser } from "@/components/auth/auth-provider"
@@ -768,22 +769,11 @@ export function CatalystChat({ open, onOpenChange }: CatalystChatProps) {
                       </div>
                     )}
                     {isLoading && messages[messages.length - 1]?.role === 'user' && (
-                      <div className="flex gap-3 justify-start animate-in fade-in slide-in-from-bottom-3 duration-300">
-                        <Avatar className="size-8 shrink-0 shadow-sm ring-1 ring-border/50">
-                          <AvatarImage
-                            src="/notes9-logo-mark-transparent.png"
-                            alt=""
-                            className="object-contain p-1.5 dark:invert dark:brightness-125 animate-spin duration-3000 bg-primary/5"
-                          />
-                          <AvatarFallback className="bg-primary/10 text-primary text-xs font-semibold">
-                            N9
-                          </AvatarFallback>
-                        </Avatar>
-                        <div className="flex items-center gap-1 px-4 py-3 rounded-2xl bg-muted/30 border border-border/30">
-                          <span className="inline-block size-1.5 rounded-full bg-foreground/50 animate-bounce" style={{ animationDelay: '0ms' }} aria-hidden />
-                          <span className="inline-block size-1.5 rounded-full bg-foreground/50 animate-bounce" style={{ animationDelay: '150ms' }} aria-hidden />
-                          <span className="inline-block size-1.5 rounded-full bg-foreground/50 animate-bounce" style={{ animationDelay: '300ms' }} aria-hidden />
-                        </div>
+                      <div className="animate-in fade-in slide-in-from-bottom-2 duration-500 ease-out">
+                        <Notes9ThinkingIndicator
+                          query={getMessageContent(messages[messages.length - 1])}
+                          size={34}
+                        />
                       </div>
                     )}
                   </div>

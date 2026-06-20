@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { Brain, ChevronRight } from 'lucide-react';
+import { Atom, ChevronRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 interface AgentReasoningPanelProps {
@@ -49,8 +49,8 @@ export function AgentReasoningPanel({ reasoning, streaming }: AgentReasoningPane
         }}
         className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs font-medium text-muted-foreground transition-colors hover:text-foreground"
       >
-        <Brain className={cn('size-3.5 shrink-0', streaming && 'animate-pulse text-primary')} />
-        <span>{streaming ? 'Thinking…' : 'Thinking'}</span>
+        <Atom className={cn('size-3.5 shrink-0', streaming && 'animate-[spin_2.4s_linear_infinite] text-primary')} />
+        <span>{streaming ? 'Reasoning…' : 'Reasoning'}</span>
         <ChevronRight
           className={cn('ml-auto size-3.5 shrink-0 transition-transform', open && 'rotate-90')}
         />

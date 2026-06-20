@@ -5,7 +5,10 @@ import { useMemo, useRef, useState, useCallback, useEffect } from 'react';
 import { cn } from '@/lib/utils';
 import { markdownToHtml } from '@/lib/markdown-to-html';
 import { sanitizeHtml } from '@/lib/sanitize-html';
-import type { CitationsManifest } from '@/hooks/use-agent-stream';
+import { parseCitationMeta } from '@/lib/citation-meta';
+import { Calendar, User } from 'lucide-react';
+import { useRouter } from 'next/navigation';
+import type { CitationsManifest, CitationsManifestEntry } from '@/hooks/use-agent-stream';
 import {
   buildHighlightUrl,
   dispatchDocumentHighlight,
@@ -212,6 +215,42 @@ function escapeHtmlAttr(value: string): string {
     .replace(/>/g, '&gt;');
 }
 
+/** Title key for detecting the SAME paper surfaced by different providers
+ * (PubMed/PMC/publisher) — mirrors the citations panel's dedupe so inline chips
+ * and the sources list agree. Returns null for non-paper/web entries or titles
+ * too short/generic to be a reliable identity. */
+function manifestSourceKey(entry: CitationsManifestEntry): string | null {
+  const isWeb = !!entry.source_url && /^https?:\/\//i.test(entry.source_url);
+  const isPaper = normalizeAgentSourceType(entry.source_type) === 'literature_review';
+  if (!isPaper && !isWeb) return null;
+  const norm = (entry.source_name || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+  if (norm.length < 12 || norm.split(' ').length < 3) return null;
+  return norm;
+}
+
+/** Map of duplicate citation labels → the canonical (lowest-numbered) label for
+ * the SAME underlying paper, so a PubMed [5] that is the same article as PMC [2]
+ * renders as [2] everywhere. Sub-citation labels ("3.2") are excluded so
+ * multi-span groups are preserved. Purely presentational. */
+function buildCanonicalLabelMap(manifest: CitationsManifest): Record<string, string> {
+  const groups = new Map<string, string[]>();
+  for (const [label, entry] of Object.entries(manifest.manifest)) {
+    if (label.includes('.')) continue;
+    const key = manifestSourceKey(entry);
+    if (!key) continue;
+    const arr = groups.get(key);
+    if (arr) arr.push(label);
+    else groups.set(key, [label]);
+  }
+  const map: Record<string, string> = {};
+  for (const labels of groups.values()) {
+    if (labels.length < 2) continue;
+    const canonical = labels.slice().sort((a, b) => parseFloat(a) - parseFloat(b))[0];
+    for (const l of labels) if (l !== canonical) map[l] = canonical;
+  }
+  return map;
+}
+
 /**
  * Post-process rendered HTML:
  * - Add target="_blank" rel="noopener noreferrer" to all <a> tags
@@ -221,6 +260,9 @@ function escapeHtmlAttr(value: string): string {
  *   show source metadata on hover.
  */
 function postProcessHtml(html: string, manifest?: CitationsManifest | null): string {
+  // Alias label → canonical label for cross-provider duplicate papers, so the
+  // same paper always renders with the same number.
+  const canonicalMap = manifest?.manifest ? buildCanonicalLabelMap(manifest) : {};
   // Links: open in new tab
   let processed = html.replace(
     /<a\s/g,
@@ -241,7 +283,10 @@ function postProcessHtml(html: string, manifest?: CitationsManifest | null): str
     // Even indices are text between tags; odd indices are the tags themselves.
     if (i % 2 !== 0) continue;
     segments[i] = segments[i].replace(CITATION_BRACKET_RE, (_full, nStr: string) => {
-      const n = nStr;
+      // Remap cross-provider duplicates to their canonical label so the SAME
+      // paper always renders as the same number (a PubMed [5] that is the same
+      // article as PMC [2] shows as [2]). Sub-citations ("3.2") are untouched.
+      const n = canonicalMap[nStr] ?? nStr;
       // The manifest is keyed by the full display label ("3" or "3.2", ADR-0006),
       // so a sub-citation resolves directly. Fall back to the base ("3.2"→"3")
       // for safety if only the document-level key is present.
@@ -357,6 +402,7 @@ function CitationHoverCard({
   onMouseEnter,
   onMouseLeave,
   onViewSource,
+  onOpenPage,
 }: {
   chip: ChipData;
   anchor: DOMRect;
@@ -364,35 +410,43 @@ function CitationHoverCard({
   onMouseEnter?: () => void;
   onMouseLeave?: () => void;
   onViewSource?: () => void;
+  onOpenPage?: () => void;
 }) {
-  // Position relative to the renderer container (which is `relative`).
+  // Position relative to the renderer container (which is `relative`). The card
+  // width tracks the container so it's never clipped on a narrow sidebar and
+  // grows when the sidebar widens — capped so it stays a tooltip, not a panel.
+  const PAD = 8;
+  const cardWidth = Math.max(180, Math.min(320, containerRect.width - PAD * 2));
+  const half = cardWidth / 2;
   const top = anchor.bottom - containerRect.top + 6;
-  const rawLeft = anchor.left - containerRect.left + anchor.width / 2;
-  const left = Math.max(8, Math.min(rawLeft, containerRect.width - 8));
+  const rawCenter = anchor.left - containerRect.left + anchor.width / 2;
+  // Keep the (center-anchored) card fully inside the container horizontally.
+  const left = Math.max(half + PAD, Math.min(rawCenter, containerRect.width - half - PAD));
   // Prefer the exact per-claim span; fall back to the document excerpt.
   const snippetSource = chip.citedText || chip.excerpt;
   const excerpt =
     snippetSource.length > 180 ? `${snippetSource.slice(0, 179)}…` : snippetSource;
 
-  // Extract Author et al and Year from sourceName if it matches typical formats
-  // e.g., "Smith et al. (2023) - Something" or "Smith et al., 2023"
-  let authorYearMatch = null;
-  let displayTitle = chip.sourceName;
-  if (chip.sourceType === 'literature_review' || chip.provenance === 'web') {
-    const match = chip.sourceName.match(/^([A-Za-z\s]+(?:et al\.?))\s*\(?(\d{4})\)?\s*[-:]?\s*(.*)$/i);
-    if (match) {
-      authorYearMatch = `${match[1].trim()}, ${match[2]}`;
-      displayTitle = match[3].trim() || displayTitle;
-    }
-  }
+  // Cross-link to the actual citation page: a web source opens its URL in a new
+  // tab; a workspace record routes to its detail page (/lab-notes/<id>, etc.).
+  const isWebSource = !!chip.sourceUrl && /^https?:\/\//i.test(chip.sourceUrl);
+  const pageHref = isWebSource
+    ? chip.sourceUrl
+    : workspaceRoute(chip.sourceType, chip.sourceId);
+
+  // Best-effort author/year from the source name (no structured fields exist on
+  // the wire). Only attempted for papers / web sources.
+  const isAcademic = chip.sourceType === 'literature_review' || chip.provenance === 'web';
+  const meta = parseCitationMeta(chip.sourceName);
+  const displayTitle = isAcademic ? meta.title || chip.sourceName : chip.sourceName;
 
   return (
     <div
       className={cn(
-        'absolute z-50 w-72 -translate-x-1/2 rounded-lg border border-border bg-popover p-2.5 text-popover-foreground shadow-lg',
+        'absolute z-50 -translate-x-1/2 rounded-lg border border-border bg-popover p-2.5 text-popover-foreground shadow-lg',
         'animate-in fade-in-0 zoom-in-95 duration-150'
       )}
-      style={{ top, left }}
+      style={{ top, left, width: cardWidth }}
       role="tooltip"
       onMouseEnter={onMouseEnter}
       onMouseLeave={onMouseLeave}
@@ -401,9 +455,16 @@ function CitationHoverCard({
         <span className="inline-flex items-center rounded-full bg-muted px-1.5 py-0.5 text-2xs font-medium uppercase tracking-wide text-muted-foreground">
           {chip.sourceType ? chip.sourceType.replace(/_/g, ' ') : 'Source'}
         </span>
-        {authorYearMatch && (
-          <span className="inline-flex items-center rounded-full bg-primary/10 text-primary px-1.5 py-0.5 text-2xs font-medium border border-primary/20">
-            {authorYearMatch}
+        {isAcademic && meta.author && (
+          <span className="inline-flex items-center gap-1 rounded-full bg-primary/10 text-primary px-1.5 py-0.5 text-2xs font-medium border border-primary/20">
+            <User className="size-2.5 shrink-0" aria-hidden />
+            {meta.author}
+          </span>
+        )}
+        {isAcademic && meta.year && (
+          <span className="inline-flex items-center gap-1 rounded-full bg-muted px-1.5 py-0.5 text-2xs font-medium text-muted-foreground">
+            <Calendar className="size-2.5 shrink-0" aria-hidden />
+            {meta.year}
           </span>
         )}
         <span className="font-mono text-2xs text-muted-foreground tabular-nums ml-auto">
@@ -432,16 +493,40 @@ function CitationHoverCard({
         </p>
       )}
       <div className="mt-1.5 flex items-center justify-between gap-2 text-2xs text-muted-foreground/80">
-        <span>{provenanceLabel(chip)}</span>
-        {(chip.citedText || chip.excerpt) && onViewSource && (
-          <button
-            type="button"
-            onClick={onViewSource}
-            className="rounded-sm font-medium text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-          >
-            View source
-          </button>
-        )}
+        <span className="min-w-0 truncate">{provenanceLabel(chip)}</span>
+        <span className="flex shrink-0 items-center gap-2.5">
+          {(chip.citedText || chip.excerpt) && onViewSource && (
+            <button
+              type="button"
+              onClick={onViewSource}
+              className="rounded-sm font-medium text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            >
+              View source
+            </button>
+          )}
+          {pageHref &&
+            (isWebSource ? (
+              <a
+                href={pageHref}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-0.5 rounded-sm font-medium text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              >
+                Open
+                <span aria-hidden>↗</span>
+              </a>
+            ) : onOpenPage ? (
+              // Internal source → SPA navigation (keeps the AI sidebar open).
+              <button
+                type="button"
+                onClick={onOpenPage}
+                className="inline-flex items-center gap-0.5 rounded-sm font-medium text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              >
+                Open
+                <span aria-hidden>↗</span>
+              </button>
+            ) : null)}
+        </span>
       </div>
     </div>
   );
@@ -469,86 +554,13 @@ function chipToViewerSource(chip: ChipData): CitationSourceViewerSource {
     supportStatus: chip.supportStatus,
   };
 }
-/* ─── References footer ─────────────────────────────────────────────────────
- * Builds a Nature-style numbered reference list from the CitationsManifest so
- * readers see the full bibliography at the end of each response, not only the
- * inline superscript chips.                                                  */
-
-function ReferencesFooter({
-  manifest,
-}: {
-  manifest: CitationsManifest;
-}) {
-  const entries = Object.entries(manifest.manifest);
-  if (entries.length === 0) return null;
-
-  // Sort by numeric label so the list is stable: "1", "2", "3.1", "3.2", …
-  const sorted = entries.sort(([a], [b]) => {
-    const aN = parseFloat(a);
-    const bN = parseFloat(b);
-    if (!Number.isNaN(aN) && !Number.isNaN(bN)) return aN - bN;
-    return a.localeCompare(b);
-  });
-
-  return (
-    <div className="mt-8 border-t border-border/40 pt-4">
-      <p className="text-sm font-semibold uppercase tracking-wider text-muted-foreground mb-3">
-        References
-      </p>
-      <ol className="space-y-1.5 list-none m-0 p-0">
-        {sorted.map(([label, entry]) => {
-          const name = entry.source_name || '';
-          const url = entry.source_url || '';
-          const sType = entry.source_type?.replace(/_/g, ' ') || '';
-          const isWeb = url && /^https?:\/\//i.test(url);
-          let domain = '';
-          if (isWeb) {
-            try { domain = new URL(url).hostname.replace(/^www\./, ''); } catch { /* ignore */ }
-          }
-
-          return (
-            <li key={label} className="flex items-baseline gap-2 text-sm leading-snug">
-              <span className="shrink-0 font-mono text-xs text-muted-foreground tabular-nums">
-                [{label}]
-              </span>
-              <span className="min-w-0">
-                {isWeb ? (
-                  <a
-                    href={url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-primary hover:underline break-words"
-                  >
-                    {name || domain || url}
-                  </a>
-                ) : (
-                  <span className="text-foreground/90 break-words">{name || `Source ${label}`}</span>
-                )}
-                {sType && (
-                  <span className="ml-1.5 text-muted-foreground/60 capitalize">
-                    ({sType})
-                  </span>
-                )}
-                {isWeb && domain && name && (
-                  <span className="ml-1.5 text-muted-foreground/50 text-xs">
-                    {domain}
-                  </span>
-                )}
-              </span>
-            </li>
-          );
-        })}
-      </ol>
-    </div>
-  );
-}
-
 export function MarkdownRenderer({
   content,
   className,
   showCursor = false,
   citationsManifest,
 }: MarkdownRendererProps) {
+  const router = useRouter();
   const containerRef = useRef<HTMLDivElement>(null);
   const [hover, setHover] = useState<{ chip: ChipData; anchor: DOMRect } | null>(null);
   // Span-level source viewer (G3): the cited source's text with the exact
@@ -573,7 +585,9 @@ export function MarkdownRenderer({
   );
 
   const html = useMemo(() => {
-    const raw = markdownToHtml(content);
+    // Chat opts into `breaks` so every line break in the model's answer renders
+    // as its own line (paired with a small `<br>` gap below for breathing room).
+    const raw = markdownToHtml(content, { breaks: true });
     if (!raw) return '';
     // `marked` v15+ ships without a built-in sanitizer, so raw HTML inside the
     // model's markdown response (e.g. <script>, <iframe>, onerror handlers
@@ -603,14 +617,21 @@ export function MarkdownRenderer({
       excerpt: spanText,
       contentSurface:
         normalizeAgentSourceType(chip.sourceType) === 'literature_review' ? 'abstract' : null,
+      // Advisory char offsets so the destination can land on the exact span.
+      charRange:
+        chip.charStart != null && chip.charEnd != null
+          ? { start: chip.charStart, end: chip.charEnd }
+          : null,
     };
     // Prefer in-app highlight dispatch (same-page doc viewers listen for it).
     if (spanText && dispatchDocumentHighlight(target)) return;
     const href = spanText
       ? buildHighlightUrl(target) || workspaceRoute(chip.sourceType, chip.sourceId)
       : workspaceRoute(chip.sourceType, chip.sourceId);
-    if (href) window.location.assign(href);
-  }, []);
+    // SPA navigation (NOT window.location.assign) so the Catalyst AI sidebar and
+    // app state survive; the destination reads ?highlight= and scrolls/pulses.
+    if (href) router.push(href);
+  }, [router]);
 
   /** Open the in-app span viewer for a chip (G3). Dismiss any hover card so it
    * doesn't float over the modal. */
@@ -702,9 +723,14 @@ export function MarkdownRenderer({
           '[&_h3]:!text-xl [&_h3]:!font-semibold [&_h3]:!leading-snug [&_h3]:!mt-8 [&_h3]:!mb-4',
           '[&_h4]:!text-lg [&_h4]:!font-medium [&_h4]:!text-muted-foreground [&_h4]:mt-8 [&_h4]:mb-4',
           '[&_pre]:overflow-x-auto [&_pre]:max-w-full',
+          '[&_code]:break-words',
           '[&_a]:break-words [&_a]:overflow-wrap-anywhere',
           '[&_table]:table-fixed [&_table]:w-full',
+          '[&_img]:max-w-full [&_img]:h-auto [&_img]:rounded-lg',
           '[&_p]:break-words [&_p]:overflow-wrap-anywhere',
+          // Each line break gets a small gap below it so multi-line answers
+          // breathe instead of stacking flush.
+          '[&_br]:block [&_br]:content-[""] [&_br]:mb-[0.5em]',
           showCursor && 'notes9-md--streaming',
           className
         )}
@@ -716,10 +742,6 @@ export function MarkdownRenderer({
         onKeyDown={hasManifest ? onKeyDown : undefined}
         dangerouslySetInnerHTML={{ __html: html }}
       />
-      {/* Numbered references footer when citations manifest is available */}
-      {hasManifest && citationsManifest && !showCursor && (
-        <ReferencesFooter manifest={citationsManifest} />
-      )}
       {hover && containerRef.current && (
         <CitationHoverCard
           chip={hover.chip}
@@ -728,6 +750,7 @@ export function MarkdownRenderer({
           onMouseEnter={cancelHoverClose}
           onMouseLeave={scheduleHoverClose}
           onViewSource={() => openViewer(hover.chip)}
+          onOpenPage={() => openChip(hover.chip)}
         />
       )}
       <CitationSourceViewer

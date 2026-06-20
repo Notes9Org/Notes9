@@ -2,7 +2,7 @@
 
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react';
 import Link from 'next/link';
-import { BookOpen, ChevronDown, MapPin, ScanSearch } from 'lucide-react';
+import { BookOpen, Calendar, ChevronDown, FolderOpen, Globe, MapPin, ScanSearch, User } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
   Collapsible,
@@ -24,6 +24,7 @@ import {
   type HighlightTarget,
 } from '@/lib/document-highlight';
 import type { GroundingResource, RagChunk } from '@/lib/agent-stream-types';
+import { parseCitationMeta } from '@/lib/citation-meta';
 import { GroundingProvenanceBadge } from './grounding-provenance-badge';
 import {
   CitationSourceViewer,
@@ -291,6 +292,10 @@ export type AgentCitationPanelItem = {
    * When set, used as the chip's `titleHref` instead of the internal
    * `documentHref` so clicking opens the actual source. */
   sourceUrl: string | null;
+  /** Other inline labels that resolve to the SAME underlying source — e.g. one
+   * paper surfaced via both PubMed and PMC. Populated by the panel's
+   * same-source dedupe so a single row stands in for every [N] that cited it. */
+  aliasLabels?: string[];
 };
 
 function fingerprintCitationItem(item: AgentCitationPanelItem): string {
@@ -670,6 +675,74 @@ function RetrievedTextBlock({
   );
 }
 
+/** Author + year chips parsed (best-effort) from a paper/web title. The wire
+ * format carries no structured author/year fields, so these only appear when
+ * the title contains them. */
+function CiteMeta({ author, year }: { author: string | null; year: string | null }) {
+  if (!author && !year) return null;
+  return (
+    <>
+      {author && (
+        <span className="inline-flex items-center gap-1 rounded-full border border-primary/20 bg-primary/10 px-2 py-0.5 text-2xs font-medium text-primary">
+          <User className="size-2.5 shrink-0" aria-hidden />
+          {author}
+        </span>
+      )}
+      {year && (
+        <span className="inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-2xs font-medium text-muted-foreground">
+          <Calendar className="size-2.5 shrink-0" aria-hidden />
+          {year}
+        </span>
+      )}
+    </>
+  );
+}
+
+/** Provenance kind metadata — drives the per-row "Internal / Paper / Web" tag so
+ * the source's origin is unmistakable even outside the grouped sections. */
+const PROVENANCE_META: Record<
+  CitationGroupKey,
+  { label: string; Icon: typeof Globe; className: string }
+> = {
+  workspace: {
+    label: 'Internal',
+    Icon: FolderOpen,
+    className: 'bg-sky-500/10 text-sky-600 dark:text-sky-400',
+  },
+  papers: {
+    label: 'Paper',
+    Icon: BookOpen,
+    className: 'bg-violet-500/10 text-violet-600 dark:text-violet-400',
+  },
+  web: {
+    label: 'Web',
+    Icon: Globe,
+    className: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400',
+  },
+};
+
+function ProvenanceTag({
+  item,
+  className,
+}: {
+  item: AgentCitationPanelItem;
+  className?: string;
+}) {
+  const meta = PROVENANCE_META[citationGroup(item)];
+  return (
+    <span
+      className={cn(
+        'inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-2xs font-medium',
+        meta.className,
+        className,
+      )}
+    >
+      <meta.Icon className="size-3 shrink-0" aria-hidden />
+      {meta.label}
+    </span>
+  );
+}
+
 function CitationBlock({ item, isStreaming }: { item: AgentCitationPanelItem; isStreaming?: boolean }) {
   const resolvedItem = useResolvedCitationItem(item);
   // Prefer external sourceUrl (web pages, signed PDF links) → highlightHref
@@ -693,15 +766,10 @@ function CitationBlock({ item, isStreaming }: { item: AgentCitationPanelItem; is
   // through SPA navigation and the title alone reads better.
   const displayUrl = resolvedItem.sourceUrl;
 
-  let authorYearMatch = null;
-  let displayTitle = resolvedItem.title;
-  if (resolvedItem.sourceType === 'literature_review' || resolvedItem.sourceType === 'web') {
-    const match = resolvedItem.title.match(/^([A-Za-z\s]+(?:et al\.?))\s*\(?(\d{4})\)?\s*[-:]?\s*(.*)$/i);
-    if (match) {
-      authorYearMatch = `${match[1].trim()}, ${match[2]}`;
-      displayTitle = match[3].trim() || displayTitle;
-    }
-  }
+  const isAcademic =
+    resolvedItem.sourceType === 'literature_review' || citationGroup(resolvedItem) === 'web';
+  const meta = parseCitationMeta(resolvedItem.title);
+  const displayTitle = isAcademic ? meta.title : resolvedItem.title;
 
   return (
     <li
@@ -715,11 +783,7 @@ function CitationBlock({ item, isStreaming }: { item: AgentCitationPanelItem; is
         {resolvedItem.isResolving && (
           <span className="size-3 shrink-0 animate-spin self-center rounded-full border border-muted-foreground/40 border-t-transparent" aria-hidden />
         )}
-        {authorYearMatch && (
-          <span className="inline-flex items-center rounded-full bg-primary/10 text-primary px-2 py-0.5 text-2xs font-medium border border-primary/20">
-            {authorYearMatch}
-          </span>
-        )}
+        {isAcademic && <CiteMeta author={meta.author} year={meta.year} />}
         {titleHref ? (
           <SmartCitationLink
             href={titleHref}
@@ -736,6 +800,7 @@ function CitationBlock({ item, isStreaming }: { item: AgentCitationPanelItem; is
         )}
       </div>
       <div className="mt-1 flex flex-wrap items-center gap-1.5">
+        <ProvenanceTag item={resolvedItem} />
         <p className="text-xs text-muted-foreground">
           {resolvedItem.sourceTypeLabel}
           {resolvedItem.matchKind === 'exact' ? (
@@ -921,6 +986,10 @@ function SingleCitationPanel({
     resolvedItem.highlightHref ||
     (resolvedItem.documentHref && excerpt ? resolvedItem.documentHref : null);
   const displayUrl = resolvedItem.sourceUrl;
+  const isAcademic =
+    resolvedItem.sourceType === 'literature_review' || citationGroup(resolvedItem) === 'web';
+  const meta = parseCitationMeta(resolvedItem.title);
+  const displayTitle = isAcademic ? meta.title : resolvedItem.title;
 
   return (
     <div
@@ -935,6 +1004,7 @@ function SingleCitationPanel({
         {resolvedItem.isResolving && (
           <span className="size-3 shrink-0 animate-spin self-center rounded-full border border-muted-foreground/40 border-t-transparent" aria-hidden />
         )}
+        {isAcademic && <CiteMeta author={meta.author} year={meta.year} />}
         {titleHref ? (
           <SmartCitationLink
             href={titleHref}
@@ -942,13 +1012,14 @@ function SingleCitationPanel({
             className="font-medium text-primary hover:underline inline-flex items-center gap-1"
           >
             {resolvedItem.highlightHref && <MapPin className="size-3 shrink-0 text-primary/70" />}
-            {resolvedItem.title}
+            {displayTitle}
           </SmartCitationLink>
         ) : (
-          <span className="font-medium text-foreground">{resolvedItem.title}</span>
+          <span className="font-medium text-foreground">{displayTitle}</span>
         )}
       </div>
       <div className="flex flex-wrap items-center gap-1.5 pl-6">
+        <ProvenanceTag item={resolvedItem} />
         {resolvedItem.matchKind === 'exact' ? (
           <p className="text-micro text-muted-foreground">
             {resolvedItem.sourceTypeLabel} · Direct record
@@ -1072,6 +1143,77 @@ function citationGroup(item: AgentCitationPanelItem): CitationGroupKey {
   return 'workspace';
 }
 
+/** Normalized title key used to detect the SAME paper surfaced by different
+ * providers (PubMed vs PMC vs publisher). Returns null for sources we must
+ * never merge by title — workspace records (lab notes, experiments) keep their
+ * own stable identity, and titles too short/generic to be reliable are skipped. */
+function sameSourceKey(item: AgentCitationPanelItem): string | null {
+  const type = normalizeAgentSourceType(item.sourceType);
+  const isWeb = !!item.sourceUrl && /^https?:\/\//i.test(item.sourceUrl);
+  // Only collapse academic papers / web articles by title.
+  if (type !== 'literature_review' && !isWeb) return null;
+  const raw = (item.sourceName || item.title || '').toLowerCase();
+  const norm = raw.replace(/[^a-z0-9]+/g, ' ').trim();
+  // Guard: avoid merging short/generic titles ("home", "results").
+  if (norm.length < 12 || norm.split(' ').length < 3) return null;
+  return norm;
+}
+
+/** Collapse citations that point at the SAME underlying source but arrived via
+ * different providers (PubMed/PMC/publisher) into a single row. The canonical
+ * row keeps the lowest-numbered label; the rest become `aliasLabels` so the one
+ * row still answers every inline [N] marker that referenced the paper. Purely
+ * presentational — the manifest and inline chips are left untouched. */
+function dedupeSameSource(items: AgentCitationPanelItem[]): AgentCitationPanelItem[] {
+  const byKey = new Map<string, AgentCitationPanelItem>();
+  const out: AgentCitationPanelItem[] = [];
+  for (const item of items) {
+    const key = sameSourceKey(item);
+    // Skip sub-citations ("3.1"/"3.2") — those are distinct spans of ONE
+    // document handled by groupBySubCitation, not cross-provider duplicates.
+    if (!key || item.citeLabel.includes('.')) {
+      out.push(item);
+      continue;
+    }
+    const existing = byKey.get(key);
+    if (!existing) {
+      const clone: AgentCitationPanelItem = {
+        ...item,
+        aliasLabels: item.aliasLabels ? [...item.aliasLabels] : [],
+      };
+      byKey.set(key, clone);
+      out.push(clone);
+      continue;
+    }
+    // A shared backend id means the SAME document (e.g. multi-span), not a
+    // cross-provider duplicate — keep it as its own row.
+    if (existing.sourceId && item.sourceId && existing.sourceId === item.sourceId) {
+      out.push(item);
+      continue;
+    }
+    // Record this label as an alias of the canonical row, and backfill any
+    // detail (excerpt / url / span) the canonical row happened to be missing.
+    if (
+      item.citeLabel &&
+      item.citeLabel !== existing.citeLabel &&
+      !existing.aliasLabels!.includes(item.citeLabel)
+    ) {
+      existing.aliasLabels!.push(item.citeLabel);
+    }
+    if (!existing.excerpt && item.excerpt) existing.excerpt = item.excerpt;
+    if (!existing.sourceUrl && item.sourceUrl) existing.sourceUrl = item.sourceUrl;
+    if (!existing.citedText && item.citedText) existing.citedText = item.citedText;
+  }
+  for (const it of byKey.values()) {
+    it.aliasLabels?.sort((a, b) => {
+      const ak = citeLabelSortKey(a);
+      const bk = citeLabelSortKey(b);
+      return (Number.isFinite(ak) ? ak : 0) - (Number.isFinite(bk) ? bk : 0);
+    });
+  }
+  return out;
+}
+
 export interface AgentCitationsPanelProps {
   items: AgentCitationPanelItem[];
   /** Collapsible trigger label, e.g. "All citations" or "Retrieved chunks" */
@@ -1113,7 +1255,9 @@ export function AgentCitationsPanel({
     (item: AgentCitationPanelItem) => setViewerSource(panelItemToViewerSource(item)),
     [],
   );
-  const sorted = [...items].sort((a, b) => a.index - b.index);
+  // Sort by inline order, then collapse the same paper surfaced by different
+  // providers (PubMed/PMC/publisher) into one row so it isn't listed twice.
+  const sorted = dedupeSameSource([...items].sort((a, b) => a.index - b.index));
 
   const viewer = (
     <CitationSourceViewer
@@ -1184,25 +1328,32 @@ export function AgentCitationsPanel({
       </CollapsibleTrigger>
       <CollapsibleContent
         className={cn(
-          'mt-2 overflow-hidden rounded-lg border border-border/60 bg-muted/20',
+          'mt-2 overflow-hidden rounded-xl border border-border/60 bg-muted/20 shadow-sm',
           'data-[state=closed]:animate-out data-[state=closed]:fade-out-0',
           'data-[state=open]:animate-in data-[state=open]:fade-in-0'
         )}
       >
         <div className="max-h-[min(22rem,55vh)] overflow-y-auto">
-          {groups.map((group, gi) => (
+          {groups.map((group, gi) => {
+            const HeaderIcon = PROVENANCE_META[group.key].Icon;
+            return (
             <div key={group.key}>
-              {/* Only show section dividers when more than one kind is present. */}
+              {/* Section header with a provenance icon + count so internal
+                  documents vs papers vs web are clearly demarcated. */}
               {groups.length > 1 && (
-                <p
+                <div
                   className={cn(
-                    'px-3 py-1.5 text-2xs font-medium uppercase tracking-wide text-muted-foreground/80',
+                    'flex items-center gap-1.5 px-3 py-1.5 text-2xs font-semibold uppercase tracking-wide text-muted-foreground/80',
                     'bg-muted/30',
                     gi > 0 && 'border-t border-border/60'
                   )}
                 >
+                  <HeaderIcon className="size-3 shrink-0" aria-hidden />
                   {group.label}
-                </p>
+                  <span className="ml-1 font-normal tabular-nums text-muted-foreground/50">
+                    ({group.items.length})
+                  </span>
+                </div>
               )}
               <ul className="divide-y divide-border/60">
                 {groupBySubCitation(group.items).map((subGroup) => (
@@ -1214,7 +1365,8 @@ export function AgentCitationsPanel({
                 ))}
               </ul>
             </div>
-          ))}
+            );
+          })}
         </div>
       </CollapsibleContent>
     </Collapsible>
