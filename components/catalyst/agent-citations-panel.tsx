@@ -17,6 +17,7 @@ import {
   buildHighlightUrlFromResource,
   coalesceAgentExcerpt,
   coalesceAgentSourceId,
+  coalesceAgentSourceIdForType,
   dispatchDocumentHighlight,
   normalizeAgentRelevance0to1,
   normalizeAgentSourceType,
@@ -454,7 +455,9 @@ export function groundingResourceToPanelItem(
   // Correct backend mislabels (e.g. a paper tagged as a lab note) when the URL
   // is clearly an academic publisher/aggregator.
   const sourceType = correctAcademicType(normalizeAgentSourceType(c.source_type), sourceUrl);
-  const sourceId = coalesceAgentSourceId(row);
+  // Type-aware id so semantic/approx matches on a project/experiment resolve to
+  // the parent record's page (not a chunk's generic id, which 404s).
+  const sourceId = coalesceAgentSourceIdForType(row, sourceType);
   const sourceName =
     c.source_name?.trim() ||
     lookupNameForSourceType(sourceType, c.display_label) ||
@@ -514,7 +517,7 @@ export function groundingResourceToPanelItem(
 export function ragChunkToPanelItem(chunk: RagChunk, i: number): AgentCitationPanelItem {
   const row = chunk as unknown as Record<string, unknown>;
   const sourceType = normalizeAgentSourceType(chunk.source_type);
-  const sourceId = coalesceAgentSourceId(row);
+  const sourceId = coalesceAgentSourceIdForType(row, sourceType);
   const sourceName = chunk.source_name?.trim() || null;
   const title = chunk.source_name?.trim() || chunk.source_type.replace(/_/g, ' ');
   const highlightTarget = buildHighlightTargetFromResource(chunk);

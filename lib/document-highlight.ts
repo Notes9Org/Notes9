@@ -205,6 +205,36 @@ export function coalesceAgentSourceId(c: Record<string, unknown>): string | null
   return null;
 }
 
+/** Id fields that point at the PARENT entity for each source type. */
+const TYPE_ID_FIELDS: Record<string, string[]> = {
+  literature_review: ['literature_review_id', 'literature_id', 'paper_id'],
+  lab_note: ['lab_note_id', 'note_id'],
+  protocol: ['protocol_id'],
+  experiment: ['experiment_id'],
+  project: ['project_id'],
+  report: ['report_id'],
+};
+
+/**
+ * Type-aware source id: prefer the backend `source_id`, then the id field that
+ * matches THIS entity type, then the generic search. This is what makes a
+ * semantic / approximate match on a project or experiment resolve to the parent
+ * record's page rather than a chunk's generic `id` (which 404s). Use this over
+ * {@link coalesceAgentSourceId} whenever the canonical source type is known.
+ */
+export function coalesceAgentSourceIdForType(
+  c: Record<string, unknown>,
+  canonicalType: string,
+): string | null {
+  const ordered = ['source_id', ...(TYPE_ID_FIELDS[canonicalType] ?? [])];
+  for (const k of ordered) {
+    const v = c[k];
+    if (typeof v === 'string' && v.trim() !== '') return v.trim();
+    if (typeof v === 'number' && Number.isFinite(v)) return String(v);
+  }
+  return coalesceAgentSourceId(c);
+}
+
 /** Match / RAG payloads may label the passage `text`, `snippet`, etc.
  * `cited_text` (the exact per-claim supporting span from the span-level
  * grounding contract) is preferred first so the highlighter targets the
