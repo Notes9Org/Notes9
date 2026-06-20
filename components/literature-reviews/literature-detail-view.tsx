@@ -148,13 +148,14 @@ function LiteratureDetailViewInner({
   );
   const activeLitHighlight = inlineLitHighlight ?? litHighlight;
   const hasPdf = !!literature.pdf_storage_path;
-  // Pick the surface to highlight on: with no PDF, always fall back to the
-  // abstract (overview); with a PDF, honor the snippet's content_surface and
-  // default to the PDF (the full text) when the hint is missing.
+  // A PDF contains the full text (abstract + body), so when one is attached we
+  // always highlight in the PDF — the matcher's anchor fallback locates the
+  // snippet whether it came from the abstract or the body. With no PDF, fall
+  // back to the abstract on the details page.
   const highlightSurface = activeLitHighlight
-    ? !hasPdf
-      ? "abstract"
-      : activeLitHighlight.contentSurface ?? "pdf"
+    ? hasPdf
+      ? "pdf"
+      : "abstract"
     : null;
 
   const [activeTab, setActiveTab] = useState<string>(initialTab);

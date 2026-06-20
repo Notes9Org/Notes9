@@ -548,97 +548,130 @@ export const LiteraturePdfViewer = forwardRef<LiteraturePdfViewerHandle, Literat
         if (!order.includes(p)) order.push(p)
       }
 
-      for (const pgNum of order) {
-        try {
-          const page = await pdfDocument.getPage(pgNum)
-          const textContent = await page.getTextContent({ includeMarkedContent: false })
-          const items: Array<{ str: string; transform: number[]; width: number; height: number }> = textContent.items
+      // Needle ladder: the full snippet first, then progressively shorter,
+      // distinctive anchors so a long / multi-line / noisy excerpt still locates
+      // its page (PDFs hyphenate line breaks, drop ligatures, reflow columns).
+      const cleaned = excerpt.replace(/\[\d+\]/g, ' ').replace(/\s+/g, ' ').trim()
+      const needles: string[] = []
+      const addNeedle = (s: string) => {
+        const t = s.trim()
+        if (t.length >= 12 && !needles.includes(t)) needles.push(t)
+      }
+      addNeedle(cleaned)
+      const firstSentence = cleaned.split(/(?<=[.?!])\s/)[0] ?? ''
+      if (firstSentence.length >= 24) addNeedle(firstSentence.slice(0, 200))
+      if (cleaned.length > 160) addNeedle(cleaned.slice(0, 160))
+      if (cleaned.length > 260) {
+        const mid = Math.floor(cleaned.length / 2)
+        addNeedle(cleaned.slice(mid - 90, mid + 90))
+      }
 
-          // Build concatenated text with space separators between items so that
-          // words split across items don't run together for the fuzzy matcher.
-          // itemMap[charIdx] holds the items[] index for that character (-1 for separators).
-          let fullText = ""
-          const itemMap: number[] = []
-          for (let ii = 0; ii < items.length; ii++) {
-            const item = items[ii]
-            if (!item.str) continue
-            if (fullText.length > 0) {
-              fullText += " "
-              itemMap.push(-1) // separator
+      type PageText = {
+        items: Array<{ str: string; transform: number[]; width: number; height: number }>
+        fullText: string
+        itemMap: number[]
+      }
+      // Cache extracted page text so multiple needle passes don't re-extract.
+      const pageTextCache = new Map<number, PageText>()
+      const getPageText = async (pgNum: number): Promise<PageText> => {
+        const cached = pageTextCache.get(pgNum)
+        if (cached) return cached
+        const page = await pdfDocument.getPage(pgNum)
+        const textContent = await page.getTextContent({ includeMarkedContent: false })
+        const items: PageText['items'] = textContent.items as PageText['items']
+        // Concatenate with space separators so words split across items don't run
+        // together; itemMap[charIdx] = items[] index (-1 for separators).
+        let fullText = ""
+        const itemMap: number[] = []
+        for (let ii = 0; ii < items.length; ii++) {
+          const item = items[ii]
+          if (!item.str) continue
+          if (fullText.length > 0) {
+            fullText += " "
+            itemMap.push(-1)
+          }
+          for (let ci = 0; ci < item.str.length; ci++) itemMap.push(ii)
+          fullText += item.str
+        }
+        const entry: PageText = { items, fullText, itemMap }
+        pageTextCache.set(pgNum, entry)
+        return entry
+      }
+
+      // First page (in hint-priority order) where any needle matches.
+      let found:
+        | { pgNum: number; items: PageText['items']; matchedItemIndices: Set<number> }
+        | null = null
+      outer: for (const needle of needles) {
+        for (const pgNum of order) {
+          try {
+            const { items, fullText, itemMap } = await getPageText(pgNum)
+            if (!fullText.trim()) continue
+            const match = fuzzyFindExcerpt(fullText, needle, { threshold: 0.3 })
+            if (!match || match.score < 0.3) continue
+            const matchedItemIndices = new Set<number>()
+            for (let ci = match.start; ci < match.end && ci < itemMap.length; ci++) {
+              const idx = itemMap[ci]
+              if (idx >= 0) matchedItemIndices.add(idx)
             }
-            for (let ci = 0; ci < item.str.length; ci++) {
-              itemMap.push(ii)
-            }
-            fullText += item.str
+            if (matchedItemIndices.size === 0) continue
+            found = { pgNum, items, matchedItemIndices }
+            break outer
+          } catch {
+            continue
           }
-
-          if (!fullText.trim()) continue
-          const match = fuzzyFindExcerpt(fullText, excerpt, { threshold: 0.3 })
-          if (!match || match.score < 0.3) continue
-
-          // Collect which items are covered by the matched range
-          const matchedItemIndices = new Set<number>()
-          for (let ci = match.start; ci < match.end && ci < itemMap.length; ci++) {
-            const idx = itemMap[ci]
-            if (idx >= 0) matchedItemIndices.add(idx)
-          }
-          if (matchedItemIndices.size === 0) continue
-
-          const baseViewport = page.getViewport({ scale: 1 })
-          const pw = baseViewport.width
-          const ph = baseViewport.height
-
-          // Build one rect per matched item.
-          // PDF coordinates: origin bottom-left, y increases upward.
-          // CSS coordinates: origin top-left, y increases downward.
-          // text TOP (CSS) = 1 - (ty + fontSize) / ph
-          // highlight HEIGHT = fontSize * 1.3 / ph  (covers ascenders + slight leading)
-          const rects: Array<{ top: number; left: number; width: number; height: number }> = []
-          for (const ii of [...matchedItemIndices].sort((a, b) => a - b)) {
-            const item = items[ii]
-            if (!item.str || !item.transform) continue
-            const tx = item.transform[4]
-            const ty = item.transform[5]
-            const fontSize = Math.abs(item.transform[3]) || Math.abs(item.transform[0]) || 12
-            const iw = item.width > 0 ? item.width : item.str.length * fontSize * 0.55
-            rects.push({
-              left: tx / pw,
-              top: 1 - (ty + fontSize) / ph,
-              width: iw / pw,
-              height: (fontSize * HIGHLIGHT_HEIGHT_FONT_MULTIPLE) / ph,
-            })
-          }
-
-          if (rects.length === 0) continue
-
-          // Ensure the page is rendered
-          setRenderedEndPage((p) => Math.max(p, pgNum))
-          setRagHighlightRects([{ pageNumber: pgNum, rects }])
-
-          // Scroll to the highlight, centered vertically.
-          // yWithinPage must be in rendered pixel units (base × scale).
-          const renderedY = rects[0].top * ph * fitScale * zoom
-          requestAnimationFrame(() => {
-            requestAnimationFrame(() => {
-              scrollPdfToPage(pgNum, renderedY)
-            })
-          })
-
-          // Fade then remove after 12 seconds
-          ragHighlightTimerRef.current = setTimeout(() => {
-            document.querySelectorAll('.pdf-rag-highlight').forEach((el) => el.classList.add('fading'))
-            setTimeout(() => {
-              setRagHighlightRects([])
-              ragHighlightTimerRef.current = null
-            }, 1_200)
-          }, 12_000)
-
-          return true
-        } catch {
-          continue
         }
       }
-      return false
+
+      if (!found) return false
+      const { pgNum, items, matchedItemIndices } = found
+
+      const page = await pdfDocument.getPage(pgNum)
+      const baseViewport = page.getViewport({ scale: 1 })
+      const pw = baseViewport.width
+      const ph = baseViewport.height
+
+      // One rect per matched item. PDF origin is bottom-left (y up); CSS is
+      // top-left (y down): text TOP = 1 - (ty + fontSize)/ph.
+      const rects: Array<{ top: number; left: number; width: number; height: number }> = []
+      for (const ii of [...matchedItemIndices].sort((a, b) => a - b)) {
+        const item = items[ii]
+        if (!item.str || !item.transform) continue
+        const tx = item.transform[4]
+        const ty = item.transform[5]
+        const fontSize = Math.abs(item.transform[3]) || Math.abs(item.transform[0]) || 12
+        const iw = item.width > 0 ? item.width : item.str.length * fontSize * 0.55
+        rects.push({
+          left: tx / pw,
+          top: 1 - (ty + fontSize) / ph,
+          width: iw / pw,
+          height: (fontSize * HIGHLIGHT_HEIGHT_FONT_MULTIPLE) / ph,
+        })
+      }
+
+      if (rects.length === 0) return false
+
+      // Ensure the page is rendered, then place + scroll to the highlight.
+      setRenderedEndPage((p) => Math.max(p, pgNum))
+      setRagHighlightRects([{ pageNumber: pgNum, rects }])
+
+      const renderedY = rects[0].top * ph * fitScale * zoom
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          scrollPdfToPage(pgNum, renderedY)
+        })
+      })
+
+      // Fade then remove after 12 seconds.
+      ragHighlightTimerRef.current = setTimeout(() => {
+        document.querySelectorAll('.pdf-rag-highlight').forEach((el) => el.classList.add('fading'))
+        setTimeout(() => {
+          setRagHighlightRects([])
+          ragHighlightTimerRef.current = null
+        }, 1_200)
+      }, 12_000)
+
+      return true
     },
 
     clearExcerptHighlight() {
