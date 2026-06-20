@@ -79,32 +79,62 @@ const titleByIdCache = new Map<string, string | null>();
  * lookup) so a citation that arrived without a usable title still shows the
  * actual document title. Cached per id; returns null when not resolvable.
  */
+function extractDoi(url: string): string | null {
+  const m = url.match(/10\.\d{4,9}\/[^\s"'<>?#]+/i);
+  return m ? m[0].replace(/[.,;]+$/, '') : null;
+}
+
+function extractPmid(url: string): string | null {
+  const m =
+    url.match(/(?:pubmed\.ncbi\.nlm\.nih\.gov|ncbi\.nlm\.nih\.gov\/pubmed)\/(\d+)/i) ||
+    url.match(/[?&]pmid=(\d+)/i);
+  return m ? m[1] : null;
+}
+
 export async function resolveTitleFromId(
   sourceType: string,
   sourceId: string | null | undefined,
+  url?: string | null,
 ): Promise<string | null> {
-  if (!sourceId) return null;
   const normalizedType = normalizeAgentSourceType(sourceType);
   const tc = tableColumnForType(normalizedType);
   if (!tc) return null;
-  const cacheKey = `${normalizedType}|${sourceId}`;
+  if (!sourceId && !url) return null;
+  const cacheKey = `${normalizedType}|${sourceId ?? ''}|${url ?? ''}`;
   if (titleByIdCache.has(cacheKey)) return titleByIdCache.get(cacheKey) ?? null;
-  try {
-    const supabase = createClient();
-    const { data, error } = await supabase
-      .from(tc.table)
-      .select(tc.column)
-      .eq('id', sourceId)
-      .maybeSingle();
-    const rec = data as Record<string, unknown> | null;
-    const value =
-      !error && rec && typeof rec[tc.column] === 'string'
-        ? (rec[tc.column] as string).trim() || null
-        : null;
-    titleByIdCache.set(cacheKey, value);
-    return value;
-  } catch {
-    titleByIdCache.set(cacheKey, null);
+
+  const supabase = createClient();
+  const readBy = async (column: string, value: string): Promise<string | null> => {
+    try {
+      const { data, error } = await supabase
+        .from(tc.table)
+        .select(tc.column)
+        .eq(column, value)
+        .limit(1)
+        .maybeSingle();
+      const rec = data as Record<string, unknown> | null;
+      if (!error && rec && typeof rec[tc.column] === 'string') {
+        return (rec[tc.column] as string).trim() || null;
+      }
+    } catch {
+      /* ignore and fall through to the next strategy */
+    }
     return null;
+  };
+
+  let resolved: string | null = null;
+  if (sourceId) resolved = await readBy('id', sourceId);
+
+  // Literature: when the id didn't resolve (e.g. a web/semantic match whose id
+  // isn't the saved record's), match the saved paper by DOI / PMID / URL.
+  if (!resolved && normalizedType === 'literature_review' && url) {
+    const doi = extractDoi(url);
+    const pmid = extractPmid(url);
+    if (doi) resolved = await readBy('doi', doi);
+    if (!resolved && pmid) resolved = await readBy('pmid', pmid);
+    if (!resolved) resolved = await readBy('url', url);
   }
+
+  titleByIdCache.set(cacheKey, resolved);
+  return resolved;
 }

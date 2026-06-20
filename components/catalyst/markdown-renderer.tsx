@@ -447,19 +447,20 @@ function CitationHoverCard({
   const [resolvedName, setResolvedName] = useState<string | null>(null);
   useEffect(() => {
     let cancelled = false;
-    if (!chip.sourceId || !isPlaceholderTitle(chip.sourceName, chip.sourceType)) {
+    const canResolve = !!(chip.sourceId || chip.sourceUrl);
+    if (!canResolve || !isPlaceholderTitle(chip.sourceName, chip.sourceType)) {
       setResolvedName(null);
       return () => {
         cancelled = true;
       };
     }
-    resolveTitleFromId(chip.sourceType, chip.sourceId).then((t) => {
+    resolveTitleFromId(chip.sourceType, chip.sourceId, chip.sourceUrl).then((t) => {
       if (!cancelled) setResolvedName(t);
     });
     return () => {
       cancelled = true;
     };
-  }, [chip.sourceId, chip.sourceName, chip.sourceType]);
+  }, [chip.sourceId, chip.sourceUrl, chip.sourceName, chip.sourceType]);
   const effectiveName = resolvedName?.trim() || chip.sourceName;
   // Best-effort author/year from the source name (no structured fields exist on
   // the wire). Only attempted for papers / web sources.

@@ -353,19 +353,20 @@ function useResolvedCitationItem(
   const titleSourceId = item.sourceId ?? resolvedSourceId;
   useEffect(() => {
     let cancelled = false;
-    if (!titleSourceId || !isPlaceholderTitle(item.title, item.sourceType)) {
+    const canResolve = !!(titleSourceId || item.sourceUrl);
+    if (!canResolve || !isPlaceholderTitle(item.title, item.sourceType)) {
       setResolvedTitle(null);
       return () => {
         cancelled = true;
       };
     }
-    resolveTitleFromId(item.sourceType, titleSourceId).then((t) => {
+    resolveTitleFromId(item.sourceType, titleSourceId, item.sourceUrl).then((t) => {
       if (!cancelled) setResolvedTitle(t);
     });
     return () => {
       cancelled = true;
     };
-  }, [titleSourceId, item.title, item.sourceType]);
+  }, [titleSourceId, item.sourceUrl, item.title, item.sourceType]);
 
   const sourceId = item.sourceId ?? resolvedSourceId;
   const fallbackHighlightTarget =
