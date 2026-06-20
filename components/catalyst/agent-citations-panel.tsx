@@ -26,6 +26,7 @@ import {
 } from '@/lib/document-highlight';
 import type { GroundingResource, RagChunk } from '@/lib/agent-stream-types';
 import { parseCitationMeta, correctAcademicType } from '@/lib/citation-meta';
+import { resolveTitleFromId, isPlaceholderTitle } from '@/lib/citation-title';
 import { GroundingProvenanceBadge } from './grounding-provenance-badge';
 import {
   CitationSourceViewer,
@@ -346,6 +347,26 @@ function useResolvedCitationItem(
     };
   }, [item.sourceId, item.sourceName, item.sourceType]);
 
+  // Resolve the real document title when the citation arrived with a missing or
+  // placeholder one ("Untitled literature"), so the reference shows the article.
+  const [resolvedTitle, setResolvedTitle] = useState<string | null>(null);
+  const titleSourceId = item.sourceId ?? resolvedSourceId;
+  useEffect(() => {
+    let cancelled = false;
+    if (!titleSourceId || !isPlaceholderTitle(item.title, item.sourceType)) {
+      setResolvedTitle(null);
+      return () => {
+        cancelled = true;
+      };
+    }
+    resolveTitleFromId(item.sourceType, titleSourceId).then((t) => {
+      if (!cancelled) setResolvedTitle(t);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [titleSourceId, item.title, item.sourceType]);
+
   const sourceId = item.sourceId ?? resolvedSourceId;
   const fallbackHighlightTarget =
     !item.highlightTarget && sourceId && item.excerpt.trim()
@@ -370,8 +391,11 @@ function useResolvedCitationItem(
     item.highlightHref ??
     (highlightTarget ? buildHighlightUrl(highlightTarget) : null);
 
+  const finalTitle = resolvedTitle?.trim() || item.title;
   return {
     ...item,
+    title: finalTitle,
+    sourceName: resolvedTitle?.trim() || item.sourceName,
     sourceId,
     highlightTarget,
     documentHref,

@@ -6,6 +6,7 @@ import { cn } from '@/lib/utils';
 import { markdownToHtml } from '@/lib/markdown-to-html';
 import { sanitizeHtml } from '@/lib/sanitize-html';
 import { parseCitationMeta, correctAcademicType } from '@/lib/citation-meta';
+import { resolveTitleFromId, isPlaceholderTitle } from '@/lib/citation-title';
 import { Calendar, User } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import type { CitationsManifest, CitationsManifestEntry } from '@/hooks/use-agent-stream';
@@ -441,11 +442,30 @@ function CitationHoverCard({
     chip.sourceUrl,
   );
   const typeLabel = sourceTypeLabel(correctedType) || 'Source';
+  // Resolve the real document title when the citation came with a placeholder
+  // ("Untitled literature"), so the hover card shows the actual article title.
+  const [resolvedName, setResolvedName] = useState<string | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    if (!chip.sourceId || !isPlaceholderTitle(chip.sourceName, chip.sourceType)) {
+      setResolvedName(null);
+      return () => {
+        cancelled = true;
+      };
+    }
+    resolveTitleFromId(chip.sourceType, chip.sourceId).then((t) => {
+      if (!cancelled) setResolvedName(t);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [chip.sourceId, chip.sourceName, chip.sourceType]);
+  const effectiveName = resolvedName?.trim() || chip.sourceName;
   // Best-effort author/year from the source name (no structured fields exist on
   // the wire). Only attempted for papers / web sources.
   const isAcademic = correctedType === 'literature_review' || chip.provenance === 'web';
-  const meta = parseCitationMeta(chip.sourceName);
-  const displayTitle = isAcademic ? meta.title || chip.sourceName : chip.sourceName;
+  const meta = parseCitationMeta(effectiveName);
+  const displayTitle = isAcademic ? meta.title || effectiveName : effectiveName;
 
   return (
     <div
