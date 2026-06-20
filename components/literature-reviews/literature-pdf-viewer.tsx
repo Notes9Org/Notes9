@@ -155,6 +155,10 @@ function LiteraturePdfPageBlock({
       const canvas = canvasRef.current
       const textLayerContainer = textLayerRef.current
       const pageContainer = pageRef.current
+      // The refs are re-checked here because `getPage` above is async — during
+      // that await the page can unmount / its canvas detach (e.g. when a
+      // highlight bumps the rendered page range), leaving these null.
+      if (!isActive || !canvas || !textLayerContainer || !pageContainer) return
       const context = canvas.getContext("2d")
       const outputScale = Math.max(
         1,
