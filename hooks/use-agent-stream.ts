@@ -21,6 +21,14 @@ import {
   normalizeAgentRelevance0to1,
 } from '@/lib/document-highlight';
 
+
+/** Hide raw Option C cite tokens during live stream; done payload replaces with [N]. */
+const CITE_TOKEN_STREAM_RE = /\[(?:[a-z]{3}_[0-9a-f]{4,8})(?:\s*,\s*[a-z]{3}_[0-9a-f]{4,8})*\]/gi;
+function maskCiteTokensForStream(text: string): string {
+  return text.replace(CITE_TOKEN_STREAM_RE, '').replace(/\s+([.,!?;:])/g, '$1').replace(/[ \t]{2,}/g, ' ');
+}
+
+
 const PROXY_STREAM_URL = '/api/agent/stream';
 
 /** Workspace entity the user explicitly tagged for this turn. Catalyst preflights
@@ -902,8 +910,9 @@ export function useAgentStream() {
               case 'token': {
                 const t = extractSseTokenPiece(payload);
                 if (t) {
+                  const masked = maskCiteTokensForStream(t);
                   tokenBuffer += t;
-                  setState((s) => ({ ...s, streamedAnswer: s.streamedAnswer + t }));
+                  setState((s) => ({ ...s, streamedAnswer: s.streamedAnswer + masked }));
                 }
                 break;
               }
@@ -922,7 +931,8 @@ export function useAgentStream() {
                   ? (payload as { delta: string }).delta
                   : '';
                 if (delta) {
-                  setState((s) => ({ ...s, thinkingTokenBuffer: s.thinkingTokenBuffer + delta }));
+                  const maskedDelta = maskCiteTokensForStream(delta);
+                  setState((s) => ({ ...s, thinkingTokenBuffer: s.thinkingTokenBuffer + maskedDelta }));
                 }
                 break;
               }
