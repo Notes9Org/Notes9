@@ -301,7 +301,17 @@ export function buildHighlightUrlFromResource(
 ): string | null {
   const target = buildHighlightTargetFromResource(c);
   if (!target) return null;
-  const url = buildHighlightUrl(target, extra);
+  // Lab notes are shown inside the experiment page — when the resource carries
+  // the parent experiment id, deep-link straight to /experiments/<id>?tab=notes
+  // &noteId=… instead of relying on the /lab-notes/<id> redirect (which fails
+  // when the id isn't a real note id, e.g. a semantic chunk match).
+  const obj = c as Record<string, unknown>;
+  const experimentId =
+    extra?.experimentId ??
+    (typeof obj.experiment_id === 'string' && obj.experiment_id.trim()
+      ? obj.experiment_id.trim()
+      : undefined);
+  const url = buildHighlightUrl(target, experimentId ? { experimentId } : extra);
   return url || null;
 }
 
@@ -319,8 +329,11 @@ export function buildHighlightTargetFromResource(
   },
 ): HighlightTarget | null {
   const obj = c as Record<string, unknown>;
+  const sourceType = normalizeAgentSourceType(c.source_type);
+  // Type-aware id: a lab-note/project/experiment semantic match resolves to the
+  // real record id (not a chunk's generic `id`).
   const id =
-    coalesceAgentSourceId(obj) ??
+    coalesceAgentSourceIdForType(obj, sourceType) ??
     (c.source_id != null && String(c.source_id).trim() !== ''
       ? String(c.source_id).trim()
       : null);
@@ -328,7 +341,6 @@ export function buildHighlightTargetFromResource(
   // exact per-claim span when the backend sent one.
   const excerpt = coalesceAgentExcerpt(obj) ?? c.cited_text?.trim() ?? c.excerpt?.trim() ?? null;
   if (!id || !excerpt) return null;
-  const sourceType = normalizeAgentSourceType(c.source_type);
   if (!HIGHLIGHTABLE_SOURCE_TYPES.has(sourceType)) return null;
   const rawPageNumber = obj.page_number;
   const pageNumber =
