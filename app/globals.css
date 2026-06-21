@@ -1394,26 +1394,3 @@ body > [data-radix-popper-content-wrapper] {
     color: var(--muted-foreground);
   }
 }
-
-/* 3D depth loader — the logo spins anticlockwise on a slightly back-tilted plane
-   (the parent supplies `perspective`), so it reads as a disc turning through 3D
-   space for a continuous "infinity" feel rather than a flat spin. A soft
-   drop-shadow on the wrapper lifts it off the surface. Honors reduced motion. */
-@keyframes n9-loader-3d {
-  from { transform: rotateX(24deg) rotateZ(0deg); }
-  to   { transform: rotateX(24deg) rotateZ(-360deg); }
-}
-.notes9-loader-3d {
-  animation: n9-loader-3d 2.4s linear infinite;
-  transform-origin: center;
-  backface-visibility: hidden;
-}
-.notes9-loader-depth {
-  filter: drop-shadow(0 3px 4px color-mix(in oklab, var(--foreground) 22%, transparent));
-}
-@media (prefers-reduced-motion: reduce) {
-  .notes9-loader-3d {
-    animation: none;
-    transform: rotateX(24deg);
-  }
-}
