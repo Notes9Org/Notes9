@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useState, useCallback, useRef } from "react"
-import { Sparkles } from "lucide-react"
+import { Activity } from "lucide-react"
 import { useAuthUser } from "@/components/auth/auth-provider"
 
 /** Per-user cache keys. Scoping by user id is required so that signing into a
@@ -153,20 +153,19 @@ export function ActivitySummary() {
   return (
     <div
       className={`
-        mx-auto flex w-full max-w-3xl items-center justify-center gap-2 px-4 pt-1
+        mx-auto flex w-full max-w-3xl items-start justify-center gap-2 px-4 pt-1
         transition-all duration-700 ease-out
         ${isVisible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-2"}
       `}
     >
-      <Sparkles
+      <Activity
         aria-hidden
-        className="size-4 shrink-0 text-[color:var(--n9-accent)] opacity-80"
+        className="mt-1 size-4 shrink-0 text-[color:var(--n9-accent)] opacity-80"
         strokeWidth={1.5}
       />
       <p
-        className="min-w-0 truncate text-base leading-snug text-muted-foreground/90 italic"
+        className="min-w-0 text-pretty text-center text-base leading-snug text-muted-foreground/90 italic"
         style={{ fontFamily: "var(--font-family-display)" }}
-        title={summary}
       >
         {summary}
       </p>
