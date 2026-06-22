@@ -28,4 +28,14 @@ export interface AiSearchResult {
    * paper by DOI/PMID/title. Mirrors the abstract shown on database results.
    */
   abstract: string | null
+  /**
+   * Stable identity for this result. Used both to dedupe and as the abstract
+   * cache key, so the value written by the background lookup is read back by the
+   * exact same key (no recomputation that could drift).
+   */
+  dedupeKey: string
+  /** Best lookup term for fetching a missing abstract (DOI → PMID → title). */
+  lookupTerm: string | null
+  /** Whether the lookup term is an id (DOI/PMID) — its top hit is trustworthy. */
+  lookupById: boolean
 }

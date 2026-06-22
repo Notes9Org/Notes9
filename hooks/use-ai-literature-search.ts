@@ -8,8 +8,9 @@ import { createClient } from '@/lib/supabase/client'
 import type { SearchPaper } from '@/types/paper-search'
 import type { AiSearchResult } from '@/types/ai-search'
 import {
-  aiResultDedupeKey,
+  extractPmid,
   matchCitationToPaper,
+  normalizeDoi,
   pickAbstractFromSearch,
   resultDedupeKey,
   type CitationLike,
@@ -230,6 +231,18 @@ export function useAiLiteratureSearch({
       const display = out.length + 1
       byKey.set(key, display)
       renumber.set(orig, display)
+      // Best term for a background abstract lookup: an id (DOI/PMID, from the
+      // matched paper or the citation itself) is most reliable, else the title.
+      const idTerm =
+        paper?.doi ||
+        paper?.pmid ||
+        normalizeDoi(citation.doi) ||
+        normalizeDoi(citation.url) ||
+        extractPmid(citation.url) ||
+        null
+      const titleTerm = (paper?.title || title || '').trim()
+      const lookupTerm = idTerm ?? (titleTerm.length >= 8 ? titleTerm : null)
+      const lookupById = !!idTerm
       // Abstract, in order: matched DB paper → source payload → background lookup.
       const abstract =
         str(paper?.abstract ?? undefined) ??
@@ -245,6 +258,9 @@ export function useAiLiteratureSearch({
         paper,
         matchKind,
         abstract,
+        dedupeKey: key,
+        lookupTerm,
+        lookupById,
       })
     })
     return { results: out, citeRenumber: renumber }
@@ -270,20 +286,17 @@ export function useAiLiteratureSearch({
 
     const queue = results.filter((r) => {
       if (str(r.abstract ?? undefined)) return false
-      const key = aiResultDedupeKey({ paper: r.paper, title: r.aiTitle, url: r.sourceUrl })
-      if (abstractCache.has(key) || abstractInFlight.has(key)) return false
-      const lookup = r.paper?.doi || r.paper?.pmid || r.paper?.title || r.aiTitle
-      return !!(lookup && lookup.trim().length >= 8)
+      if (!r.lookupTerm) return false
+      // Same key the results memo reads back with — guaranteed not to drift.
+      return !abstractCache.has(r.dedupeKey) && !abstractInFlight.has(r.dedupeKey)
     })
     if (queue.length === 0) return
 
     const lookupOne = async (r: AiSearchResult) => {
-      const key = aiResultDedupeKey({ paper: r.paper, title: r.aiTitle, url: r.sourceUrl })
+      const key = r.dedupeKey
       abstractInFlight.add(key)
-      const byId = !!(r.paper?.doi || r.paper?.pmid)
-      const lookup = (r.paper?.doi || r.paper?.pmid || r.paper?.title || r.aiTitle || '').trim()
       try {
-        const res = await fetch(`/api/search-papers?query=${encodeURIComponent(lookup)}`)
+        const res = await fetch(`/api/search-papers?query=${encodeURIComponent(r.lookupTerm ?? '')}`)
         const data: unknown = res.ok ? await res.json() : null
         const list = Array.isArray((data as { papers?: unknown })?.papers)
           ? (data as { papers: SearchPaper[] }).papers
@@ -293,7 +306,7 @@ export function useAiLiteratureSearch({
           url: r.sourceUrl,
           doi: r.paper?.doi ?? null,
         }
-        const abs = pickAbstractFromSearch(cite, list, byId)
+        const abs = pickAbstractFromSearch(cite, list, r.lookupById)
         abstractCache.set(key, abs)
         if (abs && !cancelled) setAbstractVersion((v) => v + 1)
       } catch {

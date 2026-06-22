@@ -152,23 +152,42 @@ export function citationToSearchPaper(c: CitationLike & { snippet?: string }): S
  * result is accepted only when its title is reasonably close (avoids attaching a
  * wrong abstract). Returns '' when nothing trustworthy is found.
  */
+/** Word-overlap (Jaccard) of two title keys — tolerant of word order/extra words. */
+function titleOverlap(a: string, b: string): number {
+  const wa = new Set(a.split(" ").filter((w) => w.length > 2))
+  const wb = new Set(b.split(" ").filter((w) => w.length > 2))
+  if (wa.size === 0 || wb.size === 0) return 0
+  let inter = 0
+  for (const w of wa) if (wb.has(w)) inter++
+  return inter / Math.min(wa.size, wb.size)
+}
+
 export function pickAbstractFromSearch(
   cite: CitationLike,
   list: SearchPaper[],
   searchedById: boolean,
 ): string {
   if (!list.length) return ""
+  // Prefer a confident match anywhere in the list.
   const { paper } = matchCitationToPaper(cite, list)
   if (paper?.abstract?.trim()) return paper.abstract.trim()
-  const top = list[0]
-  if (!top?.abstract?.trim()) return ""
-  // DOI/PMID lookup → the top hit is the paper.
-  if (searchedById) return top.abstract.trim()
-  // Title lookup → accept the top hit only when titles are reasonably similar.
+  // Otherwise take the first result that actually has an abstract.
+  const withAbstract = list.find((p) => p.abstract?.trim())
+  if (!withAbstract?.abstract?.trim()) return ""
+  // DOI/PMID lookup → the top hit is the paper, trust it.
+  if (searchedById) return withAbstract.abstract.trim()
+  // Title lookup: the query WAS the title, so the top hit is almost always the
+  // paper. Accept it when titles are similar by fuzzy score OR word overlap, and
+  // also when we have no title to compare against.
   const ct = titleKey(cite.title)
-  const tt = titleKey(top.title)
-  if (ct.length >= 8 && tt && fuzzyFindExcerpt(tt, ct, { threshold: 0.5 })) {
-    return top.abstract.trim()
+  const tt = titleKey(withAbstract.title)
+  if (
+    ct.length < 8 ||
+    !tt ||
+    titleOverlap(ct, tt) >= 0.4 ||
+    !!fuzzyFindExcerpt(tt, ct, { threshold: 0.45 })
+  ) {
+    return withAbstract.abstract.trim()
   }
   return ""
 }
