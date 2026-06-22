@@ -175,9 +175,10 @@ export function AiPaperCard({
           </div>
         )}
 
-        {/* Abstract — always shown for every paper when one is available. */}
+        {/* Abstract — always shown for every paper when one is available, with a
+            smooth shimmer while it's being fetched so it fades in (no flash). */}
         {abstractPlain ? (
-          <div className="mb-3 rounded-md bg-muted/40 p-3">
+          <div className="mb-3 rounded-md bg-muted/40 p-3 duration-300 animate-in fade-in">
             <p className="mb-1 text-2xs font-semibold uppercase tracking-wider text-muted-foreground">
               Abstract
             </p>
@@ -198,6 +199,18 @@ export function AiPaperCard({
                 {showAbstract ? 'Show less' : 'Read more'}
               </button>
             )}
+          </div>
+        ) : result.abstractPending ? (
+          <div className="mb-3 rounded-md bg-muted/40 p-3" aria-busy="true">
+            <div className="mb-2 flex items-center gap-1.5 text-2xs font-semibold uppercase tracking-wider text-muted-foreground">
+              <Loader2 className="size-3 animate-spin" />
+              Loading abstract
+            </div>
+            <div className="space-y-1.5">
+              <div className="h-3 w-full animate-pulse rounded bg-foreground/10" />
+              <div className="h-3 w-[94%] animate-pulse rounded bg-foreground/10" />
+              <div className="h-3 w-[82%] animate-pulse rounded bg-foreground/10" />
+            </div>
           </div>
         ) : !result.snippet?.trim() ? (
           <p className="mb-3 text-sm italic text-muted-foreground/70">

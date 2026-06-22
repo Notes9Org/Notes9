@@ -223,6 +223,10 @@ export function useAiLiteratureSearch({
         str(s.description) ??
         str(s.summary) ??
         (abstractCache.get(key) || null)
+      // Pending = no abstract yet, a lookup is possible, and we haven't recorded
+      // a result for it. Once the cache holds the key (a string or ''), it's no
+      // longer pending — either the abstract is shown or it's genuinely absent.
+      const abstractPending = !abstract && !!lookupTerm && !abstractCache.has(key)
       out.push({
         citeLabel: String(display),
         snippet: snippet ?? '',
@@ -234,6 +238,7 @@ export function useAiLiteratureSearch({
         dedupeKey: key,
         lookupTerm,
         lookupById,
+        abstractPending,
       })
     })
     return out
@@ -278,16 +283,18 @@ export function useAiLiteratureSearch({
         }
         const abs = pickAbstractFromSearch(cite, list, r.lookupById)
         abstractCache.set(key, abs)
-        if (abs && !cancelled) setAbstractVersion((v) => v + 1)
       } catch {
         abstractCache.set(key, '')
       } finally {
         abstractInFlight.delete(key)
+        // Re-derive on EVERY completion (found or not) so the card's loading
+        // shimmer resolves to the abstract or the "unavailable" state.
+        if (!cancelled) setAbstractVersion((v) => v + 1)
       }
     }
 
     // Bounded concurrency so we don't fire dozens of slow searches at once.
-    const CONCURRENCY = 4
+    const CONCURRENCY = 6
     let idx = 0
     const worker = async () => {
       while (!cancelled && idx < queue.length) {

@@ -38,4 +38,10 @@ export interface AiSearchResult {
   lookupTerm: string | null
   /** Whether the lookup term is an id (DOI/PMID) — its top hit is trustworthy. */
   lookupById: boolean
+  /**
+   * True while this result has no abstract yet but a background lookup is going
+   * to (or is currently) fetching one. Drives a loading shimmer so the abstract
+   * fades in smoothly instead of flashing "unavailable" then popping in.
+   */
+  abstractPending: boolean
 }
