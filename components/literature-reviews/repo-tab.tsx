@@ -38,6 +38,7 @@ import { toast } from "sonner";
 import { LiteratureDetailView } from "./literature-detail-view";
 import { createClient } from "@/lib/supabase/client";
 import { LITERATURE_DRAG_MIME } from "@/lib/catalyst-agent-types";
+import { cn } from "@/lib/utils";
 import { CATALYST_MENTION_DRAG_MIME } from "@/lib/catalyst-mention-types";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { useProjectScope } from "@/contexts/project-scope-context";
@@ -66,6 +67,8 @@ interface RepoTabProps {
   initialProjectFilterId?: string | null;
   /** When true (with initialProjectFilterId), project filter is fixed and cannot switch to &quot;all&quot;. */
   lockProjectFilter?: boolean;
+  /** When provided, the repo search box can launch a fresh paper search with its query. */
+  onSearchPapers?: (query: string) => void;
 }
 
 function PaperTabContent({ id, onRefresh, initialTab }: { id: string; onRefresh: () => void; initialTab?: "overview" | "pdf" | "citation" | "linked" }) {
@@ -138,6 +141,7 @@ export function RepoTab({
   experiments,
   initialProjectFilterId = null,
   lockProjectFilter = false,
+  onSearchPapers,
 }: RepoTabProps) {
   const router = useRouter();
   const { projectName: scopedProjectName } = useProjectScope();
@@ -561,19 +565,38 @@ export function RepoTab({
         </div>
 
         <TabsContent value="list" className="space-y-6 m-0 border-none p-0 outline-none">
-      {/* Search */}
-      <div className="space-y-3">
-        <div className="relative max-w-md">
-          <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+      {/* Search + filters toolbar */}
+      <div className="flex min-w-0 flex-col gap-3 lg:flex-row lg:flex-wrap lg:items-center">
+        <div className="relative w-full lg:max-w-sm">
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
-            placeholder="Search literature..."
-            className="pl-9 text-foreground"
+            placeholder="Search papers…"
+            className={cn(
+              "h-10 pl-9",
+              onSearchPapers && searchQuery.trim() && "pr-[6.75rem]"
+            )}
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && onSearchPapers && searchQuery.trim()) {
+                e.preventDefault();
+                onSearchPapers(searchQuery.trim());
+              }
+            }}
           />
+          {onSearchPapers && searchQuery.trim() && (
+            <Button
+              type="button"
+              size="sm"
+              className="absolute right-1.5 top-1/2 h-7 -translate-y-1/2 gap-1.5 px-2.5 text-xs"
+              onClick={() => onSearchPapers(searchQuery.trim())}
+              title="Search databases for new papers matching this query"
+            >
+              <Search className="h-3.5 w-3.5" />
+              Search new
+            </Button>
+          )}
         </div>
-
-        <div className="flex min-w-0 flex-col gap-3 lg:flex-row lg:flex-wrap lg:items-center">
           <Select
             value={selectedProjectId}
             onValueChange={(value) => {
@@ -622,7 +645,6 @@ export function RepoTab({
             Clear filters
           </Button>
         </div>
-      </div>
 
       {/* Literature Table */}
       <Card>

@@ -982,7 +982,7 @@ export const LiteraturePdfViewer = forwardRef<LiteraturePdfViewerHandle, Literat
       <div
         ref={viewportFrameRef}
         data-literature-pdf-viewport
-        className="relative max-h-[min(80vh,56rem)] overflow-auto rounded-lg border bg-muted/30 p-2 sm:p-4"
+        className="relative h-[min(88vh,72rem)] max-h-[min(88vh,72rem)] min-h-[32rem] overflow-auto rounded-lg border bg-muted/30 p-2 sm:p-4"
       >
         {isLoading && (
           <div className="flex min-h-[24rem] items-center justify-center">
