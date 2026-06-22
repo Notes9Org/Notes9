@@ -147,6 +147,12 @@ interface SearchTabProps {
   /** AI result filters (controlled by the host so the main search bar owns them). */
   filters?: AiResultFilters
   onFiltersChange?: (next: AiResultFilters) => void
+  /**
+   * The submitted query to drive the AI search with. Decoupled from the live
+   * input `query` so typing a new search doesn't re-run / flash the AI; defaults
+   * to `query` when not provided.
+   */
+  aiQuery?: string
 }
 
 export function SearchTab({
@@ -168,9 +174,12 @@ export function SearchTab({
   projectId,
   filters: filtersProp,
   onFiltersChange,
+  aiQuery,
 }: SearchTabProps) {
   // AI search is the primary experience; the database list is a fallback.
   const [aiMode, setAiMode] = useState(true)
+  // The AI runs on the submitted query (falls back to the live query).
+  const effectiveAiQuery = aiQuery ?? query
   // Filters are controlled by the host when provided (so the main search bar
   // owns them); otherwise managed locally.
   const [localFilters, setLocalFilters] = useState<AiResultFilters>(DEFAULT_AI_FILTERS)
@@ -224,7 +233,7 @@ export function SearchTab({
       {hasSearched && (
         <div className={aiMode ? 'block' : 'hidden'}>
           <AiSearchView
-            query={query}
+            query={effectiveAiQuery}
             projectId={projectId}
             papers={searchResults}
             filters={aiFilters}

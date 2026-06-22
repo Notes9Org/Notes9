@@ -60,26 +60,6 @@ function str(v: unknown): string | undefined {
   return typeof v === 'string' && v.trim() ? v.trim() : undefined
 }
 
-/**
- * Rewrite inline citation markers (`[5]`, `[5, 6]`) in the AI summary to the
- * final, sequential card numbers after dedupe — so the numbers in the summary
- * match the result cards, and citations that collapsed to the same paper share
- * one number instead of appearing as several.
- */
-function renumberCitations(summary: string, map: Map<number, number>): string {
-  if (!summary || map.size === 0) return summary
-  return summary.replace(/\[([0-9]+(?:\s*,\s*[0-9]+)*)\]/g, (full, inner: string) => {
-    const nums = inner.split(',').map((p) => parseInt(p.trim(), 10))
-    if (nums.some((n) => Number.isNaN(n))) return full
-    const mapped = nums
-      .map((n) => map.get(n))
-      .filter((n): n is number => typeof n === 'number')
-    if (mapped.length === 0) return full
-    const uniq = Array.from(new Set(mapped)).sort((a, b) => a - b)
-    return `[${uniq.join(', ')}]`
-  })
-}
-
 export function useAiLiteratureSearch({
   papers: externalPapers,
   query,
@@ -202,17 +182,15 @@ export function useAiLiteratureSearch({
   const isStreaming = !restored && (status === 'streaming' || status === 'submitted')
   const error = !restored && status === 'error' ? 'The AI search failed. Please try again.' : null
 
-  // Build the deduped result cards AND a map from each AI source's original
-  // citation number to its final, sequential card number. Duplicate papers (same
-  // work from different publishers) collapse onto the kept card, and cards are
-  // numbered 1, 2, 3, … in order — so the numbers stay correct even when earlier
-  // sources were merged away.
-  const { results, citeRenumber } = useMemo(() => {
-    const byKey = new Map<string, number>() // dedupe key -> display number
-    const renumber = new Map<number, number>() // original (1-based) -> display number
+  // Build the deduped result cards. Duplicate papers (same work surfaced from
+  // different publishers) collapse onto the kept card, and cards are numbered
+  // 1, 2, 3, … in order so their numbers are always sequential. The AI summary
+  // text is rendered exactly as written — its inline references and any
+  // reference list are preserved as-is (no renumber, no dedupe).
+  const results = useMemo(() => {
+    const byKey = new Set<string>()
     const out: AiSearchResult[] = []
-    sources.forEach((s, i) => {
-      const orig = i + 1
+    sources.forEach((s) => {
       const url = str(s.source_url) ?? str(s.url)
       const title = str(s.source_name) ?? str(s.title)
       const snippet = str(s.cited_text) ?? str(s.excerpt) ?? str(s.snippet)
@@ -223,14 +201,9 @@ export function useAiLiteratureSearch({
       const key = paper
         ? resultDedupeKey({ title: paper.title, url: paper.articlePageUrl ?? paper.pdfUrl, doi: paper.doi })
         : resultDedupeKey(citation)
-      const existing = byKey.get(key)
-      if (existing != null) {
-        renumber.set(orig, existing) // duplicate → folds onto the kept card
-        return
-      }
+      if (byKey.has(key)) return // duplicate paper → a card already exists
+      byKey.add(key)
       const display = out.length + 1
-      byKey.set(key, display)
-      renumber.set(orig, display)
       // Best term for a background abstract lookup: an id (DOI/PMID, from the
       // matched paper or the citation itself) is most reliable, else the title.
       const idTerm =
@@ -263,16 +236,13 @@ export function useAiLiteratureSearch({
         lookupById,
       })
     })
-    return { results: out, citeRenumber: renumber }
+    return out
     // `abstractVersion` re-derives abstracts once a background lookup fills the cache.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sources, papers, abstractVersion])
 
-  // Renumber the summary's inline citations to match the deduped card numbers.
-  const summary = useMemo(
-    () => renumberCitations(rawSummary, citeRenumber),
-    [rawSummary, citeRenumber],
-  )
+  // Render the summary exactly as the AI produced it (references untouched).
+  const summary = rawSummary
 
   // For EVERY result without an abstract, run the normal database paper search
   // (one query per paper, by DOI/PMID/title) and attach the abstract — so the AI
@@ -331,13 +301,20 @@ export function useAiLiteratureSearch({
     }
   }, [results, isStreaming, papersLoading])
 
+  // While a new query has been requested but not yet processed (or while the old
+  // answer is still in state mid-transition), the active query won't match the
+  // requested one. Gate the exposed answer on that so the PREVIOUS results never
+  // flash before the new ones render — show the loading state instead.
+  const requested = (query ?? '').trim()
+  const inSync = !requested || activeQuery === requested
+
   return {
     run,
-    summary,
-    results,
-    isStreaming,
+    summary: inSync ? summary : '',
+    results: inSync ? results : [],
+    isStreaming: isStreaming || (!!requested && !inSync),
     papersLoading: restored ? false : papersLoading,
-    error,
+    error: inSync ? error : null,
     activeQuery,
     stop,
   }
