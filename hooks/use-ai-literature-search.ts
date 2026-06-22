@@ -11,7 +11,6 @@ import {
   extractPmid,
   matchCitationToPaper,
   normalizeDoi,
-  pickAbstractFromSearch,
   resultDedupeKey,
   type CitationLike,
 } from '@/lib/ai-search-match'
@@ -58,6 +57,40 @@ function sourcesOf(msg?: UIMessage): RawSource[] {
 
 function str(v: unknown): string | undefined {
   return typeof v === 'string' && v.trim() ? v.trim() : undefined
+}
+
+/**
+ * Remove a trailing "References" / "Sources" / "Bibliography" section from the
+ * AI summary. We render our own deduped references list from the matched
+ * results, so the model's raw (often duplicated) list is dropped to avoid two
+ * lists and duplicate entries.
+ */
+function stripReferencesSection(text: string): string {
+  if (!text) return text
+  const re =
+    /\n[ \t]*(?:#{1,6}\s*)?(?:\*\*|__)?\s*(?:references|reference list|sources|bibliography|citations|works cited)\s*:?\s*(?:\*\*|__)?[ \t]*\n[\s\S]*$/i
+  const m = text.match(re)
+  return m && m.index != null ? text.slice(0, m.index).trimEnd() : text
+}
+
+/**
+ * Remap inline citation markers (`[5]`, `[5, 6]`) to the deduped, sequential
+ * card numbers and collapse duplicates within a bracket — so the numbers in the
+ * summary body line up with our references list. Safe to run only AFTER the raw
+ * references section is stripped (otherwise it would mangle that list).
+ */
+function renumberInlineCitations(text: string, map: Map<number, number>): string {
+  if (!text || map.size === 0) return text
+  return text.replace(/\[([0-9]+(?:\s*,\s*[0-9]+)*)\]/g, (full, inner: string) => {
+    const nums = inner.split(',').map((p) => parseInt(p.trim(), 10))
+    if (nums.some((n) => Number.isNaN(n))) return full
+    const mapped = nums
+      .map((n) => map.get(n))
+      .filter((n): n is number => typeof n === 'number')
+    if (mapped.length === 0) return full
+    const uniq = Array.from(new Set(mapped)).sort((a, b) => a - b)
+    return `[${uniq.join(', ')}]`
+  })
 }
 
 export function useAiLiteratureSearch({
@@ -187,10 +220,12 @@ export function useAiLiteratureSearch({
   // 1, 2, 3, … in order so their numbers are always sequential. The AI summary
   // text is rendered exactly as written — its inline references and any
   // reference list are preserved as-is (no renumber, no dedupe).
-  const results = useMemo(() => {
-    const byKey = new Set<string>()
+  const { results, renumber } = useMemo(() => {
+    const byKey = new Map<string, number>() // dedupe key -> display number
+    const renumber = new Map<number, number>() // original (1-based) -> display number
     const out: AiSearchResult[] = []
-    sources.forEach((s) => {
+    sources.forEach((s, i) => {
+      const orig = i + 1
       const url = str(s.source_url) ?? str(s.url)
       const title = str(s.source_name) ?? str(s.title)
       const snippet = str(s.cited_text) ?? str(s.excerpt) ?? str(s.snippet)
@@ -201,9 +236,14 @@ export function useAiLiteratureSearch({
       const key = paper
         ? resultDedupeKey({ title: paper.title, url: paper.articlePageUrl ?? paper.pdfUrl, doi: paper.doi })
         : resultDedupeKey(citation)
-      if (byKey.has(key)) return // duplicate paper → a card already exists
-      byKey.add(key)
+      const existing = byKey.get(key)
+      if (existing != null) {
+        renumber.set(orig, existing) // duplicate paper → folds onto the kept card
+        return
+      }
       const display = out.length + 1
+      byKey.set(key, display)
+      renumber.set(orig, display)
       // Best term for a background abstract lookup: an id (DOI/PMID, from the
       // matched paper or the citation itself) is most reliable, else the title.
       const idTerm =
@@ -241,13 +281,18 @@ export function useAiLiteratureSearch({
         abstractPending,
       })
     })
-    return out
+    return { results: out, renumber }
     // `abstractVersion` re-derives abstracts once a background lookup fills the cache.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sources, papers, abstractVersion])
 
-  // Render the summary exactly as the AI produced it (references untouched).
-  const summary = rawSummary
+  // Drop the model's raw (often duplicated) reference list and remap the inline
+  // citations to our deduped, sequential card numbers — we render our own clean
+  // references list from `results`.
+  const summary = useMemo(
+    () => renumberInlineCitations(stripReferencesSection(rawSummary), renumber),
+    [rawSummary, renumber],
+  )
 
   // For EVERY result without an abstract, run the normal database paper search
   // (one query per paper, by DOI/PMID/title) and attach the abstract — so the AI
@@ -271,17 +316,21 @@ export function useAiLiteratureSearch({
       const key = r.dedupeKey
       abstractInFlight.add(key)
       try {
-        const res = await fetch(`/api/search-papers?query=${encodeURIComponent(r.lookupTerm ?? '')}`)
+        // Fast, single-paper lookup (OpenAlex direct) — much quicker than the
+        // full literature search. The endpoint validates title matches itself.
+        const doi = r.paper?.doi || normalizeDoi(r.sourceUrl) || ''
+        const pmid = r.paper?.pmid || extractPmid(r.sourceUrl) || ''
+        const title = (r.paper?.title || r.aiTitle || '').trim()
+        const params = new URLSearchParams()
+        if (doi) params.set('doi', doi)
+        if (pmid) params.set('pmid', pmid)
+        if (title) params.set('title', title)
+        const res = await fetch(`/api/paper-abstract?${params.toString()}`)
         const data: unknown = res.ok ? await res.json() : null
-        const list = Array.isArray((data as { papers?: unknown })?.papers)
-          ? (data as { papers: SearchPaper[] }).papers
-          : []
-        const cite: CitationLike = {
-          title: r.paper?.title ?? r.aiTitle ?? null,
-          url: r.sourceUrl,
-          doi: r.paper?.doi ?? null,
-        }
-        const abs = pickAbstractFromSearch(cite, list, r.lookupById)
+        const abs =
+          data && typeof (data as { abstract?: unknown }).abstract === 'string'
+            ? (data as { abstract: string }).abstract.trim()
+            : ''
         abstractCache.set(key, abs)
       } catch {
         abstractCache.set(key, '')
@@ -293,8 +342,8 @@ export function useAiLiteratureSearch({
       }
     }
 
-    // Bounded concurrency so we don't fire dozens of slow searches at once.
-    const CONCURRENCY = 6
+    // OpenAlex is fast, so we can fan out more aggressively.
+    const CONCURRENCY = 8
     let idx = 0
     const worker = async () => {
       while (!cancelled && idx < queue.length) {

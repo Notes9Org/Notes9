@@ -12,7 +12,29 @@ import { Notes9ChatLoader } from '@/components/catalyst/notes9-chat-loader'
 import { openCatalystPanel } from '@/lib/catalyst-launch'
 import { useResizable } from '@/hooks/use-resizable'
 import { applyAiFilters, DEFAULT_AI_FILTERS, type AiResultFilters } from '@/lib/ai-search-filters'
+import { decodeHtmlEntities } from '@/lib/literature-abstract-display'
 import type { SearchPaper } from '@/types/paper-search'
+import type { AiSearchResult } from '@/types/ai-search'
+
+/** Best external link for a reference (matched metadata first, then the cited URL). */
+function refHref(r: AiSearchResult): string | null {
+  const p = r.paper
+  if (p?.articlePageUrl && /^https?:\/\//i.test(p.articlePageUrl)) return p.articlePageUrl
+  if (p?.pdfUrl && /^https?:\/\//i.test(p.pdfUrl)) return p.pdfUrl
+  const doi = p?.doi?.replace(/^https?:\/\/(dx\.)?doi\.org\//i, '').trim()
+  if (doi) return `https://doi.org/${doi}`
+  if (p?.pmid) return `https://pubmed.ncbi.nlm.nih.gov/${p.pmid}/`
+  if (r.sourceUrl && /^https?:\/\//i.test(r.sourceUrl)) return r.sourceUrl
+  return null
+}
+
+function refMeta(r: AiSearchResult): string {
+  const authors = r.paper?.authors ?? []
+  const lead = authors[0] ? `${decodeHtmlEntities(authors[0])}${authors.length > 1 ? ' et al.' : ''}` : ''
+  const journal = r.paper?.journal ? decodeHtmlEntities(r.paper.journal) : ''
+  const year = r.paper?.year || null
+  return [lead, journal, year].filter(Boolean).join(' · ')
+}
 
 function CardSkeleton() {
   return (
@@ -181,6 +203,64 @@ export function AiSearchView({
             )}
           </CardContent>
         </Card>
+
+        {/* References — our own deduped, sequentially-numbered list (no model
+            duplicates). Shows a loading shimmer until the results resolve. */}
+        {(loading || displayed.length > 0) && (
+          <Card className="mt-4">
+            <CardContent className="p-4">
+              <h3 className="mb-3 text-sm font-semibold uppercase tracking-wide text-foreground">
+                References
+              </h3>
+              {displayed.length === 0 ? (
+                <div className="space-y-3" aria-busy="true">
+                  {[0, 1, 2, 3].map((i) => (
+                    <div key={i} className="flex gap-2">
+                      <div className="mt-0.5 h-3 w-5 shrink-0 animate-pulse rounded bg-foreground/10" />
+                      <div className="min-w-0 flex-1 space-y-1.5">
+                        <div className="h-3 w-[90%] animate-pulse rounded bg-foreground/10" />
+                        <div className="h-3 w-1/2 animate-pulse rounded bg-foreground/10" />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <ol className="space-y-2.5">
+                  {displayed.map((r) => {
+                    const href = refHref(r)
+                    const title = decodeHtmlEntities(r.paper?.title || r.aiTitle || 'Untitled')
+                    const meta = refMeta(r)
+                    return (
+                      <li
+                        key={`${r.citeLabel}-${r.dedupeKey}`}
+                        className="flex gap-2 text-sm duration-300 animate-in fade-in"
+                      >
+                        <span className="mt-0.5 shrink-0 font-mono text-xs tabular-nums text-muted-foreground">
+                          [{r.citeLabel}]
+                        </span>
+                        <span className="min-w-0">
+                          {href ? (
+                            <a
+                              href={href}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="font-medium leading-snug text-foreground underline-offset-2 hover:underline"
+                            >
+                              {title}
+                            </a>
+                          ) : (
+                            <span className="font-medium leading-snug text-foreground">{title}</span>
+                          )}
+                          {meta && <span className="mt-0.5 block text-xs text-muted-foreground">{meta}</span>}
+                        </span>
+                      </li>
+                    )
+                  })}
+                </ol>
+              )}
+            </CardContent>
+          </Card>
+        )}
       </aside>
     </div>
   )
