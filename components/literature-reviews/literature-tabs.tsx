@@ -917,14 +917,14 @@ export function LiteratureTabs({
 
   return (
     <div className="w-full space-y-4">
-      <div className="inline-flex rounded-lg border border-border bg-muted/40 p-1">
+      <div className="inline-flex rounded-2xl border border-border/60 bg-muted/30 p-1 shadow-sm backdrop-blur-sm">
         <button
           type="button"
           onClick={() => setTopSection("search")}
           className={cn(
-            "inline-flex items-center gap-2 rounded-md px-4 py-2 text-sm font-medium transition-colors",
+            "inline-flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-medium transition-all duration-200",
             topSection === "search"
-              ? "bg-background text-foreground shadow-sm"
+              ? "bg-background text-foreground shadow-sm ring-1 ring-border/50"
               : "text-muted-foreground hover:text-foreground"
           )}
         >
@@ -932,7 +932,7 @@ export function LiteratureTabs({
           Search & read
           {stagedItems.length > 0 && (
             <span
-              className="ml-0.5 rounded-full bg-primary/10 px-1.5 py-0 text-xs text-primary"
+              className="ml-0.5 rounded-full bg-primary/12 px-1.5 py-0 text-xs font-semibold tabular-nums text-primary"
               title={`${stagedItems.length} paper${stagedItems.length === 1 ? "" : "s"} in staging`}
             >
               {stagedItems.length}
@@ -943,9 +943,9 @@ export function LiteratureTabs({
           type="button"
           onClick={() => setTopSection("repo")}
           className={cn(
-            "inline-flex items-center gap-2 rounded-md px-4 py-2 text-sm font-medium transition-colors",
+            "inline-flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-medium transition-all duration-200",
             topSection === "repo"
-              ? "bg-background text-foreground shadow-sm"
+              ? "bg-background text-foreground shadow-sm ring-1 ring-border/50"
               : "text-muted-foreground hover:text-foreground"
           )}
         >
@@ -956,13 +956,13 @@ export function LiteratureTabs({
 
       {topSection === "search" ? (
         <div className="space-y-6">
+          {/* Filters live next to the results (see AiSearchView) so they're
+              right where you read the papers — not buried in the search bar. */}
           <LiteratureSearchForm
             query={query}
             setQuery={setQuery}
             isSearching={isSearching}
             onSearch={handleSearch}
-            filters={aiFilters}
-            onFiltersChange={setAiFilters}
           />
 
           {resolvedActiveTab !== "search" && (
@@ -1044,6 +1044,8 @@ export function LiteratureTabs({
               onSortModeChange={handleSearchSortChange}
               openAccessOnly={openAccessOnlySearch}
               onOpenAccessOnlyChange={handleOpenAccessSearchChange}
+              filters={aiFilters}
+              onFiltersChange={setAiFilters}
               aiQuery={submittedQuery}
             />
           )}

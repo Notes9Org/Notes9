@@ -4,11 +4,12 @@ import { useState } from 'react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
-import { BookOpen, Check, Database, ExternalLink, Globe, Loader2, MessageCircle } from 'lucide-react'
+import { BookOpen, Check, Database, ExternalLink, Loader2, MessageCircle, Unlock } from 'lucide-react'
 import { decodeHtmlEntities, formatLiteratureAbstractPlain } from '@/lib/literature-abstract-display'
 import { cn } from '@/lib/utils'
 import { savePaperToRepository } from '@/app/(app)/literature-reviews/actions'
-import { openCatalystPanel } from '@/lib/catalyst-launch'
+import { openCatalystPanel, attachToCatalyst } from '@/lib/catalyst-launch'
+import { flyToCatalyst } from '@/lib/fly-to-catalyst'
 import { citationToSearchPaper } from '@/lib/ai-search-match'
 import type { AiSearchResult } from '@/types/ai-search'
 import type { SearchPaper } from '@/types/paper-search'
@@ -23,14 +24,6 @@ function readUrl(r: AiSearchResult): string | null {
   if (p?.pmid) return `https://pubmed.ncbi.nlm.nih.gov/${p.pmid}/`
   if (r.sourceUrl && /^https?:\/\//i.test(r.sourceUrl)) return r.sourceUrl
   return null
-}
-
-const MATCH_HINT: Record<AiSearchResult['matchKind'], string> = {
-  doi: 'Matched by DOI',
-  pmid: 'Matched by PMID',
-  title: 'Matched by title',
-  url: 'Matched by link',
-  none: 'From AI web search',
 }
 
 export function AiPaperCard({
@@ -69,7 +62,6 @@ export function AiPaperCard({
     .filter(Boolean)
     .join(' • ')
   const href = readUrl(result)
-  const isWeb = result.matchKind === 'none'
   const isOpenAccess = !!(result.paper?.isOpenAccess || result.paper?.pdfUrl)
 
   // "Read" does the same job as the database "Stage" button: stage the paper
@@ -109,51 +101,57 @@ export function AiPaperCard({
     }
   }
 
-  const handleAsk = () => {
+  const handleAsk = (e?: React.MouseEvent<HTMLElement>) => {
     // Open-access PDF → load it into Catalyst so the AI can read the full paper.
     const pdfUrl = result.paper?.pdfUrl
-    const attachments =
-      pdfUrl && /^https?:\/\//i.test(pdfUrl)
-        ? [{ url: pdfUrl, name: `${title.slice(0, 100)}.pdf`, contentType: 'application/pdf' }]
-        : undefined
-    const ctx = !attachments && href ? ` (${href})` : ''
+    const hasPdf = !!(pdfUrl && /^https?:\/\//i.test(pdfUrl))
+    // Open the panel first (empty composer = landing pad). The query stays clean —
+    // no raw URL pasted into the chat (which renders as an ugly text link).
     openCatalystPanel({
       scope: 'literature',
-      webSearch: !attachments,
-      query: `About the paper "${title}"${ctx}: `,
-      attachments,
+      webSearch: !hasPdf, // no full text to read → let the AI search the web
+      query: `About the paper "${title}": `,
       autoSend: false,
     })
+    if (hasPdf) {
+      // Fly the paper in and reveal the PDF pill once it lands in the chat bar.
+      const attachments = [
+        { url: pdfUrl!, name: `${title.slice(0, 100)}.pdf`, contentType: 'application/pdf' },
+      ]
+      flyToCatalyst(e?.currentTarget ?? null, { onLand: () => attachToCatalyst(attachments) })
+    } else {
+      // No open-access PDF to attach — don't fly a paper that won't land as a
+      // pill. Prompt the user to bring the full text in themselves.
+      toast.info('No open-access PDF for this paper. Download it from the source, then upload it in Catalyst to analyze the full text.')
+    }
   }
 
   return (
-    <Card className="transition-shadow hover:shadow-md">
-      <CardContent className="p-4">
+    <Card className="group/card overflow-hidden rounded-2xl border-border/60 bg-card/70 shadow-sm backdrop-blur-sm transition-all duration-300 hover:-translate-y-1 hover:border-primary/30 hover:shadow-[0_16px_40px_-20px_var(--n9-accent-glow)]">
+      <CardContent className="p-4 sm:p-5">
         <div className="mb-2 flex flex-wrap items-center gap-2">
-          <Badge variant="outline" className="gap-1 text-xs font-mono tabular-nums">
-            [{result.citeLabel}]
+          <Badge className="gap-1 rounded-full border-primary/20 bg-primary/10 font-mono text-xs tabular-nums text-primary">
+            {result.citeLabel}
           </Badge>
-          <Badge
-            variant="outline"
-            className={`gap-1 text-2xs ${
-              isWeb
-                ? 'bg-sky-50 text-sky-700 border-sky-200 dark:bg-sky-950/40 dark:text-sky-300'
-                : 'bg-violet-50 text-violet-700 border-violet-200 dark:bg-violet-950/40 dark:text-violet-300'
-            }`}
-          >
-            {isWeb ? <Globe className="size-3" /> : <BookOpen className="size-3" />}
-            {MATCH_HINT[result.matchKind]}
-          </Badge>
+          {isOpenAccess && (
+            <Badge
+              variant="outline"
+              className="gap-1 text-2xs bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300"
+            >
+              <Unlock className="size-3" />
+              Open access
+            </Badge>
+          )}
           {journalYear && <span className="text-xs text-muted-foreground">{journalYear}</span>}
         </div>
 
-        <h3 className="mb-1 text-base font-semibold leading-tight text-foreground">
+        <h3 className="mb-1 text-[15px] font-semibold leading-snug tracking-tight text-foreground transition-colors group-hover/card:text-primary">
           {href ? (
             <a
               href={href}
               target="_blank"
               rel="noopener noreferrer"
-              className="hover:underline underline-offset-2 decoration-foreground/40"
+              className="underline-offset-2 hover:underline decoration-primary/40"
             >
               {title}
             </a>
@@ -161,24 +159,12 @@ export function AiPaperCard({
             title
           )}
         </h3>
-        {authors && <p className="mb-2 text-sm text-muted-foreground">{authors}</p>}
-
-        {/* Relevant excerpt — the AI's direct quote from the paper, when present. */}
-        {result.snippet?.trim() && (
-          <div className="mb-3 rounded-md border border-primary/15 bg-primary/[0.04] p-3">
-            <p className="mb-1 text-2xs font-semibold uppercase tracking-wider text-primary/70">
-              Relevant excerpt
-            </p>
-            <p className="text-sm leading-relaxed text-foreground/90 italic whitespace-pre-wrap">
-              “{result.snippet.trim()}”
-            </p>
-          </div>
-        )}
+        {authors && <p className="mb-3 text-sm text-muted-foreground">{authors}</p>}
 
         {/* Abstract — always shown for every paper when one is available, with a
             smooth shimmer while it's being fetched so it fades in (no flash). */}
         {abstractPlain ? (
-          <div className="mb-3 rounded-md bg-muted/40 p-3 duration-300 animate-in fade-in">
+          <div className="mb-3 rounded-xl bg-muted/40 p-3.5 duration-300 animate-in fade-in">
             <p className="mb-1 text-2xs font-semibold uppercase tracking-wider text-muted-foreground">
               Abstract
             </p>
@@ -194,22 +180,22 @@ export function AiPaperCard({
               <button
                 type="button"
                 onClick={() => setShowAbstract((v) => !v)}
-                className="mt-1 text-xs text-muted-foreground hover:text-foreground"
+                className="mt-1.5 text-xs font-medium text-primary/80 transition-colors hover:text-primary"
               >
-                {showAbstract ? 'Show less' : 'Read more'}
+                {showAbstract ? 'Show less ↑' : 'Read more ↓'}
               </button>
             )}
           </div>
         ) : result.abstractPending ? (
-          <div className="mb-3 rounded-md bg-muted/40 p-3" aria-busy="true">
+          <div className="n9-skeleton-shimmer mb-3 rounded-xl bg-muted/40 p-3.5" aria-busy="true">
             <div className="mb-2 flex items-center gap-1.5 text-2xs font-semibold uppercase tracking-wider text-muted-foreground">
               <Loader2 className="size-3 animate-spin" />
               Loading abstract
             </div>
             <div className="space-y-1.5">
-              <div className="h-3 w-full animate-pulse rounded bg-foreground/10" />
-              <div className="h-3 w-[94%] animate-pulse rounded bg-foreground/10" />
-              <div className="h-3 w-[82%] animate-pulse rounded bg-foreground/10" />
+              <div className="h-3 w-full rounded bg-foreground/10" />
+              <div className="h-3 w-[94%] rounded bg-foreground/10" />
+              <div className="h-3 w-[82%] rounded bg-foreground/10" />
             </div>
           </div>
         ) : !result.snippet?.trim() ? (
@@ -220,16 +206,16 @@ export function AiPaperCard({
           </p>
         ) : null}
 
-        <div className="flex flex-wrap items-center gap-2 border-t pt-3">
+        <div className="flex flex-wrap items-center gap-2 border-t border-border/50 pt-3">
           {href && (
-            <Button variant="ghost" size="sm" asChild title="Open source in a new tab">
+            <Button variant="ghost" size="sm" asChild title="Open source in a new tab" className="rounded-lg text-muted-foreground hover:text-foreground">
               <a href={href} target="_blank" rel="noopener noreferrer" className="gap-1.5">
                 <ExternalLink className="size-3.5" />
                 Source
               </a>
             </Button>
           )}
-          <Button variant="outline" size="sm" className="gap-1.5" onClick={handleAsk} title="Ask Catalyst about this paper">
+          <Button variant="outline" size="sm" className="gap-1.5 rounded-lg" onClick={(e) => handleAsk(e)} title="Ask Catalyst about this paper">
             <MessageCircle className="size-3.5" />
             Ask Catalyst
           </Button>
@@ -241,11 +227,12 @@ export function AiPaperCard({
             disabled={saving || saved}
             title="Save to repository"
             aria-label="Save to repository"
+            className="rounded-lg"
           >
             {saving ? (
               <Loader2 className="size-3.5 animate-spin" />
             ) : saved ? (
-              <Check className="size-3.5" />
+              <Check className="size-3.5 text-emerald-600 dark:text-emerald-400" />
             ) : (
               <Database className="size-3.5" />
             )}
@@ -253,7 +240,7 @@ export function AiPaperCard({
           <Button
             variant="default"
             size="sm"
-            className="gap-1.5"
+            className="gap-1.5 rounded-lg bg-primary shadow-sm transition-all hover:bg-[var(--n9-accent-hover)] hover:shadow-[0_6px_16px_-8px_var(--n9-accent-glow)]"
             onClick={handleRead}
             disabled={isStaging}
             title="Read in Notes9 (open-access loads the PDF; closed asks for upload)"

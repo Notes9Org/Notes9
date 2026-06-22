@@ -1394,3 +1394,55 @@ body > [data-radix-popper-content-wrapper] {
     color: var(--muted-foreground);
   }
 }
+
+/* Skeleton shimmer: a soft light sweep across loading placeholders. Apply to a
+   muted-background block for a more "alive" loading state than a flat pulse. */
+.n9-skeleton-shimmer {
+  position: relative;
+  overflow: hidden;
+}
+.n9-skeleton-shimmer::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    color-mix(in oklab, var(--foreground) 8%, transparent) 50%,
+    transparent 100%
+  );
+  animation: n9-skeleton-sweep 1.6s ease-in-out infinite;
+}
+@keyframes n9-skeleton-sweep {
+  100% {
+    transform: translateX(100%);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .n9-skeleton-shimmer::after {
+    animation: none;
+  }
+}
+
+/* Brief ring + glow flash on the result card a clicked inline citation points
+   to, so the eye lands on the right paper after the scroll. */
+.n9-cite-target {
+  animation: n9-cite-flash 1.4s ease-out;
+}
+@keyframes n9-cite-flash {
+  0% {
+    box-shadow: 0 0 0 0 var(--n9-accent-glow);
+  }
+  20% {
+    box-shadow: 0 0 0 4px var(--n9-accent-glow);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(0, 0, 0, 0);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .n9-cite-target {
+    animation: none;
+  }
+}

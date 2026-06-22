@@ -1,5 +1,6 @@
 'use client'
 
+import { useEffect, useState } from 'react'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -33,12 +34,59 @@ function toYear(v: string): number | null {
   return Number.isFinite(n) && n >= 1800 && n <= 2100 ? n : null
 }
 
+/**
+ * A free-typing year field. Holds its own raw text so partial input (e.g. "2",
+ * "20", "202" on the way to "2024") is never wiped — only complete, in-range
+ * years are committed to the filter. Normalizes on blur.
+ */
+function YearField({
+  value,
+  placeholder,
+  onCommit,
+}: {
+  value: number | null
+  placeholder: string
+  onCommit: (year: number | null) => void
+}) {
+  const [text, setText] = useState(value != null ? String(value) : '')
+
+  // Reflect external changes (e.g. "Clear") without clobbering active typing.
+  useEffect(() => {
+    setText((prev) => (toYear(prev) === value ? prev : value != null ? String(value) : ''))
+  }, [value])
+
+  return (
+    <Input
+      type="text"
+      inputMode="numeric"
+      pattern="[0-9]*"
+      maxLength={4}
+      placeholder={placeholder}
+      className="h-8 tabular-nums"
+      value={text}
+      onChange={(e) => {
+        const digits = e.target.value.replace(/[^0-9]/g, '').slice(0, 4)
+        setText(digits)
+        onCommit(toYear(digits))
+      }}
+      onBlur={() => {
+        const y = toYear(text)
+        setText(y != null ? String(y) : '')
+        onCommit(y)
+      }}
+    />
+  )
+}
+
 export function AiSearchFilters({
   value,
   onChange,
+  triggerClassName,
 }: {
   value: AiResultFilters
   onChange: (next: AiResultFilters) => void
+  /** Override the trigger button sizing (e.g. compact `h-8` near results). */
+  triggerClassName?: string
 }) {
   const active = countActiveFilters(value)
   const set = (patch: Partial<AiResultFilters>) => onChange({ ...value, ...patch })
@@ -48,7 +96,7 @@ export function AiSearchFilters({
   return (
     <Popover>
       <PopoverTrigger asChild>
-        <Button variant="outline" className="h-11 gap-1.5">
+        <Button variant="outline" className={cn('h-11 gap-1.5', triggerClassName)}>
           <SlidersHorizontal className="size-4" />
           Filters
           {active > 0 && (
@@ -143,22 +191,28 @@ export function AiSearchFilters({
           <div className="grid grid-cols-[5rem_1fr] items-center gap-3">
             <Label className="text-xs text-muted-foreground">Year</Label>
             <div className="flex items-center gap-2">
-              <Input
-                type="number"
-                inputMode="numeric"
+              <YearField
+                value={value.yearFrom}
                 placeholder="From"
-                className="h-8"
-                value={value.yearFrom ?? ''}
-                onChange={(e) => set({ yearFrom: toYear(e.target.value) })}
+                onCommit={(yearFrom) =>
+                  set(
+                    yearFrom != null && value.yearTo != null && yearFrom > value.yearTo
+                      ? { yearFrom, yearTo: yearFrom }
+                      : { yearFrom },
+                  )
+                }
               />
               <span className="text-muted-foreground">–</span>
-              <Input
-                type="number"
-                inputMode="numeric"
+              <YearField
+                value={value.yearTo}
                 placeholder="To"
-                className="h-8"
-                value={value.yearTo ?? ''}
-                onChange={(e) => set({ yearTo: toYear(e.target.value) })}
+                onCommit={(yearTo) =>
+                  set(
+                    yearTo != null && value.yearFrom != null && yearTo < value.yearFrom
+                      ? { yearTo, yearFrom: yearTo }
+                      : { yearTo },
+                  )
+                }
               />
             </div>
           </div>

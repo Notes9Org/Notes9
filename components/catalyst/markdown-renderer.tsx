@@ -200,6 +200,13 @@ interface MarkdownRendererProps {
    * metadata in data-* attributes (`data-cite-n`, `data-cite-token`,
    * `data-cite-name`). When absent, `[N]` renders as plain text. */
   citationsManifest?: CitationsManifest | null;
+  /**
+   * When provided, clicking an inline `[N]` citation calls this with the label
+   * instead of opening the source viewer/deep-link, and hover previews are
+   * suppressed. Return `false` to fall through to the default behavior. Used by
+   * the literature search to scroll the matching result card into view.
+   */
+  onCitationClick?: (label: string) => boolean | void;
 }
 
 // `[N]` matcher used by the citation chip post-processor. Limited to 1-3 digit
@@ -587,6 +594,7 @@ export function MarkdownRenderer({
   className,
   showCursor = false,
   citationsManifest,
+  onCitationClick,
 }: MarkdownRendererProps) {
   const router = useRouter();
   const containerRef = useRef<HTMLDivElement>(null);
@@ -680,6 +688,8 @@ export function MarkdownRenderer({
       if (chipEl.tagName === 'A') return;
       e.preventDefault();
       const chip = readChipData(chipEl);
+      // Host override (e.g. literature search scrolls to the result card).
+      if (onCitationClick && onCitationClick(chip.label) !== false) return;
       // When we have a supporting span/excerpt, open the source viewer so the
       // user can read the exact passage highlighted in context (G3). Otherwise
       // fall back to the legacy deep-link navigation.
@@ -689,11 +699,14 @@ export function MarkdownRenderer({
         openChip(chip);
       }
     },
-    [openChip, openViewer]
+    [openChip, openViewer, onCitationClick]
   );
 
   const onMouseOver = useCallback(
     (e: React.MouseEvent<HTMLDivElement>) => {
+      // When the host owns clicks AND there's no manifest to preview, skip the
+      // hover card. With a manifest (e.g. literature search), still show it.
+      if (onCitationClick && !hasManifest) return;
       const chipEl = (e.target as HTMLElement).closest<HTMLElement>('.notes9-cite');
       if (!chipEl) {
         // Not over a chip: defer dismissal so the pointer can reach the card.
@@ -703,7 +716,7 @@ export function MarkdownRenderer({
       cancelHoverClose();
       setHover({ chip: readChipData(chipEl), anchor: chipEl.getBoundingClientRect() });
     },
-    [cancelHoverClose, scheduleHoverClose]
+    [cancelHoverClose, scheduleHoverClose, onCitationClick, hasManifest]
   );
 
   // Scroll invalidates the anchored position → dismiss so the card never floats

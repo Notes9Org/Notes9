@@ -8,6 +8,7 @@ import { createClient } from '@/lib/supabase/client'
 import type { SearchPaper } from '@/types/paper-search'
 import type { AiSearchResult } from '@/types/ai-search'
 import {
+  citationToSearchPaper,
   extractPmid,
   matchCitationToPaper,
   normalizeDoi,
@@ -23,12 +24,25 @@ type RawSource = Record<string, unknown>
 type CachedAi = { summary: string; sources: RawSource[]; papers: SearchPaper[] }
 const aiSearchCache = new Map<string, CachedAi>()
 
-/** Abstracts looked up for results that arrived without one (AI web sources not
- * in the initial paper search). Keyed by result identity; '' means "looked up,
- * none found" so we never re-fetch. Module-level so it survives remounts. */
-const abstractCache = new Map<string, string>()
+/** Per-paper metadata resolved from the database (OpenAlex) for results that
+ * arrived without it — the abstract AND the open-access PDF link + identifiers,
+ * so every cited paper shows an abstract and open-access PDFs definitely render.
+ * Keyed by result identity; a stored entry (even an empty one) means "already
+ * looked up" so we never re-fetch. Module-level so it survives remounts. */
+interface ResolvedMeta {
+  abstract: string
+  pdfUrl: string | null
+  articlePageUrl: string | null
+  isOpenAccess: boolean
+  doi: string | null
+  pmid: string | null
+  year: number | null
+  journal: string | null
+  authors: string[]
+}
+const resolveCache = new Map<string, ResolvedMeta>()
 /** Lookups currently running, so re-renders never start a duplicate fetch. */
-const abstractInFlight = new Set<string>()
+const resolveInFlight = new Set<string>()
 
 function latestAssistant(messages: UIMessage[]): UIMessage | undefined {
   for (let i = messages.length - 1; i >= 0; i--) {
@@ -91,6 +105,40 @@ function renumberInlineCitations(text: string, map: Map<number, number>): string
     const uniq = Array.from(new Set(mapped)).sort((a, b) => a - b)
     return `[${uniq.join(', ')}]`
   })
+}
+
+/**
+ * Build the paper attached to a result so open-access PDFs always render and the
+ * metadata is complete: start from the matched database paper (or a synthesized
+ * one when the AI cited a web source we couldn't match) and fill any gaps from
+ * the database lookup — PDF link, open-access flag, ids, journal, year, authors.
+ */
+function enrichPaper(
+  matched: SearchPaper | null,
+  citation: CitationLike,
+  title: string | undefined,
+  snippet: string | undefined,
+  abstract: string | null,
+  meta: ResolvedMeta | null,
+): SearchPaper | null {
+  if (!matched && !meta && !title && !citation.url && !citation.doi) return null
+  const base =
+    matched ??
+    citationToSearchPaper({ title: title ?? null, url: citation.url, doi: citation.doi, snippet })
+  const out: SearchPaper = { ...base }
+  if (abstract && !str(out.abstract ?? undefined)) out.abstract = abstract
+  if (meta) {
+    if (!out.pdfUrl && meta.pdfUrl) out.pdfUrl = meta.pdfUrl
+    if (!out.articlePageUrl && meta.articlePageUrl) out.articlePageUrl = meta.articlePageUrl
+    if (meta.isOpenAccess) out.isOpenAccess = true
+    if (!out.doi && meta.doi) out.doi = meta.doi
+    if (!out.pmid && meta.pmid) out.pmid = meta.pmid
+    if ((!out.year || out.year <= 0) && meta.year) out.year = meta.year
+    if (!str(out.journal ?? undefined) && meta.journal) out.journal = meta.journal
+    if ((!out.authors || out.authors.length === 0) && meta.authors.length) out.authors = meta.authors
+    if (!str(out.abstract ?? undefined) && meta.abstract) out.abstract = meta.abstract
+  }
+  return out
 }
 
 export function useAiLiteratureSearch({
@@ -256,23 +304,26 @@ export function useAiLiteratureSearch({
       const titleTerm = (paper?.title || title || '').trim()
       const lookupTerm = idTerm ?? (titleTerm.length >= 8 ? titleTerm : null)
       const lookupById = !!idTerm
-      // Abstract, in order: matched DB paper → source payload → background lookup.
+      const meta = resolveCache.get(key) ?? null
+      // Abstract, in order: matched DB paper → source payload → database lookup.
       const abstract =
         str(paper?.abstract ?? undefined) ??
         str(s.abstract) ??
         str(s.description) ??
         str(s.summary) ??
-        (abstractCache.get(key) || null)
-      // Pending = no abstract yet, a lookup is possible, and we haven't recorded
-      // a result for it. Once the cache holds the key (a string or ''), it's no
-      // longer pending — either the abstract is shown or it's genuinely absent.
-      const abstractPending = !abstract && !!lookupTerm && !abstractCache.has(key)
+        (meta?.abstract || null)
+      // Pending = no abstract yet, a lookup is possible (by id, title, OR the
+      // cited URL), and we haven't finished resolving this paper. It stays true
+      // for the WHOLE multi-source fetch — only the cache being set (after every
+      // source has been tried) clears it, so the loader never disappears early.
+      const canResolve = !!lookupTerm || !!url || !!paper?.articlePageUrl
+      const abstractPending = !abstract && canResolve && !resolveCache.has(key)
       out.push({
         citeLabel: String(display),
         snippet: snippet ?? '',
         aiTitle: title ?? null,
         sourceUrl: url ?? null,
-        paper,
+        paper: enrichPaper(paper, citation, title, snippet, abstract, meta),
         matchKind,
         abstract,
         dedupeKey: key,
@@ -294,10 +345,11 @@ export function useAiLiteratureSearch({
     [rawSummary, renumber],
   )
 
-  // For EVERY result without an abstract, run the normal database paper search
-  // (one query per paper, by DOI/PMID/title) and attach the abstract — so the AI
-  // results always show an abstract just like the database results. Runs in the
-  // background, a few in parallel, filling cards in progressively.
+  // For EVERY result missing an abstract OR a PDF link, resolve it against the
+  // database (OpenAlex direct, by DOI/PMID/title) and attach the abstract +
+  // open-access PDF + identifiers — so every AI result shows an abstract and
+  // open-access papers definitely render their full PDF (matching the database
+  // results). Runs in the background, a few in parallel, filling cards as it goes.
   useEffect(() => {
     // Wait until the answer + initial paper search settle, so papers already in
     // the search results match locally instead of triggering a network lookup.
@@ -305,16 +357,32 @@ export function useAiLiteratureSearch({
     let cancelled = false
 
     const queue = results.filter((r) => {
-      if (str(r.abstract ?? undefined)) return false
-      if (!r.lookupTerm) return false
+      const canResolve = !!r.lookupTerm || !!r.sourceUrl || !!r.paper?.articlePageUrl
+      if (!canResolve) return false
       // Same key the results memo reads back with — guaranteed not to drift.
-      return !abstractCache.has(r.dedupeKey) && !abstractInFlight.has(r.dedupeKey)
+      if (resolveCache.has(r.dedupeKey) || resolveInFlight.has(r.dedupeKey)) return false
+      const hasAbstract = !!str(r.abstract ?? undefined)
+      const hasPdf = !!r.paper?.pdfUrl
+      // Resolve when we're missing an abstract or an open-access PDF link.
+      return !hasAbstract || !hasPdf
     })
     if (queue.length === 0) return
 
+    const EMPTY_META: ResolvedMeta = {
+      abstract: '',
+      pdfUrl: null,
+      articlePageUrl: null,
+      isOpenAccess: false,
+      doi: null,
+      pmid: null,
+      year: null,
+      journal: null,
+      authors: [],
+    }
+
     const lookupOne = async (r: AiSearchResult) => {
       const key = r.dedupeKey
-      abstractInFlight.add(key)
+      resolveInFlight.add(key)
       try {
         // Fast, single-paper lookup (OpenAlex direct) — much quicker than the
         // full literature search. The endpoint validates title matches itself.
@@ -325,19 +393,29 @@ export function useAiLiteratureSearch({
         if (doi) params.set('doi', doi)
         if (pmid) params.set('pmid', pmid)
         if (title) params.set('title', title)
+        // The cited URL lets the resolver read the abstract straight off the
+        // source page when no index matched the paper.
+        const srcUrl = r.paper?.articlePageUrl || r.sourceUrl || ''
+        if (srcUrl) params.set('url', srcUrl)
         const res = await fetch(`/api/paper-abstract?${params.toString()}`)
-        const data: unknown = res.ok ? await res.json() : null
-        const abs =
-          data && typeof (data as { abstract?: unknown }).abstract === 'string'
-            ? (data as { abstract: string }).abstract.trim()
-            : ''
-        abstractCache.set(key, abs)
+        const data = res.ok ? ((await res.json()) as Partial<ResolvedMeta>) : null
+        resolveCache.set(key, {
+          abstract: typeof data?.abstract === 'string' ? data.abstract.trim() : '',
+          pdfUrl: data?.pdfUrl ?? null,
+          articlePageUrl: data?.articlePageUrl ?? null,
+          isOpenAccess: !!data?.isOpenAccess,
+          doi: data?.doi ?? null,
+          pmid: data?.pmid ?? null,
+          year: typeof data?.year === 'number' ? data.year : null,
+          journal: data?.journal ?? null,
+          authors: Array.isArray(data?.authors) ? data!.authors! : [],
+        })
       } catch {
-        abstractCache.set(key, '')
+        resolveCache.set(key, EMPTY_META)
       } finally {
-        abstractInFlight.delete(key)
+        resolveInFlight.delete(key)
         // Re-derive on EVERY completion (found or not) so the card's loading
-        // shimmer resolves to the abstract or the "unavailable" state.
+        // shimmer resolves to the abstract/PDF or the "unavailable" state.
         if (!cancelled) setAbstractVersion((v) => v + 1)
       }
     }
@@ -357,6 +435,44 @@ export function useAiLiteratureSearch({
     }
   }, [results, isStreaming, papersLoading])
 
+  // Final pass: renumber inline citations AND result labels to 1, 2, 3, … in the
+  // order the summary first cites them — so the inline markers and the references
+  // list always read ascending from 1 with no gaps, no matter which sources the
+  // model cited. Papers not cited inline are appended after the cited ones.
+  const { displaySummary, displayResults } = useMemo(() => {
+    const order: string[] = []
+    const seen = new Set<string>()
+    for (const m of summary.matchAll(/\[(\d+(?:\s*,\s*\d+)*)\]/g)) {
+      for (const part of m[1].split(',')) {
+        const lbl = part.trim()
+        if (lbl && !seen.has(lbl)) {
+          seen.add(lbl)
+          order.push(lbl)
+        }
+      }
+    }
+    if (order.length === 0) return { displaySummary: summary, displayResults: results }
+    const map = new Map<string, string>()
+    let k = 1
+    for (const old of order) if (!map.has(old)) map.set(old, String(k++))
+    for (const r of results) if (!map.has(r.citeLabel)) map.set(r.citeLabel, String(k++))
+    const newSummary = summary.replace(/\[(\d+(?:\s*,\s*\d+)*)\]/g, (full, inner: string) => {
+      const mapped = inner
+        .split(',')
+        .map((s) => map.get(s.trim()))
+        .filter((x): x is string => !!x)
+      if (mapped.length === 0) return full
+      const uniq = Array.from(new Set(mapped)).sort((a, b) => Number(a) - Number(b))
+      return `[${uniq.join(', ')}]`
+    })
+    const newResults = results
+      .map((r) => ({ ...r, citeLabel: map.get(r.citeLabel) ?? r.citeLabel }))
+      // Keep the cards in the same 1, 2, 3, … order as the inline citations and
+      // the references list, so a card's number always matches everywhere.
+      .sort((a, b) => Number(a.citeLabel) - Number(b.citeLabel))
+    return { displaySummary: newSummary, displayResults: newResults }
+  }, [summary, results])
+
   // While a new query has been requested but not yet processed (or while the old
   // answer is still in state mid-transition), the active query won't match the
   // requested one. Gate the exposed answer on that so the PREVIOUS results never
@@ -366,8 +482,8 @@ export function useAiLiteratureSearch({
 
   return {
     run,
-    summary: inSync ? summary : '',
-    results: inSync ? results : [],
+    summary: inSync ? displaySummary : '',
+    results: inSync ? displayResults : [],
     isStreaming: isStreaming || (!!requested && !inSync),
     papersLoading: restored ? false : papersLoading,
     error: inSync ? error : null,

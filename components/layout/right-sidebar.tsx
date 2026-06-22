@@ -114,7 +114,8 @@ import {
   catalystMentionPath,
 } from '@/lib/catalyst-mention-types';
 import { isLikelyUuid } from '@/lib/url-project-param';
-import type { CatalystLaunchDetail } from '@/lib/catalyst-launch';
+import type { CatalystLaunchDetail, CatalystAttachDetail } from '@/lib/catalyst-launch';
+import { CATALYST_ATTACH_EVENT } from '@/lib/catalyst-launch';
 import { useLiteratureMentionCandidates } from '@/contexts/literature-mention-context';
 import { useLiteratureAgentStream } from '@/hooks/use-literature-agent-stream';
 import type { LiteratureAgentDonePayload } from '@/lib/literature-agent-types';
@@ -2480,6 +2481,24 @@ export function RightSidebar({
     applyCatalystLaunch,
     onPendingLaunchConsumed,
   ]);
+
+  // Late-attach: a "fly to Catalyst" flourish drops the paper into the composer
+  // and, once it lands, dispatches this event so the attachment appears in the
+  // chat bar exactly when the animation finishes (not the instant we opened).
+  useEffect(() => {
+    const onAttach = (e: Event) => {
+      const detail = (e as CustomEvent<CatalystAttachDetail>).detail;
+      const incoming = detail?.attachments;
+      if (!incoming || incoming.length === 0) return;
+      setAttachments((prev) => {
+        const seen = new Set(prev.map((a) => a.url || a.name));
+        const fresh = incoming.filter((a) => !seen.has(a.url || a.name));
+        return fresh.length ? [...prev, ...fresh] : prev;
+      });
+    };
+    window.addEventListener(CATALYST_ATTACH_EVENT, onAttach);
+    return () => window.removeEventListener(CATALYST_ATTACH_EVENT, onAttach);
+  }, []);
 
   // --- Render Components ---
 
