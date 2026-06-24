@@ -241,6 +241,9 @@ function AppLayoutBody({ children }: AppLayoutProps) {
   // user opens it, the state lives at the layout level so it persists across
   // route changes until they close it again.
   const [catalystOpen, setCatalystOpen] = useState(false)
+  // Whether the Catalyst chat is in active use (conversation/streaming). Drives
+  // the dynamic width: narrow when idle, wider once a conversation starts.
+  const [catalystActive, setCatalystActive] = useState(false)
   const [catalystLaunch, setCatalystLaunch] = useState<CatalystLaunchDetail | null>(
     null,
   )
@@ -249,6 +252,11 @@ function AppLayoutBody({ children }: AppLayoutProps) {
   // it wins; otherwise Catalyst takes the slot. Opening one closes the other.
   const protocolAiVisible = !!headerAi?.active && !!headerAi?.isOpen
   const catalystVisible = catalystOpen && !protocolAiVisible
+  // Re-open compact: reset to idle width whenever the panel is hidden so it only
+  // widens again once the user actually starts a conversation.
+  useEffect(() => {
+    if (!catalystVisible) setCatalystActive(false)
+  }, [catalystVisible])
 
   const handleCatalystToggle = useCallback(() => {
     if (catalystVisible) {
@@ -339,11 +347,18 @@ function AppLayoutBody({ children }: AppLayoutProps) {
     sidebarOpen && leftSidebar.width > collapsedSidebarWidthPx
 
   const rightSidebar = useResizable({
-    initialWidth: isTablet ? 340 : 380,
-    minWidth: 300,
-    maxWidth: 480,
+    initialWidth: isTablet ? 400 : 460,
+    minWidth: 260,
+    maxWidth: 600,
     direction: 'right',
+    // `:v2` discards any width auto-saved by the earlier (buggy) persistence
+    // that pinned the sidebar to its old default.
+    persistKey: 'notes9:catalyst-sidebar-width:v2',
   })
+
+  // Idle → narrower; active conversation → the (resizable, persisted) wide width.
+  const catalystIdleWidth = isTablet ? 320 : 360
+  const catalystWidth = catalystActive ? rightSidebar.width : catalystIdleWidth
 
   return (
     <>
@@ -526,7 +541,7 @@ function AppLayoutBody({ children }: AppLayoutProps) {
               </SheetContent>
             </Sheet>
           ) : (
-            <div className="relative z-[120] flex h-full min-h-0 shrink-0">
+            <div className="relative z-[120] flex h-full min-h-0 shrink-0 animate-in fade-in slide-in-from-right-4 duration-300 ease-out">
               <ResizeHandle
                 onMouseDown={rightSidebar.handleMouseDown}
                 isResizing={rightSidebar.isResizing}
@@ -556,24 +571,37 @@ function AppLayoutBody({ children }: AppLayoutProps) {
                   onClose={() => setCatalystOpen(false)}
                   pendingLaunch={catalystLaunch}
                   onPendingLaunchConsumed={() => setCatalystLaunch(null)}
+                  onActiveChange={setCatalystActive}
                 />
               </SheetContent>
             </Sheet>
           ) : (
-            <div className="relative z-[120] flex h-full min-h-0 shrink-0">
-              <ResizeHandle
-                onMouseDown={rightSidebar.handleMouseDown}
-                isResizing={rightSidebar.isResizing}
-                position="left"
-              />
+            <div className="relative z-[120] flex h-full min-h-0 shrink-0 animate-in fade-in slide-in-from-right-4 duration-300 ease-out">
+              {/* Resize handle only while active — idle is a fixed compact width. */}
+              {catalystActive && (
+                <ResizeHandle
+                  onMouseDown={rightSidebar.handleMouseDown}
+                  isResizing={rightSidebar.isResizing}
+                  position="left"
+                />
+              )}
               <div
                 className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden border-l border-border"
-                style={{ width: rightSidebar.width, minWidth: 0 }}
+                style={{
+                  width: catalystWidth,
+                  minWidth: 0,
+                  // Smoothly grow/shrink between idle and active; no transition
+                  // mid-drag so manual resizing stays 1:1 with the cursor.
+                  transition: rightSidebar.isResizing
+                    ? 'none'
+                    : 'width 320ms cubic-bezier(0.22, 1, 0.36, 1)',
+                }}
               >
                 <RightSidebar
                   onClose={() => setCatalystOpen(false)}
                   pendingLaunch={catalystLaunch}
                   onPendingLaunchConsumed={() => setCatalystLaunch(null)}
+                  onActiveChange={setCatalystActive}
                 />
               </div>
             </div>

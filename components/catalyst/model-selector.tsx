@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { Check, ChevronDown, Sparkles, Zap, Brain } from 'lucide-react';
+import { Check, ChevronDown, Zap, Brain } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 
@@ -36,7 +36,7 @@ function ProviderIcon({ provider, className }: { provider: string; className?: s
     case 'anthropic':
       return <Brain className={cn('text-orange-500', className)} />;
     default:
-      return <Sparkles className={className} />;
+      return <img src="/notes9-logo-mark-transparent.png" alt="" className={cn("object-contain dark:invert dark:brightness-125", className)} />;
   }
 }
 

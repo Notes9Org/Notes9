@@ -1,7 +1,7 @@
 'use client';
 
 import {
-  Brain,
+  Activity,
   Search,
   BookOpen,
   FlaskConical,
@@ -25,7 +25,7 @@ const STAGE_ORDER: ThinkingStage[] = [
 
 /** Human label + icon for every stage the backend can emit. */
 const STAGE_META: Record<ThinkingStage, { label: string; Icon: LucideIcon }> = {
-  understanding: { label: 'Understanding', Icon: Brain },
+  understanding: { label: 'Understanding', Icon: Activity },
   searching:     { label: 'Searching', Icon: Search },
   reading:       { label: 'Reading', Icon: BookOpen },
   designing:     { label: 'Designing', Icon: FlaskConical },

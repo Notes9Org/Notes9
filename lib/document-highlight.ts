@@ -97,6 +97,9 @@ export function buildHighlightUrl(
     case 'protocol':
       return `/protocols/${encodeURIComponent(target.sourceId)}?${qs}`;
 
+    case 'report':
+      return `/reports/${encodeURIComponent(target.sourceId)}?${qs}`;
+
     case 'lab_note':
       if (extra?.experimentId) {
         return `/experiments/${encodeURIComponent(extra.experimentId)}?tab=notes&noteId=${encodeURIComponent(target.sourceId)}&${qs}`;
@@ -109,7 +112,7 @@ export function buildHighlightUrl(
 }
 
 /** Source types that support opening the document with a fuzzy text highlight. */
-const HIGHLIGHTABLE_SOURCE_TYPES = new Set(['literature_review', 'protocol', 'lab_note']);
+const HIGHLIGHTABLE_SOURCE_TYPES = new Set(['literature_review', 'protocol', 'lab_note', 'report']);
 
 /**
  * Normalize agent / RAG `source_type` strings (e.g. "Literature", "Lab note") to canonical keys.
@@ -130,6 +133,9 @@ export function normalizeAgentSourceType(raw: string): string {
     case 'protocol':
     case 'protocols':
       return 'protocol';
+    case 'report':
+    case 'reports':
+      return 'report';
     case 'experiment':
     case 'experiments':
     case 'exp':
@@ -199,6 +205,36 @@ export function coalesceAgentSourceId(c: Record<string, unknown>): string | null
   return null;
 }
 
+/** Id fields that point at the PARENT entity for each source type. */
+const TYPE_ID_FIELDS: Record<string, string[]> = {
+  literature_review: ['literature_review_id', 'literature_id', 'paper_id'],
+  lab_note: ['lab_note_id', 'note_id'],
+  protocol: ['protocol_id'],
+  experiment: ['experiment_id'],
+  project: ['project_id'],
+  report: ['report_id'],
+};
+
+/**
+ * Type-aware source id: prefer the backend `source_id`, then the id field that
+ * matches THIS entity type, then the generic search. This is what makes a
+ * semantic / approximate match on a project or experiment resolve to the parent
+ * record's page rather than a chunk's generic `id` (which 404s). Use this over
+ * {@link coalesceAgentSourceId} whenever the canonical source type is known.
+ */
+export function coalesceAgentSourceIdForType(
+  c: Record<string, unknown>,
+  canonicalType: string,
+): string | null {
+  const ordered = ['source_id', ...(TYPE_ID_FIELDS[canonicalType] ?? [])];
+  for (const k of ordered) {
+    const v = c[k];
+    if (typeof v === 'string' && v.trim() !== '') return v.trim();
+    if (typeof v === 'number' && Number.isFinite(v)) return String(v);
+  }
+  return coalesceAgentSourceId(c);
+}
+
 /** Match / RAG payloads may label the passage `text`, `snippet`, etc.
  * `cited_text` (the exact per-claim supporting span from the span-level
  * grounding contract) is preferred first so the highlighter targets the
@@ -265,7 +301,17 @@ export function buildHighlightUrlFromResource(
 ): string | null {
   const target = buildHighlightTargetFromResource(c);
   if (!target) return null;
-  const url = buildHighlightUrl(target, extra);
+  // Lab notes are shown inside the experiment page — when the resource carries
+  // the parent experiment id, deep-link straight to /experiments/<id>?tab=notes
+  // &noteId=… instead of relying on the /lab-notes/<id> redirect (which fails
+  // when the id isn't a real note id, e.g. a semantic chunk match).
+  const obj = c as Record<string, unknown>;
+  const experimentId =
+    extra?.experimentId ??
+    (typeof obj.experiment_id === 'string' && obj.experiment_id.trim()
+      ? obj.experiment_id.trim()
+      : undefined);
+  const url = buildHighlightUrl(target, experimentId ? { experimentId } : extra);
   return url || null;
 }
 
@@ -283,8 +329,11 @@ export function buildHighlightTargetFromResource(
   },
 ): HighlightTarget | null {
   const obj = c as Record<string, unknown>;
+  const sourceType = normalizeAgentSourceType(c.source_type);
+  // Type-aware id: a lab-note/project/experiment semantic match resolves to the
+  // real record id (not a chunk's generic `id`).
   const id =
-    coalesceAgentSourceId(obj) ??
+    coalesceAgentSourceIdForType(obj, sourceType) ??
     (c.source_id != null && String(c.source_id).trim() !== ''
       ? String(c.source_id).trim()
       : null);
@@ -292,7 +341,6 @@ export function buildHighlightTargetFromResource(
   // exact per-claim span when the backend sent one.
   const excerpt = coalesceAgentExcerpt(obj) ?? c.cited_text?.trim() ?? c.excerpt?.trim() ?? null;
   if (!id || !excerpt) return null;
-  const sourceType = normalizeAgentSourceType(c.source_type);
   if (!HIGHLIGHTABLE_SOURCE_TYPES.has(sourceType)) return null;
   const rawPageNumber = obj.page_number;
   const pageNumber =

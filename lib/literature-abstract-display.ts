@@ -98,8 +98,14 @@ export function formatLiteratureAbstractPlain(raw: string): string {
   t = t.replace(/<\/(?:ul|ol)>/gi, "\n\n")
   t = t.replace(/<(?:ul|ol)(?:\s[^>]*)?>/gi, "\n")
   t = t.replace(/<[^>]+>/g, "")
+  // Structured-abstract labels (Background:, Methods:, Results:, …) often arrive
+  // inline as one run-on block. Break before each so sections render with gaps.
+  t = t.replace(
+    /\s*\b(Background|Objectives?|Aims?|Purpose|Rationale|Introduction|Methods?|Materials?\s+and\s+Methods|Methodology|Study\s+Design|Design|Setting|Participants|Patients|Subjects|Interventions?|Exposures?|Main\s+Outcomes?(?:\s+and\s+Measures?)?|Outcomes?|Measurements?|Results?|Findings?|Conclusions?|Conclusions?\s+and\s+Relevance|Discussion|Interpretation|Significance|Limitations?|Implications?|Keywords?)\s*:/gi,
+    "\n\n$1:",
+  )
   t = t.replace(/[ \t\f\v]+\n/g, "\n")
   t = t.replace(/\n[ \t]+/g, "\n")
   t = t.replace(/\n{3,}/g, "\n\n")
-  return t.trim()
+  return t.replace(/^\n+/, "").trim()
 }

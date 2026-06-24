@@ -5,12 +5,17 @@ import { useMemo, useRef, useState, useCallback, useEffect } from 'react';
 import { cn } from '@/lib/utils';
 import { markdownToHtml } from '@/lib/markdown-to-html';
 import { sanitizeHtml } from '@/lib/sanitize-html';
-import type { CitationsManifest } from '@/hooks/use-agent-stream';
+import { parseCitationMeta, correctAcademicType } from '@/lib/citation-meta';
+import { resolveTitleFromId, isPlaceholderTitle } from '@/lib/citation-title';
+import { Calendar, User } from 'lucide-react';
+import { useRouter } from 'next/navigation';
+import type { CitationsManifest, CitationsManifestEntry } from '@/hooks/use-agent-stream';
 import {
   buildHighlightUrl,
   dispatchDocumentHighlight,
   normalizeAgentSourceType,
   normalizeAgentRelevance0to1,
+  sourceTypeLabel,
   type HighlightTarget,
 } from '@/lib/document-highlight';
 import { GroundingProvenanceBadge, type Grounding } from './grounding-provenance-badge';
@@ -195,6 +200,13 @@ interface MarkdownRendererProps {
    * metadata in data-* attributes (`data-cite-n`, `data-cite-token`,
    * `data-cite-name`). When absent, `[N]` renders as plain text. */
   citationsManifest?: CitationsManifest | null;
+  /**
+   * When provided, clicking an inline `[N]` citation calls this with the label
+   * instead of opening the source viewer/deep-link, and hover previews are
+   * suppressed. Return `false` to fall through to the default behavior. Used by
+   * the literature search to scroll the matching result card into view.
+   */
+  onCitationClick?: (label: string) => boolean | void;
 }
 
 // `[N]` matcher used by the citation chip post-processor. Limited to 1-3 digit
@@ -212,6 +224,42 @@ function escapeHtmlAttr(value: string): string {
     .replace(/>/g, '&gt;');
 }
 
+/** Title key for detecting the SAME paper surfaced by different providers
+ * (PubMed/PMC/publisher) — mirrors the citations panel's dedupe so inline chips
+ * and the sources list agree. Returns null for non-paper/web entries or titles
+ * too short/generic to be a reliable identity. */
+function manifestSourceKey(entry: CitationsManifestEntry): string | null {
+  const isWeb = !!entry.source_url && /^https?:\/\//i.test(entry.source_url);
+  const isPaper = normalizeAgentSourceType(entry.source_type) === 'literature_review';
+  if (!isPaper && !isWeb) return null;
+  const norm = (entry.source_name || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+  if (norm.length < 12 || norm.split(' ').length < 3) return null;
+  return norm;
+}
+
+/** Map of duplicate citation labels → the canonical (lowest-numbered) label for
+ * the SAME underlying paper, so a PubMed [5] that is the same article as PMC [2]
+ * renders as [2] everywhere. Sub-citation labels ("3.2") are excluded so
+ * multi-span groups are preserved. Purely presentational. */
+function buildCanonicalLabelMap(manifest: CitationsManifest): Record<string, string> {
+  const groups = new Map<string, string[]>();
+  for (const [label, entry] of Object.entries(manifest.manifest)) {
+    if (label.includes('.')) continue;
+    const key = manifestSourceKey(entry);
+    if (!key) continue;
+    const arr = groups.get(key);
+    if (arr) arr.push(label);
+    else groups.set(key, [label]);
+  }
+  const map: Record<string, string> = {};
+  for (const labels of groups.values()) {
+    if (labels.length < 2) continue;
+    const canonical = labels.slice().sort((a, b) => parseFloat(a) - parseFloat(b))[0];
+    for (const l of labels) if (l !== canonical) map[l] = canonical;
+  }
+  return map;
+}
+
 /**
  * Post-process rendered HTML:
  * - Add target="_blank" rel="noopener noreferrer" to all <a> tags
@@ -221,6 +269,9 @@ function escapeHtmlAttr(value: string): string {
  *   show source metadata on hover.
  */
 function postProcessHtml(html: string, manifest?: CitationsManifest | null): string {
+  // Alias label → canonical label for cross-provider duplicate papers, so the
+  // same paper always renders with the same number.
+  const canonicalMap = manifest?.manifest ? buildCanonicalLabelMap(manifest) : {};
   // Links: open in new tab
   let processed = html.replace(
     /<a\s/g,
@@ -241,7 +292,10 @@ function postProcessHtml(html: string, manifest?: CitationsManifest | null): str
     // Even indices are text between tags; odd indices are the tags themselves.
     if (i % 2 !== 0) continue;
     segments[i] = segments[i].replace(CITATION_BRACKET_RE, (_full, nStr: string) => {
-      const n = nStr;
+      // Remap cross-provider duplicates to their canonical label so the SAME
+      // paper always renders as the same number (a PubMed [5] that is the same
+      // article as PMC [2] shows as [2]). Sub-citations ("3.2") are untouched.
+      const n = canonicalMap[nStr] ?? nStr;
       // The manifest is keyed by the full display label ("3" or "3.2", ADR-0006),
       // so a sub-citation resolves directly. Fall back to the base ("3.2"→"3")
       // for safety if only the document-level key is present.
@@ -332,7 +386,7 @@ function postProcessHtml(html: string, manifest?: CitationsManifest | null): str
           + `data-cite-url="${escapeHtmlAttr(url)}" `
           + `aria-label="${escapeHtmlAttr(ariaLabel)}" `
           + `title="${escapeHtmlAttr(tip)}"`
-          + `>[${n}]</a>`
+          + `>${n}</a>`
         );
       }
       return (
@@ -341,7 +395,7 @@ function postProcessHtml(html: string, manifest?: CitationsManifest | null): str
         + `aria-label="${escapeHtmlAttr(ariaLabel)}" `
         + dataAttrs
         + (tip ? `title="${escapeHtmlAttr(tip)}"` : '')
-        + `>[${n}]</sup>`
+        + `>${n}</sup>`
       );
     });
   }
@@ -357,6 +411,7 @@ function CitationHoverCard({
   onMouseEnter,
   onMouseLeave,
   onViewSource,
+  onOpenPage,
 }: {
   chip: ChipData;
   anchor: DOMRect;
@@ -364,32 +419,91 @@ function CitationHoverCard({
   onMouseEnter?: () => void;
   onMouseLeave?: () => void;
   onViewSource?: () => void;
+  onOpenPage?: () => void;
 }) {
-  // Position relative to the renderer container (which is `relative`).
+  // Position relative to the renderer container (which is `relative`). The card
+  // width tracks the container so it's never clipped on a narrow sidebar and
+  // grows when the sidebar widens — capped so it stays a tooltip, not a panel.
+  const PAD = 8;
+  const cardWidth = Math.max(180, Math.min(320, containerRect.width - PAD * 2));
+  const half = cardWidth / 2;
   const top = anchor.bottom - containerRect.top + 6;
-  const rawLeft = anchor.left - containerRect.left + anchor.width / 2;
-  const left = Math.max(8, Math.min(rawLeft, containerRect.width - 8));
+  const rawCenter = anchor.left - containerRect.left + anchor.width / 2;
+  // Keep the (center-anchored) card fully inside the container horizontally.
+  const left = Math.max(half + PAD, Math.min(rawCenter, containerRect.width - half - PAD));
   // Prefer the exact per-claim span; fall back to the document excerpt.
   const snippetSource = chip.citedText || chip.excerpt;
   const excerpt =
     snippetSource.length > 180 ? `${snippetSource.slice(0, 179)}…` : snippetSource;
+
+  // Cross-link to the actual citation page: a web source opens its URL in a new
+  // tab; a workspace record routes to its detail page (/lab-notes/<id>, etc.).
+  const isWebSource = !!chip.sourceUrl && /^https?:\/\//i.test(chip.sourceUrl);
+  const pageHref = isWebSource
+    ? chip.sourceUrl
+    : workspaceRoute(chip.sourceType, chip.sourceId);
+
+  // Correct backend mislabels (e.g. a paper tagged as a lab note) using the URL.
+  const correctedType = correctAcademicType(
+    normalizeAgentSourceType(chip.sourceType),
+    chip.sourceUrl,
+  );
+  const typeLabel = sourceTypeLabel(correctedType) || 'Source';
+  // Resolve the real document title when the citation came with a placeholder
+  // ("Untitled literature"), so the hover card shows the actual article title.
+  const [resolvedName, setResolvedName] = useState<string | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    const canResolve = !!(chip.sourceId || chip.sourceUrl);
+    if (!canResolve || !isPlaceholderTitle(chip.sourceName, chip.sourceType)) {
+      setResolvedName(null);
+      return () => {
+        cancelled = true;
+      };
+    }
+    resolveTitleFromId(chip.sourceType, chip.sourceId, chip.sourceUrl).then((t) => {
+      if (!cancelled) setResolvedName(t);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [chip.sourceId, chip.sourceUrl, chip.sourceName, chip.sourceType]);
+  const effectiveName = resolvedName?.trim() || chip.sourceName;
+  // Best-effort author/year from the source name (no structured fields exist on
+  // the wire). Only attempted for papers / web sources.
+  const isAcademic = correctedType === 'literature_review' || chip.provenance === 'web';
+  const meta = parseCitationMeta(effectiveName);
+  const displayTitle = isAcademic ? meta.title || effectiveName : effectiveName;
+
   return (
     <div
       className={cn(
-        'absolute z-50 w-72 -translate-x-1/2 rounded-lg border border-border bg-popover p-2.5 text-popover-foreground shadow-lg',
+        'absolute z-50 -translate-x-1/2 rounded-lg border border-border bg-popover p-2.5 text-popover-foreground shadow-lg',
         'animate-in fade-in-0 zoom-in-95 duration-150'
       )}
-      style={{ top, left }}
+      style={{ top, left, width: cardWidth }}
       role="tooltip"
       onMouseEnter={onMouseEnter}
       onMouseLeave={onMouseLeave}
     >
       <div className="flex flex-wrap items-center gap-1.5">
-        <span className="inline-flex items-center rounded-full bg-muted px-1.5 py-0.5 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-          {chip.sourceType ? chip.sourceType.replace(/_/g, ' ') : 'Source'}
+        <span className="inline-flex items-center rounded-full bg-muted px-1.5 py-0.5 text-2xs font-medium uppercase tracking-wide text-muted-foreground">
+          {typeLabel}
         </span>
-        <span className="font-mono text-xs text-muted-foreground tabular-nums">
-          [{chip.label}]
+        {isAcademic && meta.author && (
+          <span className="inline-flex items-center gap-1 rounded-full bg-primary/10 text-primary px-1.5 py-0.5 text-2xs font-medium border border-primary/20">
+            <User className="size-2.5 shrink-0" aria-hidden />
+            {meta.author}
+          </span>
+        )}
+        {isAcademic && meta.year && (
+          <span className="inline-flex items-center gap-1 rounded-full bg-muted px-1.5 py-0.5 text-2xs font-medium text-muted-foreground">
+            <Calendar className="size-2.5 shrink-0" aria-hidden />
+            {meta.year}
+          </span>
+        )}
+        <span className="font-mono text-2xs text-muted-foreground tabular-nums ml-auto">
+          {chip.label}
         </span>
         <GroundingProvenanceBadge
           grounding={chip.grounding}
@@ -398,9 +512,9 @@ function CitationHoverCard({
           className="ml-auto"
         />
       </div>
-      {chip.sourceName && (
+      {displayTitle && (
         <p className="mt-1.5 line-clamp-2 text-xs font-medium text-foreground">
-          {chip.sourceName}
+          {displayTitle}
         </p>
       )}
       {chip.supportStatus && (
@@ -414,16 +528,40 @@ function CitationHoverCard({
         </p>
       )}
       <div className="mt-1.5 flex items-center justify-between gap-2 text-2xs text-muted-foreground/80">
-        <span>{provenanceLabel(chip)}</span>
-        {(chip.citedText || chip.excerpt) && onViewSource && (
-          <button
-            type="button"
-            onClick={onViewSource}
-            className="rounded-sm font-medium text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-          >
-            View source
-          </button>
-        )}
+        <span className="min-w-0 truncate">{provenanceLabel(chip)}</span>
+        <span className="flex shrink-0 items-center gap-2.5">
+          {(chip.citedText || chip.excerpt) && onViewSource && (
+            <button
+              type="button"
+              onClick={onViewSource}
+              className="rounded-sm font-medium text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            >
+              View source
+            </button>
+          )}
+          {pageHref &&
+            (isWebSource ? (
+              <a
+                href={pageHref}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-0.5 rounded-sm font-medium text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              >
+                Open
+                <span aria-hidden>↗</span>
+              </a>
+            ) : onOpenPage ? (
+              // Internal source → SPA navigation (keeps the AI sidebar open).
+              <button
+                type="button"
+                onClick={onOpenPage}
+                className="inline-flex items-center gap-0.5 rounded-sm font-medium text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              >
+                Open
+                <span aria-hidden>↗</span>
+              </button>
+            ) : null)}
+        </span>
       </div>
     </div>
   );
@@ -451,13 +589,14 @@ function chipToViewerSource(chip: ChipData): CitationSourceViewerSource {
     supportStatus: chip.supportStatus,
   };
 }
-
 export function MarkdownRenderer({
   content,
   className,
   showCursor = false,
   citationsManifest,
+  onCitationClick,
 }: MarkdownRendererProps) {
+  const router = useRouter();
   const containerRef = useRef<HTMLDivElement>(null);
   const [hover, setHover] = useState<{ chip: ChipData; anchor: DOMRect } | null>(null);
   // Span-level source viewer (G3): the cited source's text with the exact
@@ -482,7 +621,9 @@ export function MarkdownRenderer({
   );
 
   const html = useMemo(() => {
-    const raw = markdownToHtml(content);
+    // Chat opts into `breaks` so every line break in the model's answer renders
+    // as its own line (paired with a small `<br>` gap below for breathing room).
+    const raw = markdownToHtml(content, { breaks: true });
     if (!raw) return '';
     // `marked` v15+ ships without a built-in sanitizer, so raw HTML inside the
     // model's markdown response (e.g. <script>, <iframe>, onerror handlers
@@ -512,14 +653,21 @@ export function MarkdownRenderer({
       excerpt: spanText,
       contentSurface:
         normalizeAgentSourceType(chip.sourceType) === 'literature_review' ? 'abstract' : null,
+      // Advisory char offsets so the destination can land on the exact span.
+      charRange:
+        chip.charStart != null && chip.charEnd != null
+          ? { start: chip.charStart, end: chip.charEnd }
+          : null,
     };
     // Prefer in-app highlight dispatch (same-page doc viewers listen for it).
     if (spanText && dispatchDocumentHighlight(target)) return;
     const href = spanText
       ? buildHighlightUrl(target) || workspaceRoute(chip.sourceType, chip.sourceId)
       : workspaceRoute(chip.sourceType, chip.sourceId);
-    if (href) window.location.assign(href);
-  }, []);
+    // SPA navigation (NOT window.location.assign) so the Catalyst AI sidebar and
+    // app state survive; the destination reads ?highlight= and scrolls/pulses.
+    if (href) router.push(href);
+  }, [router]);
 
   /** Open the in-app span viewer for a chip (G3). Dismiss any hover card so it
    * doesn't float over the modal. */
@@ -540,6 +688,8 @@ export function MarkdownRenderer({
       if (chipEl.tagName === 'A') return;
       e.preventDefault();
       const chip = readChipData(chipEl);
+      // Host override (e.g. literature search scrolls to the result card).
+      if (onCitationClick && onCitationClick(chip.label) !== false) return;
       // When we have a supporting span/excerpt, open the source viewer so the
       // user can read the exact passage highlighted in context (G3). Otherwise
       // fall back to the legacy deep-link navigation.
@@ -549,11 +699,14 @@ export function MarkdownRenderer({
         openChip(chip);
       }
     },
-    [openChip, openViewer]
+    [openChip, openViewer, onCitationClick]
   );
 
   const onMouseOver = useCallback(
     (e: React.MouseEvent<HTMLDivElement>) => {
+      // When the host owns clicks AND there's no manifest to preview, skip the
+      // hover card. With a manifest (e.g. literature search), still show it.
+      if (onCitationClick && !hasManifest) return;
       const chipEl = (e.target as HTMLElement).closest<HTMLElement>('.notes9-cite');
       if (!chipEl) {
         // Not over a chip: defer dismissal so the pointer can reach the card.
@@ -563,7 +716,7 @@ export function MarkdownRenderer({
       cancelHoverClose();
       setHover({ chip: readChipData(chipEl), anchor: chipEl.getBoundingClientRect() });
     },
-    [cancelHoverClose, scheduleHoverClose]
+    [cancelHoverClose, scheduleHoverClose, onCitationClick, hasManifest]
   );
 
   // Scroll invalidates the anchored position → dismiss so the card never floats
@@ -600,17 +753,32 @@ export function MarkdownRenderer({
   if (!html) return null;
 
   return (
-    <div className={cn('relative', hasManifest && 'min-w-0')}>
+    <div className={cn('relative min-w-0', hasManifest && 'min-w-0')}>
       <div
         ref={containerRef}
         className={cn(
-          'prose prose-sm dark:prose-invert max-w-none html-content text-sm text-foreground',
-          '[&_h1]:!text-lg [&_h1]:!font-semibold [&_h1]:!leading-snug [&_h1]:!mt-0 [&_h1]:!mb-2',
-          '[&_h2]:!text-base [&_h2]:!font-semibold [&_h2]:!leading-snug [&_h2]:!mt-4 [&_h2]:!mb-1.5 first:[&_h2]:!mt-0',
-          '[&_h3]:!text-sm [&_h3]:!font-semibold [&_h3]:!leading-snug [&_h3]:!mt-3 [&_h3]:!mb-1',
-          '[&_h4]:!text-sm [&_h4]:!font-medium [&_h4]:!text-muted-foreground',
+          'prose dark:prose-invert max-w-none html-content text-[17px] leading-[1.7] text-foreground overflow-x-hidden break-words',
+          '[&_p]:mb-6 first:[&_p]:mt-0 last:[&_p]:mb-0',
+          '[&_h1]:!text-3xl [&_h1]:!font-semibold [&_h1]:!leading-snug [&_h1]:!mt-10 [&_h1]:!mb-6 first:[&_h1]:!mt-0',
+          '[&_h2]:!text-2xl [&_h2]:!font-semibold [&_h2]:!leading-snug [&_h2]:!mt-10 [&_h2]:!mb-6 first:[&_h2]:!mt-0',
+          '[&_h3]:!text-xl [&_h3]:!font-semibold [&_h3]:!leading-snug [&_h3]:!mt-8 [&_h3]:!mb-4',
+          '[&_h4]:!text-lg [&_h4]:!font-medium [&_h4]:!text-muted-foreground [&_h4]:mt-8 [&_h4]:mb-4',
           '[&_pre]:overflow-x-auto [&_pre]:max-w-full',
+          '[&_code]:break-words',
           '[&_a]:break-words [&_a]:overflow-wrap-anywhere',
+          '[&_table]:table-fixed [&_table]:w-full',
+          '[&_img]:max-w-full [&_img]:h-auto [&_img]:rounded-lg',
+          '[&_p]:break-words [&_p]:overflow-wrap-anywhere',
+          // Each line break gets a small gap below it so multi-line answers
+          // breathe instead of stacking flush.
+          '[&_br]:block [&_br]:content-[""] [&_br]:mb-[0.5em]',
+          // Lists, quotes, rules and tables — consistent, readable rhythm.
+          '[&_ul]:my-4 [&_ul]:list-disc [&_ul]:pl-6 [&_ol]:my-4 [&_ol]:list-decimal [&_ol]:pl-6',
+          '[&_li]:my-1.5 [&_li]:leading-[1.65] [&_li]:marker:text-muted-foreground/70',
+          '[&_li>ul]:my-1.5 [&_li>ol]:my-1.5',
+          '[&_blockquote]:my-5 [&_blockquote]:border-l-2 [&_blockquote]:border-primary/30 [&_blockquote]:pl-4 [&_blockquote]:text-muted-foreground',
+          '[&_hr]:my-8 [&_hr]:border-border/60',
+          '[&_thead_th]:px-3 [&_thead_th]:py-2 [&_thead_th]:text-left [&_tbody_td]:px-3 [&_tbody_td]:py-2',
           showCursor && 'notes9-md--streaming',
           className
         )}
@@ -630,6 +798,7 @@ export function MarkdownRenderer({
           onMouseEnter={cancelHoverClose}
           onMouseLeave={scheduleHoverClose}
           onViewSource={() => openViewer(hover.chip)}
+          onOpenPage={() => openChip(hover.chip)}
         />
       )}
       <CitationSourceViewer

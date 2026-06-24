@@ -25,12 +25,10 @@ import {
 } from "@/components/ui/tooltip"
 
 import {
-  Sparkles,
   Square,
   ArrowUp,
   History,
   Maximize2,
-  Minimize2,
   Plus,
   Paperclip,
   Globe,
@@ -42,6 +40,7 @@ import {
   ChevronDown,
   ChevronLeft,
   X,
+  Telescope,
   Menu,
   Sun,
   Moon,
@@ -75,6 +74,7 @@ import { MessageEditor } from '@/components/catalyst/message-editor';
 import { AgentStreamReply } from '@/components/catalyst/agent-stream-reply';
 import { useChatSessions, ChatSession } from '@/hooks/use-chat-sessions';
 import { MarkdownRenderer } from '@/components/catalyst/markdown-renderer';
+import { Notes9ChatLoader, toolCardsProgress } from '@/components/catalyst/notes9-chat-loader';
 import { PreviewAttachment, type Attachment } from '@/components/catalyst/preview-attachment';
 import { MessageActions } from '@/components/catalyst/message-actions';
 import { IceMascot } from '@/components/ui/ice-mascot';
@@ -115,7 +115,15 @@ import {
   catalystMentionPath,
 } from '@/lib/catalyst-mention-types';
 import { isLikelyUuid } from '@/lib/url-project-param';
-import type { CatalystLaunchDetail } from '@/lib/catalyst-launch';
+import type { CatalystLaunchDetail, CatalystAttachDetail } from '@/lib/catalyst-launch';
+import { CATALYST_ATTACH_EVENT } from '@/lib/catalyst-launch';
+import {
+  getCatalystCoPilot,
+  clearCatalystCoPilot,
+  buildCoPilotPreamble,
+  CATALYST_COPILOT_EVENT,
+  type CoPilotContext,
+} from '@/lib/catalyst-copilot';
 import { useLiteratureMentionCandidates } from '@/contexts/literature-mention-context';
 import { useLiteratureAgentStream } from '@/hooks/use-literature-agent-stream';
 import type { LiteratureAgentDonePayload } from '@/lib/literature-agent-types';
@@ -411,6 +419,9 @@ interface RightSidebarProps {
   /** Seed composer when opened from a section hero or external launch event. */
   pendingLaunch?: CatalystLaunchDetail | null;
   onPendingLaunchConsumed?: () => void;
+  /** Reports whether the chat is in active use (has a conversation / streaming)
+   * so the host layout can widen the panel and narrow it when idle. */
+  onActiveChange?: (active: boolean) => void;
 }
 
 export function RightSidebar({
@@ -419,6 +430,7 @@ export function RightSidebar({
   initialSessionId,
   pendingLaunch = null,
   onPendingLaunchConsumed,
+  onActiveChange,
 }: RightSidebarProps = {}) {
   const user = useAuthUser();
   const isPageVariant = variant === 'page';
@@ -453,6 +465,11 @@ export function RightSidebar({
     onError: () => {},
   });
   const [taggedLiterature, setTaggedLiterature] = useState<Array<{ id: string; title: string }>>([]);
+  // Literature co-pilot context (the active search), primed when a search runs.
+  // Lets the user ask about any paper / the research area without attaching.
+  const [coPilot, setCoPilot] = useState<CoPilotContext | null>(null);
+  const coPilotRef = useRef<CoPilotContext | null>(null);
+  coPilotRef.current = coPilot;
   const [mentionOpen, setMentionOpen] = useState(false);
   const [mentionFilter, setMentionFilter] = useState('');
   /** Todo-style @ menu: row highlight (-1 = none). */
@@ -1269,6 +1286,13 @@ export function RightSidebar({
     notes9Loading ||
     literatureAgentStream.isStreaming ||
     literatureAwaitingClarify;
+
+  // Surface "in active use" to the host layout (panel variant only) so it can
+  // widen while there's a conversation and narrow back to idle when empty.
+  useEffect(() => {
+    if (isPageVariant) return;
+    onActiveChange?.(messages.length > 0 || isLoading);
+  }, [isPageVariant, messages.length, isLoading, onActiveChange]);
   const isUploading = uploadQueue.length > 0;
 
   // Smart auto-scroll — only follows when the user is pinned to the bottom.
@@ -1700,9 +1724,16 @@ export function RightSidebar({
           content_type: a.contentType,
           size: a.size ?? 0,
         }));
+      // Co-pilot: prepend the active literature search (papers + abstracts +
+      // summary) to the MODEL query only — the user's visible message stays the
+      // clean question. Lets them ask about any paper without attaching one.
+      const coPilotPreamble = coPilotRef.current ? buildCoPilotPreamble(coPilotRef.current) : '';
+      const notes9ModelQuery = coPilotPreamble
+        ? `${coPilotPreamble}\n\n## User question\n${text}`
+        : text;
       const { donePayload, error, artifacts: streamArtifacts, citationsManifest: streamManifest, graphs: streamGraphs } = await agentStream.runStream(
         {
-          query: text,
+          query: notes9ModelQuery,
           session_id: sessionId,
           history,
           attachments: tagsToAttachments(requestTags),
@@ -2471,6 +2502,40 @@ export function RightSidebar({
     onPendingLaunchConsumed,
   ]);
 
+  // Late-attach: a "fly to Catalyst" flourish drops the paper into the composer
+  // and, once it lands, dispatches this event so the attachment appears in the
+  // chat bar exactly when the animation finishes (not the instant we opened).
+  useEffect(() => {
+    const onAttach = (e: Event) => {
+      const detail = (e as CustomEvent<CatalystAttachDetail>).detail;
+      const incoming = detail?.attachments;
+      if (!incoming || incoming.length === 0) return;
+      setAttachments((prev) => {
+        const seen = new Set(prev.map((a) => a.url || a.name));
+        const fresh = incoming.filter((a) => !seen.has(a.url || a.name));
+        return fresh.length ? [...prev, ...fresh] : prev;
+      });
+    };
+    window.addEventListener(CATALYST_ATTACH_EVENT, onAttach);
+    return () => window.removeEventListener(CATALYST_ATTACH_EVENT, onAttach);
+  }, []);
+
+  // Pick up the literature co-pilot context: read whatever's already primed when
+  // the sidebar mounts (opened on demand), and stay in sync as new searches run.
+  useEffect(() => {
+    setCoPilot(getCatalystCoPilot());
+    const onCoPilot = (e: Event) => setCoPilot((e as CustomEvent<CoPilotContext | null>).detail);
+    window.addEventListener(CATALYST_COPILOT_EVENT, onCoPilot);
+    return () => window.removeEventListener(CATALYST_COPILOT_EVENT, onCoPilot);
+  }, []);
+
+  // With a fresh search loaded and no conversation yet, default web search on so
+  // the co-pilot can verify/extend beyond the abstracts.
+  useEffect(() => {
+    if (coPilot && messages.length === 0) setWebSearchEnabled(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [coPilot]);
+
   // --- Render Components ---
 
   const catalystHeroComposerShell = cn(
@@ -2588,6 +2653,27 @@ export function RightSidebar({
 
     return (
     <>
+    {coPilot && messages.length === 0 && (
+      <div className="mb-2 flex items-start gap-2 rounded-xl border border-primary/25 bg-primary/[0.05] px-3 py-2 text-xs">
+        <Telescope className="mt-0.5 size-3.5 shrink-0 text-primary" aria-hidden />
+        <div className="min-w-0 flex-1 leading-snug">
+          <span className="font-medium text-foreground">Co-pilot is reading your search</span>
+          <span className="text-muted-foreground">
+            {' '}— “{coPilot.query}” · {coPilot.papers.length} paper
+            {coPilot.papers.length === 1 ? '' : 's'}. Ask about any paper or the research area.
+          </span>
+        </div>
+        <button
+          type="button"
+          onClick={() => clearCatalystCoPilot()}
+          title="Dismiss search context"
+          aria-label="Dismiss search context"
+          className="-mr-1 -mt-0.5 shrink-0 rounded p-0.5 text-muted-foreground hover:text-foreground"
+        >
+          <X className="size-3.5" />
+        </button>
+      </div>
+    )}
     <div className="group/input relative flex flex-col w-full">
       <div
         className={cn(
@@ -2961,7 +3047,11 @@ export function RightSidebar({
 
       {!mounted ? (
         <div className="flex flex-1 items-center justify-center">
-          <Sparkles className="size-6 -translate-y-[5px] text-muted-foreground/50 animate-pulse" />
+          <img
+            src="/notes9-logo-mark-transparent.png"
+            alt="Notes9"
+            className="size-7 -translate-y-[5px] object-contain opacity-60 animate-pulse dark:invert dark:brightness-125"
+          />
         </div>
       ) : paperAI?.isActive && !paperUiSuppressed ? (
         <PaperAIPanel
@@ -3155,8 +3245,21 @@ export function RightSidebar({
                 </>
               ) : (
                 <>
-                  <Button variant="ghost" size="icon" className="size-8 sm:size-9 text-muted-foreground" onClick={() => setIsExpanded(!isExpanded)}>
-                    {isExpanded ? <Minimize2 className="size-4" /> : <Maximize2 className="size-4" />}
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="size-8 sm:size-9 text-muted-foreground"
+                    title="Open full page"
+                    aria-label="Open Catalyst full page"
+                    onClick={() => {
+                      // Open the dedicated /catalyst route, carrying the active
+                      // session so the conversation continues on the full page.
+                      const sid = currentSessionRef.current;
+                      router.push(sid ? `/catalyst?session=${encodeURIComponent(sid)}` : '/catalyst');
+                      onClose?.();
+                    }}
+                  >
+                    <Maximize2 className="size-4" />
                   </Button>
                   <Button variant="ghost" size="icon" className="size-8 sm:size-9 text-muted-foreground" onClick={() => onClose?.()}>
                     <X className="size-4" />
@@ -3418,7 +3521,7 @@ export function RightSidebar({
                                 </div>
                               </div>
                             )}
-                            <div className={cn("flex flex-col min-w-0 max-w-[85%]", message.role === 'user' ? "items-end" : "items-start")}>
+                            <div className={cn("flex flex-col min-w-0", message.role === 'user' ? "items-end max-w-[85%]" : "items-start w-full max-w-full")}>
                               {isEditing ? (
                                 <MessageEditor
                                   messageId={message.id}
@@ -3546,7 +3649,7 @@ export function RightSidebar({
                               />
                             </div>
                           </div>
-                          <div className="flex min-w-0 flex-1 flex-col gap-2 max-w-[85%]">
+                          <div className="flex min-w-0 flex-1 flex-col gap-2 max-w-full">
                             <div className="space-y-0.5">
                               <p className="text-sm font-semibold leading-tight text-foreground">
                                 Literature agent
@@ -3613,10 +3716,13 @@ export function RightSidebar({
                           agentStream.error != null ||
                           agentStream.donePayload != null) && (
                         <div className="flex gap-4 w-full justify-start">
-                          <div className="size-7 shrink-0 flex items-center justify-center rounded-full bg-background border shadow-sm mt-1 -translate-y-[5px]">
-                            <Sparkles className="size-3.5 text-primary" />
-                          </div>
-                          <div className="flex-1 min-w-0 max-w-[85%]">
+                          <Notes9ChatLoader
+                            size={28}
+                            className="mt-1 -translate-y-[5px]"
+                            progress={toolCardsProgress(agentStream.toolCards)}
+                            error={agentStream.error != null}
+                          />
+                          <div className="flex-1 min-w-0 max-w-full">
                             {agentStream.thinkingSteps.length === 0 &&
                               !agentStream.streamedAnswer &&
                               !agentStream.donePayload &&
@@ -3656,9 +3762,7 @@ export function RightSidebar({
                         !literatureAwaitingClarify &&
                         messages.at(-1)?.role === 'user' && (
                         <div className="flex gap-4 w-full justify-start">
-                          <div className="size-7 shrink-0 flex items-center justify-center rounded-full bg-background border shadow-sm mt-1">
-                            <Sparkles className="size-3.5 text-primary" />
-                          </div>
+                          <Notes9ChatLoader size={28} className="mt-1" />
                           <div className="px-1 py-2.5 text-sm">
                             <span
                               className="inline-block w-[3px] h-[1em] bg-foreground/70 rounded-sm animate-cursor-blink translate-y-[2px]"

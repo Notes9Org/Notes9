@@ -36,3 +36,19 @@ export function openCatalystPanel(detail: CatalystLaunchDetail = {}) {
     new CustomEvent<CatalystLaunchDetail>(CATALYST_OPEN_EVENT, { detail }),
   )
 }
+
+export type CatalystAttachDetail = { attachments: CatalystLaunchAttachment[] }
+
+export const CATALYST_ATTACH_EVENT = "notes9:catalyst-attach"
+
+/**
+ * Append attachments to the already-open Catalyst composer. Used to drop a
+ * paper into the chat bar *after* a launch flourish lands, so the attachment
+ * appears as the animation completes rather than the instant the panel opens.
+ */
+export function attachToCatalyst(attachments: CatalystLaunchAttachment[]) {
+  if (typeof window === "undefined" || attachments.length === 0) return
+  window.dispatchEvent(
+    new CustomEvent<CatalystAttachDetail>(CATALYST_ATTACH_EVENT, { detail: { attachments } }),
+  )
+}

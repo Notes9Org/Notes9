@@ -147,8 +147,15 @@ function LiteratureDetailViewInner({
     inlineHighlightTarget,
   );
   const activeLitHighlight = inlineLitHighlight ?? litHighlight;
+  const hasPdf = !!literature.pdf_storage_path;
+  // A PDF contains the full text (abstract + body), so when one is attached we
+  // always highlight in the PDF — the matcher's anchor fallback locates the
+  // snippet whether it came from the abstract or the body. With no PDF, fall
+  // back to the abstract on the details page.
   const highlightSurface = activeLitHighlight
-    ? activeLitHighlight.contentSurface ?? "pdf"
+    ? hasPdf
+      ? "pdf"
+      : "abstract"
     : null;
 
   const [activeTab, setActiveTab] = useState<string>(initialTab);

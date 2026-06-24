@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Brain, ChevronDown } from 'lucide-react';
+import { Activity, ChevronDown } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import {
   Collapsible,
@@ -66,7 +66,7 @@ export function ThinkingPanel({ thinking, isVisible, className }: ThinkingPanelP
       )}
     >
       <CollapsibleTrigger className="flex w-full items-center gap-2 px-3 py-2 text-sm transition-colors hover:bg-primary/10">
-        <Brain className="size-4 shrink-0 animate-pulse text-primary" aria-hidden />
+        <Activity className="size-4 shrink-0 animate-pulse text-primary" aria-hidden />
         <span className="flex-1 text-left font-medium text-primary">
           Thinking{dots}
         </span>

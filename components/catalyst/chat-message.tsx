@@ -4,7 +4,7 @@ import { useState, useDeferredValue } from 'react';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
-import { Copy, Check, RefreshCw, ChevronDown, ChevronUp, FileText } from 'lucide-react';
+import { Copy, Check, RefreshCw, ChevronDown, ChevronUp, FileText, FileImage, FileCode, FileArchive, FileAudio, FileVideo, FileSpreadsheet, File } from 'lucide-react';
 import type { Attachment } from './preview-attachment';
 import { cn } from '@/lib/utils';
 import { MarkdownRenderer } from './markdown-renderer';
@@ -13,7 +13,7 @@ import {
   AgentCitationsPanel,
   groundingResourceToPanelItem,
 } from './agent-citations-panel';
-import type { ToolCard, CitationsManifest } from '@/hooks/use-agent-stream';
+import type { ToolCard, CitationsManifest, CitationsManifestEntry } from '@/hooks/use-agent-stream';
 import type { GroundingResource } from '@/lib/agent-stream-types';
 
 interface SourceItem {
@@ -25,15 +25,14 @@ interface SourceItem {
 
 /** Adapt the modal's loose web-source shape into a GroundingResource so the
  * same AgentCitationsPanel renders modal answers identically to the page. */
-function sourceToGroundingResource(src: SourceItem): GroundingResource {
-  const url = typeof src.url === 'string' ? src.url : null;
-  const title =
-    typeof src.title === 'string' && src.title.trim()
-      ? src.title.trim()
-      : url || 'Source';
-  const excerpt = typeof src.snippet === 'string' ? src.snippet : null;
+function sourceToGroundingResource(src: SourceItem | GroundingResource): GroundingResource {
+  const anySrc = src as any;
+  const url = anySrc.source_url || (typeof anySrc.url === 'string' ? anySrc.url : null);
+  const rawTitle = anySrc.source_name || anySrc.title;
+  const title = typeof rawTitle === 'string' && rawTitle.trim() ? rawTitle.trim() : url || 'Source';
+  const excerpt = anySrc.excerpt || (typeof anySrc.snippet === 'string' ? anySrc.snippet : null);
   return {
-    source_type: 'web',
+    source_type: anySrc.source_type || 'web',
     source_name: title,
     display_label: title,
     source_url: url,
@@ -78,6 +77,20 @@ export function ChatMessage({
   const [showThinking, setShowThinking] = useState(false);
   const deferredContent = useDeferredValue(content);
 
+  const getAttachmentIcon = (att: Attachment) => {
+    const type = att.contentType?.toLowerCase() || '';
+    const name = att.name?.toLowerCase() || '';
+    if (type.startsWith('image/')) return FileImage;
+    if (type.startsWith('video/')) return FileVideo;
+    if (type.startsWith('audio/')) return FileAudio;
+    if (type.includes('pdf') || name.endsWith('.pdf')) return FileText;
+    if (type.includes('word') || name.endsWith('.doc') || name.endsWith('.docx')) return FileText;
+    if (type.includes('excel') || type.includes('spreadsheet') || type.includes('csv') || name.endsWith('.xls') || name.endsWith('.xlsx') || name.endsWith('.csv')) return FileSpreadsheet;
+    if (type.includes('zip') || type.includes('tar') || type.includes('rar') || name.endsWith('.zip') || name.endsWith('.tar.gz')) return FileArchive;
+    if (type.includes('javascript') || type.includes('json') || type.includes('html') || type.includes('css') || name.match(/\.(js|ts|jsx|tsx|json|html|css|py|java|cpp|c|go|rs)$/)) return FileCode;
+    return File;
+  };
+
   const handleCopy = async () => {
     try {
       await navigator.clipboard.writeText(content);
@@ -94,22 +107,27 @@ export function ChatMessage({
     .map((s) => s as SourceItem);
 
   return (
-    <div className={cn('group flex gap-3', isUser ? 'justify-end' : 'justify-start')}>
+    <div
+      className={cn(
+        'group flex gap-3 animate-in fade-in slide-in-from-bottom-2 duration-500 ease-out',
+        isUser ? 'justify-end' : 'justify-start',
+      )}
+    >
       {/* Assistant Avatar */}
       {!isUser && (
-        <Avatar className="size-8 shrink-0 mt-0.5">
+        <Avatar className="size-8 shrink-0 mt-0.5 shadow-sm ring-1 ring-border/50">
           <AvatarImage
             src="/notes9-logo-mark-transparent.png"
             alt=""
-            className="object-contain p-1.5 dark:invert dark:brightness-125"
+            className="object-contain p-1.5 dark:invert dark:brightness-125 bg-primary/5"
           />
-          <AvatarFallback className="bg-primary/10 text-primary">
-            <span className="notes9-mascot-mask size-[18px]" aria-hidden />
+          <AvatarFallback className="bg-primary/10 text-primary text-xs font-semibold">
+            N9
           </AvatarFallback>
         </Avatar>
       )}
 
-      <div className="flex flex-col gap-1.5 max-w-[85%]">
+      <div className={cn('flex flex-col gap-1.5 min-w-0', isUser ? 'max-w-[85%]' : 'max-w-full flex-1 w-full')}>
         {/* Thinking panel — collapsible */}
         {!isUser && thinking && (
           <button
@@ -145,6 +163,7 @@ export function ChatMessage({
           <div className="flex flex-wrap gap-2 justify-end mb-1">
             {attachments.map((att, i) => {
               const isImage = att.contentType?.startsWith('image/');
+              const Icon = getAttachmentIcon(att);
               return isImage ? (
                 <a
                   key={i}
@@ -169,7 +188,7 @@ export function ChatMessage({
                   className="flex items-center gap-1.5 rounded-lg border border-primary/20 bg-primary/10 px-2 py-1 text-xs text-primary hover:bg-primary/20 transition-colors max-w-[180px]"
                   title={att.name}
                 >
-                  <FileText className="size-3 shrink-0" />
+                  <Icon className="size-3 shrink-0" />
                   <span className="truncate">{att.name}</span>
                 </a>
               );
@@ -179,31 +198,59 @@ export function ChatMessage({
 
         {/* Message Bubble — suppressed when the assistant has only tool cards
             and no answer text yet (avoids an empty grey block while tools run). */}
-        {(isUser || content || !isStreaming) && (
-          <div
-            className={cn(
-              'text-sm',
-              isUser
-                ? 'rounded-lg px-4 py-2.5 bg-primary text-primary-foreground'
-                : cn(
-                    // The answer is the product's value — give it the AI surface:
-                    // elevated card, burnt-sienna identity rail, soft apricot glow.
-                    'surface-primary assistant-rail overflow-hidden py-2.5 pl-5 pr-4',
-                    'shadow-[0_1px_2px_rgba(0,0,0,0.05),0_0_20px_-8px_var(--n9-accent-glow)]',
-                  ),
-            )}
-          >
-            {isUser ? (
-              <div className="whitespace-pre-wrap break-words overflow-wrap-anywhere">{content}</div>
-            ) : (
-              <MarkdownRenderer
-                content={deferredContent}
-                showCursor={isStreaming}
-                citationsManifest={citationsManifest}
-              />
-            )}
-          </div>
-        )}
+        {(isUser || content || !isStreaming) && (() => {
+          let effectiveManifest = citationsManifest;
+          if (!effectiveManifest && normalizedSources.length > 0) {
+            effectiveManifest = {
+              manifest: normalizedSources.reduce<Record<string, CitationsManifestEntry>>((acc, src, i) => {
+                const label = String(i + 1);
+                const anySrc = src as any;
+                const sourceName = anySrc.source_name || anySrc.title || anySrc.url || 'Source ' + label;
+                const sourceUrl = anySrc.source_url || (typeof anySrc.url === 'string' ? anySrc.url : undefined);
+                const excerpt = anySrc.excerpt || (typeof anySrc.snippet === 'string' ? anySrc.snippet : undefined);
+                // Honor the real source type/id when the stored source carries
+                // them (workspace records, papers) so inline chips route and
+                // badge correctly. Fall back to 'web' only when truly absent.
+                const sourceType =
+                  typeof anySrc.source_type === 'string' && anySrc.source_type.trim()
+                    ? anySrc.source_type
+                    : 'web';
+                const sourceId =
+                  typeof anySrc.source_id === 'string' && anySrc.source_id.trim()
+                    ? anySrc.source_id
+                    : undefined;
+                acc[label] = {
+                  source_name: String(sourceName),
+                  source_url: sourceUrl,
+                  excerpt: excerpt,
+                  source_type: sourceType,
+                  source_id: sourceId,
+                } as CitationsManifestEntry;
+                return acc;
+              }, {} as Record<string, CitationsManifestEntry>)
+            };
+          }
+          return (
+            <div
+              className={cn(
+                'rounded-2xl px-4 py-3 text-sm leading-relaxed',
+                isUser
+                  ? 'bg-primary/95 text-primary-foreground shadow-sm rounded-br-sm'
+                  : 'bg-muted/40 text-foreground overflow-hidden rounded-bl-sm border border-border/40 shadow-sm',
+              )}
+            >
+              {isUser ? (
+                <div className="whitespace-pre-wrap break-words overflow-wrap-anywhere">{content}</div>
+              ) : (
+                <MarkdownRenderer
+                  content={deferredContent}
+                  showCursor={isStreaming}
+                  citationsManifest={effectiveManifest}
+                />
+              )}
+            </div>
+          );
+        })()}
 
         {/* Sources — routed through the shared AgentCitationsPanel so modal
             answers get the same grouped, interactive citation display as the

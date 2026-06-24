@@ -3,7 +3,7 @@
 import { useCallback, useRef, useState } from 'react';
 import { ChevronDown } from 'lucide-react';
 import type { UIMessage } from 'ai';
-import { Sparkles, Square } from 'lucide-react';
+import { Square } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { MarkdownRenderer } from './markdown-renderer';
@@ -17,11 +17,13 @@ import {
 } from '@/components/catalyst/agent-citations-panel';
 import { PersistedArtifactList } from '@/components/catalyst/agent-artifact-card';
 import { AgentGraphList } from '@/components/catalyst/agent-graph-view';
+import { Notes9ChatLoader, toolCardsProgress } from '@/components/catalyst/notes9-chat-loader';
+import { Notes9ThinkingIndicator } from '@/components/catalyst/notes9-thinking-indicator';
 import type { PersistedArtifact } from '@/lib/agent-artifacts';
 import { parseNotes9AssistantStoredContent } from '@/lib/notes9-chat-format';
 import type { Vote } from '@/lib/db/schema';
-import type { ThinkingPayload, RagChunksPayload, DonePayload } from '@/lib/agent-stream-types';
-import type { CitationsManifest, ToolCard, AgentArtifact, AgentGraph } from '@/hooks/use-agent-stream';
+import type { ThinkingPayload, RagChunksPayload, DonePayload, GroundingResource } from '@/lib/agent-stream-types';
+import type { CitationsManifest, ToolCard, AgentArtifact, AgentGraph, CitationsManifestEntry } from '@/hooks/use-agent-stream';
 
 interface CatalystMessagesProps {
   messages: UIMessage[];
@@ -108,11 +110,20 @@ export function CatalystMessages({
         role="log"
         aria-label="Chat messages"
       >
-        <div className="mx-auto max-w-3xl px-4 pt-6 pb-4">
-          <div className="flex flex-col gap-4">
+        <div className="mx-auto max-w-5xl 2xl:max-w-6xl px-4 pt-6 pb-4">
+          <div className="flex flex-col gap-5">
           {messages.map((message, index) => {
             const isEditing = editingMessageId === message.id;
             const content = getMessageContent(message);
+            const getMessageSources = (msg: typeof message): Array<Record<string, unknown>> => {
+              if (!msg.parts) return [];
+              return msg.parts
+                .filter((p): p is { type: 'data-source'; data: { source: Record<string, unknown> } } =>
+                  (p as { type: string }).type === 'data-source'
+                )
+                .map((p) => (p as { type: string; data: { source: Record<string, unknown> } }).data?.source)
+                .filter(Boolean) as Array<Record<string, unknown>>;
+            };
             const isLastAssistant =
               message.role === 'assistant' && index === messages.length - 1;
             const isLastUserAwaitingReply =
@@ -147,27 +158,24 @@ export function CatalystMessages({
               <div
                 key={message.id}
                 className={cn(
-                  'group/message flex w-full gap-3',
-                  message.role === 'user' ? 'justify-end' : 'justify-start',
-                  // Each assistant turn lifts gently in on mount so replies
-                  // "arrive" rather than snap in. Keyed rows never re-trigger it
-                  // on streaming updates; reduced-motion disables it (globals).
-                  message.role === 'assistant' && 'animate-n9-turn-in'
+                  'group/message flex w-full gap-3 animate-in fade-in slide-in-from-bottom-3 duration-500 ease-out',
+                  message.role === 'user' ? 'justify-end' : 'justify-start'
                 )}
               >
                 {/* Assistant Avatar */}
                 {message.role === 'assistant' && (
-                  <div className="mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-sm">
-                    <Sparkles className="size-3.5" />
-                  </div>
+                  <img
+                    src="/notes9-logo-mark-transparent.png"
+                    alt="AI"
+                    className="mt-0.5 size-7 shrink-0 object-contain p-1 rounded-full bg-primary/5 dark:invert dark:brightness-125 shadow-sm ring-1 ring-border/50"
+                  />
                 )}
 
                 {/* Message Content */}
                 <div
                   className={cn(
-                    'flex flex-col',
-                    message.role === 'user' ? 'items-end' : 'items-start',
-                    message.role === 'user' ? 'max-w-[80%]' : 'max-w-full flex-1'
+                    'flex flex-col min-w-0',
+                    message.role === 'user' ? 'items-end max-w-[90%]' : 'items-start max-w-full flex-1'
                   )}
                 >
                   {isEditing ? (
@@ -183,50 +191,108 @@ export function CatalystMessages({
                     <>
                       <div
                         className={cn(
-                          'rounded-2xl px-4 py-2.5 text-sm leading-[1.45]',
+                          'rounded-2xl px-4 py-3 text-sm leading-relaxed overflow-hidden',
                           message.role === 'user'
-                            ? 'bg-primary text-primary-foreground'
+                            ? 'bg-primary/95 text-primary-foreground shadow-sm rounded-br-sm'
                             : 'bg-transparent'
                         )}
                       >
                         {message.role === 'user' ? (
                           <div className="whitespace-pre-wrap">{content}</div>
-                        ) : (
-                          <>
-                            <MarkdownRenderer
-                              content={assistantDisplayMarkdown}
-                              citationsManifest={notes9Parsed?.citationsManifest ?? null}
-                            />
-                            {notes9Sources && (
-                              <AgentCitationsPanel
-                                items={notes9Sources.map((c, i) =>
-                                  groundingResourceToPanelItem(c, i)
-                                )}
-                                triggerLabel="All citations"
-                                className="mt-2"
+                        ) : (() => {
+                          const rawSources = getMessageSources(message);
+                          const allSources = [...(notes9Sources ?? []), ...rawSources];
+                          let effectiveManifest = (notes9Parsed?.citationsManifest as any) ?? null;
+                          if (!effectiveManifest && allSources.length > 0) {
+                            effectiveManifest = {
+                              manifest: allSources.reduce<Record<string, CitationsManifestEntry>>((acc, src, i) => {
+                                const label = String(i + 1);
+                                // Handle both GroundingResource (from notes9Sources) and data-source parts (from rawSources)
+                                const anySrc = src as any;
+                                const sourceName = anySrc.source_name || anySrc.title || anySrc.url || 'Source ' + label;
+                                const sourceUrl = anySrc.source_url || (typeof anySrc.url === 'string' ? anySrc.url : undefined);
+                                const excerpt = anySrc.excerpt || (typeof anySrc.snippet === 'string' ? anySrc.snippet : undefined);
+                                // Honor the real source type/id when present so
+                                // workspace/paper citations route + badge right;
+                                // fall back to 'web' only when truly absent.
+                                const sourceType =
+                                  typeof anySrc.source_type === 'string' && anySrc.source_type.trim()
+                                    ? anySrc.source_type
+                                    : 'web';
+                                const sourceId =
+                                  typeof anySrc.source_id === 'string' && anySrc.source_id.trim()
+                                    ? anySrc.source_id
+                                    : undefined;
+                                acc[label] = {
+                                  source_name: String(sourceName),
+                                  source_url: sourceUrl,
+                                  excerpt: excerpt,
+                                  source_type: sourceType,
+                                  source_id: sourceId,
+                                } as CitationsManifestEntry;
+                                return acc;
+                              }, {} as Record<string, CitationsManifestEntry>)
+                            };
+                          }
+
+                          const sourceToGroundingResource = (src: Record<string, unknown> | GroundingResource): GroundingResource => {
+                            const anySrc = src as any;
+                            const url = anySrc.source_url || (typeof anySrc.url === 'string' ? anySrc.url : undefined);
+                            const rawTitle = anySrc.source_name || anySrc.title;
+                            const title = typeof rawTitle === 'string' && rawTitle.trim() ? rawTitle.trim() : url || 'Source';
+                            return {
+                              source_type: anySrc.source_type || 'web',
+                              source_name: String(title),
+                              source_url: url,
+                              excerpt: anySrc.excerpt || (typeof anySrc.snippet === 'string' ? anySrc.snippet : undefined),
+                            };
+                          };
+                          return (
+                            <>
+                              <MarkdownRenderer
+                                content={assistantDisplayMarkdown}
+                                citationsManifest={effectiveManifest}
                               />
-                            )}
-                            {/* Persisted relationship graphs — native dagre render */}
-                            {messageGraphs.length > 0 && (
-                              <div className="mt-3">
-                                <AgentGraphList graphs={messageGraphs} />
-                              </div>
-                            )}
-                            {/* Persisted file/chart artifacts — re-sign their URLs lazily */}
-                            {messageArtifacts.length > 0 && (
-                              <div className="mt-3">
-                                <PersistedArtifactList artifacts={messageArtifacts} />
-                              </div>
-                            )}
-                            {/* Blinking cursor at end of streaming text */}
-                            {isLastAssistant && isLoading && (
-                              <span
-                                className="inline-block w-[3px] h-[1em] bg-foreground/70 rounded-sm animate-cursor-blink ml-0.5 translate-y-[2px]"
-                                aria-hidden
-                              />
-                            )}
-                          </>
-                        )}
+                              {notes9Sources && (
+                                <AgentCitationsPanel
+                                  items={notes9Sources.map((c, i) =>
+                                    groundingResourceToPanelItem(c, i)
+                                  )}
+                                  triggerLabel="All citations"
+                                  className="mt-2"
+                                />
+                              )}
+                              {!notes9Sources && rawSources.length > 0 && (
+                                <AgentCitationsPanel
+                                  items={rawSources.map((src, i) =>
+                                    groundingResourceToPanelItem(sourceToGroundingResource(src), i)
+                                  )}
+                                  triggerLabel="All citations"
+                                  className="mt-2"
+                                />
+                              )}
+                              {/* Persisted relationship graphs — native dagre render */}
+                              {messageGraphs.length > 0 && (
+                                <div className="mt-3">
+                                  <AgentGraphList graphs={messageGraphs} />
+                                </div>
+                              )}
+                              {/* Persisted file/chart artifacts — re-sign their URLs lazily */}
+                              {messageArtifacts.length > 0 && (
+                                <div className="mt-3">
+                                  <PersistedArtifactList artifacts={messageArtifacts} />
+                                </div>
+                              )}
+                              {/* Blinking cursor at end of streaming text */}
+                              {isLastAssistant && isLoading && (
+                                <span
+                                  className="inline-block w-[3px] h-[1em] bg-foreground/70 rounded-sm animate-cursor-blink ml-0.5 translate-y-[2px]"
+                                  aria-hidden
+                                />
+                              )}
+                            </>
+                          );
+                        })()}
                       </div>
 
                       {/* Message Actions */}
@@ -257,10 +323,13 @@ export function CatalystMessages({
           {/* Waiting for first token: show assistant avatar + blinking cursor */}
           {(isLoading || notes9Stream) && messages.at(-1)?.role === 'user' && (
             notes9Stream ? (
-              <div className="flex w-full gap-3 justify-start animate-n9-turn-in">
-                <div className="flex size-8 shrink-0 -translate-y-[5px] items-center justify-center rounded-full bg-primary text-primary-foreground shadow-sm">
-                  <Sparkles className="size-4 animate-pulse" />
-                </div>
+              <div className="flex w-full gap-3 justify-start animate-in fade-in slide-in-from-bottom-2 duration-300">
+                <Notes9ChatLoader
+                  size={32}
+                  className="-translate-y-[5px]"
+                  progress={toolCardsProgress(notes9Stream.toolCards)}
+                  error={!!notes9Stream.error}
+                />
                 <div className="flex-1 min-w-0 max-w-full space-y-2">
                   {/* When HITL is on (runId present) AgentStreamReply renders the
                       server-side cancel button; suppress this local-abort one to
@@ -300,28 +369,20 @@ export function CatalystMessages({
                 </div>
               </div>
             ) : (
-              <div className="flex w-full gap-3 justify-start animate-n9-turn-in">
-                <div className="mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-sm">
-                  <Sparkles className="size-3.5" />
-                </div>
-                <div className="flex items-center gap-3 rounded-2xl px-4 py-2.5 text-sm bg-transparent">
-                  <span
-                    className="inline-block w-[3px] h-[1em] bg-foreground/70 rounded-sm animate-cursor-blink translate-y-[1px]"
-                    aria-hidden
-                  />
-                  {onStop && (
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      className="h-7 gap-1.5 text-xs"
-                      onClick={onStop}
-                    >
-                      <Square className="size-2.5 fill-current" />
-                      Stop
-                    </Button>
-                  )}
-                </div>
+              <div className="flex w-full items-center gap-3 justify-start animate-in fade-in slide-in-from-bottom-2 duration-500 ease-out">
+                <Notes9ThinkingIndicator query={getMessageContent(messages.at(-1)!)} size={32} />
+                {onStop && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-7 gap-1.5 text-xs ml-1"
+                    onClick={onStop}
+                  >
+                    <Square className="size-2.5 fill-current" />
+                    Stop
+                  </Button>
+                )}
               </div>
             )
           )}

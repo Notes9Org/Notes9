@@ -1,6 +1,6 @@
 'use client';
 
-import { X, FileText, Image as ImageIcon, Loader2 } from 'lucide-react';
+import { X, FileText, Image as ImageIcon, Loader2, FileVideo, FileAudio, FileSpreadsheet, FileArchive, FileCode, File } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 
@@ -63,11 +63,19 @@ export function PreviewAttachment({
               alt={attachment.name}
               className="size-7 rounded-md object-cover shrink-0"
             />
-          ) : isImage ? (
-            <ImageIcon className="size-3 text-muted-foreground" />
-          ) : (
-            <FileText className="size-3 text-muted-foreground" />
-          )}
+          ) : (() => {
+            const type = attachment.contentType?.toLowerCase() || '';
+            const name = attachment.name?.toLowerCase() || '';
+            if (isImage) return <ImageIcon className="size-3 text-muted-foreground" />;
+            if (type.startsWith('video/')) return <FileVideo className="size-3 text-muted-foreground" />;
+            if (type.startsWith('audio/')) return <FileAudio className="size-3 text-muted-foreground" />;
+            if (type.includes('pdf') || name.endsWith('.pdf')) return <FileText className="size-3 text-muted-foreground" />;
+            if (type.includes('word') || name.endsWith('.doc') || name.endsWith('.docx')) return <FileText className="size-3 text-muted-foreground" />;
+            if (type.includes('excel') || type.includes('spreadsheet') || type.includes('csv') || name.endsWith('.xls') || name.endsWith('.xlsx') || name.endsWith('.csv')) return <FileSpreadsheet className="size-3 text-muted-foreground" />;
+            if (type.includes('zip') || type.includes('tar') || type.includes('rar') || name.endsWith('.zip') || name.endsWith('.tar.gz')) return <FileArchive className="size-3 text-muted-foreground" />;
+            if (type.includes('javascript') || type.includes('json') || type.includes('html') || type.includes('css') || name.match(/\.(js|ts|jsx|tsx|json|html|css|py|java|cpp|c|go|rs)$/)) return <FileCode className="size-3 text-muted-foreground" />;
+            return <File className="size-3 text-muted-foreground" />;
+          })()}
           <span className="text-xs truncate max-w-[100px]">{attachment.name}</span>
           {onRemove && !isUploading && (
             <Button
@@ -107,11 +115,18 @@ export function PreviewAttachment({
             alt={attachment.name}
             className="size-12 rounded-md object-cover"
           />
-        ) : (
-          <div className="flex-1 flex items-center justify-center">
-            <FileText className="size-8 text-muted-foreground" />
-          </div>
-        )}
+        ) : (() => {
+          const type = attachment.contentType?.toLowerCase() || '';
+          const name = attachment.name?.toLowerCase() || '';
+          if (type.startsWith('video/')) return <div className="flex-1 flex items-center justify-center"><FileVideo className="size-8 text-muted-foreground" /></div>;
+          if (type.startsWith('audio/')) return <div className="flex-1 flex items-center justify-center"><FileAudio className="size-8 text-muted-foreground" /></div>;
+          if (type.includes('pdf') || name.endsWith('.pdf')) return <div className="flex-1 flex items-center justify-center"><FileText className="size-8 text-muted-foreground" /></div>;
+          if (type.includes('word') || name.endsWith('.doc') || name.endsWith('.docx')) return <div className="flex-1 flex items-center justify-center"><FileText className="size-8 text-muted-foreground" /></div>;
+          if (type.includes('excel') || type.includes('spreadsheet') || type.includes('csv') || name.endsWith('.xls') || name.endsWith('.xlsx') || name.endsWith('.csv')) return <div className="flex-1 flex items-center justify-center"><FileSpreadsheet className="size-8 text-muted-foreground" /></div>;
+          if (type.includes('zip') || type.includes('tar') || type.includes('rar') || name.endsWith('.zip') || name.endsWith('.tar.gz')) return <div className="flex-1 flex items-center justify-center"><FileArchive className="size-8 text-muted-foreground" /></div>;
+          if (type.includes('javascript') || type.includes('json') || type.includes('html') || type.includes('css') || name.match(/\.(js|ts|jsx|tsx|json|html|css|py|java|cpp|c|go|rs)$/)) return <div className="flex-1 flex items-center justify-center"><FileCode className="size-8 text-muted-foreground" /></div>;
+          return <div className="flex-1 flex items-center justify-center"><File className="size-8 text-muted-foreground" /></div>;
+        })()}
         <span className="text-2xs text-muted-foreground truncate w-full text-center mt-1">
           {attachment.name.length > 12
             ? `${attachment.name.slice(0, 8)}...${attachment.name.split('.').pop()}`

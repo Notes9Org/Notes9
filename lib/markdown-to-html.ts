@@ -1,11 +1,18 @@
 import { marked } from 'marked';
 
-/** GFM markdown → HTML (same parser as reports / rich paste). */
-export function markdownToHtml(markdown: string): string {
+/** GFM markdown → HTML (same parser as reports / rich paste).
+ * `breaks` (default false) maps single newlines to <br>; the chat renderer opts
+ * in so each line break shows as its own spaced line. Other callers (editor,
+ * reports, paste import) keep the stricter default. */
+export function markdownToHtml(markdown: string, opts?: { breaks?: boolean }): string {
   const trimmed = markdown.trim();
   if (!trimmed) return '';
 
-  const html = marked.parse(trimmed, { async: false, gfm: true, breaks: false }) as string;
+  const html = marked.parse(trimmed, {
+    async: false,
+    gfm: true,
+    breaks: opts?.breaks ?? false,
+  }) as string;
   return wrapTablesForScroll(html);
 }
 

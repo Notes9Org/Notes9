@@ -16,9 +16,10 @@ import {
   FlaskConical,
   MessageSquare,
   BarChart2,
+  Archive,
   BrainCircuit,
-  Wrench,
   Network,
+  Wrench,
   type LucideIcon,
 } from 'lucide-react';
 import type { ToolCard } from '@/hooks/use-agent-stream';

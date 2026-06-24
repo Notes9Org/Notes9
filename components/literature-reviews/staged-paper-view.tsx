@@ -1,5 +1,6 @@
 "use client"
 
+import { useEffect, useRef } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { SearchPaper } from "@/types/paper-search"
@@ -97,6 +98,19 @@ export function StagedPaperView({
     !lit.pdf_storage_path &&
     (lit.pdf_import_status === "none" || lit.pdf_import_status === "failed")
 
+  // When a PDF is available, auto-scroll the reader into view + center it so the
+  // user lands on the paper without scrolling (e.g. after clicking "Read").
+  const pdfCardRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (!lit.pdf_storage_path) return
+    // Scroll once early, then again after the PDF has had time to render — the
+    // page's height grows as pages paint, so a single early scroll lands short.
+    const scroll = () =>
+      pdfCardRef.current?.scrollIntoView({ behavior: "smooth", block: "center" })
+    const timers = [300, 1100].map((d) => setTimeout(scroll, d))
+    return () => timers.forEach(clearTimeout)
+  }, [lit.id, lit.pdf_storage_path])
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col gap-4">
@@ -137,6 +151,7 @@ export function StagedPaperView({
         </div>
       </div>
 
+      <div ref={pdfCardRef}>
       <Card>
         <CardHeader className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between border-b pb-6">
           <div>
@@ -230,6 +245,7 @@ export function StagedPaperView({
           )}
         </CardContent>
       </Card>
+      </div>
     </div>
   )
 }
