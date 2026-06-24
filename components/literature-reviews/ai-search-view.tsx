@@ -21,16 +21,19 @@ import type { SearchPaper } from '@/types/paper-search'
 import type { AiSearchResult } from '@/types/ai-search'
 import { toast } from 'sonner'
 
-/** Strip inline markdown (bold/italic/code) to clean plain text — the summary is
- * markdown, but the per-paper "Why it matters" blurb renders as plain text. */
+/** Strip markdown (headers, emphasis, code, list/quote markers) to clean plain
+ * text — the summary is markdown, but the per-paper "Why it matters" blurb
+ * renders as plain text. Citation markers `[n]` are left untouched. */
 function stripInlineMarkdown(s: string): string {
   return s
+    .replace(/(^|\s)#{1,6}(\s+|$)/g, '$1') // headers (## Overview)
     .replace(/\*\*([^*]+)\*\*/g, '$1')
     .replace(/__([^_]+)__/g, '$1')
     .replace(/(^|\s)\*([^*\s][^*]*?)\*(?=\s|[.,;:)]|$)/g, '$1$2')
     .replace(/(^|\s)_([^_\s][^_]*?)_(?=\s|[.,;:)]|$)/g, '$1$2')
     .replace(/`([^`]+)`/g, '$1')
     .replace(/\*\*|__/g, '')
+    .replace(/#{2,}/g, '') // stray header hashes left after merges
     .replace(/\s+/g, ' ')
     .trim()
 }
@@ -207,26 +210,35 @@ export function AiSearchView({
   const relevanceByLabel = useMemo(() => {
     const map = new Map<string, string>()
     if (!summary) return map
-    // Split on sentence boundaries, but NOT after a single capital letter (genus
-    // initials like "S. cerevisiae") or common abbreviations, so blurbs stay whole.
-    const sentences = summary.split(
-      /(?<![A-Z])(?<!\bet al)(?<!\be\.g)(?<!\bi\.e)[.!?]+\s+(?=[A-Z(["'])/,
-    )
-    for (const sentence of sentences) {
-      const labels = new Set<string>()
-      for (const m of sentence.matchAll(/\[(\d+(?:\s*,\s*\d+)*)\]/g)) {
-        for (const n of m[1].split(',')) labels.add(n.trim())
-      }
-      // Only attribute a sentence to a paper when it cites that paper alone.
-      if (labels.size !== 1) continue
-      const stripped = stripInlineMarkdown(
-        sentence.replace(/\s*\[(\d+(?:\s*,\s*\d+)*)\]/g, '').replace(/\s+/g, ' ').trim(),
+    // Work line-by-line first so markdown headers / list items never merge into a
+    // paragraph's sentences. Header / list-only lines carry no [n] and are dropped.
+    for (const rawLine of summary.split(/\n+/)) {
+      const line = stripInlineMarkdown(
+        rawLine.replace(/^\s*(?:#{1,6}|[-*+>]|\d+\.)\s+/, ''),
       )
-      if (!stripped) continue
-      // The split consumes the terminal period — add it back so blurbs read cleanly.
-      const clean = /[.!?]$/.test(stripped) ? stripped : `${stripped}.`
-      const lbl = [...labels][0]
-      map.set(lbl, map.has(lbl) ? `${map.get(lbl)} ${clean}` : clean)
+      if (!line) continue
+      // Split each line into sentences, but NOT after a single capital letter
+      // (genus initials like "S. cerevisiae") or common abbreviations.
+      const sentences = line.split(
+        /(?<![A-Z])(?<!\bet al)(?<!\be\.g)(?<!\bi\.e)[.!?]+\s+(?=[A-Z(["'])/,
+      )
+      for (const sentence of sentences) {
+        const labels = new Set<string>()
+        for (const m of sentence.matchAll(/\[(\d+(?:\s*,\s*\d+)*)\]/g)) {
+          for (const n of m[1].split(',')) labels.add(n.trim())
+        }
+        // Only attribute a sentence to a paper when it cites that paper alone.
+        if (labels.size !== 1) continue
+        const stripped = sentence
+          .replace(/\s*\[(\d+(?:\s*,\s*\d+)*)\]/g, '')
+          .replace(/\s+/g, ' ')
+          .trim()
+        if (!stripped) continue
+        // The split drops the terminal period — add it back so blurbs read cleanly.
+        const clean = /[.!?]$/.test(stripped) ? stripped : `${stripped}.`
+        const lbl = [...labels][0]
+        map.set(lbl, map.has(lbl) ? `${map.get(lbl)} ${clean}` : clean)
+      }
     }
     return map
   }, [summary])

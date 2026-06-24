@@ -4,7 +4,7 @@ import { useMemo, useState } from 'react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
-import { BookOpen, Check, Database, ExternalLink, Loader2, MessageCircle, Quote, Unlock } from 'lucide-react'
+import { BookOpen, Check, Database, ExternalLink, FileText, Loader2, MessageCircle, Quote, ScrollText, Unlock } from 'lucide-react'
 import { decodeHtmlEntities, formatLiteratureAbstractPlain } from '@/lib/literature-abstract-display'
 import { cn } from '@/lib/utils'
 import { savePaperToRepository } from '@/app/(app)/literature-reviews/actions'
@@ -24,6 +24,29 @@ function readUrl(r: AiSearchResult): string | null {
   if (p?.pmid) return `https://pubmed.ncbi.nlm.nih.gov/${p.pmid}/`
   if (r.sourceUrl && /^https?:\/\//i.test(r.sourceUrl)) return r.sourceUrl
   return null
+}
+
+/** Render a (already paragraph-broken) abstract as spaced paragraphs, bolding a
+ *  leading structured-section label ("Background:", "Methods:", …). */
+function renderAbstractParagraphs(text: string) {
+  return text.split(/\n{2,}/).map((para, i) => {
+    const trimmed = para.trim()
+    const colon = trimmed.indexOf(':')
+    const label = colon > 0 && colon <= 40 ? trimmed.slice(0, colon).trim() : ''
+    const isLabel = !!label && /^[A-Za-z][A-Za-z /&-]+$/.test(label)
+    return (
+      <p key={i} className="text-sm leading-relaxed text-foreground/80">
+        {isLabel ? (
+          <>
+            <span className="font-semibold text-foreground/90">{label}:</span>{' '}
+            {trimmed.slice(colon + 1).trim()}
+          </>
+        ) : (
+          trimmed
+        )}
+      </p>
+    )
+  })
 }
 
 const STOPWORDS = new Set([
@@ -250,31 +273,35 @@ export function AiPaperCard({
         </h3>
         {authors && <p className="mb-3 text-sm text-muted-foreground">{authors}</p>}
 
-        {/* Tabs — the per-paper AI summary (grounded to the user's query) and the
-            abstract, side by side, per the literature result spec. */}
-        <div className="mb-3 flex items-center gap-1 border-b border-border/60">
+        {/* Tabs — a pill segmented control so the active view (AI summary vs the
+            abstract) reads at a glance: solid fill + icon for the selected tab. */}
+        <div className="mb-3 inline-flex items-center gap-0.5 rounded-lg border border-border/60 bg-muted/40 p-0.5">
           <button
             type="button"
             onClick={() => setTab('ai')}
+            aria-pressed={tab === 'ai'}
             className={cn(
-              '-mb-px border-b-2 px-3 py-1.5 text-xs font-medium transition-colors',
+              'inline-flex items-center gap-1.5 rounded-md px-3 py-1 text-xs font-medium transition-all',
               tab === 'ai'
-                ? 'border-primary text-primary'
-                : 'border-transparent text-muted-foreground hover:text-foreground',
+                ? 'bg-primary text-primary-foreground shadow-sm'
+                : 'text-muted-foreground hover:text-foreground',
             )}
           >
+            <ScrollText className="size-3.5" />
             AI summary
           </button>
           <button
             type="button"
             onClick={() => setTab('abstract')}
+            aria-pressed={tab === 'abstract'}
             className={cn(
-              '-mb-px inline-flex items-center gap-1.5 border-b-2 px-3 py-1.5 text-xs font-medium transition-colors',
+              'inline-flex items-center gap-1.5 rounded-md px-3 py-1 text-xs font-medium transition-all',
               tab === 'abstract'
-                ? 'border-primary text-primary'
-                : 'border-transparent text-muted-foreground hover:text-foreground',
+                ? 'bg-primary text-primary-foreground shadow-sm'
+                : 'text-muted-foreground hover:text-foreground',
             )}
           >
+            <FileText className="size-3.5" />
             Abstract
             {!abstractPlain && result.abstractPending && <Loader2 className="size-3 animate-spin" />}
           </button>
@@ -338,19 +365,18 @@ export function AiPaperCard({
           <div className="mb-3 duration-300 animate-in fade-in">
             {abstractPlain ? (
               <>
-                <p
-                  className={cn(
-                    'text-sm leading-relaxed text-foreground/80 whitespace-pre-wrap',
-                    !showAbstract && 'line-clamp-6',
-                  )}
-                >
-                  {abstractPlain}
-                </p>
+                {showAbstract ? (
+                  <div className="space-y-2">{renderAbstractParagraphs(abstractPlain)}</div>
+                ) : (
+                  <p className="line-clamp-6 whitespace-pre-wrap text-sm leading-relaxed text-foreground/80">
+                    {abstractPlain}
+                  </p>
+                )}
                 {abstractPlain.length > 280 && (
                   <button
                     type="button"
                     onClick={() => setShowAbstract((v) => !v)}
-                    className="mt-1.5 text-xs font-medium text-primary/80 transition-colors hover:text-primary"
+                    className="mt-2 text-xs font-medium text-primary/80 transition-colors hover:text-primary"
                   >
                     {showAbstract ? 'Show less ↑' : 'Read more ↓'}
                   </button>

@@ -73,6 +73,24 @@ function str(v: unknown): string | undefined {
   return typeof v === 'string' && v.trim() ? v.trim() : undefined
 }
 
+/** A snippet/description rather than a full abstract — ends with an ellipsis, or
+ *  is suspiciously short. We prefer a full abstract over these. */
+function isTruncatedAbstract(s: string | null | undefined): boolean {
+  if (!s) return false
+  const t = s.trim()
+  return /(\.{3}|…)\s*$/.test(t) || t.length < 160
+}
+
+/** Choose the best abstract among candidates: the longest NON-truncated one;
+ *  only fall back to a truncated snippet when nothing complete is available. */
+function pickAbstract(cands: unknown[]): string | null {
+  const list = cands.map((c) => str(c)).filter((c): c is string => !!c)
+  if (list.length === 0) return null
+  const full = list.filter((c) => !isTruncatedAbstract(c))
+  const pool = full.length ? full : list
+  return pool.reduce((a, b) => (b.length > a.length ? b : a))
+}
+
 /**
  * Remove a trailing "References" / "Sources" / "Bibliography" section from the
  * AI summary. We render our own deduped references list from the matched
@@ -305,19 +323,22 @@ export function useAiLiteratureSearch({
       const lookupTerm = idTerm ?? (titleTerm.length >= 8 ? titleTerm : null)
       const lookupById = !!idTerm
       const meta = resolveCache.get(key) ?? null
-      // Abstract, in order: matched DB paper → source payload → database lookup.
-      const abstract =
-        str(paper?.abstract ?? undefined) ??
-        str(s.abstract) ??
-        str(s.description) ??
-        str(s.summary) ??
-        (meta?.abstract || null)
-      // Pending = no abstract yet, a lookup is possible (by id, title, OR the
-      // cited URL), and we haven't finished resolving this paper. It stays true
-      // for the WHOLE multi-source fetch — only the cache being set (after every
-      // source has been tried) clears it, so the loader never disappears early.
+      // Prefer a FULL abstract (matched DB / source / resolved lookup) over a
+      // truncated description/snippet ("…"). The resolved abstract (OpenAlex /
+      // Europe PMC / Semantic Scholar) outranks the AI source's short blurb.
+      const abstract = pickAbstract([
+        paper?.abstract,
+        s.abstract,
+        meta?.abstract,
+        s.description,
+        s.summary,
+      ])
       const canResolve = !!lookupTerm || !!url || !!paper?.articlePageUrl
-      const abstractPending = !abstract && canResolve && !resolveCache.has(key)
+      // Pending while we still lack a FULL abstract and a lookup hasn't run yet.
+      // Stays true for the whole multi-source fetch; a truncated snippet still
+      // counts as "needs the full abstract" until the lookup completes.
+      const needsFullAbstract = !abstract || isTruncatedAbstract(abstract)
+      const abstractPending = needsFullAbstract && canResolve && !resolveCache.has(key)
       out.push({
         citeLabel: String(display),
         snippet: snippet ?? '',
@@ -361,10 +382,11 @@ export function useAiLiteratureSearch({
       if (!canResolve) return false
       // Same key the results memo reads back with — guaranteed not to drift.
       if (resolveCache.has(r.dedupeKey) || resolveInFlight.has(r.dedupeKey)) return false
-      const hasAbstract = !!str(r.abstract ?? undefined)
+      // A truncated "…" snippet counts as missing — re-fetch the full abstract.
+      const hasFullAbstract = !!str(r.abstract ?? undefined) && !isTruncatedAbstract(r.abstract)
       const hasPdf = !!r.paper?.pdfUrl
-      // Resolve when we're missing an abstract or an open-access PDF link.
-      return !hasAbstract || !hasPdf
+      // Resolve when we lack a full abstract or an open-access PDF link.
+      return !hasFullAbstract || !hasPdf
     })
     if (queue.length === 0) return
 
