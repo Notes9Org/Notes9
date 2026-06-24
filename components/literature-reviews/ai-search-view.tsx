@@ -1,9 +1,9 @@
 'use client'
 
-import { useEffect, useMemo } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { Telescope, ScrollText, AlertCircle, MessagesSquare, GripVertical } from 'lucide-react'
+import { Telescope, ScrollText, AlertCircle, MessagesSquare, GripVertical, Loader2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useAiLiteratureSearch } from '@/hooks/use-ai-literature-search'
 import type { CitationsManifest, CitationsManifestEntry } from '@/hooks/use-agent-stream'
@@ -13,12 +13,27 @@ import { flyToCatalyst } from '@/lib/fly-to-catalyst'
 import { MarkdownRenderer } from '@/components/catalyst/markdown-renderer'
 import { Notes9ChatLoader } from '@/components/catalyst/notes9-chat-loader'
 import { openCatalystPanel, attachToCatalyst } from '@/lib/catalyst-launch'
+import { primeCatalystCoPilot } from '@/lib/catalyst-copilot'
 import { useResizable } from '@/hooks/use-resizable'
 import { applyAiFilters, DEFAULT_AI_FILTERS, type AiResultFilters } from '@/lib/ai-search-filters'
 import { decodeHtmlEntities } from '@/lib/literature-abstract-display'
 import type { SearchPaper } from '@/types/paper-search'
 import type { AiSearchResult } from '@/types/ai-search'
 import { toast } from 'sonner'
+
+/** Strip inline markdown (bold/italic/code) to clean plain text — the summary is
+ * markdown, but the per-paper "Why it matters" blurb renders as plain text. */
+function stripInlineMarkdown(s: string): string {
+  return s
+    .replace(/\*\*([^*]+)\*\*/g, '$1')
+    .replace(/__([^_]+)__/g, '$1')
+    .replace(/(^|\s)\*([^*\s][^*]*?)\*(?=\s|[.,;:)]|$)/g, '$1$2')
+    .replace(/(^|\s)_([^_\s][^_]*?)_(?=\s|[.,;:)]|$)/g, '$1$2')
+    .replace(/`([^`]+)`/g, '$1')
+    .replace(/\*\*|__/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
 
 /** Nearest scrollable ancestor, so we scroll a column on its own instead of the
  * whole page. Returns null when nothing scrolls (let the browser handle it). */
@@ -50,6 +65,43 @@ function refMeta(r: AiSearchResult): string {
   const journal = r.paper?.journal ? decodeHtmlEntities(r.paper.journal) : ''
   const year = r.paper?.year || null
   return [lead, journal, year].filter(Boolean).join(' · ')
+}
+
+/** The stages the AI summary moves through — cycled in the loading state. */
+const SUMMARY_STAGES = [
+  'Searching PubMed, Europe PMC & OpenAlex…',
+  'Reading the most relevant papers…',
+  'Cross-checking findings across sources…',
+  'Writing a cited summary…',
+]
+
+/** Modern AI-summary loading state: an indeterminate progress bar, a cycling
+ * stage label, and a shimmering "text being written" skeleton. */
+function StreamingSummary() {
+  const [stage, setStage] = useState(0)
+  useEffect(() => {
+    const t = setInterval(() => setStage((s) => (s + 1) % SUMMARY_STAGES.length), 2200)
+    return () => clearInterval(t)
+  }, [])
+  return (
+    <div aria-busy="true" aria-label="Generating AI summary">
+      <div className="n9-progress-indeterminate mb-3 h-1" />
+      <div className="mb-4 min-h-[1.25rem] text-sm text-muted-foreground">
+        <span key={stage} className="inline-block duration-500 animate-in fade-in slide-in-from-bottom-1">
+          {SUMMARY_STAGES[stage]}
+        </span>
+      </div>
+      <div className="space-y-2.5">
+        {['96%', '100%', '88%', '99%', '72%', '92%', '60%'].map((w, i) => (
+          <div
+            key={i}
+            className="n9-skeleton-shimmer h-3 rounded bg-foreground/10"
+            style={{ width: w }}
+          />
+        ))}
+      </div>
+    </div>
+  )
 }
 
 function CardSkeleton({ delay = 0 }: { delay?: number }) {
@@ -107,9 +159,35 @@ export function AiSearchView({
     if (query.trim()) void run(query)
   }, [query, run])
 
+  // Prime the Catalyst co-pilot with this search (question + papers + summary),
+  // so opening the sidebar lets the user ask about any paper or the research
+  // area immediately — no need to attach or "drop" anything first. Re-primes as
+  // abstracts fill in.
+  useEffect(() => {
+    if (isStreaming || results.length === 0 || !query.trim()) return
+    const papers = results.slice(0, 8).map((r) => ({
+      n: r.citeLabel,
+      title: decodeHtmlEntities(r.paper?.title || r.aiTitle || 'Untitled'),
+      authors: r.paper?.authors?.length
+        ? r.paper.authors.map(decodeHtmlEntities).join(', ')
+        : undefined,
+      journal: r.paper?.journal ? decodeHtmlEntities(r.paper.journal) : undefined,
+      year: r.paper?.year ?? null,
+      abstract: (r.paper?.abstract || r.abstract || '').trim() || undefined,
+      url: refHref(r),
+      openAccess: !!(r.paper?.isOpenAccess || r.paper?.pdfUrl),
+    }))
+    primeCatalystCoPilot({ query, papers, summary })
+  }, [query, results, summary, isStreaming])
+
   const loading = isStreaming || papersLoading
   const showSkeletons = loading && results.length === 0
   const displayed = applyAiFilters(results, filters)
+
+  // True until the WHOLE search has settled: the summary finished streaming, the
+  // database match finished, AND every shown result's abstract lookup resolved.
+  // The paper count + per-card content stay in a loading state until then.
+  const processing = loading || displayed.some((r) => r.abstractPending)
 
   // Labels the AI actually cited inline in its summary (e.g. "[3]", "[3, 5]").
   // The References list shows ONLY these — not every fetched paper.
@@ -119,6 +197,38 @@ export function AiSearchView({
       for (const n of m[1].split(',')) set.add(n.trim())
     }
     return set
+  }, [summary])
+
+  // Per-paper relevance: the AI's own sentences from the overall summary that
+  // cite ONLY this paper — i.e. why THIS paper specifically answers the query.
+  // Sentences citing several papers are shared context, so they're skipped here
+  // (otherwise multiple cards would show the same blurb). Citation markers are
+  // stripped so each card reads as a clean, paper-specific note.
+  const relevanceByLabel = useMemo(() => {
+    const map = new Map<string, string>()
+    if (!summary) return map
+    // Split on sentence boundaries, but NOT after a single capital letter (genus
+    // initials like "S. cerevisiae") or common abbreviations, so blurbs stay whole.
+    const sentences = summary.split(
+      /(?<![A-Z])(?<!\bet al)(?<!\be\.g)(?<!\bi\.e)[.!?]+\s+(?=[A-Z(["'])/,
+    )
+    for (const sentence of sentences) {
+      const labels = new Set<string>()
+      for (const m of sentence.matchAll(/\[(\d+(?:\s*,\s*\d+)*)\]/g)) {
+        for (const n of m[1].split(',')) labels.add(n.trim())
+      }
+      // Only attribute a sentence to a paper when it cites that paper alone.
+      if (labels.size !== 1) continue
+      const stripped = stripInlineMarkdown(
+        sentence.replace(/\s*\[(\d+(?:\s*,\s*\d+)*)\]/g, '').replace(/\s+/g, ' ').trim(),
+      )
+      if (!stripped) continue
+      // The split consumes the terminal period — add it back so blurbs read cleanly.
+      const clean = /[.!?]$/.test(stripped) ? stripped : `${stripped}.`
+      const lbl = [...labels][0]
+      map.set(lbl, map.has(lbl) ? `${map.get(lbl)} ${clean}` : clean)
+    }
+    return map
   }, [summary])
 
   // Until the summary streams in, fall back to all displayed results so the
@@ -225,11 +335,18 @@ export function AiSearchView({
                   triggerClassName="h-8 px-2.5 text-xs"
                 />
               )}
-              <span className="text-xs text-muted-foreground tabular-nums">
-                <span className="font-medium text-foreground">{displayed.length}</span>
-                {displayed.length === results.length ? '' : ` / ${results.length}`}{' '}
-                {displayed.length === 1 ? 'paper' : 'papers'}
-              </span>
+              {processing ? (
+                <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
+                  <Loader2 className="size-3 animate-spin" aria-hidden />
+                  Gathering papers…
+                </span>
+              ) : (
+                <span className="text-xs text-muted-foreground tabular-nums">
+                  <span className="font-medium text-foreground">{displayed.length}</span>
+                  {displayed.length === results.length ? '' : ` / ${results.length}`}{' '}
+                  {displayed.length === 1 ? 'paper' : 'papers'}
+                </span>
+              )}
             </div>
             <Button
               size="sm"
@@ -260,6 +377,9 @@ export function AiSearchView({
             <AiPaperCard
               result={r}
               projectId={projectId}
+              query={query}
+              summaryLoading={isStreaming}
+              relevanceSummary={relevanceByLabel.get(r.citeLabel) ?? ''}
               onStage={onStagePaper}
               onOpenStaged={onOpenStaged}
               isStaged={r.paper ? (isPaperStaged?.(r.paper.id) ?? false) : false}
@@ -329,9 +449,11 @@ export function AiSearchView({
                 citationsManifest={citationsManifest}
                 onCitationClick={scrollToCitation}
               />
+            ) : isStreaming ? (
+              <StreamingSummary />
             ) : (
               <p className="text-sm italic text-muted-foreground">
-                {isStreaming ? 'Searching the web and reading papers…' : 'Ask a question to get an AI summary.'}
+                Ask a question to get an AI summary.
               </p>
             )}
           </CardContent>

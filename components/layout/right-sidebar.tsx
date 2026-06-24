@@ -40,6 +40,7 @@ import {
   ChevronDown,
   ChevronLeft,
   X,
+  Telescope,
   Menu,
   Sun,
   Moon,
@@ -116,6 +117,13 @@ import {
 import { isLikelyUuid } from '@/lib/url-project-param';
 import type { CatalystLaunchDetail, CatalystAttachDetail } from '@/lib/catalyst-launch';
 import { CATALYST_ATTACH_EVENT } from '@/lib/catalyst-launch';
+import {
+  getCatalystCoPilot,
+  clearCatalystCoPilot,
+  buildCoPilotPreamble,
+  CATALYST_COPILOT_EVENT,
+  type CoPilotContext,
+} from '@/lib/catalyst-copilot';
 import { useLiteratureMentionCandidates } from '@/contexts/literature-mention-context';
 import { useLiteratureAgentStream } from '@/hooks/use-literature-agent-stream';
 import type { LiteratureAgentDonePayload } from '@/lib/literature-agent-types';
@@ -457,6 +465,11 @@ export function RightSidebar({
     onError: () => {},
   });
   const [taggedLiterature, setTaggedLiterature] = useState<Array<{ id: string; title: string }>>([]);
+  // Literature co-pilot context (the active search), primed when a search runs.
+  // Lets the user ask about any paper / the research area without attaching.
+  const [coPilot, setCoPilot] = useState<CoPilotContext | null>(null);
+  const coPilotRef = useRef<CoPilotContext | null>(null);
+  coPilotRef.current = coPilot;
   const [mentionOpen, setMentionOpen] = useState(false);
   const [mentionFilter, setMentionFilter] = useState('');
   /** Todo-style @ menu: row highlight (-1 = none). */
@@ -1711,9 +1724,16 @@ export function RightSidebar({
           content_type: a.contentType,
           size: a.size ?? 0,
         }));
+      // Co-pilot: prepend the active literature search (papers + abstracts +
+      // summary) to the MODEL query only — the user's visible message stays the
+      // clean question. Lets them ask about any paper without attaching one.
+      const coPilotPreamble = coPilotRef.current ? buildCoPilotPreamble(coPilotRef.current) : '';
+      const notes9ModelQuery = coPilotPreamble
+        ? `${coPilotPreamble}\n\n## User question\n${text}`
+        : text;
       const { donePayload, error, artifacts: streamArtifacts, citationsManifest: streamManifest, graphs: streamGraphs } = await agentStream.runStream(
         {
-          query: text,
+          query: notes9ModelQuery,
           session_id: sessionId,
           history,
           attachments: tagsToAttachments(requestTags),
@@ -2500,6 +2520,22 @@ export function RightSidebar({
     return () => window.removeEventListener(CATALYST_ATTACH_EVENT, onAttach);
   }, []);
 
+  // Pick up the literature co-pilot context: read whatever's already primed when
+  // the sidebar mounts (opened on demand), and stay in sync as new searches run.
+  useEffect(() => {
+    setCoPilot(getCatalystCoPilot());
+    const onCoPilot = (e: Event) => setCoPilot((e as CustomEvent<CoPilotContext | null>).detail);
+    window.addEventListener(CATALYST_COPILOT_EVENT, onCoPilot);
+    return () => window.removeEventListener(CATALYST_COPILOT_EVENT, onCoPilot);
+  }, []);
+
+  // With a fresh search loaded and no conversation yet, default web search on so
+  // the co-pilot can verify/extend beyond the abstracts.
+  useEffect(() => {
+    if (coPilot && messages.length === 0) setWebSearchEnabled(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [coPilot]);
+
   // --- Render Components ---
 
   const catalystHeroComposerShell = cn(
@@ -2617,6 +2653,27 @@ export function RightSidebar({
 
     return (
     <>
+    {coPilot && messages.length === 0 && (
+      <div className="mb-2 flex items-start gap-2 rounded-xl border border-primary/25 bg-primary/[0.05] px-3 py-2 text-xs">
+        <Telescope className="mt-0.5 size-3.5 shrink-0 text-primary" aria-hidden />
+        <div className="min-w-0 flex-1 leading-snug">
+          <span className="font-medium text-foreground">Co-pilot is reading your search</span>
+          <span className="text-muted-foreground">
+            {' '}— “{coPilot.query}” · {coPilot.papers.length} paper
+            {coPilot.papers.length === 1 ? '' : 's'}. Ask about any paper or the research area.
+          </span>
+        </div>
+        <button
+          type="button"
+          onClick={() => clearCatalystCoPilot()}
+          title="Dismiss search context"
+          aria-label="Dismiss search context"
+          className="-mr-1 -mt-0.5 shrink-0 rounded p-0.5 text-muted-foreground hover:text-foreground"
+        >
+          <X className="size-3.5" />
+        </button>
+      </div>
+    )}
     <div className="group/input relative flex flex-col w-full">
       <div
         className={cn(

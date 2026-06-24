@@ -641,10 +641,14 @@ export function LiteratureTabs({
     const q = (override ?? query).trim()
     if (!q) return
     if (override !== undefined && override !== query) setQuery(override)
+    // Always surface the results immediately: a search from anywhere (the
+    // Repository page, or while reading a PDF in another tab) jumps straight to
+    // the search-results view BEFORE the (awaited) fetch, not after it.
+    setTopSection("search")
     setSubmittedQuery(q) // drives the AI search — only changes on submit
     setHasSearched(true)
-    await executePaperSearch(q)
     syncTabsForSearchSession()
+    await executePaperSearch(q)
   }
 
   // Jump from the repository's search box straight into a fresh paper search.

@@ -1,10 +1,10 @@
 'use client'
 
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
-import { BookOpen, Check, Database, ExternalLink, Loader2, MessageCircle, Unlock } from 'lucide-react'
+import { BookOpen, Check, Database, ExternalLink, Loader2, MessageCircle, Quote, Unlock } from 'lucide-react'
 import { decodeHtmlEntities, formatLiteratureAbstractPlain } from '@/lib/literature-abstract-display'
 import { cn } from '@/lib/utils'
 import { savePaperToRepository } from '@/app/(app)/literature-reviews/actions'
@@ -26,9 +26,69 @@ function readUrl(r: AiSearchResult): string | null {
   return null
 }
 
+const STOPWORDS = new Set([
+  'the', 'and', 'for', 'are', 'was', 'were', 'with', 'that', 'this', 'from', 'have', 'has',
+  'how', 'does', 'what', 'why', 'which', 'who', 'into', 'using', 'use', 'used', 'can', 'their',
+  'its', 'they', 'them', 'these', 'those', 'than', 'then', 'when', 'where', 'will', 'would',
+  'about', 'between', 'during', 'effect', 'effects', 'study', 'studies', 'paper', 'research',
+])
+
+/** Split prose into sentences without breaking on genus initials ("S. cerevisiae")
+ *  or common abbreviations. */
+function splitSentences(text: string): string[] {
+  return text
+    .split(/(?<![A-Z])(?<!\bet al)(?<!\be\.g)(?<!\bi\.e)[.!?]+\s+(?=[A-Z(["'])/)
+    .map((s) => s.trim())
+    .filter(Boolean)
+}
+
+/**
+ * Pick the passage of a paper's text most relevant to the user's query, by
+ * scoring each sentence on how many query keywords it contains. Returns the
+ * single best sentence (plus its immediate neighbor when that's also on-topic),
+ * in original order — a real, paper-specific snippet rather than a shared blurb.
+ */
+function bestSnippetForQuery(text: string, query: string): string {
+  if (!text || !query) return ''
+  const terms = new Set(
+    (query.toLowerCase().match(/[a-z0-9]{3,}/g) ?? []).filter((t) => !STOPWORDS.has(t)),
+  )
+  if (terms.size === 0) return ''
+  const sentences = splitSentences(text)
+  if (sentences.length === 0) return ''
+  const scores = sentences.map((s) => {
+    const words = s.toLowerCase().match(/[a-z0-9]{3,}/g) ?? []
+    let hits = 0
+    for (const w of words) if (terms.has(w)) hits++
+    return hits
+  })
+  let bestIdx = -1
+  let bestScore = 0
+  scores.forEach((sc, i) => {
+    if (sc > bestScore) {
+      bestScore = sc
+      bestIdx = i
+    }
+  })
+  // No keyword overlap → fall back to the opening sentence (usually the paper's
+  // main claim) so the card still shows a real passage.
+  if (bestIdx < 0) {
+    const lead = sentences[0]
+    return /[.!?]$/.test(lead) ? lead : `${lead}.`
+  }
+  const out = [sentences[bestIdx]]
+  // Add the following sentence if it's also clearly on-topic (richer context).
+  if (bestIdx + 1 < sentences.length && scores[bestIdx + 1] >= 2) out.push(sentences[bestIdx + 1])
+  const joined = out.join(' ')
+  return /[.!?]$/.test(joined) ? joined : `${joined}.`
+}
+
 export function AiPaperCard({
   result,
   projectId,
+  query = '',
+  summaryLoading = false,
+  relevanceSummary,
   onSaved,
   onStage,
   onOpenStaged,
@@ -37,6 +97,15 @@ export function AiPaperCard({
 }: {
   result: AiSearchResult
   projectId?: string | null
+  /** The user's search query — used to pull the most query-relevant passage out
+   *  of this paper's text. */
+  query?: string
+  /** True while the overall AI summary is still streaming — the per-paper "Why
+   *  it matters" note shows a loading state until it settles. */
+  summaryLoading?: boolean
+  /** The AI's own sentences (from the overall summary) about why this paper
+   *  answers the user's query — shown in the per-paper "AI summary" tab. */
+  relevanceSummary?: string
   onSaved?: () => void
   /** Same stage action the database card uses — stages + opens a reader tab. */
   onStage?: (paper: SearchPaper) => void | Promise<void>
@@ -47,8 +116,28 @@ export function AiPaperCard({
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
   const [showAbstract, setShowAbstract] = useState(false)
+  const [tab, setTab] = useState<'ai' | 'abstract'>('ai')
   const abstractRaw = result.paper?.abstract?.trim() || result.abstract?.trim() || ''
   const abstractPlain = abstractRaw ? formatLiteratureAbstractPlain(abstractRaw) : ''
+  const relevance = relevanceSummary?.trim() || ''
+  // The exact passage relevant to the query: prefer a backend-cited quote; else
+  // extract the most query-relevant sentence(s) from this paper's own abstract —
+  // so every card shows a real, paper-specific snippet (never a shared blurb).
+  const backendSnippet = result.snippet?.trim() || ''
+  const queryExcerpt = useMemo(() => bestSnippetForQuery(abstractRaw, query), [abstractRaw, query])
+  const exactPassage = backendSnippet || queryExcerpt
+  // Where the passage came from: the abstract, the open-access full text, or the
+  // cited source — so the user knows what grounds it.
+  const passageSource = (() => {
+    if (!exactPassage) return ''
+    if (exactPassage === queryExcerpt) return 'From the abstract'
+    const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim()
+    const nAbs = norm(abstractRaw)
+    const nSnip = norm(exactPassage)
+    if (nAbs && nSnip.length > 20 && nAbs.includes(nSnip.slice(0, 60))) return 'From the abstract'
+    if (result.paper?.pdfUrl || result.paper?.isOpenAccess) return 'From the full text'
+    return 'From the cited source'
+  })()
 
   const paper: SearchPaper =
     result.paper ??
@@ -161,50 +250,133 @@ export function AiPaperCard({
         </h3>
         {authors && <p className="mb-3 text-sm text-muted-foreground">{authors}</p>}
 
-        {/* Abstract — always shown for every paper when one is available, with a
-            smooth shimmer while it's being fetched so it fades in (no flash). */}
-        {abstractPlain ? (
-          <div className="mb-3 rounded-xl bg-muted/40 p-3.5 duration-300 animate-in fade-in">
-            <p className="mb-1 text-2xs font-semibold uppercase tracking-wider text-muted-foreground">
-              Abstract
-            </p>
-            <p
-              className={cn(
-                'text-sm leading-relaxed text-foreground/80 whitespace-pre-wrap',
-                !showAbstract && 'line-clamp-4',
-              )}
-            >
-              {abstractPlain}
-            </p>
-            {abstractPlain.length > 240 && (
-              <button
-                type="button"
-                onClick={() => setShowAbstract((v) => !v)}
-                className="mt-1.5 text-xs font-medium text-primary/80 transition-colors hover:text-primary"
-              >
-                {showAbstract ? 'Show less ↑' : 'Read more ↓'}
-              </button>
+        {/* Tabs — the per-paper AI summary (grounded to the user's query) and the
+            abstract, side by side, per the literature result spec. */}
+        <div className="mb-3 flex items-center gap-1 border-b border-border/60">
+          <button
+            type="button"
+            onClick={() => setTab('ai')}
+            className={cn(
+              '-mb-px border-b-2 px-3 py-1.5 text-xs font-medium transition-colors',
+              tab === 'ai'
+                ? 'border-primary text-primary'
+                : 'border-transparent text-muted-foreground hover:text-foreground',
+            )}
+          >
+            AI summary
+          </button>
+          <button
+            type="button"
+            onClick={() => setTab('abstract')}
+            className={cn(
+              '-mb-px inline-flex items-center gap-1.5 border-b-2 px-3 py-1.5 text-xs font-medium transition-colors',
+              tab === 'abstract'
+                ? 'border-primary text-primary'
+                : 'border-transparent text-muted-foreground hover:text-foreground',
+            )}
+          >
+            Abstract
+            {!abstractPlain && result.abstractPending && <Loader2 className="size-3 animate-spin" />}
+          </button>
+        </div>
+
+        {tab === 'ai' ? (
+          <div className="mb-3 space-y-3 duration-300 animate-in fade-in">
+            {exactPassage ? (
+              <div>
+                <p className="mb-1 flex items-center gap-1.5 text-2xs font-semibold uppercase tracking-wider text-muted-foreground">
+                  <Quote className="size-3" />
+                  Most relevant to your query
+                </p>
+                <blockquote className="rounded-r-lg rounded-l-md border-l-2 border-primary/45 bg-primary/[0.04] px-3 py-2 text-sm italic leading-relaxed text-foreground/85">
+                  “{exactPassage}”
+                  {passageSource && (
+                    <span className="mt-1.5 block text-2xs font-medium not-italic text-muted-foreground">
+                      ↳ {passageSource}
+                    </span>
+                  )}
+                </blockquote>
+              </div>
+            ) : result.abstractPending ? (
+              <div className="n9-skeleton-shimmer rounded-lg bg-muted/40 p-3" aria-busy="true">
+                <div className="mb-2 flex items-center gap-1.5 text-2xs font-semibold uppercase tracking-wider text-muted-foreground">
+                  <Loader2 className="size-3 animate-spin" />
+                  Finding the most relevant passage…
+                </div>
+                <div className="space-y-1.5">
+                  <div className="h-3 w-full rounded bg-foreground/10" />
+                  <div className="h-3 w-[88%] rounded bg-foreground/10" />
+                </div>
+              </div>
+            ) : null}
+            {relevance ? (
+              <div>
+                <p className="mb-1 text-2xs font-semibold uppercase tracking-wider text-muted-foreground">
+                  Why it matters
+                </p>
+                <p className="text-sm leading-relaxed text-foreground/90">{relevance}</p>
+              </div>
+            ) : summaryLoading ? (
+              <div aria-busy="true">
+                <p className="mb-1 flex items-center gap-1.5 text-2xs font-semibold uppercase tracking-wider text-muted-foreground">
+                  <Loader2 className="size-3 animate-spin" />
+                  Analyzing relevance…
+                </p>
+                <div className="n9-skeleton-shimmer space-y-1.5 rounded">
+                  <div className="h-3 w-full rounded bg-foreground/10" />
+                  <div className="h-3 w-[80%] rounded bg-foreground/10" />
+                </div>
+              </div>
+            ) : null}
+            {!exactPassage && !relevance && !result.abstractPending && !summaryLoading && (
+              <p className="text-sm italic text-muted-foreground/70">
+                No grounded summary available for this paper — open it to read more.
+              </p>
             )}
           </div>
-        ) : result.abstractPending ? (
-          <div className="n9-skeleton-shimmer mb-3 rounded-xl bg-muted/40 p-3.5" aria-busy="true">
-            <div className="mb-2 flex items-center gap-1.5 text-2xs font-semibold uppercase tracking-wider text-muted-foreground">
-              <Loader2 className="size-3 animate-spin" />
-              Loading abstract
-            </div>
-            <div className="space-y-1.5">
-              <div className="h-3 w-full rounded bg-foreground/10" />
-              <div className="h-3 w-[94%] rounded bg-foreground/10" />
-              <div className="h-3 w-[82%] rounded bg-foreground/10" />
-            </div>
+        ) : (
+          <div className="mb-3 duration-300 animate-in fade-in">
+            {abstractPlain ? (
+              <>
+                <p
+                  className={cn(
+                    'text-sm leading-relaxed text-foreground/80 whitespace-pre-wrap',
+                    !showAbstract && 'line-clamp-6',
+                  )}
+                >
+                  {abstractPlain}
+                </p>
+                {abstractPlain.length > 280 && (
+                  <button
+                    type="button"
+                    onClick={() => setShowAbstract((v) => !v)}
+                    className="mt-1.5 text-xs font-medium text-primary/80 transition-colors hover:text-primary"
+                  >
+                    {showAbstract ? 'Show less ↑' : 'Read more ↓'}
+                  </button>
+                )}
+              </>
+            ) : result.abstractPending ? (
+              <div className="n9-skeleton-shimmer rounded-lg bg-muted/40 p-3" aria-busy="true">
+                <div className="mb-2 flex items-center gap-1.5 text-2xs font-semibold uppercase tracking-wider text-muted-foreground">
+                  <Loader2 className="size-3 animate-spin" />
+                  Loading abstract
+                </div>
+                <div className="space-y-1.5">
+                  <div className="h-3 w-full rounded bg-foreground/10" />
+                  <div className="h-3 w-[94%] rounded bg-foreground/10" />
+                  <div className="h-3 w-[82%] rounded bg-foreground/10" />
+                </div>
+              </div>
+            ) : (
+              <p className="text-sm italic text-muted-foreground/70">
+                {href
+                  ? 'Abstract not available — open the source to read this paper.'
+                  : 'Abstract not available for this result.'}
+              </p>
+            )}
           </div>
-        ) : !result.snippet?.trim() ? (
-          <p className="mb-3 text-sm italic text-muted-foreground/70">
-            {href
-              ? 'Abstract not available — open the source to read this paper.'
-              : 'Abstract not available for this result.'}
-          </p>
-        ) : null}
+        )}
 
         <div className="flex flex-wrap items-center gap-2 border-t border-border/50 pt-3">
           {href && (

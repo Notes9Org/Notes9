@@ -1446,3 +1446,44 @@ body > [data-radix-popper-content-wrapper] {
     animation: none;
   }
 }
+
+/* Indeterminate progress bar — a solid accent segment sliding across a faint
+   track. Used on the AI summary while it streams in. No gradient. */
+.n9-progress-indeterminate {
+  position: relative;
+  overflow: hidden;
+  border-radius: 9999px;
+  background: color-mix(in oklab, var(--n9-accent) 14%, transparent);
+}
+.n9-progress-indeterminate::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: -40%;
+  width: 40%;
+  border-radius: 9999px;
+  background: var(--n9-accent);
+  animation: n9-indeterminate 1.15s cubic-bezier(0.65, 0, 0.35, 1) infinite;
+}
+@keyframes n9-indeterminate {
+  0% {
+    left: -40%;
+    width: 40%;
+  }
+  50% {
+    width: 55%;
+  }
+  100% {
+    left: 100%;
+    width: 40%;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .n9-progress-indeterminate::after {
+    animation: none;
+    left: 0;
+    width: 100%;
+    opacity: 0.4;
+  }
+}
