@@ -14,8 +14,7 @@ import {
   MoreHorizontal,
   NotebookPen,
   Package,
-  PanelLeftClose,
-  PanelLeftOpen,
+  PanelLeft,
   Plus,
   Search,
   Settings,
@@ -396,7 +395,7 @@ export function AppSidebar() {
                   onClick={(e) => toggleSidebarOpen(e)}
                   aria-label="Expand sidebar"
                 >
-                  <PanelLeftOpen className="size-4" />
+                  <PanelLeft className="size-4" />
                 </Button>
               </div>
             ) : (
@@ -426,7 +425,7 @@ export function AppSidebar() {
                     onClick={(e) => toggleSidebarOpen(e)}
                     aria-label="Collapse sidebar"
                   >
-                    <PanelLeftClose className="h-4 w-4" />
+                    <PanelLeft className="h-4 w-4" />
                   </Button>
                 )}
               </div>
