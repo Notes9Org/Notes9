@@ -648,42 +648,21 @@ export function LiteratureTabs({
     return list
   }, [searchResults, openAccessOnlySearch, searchSort])
 
-  const executePaperSearch = async (q: string) => {
-    setIsSearching(true)
-    try {
-      const params = new URLSearchParams()
-      params.set("query", q)
-      // Always fetch the broad, relevance-ranked pool with full metadata. The
-      // Sort-by control and the open-access filter then operate on this set
-      // client-side, so toggling them never triggers another search.
-      params.set("sort", "relevance")
-      const response = await fetch(`/api/search-papers?${params.toString()}`)
-      const data = await response.json()
-
-      if (response.ok) {
-        setSearchResults(data.papers || [])
-      } else {
-        console.error("Search error:", data.error)
-      }
-    } catch (error) {
-      console.error("Search failed:", error)
-    } finally {
-      setIsSearching(false)
-    }
-  }
-
-  const handleSearch = async (override?: string) => {
+  // The dedicated AI-search endpoint (/api/literature/ai-search) is invoked by
+  // AiSearchView from the submitted query — there's no separate
+  // /api/search-papers call. AiSearchView lifts its papers (for staging
+  // detection + count) via onResults and its loading via onLoadingChange.
+  const handleSearch = (override?: string) => {
     const q = (override ?? query).trim()
     if (!q) return
     if (override !== undefined && override !== query) setQuery(override)
-    // Always surface the results immediately: a search from anywhere (the
-    // Repository page, or while reading a PDF in another tab) jumps straight to
-    // the search-results view BEFORE the (awaited) fetch, not after it.
+    // Surface the results view immediately on submit (from anywhere).
     setTopSection("search")
     setSubmittedQuery(q) // drives the AI search — only changes on submit
     setHasSearched(true)
+    setIsSearching(true) // cleared by AiSearchView via onLoadingChange
+    setSearchResults([]) // clear stale results until the new search streams in
     syncTabsForSearchSession()
-    await executePaperSearch(q)
   }
 
   // Jump from the repository's search box straight into a fresh paper search.
@@ -1041,6 +1020,8 @@ export function LiteratureTabs({
                       filters={aiFilters}
                       onFiltersChange={setAiFilters}
                       aiQuery={submittedQuery}
+                      onResults={setSearchResults}
+                      onLoadingChange={setIsSearching}
                     />
                   </TabsContent>
                 )}
@@ -1087,6 +1068,8 @@ export function LiteratureTabs({
               filters={aiFilters}
               onFiltersChange={setAiFilters}
               aiQuery={submittedQuery}
+              onResults={setSearchResults}
+              onLoadingChange={setIsSearching}
             />
           )}
         </div>

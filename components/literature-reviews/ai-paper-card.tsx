@@ -142,7 +142,12 @@ export function AiPaperCard({
   const [tab, setTab] = useState<'ai' | 'abstract'>('ai')
   const abstractRaw = result.paper?.abstract?.trim() || result.abstract?.trim() || ''
   const abstractPlain = abstractRaw ? formatLiteratureAbstractPlain(abstractRaw) : ''
-  const relevance = relevanceSummary?.trim() || ''
+  // Prefer the backend per-paper AI summary (/literature/ai-search); fall back to
+  // the legacy "why it matters" sentences derived from the overall summary.
+  const relevance = (result.aiSummary || relevanceSummary)?.trim() || ''
+  // The backend is still generating this paper's summary, or the legacy overall
+  // summary is still streaming — either way, show the shimmer.
+  const relevanceLoading = result.summaryPending || summaryLoading
   // The exact passage relevant to the query: prefer a backend-cited quote; else
   // extract the most query-relevant sentence(s) from this paper's own abstract —
   // so every card shows a real, paper-specific snippet (never a shared blurb).
@@ -174,7 +179,13 @@ export function AiPaperCard({
     .filter(Boolean)
     .join(' • ')
   const href = readUrl(result)
-  const isOpenAccess = !!(result.paper?.isOpenAccess || result.paper?.pdfUrl)
+  // The green badge reflects *true* open access only. A `pdfUrl` just means a PDF
+  // link exists (e.g. Europe PMC full text) — that's not the same as open access,
+  // so it drives inline-read behavior (`canReadInline`) but never the badge.
+  const isOpenAccess = !!result.paper?.isOpenAccess
+  const canReadInline = !!(result.paper?.isOpenAccess || result.paper?.pdfUrl)
+  const citationCount =
+    typeof result.paper?.citedByCount === 'number' ? result.paper.citedByCount : null
 
   // "Read" does the same job as the database "Stage" button: stage the paper
   // (open-access → PDF fetched into a reader tab beside Search; closed → prompt
@@ -187,7 +198,7 @@ export function AiPaperCard({
     }
     if (onStage) {
       void onStage(paper)
-      if (!isOpenAccess) {
+      if (!canReadInline) {
         toast.info('Not open access — download the PDF and upload it in its tab to read it in Notes9.')
       }
       return
@@ -255,6 +266,16 @@ export function AiPaperCard({
             </Badge>
           )}
           {journalYear && <span className="text-xs text-muted-foreground">{journalYear}</span>}
+          {citationCount != null && (
+            <span
+              className="inline-flex items-center gap-1 text-xs tabular-nums text-muted-foreground"
+              title={`Cited by ${citationCount.toLocaleString()}`}
+            >
+              <Quote className="size-3 opacity-70" />
+              {citationCount.toLocaleString()}
+              {citationCount === 1 ? ' citation' : ' citations'}
+            </span>
+          )}
         </div>
 
         <h3 className="mb-1 text-[15px] font-semibold leading-snug tracking-tight text-foreground transition-colors group-hover/card:text-primary">
@@ -343,7 +364,7 @@ export function AiPaperCard({
                 </p>
                 <p className="text-sm leading-relaxed text-foreground/90">{relevance}</p>
               </div>
-            ) : summaryLoading ? (
+            ) : relevanceLoading ? (
               <div aria-busy="true">
                 <p className="mb-1 flex items-center gap-1.5 text-2xs font-semibold uppercase tracking-wider text-muted-foreground">
                   <Loader2 className="size-3 animate-spin" />
@@ -355,7 +376,7 @@ export function AiPaperCard({
                 </div>
               </div>
             ) : null}
-            {!exactPassage && !relevance && !result.abstractPending && !summaryLoading && (
+            {!exactPassage && !relevance && !result.abstractPending && !relevanceLoading && (
               <p className="text-sm italic text-muted-foreground/70">
                 No grounded summary available for this paper — open it to read more.
               </p>
