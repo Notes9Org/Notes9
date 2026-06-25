@@ -37,10 +37,18 @@ export async function POST(req: Request) {
   ]);
   if (postParseBlocked) return postParseBlocked;
   const { supabaseToken: _bodyToken, ...rest } = body;
+  if (typeof rest.query !== 'string' || rest.query.trim() === '') {
+    return new Response(JSON.stringify({ error: 'Bad Request: query must be a non-empty string' }), { status: 400, headers: { 'content-type': 'application/json' } });
+  }
+  // session_id is OPTIONAL: when absent/empty the backend mints a new session.
+  // Only reject a present-but-non-string value; preserve the prior tolerant
+  // coercion (String(rest.session_id ?? '')) so "start a new session" calls work.
+  if (rest.session_id !== undefined && rest.session_id !== null && typeof rest.session_id !== 'string') {
+    return new Response(JSON.stringify({ error: 'Bad Request: session_id must be a string when provided' }), { status: 400, headers: { 'content-type': 'application/json' } });
+  }
   const upstreamBody = buildNotes9AgentRequestBody({
-    query: typeof rest.query === 'string' ? rest.query : String(rest.query ?? ''),
-    session_id:
-      typeof rest.session_id === 'string' ? rest.session_id : String(rest.session_id ?? ''),
+    query: rest.query,
+    session_id: typeof rest.session_id === 'string' ? rest.session_id : '',
     history: Array.isArray(rest.history) ? (rest.history as Notes9AgentHistoryItem[]) : undefined,
     options:
       rest.options && typeof rest.options === 'object' && !Array.isArray(rest.options)
@@ -82,10 +90,15 @@ export async function POST(req: Request) {
       { status: 503, headers: { 'Content-Type': 'application/json' } }
     );
   }
-
-  const queryStr = typeof rest.query === 'string' ? rest.query : String(rest.query ?? '');
-  if (!queryStr.trim()) {
-    return new Response(JSON.stringify({ error: 'Bad Request: query is required' }), { status: 400, headers: { 'content-type': 'application/json' } });
+  try {
+    new URL(NOTES9_API_BASE);
+  } catch {
+    // Do NOT log the raw value — a Function URL can embed credentials/keys.
+    console.error('[agent/stream] CHAT_API_URL is not a valid URL (value redacted)');
+    return new Response(
+      JSON.stringify({ error: 'Notes9 API URL is misconfigured. CHAT_API_URL is not a valid URL.' }),
+      { status: 503, headers: { 'Content-Type': 'application/json' } }
+    );
   }
 
   try {

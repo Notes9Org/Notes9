@@ -271,7 +271,9 @@ export function SampleProteinViewer({
         if (cancelled) {
           try {
             viewer.plugin?.dispose?.()
-          } catch {}
+          } catch (err) {
+            console.error('[protein-viewer] dispose on cancelled early exit:', err)
+          }
           return
         }
         viewerRef.current = viewer
@@ -301,14 +303,18 @@ export function SampleProteinViewer({
       try {
         viewer?.plugin?.canvas3d?.pause?.()
         viewer?.plugin?.dispose?.()
-      } catch {}
+      } catch (err) {
+        console.error('[protein-viewer] cleanup dispose/pause:', err)
+      }
       // Mol* leaves its <canvas> child in the host even after dispose. Clearing
       // it lets the GPU release the WebGL context — browsers cap ~16 contexts
       // and we'd otherwise exhaust them after a few file switches.
       if (host) {
         try {
           while (host.firstChild) host.removeChild(host.firstChild)
-        } catch {}
+        } catch (err) {
+          console.error('[protein-viewer] DOM canvas child removal:', err)
+        }
       }
     }
   }, [fileUrl, fileName, format])
@@ -323,7 +329,9 @@ export function SampleProteinViewer({
         viewer.plugin.canvas3d.setProps({
           renderer: { backgroundColor: color },
         })
-      } catch {}
+      } catch (err) {
+        console.error('[protein-viewer] setProps background color:', err)
+      }
     }
     const observer = new MutationObserver(apply)
     observer.observe(document.documentElement, { attributes: true, attributeFilter: ["class"] })
@@ -340,7 +348,9 @@ export function SampleProteinViewer({
   const resetCamera = useCallback(() => {
     try {
       viewerRef.current?.plugin?.managers?.camera?.reset?.()
-    } catch {}
+    } catch (err) {
+      console.error('[protein-viewer] resetCamera:', err)
+    }
   }, [])
 
   const focusOnLoaded = useCallback(() => {
@@ -351,7 +361,9 @@ export function SampleProteinViewer({
       const camera = plugin.managers.camera
       if (data && typeof camera?.focusLoci === "function") camera.focusLoci(data)
       else camera?.reset?.()
-    } catch {}
+    } catch (err) {
+      console.error('[protein-viewer] focusOnLoaded:', err)
+    }
   }, [])
 
   const toggleFullscreen = useCallback(async () => {
@@ -484,7 +496,9 @@ export function SampleProteinViewer({
     if (!loci) return
     try {
       plugin.managers.camera.focusLoci?.(loci)
-    } catch {}
+    } catch (err) {
+      console.error('[protein-viewer] focusSelection focusLoci:', err)
+    }
   }, [])
 
   const selectionRef = useRef<ResidueSelection | null>(null)
@@ -595,7 +609,9 @@ export function SampleProteinViewer({
       // Re-fit camera to show both.
       try {
         plugin.managers.camera.reset?.()
-      } catch {}
+      } catch (err) {
+        console.error('[protein-viewer] camera reset after superposition:', err)
+      }
     } catch (err) {
       console.error(err)
       setError(err instanceof Error ? err.message : "Superposition failed.")

@@ -51,19 +51,22 @@ type WorkspaceProps = {
 
 type ModuleTone = "default" | "leaf" | "warm" | "neutral" | "accent"
 
+// All values reference CSS variables defined in globals.css with both :root
+// (light) and .dark overrides, so the workspace cards adapt to dark mode
+// without any JS theme detection.
 const TONE_BG: Record<ModuleTone, string> = {
   default: "color-mix(in srgb, var(--foreground) 6%, var(--card))",
-  leaf: "color-mix(in srgb, #5e7a4a 14%, var(--card))",
+  leaf: "var(--tone-leaf-bg)",
   accent: "var(--n9-accent-light)",
-  warm: "color-mix(in srgb, #b56b54 14%, var(--card))",
+  warm: "var(--tone-warm-bg)",
   neutral: "var(--muted)",
 }
 
 const TONE_FG: Record<ModuleTone, string> = {
   default: "var(--foreground)",
-  leaf: "#3f5c33",
+  leaf: "var(--tone-leaf-fg)",
   accent: "var(--n9-accent)",
-  warm: "#8c4f38",
+  warm: "var(--tone-warm-fg)",
   neutral: "var(--foreground)",
 }
 

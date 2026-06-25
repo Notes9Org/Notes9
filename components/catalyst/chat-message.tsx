@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useDeferredValue } from 'react';
+import { memo, useState, useDeferredValue } from 'react';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
@@ -58,7 +58,7 @@ interface ChatMessageProps {
   citationsManifest?: CitationsManifest | null;
 }
 
-export function ChatMessage({
+function ChatMessageInner({
   role,
   content,
   attachments = [],
@@ -313,3 +313,8 @@ export function ChatMessage({
     </div>
   );
 }
+
+/** Memoized: skips re-render when all props are reference-equal.
+ *  For settled messages (not the streaming one) every prop is stable between
+ *  token updates, so only the actively-streaming message re-renders. */
+export const ChatMessage = memo(ChatMessageInner);

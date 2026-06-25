@@ -21,7 +21,7 @@ import dotenv from "dotenv"
 import puppeteer, { type Page } from "puppeteer"
 import * as fs from "fs"
 import * as path from "path"
-import { addCaptureInitScripts } from "../lib/capture-sanitize"
+import { addCaptureInitScripts } from "@/lib/capture-sanitize"
 
 dotenv.config({ path: path.join(process.cwd(), ".env") })
 

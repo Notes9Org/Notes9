@@ -16,7 +16,7 @@ export async function POST(req: Request) {
   if (preParseBlocked) return preParseBlocked;
 
   const headerToken = req.headers.get('Authorization')?.replace(/^Bearer\s+/i, '').trim();
-  const body = await req.json().catch(() => ({}));
+  const body = await req.json().catch((err: unknown) => { console.error('[agent/run] body parse failed:', err); return {}; });
 
   // Post-parse: field-level checks.
   const postParseBlocked = enforceLimits('agent_run', [
@@ -88,8 +88,8 @@ export async function POST(req: Request) {
     try {
       data = await response.json();
     } catch (parseErr) {
-      const rawText = await response.text().catch(() => '');
-      console.error(JSON.stringify({ event: 'upstream_non_json', route: 'agent/run', status: response.status, parseError: parseErr instanceof Error ? parseErr.message : String(parseErr), snippet: rawText.slice(0, 500), rawTextLength: rawText.length }));
+      const rawText = await response.text().catch((err: unknown) => { console.error('[agent/run] response text read failed:', err); return ''; });
+      console.error(JSON.stringify({ event: 'upstream_non_json', route: 'agent/run', status: response.status, parseError: parseErr instanceof Error ? parseErr.message : String(parseErr), snippet: rawText.slice(0, 120), rawTextLength: rawText.length }));
       return NextResponse.json({ error: 'Upstream returned non-JSON response', status: response.status }, { status: 502 });
     }
     const dataObj = data as Record<string, unknown>;

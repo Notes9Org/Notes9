@@ -12,7 +12,7 @@ from PIL import Image
 
 
 def main() -> None:
-    root = Path(__file__).resolve().parents[1]
+    root = Path(__file__).resolve().parents[2]
     src = root / "public" / "notes9-mascot.png"
     out = root / "public" / "notes9-mascot-ui.png"
 

@@ -324,6 +324,93 @@ export function LiteraturePageSkeleton() {
   )
 }
 
+// ---------------------------------------------------------------------------
+// Catalyst chat surface skeletons
+// ---------------------------------------------------------------------------
+
+/**
+ * Single assistant message bubble skeleton — matches the rounded-2xl bubble
+ * shape used by AssistantLoadingPlaceholder and chat-message.tsx.
+ */
+export function CatalystMessageSkeleton({ className }: { className?: string }) {
+  return (
+    <div
+      className={cn(
+        "rounded-2xl border border-border/50 bg-muted/10 px-4 py-3.5 dark:bg-muted/5",
+        className,
+      )}
+      aria-hidden
+    >
+      <div className="space-y-2.5">
+        <div className="flex gap-2">
+          <div className="h-2.5 w-[28%] animate-pulse rounded-full bg-muted-foreground/15" />
+          <div className="h-2.5 w-10 animate-pulse rounded-full bg-muted-foreground/15" />
+        </div>
+        <div className="space-y-2">
+          <div className="h-2 w-full animate-pulse rounded-full bg-muted-foreground/12" />
+          <div className="h-2 w-[94%] animate-pulse rounded-full bg-muted-foreground/12" />
+          <div className="h-2 w-[81%] animate-pulse rounded-full bg-muted-foreground/12" />
+          <div className="h-2 w-[67%] animate-pulse rounded-full bg-muted-foreground/10" />
+        </div>
+      </div>
+    </div>
+  )
+}
+
+/**
+ * Citations panel skeleton — two stacked source-card shimmer blocks,
+ * matching AgentCitationsPanel's card layout.
+ */
+export function CatalystCitationsPanelSkeleton({ className }: { className?: string }) {
+  return (
+    <div className={cn("flex flex-col gap-2", className)} aria-hidden>
+      <div className="h-4 w-24 animate-pulse rounded-md bg-muted" />
+      {[1, 2].map((i) => (
+        <div
+          key={i}
+          className="flex gap-3 rounded-lg border border-border/60 bg-card p-3"
+        >
+          <div className="size-8 shrink-0 animate-pulse rounded-md bg-muted" />
+          <div className="flex flex-1 flex-col gap-1.5">
+            <div className="h-3 w-3/4 animate-pulse rounded-md bg-muted" />
+            <div className="h-2.5 w-full animate-pulse rounded-md bg-muted/70" />
+            <div className="h-2.5 w-[60%] animate-pulse rounded-md bg-muted/50" />
+          </div>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+/**
+ * Reasoning / thinking panel skeleton — matches the collapsible header +
+ * streaming-text area used by AgentReasoningPanel and ThinkingPanel.
+ */
+export function CatalystReasoningSkeleton({ className }: { className?: string }) {
+  return (
+    <div
+      className={cn(
+        "rounded-lg border border-border/50 bg-muted/5 px-3 py-2.5",
+        className,
+      )}
+      aria-hidden
+    >
+      {/* Header row: icon + label + chevron */}
+      <div className="mb-2.5 flex items-center gap-2">
+        <div className="size-4 animate-pulse rounded-full bg-muted-foreground/20" />
+        <div className="h-3 w-16 animate-pulse rounded-md bg-muted-foreground/20" />
+        <div className="ml-auto size-3.5 animate-pulse rounded bg-muted-foreground/15" />
+      </div>
+      {/* Body lines */}
+      <div className="space-y-1.5 pl-6">
+        <div className="h-2 w-full animate-pulse rounded-full bg-muted-foreground/12" />
+        <div className="h-2 w-[88%] animate-pulse rounded-full bg-muted-foreground/10" />
+        <div className="h-2 w-[74%] animate-pulse rounded-full bg-muted-foreground/8" />
+      </div>
+    </div>
+  )
+}
+
 /** Papers workspace: tabs + split pane. */
 export function PapersPageSkeleton() {
   return (

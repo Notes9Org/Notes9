@@ -1,6 +1,7 @@
 "use client"
 
 import { RightSidebar } from "@/components/layout/right-sidebar"
+import { CatalystErrorBoundary } from "@/components/catalyst/catalyst-error-boundary"
 
 type CatalystFullPageProps = {
   sessionId?: string
@@ -10,7 +11,9 @@ type CatalystFullPageProps = {
 export function CatalystFullPage({ sessionId }: CatalystFullPageProps) {
   return (
     <div className="flex h-full min-h-0 w-full flex-col overflow-hidden">
-      <RightSidebar variant="page" initialSessionId={sessionId} />
+      <CatalystErrorBoundary>
+        <RightSidebar variant="page" initialSessionId={sessionId} />
+      </CatalystErrorBoundary>
     </div>
   )
 }

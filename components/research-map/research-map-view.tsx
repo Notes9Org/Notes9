@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import {
   Background,
   BackgroundVariant,
@@ -164,7 +164,8 @@ function LabelledEdge({
   )
 }
 
-const edgeTypes = { labelled: LabelledEdge }
+const MemoLabelledEdge = React.memo(LabelledEdge)
+const edgeTypes = { labelled: MemoLabelledEdge }
 
 const KINDS: ResearchMapNodeKind[] = [
   "project",
@@ -427,6 +428,9 @@ function ResearchMapCanvas() {
   const mapRefreshDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(
     null,
   )
+  // Tracks the last highlight key applied so we skip identical re-applications
+  // (e.g. double-clicking the same node sends the same Sets to applyHighlightToGraph).
+  const lastHighlightKeyRef = useRef<string>("")
 
   useEffect(() => {
     recordRumEvent('research_map_viewed', {})
@@ -539,24 +543,69 @@ function ResearchMapCanvas() {
   }, [fetchMap, loadProjectOptions])
 
   useEffect(() => {
-    const channel = supabase.channel("research-map-graph")
+    // Build the channel once. We subscribe/unsubscribe based on page visibility
+    // so the 10-table realtime connection is fully dormant when the user is on
+    // another tab or the panel is hidden. The channel is always removed on
+    // component unmount so there is no subscription leak.
     const handler = () => {
       scheduleBackgroundMapRefresh()
     }
-    for (const table of RESEARCH_MAP_REALTIME_TABLES) {
-      channel.on(
-        "postgres_changes",
-        { event: "*", schema: "public", table },
-        handler,
-      )
+
+    // A FRESH channel is built on each activate(): a channel that has been
+    // through removeChannel() is closed and cannot be re-subscribed, so we must
+    // never reuse one across a hide/show cycle (doing so silently dropped all
+    // live updates until reload). The active channel is removed on unmount.
+    let channel: ReturnType<typeof supabase.channel> | null = null
+
+    function activate() {
+      if (channel) return
+      const ch = supabase.channel("research-map-graph")
+      for (const table of RESEARCH_MAP_REALTIME_TABLES) {
+        ch.on(
+          "postgres_changes",
+          { event: "*", schema: "public", table },
+          handler,
+        )
+      }
+      ch.subscribe()
+      channel = ch
     }
-    channel.subscribe()
-    return () => {
+
+    function deactivate() {
+      if (channel) {
+        // Unsubscribe from the server-push channel so Supabase stops
+        // delivering events and the WS multiplexer sheds the topic slot.
+        supabase.removeChannel(channel)
+        channel = null
+      }
+      // Also cancel any pending debounced refresh — no point running it
+      // while the map is not visible.
       if (mapRefreshDebounceRef.current) {
         clearTimeout(mapRefreshDebounceRef.current)
         mapRefreshDebounceRef.current = null
       }
-      supabase.removeChannel(channel)
+    }
+
+    function onVisibilityChange() {
+      if (document.visibilityState === "visible") {
+        activate()
+        // Catch up on any changes that happened while hidden.
+        scheduleBackgroundMapRefresh()
+      } else {
+        deactivate()
+      }
+    }
+
+    // Subscribe immediately if the page is already visible.
+    if (document.visibilityState === "visible") {
+      activate()
+    }
+
+    document.addEventListener("visibilitychange", onVisibilityChange)
+
+    return () => {
+      document.removeEventListener("visibilitychange", onVisibilityChange)
+      deactivate()
     }
   }, [supabase, scheduleBackgroundMapRefresh])
 
@@ -573,6 +622,9 @@ function ResearchMapCanvas() {
     setSelectedEdgeId(null)
     setHighlightNodes(null)
     setHighlightEdges(null)
+    // Reset the highlight key so the next interaction always re-applies cleanly
+    // against the freshly laid-out graph rather than hitting the memoization guard.
+    lastHighlightKeyRef.current = ""
     requestAnimationFrame(() => {
       fitView({ padding: 0.2, duration: 350 })
     })
@@ -622,6 +674,15 @@ function ResearchMapCanvas() {
   )
 
   useEffect(() => {
+    // Build a cheap key from the highlight state. If nothing changed since the
+    // last apply (e.g. the user double-clicks the same node), skip the full
+    // node+edge map pass — it would produce identical output and cause React to
+    // schedule two unnecessary reconciliation cycles on potentially large arrays.
+    const nodeKey = highlightNodes ? [...highlightNodes].sort().join(",") : ""
+    const edgeKey = highlightEdges ? [...highlightEdges].sort().join(",") : ""
+    const key = `${nodeKey}|${edgeKey}|${selectedEdgeId ?? ""}|${selectedNodeId ?? ""}`
+    if (key === lastHighlightKeyRef.current) return
+    lastHighlightKeyRef.current = key
     applyHighlightToGraph(highlightNodes, highlightEdges, selectedEdgeId, selectedNodeId)
   }, [highlightNodes, highlightEdges, selectedEdgeId, selectedNodeId, applyHighlightToGraph])
 
