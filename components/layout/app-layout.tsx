@@ -549,7 +549,7 @@ function AppLayoutBody({ children }: AppLayoutProps) {
             Suppressed entirely on /catalyst — the route already mounts the
             same RightSidebar as the page, so a second instance here would
             duplicate the chat. */}
-        {!isCatalystRoute && protocolAiVisible ? (
+        {isCatalystRoute ? null : protocolAiVisible ? (
           isMobile ? (
             <Sheet open={headerAi!.isOpen} onOpenChange={(open) => { if (!open && headerAi!.isOpen) headerAi!.onToggle() }}>
               <SheetContent

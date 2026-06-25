@@ -3328,9 +3328,9 @@ export function RightSidebar({
                   className="flex h-full min-h-0 flex-col gap-1 p-2"
                   style={{ width: historySidebar.width }}
                 >
-                  {/* Header row — "Chats" on the left, minimise + new chat on the right. */}
+                  {/* Header row — close button + "Chats" label on the top-left,
+                      new chat on the right. */}
                   <div className="flex h-8 shrink-0 items-center gap-1 rounded-md px-1 text-xs font-medium text-sidebar-foreground/70">
-                    <span className="flex-1 truncate pl-1">Chats</span>
                     <Button
                       variant="ghost"
                       size="icon"
@@ -3341,6 +3341,7 @@ export function RightSidebar({
                     >
                       <ChevronsLeft className="h-4 w-4" />
                     </Button>
+                    <span className="flex-1 truncate">Chats</span>
                     <Button
                       variant="ghost"
                       size="icon"
