@@ -54,15 +54,18 @@ const STATUS_CONFIG: Record<StepStatus, { label: string; icon: typeof Circle; co
   skipped: { label: "Skipped", icon: SkipForward, color: "text-[var(--color-warning)]", bg: "bg-[var(--color-warning)]/10" },
 }
 
+// Each category maps to a distinct CSS token so the border adapts in dark mode.
+// chart-1..5 already have light + dark values in globals.css; the three extra
+// categories use --category-* tokens defined there as well.
 const CATEGORY_COLORS: Record<StepCategory, string> = {
-  "Sample Handling": "border-l-orange-400",
-  "Reaction / Treatment": "border-l-red-400",
-  "Separation / Purification": "border-l-purple-400",
-  "Measurement / Analysis": "border-l-blue-400",
-  "Computational": "border-l-cyan-400",
-  "Quality / Control": "border-l-green-400",
-  "Decision / Workflow": "border-l-yellow-400",
-  "Documentation": "border-l-gray-400",
+  "Sample Handling":        "border-l-[var(--chart-1)]",
+  "Reaction / Treatment":   "border-l-[var(--chart-5)]",
+  "Separation / Purification": "border-l-[var(--chart-4)]",
+  "Measurement / Analysis": "border-l-[var(--chart-2)]",
+  "Computational":          "border-l-[var(--category-computational)]",
+  "Quality / Control":      "border-l-[var(--chart-3)]",
+  "Decision / Workflow":    "border-l-[var(--category-decision)]",
+  "Documentation":          "border-l-[var(--category-doc)]",
 }
 
 function formatDuration(minutes: number | null): string {

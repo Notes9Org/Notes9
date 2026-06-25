@@ -142,7 +142,7 @@ export async function POST(request: Request) {
     const message = e instanceof Error ? e.message : "Finalize failed"
     console.error("[protocol-templates/finalize]", e)
     if (storagePathForCleanup) {
-      await supabase.storage.from(bucket).remove([storagePathForCleanup]).catch(() => {})
+      await supabase.storage.from(bucket).remove([storagePathForCleanup]).catch((err: unknown) => console.error('[protocol-templates/finalize] storage cleanup failed:', err))
     }
     return NextResponse.json({ error: message }, { status: 500 })
   }

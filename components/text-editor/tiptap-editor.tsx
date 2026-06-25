@@ -155,12 +155,27 @@ import { SpreadsheetEmbed } from "./extensions/spreadsheet-embed"
 import { VoiceWaveform } from "./voice-waveform"
 // @ts-ignore - CSS import for KaTeX math rendering
 import "katex/dist/katex.min.css"
-import {
-  buildSpreadsheetWorkbookSnapshot,
-  encodeSpreadsheetWorkbook,
-  isSpreadsheetFile,
-  readSpreadsheetWorkbook,
-} from "@/lib/spreadsheet-workbook"
+// `xlsx` (~1 MB) is only needed when the user imports a spreadsheet file.
+// `isSpreadsheetFile` and `encodeSpreadsheetWorkbook` are inlined here so the
+// gating checks in drag/paste handlers don't pull in the heavy xlsx module.
+// `readSpreadsheetWorkbook` and `buildSpreadsheetWorkbookSnapshot` are loaded
+// dynamically inside insertSpreadsheetFromFile.
+
+function isSpreadsheetFile(file: File): boolean {
+  const lower = file.name.toLowerCase()
+  return (
+    lower.endsWith(".xlsx") ||
+    lower.endsWith(".xls") ||
+    lower.endsWith(".csv") ||
+    file.type.includes("spreadsheet") ||
+    file.type.includes("excel") ||
+    file.type.includes("csv")
+  )
+}
+
+function encodeSpreadsheetWorkbook(workbook: Record<string, unknown>): string {
+  return encodeURIComponent(JSON.stringify(workbook))
+}
 import {
   isEditorNativeClipboardHtml,
   resolveClipboardPaste,
@@ -3830,6 +3845,10 @@ export function TiptapEditor({
     if (!isSpreadsheetFile(file)) return
 
     const arrayBuffer = await file.arrayBuffer()
+    // Dynamic import — xlsx (~1 MB) only loads when the user actually inserts
+    // a spreadsheet file, keeping it out of the initial editor bundle.
+    const { readSpreadsheetWorkbook, buildSpreadsheetWorkbookSnapshot } =
+      await import("@/lib/spreadsheet-workbook")
     const workbook = readSpreadsheetWorkbook(arrayBuffer, file.name)
     const workbookSnapshot = buildSpreadsheetWorkbookSnapshot(file.name, workbook)
 

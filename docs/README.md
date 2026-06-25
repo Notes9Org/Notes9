@@ -1,450 +1,97 @@
-# 📚 Complete Documentation Index
+---
+title: Documentation Index
+created: 2026-06-24
+updated: 2026-06-24
+status: current
+---
 
-## 🎯 Start Here
+# Notes9 Documentation
 
-Pick your route based on your needs:
-
-### 🏃 I'm in a hurry (5 minutes)
-1. Read: [QUICK_START_SUMMARY.md](./QUICK_START_SUMMARY.md)
-2. Done! You know everything you need.
-
-### 👨‍💼 I want to use it (15 minutes)
-1. Read: [TABLE_README.md](./TABLE_README.md) - Overview
-2. Skim: [TABLE_QUICK_REFERENCE.md](./TABLE_QUICK_REFERENCE.md) - Usage guide
-3. Done! You're ready to start using tables.
-
-### 🔧 I want to customize it (30 minutes)
-1. Read: [TABLE_INSTALLATION.md](./TABLE_INSTALLATION.md) - Customization
-2. Check: [TABLE_CODE_EXAMPLES.md](./TABLE_CODE_EXAMPLES.md) - Code patterns
-3. Reference: [TABLE_UI_LAYOUT.md](./TABLE_UI_LAYOUT.md) - Design system
-4. Done! You know how to customize.
-
-### 👨‍💻 I want to integrate it (1 hour)
-1. Read: [TABLE_IMPLEMENTATION_SUMMARY.md](./TABLE_IMPLEMENTATION_SUMMARY.md) - Architecture
-2. Study: [TABLE_CODE_EXAMPLES.md](./TABLE_CODE_EXAMPLES.md) - All examples
-3. Reference: [TABLE_INSTALLATION.md](./TABLE_INSTALLATION.md) - Integration points
-4. Check: [TABLE_FEATURES.md](./TABLE_FEATURES.md) - All capabilities
-5. Done! You can integrate it anywhere.
-
-### 🎓 I want to learn everything (2+ hours)
-1. Read all documentation (except this index)
-2. Review source code
-3. Study code examples
-4. Done! You're an expert.
+Notes9 is an Electronic Lab Notebook (ELN) for research teams, with an AI research assistant called **Catalyst**. It is built on Next.js 16, React 19, TypeScript 5, Tailwind + shadcn/ui, Supabase (Postgres + RLS + Realtime + Storage), and Tiptap. Catalyst is a separate FastAPI service in the sibling `AI/` repository.
 
 ---
 
-## 📖 Documentation Files
+## Architecture
 
-### Essential (Read These First)
+Start here to understand how the system fits together.
 
-#### [QUICK_START_SUMMARY.md](./QUICK_START_SUMMARY.md) ⭐⭐⭐⭐⭐
-**Everything at a glance (5 min read)**
-- Visual overview of all features
-- 3-step quick start
-- How it works diagrams
-- Performance metrics
-- File changes summary
-- Documentation structure
-
-**Best for:** Getting oriented quickly
+- **[ARCHITECTURE.md](./ARCHITECTURE.md)** — Route groups, Supabase integration, auth model, Catalyst SSE path, major subsystems, key config files.
 
 ---
 
-#### [TABLE_README.md](./TABLE_README.md) ⭐⭐⭐⭐⭐
-**Complete feature overview (15 min read)**
-- All key features explained
-- User experience details
-- What was implemented
-- How to use (step by step)
-- Visual design system
-- Technical details
-- Best practices
-- Browser support
-- Future enhancements
+## Setup
 
-**Best for:** Understanding the complete system
+- **[SETUP.md](./SETUP.md)** — Prerequisites, clone + install, env vars, schema migration, `pnpm dev`, type-checking, tests, collaboration server, Catalyst backend.
+- **[ENVIRONMENT_VARIABLES.md](./ENVIRONMENT_VARIABLES.md)** — Every `process.env.*` variable in the codebase: purpose, required/optional, runtime (client vs server).
+- **[database-connection-guide.md](./database-connection-guide.md)** — psql setup, direct vs pooler connections, running migrations, RLS diagnostics.
 
 ---
 
-### Quick Reference
+## Data Model
 
-#### [TABLE_QUICK_REFERENCE.md](./TABLE_QUICK_REFERENCE.md) ⭐⭐⭐⭐
-**Fast lookup guide (2-5 min lookup)**
-- Getting started (3 steps)
-- Interactive controls guide
-- Keyboard shortcuts
-- Color scheme info
-- Pro tips
-- Troubleshooting table
-- Support info
-
-**Best for:** Quick answers while using
+- **[DATA_MODEL.md](./DATA_MODEL.md)** — Table reference, ER diagram, RLS scoping model. Derived from `scripts/000_full_script.sql`.
+- **[row-level-security-policies.md](./row-level-security-policies.md)** — Full RLS policy listing for all 19+ tables.
+- **[rls-quick-reference.md](./rls-quick-reference.md)** — Diagnostic SQL for testing RLS policies interactively.
 
 ---
 
-### Detailed Guides
+## Features
 
-#### [TABLE_FEATURES.md](./TABLE_FEATURES.md) ⭐⭐⭐⭐
-**Complete feature breakdown (20 min read)**
-- Resize features (column & row)
-- Add row/column features
-- Delete row/column features
-- UI design details
-- Responsive behavior
-- Usage examples
-- Technical implementation
-- Browser compatibility
-- Best practices
-- Known limitations
-- Future enhancements
+### Tiptap Editor
+- **[tiptap.md](./tiptap.md)** — Installed extensions, data storage format (Tiptap JSON in `editor_data`), draft/commit model, collaboration (HocusPocus + Yjs), bundle size notes.
 
-**Best for:** Understanding each feature deeply
+### Catalyst AI
+- **[CATALYST_INTEGRATION.md](./CATALYST_INTEGRATION.md)** — SSE event contract, frontend components, chat sessions, citations/grounding, artifacts, Stop/Cancel, graph events, feature flags.
+- **[AGENT_STREAM_API.md](./AGENT_STREAM_API.md)** — HTTP endpoint reference for the Catalyst streaming API, including request/response shapes and a full TypeScript parsing example.
+- **[CATALYST_CHAT_UX_AUDIT.md](./CATALYST_CHAT_UX_AUDIT.md)** — Capability surfacing audit: what the backend emits vs what the UI shows. The authoritative gap list.
+
+### Research Map
+The ReactFlow knowledge graph lives at `app/(app)/research-map/`. See `ARCHITECTURE.md` → "Research Map" subsystem.
+
+### File Uploads
+- **[file-upload-implementation.md](./file-upload-implementation.md)** — Storage bucket setup, signed URL flow, file registration API.
 
 ---
 
-#### [TABLE_UI_LAYOUT.md](./TABLE_UI_LAYOUT.md) ⭐⭐⭐⭐
-**Visual design guide (15 min read)**
-- ASCII diagrams showing layout
-- Control positions explained
-- State transition diagrams
-- Color schemes (light/dark)
-- Responsive design info
-- Animation timeline
-- Accessibility features
-- Performance considerations
-- Error prevention
-- Future enhancements
+## Operations
 
-**Best for:** Visual learners
+- **[DEPLOYMENT.md](./DEPLOYMENT.md)** — Vercel deploy, `ignoreBuildErrors` rationale, SQL migration process, Catalyst + collaboration server deployment, health checks.
+- **[ENVIRONMENT_VARIABLES.md](./ENVIRONMENT_VARIABLES.md)** — (same as Setup → required prod vars section)
 
 ---
 
-### Code & Implementation
+## Reference
 
-#### [TABLE_CODE_EXAMPLES.md](./TABLE_CODE_EXAMPLES.md) ⭐⭐⭐⭐⭐
-**Working code examples (30 min study)**
-- Basic component usage
-- State management integration
-- Database persistence
-- Advanced table manipulation
-- Data extraction & export
-- Table validation
-- Custom implementations
-- Error handling
-- Performance optimization
-- Testing examples
+### TABLE_* docs (Tiptap table feature)
+These docs cover the custom table resize/add/delete UI built on top of the Tiptap table extension:
 
-**Best for:** Developers building with this
+- [TABLE_README.md](./TABLE_README.md) — Feature overview
+- [TABLE_QUICK_REFERENCE.md](./TABLE_QUICK_REFERENCE.md) — Keyboard shortcuts and controls
+- [TABLE_FEATURES.md](./TABLE_FEATURES.md) — Feature breakdown
+- [TABLE_UI_LAYOUT.md](./TABLE_UI_LAYOUT.md) — Visual design / layout guide
+- [TABLE_CODE_EXAMPLES.md](./TABLE_CODE_EXAMPLES.md) — Code patterns
+- [TABLE_INSTALLATION.md](./TABLE_INSTALLATION.md) — Integration checklist
+- [TABLE_IMPLEMENTATION_SUMMARY.md](./TABLE_IMPLEMENTATION_SUMMARY.md) — Technical overview
+- [TABLE_INDEX.md](./TABLE_INDEX.md) — Navigation index
 
----
-
-#### [TABLE_IMPLEMENTATION_SUMMARY.md](./TABLE_IMPLEMENTATION_SUMMARY.md) ⭐⭐⭐
-**Technical overview (10 min read)**
-- What was added
-- Files created/modified
-- Design highlights
-- How to use
-- Quality metrics
-- Bonus features
-- Documentation overview
-- Browser compatibility
-
-**Best for:** Quick technical overview
+### Other reference
+- **[GLOSSARY.md](./GLOSSARY.md)** — Domain terms: Catalyst, Citation, GroundingResource, Lab Note, Organization scope, Protocol, RLS, Research Map, SSE, Tiptap, and more.
+- **[NOTES9_AI_PRODUCT_UX_CHANGES.md](./NOTES9_AI_PRODUCT_UX_CHANGES.md)** — 2026-06-17 AI product design audit: locked decisions, build sequence (Waves 0–6), gap analysis.
+- **[FRONTEND_INTEGRATION_GUIDE.md](./FRONTEND_INTEGRATION_GUIDE.md)** — Full frontend integration guide: Chat API, Agent API, auth headers, error handling.
+- **[scale.md](./scale.md)** — Scaling considerations.
+- **[storage-decision.md](./storage-decision.md)** — Storage architecture decisions.
 
 ---
 
-### Setup & Configuration
+## Archive
 
-#### [TABLE_INSTALLATION.md](./TABLE_INSTALLATION.md) ⭐⭐⭐⭐
-**Setup and configuration (20 min read)**
-- Prerequisites check
-- Installation status
-- File structure
-- Quick start (3 steps)
-- Configuration options
-- Customization guide
-- Integration points
-- Testing procedures
-- Dependency verification
-- Troubleshooting section
-- Final checklist
-
-**Best for:** Setting up and troubleshooting
+Stale or superseded documents are in **[archive/](./archive/)** with a README explaining why each was archived.
 
 ---
 
-### Navigation & Index
+## How Docs Are Maintained
 
-#### [TABLE_INDEX.md](./TABLE_INDEX.md) ⭐⭐⭐
-**Complete documentation index (10 min read)**
-- Getting started paths
-- Documentation file descriptions
-- Use case navigation
-- Source code files
-- Feature matrix
-- Quick links by task
-- Learning paths
-- Complexity levels
-- Troubleshooting guide
-- Bonus materials
-- Support resources
-
-**Best for:** Finding what you need
-
----
-
-### Reports & Summaries
-
-#### [IMPLEMENTATION_COMPLETE.md](./IMPLEMENTATION_COMPLETE.md) ⭐⭐⭐
-**Implementation summary report (10 min read)**
-- What was delivered
-- Files created/modified
-- Statistics summary
-- Quality assurance results
-- Verification checklist
-- Integration checklist
-- Support resources
-- Highlights summary
-
-**Best for:** High-level overview of work
-
----
-
-#### [FINAL_VERIFICATION.md](./FINAL_VERIFICATION.md) ⭐⭐⭐
-**Final verification report (10 min read)**
-- Implementation status
-- Deliverables summary
-- Features verified
-- Quality checks
-- File statistics
-- Feature matrix
-- Testing verification
-- Documentation verification
-- Deployment readiness
-- Metrics summary
-- Help & support resources
-
-**Best for:** Verification that everything works
-
----
-
-## 🗂️ Documentation Structure
-
-```
-docs/
-├─ QUICK_START_SUMMARY.md         ← START HERE (5 min)
-├─ TABLE_README.md                 ← Main guide (15 min)
-├─ TABLE_INDEX.md                  ← Navigation (5 min)
-├─ TABLE_QUICK_REFERENCE.md        ← Quick lookup (2-5 min)
-├─ TABLE_FEATURES.md               ← Feature details (20 min)
-├─ TABLE_UI_LAYOUT.md              ← Visual guide (15 min)
-├─ TABLE_CODE_EXAMPLES.md          ← Code samples (30 min)
-├─ TABLE_INSTALLATION.md           ← Setup guide (20 min)
-├─ TABLE_IMPLEMENTATION_SUMMARY.md ← Technical (10 min)
-├─ IMPLEMENTATION_COMPLETE.md      ← Report (10 min)
-└─ FINAL_VERIFICATION.md           ← Verification (10 min)
-
-Total: 11 files
-Total Reading: ~130-180 minutes (all)
-Recommended: 30-45 minutes (essentials)
-```
-
----
-
-## 🎯 By Use Case
-
-| Use Case | Document | Time |
-|----------|----------|------|
-| "Tell me everything" | TABLE_README.md | 15 min |
-| "How do I use this?" | TABLE_QUICK_REFERENCE.md | 5 min |
-| "Show me the features" | TABLE_FEATURES.md | 20 min |
-| "How does it look?" | TABLE_UI_LAYOUT.md | 15 min |
-| "Show me code" | TABLE_CODE_EXAMPLES.md | 30 min |
-| "I want to customize" | TABLE_INSTALLATION.md | 20 min |
-| "What was done?" | IMPLEMENTATION_COMPLETE.md | 10 min |
-| "Does it work?" | FINAL_VERIFICATION.md | 10 min |
-| "I'm lost" | TABLE_INDEX.md | 5 min |
-| "Just overview" | QUICK_START_SUMMARY.md | 5 min |
-
----
-
-## 📊 Reading Time Summary
-
-```
-Quick Overview:         5-10 minutes
-Basic Usage:            15-20 minutes
-Customization:          30-40 minutes
-Full Integration:       45-60 minutes
-Complete Mastery:       120-180 minutes
-```
-
----
-
-## 🎓 Learning Levels
-
-### Beginner (30 minutes)
-1. QUICK_START_SUMMARY.md
-2. TABLE_QUICK_REFERENCE.md
-3. TABLE_README.md (Features section)
-
-### Intermediate (60 minutes)
-1. All Beginner materials
-2. TABLE_FEATURES.md
-3. TABLE_CODE_EXAMPLES.md (Basic usage)
-4. TABLE_INSTALLATION.md (Quick start)
-
-### Advanced (120+ minutes)
-1. All Intermediate materials
-2. TABLE_UI_LAYOUT.md
-3. TABLE_CODE_EXAMPLES.md (All examples)
-4. TABLE_INSTALLATION.md (Full)
-5. Source code review
-
-### Expert (180+ minutes)
-1. All Advanced materials
-2. TABLE_IMPLEMENTATION_SUMMARY.md
-3. Deep source code analysis
-4. Custom implementation
-
----
-
-## 🔍 How to Find Answers
-
-| Question | Answer In |
-|----------|-----------|
-| What is this? | QUICK_START_SUMMARY.md |
-| How do I use it? | TABLE_QUICK_REFERENCE.md |
-| How does it work? | TABLE_FEATURES.md |
-| Show me the UI | TABLE_UI_LAYOUT.md |
-| Show me code | TABLE_CODE_EXAMPLES.md |
-| How do I set it up? | TABLE_INSTALLATION.md |
-| What was implemented? | IMPLEMENTATION_COMPLETE.md |
-| Does it work? | FINAL_VERIFICATION.md |
-| What document should I read? | TABLE_INDEX.md |
-| Where do I start? | This file! |
-
----
-
-## 💡 Tips for Using This Documentation
-
-### For Quick Reference
-- Bookmark: `TABLE_QUICK_REFERENCE.md`
-- Use: When you need a quick answer
-- Time: 2-5 minutes per lookup
-
-### For Learning
-- Start: `QUICK_START_SUMMARY.md`
-- Then: `TABLE_README.md`
-- Then: Pick other docs based on interest
-
-### For Integration
-- Start: `TABLE_IMPLEMENTATION_SUMMARY.md`
-- Then: `TABLE_CODE_EXAMPLES.md`
-- Then: `TABLE_INSTALLATION.md`
-
-### For Troubleshooting
-- Check: `TABLE_INSTALLATION.md` (Troubleshooting section)
-- Check: `TABLE_QUICK_REFERENCE.md` (Troubleshooting table)
-- Check: `TABLE_FEATURES.md` (Known Limitations section)
-
-### For Customization
-- Read: `TABLE_INSTALLATION.md` (Customization section)
-- Study: `TABLE_CODE_EXAMPLES.md` (Custom implementations)
-- Reference: `TABLE_UI_LAYOUT.md` (Design system)
-
----
-
-## 🎁 Bonus Features
-
-### Ready-to-Use Code
-- Basic component usage
-- State management patterns
-- Database integration
-- Custom keyboard shortcuts
-- Table export (CSV)
-- Table validation
-- Error handling
-- Performance optimization
-
-### Visual References
-- ASCII diagrams
-- Color schemes
-- Layout guides
-- Animation timelines
-- State flow diagrams
-
-### Complete Examples
-- 12+ code examples
-- Multiple integration patterns
-- Different use cases
-- Error handling patterns
-- Best practices
-
----
-
-## 📞 Getting Help
-
-### Immediate Help (5 min)
-→ `TABLE_QUICK_REFERENCE.md` - Troubleshooting section
-
-### Detailed Help (15 min)
-→ `TABLE_INSTALLATION.md` - Troubleshooting section
-
-### Code Help (30 min)
-→ `TABLE_CODE_EXAMPLES.md` - Pick relevant example
-
-### Complete Help
-→ Read: `TABLE_INDEX.md` to find specific resource
-
----
-
-## ✅ Documentation Checklist
-
-- ✓ User guides
-- ✓ Quick reference
-- ✓ Feature details
-- ✓ Visual guides
-- ✓ Code examples
-- ✓ Setup guides
-- ✓ Integration guides
-- ✓ Troubleshooting
-- ✓ Reports
-- ✓ Verification
-- ✓ This index
-
----
-
-## 🚀 Next Steps
-
-### Right Now
-→ Read: `QUICK_START_SUMMARY.md` (5 min)
-
-### Then
-→ Pick from the matrix above based on your needs
-
-### Finally
-→ Start using the table features in your app!
-
----
-
-## 🎉 Welcome!
-
-You now have everything you need to:
-- ✅ Understand the system
-- ✅ Use it immediately
-- ✅ Customize it
-- ✅ Integrate it
-- ✅ Extend it
-- ✅ Fix any issues
-
-**Let's go! Pick a document above and start reading! 📚**
-
----
-
-**Documentation Version:** 1.0  
-**Last Updated:** February 9, 2026  
-**Status:** ✅ Complete  
-**Coverage:** 100%  
-
-Happy learning! 🎓
+- Update the `updated:` frontmatter date whenever you edit a doc.
+- Change `status:` from `current` to `stale` when a doc is no longer accurate but not yet worth replacing.
+- Move genuinely superseded docs to `docs/archive/` and add a line to `docs/archive/README.md`.
+- Ground everything in actual code. Mark anything unverifiable as `> TODO: confirm`.

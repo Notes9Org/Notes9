@@ -115,7 +115,7 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    const body = await req.json().catch(() => null)
+    const body = await req.json().catch((err: unknown) => { console.error('[reports/generate] body parse failed:', err); return null; })
     if (body === null) {
       return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 })
     }

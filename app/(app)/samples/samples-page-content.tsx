@@ -4,7 +4,7 @@ import { useState, useMemo, useEffect } from "react"
 import { useMediaQuery } from "@/hooks/use-media-query"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { Plus, Package, Grid3x3, List, Dna, Atom } from "lucide-react"
+import { Plus, Package, Grid3x3, List, Dna, Atom, SearchX } from "lucide-react"
 import Link from "next/link"
 import { SampleList } from "./sample-list"
 import {
@@ -260,8 +260,14 @@ export function SamplesPageContent({ samples, statusCount }: SamplesPageContentP
         <SampleList samples={filteredSamples} viewMode={viewMode} setViewMode={setViewMode} hideToolbar />
       ) : (
         <Card>
-          <CardContent className="flex flex-col items-center justify-center gap-3 py-10 text-center">
-            <p className="text-sm text-muted-foreground">No samples match the selected filters.</p>
+          <CardContent className="flex flex-col items-center justify-center gap-4 py-12 text-center">
+            <div className="flex size-12 items-center justify-center rounded-full bg-muted">
+              <SearchX className="size-6 text-muted-foreground" aria-hidden />
+            </div>
+            <div className="space-y-1">
+              <p className="text-sm font-medium text-foreground">No samples match the selected filters</p>
+              <p className="text-xs text-muted-foreground">Try broadening your search by adjusting or clearing the active filters.</p>
+            </div>
             {filtersActive ? (
               <Button variant="outline" size="sm" onClick={clearFilters}>
                 Clear filters

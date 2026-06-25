@@ -1,6 +1,6 @@
 "use client"
 
-import { createContext, useContext, type ReactNode } from "react"
+import { createContext, useContext, useMemo, type ReactNode } from "react"
 
 /**
  * Lets descendants (notably <CatalystSectionHero>) react to the right Catalyst
@@ -23,7 +23,8 @@ export function CatalystPanelStateProvider({
   isOpen: boolean
   children: ReactNode
 }) {
-  return <Context.Provider value={{ isOpen }}>{children}</Context.Provider>
+  const value = useMemo<CatalystPanelState>(() => ({ isOpen }), [isOpen])
+  return <Context.Provider value={value}>{children}</Context.Provider>
 }
 
 export function useCatalystPanelState(): CatalystPanelState {

@@ -427,8 +427,9 @@ export function CatalystInput({
                   variant="outline"
                   className="size-8 rounded-full"
                   onClick={stop}
+                  aria-label="Stop generation"
                 >
-                  <Square className="size-3" />
+                  <Square className="size-3" aria-hidden />
                 </Button>
               ) : (
                 <Button
@@ -436,8 +437,9 @@ export function CatalystInput({
                   size="icon"
                   className="size-8 rounded-full bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
                   disabled={(!input.trim() && attachments.length === 0) || isUploading}
+                  aria-label="Send message"
                 >
-                  <ArrowUp className="size-4" />
+                  <ArrowUp className="size-4" aria-hidden />
                 </Button>
               )}
             </div>

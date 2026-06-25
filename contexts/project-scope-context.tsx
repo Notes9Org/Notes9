@@ -2,6 +2,7 @@
 
 import {
   createContext,
+  useCallback,
   useContext,
   useEffect,
   useMemo,
@@ -194,7 +195,7 @@ export function ProjectScopeProvider({ children }: { children: ReactNode }) {
   const projectId =
     queryProjectId ?? pathProjectId ?? persistedProjectId
 
-  const clearScope = () => {
+  const clearScope = useCallback(() => {
     try {
       localStorage.removeItem("n9_last_project_id")
       localStorage.removeItem("n9_last_experiment_id")
@@ -205,7 +206,7 @@ export function ProjectScopeProvider({ children }: { children: ReactNode }) {
     setPersistedExperimentId(null)
     setExperimentId(null)
     setExperimentName(null)
-  }
+  }, [])
 
   const scopedQueryString = useMemo(() => {
     const params = new URLSearchParams()
@@ -236,6 +237,7 @@ export function ProjectScopeProvider({ children }: { children: ReactNode }) {
       persistedExperimentId,
       experimentName,
       loading,
+      clearScope,
       scopedQueryString,
     ],
   )
