@@ -1071,6 +1071,44 @@ export function RightSidebar({
     );
   }, [hasConversation, isPageVariant]);
 
+  // A literature-search summary arrives via the in-memory bridge and is shown in
+  // a pinned panel — it was never persisted, so these chats never appeared in
+  // history. Once a summary finishes streaming, save it as a real session (query
+  // + summary). createSession adopts it as the current session, so follow-up
+  // questions continue the same thread.
+  const persistedLiteratureSigRef = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    if (!literature || literature.streaming) return;
+    const summary = literature.summary?.trim();
+    const query = literature.query?.trim();
+    if (!summary || !query) return;
+    const sig = `${query}::${summary.length}`;
+    if (persistedLiteratureSigRef.current.has(sig)) return;
+    persistedLiteratureSigRef.current.add(sig);
+
+    let cancelled = false;
+    void (async () => {
+      const sessionId = await createSession(query.slice(0, 50) || 'Literature search');
+      if (!sessionId || cancelled) return;
+      const refsMd = literature.references?.length
+        ? '\n\n**References**\n' +
+          literature.references
+            .map((r) => `${r.n}. ${r.title}${r.meta ? ` — ${r.meta}` : ''}`)
+            .join('\n')
+        : '';
+      await saveMessage(sessionId, 'user', query);
+      await saveMessage(sessionId, 'assistant', summary + refsMd, {
+        source: 'literature_summary',
+      });
+      if (!cancelled) loadSessions();
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // Only the literature bridge drives this; the session helpers are stable.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [literature]);
+
   const agentStream = useAgentStream();
   const literatureAgentStream = useLiteratureAgentStream();
   const contextMentionCandidates = useLiteratureMentionCandidates();
@@ -2642,6 +2680,9 @@ export function RightSidebar({
     }
     setCurrentSessionId(sessionId);
     currentSessionRef.current = sessionId;
+    // Drop the live literature panel so a persisted literature session renders
+    // as its saved messages instead of doubling up with the pinned summary.
+    setCatalystLiterature(null);
     loadMessages(sessionId).then((msgs) => {
       const chatMessages = msgs.map((m) => {
         let text = m.content;
