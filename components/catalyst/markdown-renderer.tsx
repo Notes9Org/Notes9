@@ -709,14 +709,28 @@ export function MarkdownRenderer({
           ? { start: chip.charStart, end: chip.charEnd }
           : null,
     };
-    // Prefer in-app highlight dispatch (same-page doc viewers listen for it).
+    // Prefer in-app highlight dispatch (same-page doc viewers listen for it):
+    // this is also how a second citation into the SAME open document just scrolls
+    // to the new excerpt instead of reloading the document.
     if (spanText && dispatchDocumentHighlight(target)) return;
     const href = spanText
       ? buildHighlightUrl(target) || workspaceRoute(chip.sourceType, chip.sourceId)
       : workspaceRoute(chip.sourceType, chip.sourceId);
+    if (!href) return;
+    // Give the Catalyst full page a chance to dock the chat into the sidebar
+    // (so the conversation stays on the side) before we leave for the document.
+    // If it handles this it performs the navigation itself.
+    if (typeof window !== 'undefined') {
+      const beforeNav = new CustomEvent('notes9:catalyst-before-navigate', {
+        detail: { href },
+        cancelable: true,
+      });
+      window.dispatchEvent(beforeNav);
+      if (beforeNav.defaultPrevented) return;
+    }
     // SPA navigation (NOT window.location.assign) so the Catalyst AI sidebar and
     // app state survive; the destination reads ?highlight= and scrolls/pulses.
-    if (href) router.push(href);
+    router.push(href);
   }, [router]);
 
   /** Open the in-app span viewer for a chip (G3). Dismiss any hover card so it

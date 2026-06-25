@@ -2846,6 +2846,24 @@ export function RightSidebar({
     loadSession(initialSessionId);
   }, [isPageVariant, initialSessionId, mounted]);
 
+  // On the full Catalyst page, when a citation in an answer navigates to its
+  // source document, dock the chat into the sidebar (carrying the session) so
+  // the conversation stays on the side instead of being replaced by the doc.
+  useEffect(() => {
+    if (!isPageVariant) return;
+    const onBeforeNav = (e: Event) => {
+      const href = (e as CustomEvent<{ href?: string }>).detail?.href;
+      if (!href) return;
+      e.preventDefault();
+      const sid = currentSessionRef.current;
+      openCatalystPanel({ dock: true, ...(sid ? { sessionId: sid } : {}) });
+      router.push(href);
+    };
+    window.addEventListener('notes9:catalyst-before-navigate', onBeforeNav as EventListener);
+    return () =>
+      window.removeEventListener('notes9:catalyst-before-navigate', onBeforeNav as EventListener);
+  }, [isPageVariant, router]);
+
   const applyCatalystLaunch = useCallback(
     (launch: { query?: string; projectId?: string; attachments?: Array<{ url: string; name: string; contentType: string; size?: number }>; webSearch?: boolean; autoSend?: boolean; sessionId?: string }) => {
       // Continue an existing conversation (e.g. minimizing the full page back
