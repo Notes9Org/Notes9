@@ -1,76 +1,130 @@
 'use client'
 
-import { ScrollText, Loader2, BookText } from 'lucide-react'
+import { ArrowUpRight } from 'lucide-react'
 import { MarkdownRenderer } from '@/components/catalyst/markdown-renderer'
-import type { CatalystLiterature } from '@/lib/catalyst-literature'
+import { cn } from '@/lib/utils'
+import type { CatalystLiterature, LiteratureRef } from '@/lib/catalyst-literature'
 
 /**
  * The literature search's AI summary, shown at the top of the Catalyst chat —
  * composed on the literature page (/api/chat) and streamed in here, with its
- * cited references underneath. Follow-up questions continue in the chat below.
+ * cited sources underneath. Deliberately borderless/box-free so it reads as a
+ * premium, native answer rather than a card. Follow-ups continue in the chat.
  */
 export function LiteratureSummaryPanel({ lit }: { lit: CatalystLiterature }) {
+  const hasSummary = lit.summary.trim().length > 0
+
   return (
-    <section className="overflow-hidden rounded-2xl border border-primary/20 bg-primary/[0.03] shadow-sm">
-      <div className="flex items-center gap-2.5 border-b border-primary/15 px-4 py-2.5">
-        {lit.streaming ? (
-          <Loader2 className="size-4 shrink-0 animate-spin text-primary" aria-hidden />
-        ) : (
-          <span className="flex size-6 shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-            <ScrollText className="size-3.5" />
+    <section className="space-y-4">
+      {/* Header — no box; a live accent dot + label, with the query as the lead. */}
+      <div className="space-y-1.5">
+        <div className="flex items-center gap-2">
+          <span className="relative flex size-2 shrink-0" aria-hidden>
+            {lit.streaming && (
+              <span className="absolute inline-flex size-full animate-ping rounded-full bg-[var(--n9-accent)] opacity-60" />
+            )}
+            <span className="relative inline-flex size-2 rounded-full bg-[var(--n9-accent)]" />
           </span>
-        )}
-        <div className="min-w-0">
-          <p className="text-2xs font-semibold uppercase tracking-wider text-primary/80">AI summary</p>
-          {lit.query && (
-            <p className="truncate text-xs text-muted-foreground" title={lit.query}>
-              “{lit.query}”
-            </p>
+          <span className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--n9-accent)]">
+            AI summary
+          </span>
+          {lit.streaming && (
+            <span className="text-[11px] font-medium text-muted-foreground animate-pulse">
+              composing…
+            </span>
           )}
         </div>
+        {lit.query && (
+          <h3 className="text-[15px] font-semibold leading-snug tracking-[-0.01em] text-foreground">
+            {lit.query}
+          </h3>
+        )}
       </div>
 
-      <div className="px-4 py-3">
-        {lit.summary.trim() ? (
-          <MarkdownRenderer content={lit.summary} showCursor={lit.streaming} className="text-sm" />
-        ) : (
-          <p className="text-sm italic text-muted-foreground">Reading the papers and composing a cited summary…</p>
-        )}
+      {/* Summary prose — flows directly in the chat, no container. */}
+      {hasSummary ? (
+        <MarkdownRenderer
+          content={lit.summary}
+          showCursor={lit.streaming}
+          className="text-[13.5px] leading-relaxed"
+        />
+      ) : (
+        <div className="space-y-2.5" aria-label="Composing summary">
+          <div className="n9-skeleton-shimmer h-3 w-[94%] rounded-full bg-muted/60" />
+          <div className="n9-skeleton-shimmer h-3 w-[100%] rounded-full bg-muted/60" />
+          <div className="n9-skeleton-shimmer h-3 w-[86%] rounded-full bg-muted/60" />
+          <div className="n9-skeleton-shimmer h-3 w-[72%] rounded-full bg-muted/60" />
+        </div>
+      )}
 
-        {lit.references.length > 0 && (
-          <div className="mt-3 border-t border-border/50 pt-3">
-            <p className="mb-2 flex items-center gap-1.5 text-2xs font-semibold uppercase tracking-wider text-muted-foreground">
-              <BookText className="size-3.5 text-primary/70" aria-hidden />
-              References
-              <span className="ml-auto rounded-full bg-muted px-1.5 text-2xs font-medium tabular-nums text-muted-foreground">
-                {lit.references.length}
-              </span>
-            </p>
-            <ol className="space-y-2">
-              {lit.references.map((r) => (
-                <li key={r.n} className="flex gap-2 text-sm">
-                  <span className="mt-0.5 shrink-0 font-mono text-xs tabular-nums text-primary/80">[{r.n}]</span>
-                  <span className="min-w-0">
-                    {r.href ? (
-                      <a
-                        href={r.href}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="font-medium leading-snug text-foreground underline-offset-2 hover:underline"
-                      >
-                        {r.title}
-                      </a>
-                    ) : (
-                      <span className="font-medium leading-snug text-foreground">{r.title}</span>
-                    )}
-                    {r.meta && <span className="mt-0.5 block text-xs text-muted-foreground">{r.meta}</span>}
-                  </span>
-                </li>
-              ))}
-            </ol>
+      {/* Sources — a clean labelled set of hover cards, accent-numbered. */}
+      {lit.references.length > 0 && (
+        <div className="space-y-2 pt-0.5">
+          <div className="flex items-center gap-2">
+            <span className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+              Sources
+            </span>
+            <span className="rounded-full bg-muted px-1.5 py-px text-[10px] font-semibold tabular-nums text-muted-foreground">
+              {lit.references.length}
+            </span>
+            <span className="h-px flex-1 bg-border/60" />
           </div>
-        )}
-      </div>
+          <ol className="grid gap-1">
+            {lit.references.map((r) => (
+              <SourceRow key={r.n} r={r} />
+            ))}
+          </ol>
+        </div>
+      )}
     </section>
+  )
+}
+
+function SourceRow({ r }: { r: LiteratureRef }) {
+  const inner = (
+    <>
+      <span className="mt-px flex size-5 shrink-0 items-center justify-center rounded-md bg-[color:color-mix(in_oklab,var(--n9-accent)_14%,transparent)] text-[10px] font-bold tabular-nums text-[var(--n9-accent)]">
+        {r.n}
+      </span>
+      <span className="min-w-0 flex-1">
+        <span
+          className={cn(
+            'block truncate text-[13px] font-medium leading-snug text-foreground',
+            r.href && 'group-hover:text-[var(--n9-accent)]',
+          )}
+        >
+          {r.title}
+        </span>
+        {r.meta && (
+          <span className="mt-0.5 block truncate text-[11px] text-muted-foreground">
+            {r.meta}
+          </span>
+        )}
+      </span>
+      {r.href && (
+        <ArrowUpRight className="mt-0.5 size-3.5 shrink-0 text-muted-foreground/0 transition-colors group-hover:text-[var(--n9-accent)]" />
+      )}
+    </>
+  )
+
+  if (r.href) {
+    return (
+      <li>
+        <a
+          href={r.href}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="group flex items-start gap-2.5 rounded-xl px-2 py-1.5 transition-colors hover:bg-accent/60"
+        >
+          {inner}
+        </a>
+      </li>
+    )
+  }
+
+  return (
+    <li>
+      <div className="group flex items-start gap-2.5 rounded-xl px-2 py-1.5">{inner}</div>
+    </li>
   )
 }

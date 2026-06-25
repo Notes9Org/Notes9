@@ -103,11 +103,12 @@ export function StagedPaperView({
   const pdfCardRef = useRef<HTMLDivElement>(null)
   useEffect(() => {
     if (!lit.pdf_storage_path) return
-    // Scroll once early, then again after the PDF has had time to render — the
-    // page's height grows as pages paint, so a single early scroll lands short.
+    // Scroll once early, then again as the PDF paints — the page's height grows
+    // as pages render (and a repository PDF's signed URL can resolve slowly), so
+    // a single early scroll lands short. Align the reader to the top.
     const scroll = () =>
-      pdfCardRef.current?.scrollIntoView({ behavior: "smooth", block: "center" })
-    const timers = [300, 1100].map((d) => setTimeout(scroll, d))
+      pdfCardRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })
+    const timers = [300, 1100, 2200].map((d) => setTimeout(scroll, d))
     return () => timers.forEach(clearTimeout)
   }, [lit.id, lit.pdf_storage_path])
 
@@ -152,7 +153,7 @@ export function StagedPaperView({
         </div>
       </div>
 
-      <div ref={pdfCardRef}>
+      <div ref={pdfCardRef} className="scroll-mt-4">
       {lit.pdf_storage_path ? (
         /* PDF attached: a single compact toolbar so the reader starts at the top. */
         <div className="space-y-2">

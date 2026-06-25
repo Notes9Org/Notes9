@@ -160,6 +160,20 @@ function LiteratureDetailViewInner({
 
   const [activeTab, setActiveTab] = useState<string>(initialTab);
 
+  // Auto-scroll the PDF into view when the PDF tab is shown for a repository
+  // paper — same affordance the staged "Read" view already has. Skipped when a
+  // RAG highlight is driving its own scroll, so we don't fight it.
+  const pdfSectionRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (activeTab !== "pdf" || !hasPdf) return;
+    if (activeLitHighlight && highlightSurface === "pdf") return;
+    // Scroll once the panel mounts, then again after pages paint and grow it.
+    const scroll = () =>
+      pdfSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    const timers = [250, 900].map((d) => setTimeout(scroll, d));
+    return () => timers.forEach(clearTimeout);
+  }, [activeTab, hasPdf, activeLitHighlight, highlightSurface, literature.id]);
+
   // Deep-link: switch tab for RAG highlight (abstract → Overview, body/PDF → PDF)
   useEffect(() => {
     if (!activeLitHighlight) {
@@ -493,7 +507,7 @@ ER  - `;
           {literature.pdf_storage_path ? (
             /* PDF attached: a single compact toolbar (file name + meta + replace)
                so the reader starts right at the top — no stacked header/description. */
-            <div className="space-y-2">
+            <div ref={pdfSectionRef} className="scroll-mt-4 space-y-2">
               <div className="flex items-center justify-between gap-2 rounded-md border bg-muted/20 py-1 pl-2.5 pr-1">
                 <span className="flex min-w-0 items-center gap-1.5 text-xs font-medium text-foreground">
                   <FileText className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
