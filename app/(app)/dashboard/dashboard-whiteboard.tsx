@@ -10,7 +10,7 @@ import {
   type MouseEvent,
 } from "react"
 import { createPortal } from "react-dom"
-import { Shapes, Type, Trash2, X, Sparkles, Maximize2, Minimize2 } from "lucide-react"
+import { Shapes, Type, Trash2, X, Sparkles, Maximize, Minimize } from "lucide-react"
 import {
   AlertDialog,
   AlertDialogAction,
@@ -595,7 +595,7 @@ export function DashboardWhiteboard({
             onClick={() => setIsFullscreen(!isFullscreen)}
             className="text-muted-foreground hover:text-foreground transition-colors"
           >
-            {isFullscreen ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
+            {isFullscreen ? <Minimize size={14} /> : <Maximize size={14} />}
           </button>
         </div>
       </header>

@@ -4,7 +4,7 @@ import { useEffect, useRef } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { SearchPaper } from "@/types/paper-search"
-import { BookOpen, Database, ExternalLink, FileText, Loader2, Trash2, Search } from "lucide-react"
+import { BookOpen, BookmarkPlus, ExternalLink, FileText, Loader2, Trash2 } from "lucide-react"
 import { LiteraturePdfPanel } from "./literature-pdf-panel"
 import { UploadLiteraturePdfDialog } from "./upload-literature-pdf-dialog"
 import { decodeHtmlEntities } from "@/lib/literature-abstract-display"
@@ -125,18 +125,19 @@ export function StagedPaperView({
           </div>
           <div className="flex items-center gap-2">
             <Button
-              variant="outline"
+              variant="default"
               size="sm"
               onClick={() => void onSavePaper(rowToSearchPaper(lit), lit.id)}
               disabled={Boolean(savingLiteratureId)}
-              className="gap-2"
+              title="Keep this paper in your library"
+              className="gap-2 bg-primary hover:bg-[var(--n9-accent-hover)]"
             >
               {savingLiteratureId === lit.id ? (
                 <Loader2 className="h-4 w-4 animate-spin" />
               ) : (
-                <Database className="h-4 w-4" />
+                <BookmarkPlus className="h-4 w-4" />
               )}
-              Save to Repository
+              Save to library
             </Button>
             <Button
               variant="ghost"

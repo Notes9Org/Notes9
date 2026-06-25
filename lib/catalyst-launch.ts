@@ -25,6 +25,35 @@ export type CatalystLaunchDetail = {
   /** When true, the sidebar submits the query immediately instead of only
    *  pre-filling its composer — i.e. the user already clicked Send. */
   autoSend?: boolean
+  /** Continue an existing conversation — used when minimizing the full Catalyst
+   *  page back into the docked sidebar so the session carries over. */
+  sessionId?: string
+  /** Force docking into the side panel even when currently on `/catalyst`
+   *  (otherwise opening from `/catalyst` just re-seeds the full page). */
+  dock?: boolean
+}
+
+const ORIGIN_KEY = "notes9:catalyst-origin"
+let catalystOriginPath: string | null = null
+
+/** Remember the page the user maximized Catalyst from, so minimizing returns
+ *  there with the docked sidebar. */
+export function setCatalystOrigin(path: string) {
+  catalystOriginPath = path
+  try {
+    sessionStorage.setItem(ORIGIN_KEY, path)
+  } catch {
+    /* ignore */
+  }
+}
+
+export function getCatalystOrigin(): string | null {
+  if (catalystOriginPath) return catalystOriginPath
+  try {
+    return sessionStorage.getItem(ORIGIN_KEY)
+  } catch {
+    return null
+  }
 }
 
 export const CATALYST_OPEN_EVENT = "notes9:open-catalyst"

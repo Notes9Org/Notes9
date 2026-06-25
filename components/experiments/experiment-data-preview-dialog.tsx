@@ -16,8 +16,8 @@ import {
   FileImage,
   FileText,
   Loader2,
-  Maximize2,
-  Minimize2,
+  Maximize,
+  Minimize,
   X,
 } from "lucide-react"
 
@@ -466,7 +466,7 @@ export function ExperimentDataPreviewDialog({ open, onOpenChange, fileUrl, fileN
               aria-label={fullPage ? "Exit full page" : "Full page"}
               title={fullPage ? "Exit full page" : "Full page"}
             >
-              {fullPage ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
+              {fullPage ? <Minimize className="h-4 w-4" /> : <Maximize className="h-4 w-4" />}
             </Button>
             <Button
               type="button"

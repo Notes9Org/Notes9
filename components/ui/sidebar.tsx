@@ -4,7 +4,7 @@ import * as React from 'react'
 import { usePathname } from 'next/navigation'
 import { Slot } from '@radix-ui/react-slot'
 import { cva, VariantProps } from 'class-variance-authority'
-import { PanelLeftIcon } from 'lucide-react'
+import { ChevronsLeft, ChevronsRight } from 'lucide-react'
 
 import { useIsMobile } from '@/hooks/use-mobile'
 import { cn } from '@/lib/utils'
@@ -247,7 +247,7 @@ function Sidebar({
       <div
         data-slot="sidebar-gap"
         className={cn(
-          'relative w-(--sidebar-width) bg-transparent transition-[width] duration-200 ease-linear',
+          'relative w-(--sidebar-width) bg-transparent transition-[width] duration-500 ease-[cubic-bezier(0.22,1,0.36,1)]',
           'group-data-[collapsible=offcanvas]:w-0',
           'group-data-[side=right]:rotate-180',
           variant === 'floating' || variant === 'inset'
@@ -259,7 +259,7 @@ function Sidebar({
         data-slot="sidebar-container"
         className={cn(
           /* z-[120] above TipTap region fullscreen (z-110) */
-          'fixed inset-y-0 z-[120] hidden h-svh w-(--sidebar-width) transition-[left,right,width] duration-200 ease-linear md:flex',
+          'fixed inset-y-0 z-[120] hidden h-svh w-(--sidebar-width) transition-[left,right,width] duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] md:flex',
           side === 'left'
             ? 'left-0 group-data-[collapsible=offcanvas]:left-[calc(var(--sidebar-width)*-1)]'
             : 'right-0 group-data-[collapsible=offcanvas]:right-[calc(var(--sidebar-width)*-1)]',
@@ -288,7 +288,7 @@ function SidebarTrigger({
   onClick,
   ...props
 }: React.ComponentProps<typeof Button>) {
-  const { toggleSidebar } = useSidebar()
+  const { toggleSidebar, state } = useSidebar()
 
   return (
     <Button
@@ -303,7 +303,7 @@ function SidebarTrigger({
       }}
       {...props}
     >
-      <PanelLeftIcon />
+      {state === 'expanded' ? <ChevronsLeft /> : <ChevronsRight />}
       <span className="sr-only">Toggle Sidebar</span>
     </Button>
   )

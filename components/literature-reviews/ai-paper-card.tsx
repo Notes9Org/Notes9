@@ -4,7 +4,7 @@ import { useMemo, useState } from 'react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
-import { BookOpen, Check, Database, ExternalLink, FileText, Loader2, MessageCircle, Quote, ScrollText, Unlock } from 'lucide-react'
+import { BookOpen, BookmarkCheck, BookmarkPlus, ExternalLink, FileText, Loader2, MessageCircle, Quote, ScrollText, Unlock } from 'lucide-react'
 import { decodeHtmlEntities, formatLiteratureAbstractPlain } from '@/lib/literature-abstract-display'
 import { cn } from '@/lib/utils'
 import { savePaperToRepository } from '@/app/(app)/literature-reviews/actions'
@@ -406,45 +406,51 @@ export function AiPaperCard({
 
         <div className="flex flex-wrap items-center gap-2 border-t border-border/50 pt-3">
           {href && (
-            <Button variant="ghost" size="sm" asChild title="Open source in a new tab" className="rounded-lg text-muted-foreground hover:text-foreground">
+            <Button variant="ghost" size="sm" asChild title="Open the original source in a new tab" className="rounded-lg text-muted-foreground hover:text-foreground">
               <a href={href} target="_blank" rel="noopener noreferrer" className="gap-1.5">
                 <ExternalLink className="size-3.5" />
                 Source
               </a>
             </Button>
           )}
-          <Button variant="outline" size="sm" className="gap-1.5 rounded-lg" onClick={(e) => handleAsk(e)} title="Ask Catalyst about this paper">
+          <Button variant="ghost" size="sm" className="gap-1.5 rounded-lg text-muted-foreground hover:text-foreground" onClick={(e) => handleAsk(e)} title="Ask Catalyst AI about this paper">
             <MessageCircle className="size-3.5" />
             Ask Catalyst
           </Button>
           <div className="flex-1" />
+          {/* Step 2 — keep it: add to your library. */}
           <Button
             variant="outline"
-            size="icon"
+            size="sm"
             onClick={handleSave}
             disabled={saving || saved}
-            title="Save to repository"
-            aria-label="Save to repository"
-            className="rounded-lg"
+            title="Save this paper to your library so you can find it later"
+            className="gap-1.5 rounded-lg"
           >
             {saving ? (
               <Loader2 className="size-3.5 animate-spin" />
             ) : saved ? (
-              <Check className="size-3.5 text-emerald-600 dark:text-emerald-400" />
+              <BookmarkCheck className="size-3.5 text-emerald-600 dark:text-emerald-400" />
             ) : (
-              <Database className="size-3.5" />
+              <BookmarkPlus className="size-3.5" />
             )}
+            {saved ? 'Saved to library' : 'Save to library'}
           </Button>
+          {/* Step 1 — read it: open the full text (open-access loads the PDF). */}
           <Button
             variant="default"
             size="sm"
             className="gap-1.5 rounded-lg bg-primary shadow-sm transition-all hover:bg-[var(--n9-accent-hover)] hover:shadow-[0_6px_16px_-8px_var(--n9-accent-glow)]"
             onClick={handleRead}
             disabled={isStaging}
-            title="Read in Notes9 (open-access loads the PDF; closed asks for upload)"
+            title={
+              isStaged
+                ? 'Open this paper in your reader'
+                : 'Open to read the full paper — the PDF loads inline for open-access papers'
+            }
           >
             {isStaging ? <Loader2 className="size-3.5 animate-spin" /> : <BookOpen className="size-3.5" />}
-            {isStaged ? 'Open' : 'Read'}
+            {isStaged ? 'Open' : 'Read paper'}
           </Button>
         </div>
       </CardContent>

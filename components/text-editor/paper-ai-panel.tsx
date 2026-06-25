@@ -18,8 +18,8 @@ import {
   MessageSquare,
   BookOpen,
   NotebookPen,
-  Minimize2,
-  Maximize2,
+  Minimize,
+  Maximize,
   RotateCcw,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -427,7 +427,7 @@ export function PaperAIPanel({
               onClick={onToggleExpand}
               aria-label={isExpanded ? "Exit full screen" : "Expand chat"}
             >
-              {isExpanded ? <Minimize2 className="size-4" /> : <Maximize2 className="size-4" />}
+              {isExpanded ? <Minimize className="size-4" /> : <Maximize className="size-4" />}
             </Button>
           ) : null}
           <Button

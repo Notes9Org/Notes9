@@ -28,7 +28,10 @@ import {
   Square,
   ArrowUp,
   History,
-  Maximize2,
+  Maximize,
+  Minimize,
+  ChevronsRight,
+  ChevronsLeft,
   Plus,
   Paperclip,
   Globe,
@@ -38,7 +41,6 @@ import {
   MoreHorizontal,
   Trash2,
   ChevronDown,
-  ChevronLeft,
   X,
   Telescope,
   Menu,
@@ -116,7 +118,12 @@ import {
 } from '@/lib/catalyst-mention-types';
 import { isLikelyUuid } from '@/lib/url-project-param';
 import type { CatalystLaunchDetail, CatalystAttachDetail } from '@/lib/catalyst-launch';
-import { CATALYST_ATTACH_EVENT } from '@/lib/catalyst-launch';
+import {
+  CATALYST_ATTACH_EVENT,
+  openCatalystPanel,
+  setCatalystOrigin,
+  getCatalystOrigin,
+} from '@/lib/catalyst-launch';
 import {
   getCatalystCoPilot,
   clearCatalystCoPilot,
@@ -124,6 +131,8 @@ import {
   CATALYST_COPILOT_EVENT,
   type CoPilotContext,
 } from '@/lib/catalyst-copilot';
+import { useCatalystLiterature, setCatalystLiterature } from '@/lib/catalyst-literature';
+import { LiteratureSummaryPanel } from '@/components/catalyst/literature-summary-panel';
 import { useLiteratureMentionCandidates } from '@/contexts/literature-mention-context';
 import { useLiteratureAgentStream } from '@/hooks/use-literature-agent-stream';
 import type { LiteratureAgentDonePayload } from '@/lib/literature-agent-types';
@@ -470,6 +479,9 @@ export function RightSidebar({
   const [coPilot, setCoPilot] = useState<CoPilotContext | null>(null);
   const coPilotRef = useRef<CoPilotContext | null>(null);
   coPilotRef.current = coPilot;
+  // The literature search's AI summary (streamed in from the literature page),
+  // pinned at the top of the chat with its references.
+  const literature = useCatalystLiterature();
   const [mentionOpen, setMentionOpen] = useState(false);
   const [mentionFilter, setMentionFilter] = useState('');
   /** Todo-style @ menu: row highlight (-1 = none). */
@@ -2298,6 +2310,9 @@ export function RightSidebar({
       setLiteraturePlainLen(0);
       literatureAgentStream.reset();
       agentStream.reset();
+      // A fresh chat drops the pinned literature summary + its co-pilot context.
+      setCatalystLiterature(null);
+      clearCatalystCoPilot();
     }
   };
 
@@ -2418,7 +2433,13 @@ export function RightSidebar({
   }, [isPageVariant, initialSessionId, mounted]);
 
   const applyCatalystLaunch = useCallback(
-    (launch: { query?: string; projectId?: string; attachments?: Array<{ url: string; name: string; contentType: string; size?: number }>; webSearch?: boolean; autoSend?: boolean }) => {
+    (launch: { query?: string; projectId?: string; attachments?: Array<{ url: string; name: string; contentType: string; size?: number }>; webSearch?: boolean; autoSend?: boolean; sessionId?: string }) => {
+      // Continue an existing conversation (e.g. minimizing the full page back
+      // into the docked sidebar) before seeding any new query.
+      if (launch.sessionId && launch.sessionId !== currentSessionRef.current) {
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+        loadSession(launch.sessionId);
+      }
       const q = launch.query?.trim();
       if (q) {
         setInput(q);
@@ -2492,6 +2513,7 @@ export function RightSidebar({
       attachments: pendingLaunch.attachments,
       webSearch: pendingLaunch.webSearch,
       autoSend: pendingLaunch.autoSend,
+      sessionId: pendingLaunch.sessionId,
     });
     onPendingLaunchConsumed?.();
   }, [
@@ -3083,20 +3105,21 @@ export function RightSidebar({
                   <Menu className="size-4" />
                 </Button>
               ) : null}
-              {isPageVariant ? (
-                <span className="truncate px-1 text-sm font-semibold text-foreground">Catalyst</span>
-              ) : null}
-              {!isPageVariant && layoutExpanded && !expandedHistoryOpen && (
+              {isPageVariant && layoutExpanded && !expandedHistoryOpen && (
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="size-8 sm:size-9 text-muted-foreground shrink-0"
+                  className="size-8 shrink-0 text-muted-foreground sm:size-9"
                   onClick={() => setExpandedHistoryOpen(true)}
+                  title="Show chat history"
                   aria-label="Show chat history"
                 >
-                    <History className="size-4" />
+                  <ChevronsRight className="size-4" />
                 </Button>
               )}
+              {isPageVariant ? (
+                <span className="truncate px-1 text-sm font-semibold text-foreground">Catalyst</span>
+              ) : null}
               {!isPageVariant && !layoutExpanded && (
                 <>
                   <ScrollArea className="w-full whitespace-nowrap scrollbar-hide">
@@ -3191,17 +3214,24 @@ export function RightSidebar({
             <div className="flex items-center gap-1 pl-2 shrink-0">
               {isPageVariant ? (
                 <>
-                  {layoutExpanded && !expandedHistoryOpen ? (
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="size-8 sm:size-9 text-muted-foreground"
-                      onClick={() => setExpandedHistoryOpen(true)}
-                      aria-label="Show chat history"
-                    >
-                      <History className="size-4" />
-                    </Button>
-                  ) : null}
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="size-8 text-muted-foreground sm:size-9"
+                    title="Minimize to sidebar"
+                    aria-label="Minimize Catalyst to the sidebar"
+                    onClick={() => {
+                      // Dock the full page back into the side panel (NOT close it),
+                      // carrying the conversation, and return to the page it was
+                      // opened from.
+                      const sid = currentSessionRef.current;
+                      openCatalystPanel({ dock: true, ...(sid ? { sessionId: sid } : {}) });
+                      router.push(getCatalystOrigin() ?? '/');
+                    }}
+                  >
+                    <Minimize className="size-4" />
+                  </Button>
                   <Button
                     variant="secondary"
                     className="hidden h-8 text-muted-foreground sm:inline-flex sm:h-9"
@@ -3252,16 +3282,18 @@ export function RightSidebar({
                     title="Open full page"
                     aria-label="Open Catalyst full page"
                     onClick={() => {
-                      // Open the dedicated /catalyst route, carrying the active
-                      // session so the conversation continues on the full page.
+                      // Maximize → open the dedicated /catalyst route, carrying the
+                      // active session so the conversation continues full-page.
+                      // Remember this page so minimizing returns here.
+                      setCatalystOrigin(pathname ?? '/');
                       const sid = currentSessionRef.current;
                       router.push(sid ? `/catalyst?session=${encodeURIComponent(sid)}` : '/catalyst');
                       onClose?.();
                     }}
                   >
-                    <Maximize2 className="size-4" />
+                    <Maximize className="size-4" />
                   </Button>
-                  <Button variant="ghost" size="icon" className="size-8 sm:size-9 text-muted-foreground" onClick={() => onClose?.()}>
+                  <Button variant="ghost" size="icon" className="size-8 sm:size-9 text-muted-foreground" title="Close" aria-label="Close Catalyst" onClick={() => onClose?.()}>
                     <X className="size-4" />
                   </Button>
                 </>
@@ -3271,29 +3303,44 @@ export function RightSidebar({
 
           {/* When full screen: left = conversation list, right = chat. Otherwise: single column. */}
           <div className={cn("flex-1 flex min-h-0 overflow-hidden", layoutExpanded ? "flex-row" : "flex-col")}>
-            {/* Full-screen / page route: left sidebar with previous conversations */}
-            {layoutExpanded && expandedHistoryOpen && (
+            {/* Full-screen / page route: left sidebar with previous conversations.
+                Stays mounted and smoothly animates its width to 0 when minimised
+                (no width shown when closed), so open/close is fluid, not a pop. */}
+            {layoutExpanded && (
               <>
                 <aside
-                  className="flex-shrink-0 flex flex-col overflow-hidden border-r border-border bg-sidebar transition-[width] duration-200 ease-in-out min-h-0"
+                  className={cn(
+                    'relative z-10 flex-shrink-0 flex flex-col overflow-hidden border-r bg-sidebar min-h-0',
+                    expandedHistoryOpen
+                      ? 'border-border shadow-[6px_0_22px_-14px_rgba(20,14,8,0.28)] dark:shadow-[6px_0_26px_-12px_rgba(0,0,0,0.55)]'
+                      : 'border-transparent',
+                  )}
                   style={{
-                    width: historySidebar.width,
-                    transition: historySidebar.isResizing ? 'none' : 'width 0.15s cubic-bezier(0.4, 0, 0.2, 1)',
+                    width: expandedHistoryOpen ? historySidebar.width : 0,
+                    transition: historySidebar.isResizing
+                      ? 'none'
+                      : 'width 0.5s cubic-bezier(0.22, 1, 0.36, 1)',
                   }}
                 >
-                <div className="flex h-full min-h-0 flex-col gap-1 p-2">
-                  {/* Header row - back arrow to hide history (like lab notes collapse) */}
-                  <div className="flex h-8 shrink-0 items-center gap-2 rounded-md px-2 text-xs font-medium text-sidebar-foreground/70">
+                {/* Fixed-width inner content so it's clipped (not reflowed) while
+                    the panel collapses. */}
+                <div
+                  className="flex h-full min-h-0 flex-col gap-1 p-2"
+                  style={{ width: historySidebar.width }}
+                >
+                  {/* Header row — "Chats" on the left, minimise + new chat on the right. */}
+                  <div className="flex h-8 shrink-0 items-center gap-1 rounded-md px-1 text-xs font-medium text-sidebar-foreground/70">
+                    <span className="flex-1 truncate pl-1">Chats</span>
                     <Button
                       variant="ghost"
                       size="icon"
-                      className="h-7 w-7 shrink-0 -ml-0.5"
+                      className="h-7 w-7 shrink-0"
                       onClick={() => setExpandedHistoryOpen(false)}
+                      title="Hide chat history"
                       aria-label="Hide chat history"
                     >
-                      <ChevronLeft className="h-4 w-4" />
+                      <ChevronsLeft className="h-4 w-4" />
                     </Button>
-                    <span className="flex-1 truncate">Chats</span>
                     <Button
                       variant="ghost"
                       size="icon"
@@ -3360,18 +3407,20 @@ export function RightSidebar({
                   </ScrollArea>
                 </div>
               </aside>
-              <ResizeHandle
-                onMouseDown={historySidebar.handleMouseDown}
-                isResizing={historySidebar.isResizing}
-                position="right"
-                className="z-10 shrink-0 bg-border/10 hover:bg-border/35"
-              />
+              {expandedHistoryOpen && (
+                <ResizeHandle
+                  onMouseDown={historySidebar.handleMouseDown}
+                  isResizing={historySidebar.isResizing}
+                  position="right"
+                  className="z-10 shrink-0 bg-border/10 hover:bg-border/35"
+                />
+              )}
               </>
             )}
 
             {/* Main chat area (narrow: only this; full screen: right side) */}
             <div className="flex-1 flex flex-col min-h-0 min-w-0 overflow-hidden">
-              {messages.length === 0 ? (
+              {messages.length === 0 && !literature ? (
                 isPageVariant ? (
                   <div className="relative min-h-0 flex-1 overflow-hidden">
                     <div className="absolute inset-0 flex items-center justify-center px-4 py-6 sm:px-6">
@@ -3436,6 +3485,7 @@ export function RightSidebar({
                     aria-label="Chat messages"
                   >
                     <div className="flex flex-col gap-6 p-4 pt-5 pb-4 max-w-3xl mx-auto w-full min-w-0">
+                      {literature && <LiteratureSummaryPanel lit={literature} />}
                       {messages.map((message, index) => {
                         const rawContent = getMessageContent(message);
                         const literatureParsed =
