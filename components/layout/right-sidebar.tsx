@@ -879,7 +879,6 @@ export function RightSidebar({
   const [isExpanded, setIsExpanded] = useState(isPageVariant);
   const [expandedHistoryOpen, setExpandedHistoryOpen] = useState(true);
   const initialSessionLoadedRef = useRef<string | null>(null);
-  const [showAllPastChats, setShowAllPastChats] = useState(false);
   /** When set, show main Catalyst chat instead of the paper Writing panel (paper context stays registered). */
   const [paperUiSuppressed, setPaperUiSuppressed] = useState(false);
   const previousPathnameRef = useRef(pathname);
@@ -1693,9 +1692,6 @@ export function RightSidebar({
     }
   }, [paperAI?.isActive]);
 
-  const MAX_PAST_CHATS = 5;
-  const pastChatsToShow = showAllPastChats ? sessions : sessions.slice(0, MAX_PAST_CHATS);
-  const hasMorePastChats = sessions.length > MAX_PAST_CHATS;
 
   useEffect(() => {
     currentSessionRef.current = currentSessionId;

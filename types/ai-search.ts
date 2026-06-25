@@ -44,4 +44,11 @@ export interface AiSearchResult {
    * fades in smoothly instead of flashing "unavailable" then popping in.
    */
   abstractPending: boolean
+  /**
+   * Per-paper, query-relevant AI summary produced by the backend
+   * (/literature/ai-search). Shown as "Why it matters". Null until it streams in.
+   */
+  aiSummary?: string | null
+  /** True while the per-paper summary is still being generated (drives a shimmer). */
+  summaryPending?: boolean
 }

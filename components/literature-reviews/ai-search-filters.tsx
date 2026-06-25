@@ -82,16 +82,24 @@ export function AiSearchFilters({
   value,
   onChange,
   triggerClassName,
+  journals = [],
+  yearHint = null,
 }: {
   value: AiResultFilters
   onChange: (next: AiResultFilters) => void
   /** Override the trigger button sizing (e.g. compact `h-8` near results). */
   triggerClassName?: string
+  /** Journal/Source options derived from the current result set. */
+  journals?: string[]
+  /** Min/max year present in the results — grounds the year-range placeholders. */
+  yearHint?: { min: number; max: number } | null
 }) {
   const active = countActiveFilters(value)
   const set = (patch: Partial<AiResultFilters>) => onChange({ ...value, ...patch })
   const toggleType = (t: PaperType) =>
     set({ types: value.types.includes(t) ? value.types.filter((x) => x !== t) : [...value.types, t] })
+  const toggleJournal = (j: string) =>
+    set({ journals: value.journals.includes(j) ? value.journals.filter((x) => x !== j) : [...value.journals, j] })
 
   return (
     <Popover>
@@ -193,7 +201,7 @@ export function AiSearchFilters({
             <div className="flex items-center gap-2">
               <YearField
                 value={value.yearFrom}
-                placeholder="From"
+                placeholder={yearHint ? String(yearHint.min) : 'From'}
                 onCommit={(yearFrom) =>
                   set(
                     yearFrom != null && value.yearTo != null && yearFrom > value.yearTo
@@ -205,7 +213,7 @@ export function AiSearchFilters({
               <span className="text-muted-foreground">–</span>
               <YearField
                 value={value.yearTo}
-                placeholder="To"
+                placeholder={yearHint ? String(yearHint.max) : 'To'}
                 onCommit={(yearTo) =>
                   set(
                     yearTo != null && value.yearFrom != null && yearTo < value.yearFrom
@@ -244,6 +252,38 @@ export function AiSearchFilters({
               })}
             </div>
           </div>
+
+          {journals.length > 0 && (
+            <>
+              <Separator />
+              {/* Journal / Source — options derived from the current results */}
+              <div className="space-y-2">
+                <Label className="text-xs text-muted-foreground">Journal / source</Label>
+                <div className="flex flex-wrap gap-1.5">
+                  {journals.map((j) => {
+                    const selected = value.journals.includes(j)
+                    return (
+                      <button
+                        key={j}
+                        type="button"
+                        onClick={() => toggleJournal(j)}
+                        aria-pressed={selected}
+                        title={j}
+                        className={cn(
+                          'max-w-full truncate rounded-full border px-2.5 py-1 text-xs font-medium transition-colors',
+                          selected
+                            ? 'border-primary/40 bg-primary/10 text-primary'
+                            : 'border-border text-muted-foreground hover:bg-muted hover:text-foreground',
+                        )}
+                      >
+                        {j}
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+            </>
+          )}
 
           <Separator />
 
