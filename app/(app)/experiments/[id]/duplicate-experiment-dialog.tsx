@@ -19,7 +19,7 @@ import { useRouter } from "next/navigation"
 import { Copy, Loader2 } from "lucide-react"
 import { getUniqueNameErrorMessage } from "@/lib/unique-name-error"
 import { Checkbox } from "@/components/ui/checkbox"
-import { useRequiredUser } from "@/components/auth/auth-provider"
+import { useAuthUser } from "@/components/auth/auth-provider"
 
 interface Experiment {
   id: string
@@ -46,7 +46,11 @@ export function DuplicateExperimentDialog({
   const { toast } = useToast()
   const router = useRouter()
   const supabase = useMemo(() => createClient(), [])
-  const currentUser = useRequiredUser()
+  // Non-throwing: this dialog can render during a fresh SSR of the experiment
+  // page (e.g. arriving via the /lab-notes/<id> redirect) where the auth context
+  // hasn't hydrated yet. The user is only needed when actually duplicating, which
+  // is already guarded below — so don't crash the whole page at render time.
+  const currentUser = useAuthUser()
 
   const [internalOpen, setInternalOpen] = useState(false)
   const open = externalOpen !== undefined ? externalOpen : internalOpen

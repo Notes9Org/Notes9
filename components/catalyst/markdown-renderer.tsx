@@ -6,7 +6,7 @@ import { cn } from '@/lib/utils';
 import { markdownToHtml } from '@/lib/markdown-to-html';
 import { sanitizeHtml } from '@/lib/sanitize-html';
 import { parseCitationMeta, correctAcademicType } from '@/lib/citation-meta';
-import { resolveTitleFromId, isPlaceholderTitle } from '@/lib/citation-title';
+import { resolveTitleFromId, isPlaceholderTitle, resolveLabNoteExperimentId } from '@/lib/citation-title';
 import { Calendar, User } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import type { CitationsManifest, CitationsManifestEntry } from '@/hooks/use-agent-stream';
@@ -713,24 +713,42 @@ export function MarkdownRenderer({
     // this is also how a second citation into the SAME open document just scrolls
     // to the new excerpt instead of reloading the document.
     if (spanText && dispatchDocumentHighlight(target)) return;
+
+    // SPA navigation (NOT window.location.assign) so the Catalyst AI sidebar and
+    // app state survive; the destination reads ?highlight= and scrolls/pulses.
+    // First lets the Catalyst full page dock the chat into the sidebar.
+    const navigate = (dest: string) => {
+      if (!dest) return;
+      if (typeof window !== 'undefined') {
+        const beforeNav = new CustomEvent('notes9:catalyst-before-navigate', {
+          detail: { href: dest },
+          cancelable: true,
+        });
+        window.dispatchEvent(beforeNav);
+        if (beforeNav.defaultPrevented) return;
+      }
+      router.push(dest);
+    };
+
+    const normalizedType = normalizeAgentSourceType(chip.sourceType);
+    if (normalizedType === 'lab_note') {
+      // Deep-link client-side to /experiments/<exp>?tab=notes&noteId=… — resolving
+      // the parent experiment ourselves avoids the /lab-notes/<id> server redirect
+      // (a fresh experiment-page SSR that could error and dropped the user on a
+      // blank /experiments/<exp>).
+      const fallback =
+        (spanText ? buildHighlightUrl(target) : '') ||
+        workspaceRoute(chip.sourceType, chip.sourceId);
+      void resolveLabNoteExperimentId(chip.sourceId).then((expId) => {
+        navigate(expId ? buildHighlightUrl(target, { experimentId: expId }) : fallback);
+      });
+      return;
+    }
+
     const href = spanText
       ? buildHighlightUrl(target) || workspaceRoute(chip.sourceType, chip.sourceId)
       : workspaceRoute(chip.sourceType, chip.sourceId);
-    if (!href) return;
-    // Give the Catalyst full page a chance to dock the chat into the sidebar
-    // (so the conversation stays on the side) before we leave for the document.
-    // If it handles this it performs the navigation itself.
-    if (typeof window !== 'undefined') {
-      const beforeNav = new CustomEvent('notes9:catalyst-before-navigate', {
-        detail: { href },
-        cancelable: true,
-      });
-      window.dispatchEvent(beforeNav);
-      if (beforeNav.defaultPrevented) return;
-    }
-    // SPA navigation (NOT window.location.assign) so the Catalyst AI sidebar and
-    // app state survive; the destination reads ?highlight= and scrolls/pulses.
-    router.push(href);
+    navigate(href);
   }, [router]);
 
   /** Open the in-app span viewer for a chip (G3). Dismiss any hover card so it
