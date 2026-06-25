@@ -24,7 +24,7 @@ import {
   ExternalLink,
   GripVertical,
   Loader2,
-  ChevronsLeft,
+  PanelLeftClose,
   SearchX,
   Sparkles,
   BookOpen,
@@ -408,7 +408,7 @@ export function ProtocolLiteraturePanel({
                 {/* Mobile: clear dismiss; desktop keeps narrow “hide rail” affordance */}
                 <>
                   <X className="size-5 sm:hidden" aria-hidden />
-                  <ChevronsLeft className="hidden size-3.5 sm:block" aria-hidden />
+                  <PanelLeftClose className="hidden size-3.5 sm:block" aria-hidden />
                 </>
               </Button>
             )}

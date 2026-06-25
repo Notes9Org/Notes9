@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useMemo, useCallback } from "react"
+import { useState, useEffect, useMemo, useCallback, useRef } from "react"
 import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
 import Image from "next/image"
@@ -14,8 +14,8 @@ import {
   MoreHorizontal,
   NotebookPen,
   Package,
-  ChevronsLeft,
-  ChevronsRight,
+  PanelLeftClose,
+  PanelLeftOpen,
   Plus,
   Search,
   Settings,
@@ -162,6 +162,7 @@ export function AppSidebar() {
   const supabase = useMemo(() => createClient(), [])
 
   const isIconMode = !open
+  const searchInputRef = useRef<HTMLInputElement>(null)
 
   const toggleSidebarOpen = (e?: React.MouseEvent<HTMLButtonElement>) => {
     setOpen(!open)
@@ -169,6 +170,14 @@ export function AppSidebar() {
     // doesn't linger on the chrome (visible as a highlighted icon at the
     // top of the sidebar after every click).
     if (e?.currentTarget) e.currentTarget.blur()
+  }
+
+  // Collapsed-rail affordance: clicking the search icon expands the sidebar and
+  // lands the cursor in the (now-visible) search field.
+  const openAndFocusSearch = () => {
+    setOpen(true)
+    // Wait for the expand transition to mount the full input before focusing.
+    setTimeout(() => searchInputRef.current?.focus(), 120)
   }
 
   // Prevent hydration mismatch by only activating after mount
@@ -387,7 +396,7 @@ export function AppSidebar() {
                   onClick={(e) => toggleSidebarOpen(e)}
                   aria-label="Expand sidebar"
                 >
-                  <ChevronsRight className="size-4" />
+                  <PanelLeftOpen className="size-4" />
                 </Button>
               </div>
             ) : (
@@ -417,7 +426,7 @@ export function AppSidebar() {
                     onClick={(e) => toggleSidebarOpen(e)}
                     aria-label="Collapse sidebar"
                   >
-                    <ChevronsLeft className="h-4 w-4" />
+                    <PanelLeftClose className="h-4 w-4" />
                   </Button>
                 )}
               </div>
@@ -431,6 +440,28 @@ export function AppSidebar() {
           isIconMode && "gap-0 overflow-y-auto overflow-x-hidden pt-0"
         )}
       >
+        {/* Collapsed rail: a search icon stands in for the full field. Clicking
+            it expands the sidebar and focuses the search input. Only in icon mode. */}
+        {isIconMode && (
+          <SidebarGroup className="flex flex-col items-center px-1.5 pb-1 pt-0">
+            <SidebarGroupContent className="w-full flex flex-col items-center">
+              <SidebarMenu className="flex w-full flex-col items-center gap-0.5">
+                <SidebarMenuItem>
+                  <SidebarMenuButton
+                    tooltip="Search"
+                    aria-label="Search"
+                    onClick={openAndFocusSearch}
+                    className="group transition-all duration-150 hover:bg-[color:color-mix(in_oklab,var(--background)_78%,var(--primary)_22%)] hover:text-sidebar-foreground active:scale-[0.985] dark:hover:bg-sidebar-accent dark:hover:text-sidebar-accent-foreground"
+                  >
+                    <Search />
+                    <span className="hidden">Search</span>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        )}
+
         {/* Search - Hidden in icon mode */}
         <SidebarGroup className={cn(isIconMode && "hidden")}>
           <SidebarGroupContent className="px-2">
@@ -442,6 +473,7 @@ export function AppSidebar() {
                       `left-4` which left a noticeable dead-space gap. */}
                   <Search className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 select-none text-muted-foreground" />
                   <SidebarInput
+                    ref={searchInputRef}
                     placeholder="Search..."
                     className={cn(
                       "pl-9",
@@ -645,6 +677,10 @@ export function AppSidebar() {
                             <Link
                               href={(mounted && item.name === "Literature" && scope.projectId) ? `${item.href}${scope.scopedQueryString}` : item.href}
                               aria-label={isIconMode ? item.name : undefined}
+                              // In the collapsed rail, navigating also expands the
+                              // sidebar so the user lands on the page with the full
+                              // nav open (per request: clicking an icon opens it).
+                              onClick={() => { if (isIconMode) setOpen(true) }}
                               className="flex-1 flex items-center pr-6"
                             >
                               <ActiveIcon />

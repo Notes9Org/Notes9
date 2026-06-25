@@ -31,8 +31,8 @@ import {
   History,
   Maximize,
   Minimize,
-  ChevronsRight,
-  ChevronsLeft,
+  PanelLeftOpen,
+  PanelLeftClose,
   Plus,
   Paperclip,
   Globe,
@@ -3554,7 +3554,7 @@ export function RightSidebar({
                       title="Hide chat history"
                       aria-label="Hide chat history"
                     >
-                      <ChevronsLeft className="h-4 w-4" />
+                      <PanelLeftClose className="h-4 w-4" />
                     </Button>
                     <span className="flex-1 truncate">Chats</span>
                     <Button
@@ -3648,7 +3648,7 @@ export function RightSidebar({
                   title="Show chat history"
                   aria-label="Show chat history"
                 >
-                  <ChevronsRight className="h-4 w-4" />
+                  <PanelLeftOpen className="h-4 w-4" />
                 </Button>
               )}
               {messages.length === 0 && !literature ? (
