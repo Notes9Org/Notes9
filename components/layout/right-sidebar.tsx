@@ -68,7 +68,9 @@ import {
   parseLiteratureAssistantStoredContent,
   serializeLiteratureAssistantStoredContent,
 } from '@/lib/literature-assistant-stored';
-import { useAgentStream, type AgentFileAttachment, type CitationsManifest, type AgentGraph } from '@/hooks/use-agent-stream';
+import { useAgentStream, type AgentFileAttachment, type CitationsManifest, type CitationsManifestEntry, type AgentGraph } from '@/hooks/use-agent-stream';
+import { useResolvedCitationTitles, type ResolvableCite } from '@/hooks/use-resolved-citation-titles';
+import { isPlaceholderTitle } from '@/lib/citation-title';
 import { AgentGraphList } from '@/components/catalyst/agent-graph-view';
 import { usePinnedAutoScroll } from '@/hooks/use-pinned-auto-scroll';
 import { deleteTrailingMessages } from '@/app/(app)/catalyst/actions';
@@ -577,6 +579,73 @@ const SidebarChatMessageItem = memo(function SidebarChatMessageItem({
     return cited.length > 0 ? cited : null;
   })();
 
+  // Resolve the REAL titles for this message's citations once, then inject them
+  // into BOTH the inline chips (manifest) and the Sources list, so workspace
+  // records (lab notes, protocols, literature articles, papers, reports) show
+  // their document title instead of "Untitled …".
+  const baseManifest =
+    notes9Parsed?.citationsManifest ?? literatureParsed?.citationsManifest ?? null;
+  const citeRefs = useMemo<ResolvableCite[]>(() => {
+    const out: ResolvableCite[] = [];
+    if (notes9Sources) {
+      for (const r of notes9Sources) {
+        out.push({
+          sourceType: r.source_type,
+          sourceId: r.source_id ?? null,
+          sourceUrl: r.source_url ?? null,
+          currentTitle: r.source_name ?? r.display_label ?? null,
+        });
+      }
+    }
+    if (baseManifest?.manifest) {
+      for (const e of Object.values(baseManifest.manifest)) {
+        out.push({
+          sourceType: e.source_type,
+          sourceId: e.source_id ?? null,
+          sourceUrl: e.source_url ?? null,
+          currentTitle: e.source_name ?? null,
+        });
+      }
+    }
+    return out;
+  }, [notes9Sources, baseManifest]);
+  const resolveTitle = useResolvedCitationTitles(citeRefs);
+
+  const effectiveManifest = useMemo<CitationsManifest | null>(() => {
+    if (!baseManifest?.manifest) return baseManifest;
+    let changed = false;
+    const manifest: Record<string, CitationsManifestEntry> = {};
+    for (const [k, e] of Object.entries(baseManifest.manifest)) {
+      const better = isPlaceholderTitle(e.source_name, e.source_type)
+        ? resolveTitle(e.source_type, e.source_id, e.source_url)
+        : null;
+      if (better) {
+        manifest[k] = { ...e, source_name: better };
+        changed = true;
+      } else {
+        manifest[k] = e;
+      }
+    }
+    return changed ? { ...baseManifest, manifest } : baseManifest;
+  }, [baseManifest, resolveTitle]);
+
+  const effectiveNotes9Sources = useMemo(() => {
+    if (!notes9Sources) return null;
+    let changed = false;
+    const out = notes9Sources.map((r) => {
+      const cur = r.source_name ?? r.display_label ?? null;
+      const better = isPlaceholderTitle(cur, r.source_type)
+        ? resolveTitle(r.source_type, r.source_id, r.source_url)
+        : null;
+      if (better) {
+        changed = true;
+        return { ...r, source_name: better };
+      }
+      return r;
+    });
+    return changed ? out : notes9Sources;
+  }, [notes9Sources, resolveTitle]);
+
   const userLiteratureMarkdown =
     message.role === 'user' &&
     ((agentMode === 'literature' && isLiteratureRoute) ||
@@ -658,11 +727,7 @@ const SidebarChatMessageItem = memo(function SidebarChatMessageItem({
                 <MarkdownRenderer
                   content={content}
                   className="text-sm text-foreground break-words [overflow-wrap:anywhere] [&_pre]:max-w-full [&_pre]:overflow-auto [&_pre]:whitespace-pre [&_code]:break-all"
-                  citationsManifest={
-                    notes9Parsed?.citationsManifest ??
-                    literatureParsed?.citationsManifest ??
-                    null
-                  }
+                  citationsManifest={effectiveManifest}
                 />
               )}
             </div>
@@ -672,9 +737,9 @@ const SidebarChatMessageItem = memo(function SidebarChatMessageItem({
                 className="mt-3 w-full"
               />
             )}
-            {notes9Sources && (
+            {effectiveNotes9Sources && (
               <AgentCitationsPanel
-                items={notes9Sources.map((c, i) =>
+                items={effectiveNotes9Sources.map((c, i) =>
                   groundingResourceToPanelItem(c, i)
                 )}
                 triggerLabel="Sources"

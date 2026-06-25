@@ -589,6 +589,27 @@ function chipToViewerSource(chip: ChipData): CitationSourceViewerSource {
     supportStatus: chip.supportStatus,
   };
 }
+/**
+ * Auto-close the dangling markdown constructs that streaming inevitably leaves
+ * open mid-flight, so a partial answer renders correctly token-by-token instead
+ * of turning everything after an unclosed `**` bold (and eating spaces). Only
+ * used while `showCursor` is true; the final answer is already well-formed.
+ */
+function completePartialMarkdown(src: string): string {
+  let s = src;
+  // Block code fences (```): if one is open, close it and stop — markers inside
+  // a fence are literal, so balancing inline tokens below would be wrong.
+  const fences = (s.match(/^```/gm) ?? []).length;
+  if (fences % 2 === 1) return `${s}\n\`\`\``;
+  // Inline code (`): close a dangling span.
+  const ticks = (s.match(/`/g) ?? []).length;
+  if (ticks % 2 === 1) s += '`';
+  // Bold (**): the usual culprit behind a runaway-bold streaming answer.
+  const bold = (s.match(/\*\*/g) ?? []).length;
+  if (bold % 2 === 1) s += '**';
+  return s;
+}
+
 export function MarkdownRenderer({
   content,
   className,
@@ -621,9 +642,14 @@ export function MarkdownRenderer({
   );
 
   const html = useMemo(() => {
+    // While streaming, the markdown is partial — an opened `**` / `` ` `` / code
+    // fence whose closer hasn't streamed yet makes `marked` render ALL following
+    // text bold/mono and collapses spacing. Auto-close dangling constructs so the
+    // live answer paints cleanly token-by-token (the "everything went bold" fix).
+    const source = showCursor ? completePartialMarkdown(content) : content;
     // Chat opts into `breaks` so every line break in the model's answer renders
     // as its own line (paired with a small `<br>` gap below for breathing room).
-    const raw = markdownToHtml(content, { breaks: true });
+    const raw = markdownToHtml(source, { breaks: true });
     if (!raw) return '';
     // `marked` v15+ ships without a built-in sanitizer, so raw HTML inside the
     // model's markdown response (e.g. <script>, <iframe>, onerror handlers
@@ -633,7 +659,7 @@ export function MarkdownRenderer({
     // client useMemo re-runs on hydration so the live render is always safe.
     const processed = postProcessHtml(raw, citationsManifest);
     return sanitizeHtml(processed);
-  }, [content, citationsManifest]);
+  }, [content, citationsManifest, showCursor]);
 
   /** Open the source a chip points at: web → new tab; workspace → highlight
    * deep-link via dispatchDocumentHighlight (no fragile title lookup — the
