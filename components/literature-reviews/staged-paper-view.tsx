@@ -103,13 +103,13 @@ export function StagedPaperView({
   const pdfCardRef = useRef<HTMLDivElement>(null)
   useEffect(() => {
     if (!lit.pdf_storage_path) return
-    // Scroll once early, then again as the PDF paints — the page's height grows
-    // as pages render (and a repository PDF's signed URL can resolve slowly), so
-    // a single early scroll lands short. Align the reader to the top.
-    const scroll = () =>
-      pdfCardRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })
-    const timers = [300, 1100, 2200].map((d) => setTimeout(scroll, d))
-    return () => timers.forEach(clearTimeout)
+    // Single, stable scroll: aligning the section's TOP to the top is unaffected
+    // by the PDF growing below, so one pass lands right — no double-scroll jump.
+    const t = setTimeout(
+      () => pdfCardRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }),
+      350,
+    )
+    return () => clearTimeout(t)
   }, [lit.id, lit.pdf_storage_path])
 
   return (
@@ -155,13 +155,14 @@ export function StagedPaperView({
 
       <div ref={pdfCardRef} className="scroll-mt-4">
       {lit.pdf_storage_path ? (
-        /* PDF attached: a single compact toolbar so the reader starts at the top. */
-        <div className="space-y-2">
-          <div className="flex items-center justify-between gap-2 rounded-md border bg-muted/20 py-1 pl-2.5 pr-1">
-            <span className="flex min-w-0 items-center gap-1.5 text-xs font-medium text-foreground">
-              <FileText className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-              <span className="truncate">{lit.pdf_file_name || "Attached PDF"}</span>
-            </span>
+        /* PDF attached: Replace lives in the reader's single header row, so the
+           document starts right at the top. */
+        <LiteraturePdfPanel
+          literatureId={lit.id}
+          pdfUrl={`/api/literature/${lit.id}/viewer-pdf`}
+          pdfFileName={lit.pdf_file_name || "paper.pdf"}
+          openInNewTabFallbackUrl={`/api/literature/${lit.id}/viewer-pdf`}
+          headerActions={
             <UploadLiteraturePdfDialog
               literatureReviews={[
                 {
@@ -189,16 +190,10 @@ export function StagedPaperView({
               }}
               triggerLabel="Replace"
               triggerSize="sm"
-              triggerClassName="h-7 px-2 text-xs"
+              triggerClassName="h-8 px-2.5 text-xs"
             />
-          </div>
-          <LiteraturePdfPanel
-            literatureId={lit.id}
-            pdfUrl={`/api/literature/${lit.id}/viewer-pdf`}
-            pdfFileName={lit.pdf_file_name || "paper.pdf"}
-            openInNewTabFallbackUrl={`/api/literature/${lit.id}/viewer-pdf`}
-          />
-        </div>
+          }
+        />
       ) : (
       <Card>
         <CardHeader className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between border-b pb-6">

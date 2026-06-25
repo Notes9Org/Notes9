@@ -167,11 +167,13 @@ function LiteratureDetailViewInner({
   useEffect(() => {
     if (activeTab !== "pdf" || !hasPdf) return;
     if (activeLitHighlight && highlightSurface === "pdf") return;
-    // Scroll once the panel mounts, then again after pages paint and grow it.
-    const scroll = () =>
-      pdfSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-    const timers = [250, 900].map((d) => setTimeout(scroll, d));
-    return () => timers.forEach(clearTimeout);
+    // Single, stable scroll: aligning the section TOP isn't affected by the PDF
+    // growing below it, so one pass suffices — no double-scroll jump.
+    const t = setTimeout(
+      () => pdfSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }),
+      350,
+    );
+    return () => clearTimeout(t);
   }, [activeTab, hasPdf, activeLitHighlight, highlightSurface, literature.id]);
 
   // Deep-link: switch tab for RAG highlight (abstract → Overview, body/PDF → PDF)
@@ -505,44 +507,9 @@ ER  - `;
 
         <TabsContent value="pdf" className="space-y-3">
           {literature.pdf_storage_path ? (
-            /* PDF attached: a single compact toolbar (file name + meta + replace)
-               so the reader starts right at the top — no stacked header/description. */
-            <div ref={pdfSectionRef} className="scroll-mt-4 space-y-2">
-              <div className="flex items-center justify-between gap-2 rounded-md border bg-muted/20 py-1 pl-2.5 pr-1">
-                <span className="flex min-w-0 items-center gap-1.5 text-xs font-medium text-foreground">
-                  <FileText className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-                  <span className="truncate">{literature.pdf_file_name || "Attached PDF"}</span>
-                </span>
-                <UploadLiteraturePdfDialog
-                  literatureReviews={[
-                    {
-                      id: literature.id,
-                      title: literature.title,
-                      authors: literature.authors,
-                      journal: literature.journal,
-                      publication_year: literature.publication_year,
-                      doi: literature.doi,
-                      pmid: literature.pmid,
-                      pdf_storage_path: literature.pdf_storage_path,
-                      pdf_file_name: literature.pdf_file_name,
-                    },
-                  ]}
-                  currentLiterature={{
-                    id: literature.id,
-                    title: literature.title,
-                    authors: literature.authors,
-                    journal: literature.journal,
-                    publication_year: literature.publication_year,
-                    doi: literature.doi,
-                    pmid: literature.pmid,
-                    pdf_storage_path: literature.pdf_storage_path,
-                    pdf_file_name: literature.pdf_file_name,
-                  }}
-                  triggerLabel="Replace"
-                  triggerSize="sm"
-                  triggerClassName="h-7 px-2 text-xs"
-                />
-              </div>
+            /* PDF attached: everything lives in the reader's single header row
+               (Replace + Export + Highlights), so the PDF starts at the top. */
+            <div ref={pdfSectionRef} className="scroll-mt-4">
               <LiteraturePdfPanel
                 literatureId={literature.id}
                 pdfUrl={`/api/literature/${literature.id}/viewer-pdf`}
@@ -557,6 +524,37 @@ ER  - `;
                   activeLitHighlight && highlightSurface === "pdf"
                     ? activeLitHighlight.pageNumber ?? null
                     : null
+                }
+                headerActions={
+                  <UploadLiteraturePdfDialog
+                    literatureReviews={[
+                      {
+                        id: literature.id,
+                        title: literature.title,
+                        authors: literature.authors,
+                        journal: literature.journal,
+                        publication_year: literature.publication_year,
+                        doi: literature.doi,
+                        pmid: literature.pmid,
+                        pdf_storage_path: literature.pdf_storage_path,
+                        pdf_file_name: literature.pdf_file_name,
+                      },
+                    ]}
+                    currentLiterature={{
+                      id: literature.id,
+                      title: literature.title,
+                      authors: literature.authors,
+                      journal: literature.journal,
+                      publication_year: literature.publication_year,
+                      doi: literature.doi,
+                      pmid: literature.pmid,
+                      pdf_storage_path: literature.pdf_storage_path,
+                      pdf_file_name: literature.pdf_file_name,
+                    }}
+                    triggerLabel="Replace"
+                    triggerSize="sm"
+                    triggerClassName="h-8 px-2.5 text-xs"
+                  />
                 }
               />
             </div>
