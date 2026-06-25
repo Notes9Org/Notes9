@@ -111,7 +111,7 @@ function HighlightedBody({ span }: { span: ResolvedSpan }) {
   }
   if (span.via === 'none' || span.end <= span.start) {
     return (
-      <p className="whitespace-pre-wrap text-sm leading-relaxed text-foreground">
+      <p className="whitespace-pre-wrap break-words [overflow-wrap:anywhere] text-sm leading-relaxed text-foreground">
         {span.body}
       </p>
     );
@@ -120,7 +120,7 @@ function HighlightedBody({ span }: { span: ResolvedSpan }) {
   const hit = span.body.slice(span.start, span.end);
   const after = span.body.slice(span.end);
   return (
-    <p className="whitespace-pre-wrap text-sm leading-relaxed text-foreground">
+    <p className="whitespace-pre-wrap break-words [overflow-wrap:anywhere] text-sm leading-relaxed text-foreground">
       {before}
       <mark
         className="rounded-sm bg-primary/20 px-0.5 text-foreground ring-1 ring-primary/40"
@@ -205,8 +205,8 @@ export function CitationSourceViewer({
           </DialogDescription>
         </DialogHeader>
 
-        <ScrollArea className="max-h-[min(60dvh,28rem)] rounded-md border border-border/60 bg-muted/10">
-          <div className="p-3">
+        <ScrollArea className="max-h-[min(60dvh,28rem)] w-full min-w-0 overflow-x-hidden rounded-md border border-border/60 bg-muted/10">
+          <div className="w-full min-w-0 p-3">
             <HighlightedBody span={span} />
           </div>
         </ScrollArea>

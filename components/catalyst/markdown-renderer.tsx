@@ -607,7 +607,30 @@ function completePartialMarkdown(src: string): string {
   // Bold (**): the usual culprit behind a runaway-bold streaming answer.
   const bold = (s.match(/\*\*/g) ?? []).length;
   if (bold % 2 === 1) s += '**';
+  // Italic (single * / _) — close a dangling pair so it doesn't italicise the
+  // rest. Count only standalone markers (not the `**` handled above / list `* `).
+  const stars = (s.replace(/\*\*/g, '').match(/(?<=\S)\*(?=\S)|(?<=\s)\*(?=\S)/g) ?? []).length;
+  if (stars % 2 === 1) s += '*';
   return s;
+}
+
+/**
+ * Models often write section headings as a whole-line **bold** instead of a real
+ * `##` heading, so the answer reads as one wall of bold text. Promote a line
+ * that is ENTIRELY a single bold span (optionally ending in a colon) into an h3,
+ * giving the answer a real heading / body-text hierarchy. Conservative: skips
+ * long lines and sentence-like text so genuine emphasis is left alone.
+ */
+function promoteBoldHeadings(src: string): string {
+  return src.replace(
+    /^[ \t]*\*\*([^\n*][^\n]*?)\*\*[ \t]*(:?)[ \t]*$/gm,
+    (full, inner: string) => {
+      const text = inner.trim();
+      if (!text || text.length > 80) return full;
+      if (/[.!?]$/.test(text)) return full; // a sentence, not a heading
+      return `### ${text}`;
+    },
+  );
 }
 
 export function MarkdownRenderer({
@@ -646,7 +669,8 @@ export function MarkdownRenderer({
     // fence whose closer hasn't streamed yet makes `marked` render ALL following
     // text bold/mono and collapses spacing. Auto-close dangling constructs so the
     // live answer paints cleanly token-by-token (the "everything went bold" fix).
-    const source = showCursor ? completePartialMarkdown(content) : content;
+    const balanced = showCursor ? completePartialMarkdown(content) : content;
+    const source = promoteBoldHeadings(balanced);
     // Chat opts into `breaks` so every line break in the model's answer renders
     // as its own line (paired with a small `<br>` gap below for breathing room).
     const raw = markdownToHtml(source, { breaks: true });
