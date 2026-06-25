@@ -167,10 +167,10 @@ export function CitationSourceViewer({
       <DialogContent
         dialogSize="md"
         overlayClassName="z-[130]"
-        className="max-h-[min(85dvh,42rem)] gap-3"
+        className="max-h-[min(85dvh,42rem)] gap-3 overflow-hidden [&>*]:min-w-0"
       >
-        <DialogHeader>
-          <div className="flex flex-wrap items-center gap-2">
+        <DialogHeader className="min-w-0">
+          <div className="flex min-w-0 flex-wrap items-center gap-2">
             <span className="font-mono text-sm text-muted-foreground tabular-nums">
               [{source?.label ?? ''}]
             </span>
