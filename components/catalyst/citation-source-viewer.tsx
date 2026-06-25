@@ -9,7 +9,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { ScrollArea } from '@/components/ui/scroll-area';
 import { cn } from '@/lib/utils';
 import { GroundingProvenanceBadge } from './grounding-provenance-badge';
 
@@ -222,11 +221,14 @@ export function CitationSourceViewer({
           </DialogDescription>
         </DialogHeader>
 
-        <ScrollArea className="max-h-[min(60dvh,28rem)] w-full min-w-0 overflow-x-hidden rounded-md border border-border/60 bg-muted/10">
+        {/* A plain scroll container (not Radix ScrollArea, whose viewport sizes
+            to content and let wide text overflow) so the source text wraps and
+            stays inside the box. */}
+        <div className="max-h-[min(60dvh,28rem)] w-full min-w-0 overflow-y-auto overflow-x-hidden rounded-md border border-border/60 bg-muted/10">
           <div className="w-full min-w-0 p-3">
             <HighlightedBody span={span} />
           </div>
-        </ScrollArea>
+        </div>
 
         <p
           className={cn(
