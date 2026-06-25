@@ -21,7 +21,7 @@ export function PageTransition({ children }: { children: ReactNode }) {
       return
     }
     setPhase("enter")
-    const t = window.setTimeout(() => setPhase("idle"), 240)
+    const t = window.setTimeout(() => setPhase("idle"), 360)
     return () => window.clearTimeout(t)
   }, [pathname])
 

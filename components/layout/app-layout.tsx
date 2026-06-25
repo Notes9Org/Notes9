@@ -265,7 +265,12 @@ function AppLayoutBody({ children }: AppLayoutProps) {
   const [catalystRender, setCatalystRender] = useState(false)
   const [catalystExpanded, setCatalystExpanded] = useState(false)
   useEffect(() => {
-    if (catalystVisible) {
+    // The docked panel only ever shows off the /catalyst route. Gate the open
+    // animation on the route too, so that minimising the full page lands on the
+    // origin and the sidebar smoothly animates open (width 0 → full) there,
+    // rather than appearing already-expanded.
+    const shouldShow = catalystVisible && !isCatalystRoute
+    if (shouldShow) {
       setCatalystRender(true)
       const r = requestAnimationFrame(() => setCatalystExpanded(true))
       return () => cancelAnimationFrame(r)
@@ -273,7 +278,7 @@ function AppLayoutBody({ children }: AppLayoutProps) {
     setCatalystExpanded(false)
     const t = setTimeout(() => setCatalystRender(false), 520)
     return () => clearTimeout(t)
-  }, [catalystVisible])
+  }, [catalystVisible, isCatalystRoute])
 
   const handleCatalystToggle = useCallback(() => {
     if (catalystVisible) {

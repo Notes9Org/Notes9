@@ -1189,14 +1189,15 @@ body > [data-radix-popper-content-wrapper] {
 }
 
 /* Page transition — soft fade + tiny lift when the route changes. Driven by
-   components/layout/page-transition.tsx. Total cost: 240ms, two GPU-cheap
+   components/layout/page-transition.tsx. A slow, refined ease so route changes
+   (e.g. maximising Catalyst to its full page) settle smoothly; two GPU-cheap
    properties (opacity, transform). */
 @keyframes page-transition {
-  from { opacity: 0; transform: translate3d(0, 4px, 0); }
+  from { opacity: 0; transform: translate3d(0, 6px, 0); }
   to   { opacity: 1; transform: translate3d(0, 0, 0); }
 }
 .animate-page-transition {
-  animation: page-transition 240ms cubic-bezier(0.22, 1, 0.36, 1);
+  animation: page-transition 360ms cubic-bezier(0.22, 1, 0.36, 1);
   will-change: opacity, transform;
 }
 
