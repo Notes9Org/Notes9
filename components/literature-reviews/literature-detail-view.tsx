@@ -489,7 +489,74 @@ ER  - `;
           )}
         </TabsContent>
 
-        <TabsContent value="pdf" className="space-y-4">
+        <TabsContent value="pdf" className="space-y-3">
+          {literature.pdf_storage_path ? (
+            /* PDF attached: a single compact toolbar (file name + meta + replace)
+               so the reader starts right at the top — no stacked header/description. */
+            <div className="space-y-3">
+              <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 rounded-lg border bg-muted/30 px-3 py-2">
+                <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 text-sm">
+                  <span className="flex min-w-0 items-center gap-2 font-medium text-foreground">
+                    <FileText className="h-4 w-4 shrink-0" />
+                    <span className="truncate">{literature.pdf_file_name || "Attached PDF"}</span>
+                  </span>
+                  {literature.pdf_uploaded_at && (
+                    <span className="text-xs text-muted-foreground">
+                      Uploaded {formatDate(literature.pdf_uploaded_at)}
+                    </span>
+                  )}
+                  {literature.pdf_match_source && (
+                    <Badge variant="outline" className="text-2xs">
+                      {literature.pdf_match_source}
+                    </Badge>
+                  )}
+                </div>
+                <UploadLiteraturePdfDialog
+                  literatureReviews={[
+                    {
+                      id: literature.id,
+                      title: literature.title,
+                      authors: literature.authors,
+                      journal: literature.journal,
+                      publication_year: literature.publication_year,
+                      doi: literature.doi,
+                      pmid: literature.pmid,
+                      pdf_storage_path: literature.pdf_storage_path,
+                      pdf_file_name: literature.pdf_file_name,
+                    },
+                  ]}
+                  currentLiterature={{
+                    id: literature.id,
+                    title: literature.title,
+                    authors: literature.authors,
+                    journal: literature.journal,
+                    publication_year: literature.publication_year,
+                    doi: literature.doi,
+                    pmid: literature.pmid,
+                    pdf_storage_path: literature.pdf_storage_path,
+                    pdf_file_name: literature.pdf_file_name,
+                  }}
+                  triggerLabel="Replace PDF"
+                />
+              </div>
+              <LiteraturePdfPanel
+                literatureId={literature.id}
+                pdfUrl={`/api/literature/${literature.id}/viewer-pdf`}
+                pdfFileName={literature.pdf_file_name}
+                openInNewTabFallbackUrl={`/api/literature/${literature.id}/viewer-pdf`}
+                highlightExcerpt={
+                  activeLitHighlight && highlightSurface === "pdf"
+                    ? activeLitHighlight.excerpt
+                    : null
+                }
+                highlightPageNumber={
+                  activeLitHighlight && highlightSurface === "pdf"
+                    ? activeLitHighlight.pageNumber ?? null
+                    : null
+                }
+              />
+            </div>
+          ) : (
           <Card>
             <CardHeader className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
               <div>
@@ -523,7 +590,7 @@ ER  - `;
                   pdf_storage_path: literature.pdf_storage_path,
                   pdf_file_name: literature.pdf_file_name,
                 }}
-                triggerLabel={literature.pdf_storage_path ? "Replace PDF" : "Upload PDF"}
+                triggerLabel="Upload PDF"
               />
             </CardHeader>
             <CardContent className="space-y-4">
@@ -610,38 +677,7 @@ ER  - `;
                   )}
                 </div>
               )}
-              {literature.pdf_storage_path ? (
-                <>
-                  <div className="flex flex-wrap items-center gap-3 rounded-lg border bg-muted/30 p-3 text-sm text-muted-foreground">
-                    <div className="flex items-center gap-2 text-foreground">
-                      <FileText className="h-4 w-4" />
-                      {literature.pdf_file_name || "Attached PDF"}
-                    </div>
-                    {literature.pdf_uploaded_at && (
-                      <span>Uploaded {formatDate(literature.pdf_uploaded_at)}</span>
-                    )}
-                    {literature.pdf_match_source && (
-                      <Badge variant="outline">{literature.pdf_match_source}</Badge>
-                    )}
-                  </div>
-                  <LiteraturePdfPanel
-                    literatureId={literature.id}
-                    pdfUrl={`/api/literature/${literature.id}/viewer-pdf`}
-                    pdfFileName={literature.pdf_file_name}
-                    openInNewTabFallbackUrl={`/api/literature/${literature.id}/viewer-pdf`}
-                    highlightExcerpt={
-                      activeLitHighlight && highlightSurface === "pdf"
-                        ? activeLitHighlight.excerpt
-                        : null
-                    }
-                    highlightPageNumber={
-                      activeLitHighlight && highlightSurface === "pdf"
-                        ? activeLitHighlight.pageNumber ?? null
-                        : null
-                    }
-                  />
-                </>
-              ) : !["pending", "failed", "none"].includes(String(literature.pdf_import_status)) ? (
+              {!["pending", "failed", "none"].includes(String(literature.pdf_import_status)) ? (
                 <div className="rounded-lg border border-dashed px-6 py-10 text-center">
                   <FileText className="mx-auto h-10 w-10 text-muted-foreground" />
                   <p className="mt-4 text-sm text-muted-foreground">
@@ -651,6 +687,7 @@ ER  - `;
               ) : null}
             </CardContent>
           </Card>
+          )}
         </TabsContent>
 
         <TabsContent value="citation" className="space-y-4">

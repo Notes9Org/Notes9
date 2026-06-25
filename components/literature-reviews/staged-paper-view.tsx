@@ -153,14 +153,56 @@ export function StagedPaperView({
       </div>
 
       <div ref={pdfCardRef}>
+      {lit.pdf_storage_path ? (
+        /* PDF attached: a single compact toolbar so the reader starts at the top. */
+        <div className="space-y-3">
+          <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 rounded-lg border bg-muted/30 px-3 py-2">
+            <span className="flex min-w-0 items-center gap-2 text-sm font-medium text-foreground">
+              <FileText className="h-4 w-4 shrink-0" />
+              <span className="truncate">{lit.pdf_file_name || "Attached PDF"}</span>
+            </span>
+            <UploadLiteraturePdfDialog
+              literatureReviews={[
+                {
+                  id: lit.id,
+                  title: lit.title,
+                  authors: lit.authors,
+                  journal: lit.journal,
+                  publication_year: lit.publication_year,
+                  doi: lit.doi,
+                  pmid: lit.pmid,
+                  pdf_storage_path: lit.pdf_storage_path,
+                  pdf_file_name: lit.pdf_file_name,
+                },
+              ]}
+              currentLiterature={{
+                id: lit.id,
+                title: lit.title,
+                authors: lit.authors,
+                journal: lit.journal,
+                publication_year: lit.publication_year,
+                doi: lit.doi,
+                pmid: lit.pmid,
+                pdf_storage_path: lit.pdf_storage_path,
+                pdf_file_name: lit.pdf_file_name,
+              }}
+              triggerLabel="Replace PDF"
+            />
+          </div>
+          <LiteraturePdfPanel
+            literatureId={lit.id}
+            pdfUrl={`/api/literature/${lit.id}/viewer-pdf`}
+            pdfFileName={lit.pdf_file_name || "paper.pdf"}
+            openInNewTabFallbackUrl={`/api/literature/${lit.id}/viewer-pdf`}
+          />
+        </div>
+      ) : (
       <Card>
         <CardHeader className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between border-b pb-6">
           <div>
             <CardTitle className="text-lg">Paper Source & PDF</CardTitle>
             <CardDescription>
-              {lit.pdf_storage_path
-                ? "View and annotate the paper PDF inline."
-                : "Automatic import skipped or failed for this reference."}
+              Automatic import skipped or failed for this reference.
             </CardDescription>
           </div>
           <UploadLiteraturePdfDialog
@@ -188,18 +230,11 @@ export function StagedPaperView({
               pdf_storage_path: lit.pdf_storage_path,
               pdf_file_name: lit.pdf_file_name,
             }}
-            triggerLabel={lit.pdf_storage_path ? "Replace PDF" : "Upload PDF"}
+            triggerLabel="Upload PDF"
           />
         </CardHeader>
         <CardContent className="pt-6">
-          {lit.pdf_storage_path ? (
-            <LiteraturePdfPanel
-              literatureId={lit.id}
-              pdfUrl={`/api/literature/${lit.id}/viewer-pdf`}
-              pdfFileName={lit.pdf_file_name || "paper.pdf"}
-              openInNewTabFallbackUrl={`/api/literature/${lit.id}/viewer-pdf`}
-            />
-          ) : isClosedSource ? (
+          {isClosedSource ? (
             <div className="rounded-xl border border-dashed bg-muted/20 px-8 py-12 text-center">
               <div className="mb-4 inline-flex h-12 w-12 items-center justify-center rounded-full bg-muted">
                 <FileText className="h-6 w-6 text-muted-foreground" />
@@ -246,6 +281,7 @@ export function StagedPaperView({
           )}
         </CardContent>
       </Card>
+      )}
       </div>
     </div>
   )
