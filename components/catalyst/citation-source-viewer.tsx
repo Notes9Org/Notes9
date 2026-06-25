@@ -22,6 +22,8 @@ export interface CitationSourceViewerSource {
   /** Display label `[N]` / `[3.2]`. */
   label: string;
   sourceType: string;
+  /** Record id, for SPA-aware "Open document" navigation. */
+  sourceId?: string | null;
   sourceName: string | null;
   sourceUrl: string | null;
   /** The full source body when available (not currently on the wire — kept so
@@ -137,6 +139,9 @@ export interface CitationSourceViewerProps {
   source: CitationSourceViewerSource | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  /** SPA-aware "Open document" handler (lab-note resolution, chat docking). When
+   * omitted, falls back to a plain link via `documentHref`. */
+  onOpenDocument?: (source: CitationSourceViewerSource) => void;
 }
 
 /**
@@ -149,6 +154,7 @@ export function CitationSourceViewer({
   source,
   open,
   onOpenChange,
+  onOpenDocument,
 }: CitationSourceViewerProps) {
   const span = useMemo(
     () => (source ? resolveSpan(source) : { body: '', start: 0, end: 0, via: 'none' as const }),
@@ -193,14 +199,25 @@ export function CitationSourceViewer({
                 <ExternalLink className="size-3 shrink-0" aria-hidden />
               </a>
             )}
-            {!source?.sourceUrl && source?.documentHref && (
-              <a
-                href={source.documentHref}
-                className="inline-flex items-center gap-1 text-primary hover:underline"
-              >
-                Open document
-                <ExternalLink className="size-3 shrink-0" aria-hidden />
-              </a>
+            {!source?.sourceUrl && (source?.documentHref || (onOpenDocument && source?.sourceId)) && (
+              onOpenDocument && source ? (
+                <button
+                  type="button"
+                  onClick={() => onOpenDocument(source)}
+                  className="inline-flex items-center gap-1 text-primary hover:underline"
+                >
+                  Open document
+                  <ExternalLink className="size-3 shrink-0" aria-hidden />
+                </button>
+              ) : (
+                <a
+                  href={source!.documentHref!}
+                  className="inline-flex items-center gap-1 text-primary hover:underline"
+                >
+                  Open document
+                  <ExternalLink className="size-3 shrink-0" aria-hidden />
+                </a>
+              )
             )}
           </DialogDescription>
         </DialogHeader>

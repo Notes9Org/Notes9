@@ -10,6 +10,7 @@ import {
   CollapsibleTrigger,
 } from '@/components/ui/collapsible';
 import { createClient } from '@/lib/supabase/client';
+import { useSourceNavigation } from '@/hooks/use-source-navigation';
 import { cn } from '@/lib/utils';
 import {
   buildHighlightTargetFromResource,
@@ -48,6 +49,7 @@ function panelItemToViewerSource(
   return {
     label: item.citeLabel,
     sourceType: item.sourceType,
+    sourceId: item.sourceId ?? null,
     sourceName: item.sourceName,
     sourceUrl: item.sourceUrl,
     sourceBody: null,
@@ -1276,6 +1278,7 @@ export function AgentCitationsPanel({
   // after the length checks below changed the hook call order and crashed the
   // panel (Rules of Hooks violation).
   const [open, setOpen] = useState(defaultOpen);
+  const navigateToSource = useSourceNavigation();
   // Span-level source viewer (G3). null → closed.
   const [viewerSource, setViewerSource] = useState<CitationSourceViewerSource | null>(null);
   // Stable identity so the CitationViewerContext value doesn't change every
@@ -1295,6 +1298,17 @@ export function AgentCitationsPanel({
       open={viewerSource !== null}
       onOpenChange={(o) => {
         if (!o) setViewerSource(null);
+      }}
+      onOpenDocument={(s) => {
+        setViewerSource(null);
+        navigateToSource({
+          sourceType: s.sourceType,
+          sourceId: s.sourceId,
+          sourceUrl: s.sourceUrl,
+          excerpt: s.citedText || s.excerpt,
+          charStart: s.charStart,
+          charEnd: s.charEnd,
+        });
       }}
     />
   );

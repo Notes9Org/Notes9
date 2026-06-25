@@ -6,7 +6,8 @@ import { cn } from '@/lib/utils';
 import { markdownToHtml } from '@/lib/markdown-to-html';
 import { sanitizeHtml } from '@/lib/sanitize-html';
 import { parseCitationMeta, correctAcademicType } from '@/lib/citation-meta';
-import { resolveTitleFromId, isPlaceholderTitle, resolveLabNoteExperimentId } from '@/lib/citation-title';
+import { resolveTitleFromId, isPlaceholderTitle } from '@/lib/citation-title';
+import { useSourceNavigation } from '@/hooks/use-source-navigation';
 import { Calendar, User } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import type { CitationsManifest, CitationsManifestEntry } from '@/hooks/use-agent-stream';
@@ -576,6 +577,7 @@ function chipToViewerSource(chip: ChipData): CitationSourceViewerSource {
   return {
     label: chip.label,
     sourceType: chip.sourceType,
+    sourceId: chip.sourceId || null,
     sourceName: chip.sourceName || null,
     sourceUrl: chip.sourceUrl || null,
     sourceBody: null,
@@ -688,68 +690,25 @@ export function MarkdownRenderer({
   /** Open the source a chip points at: web → new tab; workspace → highlight
    * deep-link via dispatchDocumentHighlight (no fragile title lookup — the
    * manifest now carries source_id). */
-  const openChip = useCallback((chip: ChipData) => {
-    if (chip.sourceUrl && /^https?:\/\//i.test(chip.sourceUrl)) {
-      window.open(chip.sourceUrl, '_blank', 'noopener,noreferrer');
-      return;
-    }
-    if (!chip.sourceId) return;
-    // Prefer the exact per-claim span so [3.1] and [3.2] (same document,
-    // different cited_text) scroll to and highlight DIFFERENT sentences.
-    const spanText = chip.citedText || chip.excerpt;
-    const target: HighlightTarget = {
-      sourceType: normalizeAgentSourceType(chip.sourceType),
-      sourceId: chip.sourceId,
-      excerpt: spanText,
-      contentSurface:
-        normalizeAgentSourceType(chip.sourceType) === 'literature_review' ? 'abstract' : null,
-      // Advisory char offsets so the destination can land on the exact span.
-      charRange:
-        chip.charStart != null && chip.charEnd != null
-          ? { start: chip.charStart, end: chip.charEnd }
-          : null,
-    };
-    // Prefer in-app highlight dispatch (same-page doc viewers listen for it):
-    // this is also how a second citation into the SAME open document just scrolls
-    // to the new excerpt instead of reloading the document.
-    if (spanText && dispatchDocumentHighlight(target)) return;
+  // The one place workspace-source / citation navigation lives (shared with the
+  // Sources panel) — SPA nav, chat docking, lab-note experiment resolution.
+  const navigateToSource = useSourceNavigation();
 
-    // SPA navigation (NOT window.location.assign) so the Catalyst AI sidebar and
-    // app state survive; the destination reads ?highlight= and scrolls/pulses.
-    // First lets the Catalyst full page dock the chat into the sidebar.
-    const navigate = (dest: string) => {
-      if (!dest) return;
-      if (typeof window !== 'undefined') {
-        const beforeNav = new CustomEvent('notes9:catalyst-before-navigate', {
-          detail: { href: dest },
-          cancelable: true,
-        });
-        window.dispatchEvent(beforeNav);
-        if (beforeNav.defaultPrevented) return;
-      }
-      router.push(dest);
-    };
-
-    const normalizedType = normalizeAgentSourceType(chip.sourceType);
-    if (normalizedType === 'lab_note') {
-      // Deep-link client-side to /experiments/<exp>?tab=notes&noteId=… — resolving
-      // the parent experiment ourselves avoids the /lab-notes/<id> server redirect
-      // (a fresh experiment-page SSR that could error and dropped the user on a
-      // blank /experiments/<exp>).
-      const fallback =
-        (spanText ? buildHighlightUrl(target) : '') ||
-        workspaceRoute(chip.sourceType, chip.sourceId);
-      void resolveLabNoteExperimentId(chip.sourceId).then((expId) => {
-        navigate(expId ? buildHighlightUrl(target, { experimentId: expId }) : fallback);
+  const openChip = useCallback(
+    (chip: ChipData) => {
+      navigateToSource({
+        sourceType: chip.sourceType,
+        sourceId: chip.sourceId,
+        sourceUrl: chip.sourceUrl,
+        // Prefer the exact per-claim span so [3.1] and [3.2] (same document,
+        // different cited_text) scroll to DIFFERENT sentences.
+        excerpt: chip.citedText || chip.excerpt,
+        charStart: chip.charStart,
+        charEnd: chip.charEnd,
       });
-      return;
-    }
-
-    const href = spanText
-      ? buildHighlightUrl(target) || workspaceRoute(chip.sourceType, chip.sourceId)
-      : workspaceRoute(chip.sourceType, chip.sourceId);
-    navigate(href);
-  }, [router]);
+    },
+    [navigateToSource],
+  );
 
   /** Open the in-app span viewer for a chip (G3). Dismiss any hover card so it
    * doesn't float over the modal. */
@@ -888,6 +847,19 @@ export function MarkdownRenderer({
         open={viewerSource !== null}
         onOpenChange={(o) => {
           if (!o) setViewerSource(null);
+        }}
+        onOpenDocument={(s) => {
+          // Close the modal, then route to the document via the shared SPA-aware
+          // navigator (lab-note experiment resolution, chat docking, dedup).
+          setViewerSource(null);
+          navigateToSource({
+            sourceType: s.sourceType,
+            sourceId: s.sourceId,
+            sourceUrl: s.sourceUrl,
+            excerpt: s.citedText || s.excerpt,
+            charStart: s.charStart,
+            charEnd: s.charEnd,
+          });
         }}
       />
     </div>
