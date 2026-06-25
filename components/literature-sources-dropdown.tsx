@@ -186,7 +186,7 @@ export function LiteratureSourcesDropdown({
           className="h-8 gap-1.5 text-xs font-medium text-muted-foreground hover:text-foreground"
         >
           <BookOpen className="size-3.5 shrink-0" aria-hidden />
-          All citations
+          Sources
           <span className="tabular-nums text-muted-foreground">({sorted.length})</span>
           <ChevronDown
             className={cn(

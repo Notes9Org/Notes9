@@ -137,7 +137,7 @@ import { useLiteratureMentionCandidates } from '@/contexts/literature-mention-co
 import { useLiteratureAgentStream } from '@/hooks/use-literature-agent-stream';
 import type { LiteratureAgentDonePayload } from '@/lib/literature-agent-types';
 import { ClarifyCard } from '@/components/clarify-card';
-import { LiteratureSourcesDropdown } from '@/components/literature-sources-dropdown';
+import { CatalystSources, litRefsToSourceItems } from '@/components/catalyst/catalyst-sources';
 import {
   AgentCitationsPanel,
   groundingResourceToPanelItem,
@@ -667,9 +667,9 @@ const SidebarChatMessageItem = memo(function SidebarChatMessageItem({
               )}
             </div>
             {literatureSources && (
-              <LiteratureSourcesDropdown
-                refs={literatureSources}
-                className="mt-2 self-start"
+              <CatalystSources
+                items={litRefsToSourceItems(literatureSources)}
+                className="mt-3 w-full"
               />
             )}
             {notes9Sources && (
@@ -677,7 +677,7 @@ const SidebarChatMessageItem = memo(function SidebarChatMessageItem({
                 items={notes9Sources.map((c, i) =>
                   groundingResourceToPanelItem(c, i)
                 )}
-                triggerLabel="All citations"
+                triggerLabel="Sources"
                 className="mt-2 self-start"
               />
             )}
@@ -3834,21 +3834,20 @@ export function RightSidebar({
                               if (livePreview.kind === 'empty') return null;
                               if (livePreview.kind === 'waiting_structured') {
                                 return (
-                                  <p className="rounded-md border border-border/40 bg-muted/20 px-3 py-2 text-xs text-muted-foreground dark:bg-muted/10">
-                                    Receiving structured answer…
+                                  <p className="animate-pulse text-xs font-medium text-muted-foreground">
+                                    Composing answer…
                                   </p>
                                 );
                               }
                               return (
-                                <div className="rounded-md border border-border/40 bg-muted/20 px-3 py-2 dark:bg-muted/10">
-                                  {/*
-                                    Live tokens: plain text only. Full MarkdownRenderer (remark/rehype/highlight)
-                                    on every chunk blocks the main thread so nothing paints until the stream ends.
-                                    Final formatted markdown appears in the saved assistant message.
-                                  */}
-                                  <div className="whitespace-pre-wrap break-words text-sm leading-relaxed text-foreground">
-                                    {livePreview.markdown}
-                                  </div>
+                                /*
+                                  Live tokens: plain text only, borderless to match the AI
+                                  summary. Full MarkdownRenderer (remark/rehype/highlight) on
+                                  every chunk blocks the main thread so nothing paints until the
+                                  stream ends. Final formatted markdown appears in the saved message.
+                                */
+                                <div className="w-full min-w-0 whitespace-pre-wrap break-words text-[13.5px] leading-relaxed text-foreground [overflow-wrap:anywhere]">
+                                  {livePreview.markdown}
                                 </div>
                               );
                             })()}
