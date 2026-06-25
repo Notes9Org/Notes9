@@ -36,6 +36,8 @@ interface UploadLiteraturePdfDialogProps {
   experiments?: { id: string; name: string; project_id: string }[]
   currentLiterature?: LiteratureRecordSummary | null
   triggerLabel?: string
+  triggerClassName?: string
+  triggerSize?: "default" | "sm" | "lg" | "icon"
   initialProjectId?: string | null
 }
 
@@ -61,6 +63,8 @@ export function UploadLiteraturePdfDialog({
   experiments = [],
   currentLiterature = null,
   triggerLabel = "Upload PDF",
+  triggerClassName,
+  triggerSize,
   initialProjectId = null,
 }: UploadLiteraturePdfDialogProps) {
   const router = useRouter()
@@ -425,8 +429,8 @@ export function UploadLiteraturePdfDialog({
       }}
     >
       <DialogTrigger asChild>
-        <Button variant="outline" data-tour="upload-pdf">
-          <Upload className="mr-2 h-4 w-4" />
+        <Button variant="outline" size={triggerSize} data-tour="upload-pdf" className={triggerClassName}>
+          <Upload className={cn("h-4 w-4", triggerLabel ? "mr-2" : "")} />
           {triggerLabel}
         </Button>
       </DialogTrigger>

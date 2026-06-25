@@ -10,8 +10,8 @@ import {
   ChevronRight,
   Clock3,
   ImagePlus,
-  Maximize2,
-  Minimize2,
+  Maximize,
+  Minimize,
   Play,
   RotateCcw,
   ShieldCheck,
@@ -895,7 +895,7 @@ export function AgentWorkflowStudio() {
                   aria-label={isCanvasExpanded ? "Collapse canvas" : "Expand canvas"}
                   onClick={() => setIsCanvasExpanded((previous) => !previous)}
                 >
-                  {isCanvasExpanded ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
+                  {isCanvasExpanded ? <Minimize className="h-4 w-4" /> : <Maximize className="h-4 w-4" />}
                 </Button>
                 <input
                   ref={imageInputRef}

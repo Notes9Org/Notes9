@@ -160,6 +160,22 @@ function LiteratureDetailViewInner({
 
   const [activeTab, setActiveTab] = useState<string>(initialTab);
 
+  // Auto-scroll the PDF into view when the PDF tab is shown for a repository
+  // paper — same affordance the staged "Read" view already has. Skipped when a
+  // RAG highlight is driving its own scroll, so we don't fight it.
+  const pdfSectionRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (activeTab !== "pdf" || !hasPdf) return;
+    if (activeLitHighlight && highlightSurface === "pdf") return;
+    // Single, stable scroll: aligning the section TOP isn't affected by the PDF
+    // growing below it, so one pass suffices — no double-scroll jump.
+    const t = setTimeout(
+      () => pdfSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }),
+      350,
+    );
+    return () => clearTimeout(t);
+  }, [activeTab, hasPdf, activeLitHighlight, highlightSurface, literature.id]);
+
   // Deep-link: switch tab for RAG highlight (abstract → Overview, body/PDF → PDF)
   useEffect(() => {
     if (!activeLitHighlight) {
@@ -489,7 +505,60 @@ ER  - `;
           )}
         </TabsContent>
 
-        <TabsContent value="pdf" className="space-y-4">
+        <TabsContent value="pdf" className="space-y-3">
+          {literature.pdf_storage_path ? (
+            /* PDF attached: everything lives in the reader's single header row
+               (Replace + Export + Highlights), so the PDF starts at the top. */
+            <div ref={pdfSectionRef} className="scroll-mt-4">
+              <LiteraturePdfPanel
+                literatureId={literature.id}
+                pdfUrl={`/api/literature/${literature.id}/viewer-pdf`}
+                pdfFileName={literature.pdf_file_name}
+                openInNewTabFallbackUrl={`/api/literature/${literature.id}/viewer-pdf`}
+                highlightExcerpt={
+                  activeLitHighlight && highlightSurface === "pdf"
+                    ? activeLitHighlight.excerpt
+                    : null
+                }
+                highlightPageNumber={
+                  activeLitHighlight && highlightSurface === "pdf"
+                    ? activeLitHighlight.pageNumber ?? null
+                    : null
+                }
+                headerActions={
+                  <UploadLiteraturePdfDialog
+                    literatureReviews={[
+                      {
+                        id: literature.id,
+                        title: literature.title,
+                        authors: literature.authors,
+                        journal: literature.journal,
+                        publication_year: literature.publication_year,
+                        doi: literature.doi,
+                        pmid: literature.pmid,
+                        pdf_storage_path: literature.pdf_storage_path,
+                        pdf_file_name: literature.pdf_file_name,
+                      },
+                    ]}
+                    currentLiterature={{
+                      id: literature.id,
+                      title: literature.title,
+                      authors: literature.authors,
+                      journal: literature.journal,
+                      publication_year: literature.publication_year,
+                      doi: literature.doi,
+                      pmid: literature.pmid,
+                      pdf_storage_path: literature.pdf_storage_path,
+                      pdf_file_name: literature.pdf_file_name,
+                    }}
+                    triggerLabel="Replace"
+                    triggerSize="sm"
+                    triggerClassName="h-8 px-2.5 text-xs"
+                  />
+                }
+              />
+            </div>
+          ) : (
           <Card>
             <CardHeader className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
               <div>
@@ -523,7 +592,7 @@ ER  - `;
                   pdf_storage_path: literature.pdf_storage_path,
                   pdf_file_name: literature.pdf_file_name,
                 }}
-                triggerLabel={literature.pdf_storage_path ? "Replace PDF" : "Upload PDF"}
+                triggerLabel="Upload PDF"
               />
             </CardHeader>
             <CardContent className="space-y-4">
@@ -610,38 +679,7 @@ ER  - `;
                   )}
                 </div>
               )}
-              {literature.pdf_storage_path ? (
-                <>
-                  <div className="flex flex-wrap items-center gap-3 rounded-lg border bg-muted/30 p-3 text-sm text-muted-foreground">
-                    <div className="flex items-center gap-2 text-foreground">
-                      <FileText className="h-4 w-4" />
-                      {literature.pdf_file_name || "Attached PDF"}
-                    </div>
-                    {literature.pdf_uploaded_at && (
-                      <span>Uploaded {formatDate(literature.pdf_uploaded_at)}</span>
-                    )}
-                    {literature.pdf_match_source && (
-                      <Badge variant="outline">{literature.pdf_match_source}</Badge>
-                    )}
-                  </div>
-                  <LiteraturePdfPanel
-                    literatureId={literature.id}
-                    pdfUrl={`/api/literature/${literature.id}/viewer-pdf`}
-                    pdfFileName={literature.pdf_file_name}
-                    openInNewTabFallbackUrl={`/api/literature/${literature.id}/viewer-pdf`}
-                    highlightExcerpt={
-                      activeLitHighlight && highlightSurface === "pdf"
-                        ? activeLitHighlight.excerpt
-                        : null
-                    }
-                    highlightPageNumber={
-                      activeLitHighlight && highlightSurface === "pdf"
-                        ? activeLitHighlight.pageNumber ?? null
-                        : null
-                    }
-                  />
-                </>
-              ) : !["pending", "failed", "none"].includes(String(literature.pdf_import_status)) ? (
+              {!["pending", "failed", "none"].includes(String(literature.pdf_import_status)) ? (
                 <div className="rounded-lg border border-dashed px-6 py-10 text-center">
                   <FileText className="mx-auto h-10 w-10 text-muted-foreground" />
                   <p className="mt-4 text-sm text-muted-foreground">
@@ -651,6 +689,7 @@ ER  - `;
               ) : null}
             </CardContent>
           </Card>
+          )}
         </TabsContent>
 
         <TabsContent value="citation" className="space-y-4">

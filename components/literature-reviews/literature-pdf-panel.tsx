@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useEffect, useRef, useState } from "react"
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react"
 import { ChevronDown, Download, FileText, Loader2, PanelRightOpen } from "lucide-react"
 
 import { LiteraturePdfAnnotationSidebar } from "@/components/literature-reviews/literature-pdf-annotation-sidebar"
@@ -23,6 +23,8 @@ interface LiteraturePdfPanelProps {
   /** If set, the viewer will search for this text and temporarily highlight the match. */
   highlightExcerpt?: string | null
   highlightPageNumber?: number | null
+  /** Extra controls (e.g. Replace PDF) merged into the reader's single header row. */
+  headerActions?: ReactNode
 }
 
 export function LiteraturePdfPanel({
@@ -32,6 +34,7 @@ export function LiteraturePdfPanel({
   openInNewTabFallbackUrl,
   highlightExcerpt,
   highlightPageNumber,
+  headerActions,
 }: LiteraturePdfPanelProps) {
   const { toast } = useToast()
   const [annotations, setAnnotations] = useState<LiteraturePdfAnnotation[]>([])
@@ -183,40 +186,42 @@ export function LiteraturePdfPanel({
 
   return (
     <Collapsible open={annotationsOpen} onOpenChange={setAnnotationsOpen}>
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-2 text-sm text-muted-foreground">
-          <FileText className="h-4 w-4 shrink-0" />
+      <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
+        <div className="flex items-center gap-2 text-sm font-medium text-foreground">
+          <FileText className="h-4 w-4 shrink-0 text-muted-foreground" />
           Reader
         </div>
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex flex-wrap items-center gap-1.5">
+          {headerActions}
           <Button
             type="button"
             variant="outline"
             size="sm"
-            className="gap-2"
+            className="h-8 gap-1.5 px-2.5 text-xs"
             disabled={exportingPdf}
             onClick={handleExportAnnotatedPdf}
-            title="Download PDF: colored highlights on the page (as in the reader) plus a right column listing highlights and notes"
+            title="Download the PDF with colored highlights on the page plus a column listing highlights and notes"
           >
             {exportingPdf ? (
-              <Loader2 className="h-4 w-4 shrink-0 animate-spin" />
+              <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin" />
             ) : (
-              <Download className="h-4 w-4 shrink-0" />
+              <Download className="h-3.5 w-3.5 shrink-0" />
             )}
-            Export with annotations
+            Export
           </Button>
           <CollapsibleTrigger asChild>
             <Button
               type="button"
               variant="outline"
               size="sm"
-              className="gap-2"
+              className="h-8 gap-1.5 px-2.5 text-xs"
               aria-expanded={annotationsOpen}
+              title="Show highlights & notes"
             >
-              <PanelRightOpen className="h-4 w-4 shrink-0" />
-              Highlights &amp; notes
+              <PanelRightOpen className="h-3.5 w-3.5 shrink-0" />
+              Highlights
               <ChevronDown
-                className={cn("h-4 w-4 shrink-0 transition-transform duration-200", annotationsOpen && "rotate-180")}
+                className={cn("h-3.5 w-3.5 shrink-0 transition-transform duration-200", annotationsOpen && "rotate-180")}
               />
             </Button>
           </CollapsibleTrigger>

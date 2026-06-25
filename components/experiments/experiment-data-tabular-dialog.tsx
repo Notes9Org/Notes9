@@ -10,7 +10,7 @@ import {
 } from "@/lib/spreadsheet-workbook"
 import { cn } from "@/lib/utils"
 import { useToast } from "@/hooks/use-toast"
-import { FileSpreadsheet, Loader2, Maximize2, Minimize2, X } from "lucide-react"
+import { FileSpreadsheet, Loader2, Maximize, Minimize, X } from "lucide-react"
 import { appApiUrl } from "@/lib/app-api-url"
 
 export function isTabularExperimentFile(file: {
@@ -248,12 +248,12 @@ export function ExperimentDataTabularDialog({
             >
               {fullPage ? (
                 <>
-                  <Minimize2 className="h-4 w-4" />
+                  <Minimize className="h-4 w-4" />
                   <span className="hidden sm:inline">Exit full page</span>
                 </>
               ) : (
                 <>
-                  <Maximize2 className="h-4 w-4" />
+                  <Maximize className="h-4 w-4" />
                   <span className="hidden sm:inline">Full page</span>
                 </>
               )}

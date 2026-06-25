@@ -589,6 +589,50 @@ function chipToViewerSource(chip: ChipData): CitationSourceViewerSource {
     supportStatus: chip.supportStatus,
   };
 }
+/**
+ * Auto-close the dangling markdown constructs that streaming inevitably leaves
+ * open mid-flight, so a partial answer renders correctly token-by-token instead
+ * of turning everything after an unclosed `**` bold (and eating spaces). Only
+ * used while `showCursor` is true; the final answer is already well-formed.
+ */
+function completePartialMarkdown(src: string): string {
+  let s = src;
+  // Block code fences (```): if one is open, close it and stop — markers inside
+  // a fence are literal, so balancing inline tokens below would be wrong.
+  const fences = (s.match(/^```/gm) ?? []).length;
+  if (fences % 2 === 1) return `${s}\n\`\`\``;
+  // Inline code (`): close a dangling span.
+  const ticks = (s.match(/`/g) ?? []).length;
+  if (ticks % 2 === 1) s += '`';
+  // Bold (**): the usual culprit behind a runaway-bold streaming answer.
+  const bold = (s.match(/\*\*/g) ?? []).length;
+  if (bold % 2 === 1) s += '**';
+  // Italic (single * / _) — close a dangling pair so it doesn't italicise the
+  // rest. Count only standalone markers (not the `**` handled above / list `* `).
+  const stars = (s.replace(/\*\*/g, '').match(/(?<=\S)\*(?=\S)|(?<=\s)\*(?=\S)/g) ?? []).length;
+  if (stars % 2 === 1) s += '*';
+  return s;
+}
+
+/**
+ * Models often write section headings as a whole-line **bold** instead of a real
+ * `##` heading, so the answer reads as one wall of bold text. Promote a line
+ * that is ENTIRELY a single bold span (optionally ending in a colon) into an h3,
+ * giving the answer a real heading / body-text hierarchy. Conservative: skips
+ * long lines and sentence-like text so genuine emphasis is left alone.
+ */
+function promoteBoldHeadings(src: string): string {
+  return src.replace(
+    /^[ \t]*\*\*([^\n*][^\n]*?)\*\*[ \t]*(:?)[ \t]*$/gm,
+    (full, inner: string) => {
+      const text = inner.trim();
+      if (!text || text.length > 80) return full;
+      if (/[.!?]$/.test(text)) return full; // a sentence, not a heading
+      return `### ${text}`;
+    },
+  );
+}
+
 export function MarkdownRenderer({
   content,
   className,
@@ -621,9 +665,15 @@ export function MarkdownRenderer({
   );
 
   const html = useMemo(() => {
+    // While streaming, the markdown is partial — an opened `**` / `` ` `` / code
+    // fence whose closer hasn't streamed yet makes `marked` render ALL following
+    // text bold/mono and collapses spacing. Auto-close dangling constructs so the
+    // live answer paints cleanly token-by-token (the "everything went bold" fix).
+    const balanced = showCursor ? completePartialMarkdown(content) : content;
+    const source = promoteBoldHeadings(balanced);
     // Chat opts into `breaks` so every line break in the model's answer renders
     // as its own line (paired with a small `<br>` gap below for breathing room).
-    const raw = markdownToHtml(content, { breaks: true });
+    const raw = markdownToHtml(source, { breaks: true });
     if (!raw) return '';
     // `marked` v15+ ships without a built-in sanitizer, so raw HTML inside the
     // model's markdown response (e.g. <script>, <iframe>, onerror handlers
@@ -633,7 +683,7 @@ export function MarkdownRenderer({
     // client useMemo re-runs on hydration so the live render is always safe.
     const processed = postProcessHtml(raw, citationsManifest);
     return sanitizeHtml(processed);
-  }, [content, citationsManifest]);
+  }, [content, citationsManifest, showCursor]);
 
   /** Open the source a chip points at: web → new tab; workspace → highlight
    * deep-link via dispatchDocumentHighlight (no fragile title lookup — the
@@ -659,14 +709,28 @@ export function MarkdownRenderer({
           ? { start: chip.charStart, end: chip.charEnd }
           : null,
     };
-    // Prefer in-app highlight dispatch (same-page doc viewers listen for it).
+    // Prefer in-app highlight dispatch (same-page doc viewers listen for it):
+    // this is also how a second citation into the SAME open document just scrolls
+    // to the new excerpt instead of reloading the document.
     if (spanText && dispatchDocumentHighlight(target)) return;
     const href = spanText
       ? buildHighlightUrl(target) || workspaceRoute(chip.sourceType, chip.sourceId)
       : workspaceRoute(chip.sourceType, chip.sourceId);
+    if (!href) return;
+    // Give the Catalyst full page a chance to dock the chat into the sidebar
+    // (so the conversation stays on the side) before we leave for the document.
+    // If it handles this it performs the navigation itself.
+    if (typeof window !== 'undefined') {
+      const beforeNav = new CustomEvent('notes9:catalyst-before-navigate', {
+        detail: { href },
+        cancelable: true,
+      });
+      window.dispatchEvent(beforeNav);
+      if (beforeNav.defaultPrevented) return;
+    }
     // SPA navigation (NOT window.location.assign) so the Catalyst AI sidebar and
     // app state survive; the destination reads ?highlight= and scrolls/pulses.
-    if (href) router.push(href);
+    router.push(href);
   }, [router]);
 
   /** Open the in-app span viewer for a chip (G3). Dismiss any hover card so it

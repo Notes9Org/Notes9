@@ -18,8 +18,8 @@ import {
   Focus,
   Layers3,
   Loader2,
-  Maximize2,
-  Minimize2,
+  Maximize,
+  Minimize,
   Palette,
   RotateCcw,
   Sparkles,
@@ -735,7 +735,7 @@ export function SampleProteinViewer({
             </a>
           </Button>
           <Button type="button" variant="outline" size="sm" onClick={toggleFullscreen}>
-            {isFullscreen ? <Minimize2 className="mr-1.5 h-3.5 w-3.5" /> : <Maximize2 className="mr-1.5 h-3.5 w-3.5" />}
+            {isFullscreen ? <Minimize className="mr-1.5 h-3.5 w-3.5" /> : <Maximize className="mr-1.5 h-3.5 w-3.5" />}
             {isFullscreen ? "Exit" : "Full"}
           </Button>
         </div>
@@ -835,7 +835,7 @@ export function SampleProteinViewer({
               className="absolute right-3 top-3 z-20 shadow-md"
               aria-label="Exit fullscreen"
             >
-              <Minimize2 className="mr-1.5 h-3.5 w-3.5" />
+              <Minimize className="mr-1.5 h-3.5 w-3.5" />
               Exit fullscreen
               <kbd className="ml-2 rounded-sm border bg-muted/60 px-1 py-0.5 font-mono text-2xs text-muted-foreground">
                 Esc

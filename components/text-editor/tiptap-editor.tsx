@@ -79,6 +79,8 @@ import {
   Rows,
   Maximize2,
   Minimize2,
+  Maximize,
+  Minimize,
   MessageSquare,
   Plus,
   Pipette,
@@ -4949,9 +4951,9 @@ export function TiptapEditor({
                     title={editorRegionFullscreen ? "Exit fullscreen (Esc)" : "Fullscreen editor"}
                   >
                     {editorRegionFullscreen ? (
-                      <Minimize2 className="h-4 w-4" />
+                      <Minimize className="h-4 w-4" />
                     ) : (
-                      <Maximize2 className="h-4 w-4" />
+                      <Maximize className="h-4 w-4" />
                     )}
                   </Button>
                   {trailingToolbarSlot ? (
@@ -4982,9 +4984,9 @@ export function TiptapEditor({
                   title={editorRegionFullscreen ? "Exit fullscreen (Esc)" : "Fullscreen editor"}
                 >
                   {editorRegionFullscreen ? (
-                    <Minimize2 className="h-4 w-4" />
+                    <Minimize className="h-4 w-4" />
                   ) : (
-                    <Maximize2 className="h-4 w-4" />
+                    <Maximize className="h-4 w-4" />
                   )}
                 </Button>
               </>
@@ -5004,9 +5006,9 @@ export function TiptapEditor({
               title={editorRegionFullscreen ? "Exit fullscreen (Esc)" : "Fullscreen editor"}
             >
               {editorRegionFullscreen ? (
-                <Minimize2 className="h-4 w-4" />
+                <Minimize className="h-4 w-4" />
               ) : (
-                <Maximize2 className="h-4 w-4" />
+                <Maximize className="h-4 w-4" />
               )}
             </Button>
           </>

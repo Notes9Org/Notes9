@@ -23,8 +23,8 @@ import {
   Copy,
   Download,
   Loader2,
-  Maximize2,
-  Minimize2,
+  Maximize,
+  Minimize,
   Palette,
   Plus,
   Save,
@@ -752,9 +752,9 @@ export function SamplePlasmidViewer({
             aria-label="Toggle fullscreen"
           >
             {fullscreen ? (
-              <Minimize2 className="h-3.5 w-3.5" />
+              <Minimize className="h-3.5 w-3.5" />
             ) : (
-              <Maximize2 className="h-3.5 w-3.5" />
+              <Maximize className="h-3.5 w-3.5" />
             )}
           </Button>
 

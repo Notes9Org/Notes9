@@ -29,7 +29,9 @@ import {
   Square,
   ArrowUp,
   History,
-  Maximize2,
+  Maximize,
+  Minimize,
+  PanelLeft,
   Plus,
   Paperclip,
   Globe,
@@ -39,7 +41,6 @@ import {
   MoreHorizontal,
   Trash2,
   ChevronDown,
-  ChevronLeft,
   X,
   Telescope,
   Menu,
@@ -67,7 +68,9 @@ import {
   parseLiteratureAssistantStoredContent,
   serializeLiteratureAssistantStoredContent,
 } from '@/lib/literature-assistant-stored';
-import { useAgentStream, type AgentFileAttachment, type CitationsManifest, type AgentGraph } from '@/hooks/use-agent-stream';
+import { useAgentStream, type AgentFileAttachment, type CitationsManifest, type CitationsManifestEntry, type AgentGraph } from '@/hooks/use-agent-stream';
+import { useResolvedCitationTitles, type ResolvableCite } from '@/hooks/use-resolved-citation-titles';
+import { isPlaceholderTitle } from '@/lib/citation-title';
 import { AgentGraphList } from '@/components/catalyst/agent-graph-view';
 import { usePinnedAutoScroll } from '@/hooks/use-pinned-auto-scroll';
 import { deleteTrailingMessages } from '@/app/(app)/catalyst/actions';
@@ -117,7 +120,12 @@ import {
 } from '@/lib/catalyst-mention-types';
 import { isLikelyUuid } from '@/lib/url-project-param';
 import type { CatalystLaunchDetail, CatalystAttachDetail } from '@/lib/catalyst-launch';
-import { CATALYST_ATTACH_EVENT } from '@/lib/catalyst-launch';
+import {
+  CATALYST_ATTACH_EVENT,
+  openCatalystPanel,
+  setCatalystOrigin,
+  getCatalystOrigin,
+} from '@/lib/catalyst-launch';
 import {
   getCatalystCoPilot,
   clearCatalystCoPilot,
@@ -125,11 +133,13 @@ import {
   CATALYST_COPILOT_EVENT,
   type CoPilotContext,
 } from '@/lib/catalyst-copilot';
+import { useCatalystLiterature, setCatalystLiterature } from '@/lib/catalyst-literature';
+import { LiteratureSummaryPanel } from '@/components/catalyst/literature-summary-panel';
 import { useLiteratureMentionCandidates } from '@/contexts/literature-mention-context';
 import { useLiteratureAgentStream } from '@/hooks/use-literature-agent-stream';
 import type { LiteratureAgentDonePayload } from '@/lib/literature-agent-types';
 import { ClarifyCard } from '@/components/clarify-card';
-import { LiteratureSourcesDropdown } from '@/components/literature-sources-dropdown';
+import { CatalystSources, litRefsToSourceItems } from '@/components/catalyst/catalyst-sources';
 import {
   AgentCitationsPanel,
   groundingResourceToPanelItem,
@@ -569,6 +579,73 @@ const SidebarChatMessageItem = memo(function SidebarChatMessageItem({
     return cited.length > 0 ? cited : null;
   })();
 
+  // Resolve the REAL titles for this message's citations once, then inject them
+  // into BOTH the inline chips (manifest) and the Sources list, so workspace
+  // records (lab notes, protocols, literature articles, papers, reports) show
+  // their document title instead of "Untitled …".
+  const baseManifest =
+    notes9Parsed?.citationsManifest ?? literatureParsed?.citationsManifest ?? null;
+  const citeRefs = useMemo<ResolvableCite[]>(() => {
+    const out: ResolvableCite[] = [];
+    if (notes9Sources) {
+      for (const r of notes9Sources) {
+        out.push({
+          sourceType: r.source_type,
+          sourceId: r.source_id ?? null,
+          sourceUrl: r.source_url ?? null,
+          currentTitle: r.source_name ?? r.display_label ?? null,
+        });
+      }
+    }
+    if (baseManifest?.manifest) {
+      for (const e of Object.values(baseManifest.manifest)) {
+        out.push({
+          sourceType: e.source_type,
+          sourceId: e.source_id ?? null,
+          sourceUrl: e.source_url ?? null,
+          currentTitle: e.source_name ?? null,
+        });
+      }
+    }
+    return out;
+  }, [notes9Sources, baseManifest]);
+  const resolveTitle = useResolvedCitationTitles(citeRefs);
+
+  const effectiveManifest = useMemo<CitationsManifest | null>(() => {
+    if (!baseManifest?.manifest) return baseManifest;
+    let changed = false;
+    const manifest: Record<string, CitationsManifestEntry> = {};
+    for (const [k, e] of Object.entries(baseManifest.manifest)) {
+      const better = isPlaceholderTitle(e.source_name, e.source_type)
+        ? resolveTitle(e.source_type, e.source_id, e.source_url)
+        : null;
+      if (better) {
+        manifest[k] = { ...e, source_name: better };
+        changed = true;
+      } else {
+        manifest[k] = e;
+      }
+    }
+    return changed ? { ...baseManifest, manifest } : baseManifest;
+  }, [baseManifest, resolveTitle]);
+
+  const effectiveNotes9Sources = useMemo(() => {
+    if (!notes9Sources) return null;
+    let changed = false;
+    const out = notes9Sources.map((r) => {
+      const cur = r.source_name ?? r.display_label ?? null;
+      const better = isPlaceholderTitle(cur, r.source_type)
+        ? resolveTitle(r.source_type, r.source_id, r.source_url)
+        : null;
+      if (better) {
+        changed = true;
+        return { ...r, source_name: better };
+      }
+      return r;
+    });
+    return changed ? out : notes9Sources;
+  }, [notes9Sources, resolveTitle]);
+
   const userLiteratureMarkdown =
     message.role === 'user' &&
     ((agentMode === 'literature' && isLiteratureRoute) ||
@@ -650,26 +727,22 @@ const SidebarChatMessageItem = memo(function SidebarChatMessageItem({
                 <MarkdownRenderer
                   content={content}
                   className="text-sm text-foreground break-words [overflow-wrap:anywhere] [&_pre]:max-w-full [&_pre]:overflow-auto [&_pre]:whitespace-pre [&_code]:break-all"
-                  citationsManifest={
-                    notes9Parsed?.citationsManifest ??
-                    literatureParsed?.citationsManifest ??
-                    null
-                  }
+                  citationsManifest={effectiveManifest}
                 />
               )}
             </div>
             {literatureSources && (
-              <LiteratureSourcesDropdown
-                refs={literatureSources}
-                className="mt-2 self-start"
+              <CatalystSources
+                items={litRefsToSourceItems(literatureSources)}
+                className="mt-3 w-full"
               />
             )}
-            {notes9Sources && (
+            {effectiveNotes9Sources && (
               <AgentCitationsPanel
-                items={notes9Sources.map((c, i) =>
+                items={effectiveNotes9Sources.map((c, i) =>
                   groundingResourceToPanelItem(c, i)
                 )}
-                triggerLabel="All citations"
+                triggerLabel="Sources"
                 className="mt-2 self-start"
               />
             )}
@@ -766,6 +839,9 @@ export function RightSidebar({
   const [coPilot, setCoPilot] = useState<CoPilotContext | null>(null);
   const coPilotRef = useRef<CoPilotContext | null>(null);
   coPilotRef.current = coPilot;
+  // The literature search's AI summary (streamed in from the literature page),
+  // pinned at the top of the chat with its references.
+  const literature = useCatalystLiterature();
   const [mentionOpen, setMentionOpen] = useState(false);
   const [mentionFilter, setMentionFilter] = useState('');
   /** Todo-style @ menu: row highlight (-1 = none). */
@@ -1046,6 +1122,57 @@ export function RightSidebar({
   } = useChatSessions();
 
   const currentSessionRef = useRef<string | null>(null);
+
+  // Signal the layout when a real conversation is underway (or via a streamed
+  // literature summary) so the docked Catalyst sidebar can widen for comfortable
+  // reading. Only the docked variant cares — the full page is already wide.
+  const hasConversation = messages.length > 0 || !!literature;
+  useEffect(() => {
+    if (isPageVariant || typeof window === 'undefined') return;
+    window.dispatchEvent(
+      new CustomEvent('notes9:catalyst-chat-active', {
+        detail: { active: hasConversation },
+      }),
+    );
+  }, [hasConversation, isPageVariant]);
+
+  // A literature-search summary arrives via the in-memory bridge and is shown in
+  // a pinned panel — it was never persisted, so these chats never appeared in
+  // history. Once a summary finishes streaming, save it as a real session (query
+  // + summary). createSession adopts it as the current session, so follow-up
+  // questions continue the same thread.
+  const persistedLiteratureSigRef = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    if (!literature || literature.streaming) return;
+    const summary = literature.summary?.trim();
+    const query = literature.query?.trim();
+    if (!summary || !query) return;
+    const sig = `${query}::${summary.length}`;
+    if (persistedLiteratureSigRef.current.has(sig)) return;
+    persistedLiteratureSigRef.current.add(sig);
+
+    let cancelled = false;
+    void (async () => {
+      const sessionId = await createSession(query.slice(0, 50) || 'Literature search');
+      if (!sessionId || cancelled) return;
+      const refsMd = literature.references?.length
+        ? '\n\n**References**\n' +
+          literature.references
+            .map((r) => `${r.n}. ${r.title}${r.meta ? ` — ${r.meta}` : ''}`)
+            .join('\n')
+        : '';
+      await saveMessage(sessionId, 'user', query);
+      await saveMessage(sessionId, 'assistant', summary + refsMd, {
+        source: 'literature_summary',
+      });
+      if (!cancelled) loadSessions();
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // Only the literature bridge drives this; the session helpers are stable.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [literature]);
 
   const agentStream = useAgentStream();
   const literatureAgentStream = useLiteratureAgentStream();
@@ -2594,6 +2721,9 @@ export function RightSidebar({
       setLiteraturePlainLen(0);
       literatureAgentStream.reset();
       agentStream.reset();
+      // A fresh chat drops the pinned literature summary + its co-pilot context.
+      setCatalystLiterature(null);
+      clearCatalystCoPilot();
     }
   };
 
@@ -2615,6 +2745,9 @@ export function RightSidebar({
     }
     setCurrentSessionId(sessionId);
     currentSessionRef.current = sessionId;
+    // Drop the live literature panel so a persisted literature session renders
+    // as its saved messages instead of doubling up with the pinned summary.
+    setCatalystLiterature(null);
     loadMessages(sessionId).then((msgs) => {
       const chatMessages = msgs.map((m) => {
         let text = m.content;
@@ -2713,8 +2846,32 @@ export function RightSidebar({
     loadSession(initialSessionId);
   }, [isPageVariant, initialSessionId, mounted]);
 
+  // On the full Catalyst page, when a citation in an answer navigates to its
+  // source document, dock the chat into the sidebar (carrying the session) so
+  // the conversation stays on the side instead of being replaced by the doc.
+  useEffect(() => {
+    if (!isPageVariant) return;
+    const onBeforeNav = (e: Event) => {
+      const href = (e as CustomEvent<{ href?: string }>).detail?.href;
+      if (!href) return;
+      e.preventDefault();
+      const sid = currentSessionRef.current;
+      openCatalystPanel({ dock: true, ...(sid ? { sessionId: sid } : {}) });
+      router.push(href);
+    };
+    window.addEventListener('notes9:catalyst-before-navigate', onBeforeNav as EventListener);
+    return () =>
+      window.removeEventListener('notes9:catalyst-before-navigate', onBeforeNav as EventListener);
+  }, [isPageVariant, router]);
+
   const applyCatalystLaunch = useCallback(
-    (launch: { query?: string; projectId?: string; attachments?: Array<{ url: string; name: string; contentType: string; size?: number }>; webSearch?: boolean; autoSend?: boolean }) => {
+    (launch: { query?: string; projectId?: string; attachments?: Array<{ url: string; name: string; contentType: string; size?: number }>; webSearch?: boolean; autoSend?: boolean; sessionId?: string }) => {
+      // Continue an existing conversation (e.g. minimizing the full page back
+      // into the docked sidebar) before seeding any new query.
+      if (launch.sessionId && launch.sessionId !== currentSessionRef.current) {
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+        loadSession(launch.sessionId);
+      }
       const q = launch.query?.trim();
       if (q) {
         setInput(q);
@@ -2788,6 +2945,7 @@ export function RightSidebar({
       attachments: pendingLaunch.attachments,
       webSearch: pendingLaunch.webSearch,
       autoSend: pendingLaunch.autoSend,
+      sessionId: pendingLaunch.sessionId,
     });
     onPendingLaunchConsumed?.();
   }, [
@@ -3312,17 +3470,6 @@ export function RightSidebar({
               {isPageVariant ? (
                 <span className="truncate px-1 text-sm font-semibold text-foreground">Catalyst</span>
               ) : null}
-              {!isPageVariant && layoutExpanded && !expandedHistoryOpen && (
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="size-8 sm:size-9 text-muted-foreground shrink-0"
-                  onClick={() => setExpandedHistoryOpen(true)}
-                  aria-label="Show chat history"
-                >
-                    <History className="size-4" />
-                </Button>
-              )}
               {!isPageVariant && !layoutExpanded && (
                 <>
                   <ScrollArea className="w-full whitespace-nowrap scrollbar-hide">
@@ -3417,17 +3564,24 @@ export function RightSidebar({
             <div className="flex items-center gap-1 pl-2 shrink-0">
               {isPageVariant ? (
                 <>
-                  {layoutExpanded && !expandedHistoryOpen ? (
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="size-8 sm:size-9 text-muted-foreground"
-                      onClick={() => setExpandedHistoryOpen(true)}
-                      aria-label="Show chat history"
-                    >
-                      <History className="size-4" />
-                    </Button>
-                  ) : null}
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="size-8 text-muted-foreground sm:size-9"
+                    title="Minimize to sidebar"
+                    aria-label="Minimize Catalyst to the sidebar"
+                    onClick={() => {
+                      // Dock the full page back into the side panel (NOT close it),
+                      // carrying the conversation, and return to the page it was
+                      // opened from.
+                      const sid = currentSessionRef.current;
+                      openCatalystPanel({ dock: true, ...(sid ? { sessionId: sid } : {}) });
+                      router.push(getCatalystOrigin() ?? '/');
+                    }}
+                  >
+                    <Minimize className="size-4" />
+                  </Button>
                   <Button
                     variant="secondary"
                     className="hidden h-8 text-muted-foreground sm:inline-flex sm:h-9"
@@ -3478,16 +3632,18 @@ export function RightSidebar({
                     title="Open full page"
                     aria-label="Open Catalyst full page"
                     onClick={() => {
-                      // Open the dedicated /catalyst route, carrying the active
-                      // session so the conversation continues on the full page.
+                      // Maximize → open the dedicated /catalyst route, carrying the
+                      // active session so the conversation continues full-page.
+                      // Remember this page so minimizing returns here.
+                      setCatalystOrigin(pathname ?? '/');
                       const sid = currentSessionRef.current;
                       router.push(sid ? `/catalyst?session=${encodeURIComponent(sid)}` : '/catalyst');
                       onClose?.();
                     }}
                   >
-                    <Maximize2 className="size-4" />
+                    <Maximize className="size-4" />
                   </Button>
-                  <Button variant="ghost" size="icon" className="size-8 sm:size-9 text-muted-foreground" onClick={() => onClose?.()}>
+                  <Button variant="ghost" size="icon" className="size-8 sm:size-9 text-muted-foreground" title="Close" aria-label="Close Catalyst" onClick={() => onClose?.()}>
                     <X className="size-4" />
                   </Button>
                 </>
@@ -3497,27 +3653,44 @@ export function RightSidebar({
 
           {/* When full screen: left = conversation list, right = chat. Otherwise: single column. */}
           <div className={cn("flex-1 flex min-h-0 overflow-hidden", layoutExpanded ? "flex-row" : "flex-col")}>
-            {/* Full-screen / page route: left sidebar with previous conversations */}
-            {layoutExpanded && expandedHistoryOpen && (
+            {/* Full-screen / page route: left sidebar with previous conversations.
+                Stays mounted and smoothly animates its width to 0 when minimised
+                (no width shown when closed), so open/close is fluid, not a pop. */}
+            {layoutExpanded && (
               <>
                 <aside
-                  className="flex-shrink-0 flex flex-col overflow-hidden border-r border-border bg-sidebar transition-[width] duration-200 ease-in-out min-h-0"
+                  className={cn(
+                    'relative z-10 flex-shrink-0 flex flex-col overflow-hidden border-r border-border bg-sidebar min-h-0',
+                    expandedHistoryOpen &&
+                      'shadow-[6px_0_22px_-14px_rgba(20,14,8,0.28)] dark:shadow-[6px_0_26px_-12px_rgba(0,0,0,0.55)]',
+                  )}
                   style={{
-                    width: historySidebar.width,
-                    transition: historySidebar.isResizing ? 'none' : 'width 0.15s cubic-bezier(0.4, 0, 0.2, 1)',
+                    // Open → full width; collapsed → fully gone (width 0, no rail).
+                    // A floating button (below) re-opens it from the chat area.
+                    width: expandedHistoryOpen ? historySidebar.width : 0,
+                    transition: historySidebar.isResizing
+                      ? 'none'
+                      : 'width 0.5s cubic-bezier(0.22, 1, 0.36, 1)',
                   }}
                 >
-                <div className="flex h-full min-h-0 flex-col gap-1 p-2">
-                  {/* Header row - back arrow to hide history (like lab notes collapse) */}
-                  <div className="flex h-8 shrink-0 items-center gap-2 rounded-md px-2 text-xs font-medium text-sidebar-foreground/70">
+                {/* Fixed-width inner content so it's clipped (not reflowed) while
+                    the panel collapses to 0. */}
+                <div
+                  className="flex h-full min-h-0 flex-col gap-1 p-2"
+                  style={{ width: historySidebar.width }}
+                >
+                  {/* Header row — close button + "Chats" label on the top-left,
+                      new chat on the right. */}
+                  <div className="flex h-8 shrink-0 items-center gap-1 rounded-md px-1 text-xs font-medium text-sidebar-foreground/70">
                     <Button
                       variant="ghost"
                       size="icon"
-                      className="h-7 w-7 shrink-0 -ml-0.5"
+                      className="h-7 w-7 shrink-0"
                       onClick={() => setExpandedHistoryOpen(false)}
+                      title="Hide chat history"
                       aria-label="Hide chat history"
                     >
-                      <ChevronLeft className="h-4 w-4" />
+                      <PanelLeft className="h-4 w-4" />
                     </Button>
                     <span className="flex-1 truncate">Chats</span>
                     <Button
@@ -3586,18 +3759,35 @@ export function RightSidebar({
                   </ScrollArea>
                 </div>
               </aside>
-              <ResizeHandle
-                onMouseDown={historySidebar.handleMouseDown}
-                isResizing={historySidebar.isResizing}
-                position="right"
-                className="z-10 shrink-0 bg-border/10 hover:bg-border/35"
-              />
+              {expandedHistoryOpen && (
+                <ResizeHandle
+                  onMouseDown={historySidebar.handleMouseDown}
+                  isResizing={historySidebar.isResizing}
+                  position="right"
+                  className="z-10 shrink-0 bg-border/10 hover:bg-border/35"
+                />
+              )}
               </>
             )}
 
             {/* Main chat area (narrow: only this; full screen: right side) */}
-            <div className="flex-1 flex flex-col min-h-0 min-w-0 overflow-hidden">
-              {messages.length === 0 ? (
+            <div className="relative flex-1 flex flex-col min-h-0 min-w-0 overflow-hidden">
+              {/* Floating "show chat history" button — appears only when the
+                  history panel is collapsed (no rail), at the same vertical spot
+                  as the "Chats" header so reopening feels anchored. */}
+              {layoutExpanded && !expandedHistoryOpen && (
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="absolute left-2 top-2 z-20 h-7 w-7 rounded-md bg-background/80 text-foreground/70 shadow-sm backdrop-blur-sm hover:bg-accent hover:text-foreground"
+                  onClick={() => setExpandedHistoryOpen(true)}
+                  title="Show chat history"
+                  aria-label="Show chat history"
+                >
+                  <PanelLeft className="h-4 w-4" />
+                </Button>
+              )}
+              {messages.length === 0 && !literature ? (
                 isPageVariant ? (
                   <div className="relative min-h-0 flex-1 overflow-hidden">
                     <div className="absolute inset-0 flex items-center justify-center px-4 py-6 sm:px-6">
@@ -3662,6 +3852,7 @@ export function RightSidebar({
                     aria-label="Chat messages"
                   >
                     <div className="flex flex-col gap-6 p-4 pt-5 pb-4 max-w-3xl mx-auto w-full min-w-0">
+                      {literature && <LiteratureSummaryPanel lit={literature} />}
                       {messages.map((message, index) => {
                         const isLast = index === messages.length - 1;
                         const isLastAssistant = isLast && message.role === 'assistant';
@@ -3726,21 +3917,20 @@ export function RightSidebar({
                               if (livePreview.kind === 'empty') return null;
                               if (livePreview.kind === 'waiting_structured') {
                                 return (
-                                  <p className="rounded-md border border-border/40 bg-muted/20 px-3 py-2 text-xs text-muted-foreground dark:bg-muted/10">
-                                    Receiving structured answer…
+                                  <p className="animate-pulse text-xs font-medium text-muted-foreground">
+                                    Composing answer…
                                   </p>
                                 );
                               }
                               return (
-                                <div className="rounded-md border border-border/40 bg-muted/20 px-3 py-2 dark:bg-muted/10">
-                                  {/*
-                                    Live tokens: plain text only. Full MarkdownRenderer (remark/rehype/highlight)
-                                    on every chunk blocks the main thread so nothing paints until the stream ends.
-                                    Final formatted markdown appears in the saved assistant message.
-                                  */}
-                                  <div className="whitespace-pre-wrap break-words text-sm leading-relaxed text-foreground">
-                                    {livePreview.markdown}
-                                  </div>
+                                /*
+                                  Live tokens: plain text only, borderless to match the AI
+                                  summary. Full MarkdownRenderer (remark/rehype/highlight) on
+                                  every chunk blocks the main thread so nothing paints until the
+                                  stream ends. Final formatted markdown appears in the saved message.
+                                */
+                                <div className="w-full min-w-0 whitespace-pre-wrap break-words text-[13.5px] leading-relaxed text-foreground [overflow-wrap:anywhere]">
+                                  {livePreview.markdown}
                                 </div>
                               );
                             })()}

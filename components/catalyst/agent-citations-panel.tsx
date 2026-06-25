@@ -1341,12 +1341,12 @@ export function AgentCitationsPanel({
           )}
         >
           <BookOpen className="size-3.5 shrink-0" aria-hidden />
-          {triggerLabel === 'All citations'
-            ? `Grounded in ${sorted.length} source${sorted.length === 1 ? '' : 's'}`
+          {/* "Sources" is the consistent label across every AI answer; only an
+              explicit custom label (e.g. debug "Retrieved chunks") overrides it. */}
+          {triggerLabel === 'All citations' || triggerLabel === 'Sources'
+            ? 'Sources'
             : triggerLabel}
-          {triggerLabel !== 'All citations' && (
-            <span className="tabular-nums text-muted-foreground">({sorted.length})</span>
-          )}
+          <span className="tabular-nums text-muted-foreground">({sorted.length})</span>
           <ChevronDown
             className={cn(
               'size-3.5 shrink-0 opacity-70 transition-transform duration-200',

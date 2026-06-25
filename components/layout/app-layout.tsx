@@ -258,6 +258,28 @@ function AppLayoutBody({ children }: AppLayoutProps) {
     if (!catalystVisible) setCatalystActive(false)
   }, [catalystVisible])
 
+  // Smooth open/close for the (desktop) Catalyst panel — matches the left sidebar
+  // and chat history: stay mounted and animate WIDTH 0 ↔ full, then unmount after
+  // the close transition. `catalystRender` = in the DOM; `catalystExpanded` = the
+  // animated open state.
+  const [catalystRender, setCatalystRender] = useState(false)
+  const [catalystExpanded, setCatalystExpanded] = useState(false)
+  useEffect(() => {
+    // The docked panel only ever shows off the /catalyst route. Gate the open
+    // animation on the route too, so that minimising the full page lands on the
+    // origin and the sidebar smoothly animates open (width 0 → full) there,
+    // rather than appearing already-expanded.
+    const shouldShow = catalystVisible && !isCatalystRoute
+    if (shouldShow) {
+      setCatalystRender(true)
+      const r = requestAnimationFrame(() => setCatalystExpanded(true))
+      return () => cancelAnimationFrame(r)
+    }
+    setCatalystExpanded(false)
+    const t = setTimeout(() => setCatalystRender(false), 520)
+    return () => clearTimeout(t)
+  }, [catalystVisible, isCatalystRoute])
+
   const handleCatalystToggle = useCallback(() => {
     if (catalystVisible) {
       setCatalystOpen(false)
@@ -291,7 +313,10 @@ function AppLayoutBody({ children }: AppLayoutProps) {
       const detail =
         (event as CustomEvent<CatalystLaunchDetail>).detail ?? ({} as CatalystLaunchDetail)
 
-      if ((pathname ?? "").startsWith("/catalyst")) {
+      // On /catalyst, opening normally just re-seeds the full page. But a "dock"
+      // request (minimize → sidebar) must open the docked panel; we set state
+      // here and let the caller navigate away from /catalyst so it appears.
+      if ((pathname ?? "").startsWith("/catalyst") && !detail.dock) {
         const params = new URLSearchParams()
         if (detail.query) params.set("q", detail.query)
         if (detail.scope) params.set("scope", detail.scope)
@@ -356,9 +381,26 @@ function AppLayoutBody({ children }: AppLayoutProps) {
     persistKey: 'notes9:catalyst-sidebar-width:v2',
   })
 
-  // Idle → narrower; active conversation → the (resizable, persisted) wide width.
-  const catalystIdleWidth = isTablet ? 320 : 360
-  const catalystWidth = catalystActive ? rightSidebar.width : catalystIdleWidth
+  // The Catalyst panel is freely resizable (drag handle) at all times; its width
+  // is the persisted, user-set value.
+  const catalystWidth = rightSidebar.width
+
+  // Once a real conversation starts, widen the docked Catalyst sidebar for
+  // comfortable reading — but only upward, and ephemerally (never persisted), so
+  // it can't override a narrower width the user has deliberately dragged later.
+  const chatActiveWidth = isTablet ? 460 : 540
+  useEffect(() => {
+    const onChatActive = (e: Event) => {
+      const active = (e as CustomEvent<{ active: boolean }>).detail?.active
+      if (!active) return
+      rightSidebar.setWidth((prev) => (prev < chatActiveWidth ? chatActiveWidth : prev))
+    }
+    window.addEventListener('notes9:catalyst-chat-active', onChatActive as EventListener)
+    return () =>
+      window.removeEventListener('notes9:catalyst-chat-active', onChatActive as EventListener)
+    // setWidth is a stable useState setter; chatActiveWidth covers the tablet flag.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [chatActiveWidth])
 
   return (
     <>
@@ -378,14 +420,18 @@ function AppLayoutBody({ children }: AppLayoutProps) {
               data-sidebar-container
               data-resizing={leftSidebar.isResizing ? 'true' : undefined}
               className={cn(
-                "h-full min-h-0 shrink-0 overflow-hidden",
+                // Soft right-edge shadow lifts the sidebar above the content for
+                // a modern, layered separation.
+                "relative z-10 h-full min-h-0 shrink-0 overflow-hidden shadow-[6px_0_24px_-14px_rgba(20,14,8,0.30)] dark:shadow-[6px_0_28px_-12px_rgba(0,0,0,0.6)]",
                 "data-[resizing=true]:[&_[data-slot=sidebar-gap]]:!transition-none",
                 "data-[resizing=true]:[&_[data-slot=sidebar-container]]:!transition-none"
               )}
               style={{
                 '--sidebar-width': `${leftColumnWidth}px`,
                 width: leftColumnWidth,
-                transition: leftSidebar.isResizing ? 'none' : 'width 0.15s cubic-bezier(0.4, 0, 0.2, 1)',
+                // Slow, refined open/close (matches the inner sidebar animation);
+                // 1:1 with the cursor mid-drag.
+                transition: leftSidebar.isResizing ? 'none' : 'width 0.5s cubic-bezier(0.22, 1, 0.36, 1)',
               } as React.CSSProperties}
             >
               <AppSidebar />
@@ -525,7 +571,7 @@ function AppLayoutBody({ children }: AppLayoutProps) {
             Suppressed entirely on /catalyst — the route already mounts the
             same RightSidebar as the page, so a second instance here would
             duplicate the chat. */}
-        {!isCatalystRoute && protocolAiVisible ? (
+        {isCatalystRoute ? null : protocolAiVisible ? (
           isMobile ? (
             <Sheet open={headerAi!.isOpen} onOpenChange={(open) => { if (!open && headerAi!.isOpen) headerAi!.onToggle() }}>
               <SheetContent
@@ -541,7 +587,7 @@ function AppLayoutBody({ children }: AppLayoutProps) {
               </SheetContent>
             </Sheet>
           ) : (
-            <div className="relative z-[120] flex h-full min-h-0 shrink-0 animate-in fade-in slide-in-from-right-4 duration-300 ease-out">
+            <div className="relative z-[120] flex h-full min-h-0 shrink-0 animate-in fade-in slide-in-from-right-6 duration-500 ease-[cubic-bezier(0.22,1,0.36,1)]">
               <ResizeHandle
                 onMouseDown={rightSidebar.handleMouseDown}
                 isResizing={rightSidebar.isResizing}
@@ -555,8 +601,8 @@ function AppLayoutBody({ children }: AppLayoutProps) {
               </div>
             </div>
           )
-        ) : catalystVisible ? (
-          isMobile ? (
+        ) : isMobile ? (
+          catalystVisible ? (
             <Sheet open onOpenChange={(open) => { if (!open) setCatalystOpen(false) }}>
               <SheetContent
                 side="right"
@@ -575,27 +621,33 @@ function AppLayoutBody({ children }: AppLayoutProps) {
                 />
               </SheetContent>
             </Sheet>
-          ) : (
-            <div className="relative z-[120] flex h-full min-h-0 shrink-0 animate-in fade-in slide-in-from-right-4 duration-300 ease-out">
-              {/* Resize handle only while active — idle is a fixed compact width. */}
-              {catalystActive && (
-                <ResizeHandle
-                  onMouseDown={rightSidebar.handleMouseDown}
-                  isResizing={rightSidebar.isResizing}
-                  position="left"
-                />
-              )}
+          ) : null
+        ) : catalystRender ? (
+          // Desktop: stays mounted and animates WIDTH 0 ↔ full (same refined
+          // curve as the other sidebars), so open/close is fluid, not a pop.
+          <div className="relative z-[120] flex h-full min-h-0 shrink-0">
+            {catalystExpanded && (
+              <ResizeHandle
+                onMouseDown={rightSidebar.handleMouseDown}
+                isResizing={rightSidebar.isResizing}
+                position="left"
+              />
+            )}
+            <div
+              className="flex h-full min-h-0 flex-col overflow-hidden border-l border-border shadow-[-8px_0_28px_-16px_rgba(20,14,8,0.32)] dark:shadow-[-10px_0_32px_-14px_rgba(0,0,0,0.6)]"
+              style={{
+                width: catalystExpanded ? catalystWidth : 0,
+                minWidth: 0,
+                transition: rightSidebar.isResizing
+                  ? 'none'
+                  : 'width 0.5s cubic-bezier(0.22, 1, 0.36, 1)',
+              }}
+            >
+              {/* Fixed-width content so it's clipped (not reflowed) during the
+                  width animation. */}
               <div
-                className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden border-l border-border"
-                style={{
-                  width: catalystWidth,
-                  minWidth: 0,
-                  // Smoothly grow/shrink between idle and active; no transition
-                  // mid-drag so manual resizing stays 1:1 with the cursor.
-                  transition: rightSidebar.isResizing
-                    ? 'none'
-                    : 'width 320ms cubic-bezier(0.22, 1, 0.36, 1)',
-                }}
+                className="flex h-full min-h-0 min-w-0 flex-col"
+                style={{ width: catalystWidth }}
               >
                 <RightSidebar
                   onClose={() => setCatalystOpen(false)}
@@ -605,7 +657,7 @@ function AppLayoutBody({ children }: AppLayoutProps) {
                 />
               </div>
             </div>
-          )
+          </div>
         ) : null}
         </div>
       </SidebarProvider>

@@ -7,8 +7,8 @@ import {
   Database,
   ChevronLeft,
   ChevronRight,
-  X,
   Loader2,
+  X,
 } from "lucide-react"
 import {
   LiteratureSearchForm,
@@ -280,6 +280,17 @@ export function LiteratureTabs({
     }
     return m
   }, [stagedItems, stagedPdfPatches])
+
+  // Repository papers, keyed by id and shaped like staged items, so the reader
+  // tab can render a repo paper (its PDF, or the overview if none) just like a
+  // staged one when opened from the results page.
+  const repoById = useMemo(() => {
+    const m = new Map<string, StagingListItem>()
+    for (const r of repositoryReviews) {
+      m.set(String(r.id), mapRowToListItem(r as unknown as StagingLiteratureRow))
+    }
+    return m
+  }, [repositoryReviews])
 
   const registerLiteratureMentions = useLiteratureMentionRegister()
   const literatureMentionCandidates = useMemo(() => {
@@ -594,6 +605,30 @@ export function LiteratureTabs({
     [stagedLiterature, lockedProjectId]
   )
 
+  // Resolve a result paper to an existing literature row — staged first, then the
+  // repository — so "Read" opens the already-imported paper (PDF or overview)
+  // instead of re-staging it.
+  const resolveOpenableLiteratureId = useCallback(
+    (paper: SearchPaper): string | null => {
+      const staged = resolveStagedLiteratureId(paper)
+      if (staged) return staged
+      const nd = paper.doi ? normalizeDoi(paper.doi) : null
+      const pool = lockedProjectId
+        ? repositoryReviews.filter((r) => r.project?.id === lockedProjectId)
+        : repositoryReviews
+      const match = pool.find((row) => {
+        const rowPmid = (row as { pmid?: string | null }).pmid ?? null
+        if (paper.pmid && rowPmid === paper.pmid) return true
+        if (nd && row.doi === nd) return true
+        if (!paper.pmid && !nd && row.title === paper.title && row.publication_year === paper.year)
+          return true
+        return false
+      })
+      return match ? String(match.id) : null
+    },
+    [resolveStagedLiteratureId, repositoryReviews, lockedProjectId]
+  )
+
   /**
    * Sorting (Best match / Newest first / Most cited) and the open-access filter
    * are derived from the metadata we already fetched — no new network search.
@@ -670,11 +705,12 @@ export function LiteratureTabs({
   const isPaperStaged = (paperId: string) => {
     const paper = searchResults.find((p) => p.id === paperId)
     if (!paper) return false
-    return resolveStagedLiteratureId(paper) !== null
+    // Already in the library (staging OR repository) → "Read" opens it directly.
+    return resolveOpenableLiteratureId(paper) !== null
   }
 
   const handleOpenStaged = (paper: SearchPaper) => {
-    const id = resolveStagedLiteratureId(paper)
+    const id = resolveOpenableLiteratureId(paper)
     if (id) openPaperTab(id, paper.title)
   }
 
@@ -867,7 +903,7 @@ export function LiteratureTabs({
               </TabsTrigger>
             )}
             {stripPaperIds.map((id) => {
-              const lit = stagedByIdMerged.get(id)
+              const lit = stagedByIdMerged.get(id) ?? repoById.get(id)
               const tabTitle = lit?.title ?? pendingTabTitles[id]
               if (!tabTitle) return null
               return (
@@ -878,13 +914,13 @@ export function LiteratureTabs({
                   className="group relative data-[state=active]:bg-transparent data-[state=active]:border-b-2 data-[state=active]:border-[var(--n9-accent)] data-[state=active]:text-foreground rounded-none border-b-2 border-transparent px-4 py-2 bg-transparent text-muted-foreground transition-none shadow-none max-w-[220px] flex items-center gap-1 shrink-0"
                 >
                   <span className="truncate text-sm font-semibold">{tabTitle}</span>
-                  {/* role=button span, NOT a <button>: TabsTrigger already
-                      renders a <button>, and a nested button is invalid HTML
-                      (React hydration error). Span keeps click + keyboard. */}
+                  {/* role=button span, NOT a nested <button> (invalid inside the
+                      TabsTrigger button — causes hydration errors). */}
                   <span
                     role="button"
                     tabIndex={0}
                     aria-label="Close tab"
+                    title="Close tab"
                     onClick={(e) => handleCloseTabClick(id, e)}
                     onKeyDown={(e) => {
                       if (e.key === "Enter" || e.key === " ") {
@@ -892,7 +928,7 @@ export function LiteratureTabs({
                         handleCloseTabClick(id, e)
                       }
                     }}
-                    className="flex-shrink-0 p-1 rounded-md hover:bg-muted text-muted-foreground/60 hover:text-rose-500 transition-all opacity-0 group-hover:opacity-100 focus:opacity-100 cursor-pointer"
+                    className="flex-shrink-0 cursor-pointer rounded-md p-1 text-muted-foreground/60 opacity-0 transition-all hover:bg-muted hover:text-rose-500 focus:opacity-100 group-hover:opacity-100"
                   >
                     <X className="h-3 w-3" />
                   </span>
@@ -1010,7 +1046,7 @@ export function LiteratureTabs({
                 )}
 
                 {stripPaperIds.map((id) => {
-                  const lit = stagedByIdMerged.get(id)
+                  const lit = stagedByIdMerged.get(id) ?? repoById.get(id)
                   return (
                     <TabsContent key={id} value={id} className="m-0 border-none p-0">
                       {lit ? (

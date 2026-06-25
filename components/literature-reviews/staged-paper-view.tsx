@@ -4,7 +4,7 @@ import { useEffect, useRef } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { SearchPaper } from "@/types/paper-search"
-import { BookOpen, Database, ExternalLink, FileText, Loader2, Trash2, Search } from "lucide-react"
+import { BookOpen, BookmarkPlus, ExternalLink, FileText, Loader2, Trash2 } from "lucide-react"
 import { LiteraturePdfPanel } from "./literature-pdf-panel"
 import { UploadLiteraturePdfDialog } from "./upload-literature-pdf-dialog"
 import { decodeHtmlEntities } from "@/lib/literature-abstract-display"
@@ -103,12 +103,13 @@ export function StagedPaperView({
   const pdfCardRef = useRef<HTMLDivElement>(null)
   useEffect(() => {
     if (!lit.pdf_storage_path) return
-    // Scroll once early, then again after the PDF has had time to render — the
-    // page's height grows as pages paint, so a single early scroll lands short.
-    const scroll = () =>
-      pdfCardRef.current?.scrollIntoView({ behavior: "smooth", block: "center" })
-    const timers = [300, 1100].map((d) => setTimeout(scroll, d))
-    return () => timers.forEach(clearTimeout)
+    // Single, stable scroll: aligning the section's TOP to the top is unaffected
+    // by the PDF growing below, so one pass lands right — no double-scroll jump.
+    const t = setTimeout(
+      () => pdfCardRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }),
+      350,
+    )
+    return () => clearTimeout(t)
   }, [lit.id, lit.pdf_storage_path])
 
   return (
@@ -125,18 +126,19 @@ export function StagedPaperView({
           </div>
           <div className="flex items-center gap-2">
             <Button
-              variant="outline"
+              variant="default"
               size="sm"
               onClick={() => void onSavePaper(rowToSearchPaper(lit), lit.id)}
               disabled={Boolean(savingLiteratureId)}
-              className="gap-2"
+              title="Keep this paper in your library"
+              className="gap-2 bg-primary hover:bg-[var(--n9-accent-hover)]"
             >
               {savingLiteratureId === lit.id ? (
                 <Loader2 className="h-4 w-4 animate-spin" />
               ) : (
-                <Database className="h-4 w-4" />
+                <BookmarkPlus className="h-4 w-4" />
               )}
-              Save to Repository
+              Save to library
             </Button>
             <Button
               variant="ghost"
@@ -151,15 +153,54 @@ export function StagedPaperView({
         </div>
       </div>
 
-      <div ref={pdfCardRef}>
+      <div ref={pdfCardRef} className="scroll-mt-4">
+      {lit.pdf_storage_path ? (
+        /* PDF attached: Replace lives in the reader's single header row, so the
+           document starts right at the top. */
+        <LiteraturePdfPanel
+          literatureId={lit.id}
+          pdfUrl={`/api/literature/${lit.id}/viewer-pdf`}
+          pdfFileName={lit.pdf_file_name || "paper.pdf"}
+          openInNewTabFallbackUrl={`/api/literature/${lit.id}/viewer-pdf`}
+          headerActions={
+            <UploadLiteraturePdfDialog
+              literatureReviews={[
+                {
+                  id: lit.id,
+                  title: lit.title,
+                  authors: lit.authors,
+                  journal: lit.journal,
+                  publication_year: lit.publication_year,
+                  doi: lit.doi,
+                  pmid: lit.pmid,
+                  pdf_storage_path: lit.pdf_storage_path,
+                  pdf_file_name: lit.pdf_file_name,
+                },
+              ]}
+              currentLiterature={{
+                id: lit.id,
+                title: lit.title,
+                authors: lit.authors,
+                journal: lit.journal,
+                publication_year: lit.publication_year,
+                doi: lit.doi,
+                pmid: lit.pmid,
+                pdf_storage_path: lit.pdf_storage_path,
+                pdf_file_name: lit.pdf_file_name,
+              }}
+              triggerLabel="Replace"
+              triggerSize="sm"
+              triggerClassName="h-8 px-2.5 text-xs"
+            />
+          }
+        />
+      ) : (
       <Card>
         <CardHeader className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between border-b pb-6">
           <div>
             <CardTitle className="text-lg">Paper Source & PDF</CardTitle>
             <CardDescription>
-              {lit.pdf_storage_path
-                ? "View and annotate the paper PDF inline."
-                : "Automatic import skipped or failed for this reference."}
+              Automatic import skipped or failed for this reference.
             </CardDescription>
           </div>
           <UploadLiteraturePdfDialog
@@ -187,18 +228,11 @@ export function StagedPaperView({
               pdf_storage_path: lit.pdf_storage_path,
               pdf_file_name: lit.pdf_file_name,
             }}
-            triggerLabel={lit.pdf_storage_path ? "Replace PDF" : "Upload PDF"}
+            triggerLabel="Upload PDF"
           />
         </CardHeader>
         <CardContent className="pt-6">
-          {lit.pdf_storage_path ? (
-            <LiteraturePdfPanel
-              literatureId={lit.id}
-              pdfUrl={`/api/literature/${lit.id}/viewer-pdf`}
-              pdfFileName={lit.pdf_file_name || "paper.pdf"}
-              openInNewTabFallbackUrl={`/api/literature/${lit.id}/viewer-pdf`}
-            />
-          ) : isClosedSource ? (
+          {isClosedSource ? (
             <div className="rounded-xl border border-dashed bg-muted/20 px-8 py-12 text-center">
               <div className="mb-4 inline-flex h-12 w-12 items-center justify-center rounded-full bg-muted">
                 <FileText className="h-6 w-6 text-muted-foreground" />
@@ -245,6 +279,7 @@ export function StagedPaperView({
           )}
         </CardContent>
       </Card>
+      )}
       </div>
     </div>
   )
