@@ -9,7 +9,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { ScrollArea } from '@/components/ui/scroll-area';
 import { cn } from '@/lib/utils';
 import { GroundingProvenanceBadge } from './grounding-provenance-badge';
 
@@ -22,6 +21,8 @@ export interface CitationSourceViewerSource {
   /** Display label `[N]` / `[3.2]`. */
   label: string;
   sourceType: string;
+  /** Record id, for SPA-aware "Open document" navigation. */
+  sourceId?: string | null;
   sourceName: string | null;
   sourceUrl: string | null;
   /** The full source body when available (not currently on the wire — kept so
@@ -137,6 +138,9 @@ export interface CitationSourceViewerProps {
   source: CitationSourceViewerSource | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  /** SPA-aware "Open document" handler (lab-note resolution, chat docking). When
+   * omitted, falls back to a plain link via `documentHref`. */
+  onOpenDocument?: (source: CitationSourceViewerSource) => void;
 }
 
 /**
@@ -149,6 +153,7 @@ export function CitationSourceViewer({
   source,
   open,
   onOpenChange,
+  onOpenDocument,
 }: CitationSourceViewerProps) {
   const span = useMemo(
     () => (source ? resolveSpan(source) : { body: '', start: 0, end: 0, via: 'none' as const }),
@@ -162,10 +167,10 @@ export function CitationSourceViewer({
       <DialogContent
         dialogSize="md"
         overlayClassName="z-[130]"
-        className="max-h-[min(85dvh,42rem)] gap-3"
+        className="max-h-[min(85dvh,42rem)] gap-3 overflow-hidden [&>*]:min-w-0"
       >
-        <DialogHeader>
-          <div className="flex flex-wrap items-center gap-2">
+        <DialogHeader className="min-w-0">
+          <div className="flex min-w-0 flex-wrap items-center gap-2">
             <span className="font-mono text-sm text-muted-foreground tabular-nums">
               [{source?.label ?? ''}]
             </span>
@@ -193,23 +198,37 @@ export function CitationSourceViewer({
                 <ExternalLink className="size-3 shrink-0" aria-hidden />
               </a>
             )}
-            {!source?.sourceUrl && source?.documentHref && (
-              <a
-                href={source.documentHref}
-                className="inline-flex items-center gap-1 text-primary hover:underline"
-              >
-                Open document
-                <ExternalLink className="size-3 shrink-0" aria-hidden />
-              </a>
+            {!source?.sourceUrl && (source?.documentHref || (onOpenDocument && source?.sourceId)) && (
+              onOpenDocument && source ? (
+                <button
+                  type="button"
+                  onClick={() => onOpenDocument(source)}
+                  className="inline-flex items-center gap-1 text-primary hover:underline"
+                >
+                  Open document
+                  <ExternalLink className="size-3 shrink-0" aria-hidden />
+                </button>
+              ) : (
+                <a
+                  href={source!.documentHref!}
+                  className="inline-flex items-center gap-1 text-primary hover:underline"
+                >
+                  Open document
+                  <ExternalLink className="size-3 shrink-0" aria-hidden />
+                </a>
+              )
             )}
           </DialogDescription>
         </DialogHeader>
 
-        <ScrollArea className="max-h-[min(60dvh,28rem)] w-full min-w-0 overflow-x-hidden rounded-md border border-border/60 bg-muted/10">
+        {/* A plain scroll container (not Radix ScrollArea, whose viewport sizes
+            to content and let wide text overflow) so the source text wraps and
+            stays inside the box. */}
+        <div className="max-h-[min(60dvh,28rem)] w-full min-w-0 overflow-y-auto overflow-x-hidden rounded-md border border-border/60 bg-muted/10">
           <div className="w-full min-w-0 p-3">
             <HighlightedBody span={span} />
           </div>
-        </ScrollArea>
+        </div>
 
         <p
           className={cn(

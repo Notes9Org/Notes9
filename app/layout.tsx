@@ -83,6 +83,11 @@ export default function RootLayout({
         />
       </head>
       <body
+        // Browser extensions (password managers, ad blockers, etc.) inject
+        // attributes like `data-atm-ext-installed` onto <body> before React
+        // hydrates, which would otherwise log a hydration-mismatch warning.
+        // Same guard already on <html>; harmless for our own attributes.
+        suppressHydrationWarning
         className="font-sans antialiased"
         style={{
           // Map global styles to CSS variables so Tailwind classes still function correctly

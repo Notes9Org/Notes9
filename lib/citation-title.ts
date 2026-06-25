@@ -138,3 +138,36 @@ export async function resolveTitleFromId(
   titleByIdCache.set(cacheKey, resolved);
   return resolved;
 }
+
+const labNoteExperimentCache = new Map<string, string | null>();
+
+/**
+ * Resolve a lab note's parent experiment id so a citation can deep-link straight
+ * to `/experiments/<exp>?tab=notes&noteId=…` via client-side navigation —
+ * avoiding the `/lab-notes/<id>` server redirect (which re-SSRs the experiment
+ * page). Cached per note id; null when not resolvable.
+ */
+export async function resolveLabNoteExperimentId(
+  noteId: string | null | undefined,
+): Promise<string | null> {
+  if (!noteId) return null;
+  if (labNoteExperimentCache.has(noteId)) return labNoteExperimentCache.get(noteId) ?? null;
+  let expId: string | null = null;
+  try {
+    const supabase = createClient();
+    const { data, error } = await supabase
+      .from('lab_notes')
+      .select('experiment_id')
+      .eq('id', noteId)
+      .limit(1)
+      .maybeSingle();
+    const rec = data as { experiment_id?: string | null } | null;
+    if (!error && rec && typeof rec.experiment_id === 'string') {
+      expId = rec.experiment_id.trim() || null;
+    }
+  } catch {
+    /* ignore — caller falls back to the redirect route */
+  }
+  labNoteExperimentCache.set(noteId, expId);
+  return expId;
+}
