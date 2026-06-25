@@ -3303,17 +3303,16 @@ export function RightSidebar({
                       'shadow-[6px_0_22px_-14px_rgba(20,14,8,0.28)] dark:shadow-[6px_0_26px_-12px_rgba(0,0,0,0.55)]',
                   )}
                   style={{
-                    // Open → full width; collapsed → a thin rail that keeps the
-                    // show button at the SAME vertical spot as the "Chats" header.
-                    width: expandedHistoryOpen ? historySidebar.width : '2.75rem',
+                    // Open → full width; collapsed → fully gone (width 0, no rail).
+                    // A floating button (below) re-opens it from the chat area.
+                    width: expandedHistoryOpen ? historySidebar.width : 0,
                     transition: historySidebar.isResizing
                       ? 'none'
                       : 'width 0.5s cubic-bezier(0.22, 1, 0.36, 1)',
                   }}
                 >
-                {expandedHistoryOpen ? (
-                /* Fixed-width inner content so it's clipped (not reflowed) while
-                    the panel collapses. */
+                {/* Fixed-width inner content so it's clipped (not reflowed) while
+                    the panel collapses to 0. */}
                 <div
                   className="flex h-full min-h-0 flex-col gap-1 p-2"
                   style={{ width: historySidebar.width }}
@@ -3397,24 +3396,6 @@ export function RightSidebar({
                     <ScrollBar orientation="horizontal" />
                   </ScrollArea>
                 </div>
-                ) : (
-                  /* Collapsed rail — just the show button, aligned to the same
-                     vertical position as the "Chats" header row when open. */
-                  <div className="flex h-full min-h-0 flex-col gap-1 p-2">
-                    <div className="flex h-8 shrink-0 items-center justify-center">
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-7 w-7 shrink-0"
-                        onClick={() => setExpandedHistoryOpen(true)}
-                        title="Show chat history"
-                        aria-label="Show chat history"
-                      >
-                        <ChevronsRight className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  </div>
-                )}
               </aside>
               {expandedHistoryOpen && (
                 <ResizeHandle
@@ -3428,7 +3409,22 @@ export function RightSidebar({
             )}
 
             {/* Main chat area (narrow: only this; full screen: right side) */}
-            <div className="flex-1 flex flex-col min-h-0 min-w-0 overflow-hidden">
+            <div className="relative flex-1 flex flex-col min-h-0 min-w-0 overflow-hidden">
+              {/* Floating "show chat history" button — appears only when the
+                  history panel is collapsed (no rail), at the same vertical spot
+                  as the "Chats" header so reopening feels anchored. */}
+              {layoutExpanded && !expandedHistoryOpen && (
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="absolute left-2 top-2 z-20 h-7 w-7 rounded-md bg-background/80 text-foreground/70 shadow-sm backdrop-blur-sm hover:bg-accent hover:text-foreground"
+                  onClick={() => setExpandedHistoryOpen(true)}
+                  title="Show chat history"
+                  aria-label="Show chat history"
+                >
+                  <ChevronsRight className="h-4 w-4" />
+                </Button>
+              )}
               {messages.length === 0 && !literature ? (
                 isPageVariant ? (
                   <div className="relative min-h-0 flex-1 overflow-hidden">
