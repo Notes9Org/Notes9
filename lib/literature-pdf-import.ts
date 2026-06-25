@@ -119,26 +119,85 @@ async function verifyPdfCandidatesViaCatalyst(params: {
 /** Shown in User-Agent for NCBI/PMC polite use — must be a reachable contact URL. */
 const NOTES9_CONTACT = process.env.NOTES9_CONTACT_URL ?? "https://notes9.com"
 
-const NCBI_USER_AGENT = `Mozilla/5.0 (compatible; Notes9/1.0; +${NOTES9_CONTACT}) literature-pdf-import`
+/**
+ * Polite, self-identifying UA for NCBI / Europe PMC / EBI **API** calls (elink,
+ * oa.fcgi): these services run a "polite pool" that *wants* identification.
+ */
+const NCBI_USER_AGENT = `Mozilla/5.0 (compatible; Notes9/1.0; +${NOTES9_CONTACT})`
+
+/**
+ * Plain real-browser UA for **publisher PDF byte fetches**. Cloudflare-fronted
+ * hosts (MDPI, Frontiers, Wiley, …) challenge requests whose UA self-identifies
+ * as a bot — so for those hosts we look like a normal browser. (We never bypass a
+ * real bot wall; this only avoids being flagged when fetching genuinely-OA PDFs.)
+ */
+const BROWSER_USER_AGENT =
+  "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+
+/** Hosts that run a polite pool and prefer the identified Notes9 UA. */
+function isPolitePoolHost(host: string): boolean {
+  return (
+    host.endsWith("nih.gov") ||
+    host.includes("ncbi.nlm.nih.gov") ||
+    host.includes("europepmc.org") ||
+    host.endsWith("ebi.ac.uk")
+  )
+}
 
 function pdfFetchHeaders(pdfUrl: string): Record<string, string> {
-  const headers: Record<string, string> = {
-    "User-Agent": NCBI_USER_AGENT,
-    Accept: "application/pdf,application/octet-stream,*/*;q=0.8",
-  }
+  let host = ""
   try {
-    const host = new URL(pdfUrl).hostname.toLowerCase()
-    if (host.includes("ncbi.nlm.nih.gov") || host.endsWith("nih.gov")) {
-      headers.Referer = "https://www.ncbi.nlm.nih.gov/"
-    } else if (host.includes("europepmc.org")) {
-      headers.Referer = "https://europepmc.org/"
-    } else if (host.includes("ebi.ac.uk")) {
-      headers.Referer = "https://www.ebi.ac.uk/"
-    }
+    host = new URL(pdfUrl).hostname.toLowerCase()
   } catch {
     /* ignore invalid URL */
   }
+
+  if (isPolitePoolHost(host)) {
+    const headers: Record<string, string> = {
+      "User-Agent": NCBI_USER_AGENT,
+      Accept: "application/pdf,application/octet-stream,*/*;q=0.8",
+    }
+    if (host.includes("europepmc.org")) headers.Referer = "https://europepmc.org/"
+    else if (host.endsWith("ebi.ac.uk")) headers.Referer = "https://www.ebi.ac.uk/"
+    else headers.Referer = "https://www.ncbi.nlm.nih.gov/"
+    return headers
+  }
+
+  // Publisher / repository hosts: look like a real browser to avoid bot-wall 403s.
+  const headers: Record<string, string> = {
+    "User-Agent": BROWSER_USER_AGENT,
+    Accept: "application/pdf,application/xhtml+xml,text/html;q=0.9,*/*;q=0.8",
+    "Accept-Language": "en-US,en;q=0.9",
+    "Sec-Fetch-Dest": "document",
+    "Sec-Fetch-Mode": "navigate",
+    "Sec-Fetch-Site": "none",
+    "Upgrade-Insecure-Requests": "1",
+  }
+  // A same-origin Referer (the host root) reads as a click-through from the
+  // article page rather than a hot-linked scrape.
+  if (host) headers.Referer = `https://${host}/`
   return headers
+}
+
+/**
+ * Recognize an HTML bot/Proof-of-Work/Cloudflare interstitial served with a 200.
+ * These come back as `text/html` (or start with `<`) and never carry the `%PDF`
+ * magic bytes — when we see one we skip to the next candidate URL rather than
+ * storing the challenge page as if it were the paper.
+ */
+export function looksLikeHtmlInterstitial(contentType: string | null, head: Uint8Array): boolean {
+  if (contentType && /text\/html|application\/xhtml/i.test(contentType)) return true
+  // %PDF = 0x25 0x50 0x44 0x46
+  const isPdf =
+    head.length >= 4 && head[0] === 0x25 && head[1] === 0x50 && head[2] === 0x44 && head[3] === 0x46
+  if (isPdf) return false
+  // Leading '<' (after optional BOM/whitespace) → HTML/XML document.
+  for (let i = 0; i < Math.min(head.length, 8); i++) {
+    const b = head[i]
+    if (b === 0x20 || b === 0x09 || b === 0x0a || b === 0x0d || b === 0xef || b === 0xbb || b === 0xbf) continue
+    return b === 0x3c // '<'
+  }
+  return false
 }
 
 /**
@@ -208,18 +267,25 @@ function extractPmcNumericId(paper: SearchPaper): string | null {
 }
 
 /**
- * PMC often serves HTML at .../pdf/ while the file is at .../pdf/main.pdf.
- * Try several mirrors and path patterns.
+ * PMC mirrors/paths for an article's PDF, ordered **non-gated first**.
+ *
+ * NLM's own `pmc.ncbi.nlm.nih.gov/.../pdf*` endpoints frequently serve a JS
+ * Proof-of-Work bot interstitial (HTML, not PDF bytes), so the Europe PMC render
+ * mirror — which streams the PDF without a bot challenge — is tried first. The
+ * bare `…/pdf/` folder forms (most POW-prone) come last.
  */
 export function buildPmcPdfCandidateUrls(pmcNumeric: string): string[] {
   const id = `PMC${pmcNumeric.replace(/^PMC/i, "")}`
   return [
+    // Non-gated Europe PMC render mirror first.
+    `https://europepmc.org/backend/ptpmcrender.fcgi?accid=${encodeURIComponent(id)}&blobtype=pdf`,
+    `https://europepmc.org/articles/${id}?pdf=render`,
+    // NLM direct-file forms (sometimes bytes, sometimes POW interstitial).
     `https://pmc.ncbi.nlm.nih.gov/articles/${id}/pdf/main.pdf`,
     `https://www.ncbi.nlm.nih.gov/pmc/articles/${id}/pdf/main.pdf`,
-    `https://europepmc.org/backend/ptpmcrender.fcgi?accid=${encodeURIComponent(id)}&blobtype=pdf`,
+    // Bare folder forms — most likely to return the POW interstitial; last.
     `https://pmc.ncbi.nlm.nih.gov/articles/${id}/pdf/`,
     `https://www.ncbi.nlm.nih.gov/pmc/articles/${id}/pdf/`,
-    `https://europepmc.org/articles/${id}?pdf=render`,
   ]
 }
 
@@ -370,7 +436,15 @@ async function fetchFirstPdfBuffer(urls: string[]): Promise<{ buffer: ArrayBuffe
 
       const buffer = await response.arrayBuffer()
       const len = buffer.byteLength
-      const headerErr = validatePdfBuffer(len, new Uint8Array(buffer.slice(0, 8)))
+      const head = new Uint8Array(buffer.slice(0, 8))
+      // A 200 that returns an HTML bot/POW/Cloudflare interstitial is not the
+      // paper — skip it (don't store the challenge page) and try the next mirror.
+      if (looksLikeHtmlInterstitial(response.headers.get("content-type"), head)) {
+        lastIssue = "Source returned an HTML bot/verification page instead of a PDF"
+        console.warn("[literature-pdf-import] skipped non-PDF interstitial:", pdfUrl)
+        continue
+      }
+      const headerErr = validatePdfBuffer(len, head)
       if (!headerErr) {
         return { buffer, usedUrl: pdfUrl }
       }
@@ -595,8 +669,10 @@ export async function tryImportPdfForPaper(params: {
   literatureId: string
   paper: SearchPaper
   matchSource: PdfMatchSource
+  /** Signed-in user's email — passed to Unpaywall as the polite-pool contact. */
+  contactEmail?: string | null
 }): Promise<TryImportPdfResult> {
-  const resolved = await resolveOaSources(params.paper)
+  const resolved = await resolveOaSources(params.paper, { contactEmail: params.contactEmail })
   const pdfUrls = resolved.pdfUrls
   const resolvedAbstract = resolved.abstract
 

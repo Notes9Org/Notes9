@@ -18,6 +18,7 @@ import {
   upgradeInsecurePdfUrlIfKnownHost,
 } from "@/lib/literature-pdf-urls"
 import { resolvePmcOaPdfUrls } from "@/lib/literature-pdf-import"
+import { resolveUnpaywallPdfUrl } from "@/lib/unpaywall"
 
 const NOTES9_CONTACT_EMAIL = process.env.OPENALEX_CONTACT_EMAIL
 const OA_USER_AGENT = NOTES9_CONTACT_EMAIL
@@ -220,42 +221,49 @@ async function resolveFromEuropePmc(
 /**
  * Gather OA PDF candidate URLs from every available signal on the paper, plus a best-effort
  * abstract. URLs are de-duped (order preserved) and every one passes the SSRF allowlist check.
+ *
+ * `contactEmail` is the signed-in user's email, sent to Unpaywall as the polite-pool
+ * contact (it does not need to be registered); falls back to `UNPAYWALL_EMAIL`.
  */
 export async function resolveOaSources(
-  paper: SearchPaper
+  paper: SearchPaper,
+  opts?: { contactEmail?: string | null }
 ): Promise<{ pdfUrls: string[]; oaPackageTgzUrl: string | null; abstract: string | null }> {
   const normalizedDoi = normalizeDoi(paper.doi)
   const pdfUrls: string[] = []
 
-  // 1. Card href (expanded: PMC folder → main.pdf, http → https).
-  if (paper.pdfUrl?.trim()) {
-    for (const u of expandSearchCardPdfUrls(paper.pdfUrl.trim())) {
-      addCandidate(pdfUrls, u)
-    }
-  }
+  // Candidates are ordered **non-gated first**: sources that stream PDF bytes
+  // without a bot/Proof-of-Work/Cloudflare challenge come before the publisher
+  // card href and the POW-prone NLM `/pdf/` forms. All candidates are still
+  // tried — only the order changes — so reliability improves without losing reach.
 
-  // 2. Preprint construction from DOI.
+  // 1. Preprint direct (arXiv/bioRxiv/medRxiv) — open repositories, never gated.
   if (normalizedDoi) {
     for (const u of preprintPdfUrlsFromDoi(normalizedDoi, paper.source)) {
       addCandidate(pdfUrls, u)
     }
   }
-
-  // 2b. arXiv papers without a DOI: derive the id from the card/article URL.
+  // 1b. arXiv papers without a DOI: derive the id from the card/article URL.
   const arxivId = arxivIdFromUrl(paper.pdfUrl) ?? arxivIdFromUrl(paper.articlePageUrl)
   if (arxivId) {
     addCandidate(pdfUrls, `https://arxiv.org/pdf/${arxivId}`)
   }
 
-  // 3 + 4. Network resolvers (OpenAlex, Europe PMC) — run together; resilient to failure.
-  const [openAlex, europePmc] = await Promise.all([
+  // 2. Network resolvers — run together (free, parallel; resilient to failure):
+  //    OpenAlex, Europe PMC, and Unpaywall (the cross-publisher OA locator).
+  const [openAlex, europePmc, unpaywallPdfUrl] = await Promise.all([
     resolveFromOpenAlex(normalizedDoi),
     resolveFromEuropePmc(paper, normalizedDoi),
+    resolveUnpaywallPdfUrl(normalizedDoi, opts?.contactEmail),
   ])
-  addCandidate(pdfUrls, openAlex.pdfUrl)
+  // 2a. Europe PMC full text (render mirror) — non-gated.
   addCandidate(pdfUrls, europePmc.pdfUrl)
+  // 2b. Unpaywall best OA PDF (often a repository-hosted, non-gated copy).
+  addCandidate(pdfUrls, unpaywallPdfUrl)
+  // 2c. OpenAlex best OA location.
+  addCandidate(pdfUrls, openAlex.pdfUrl)
 
-  // 5. PMC OA subset (also surfaces the OA package .tgz fallback).
+  // 3. PMC OA subset (render-first internally; also surfaces the OA package .tgz).
   let oaPackageTgzUrl: string | null = null
   try {
     const pmc = await resolvePmcOaPdfUrls(paper)
@@ -263,6 +271,14 @@ export async function resolveOaSources(
     oaPackageTgzUrl = pmc.oaPackageTgzUrl
   } catch {
     /* ignore — PMC resolution is best-effort */
+  }
+
+  // 4. Card href (expanded: PMC folder → main.pdf, http → https) — last, since it
+  //    is frequently the gated publisher URL or the POW-prone NLM `/pdf/` form.
+  if (paper.pdfUrl?.trim()) {
+    for (const u of expandSearchCardPdfUrls(paper.pdfUrl.trim())) {
+      addCandidate(pdfUrls, u)
+    }
   }
 
   // Abstract: Europe PMC → OpenAlex, then preprint-API fallbacks for brand-new
