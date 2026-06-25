@@ -155,10 +155,10 @@ export function StagedPaperView({
       <div ref={pdfCardRef}>
       {lit.pdf_storage_path ? (
         /* PDF attached: a single compact toolbar so the reader starts at the top. */
-        <div className="space-y-3">
-          <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 rounded-lg border bg-muted/30 px-3 py-2">
-            <span className="flex min-w-0 items-center gap-2 text-sm font-medium text-foreground">
-              <FileText className="h-4 w-4 shrink-0" />
+        <div className="space-y-2">
+          <div className="flex items-center justify-between gap-2 rounded-md border bg-muted/20 py-1 pl-2.5 pr-1">
+            <span className="flex min-w-0 items-center gap-1.5 text-xs font-medium text-foreground">
+              <FileText className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
               <span className="truncate">{lit.pdf_file_name || "Attached PDF"}</span>
             </span>
             <UploadLiteraturePdfDialog
@@ -186,7 +186,9 @@ export function StagedPaperView({
                 pdf_storage_path: lit.pdf_storage_path,
                 pdf_file_name: lit.pdf_file_name,
               }}
-              triggerLabel="Replace PDF"
+              triggerLabel="Replace"
+              triggerSize="sm"
+              triggerClassName="h-7 px-2 text-xs"
             />
           </div>
           <LiteraturePdfPanel

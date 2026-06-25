@@ -1058,6 +1058,19 @@ export function RightSidebar({
 
   const currentSessionRef = useRef<string | null>(null);
 
+  // Signal the layout when a real conversation is underway (or via a streamed
+  // literature summary) so the docked Catalyst sidebar can widen for comfortable
+  // reading. Only the docked variant cares — the full page is already wide.
+  const hasConversation = messages.length > 0 || !!literature;
+  useEffect(() => {
+    if (isPageVariant || typeof window === 'undefined') return;
+    window.dispatchEvent(
+      new CustomEvent('notes9:catalyst-chat-active', {
+        detail: { active: hasConversation },
+      }),
+    );
+  }, [hasConversation, isPageVariant]);
+
   const agentStream = useAgentStream();
   const literatureAgentStream = useLiteratureAgentStream();
   const contextMentionCandidates = useLiteratureMentionCandidates();

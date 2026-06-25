@@ -385,6 +385,23 @@ function AppLayoutBody({ children }: AppLayoutProps) {
   // is the persisted, user-set value.
   const catalystWidth = rightSidebar.width
 
+  // Once a real conversation starts, widen the docked Catalyst sidebar for
+  // comfortable reading — but only upward, and ephemerally (never persisted), so
+  // it can't override a narrower width the user has deliberately dragged later.
+  const chatActiveWidth = isTablet ? 460 : 540
+  useEffect(() => {
+    const onChatActive = (e: Event) => {
+      const active = (e as CustomEvent<{ active: boolean }>).detail?.active
+      if (!active) return
+      rightSidebar.setWidth((prev) => (prev < chatActiveWidth ? chatActiveWidth : prev))
+    }
+    window.addEventListener('notes9:catalyst-chat-active', onChatActive as EventListener)
+    return () =>
+      window.removeEventListener('notes9:catalyst-chat-active', onChatActive as EventListener)
+    // setWidth is a stable useState setter; chatActiveWidth covers the tablet flag.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [chatActiveWidth])
+
   return (
     <>
       <SidebarProvider defaultOpen={!isMobile} open={sidebarOpen} onOpenChange={setSidebarOpen}>

@@ -493,24 +493,12 @@ ER  - `;
           {literature.pdf_storage_path ? (
             /* PDF attached: a single compact toolbar (file name + meta + replace)
                so the reader starts right at the top — no stacked header/description. */
-            <div className="space-y-3">
-              <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 rounded-lg border bg-muted/30 px-3 py-2">
-                <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 text-sm">
-                  <span className="flex min-w-0 items-center gap-2 font-medium text-foreground">
-                    <FileText className="h-4 w-4 shrink-0" />
-                    <span className="truncate">{literature.pdf_file_name || "Attached PDF"}</span>
-                  </span>
-                  {literature.pdf_uploaded_at && (
-                    <span className="text-xs text-muted-foreground">
-                      Uploaded {formatDate(literature.pdf_uploaded_at)}
-                    </span>
-                  )}
-                  {literature.pdf_match_source && (
-                    <Badge variant="outline" className="text-2xs">
-                      {literature.pdf_match_source}
-                    </Badge>
-                  )}
-                </div>
+            <div className="space-y-2">
+              <div className="flex items-center justify-between gap-2 rounded-md border bg-muted/20 py-1 pl-2.5 pr-1">
+                <span className="flex min-w-0 items-center gap-1.5 text-xs font-medium text-foreground">
+                  <FileText className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                  <span className="truncate">{literature.pdf_file_name || "Attached PDF"}</span>
+                </span>
                 <UploadLiteraturePdfDialog
                   literatureReviews={[
                     {
@@ -536,7 +524,9 @@ ER  - `;
                     pdf_storage_path: literature.pdf_storage_path,
                     pdf_file_name: literature.pdf_file_name,
                   }}
-                  triggerLabel="Replace PDF"
+                  triggerLabel="Replace"
+                  triggerSize="sm"
+                  triggerClassName="h-7 px-2 text-xs"
                 />
               </div>
               <LiteraturePdfPanel

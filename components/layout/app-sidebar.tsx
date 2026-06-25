@@ -759,6 +759,44 @@ export function AppSidebar() {
                             })}
                           </SidebarMenuSub>
                         )}
+
+                        {/* Collapsed rail: surface the project's sub-pages
+                            (Experiments, Lab notes, Protocols, Samples, …) as a
+                            flat stack of icons. Clicking one navigates AND expands
+                            the sidebar so the full nav is visible on arrival. */}
+                        {isProjectItemWithScope && isIconMode && (
+                          <div className="mt-0.5 flex w-full flex-col items-center gap-0.5">
+                            {PROJECT_SCOPED_NAV.flatMap((s) => [
+                              s,
+                              ...(s.children ?? []),
+                            ]).map((sub) => {
+                              const SubIcon = sub.icon;
+                              const subHref = `${sub.basePath}${scope.scopedQueryString}`;
+                              const subActive =
+                                mounted &&
+                                (pathname === sub.basePath ||
+                                  pathname.startsWith(sub.basePath + "/"));
+                              return (
+                                <SidebarMenuButton
+                                  key={sub.basePath}
+                                  asChild
+                                  isActive={subActive}
+                                  tooltip={sub.name}
+                                  className="group transition-all duration-150 hover:bg-[color:color-mix(in_oklab,var(--background)_78%,var(--primary)_22%)] hover:text-sidebar-foreground active:scale-[0.985] dark:hover:bg-sidebar-accent dark:hover:text-sidebar-accent-foreground data-[active=true]:bg-transparent data-[active=true]:text-sidebar-foreground"
+                                >
+                                  <Link
+                                    href={subHref}
+                                    aria-label={sub.name}
+                                    onClick={() => setOpen(true)}
+                                  >
+                                    <SubIcon />
+                                    <span className="hidden">{sub.name}</span>
+                                  </Link>
+                                </SidebarMenuButton>
+                              );
+                            })}
+                          </div>
+                        )}
                       </SidebarMenuItem>
                     );
               })}
