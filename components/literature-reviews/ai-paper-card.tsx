@@ -26,6 +26,22 @@ function readUrl(r: AiSearchResult): string | null {
   return null
 }
 
+/**
+ * Same-origin proxy URL for an open-access PMC paper, so a "Read" with no host
+ * stage handler streams the PDF through our server (which uses non-gated mirrors)
+ * instead of navigating the browser straight to NLM's Proof-of-Work page.
+ * Returns null when the paper has no PMC/PMID id to resolve.
+ */
+function oaProxyUrl(p: SearchPaper | null | undefined): string | null {
+  if (!p?.isOpenAccess) return null
+  const pmcMatch = p.pdfUrl?.match(/PMC(\d+)/i)
+  const params = new URLSearchParams()
+  if (pmcMatch?.[1]) params.set('pmc', pmcMatch[1])
+  if (p.pmid) params.set('pmid', p.pmid)
+  const qs = params.toString()
+  return qs ? `/api/literature/oa-pdf?${qs}` : null
+}
+
 /** Render a (already paragraph-broken) abstract as spaced paragraphs, bolding a
  *  leading structured-section label ("Background:", "Methods:", …). */
 function renderAbstractParagraphs(text: string) {
@@ -201,6 +217,14 @@ export function AiPaperCard({
       if (!canReadInline) {
         toast.info('Not open access — download the PDF and upload it in its tab to read it in Notes9.')
       }
+      return
+    }
+    // No host stage handler: for an open-access PMC paper, read via our same-origin
+    // proxy (server fetches a non-gated mirror) rather than sending the browser to
+    // NLM's bot/verification page. Otherwise fall back to the external source.
+    const proxied = oaProxyUrl(result.paper)
+    if (proxied) {
+      window.open(proxied, '_blank', 'noopener,noreferrer')
       return
     }
     if (href) window.open(href, '_blank', 'noopener,noreferrer')

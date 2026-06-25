@@ -161,6 +161,7 @@ export async function stagePaper(
 
     const literatureId = created.id
     const userId = user.id
+    const userEmail = user.email
 
     revalidatePath("/literature-reviews")
 
@@ -176,6 +177,7 @@ export async function stagePaper(
           literatureId,
           paper,
           matchSource: "staging_pubmed_import",
+          contactEmail: userEmail,
         })
         await backfillAbstractIfBlank(
           bgSupabase,
@@ -270,6 +272,7 @@ export async function savePaperToRepository(
           literatureId: stagingRow.id,
           paper,
           matchSource: "repository_pubmed_import",
+          contactEmail: user.email,
         })
         await backfillAbstractIfBlank(
           supabase,
@@ -345,6 +348,7 @@ export async function savePaperToRepository(
       literatureId: data.id,
       paper,
       matchSource: "repository_pubmed_import",
+      contactEmail: user.email,
     })
     await backfillAbstractIfBlank(supabase, data.id, paper.abstract, importResult.resolvedAbstract)
     if (!importResult.ok && importResult.reason === "fetch_failed" && "message" in importResult) {
