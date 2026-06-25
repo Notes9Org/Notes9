@@ -28,6 +28,17 @@
   --chart-3: oklch(0.398 0.07 227.392);
   --chart-4: oklch(0.828 0.189 84.429);
   --chart-5: oklch(0.769 0.188 70.08);
+  /* ── Workspace tone tokens ─────────────────────────────────────────── */
+  --n9-accent: oklch(0.35 0.12 145);
+  --n9-accent-light: oklch(0.95 0.04 145);
+  --tone-leaf-fg: oklch(0.35 0.1 138);
+  --tone-leaf-bg: oklch(0.94 0.025 138);
+  --tone-warm-fg: oklch(0.44 0.1 32);
+  --tone-warm-bg: oklch(0.94 0.025 32);
+  /* ── Experiment step category border tokens ─────────────────────────── */
+  --category-computational: oklch(0.62 0.13 200);
+  --category-decision: oklch(0.78 0.15 80);
+  --category-doc: oklch(0.6 0 0);
   --radius: 0.625rem;
   --sidebar: oklch(0.985 0 0);
   --sidebar-foreground: oklch(0.145 0 0);
@@ -64,6 +75,17 @@
   --chart-3: oklch(0.769 0.188 70.08);
   --chart-4: oklch(0.627 0.265 303.9);
   --chart-5: oklch(0.645 0.246 16.439);
+  /* ── Workspace tone tokens ─────────────────────────────────────────── */
+  --n9-accent: oklch(0.72 0.14 145);
+  --n9-accent-light: oklch(0.22 0.04 145);
+  --tone-leaf-fg: oklch(0.72 0.13 138);
+  --tone-leaf-bg: oklch(0.21 0.03 138);
+  --tone-warm-fg: oklch(0.72 0.12 32);
+  --tone-warm-bg: oklch(0.21 0.025 32);
+  /* ── Experiment step category border tokens ─────────────────────────── */
+  --category-computational: oklch(0.7 0.14 200);
+  --category-decision: oklch(0.82 0.16 80);
+  --category-doc: oklch(0.65 0 0);
   --sidebar: oklch(0.205 0 0);
   --sidebar-foreground: oklch(0.985 0 0);
   --sidebar-primary: oklch(0.488 0.243 264.376);

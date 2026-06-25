@@ -275,11 +275,11 @@ export function LabNotesTab({
           el.scrollIntoView({ behavior: 'smooth', block: 'center' });
           setTimeout(() => {
             document.querySelectorAll('.rag-chunk-highlight').forEach((e) => e.classList.add('fading'));
-            setTimeout(() => { try { editor.commands.clearRagHighlight(); } catch (err) { console.warn('clearRagHighlight (fade) failed', err); } }, 1_200);
+            setTimeout(() => { try { editor.commands.clearRagHighlight(); } catch (err) { if (process.env.NODE_ENV !== 'production') { console.warn('clearRagHighlight (fade) failed', err); } } }, 1_200);
           }, 12_000);
         } else if (attempt < retryDelays.length - 1) {
           // No element yet — clear and retry after a longer delay
-          try { editor.commands.clearRagHighlight(); } catch (err) { console.warn('clearRagHighlight (retry) failed', err); }
+          try { editor.commands.clearRagHighlight(); } catch (err) { if (process.env.NODE_ENV !== 'production') { console.warn('clearRagHighlight (retry) failed', err); } }
           attempt++;
           setTimeout(tryHighlight, retryDelays[attempt]);
         }
@@ -446,7 +446,7 @@ export function LabNotesTab({
     isCreatingRef.current = isCreating;
   }, [isCreating]);
 
-  const fetchNotes = useCallback(async (preferredNoteId?: string | null) => {
+  const fetchNotes = useCallback(async (preferredNoteId?: string | null, signal?: { cancelled: boolean }) => {
     try {
       const supabase = createClient();
       const { data, error } = await supabase
@@ -454,6 +454,9 @@ export function LabNotesTab({
         .select("*")
         .eq("experiment_id", experimentId)
         .order("created_at", { ascending: false });
+
+      // Bail out if the caller's effect was superseded (rapid experiment/note switch).
+      if (signal?.cancelled) return;
 
       if (error) throw error;
       setNotes(data || []);
@@ -471,6 +474,7 @@ export function LabNotesTab({
         // briefly remounts the editor via `key={selectedNote?.id}` and wipes
         // any in-flight diff/edit state for no user-visible benefit.
         if (next && next.id !== selectedNoteIdRef.current) {
+          if (signal?.cancelled) return;
           setSelectedNote(next);
           setFormData({
             title: next.title,
@@ -480,6 +484,7 @@ export function LabNotesTab({
         }
       }
     } catch (error: any) {
+      if (signal?.cancelled) return;
       console.error("Error fetching notes:", error);
       toast({
         title: "Couldn't load lab notes",
@@ -503,16 +508,13 @@ export function LabNotesTab({
   useEffect(() => {
     // Guard against a previous experiment's `fetchNotes` resolving after the
     // user has navigated to a new experiment and overwriting the fresh
-    // `notes` list. fetchNotes itself can't cancel (it's a useCallback), but
-    // we can flip a flag to no-op late state writers indirectly — here we
-    // just skip the call if it would land on an unmounted/stale instance.
-    let cancelled = false;
-    (async () => {
-      if (cancelled) return;
-      await fetchNotes(noteIdFromQuery);
-    })();
+    // `notes` list. The signal object is passed into fetchNotes so it can
+    // bail out of any setState calls that would otherwise apply stale data
+    // after rapid navigation.
+    const signal = { cancelled: false };
+    void fetchNotes(noteIdFromQuery, signal);
     return () => {
-      cancelled = true;
+      signal.cancelled = true;
     };
   }, [experimentId, noteIdFromQuery, fetchNotes]);
 
@@ -953,7 +955,9 @@ export function LabNotesTab({
           window.sessionStorage.setItem('n9_first_note_sent', '1')
         }
       } catch (err) {
-        console.warn('first-note RUM/sessionStorage write failed', err)
+        if (process.env.NODE_ENV !== 'production') {
+          console.warn('first-note RUM/sessionStorage write failed', err)
+        }
       }
 
       toast({
@@ -1014,13 +1018,15 @@ export function LabNotesTab({
       const message = error?.message ?? null;
       const details = error?.details ?? null;
       const hint = error?.hint ?? null;
-      console.error("Error fetching linked protocols:", {
-        noteId,
-        code,
-        message,
-        details,
-        hint,
-      });
+      if (process.env.NODE_ENV !== 'production') {
+        console.error("Error fetching linked protocols:", {
+          noteId,
+          code,
+          message,
+          details,
+          hint,
+        });
+      }
       setLinkedProtocols([]);
       // Only surface a toast for a *real* failure. An empty error object (no
       // code/message — e.g. an RLS-filtered embed or aborted request on note

@@ -2,6 +2,7 @@
 
 import Image from 'next/image';
 import {
+  memo,
   useState,
   useRef,
   useEffect,
@@ -13,7 +14,7 @@ import {
 import { renderToStaticMarkup } from 'react-dom/server';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useChat } from '@ai-sdk/react';
-import { DefaultChatTransport } from 'ai';
+import { DefaultChatTransport, type UIMessage } from 'ai';
 import { Button } from '@/components/ui/button';
 import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
@@ -410,6 +411,301 @@ function sortLiteratureCandidates(
     return a.title.localeCompare(b.title, undefined, { sensitivity: 'base' });
   });
 }
+
+// ---------------------------------------------------------------------------
+// Module-level helpers — pure functions hoisted out of RightSidebar so the
+// SidebarChatMessageItem memo'd component can close over them without
+// re-creating its own definition on every parent render.
+// ---------------------------------------------------------------------------
+
+/** If string is stringified JSON parts (single or double/triple wrapped),
+ *  unwrap to plain text. Never return raw JSON. */
+function sidebarNormalizeContentString(raw: string): string {
+  let s = raw.trim();
+  if (!s) return '';
+  const maxUnwrap = 5;
+  for (let i = 0; i < maxUnwrap; i++) {
+    const looksLikeJsonParts =
+      (s.startsWith('[') || s.includes('[')) && s.includes('"type"') && s.includes('"text"');
+    if (!looksLikeJsonParts) return s;
+    try {
+      const parsed = JSON.parse(s) as Array<{ type?: string; text?: string }>;
+      if (!Array.isArray(parsed)) return s;
+      const text = parsed
+        .filter((p) => p?.type === 'text' && typeof p.text === 'string')
+        .map((p) => p.text!)
+        .join('');
+      if (!text || text === s) return s;
+      s = text;
+    } catch {
+      const segments: string[] = [];
+      const re = /"text"\s*:\s*"((?:[^"\\]|\\.)*)"/g;
+      let m: RegExpExecArray | null;
+      while ((m = re.exec(s)) !== null) {
+        segments.push(m[1].replace(/\\"/g, '"').replace(/\\n/g, '\n'));
+      }
+      if (segments.length === 0 && /"text"\s*:\s*"/.test(s)) {
+        const valueStart = s.indexOf('"text"');
+        const afterKey = s.indexOf('"', valueStart + 6) + 1;
+        if (afterKey > 0) segments.push(s.slice(afterKey).replace(/\\"/g, '"').replace(/\\n/g, '\n'));
+      }
+      return segments.length > 0 ? segments.join('') : s;
+    }
+  }
+  return s;
+}
+
+/** Extract plain text from a sidebar chat message object. */
+function sidebarGetMessageContent(message: UIMessage): string {
+  let raw = '';
+  const content = (message as { content?: unknown }).content;
+  if (content != null && Array.isArray(content)) {
+    raw = (content as Array<{ type?: string; text?: string }>)
+      .filter((p) => p?.type === 'text' && typeof p.text === 'string')
+      .map((p) => p.text!)
+      .join('');
+  }
+  if (!raw && message.parts?.length) {
+    raw = message.parts
+      .filter((p) => p.type === 'text')
+      .map((p) => ('text' in p ? String((p as { text?: unknown }).text ?? '') : ''))
+      .join('');
+  }
+  if (!raw && content != null && typeof content === 'string') {
+    raw = content;
+  }
+  if (!raw) return '';
+  return sidebarNormalizeContentString(raw);
+}
+
+// ---------------------------------------------------------------------------
+// Memoized per-message render unit for the right-sidebar message list.
+// Only the actively streaming message (the last one) re-renders on each token;
+// all settled history messages skip re-render because their props are stable.
+// ---------------------------------------------------------------------------
+
+interface SidebarChatMessageItemProps {
+  message: UIMessage;
+  /** Pre-extracted plain-text content — stable string for settled messages. */
+  rawContent: string;
+  /** Attachment list for this message id (stable Map entry for settled msgs). */
+  messageAttachments?: Attachment[];
+  /**
+   * True only for the final message in the list.
+   * False for all history entries → stable for those entries during streaming.
+   */
+  isLast: boolean;
+  /** True while the last user message is waiting for a reply (isLoading && isLast && role==='user'). */
+  isLastUserAwaitingReply: boolean;
+  /** True while isLoading && isLast && role==='assistant'. Passed pre-computed so settled messages never re-render when isLoading flips. */
+  regenerateDisabled: boolean;
+  /** Whether this message is currently being edited. */
+  isEditing: boolean;
+  agentMode: CatalystAgentMode;
+  isLiteratureRoute: boolean;
+  currentSessionId: string | null;
+  onSetEditingMessageId: (id: string | null) => void;
+  onSaveEdit: (messageId: string, newContent: string) => Promise<void>;
+  onRegenerate: (() => Promise<void>) | undefined;
+}
+
+const SidebarChatMessageItem = memo(function SidebarChatMessageItem({
+  message,
+  rawContent,
+  messageAttachments,
+  isLast,
+  isLastUserAwaitingReply,
+  regenerateDisabled,
+  isEditing,
+  agentMode,
+  isLiteratureRoute,
+  currentSessionId,
+  onSetEditingMessageId,
+  onSaveEdit,
+  onRegenerate,
+}: SidebarChatMessageItemProps) {
+  // All derivations are pure functions of rawContent / message — stable for
+  // settled messages because rawContent (a string) doesn't change.
+  const literatureParsed =
+    message.role === 'assistant'
+      ? parseLiteratureAssistantStoredContent(rawContent)
+      : null;
+  const hasLitRefs = Boolean(literatureParsed && literatureParsed.refs.length > 0);
+  const notes9Parsed =
+    message.role === 'assistant' && !hasLitRefs
+      ? parseNotes9AssistantStoredContent(literatureParsed?.bodyMarkdown ?? rawContent)
+      : null;
+
+  const messageArtifacts: PersistedArtifact[] =
+    (message as { metadata?: { artifacts?: PersistedArtifact[] } }).metadata?.artifacts
+    ?? notes9Parsed?.artifacts
+    ?? [];
+  const messageGraphs: AgentGraph[] =
+    (message as { metadata?: { graphs?: AgentGraph[] } }).metadata?.graphs ?? [];
+
+  const content = hasLitRefs
+    ? literatureParsed!.bodyMarkdown
+    : notes9Parsed
+      ? notes9Parsed.bodyMarkdown
+      : rawContent;
+
+  const literatureSources = hasLitRefs ? literatureParsed!.refs : null;
+
+  const notes9Sources = (() => {
+    if (!notes9Parsed || notes9Parsed.resources.length === 0) return null;
+    const body = notes9Parsed.bodyMarkdown;
+    const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const cited = notes9Parsed.resources.filter((r, i) => {
+      const label =
+        typeof r.cite_label === 'string' && r.cite_label.trim()
+          ? r.cite_label.trim()
+          : String(i + 1);
+      const base = label.split('.')[0];
+      return (
+        new RegExp(`\\[${escapeRe(base)}(?:\\.\\d+)?\\]`).test(body) ||
+        body.includes(`[${label}]`)
+      );
+    });
+    return cited.length > 0 ? cited : null;
+  })();
+
+  const userLiteratureMarkdown =
+    message.role === 'user' &&
+    ((agentMode === 'literature' && isLiteratureRoute) ||
+      /\]\(\/(?:literature-reviews|lab-notes|experiments|projects|protocols)\//.test(content));
+
+  const isLastAssistant = isLast && message.role === 'assistant';
+
+  return (
+    <div
+      className={cn('group/message flex gap-4 w-full', message.role === 'user' ? 'justify-end' : 'justify-start')}
+    >
+      {message.role === 'assistant' && (
+        <div className="mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-full border border-border/60 bg-[rgba(124,82,52,0.05)] shadow-sm dark:bg-background dark:border-border">
+          <div className="relative size-[18px] shrink-0" aria-hidden>
+            <Image
+              src="/notes9-logo-mark-transparent.png"
+              alt=""
+              fill
+              sizes="18px"
+              className="object-contain dark:invert dark:brightness-125"
+            />
+          </div>
+        </div>
+      )}
+      <div className={cn('flex flex-col min-w-0', message.role === 'user' ? 'items-end max-w-[85%]' : 'items-start w-full max-w-full')}>
+        {isEditing ? (
+          <MessageEditor
+            messageId={message.id}
+            initialContent={content}
+            setMode={(mode) => {
+              if (mode === 'view') onSetEditingMessageId(null);
+            }}
+            onSave={onSaveEdit}
+            compact
+          />
+        ) : (
+          <>
+            {/* Image thumbnails for user messages */}
+            {message.role === 'user' && (() => {
+              const atts = messageAttachments;
+              if (!atts?.length) return null;
+              return (
+                <div className="flex flex-wrap gap-2 justify-end mb-1.5">
+                  {atts.map((att, i) =>
+                    att.contentType?.startsWith('image/') ? (
+                      <a key={i} href={att.url} target="_blank" rel="noopener noreferrer" className="block rounded-xl overflow-hidden border border-border/40 shadow-sm hover:opacity-90 transition-opacity">
+                        <img src={att.url} alt={att.name} className="max-h-44 max-w-[260px] object-cover rounded-xl" />
+                      </a>
+                    ) : (
+                      <a key={i} href={att.url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1.5 rounded-lg border border-primary/20 bg-primary/10 px-2 py-1 text-xs text-primary hover:bg-primary/20 transition-colors max-w-[180px]" title={att.name}>
+                        <FileText className="size-3 shrink-0" />
+                        <span className="truncate">{att.name}</span>
+                      </a>
+                    )
+                  )}
+                </div>
+              );
+            })()}
+            <div
+              className={cn(
+                'text-sm leading-[1.45] break-words',
+                message.role === 'user'
+                  ? 'whitespace-pre-wrap bg-primary/5 text-foreground px-4 py-2.5 rounded-2xl rounded-tr-sm'
+                  : 'min-w-0 text-foreground whitespace-normal'
+              )}
+            >
+              {message.role === 'user' ? (
+                hasUserComposerMentions(content) ? (
+                  <UserMessageComposerPreview content={content} />
+                ) : userLiteratureMarkdown ? (
+                  <MarkdownRenderer
+                    content={content}
+                    className="text-sm text-foreground break-words [overflow-wrap:anywhere] [&_pre]:max-w-full [&_pre]:overflow-auto [&_pre]:whitespace-pre [&_code]:break-all"
+                  />
+                ) : (
+                  content
+                )
+              ) : (
+                <MarkdownRenderer
+                  content={content}
+                  className="text-sm text-foreground break-words [overflow-wrap:anywhere] [&_pre]:max-w-full [&_pre]:overflow-auto [&_pre]:whitespace-pre [&_code]:break-all"
+                  citationsManifest={
+                    notes9Parsed?.citationsManifest ??
+                    literatureParsed?.citationsManifest ??
+                    null
+                  }
+                />
+              )}
+            </div>
+            {literatureSources && (
+              <LiteratureSourcesDropdown
+                refs={literatureSources}
+                className="mt-2 self-start"
+              />
+            )}
+            {notes9Sources && (
+              <AgentCitationsPanel
+                items={notes9Sources.map((c, i) =>
+                  groundingResourceToPanelItem(c, i)
+                )}
+                triggerLabel="All citations"
+                className="mt-2 self-start"
+              />
+            )}
+            {messageGraphs.length > 0 && (
+              <div className="mt-3 w-full">
+                <AgentGraphList graphs={messageGraphs} />
+              </div>
+            )}
+            {messageArtifacts.length > 0 && (
+              <div className="mt-3 w-full">
+                <PersistedArtifactList artifacts={messageArtifacts} />
+              </div>
+            )}
+            <div className="mt-1 opacity-0 group-hover/message:opacity-100 transition-opacity px-1">
+              <MessageActions
+                sessionId={currentSessionId}
+                messageId={message.id}
+                messageRole={message.role as 'user' | 'assistant'}
+                messageContent={content}
+                userEditDisabled={isLastUserAwaitingReply}
+                regenerateDisabled={regenerateDisabled}
+                onEdit={
+                  message.role === 'user'
+                    ? () => onSetEditingMessageId(message.id)
+                    : undefined
+                }
+                onRegenerate={isLastAssistant ? onRegenerate : undefined}
+                compact
+              />
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+});
 
 interface RightSidebarProps {
   onClose?: () => void;
@@ -2939,76 +3235,6 @@ export function RightSidebar({
     </div>
   );
 
-  /** Extract plain text from message. Handles string, array of parts (object or stringified JSON). Never returns raw JSON to the UI. */
-  const getMessageContent = (message: (typeof messages)[0]): string => {
-    let raw = '';
-
-    const content = (message as { content?: unknown }).content;
-
-    // 1) message.content as array (e.g. from stream)
-    if (content != null && Array.isArray(content)) {
-      raw = (content as Array<{ type?: string; text?: string }>)
-        .filter((p) => p?.type === 'text' && typeof p.text === 'string')
-        .map((p) => p.text!)
-        .join('');
-    }
-
-    // 2) message.parts (text parts only)
-    if (!raw && message.parts?.length) {
-      raw = message.parts
-        .filter((p) => p.type === 'text')
-        .map((p) => ('text' in p ? String(p.text ?? '') : ''))
-        .join('');
-    }
-
-    // 3) message.content as string
-    if (!raw && content != null && typeof content === 'string') {
-      raw = content;
-    }
-
-    if (!raw) return '';
-
-    // Always normalize so we never pass raw JSON to the renderer
-    return normalizeContentString(raw);
-  };
-
-  /** If string is stringified JSON parts (single or double/triple wrapped), unwrap to plain text. Never return raw JSON. */
-  function normalizeContentString(raw: string): string {
-    let s = raw.trim();
-    if (!s) return '';
-
-    const maxUnwrap = 5;
-    for (let i = 0; i < maxUnwrap; i++) {
-      const looksLikeJsonParts =
-        (s.startsWith('[') || s.includes('[')) && s.includes('"type"') && s.includes('"text"');
-      if (!looksLikeJsonParts) return s;
-      try {
-        const parsed = JSON.parse(s) as Array<{ type?: string; text?: string }>;
-        if (!Array.isArray(parsed)) return s;
-        const text = parsed
-          .filter((p) => p?.type === 'text' && typeof p.text === 'string')
-          .map((p) => p.text!)
-          .join('');
-        if (!text || text === s) return s;
-        s = text;
-      } catch {
-        const segments: string[] = [];
-        const re = /"text"\s*:\s*"((?:[^"\\]|\\.)*)"/g;
-        let m: RegExpExecArray | null;
-        while ((m = re.exec(s)) !== null) {
-          segments.push(m[1].replace(/\\"/g, '"').replace(/\\n/g, '\n'));
-        }
-        if (segments.length === 0 && /"text"\s*:\s*"/.test(s)) {
-          const valueStart = s.indexOf('"text"');
-          const afterKey = s.indexOf('"', valueStart + 6) + 1;
-          if (afterKey > 0) segments.push(s.slice(afterKey).replace(/\\"/g, '"').replace(/\\n/g, '\n'));
-        }
-        return segments.length > 0 ? segments.join('') : s;
-      }
-    }
-    return s;
-  }
-
   const showLiteratureEmptyState = agentMode === 'literature' && isLiteratureRoute;
   const emptyStateSubheading = showLiteratureEmptyState ? 'For Literature' : null;
   const emptyStateDescription = showLiteratureEmptyState
@@ -3437,201 +3663,25 @@ export function RightSidebar({
                   >
                     <div className="flex flex-col gap-6 p-4 pt-5 pb-4 max-w-3xl mx-auto w-full min-w-0">
                       {messages.map((message, index) => {
-                        const rawContent = getMessageContent(message);
-                        const literatureParsed =
-                          message.role === 'assistant'
-                            ? parseLiteratureAssistantStoredContent(rawContent)
-                            : null;
-                        const hasLitRefs = Boolean(
-                          literatureParsed && literatureParsed.refs.length > 0
-                        );
-                        const notes9Parsed =
-                          message.role === 'assistant' && !hasLitRefs
-                            ? parseNotes9AssistantStoredContent(
-                                literatureParsed?.bodyMarkdown ?? rawContent
-                              )
-                            : null;
-                        // Prefer structured metadata.artifacts (Phase 0 — the
-                        // reliable source). Fall back to the legacy parsed markdown
-                        // block only for messages saved before this change.
-                        const messageArtifacts: PersistedArtifact[] =
-                          (message as { metadata?: { artifacts?: PersistedArtifact[] } }).metadata?.artifacts
-                          ?? notes9Parsed?.artifacts
-                          ?? [];
-                        const messageGraphs: AgentGraph[] =
-                          (message as { metadata?: { graphs?: AgentGraph[] } }).metadata?.graphs ?? [];
-                        const content = hasLitRefs
-                          ? literatureParsed!.bodyMarkdown
-                          : notes9Parsed
-                            ? notes9Parsed.bodyMarkdown
-                            : rawContent;
-                        const literatureSources = hasLitRefs
-                          ? literatureParsed!.refs
-                          : null;
-                        const notes9Sources = (() => {
-                          if (!notes9Parsed || notes9Parsed.resources.length === 0) return null;
-                          const body = notes9Parsed.bodyMarkdown;
-                          // Surface resources whose marker is actually present in the
-                          // answer. Key on each resource's cite_label (reliably on the
-                          // wire) and fall back to array position only for legacy blobs.
-                          // The base regex also keeps sub-citations: a source labelled
-                          // "1.2" stays when "[1.2]" (or any "[1.x]") appears. The old
-                          // filter used `[i+1]` (array ordinal) as the label, so when an
-                          // answer had only sub-citations like [1.1] [1.2] … [6.2] and no
-                          // bare [1]…[6], almost every resource was dropped — the reload
-                          // "12 chips but Grounded in 2 sources" bug. This mirrors the
-                          // live-stream path (agent-stream-reply.tsx) so a reloaded
-                          // message shows the SAME sources it did while streaming.
-                          const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-                          const cited = notes9Parsed.resources.filter((r, i) => {
-                            const label =
-                              typeof r.cite_label === 'string' && r.cite_label.trim()
-                                ? r.cite_label.trim()
-                                : String(i + 1);
-                            const base = label.split('.')[0];
-                            return (
-                              new RegExp(`\\[${escapeRe(base)}(?:\\.\\d+)?\\]`).test(body) ||
-                              body.includes(`[${label}]`)
-                            );
-                          });
-                          return cited.length > 0 ? cited : null;
-                        })();
-                        const userLiteratureMarkdown =
-                          message.role === 'user' &&
-                          ((agentMode === 'literature' && isLiteratureRoute) ||
-                            /\]\(\/(?:literature-reviews|lab-notes|experiments|projects|protocols)\//.test(content));
-                        const isLastAssistant = message.role === 'assistant' && index === messages.length - 1;
-                        const isLastUserAwaitingReply =
-                          isLoading &&
-                          message.role === 'user' &&
-                          index === messages.length - 1;
-                        const isEditing = editingMessageId === message.id;
+                        const isLast = index === messages.length - 1;
+                        const isLastAssistant = isLast && message.role === 'assistant';
                         return (
-                          <div key={message.id} className={cn('group/message flex gap-4 w-full', message.role === 'user' ? 'justify-end' : 'justify-start')}>
-                            {message.role === 'assistant' && (
-                          <div className="mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-full border border-border/60 bg-[rgba(124,82,52,0.05)] shadow-sm dark:bg-background dark:border-border">
-                                <div className="relative size-[18px] shrink-0" aria-hidden>
-                                  <Image
-                                    src="/notes9-logo-mark-transparent.png"
-                                    alt=""
-                                    fill
-                                    sizes="18px"
-                                    className="object-contain dark:invert dark:brightness-125"
-                                  />
-                                </div>
-                              </div>
-                            )}
-                            <div className={cn("flex flex-col min-w-0", message.role === 'user' ? "items-end max-w-[85%]" : "items-start w-full max-w-full")}>
-                              {isEditing ? (
-                                <MessageEditor
-                                  messageId={message.id}
-                                  initialContent={content}
-                                  setMode={(mode) => {
-                                    if (mode === 'view') setEditingMessageId(null);
-                                  }}
-                                  onSave={handleEditMessage}
-                                  compact
-                                />
-                              ) : (
-                                <>
-                                  {/* Image thumbnails for user messages */}
-                                  {message.role === 'user' && (() => {
-                                    const atts = messageAttachments.get(message.id);
-                                    if (!atts?.length) return null;
-                                    return (
-                                      <div className="flex flex-wrap gap-2 justify-end mb-1.5">
-                                        {atts.map((att, i) =>
-                                          att.contentType?.startsWith('image/') ? (
-                                            <a key={i} href={att.url} target="_blank" rel="noopener noreferrer" className="block rounded-xl overflow-hidden border border-border/40 shadow-sm hover:opacity-90 transition-opacity">
-                                              <img src={att.url} alt={att.name} className="max-h-44 max-w-[260px] object-cover rounded-xl" />
-                                            </a>
-                                          ) : (
-                                            <a key={i} href={att.url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1.5 rounded-lg border border-primary/20 bg-primary/10 px-2 py-1 text-xs text-primary hover:bg-primary/20 transition-colors max-w-[180px]" title={att.name}>
-                                              <FileText className="size-3 shrink-0" />
-                                              <span className="truncate">{att.name}</span>
-                                            </a>
-                                          )
-                                        )}
-                                      </div>
-                                    );
-                                  })()}
-                                  <div
-                                    className={cn(
-                                      'text-sm leading-[1.45] break-words',
-                                      message.role === 'user'
-                                        ? 'whitespace-pre-wrap bg-primary/5 text-foreground px-4 py-2.5 rounded-2xl rounded-tr-sm'
-                                        : 'min-w-0 text-foreground whitespace-normal'
-                                    )}
-                                  >
-                                    {message.role === 'user' ? (
-                                      hasUserComposerMentions(content) ? (
-                                        <UserMessageComposerPreview content={content} />
-                                      ) : userLiteratureMarkdown ? (
-                                        <MarkdownRenderer
-                                          content={content}
-                                          className="text-sm text-foreground break-words [overflow-wrap:anywhere] [&_pre]:max-w-full [&_pre]:overflow-auto [&_pre]:whitespace-pre [&_code]:break-all"
-                                        />
-                                      ) : (
-                                        content
-                                      )
-                                    ) : (
-                                      <MarkdownRenderer
-                                        content={content}
-                                        className="text-sm text-foreground break-words [overflow-wrap:anywhere] [&_pre]:max-w-full [&_pre]:overflow-auto [&_pre]:whitespace-pre [&_code]:break-all"
-                                        citationsManifest={
-                                          notes9Parsed?.citationsManifest ??
-                                          literatureParsed?.citationsManifest ??
-                                          null
-                                        }
-                                      />
-                                    )}
-                                  </div>
-                                  {literatureSources && (
-                                    <LiteratureSourcesDropdown
-                                      refs={literatureSources}
-                                      className="mt-2 self-start"
-                                    />
-                                  )}
-                                  {notes9Sources && (
-                                    <AgentCitationsPanel
-                                      items={notes9Sources.map((c, i) =>
-                                        groundingResourceToPanelItem(c, i)
-                                      )}
-                                      triggerLabel="All citations"
-                                      className="mt-2 self-start"
-                                    />
-                                  )}
-                                  {messageGraphs.length > 0 && (
-                                    <div className="mt-3 w-full">
-                                      <AgentGraphList graphs={messageGraphs} />
-                                    </div>
-                                  )}
-                                  {messageArtifacts.length > 0 && (
-                                    <div className="mt-3 w-full">
-                                      <PersistedArtifactList artifacts={messageArtifacts} />
-                                    </div>
-                                  )}
-                                  <div className="mt-1 opacity-0 group-hover/message:opacity-100 transition-opacity px-1">
-                                    <MessageActions
-                                      sessionId={currentSessionId}
-                                      messageId={message.id}
-                                      messageRole={message.role as 'user' | 'assistant'}
-                                      messageContent={content}
-                                      userEditDisabled={isLastUserAwaitingReply}
-                                      regenerateDisabled={isLoading && isLastAssistant}
-                                      onEdit={
-                                        message.role === 'user'
-                                          ? () => setEditingMessageId(message.id)
-                                          : undefined
-                                      }
-                                      onRegenerate={isLastAssistant ? handleRegenerate : undefined}
-                                      compact
-                                    />
-                                  </div>
-                                </>
-                              )}
-                            </div>
-                          </div>
+                          <SidebarChatMessageItem
+                            key={message.id}
+                            message={message as UIMessage}
+                            rawContent={sidebarGetMessageContent(message as UIMessage)}
+                            messageAttachments={messageAttachments.get(message.id)}
+                            isLast={isLast}
+                            isLastUserAwaitingReply={isLoading && message.role === 'user' && isLast}
+                            regenerateDisabled={isLoading && isLastAssistant}
+                            isEditing={editingMessageId === message.id}
+                            agentMode={agentMode}
+                            isLiteratureRoute={isLiteratureRoute}
+                            currentSessionId={currentSessionId}
+                            onSetEditingMessageId={setEditingMessageId}
+                            onSaveEdit={handleEditMessage}
+                            onRegenerate={isLastAssistant ? handleRegenerate : undefined}
+                          />
                         );
                       })}
                       {agentMode === 'literature' &&

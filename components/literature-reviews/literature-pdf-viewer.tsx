@@ -1,7 +1,5 @@
 "use client"
 
-import "pdfjs-dist/web/pdf_viewer.css"
-
 import {
   forwardRef,
   useCallback,
@@ -13,6 +11,9 @@ import {
   type MutableRefObject,
 } from "react"
 import { Copy, ExternalLink, Highlighter, Loader2, StickyNote, ZoomIn, ZoomOut } from "lucide-react"
+// Static so the text/annotation-layer styles are reliably injected. This CSS is
+// tiny; the heavy pdfjs JS is still dynamically imported in load()/render().
+import "pdfjs-dist/web/pdf_viewer.css"
 
 import { Button } from "@/components/ui/button"
 import {

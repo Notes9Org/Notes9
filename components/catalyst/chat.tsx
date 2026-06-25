@@ -1,8 +1,8 @@
 'use client';
 
 import { useChat } from '@ai-sdk/react';
-import { DefaultChatTransport } from 'ai';
-import { useRef, useEffect, useState, useCallback, useMemo } from 'react';
+import { DefaultChatTransport, type UIMessage } from 'ai';
+import { memo, useRef, useEffect, useState, useCallback, useMemo } from 'react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -39,14 +39,105 @@ const ALLOWED_ATTACHMENT_TYPES = [
   'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
 ];
 
-interface CatalystChatProps {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
+// ---------------------------------------------------------------------------
+// Module-level message-content helpers (no component state closure needed)
+// ---------------------------------------------------------------------------
+
+function _getMessageTextContent(message: UIMessage): string {
+  if (message.parts && message.parts.length > 0) {
+    return message.parts
+      .filter((p) => p.type === 'text')
+      .map((p) => ('text' in p ? (p as { type: 'text'; text: string }).text : ''))
+      .join('');
+  }
+  const content = (message as { content?: unknown }).content;
+  return typeof content === 'string' ? content : '';
 }
+
+function _getMessageSources(message: UIMessage): Array<Record<string, unknown>> {
+  if (!message.parts) return [];
+  return message.parts
+    .filter((p): p is { type: 'data-source'; data: { source: Record<string, unknown> } } =>
+      (p as { type: string }).type === 'data-source'
+    )
+    .map((p) => (p as { type: string; data: { source: Record<string, unknown> } }).data?.source)
+    .filter(Boolean) as Array<Record<string, unknown>>;
+}
+
+function _getMessageThinking(message: UIMessage): string | null {
+  if (!message.parts) return null;
+  const parts = message.parts
+    .filter((p): p is { type: 'data-thinking'; data: { thinking: string } } =>
+      (p as { type: string }).type === 'data-thinking'
+    )
+    .map((p) => (p as { type: string; data: { thinking: string } }).data?.thinking)
+    .filter(Boolean);
+  return parts.length > 0 ? parts.join('') : null;
+}
+
+// ---------------------------------------------------------------------------
+// Memoized per-message item — only re-renders when the message itself changes
+// (settled history messages) or when isLast/isStreaming flip on the last entry.
+// ---------------------------------------------------------------------------
 
 interface UserProfile {
   avatar_url: string | null;
   full_name: string | null;
+}
+
+interface CatalystChatItemProps {
+  message: UIMessage;
+  attachments?: Attachment[];
+  userProfile: UserProfile | null;
+  /** True only for the final message in the list. */
+  isLast: boolean;
+  /** True while the last assistant message is still streaming. */
+  isStreaming: boolean;
+  onRegenerate: () => void;
+  isRegenerating: boolean;
+}
+
+const CatalystChatItem = memo(function CatalystChatItem({
+  message,
+  attachments,
+  userProfile,
+  isLast,
+  isStreaming,
+  onRegenerate,
+  isRegenerating,
+}: CatalystChatItemProps) {
+  const content = _getMessageTextContent(message);
+  const notes9Parsed =
+    message.role === 'assistant'
+      ? parseNotes9AssistantStoredContent(content)
+      : null;
+  const assistantDisplayMarkdown =
+    message.role === 'assistant' && notes9Parsed
+      ? notes9Parsed.bodyMarkdown
+      : content;
+
+  return (
+    <ChatMessage
+      role={message.role as 'user' | 'assistant'}
+      content={assistantDisplayMarkdown}
+      attachments={attachments}
+      sources={[...(notes9Parsed?.resources ?? []), ..._getMessageSources(message)] as any[]}
+      thinking={_getMessageThinking(message)}
+      toolCards={extractToolCards(message.parts)}
+      userAvatar={userProfile?.avatar_url}
+      userName={userProfile?.full_name || undefined}
+      isLast={isLast}
+      onRegenerate={onRegenerate}
+      isRegenerating={isRegenerating}
+      isStreaming={isStreaming}
+      citationsManifest={notes9Parsed?.citationsManifest ?? null}
+    />
+  );
+});
+
+interface CatalystChatProps {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
 }
 
 export function CatalystChat({ open, onOpenChange }: CatalystChatProps) {
@@ -716,34 +807,17 @@ export function CatalystChat({ open, onOpenChange }: CatalystChatProps) {
                     ) : (
                       messages.map((message, index) => {
                         const isLastAssistant = index === messages.length - 1 && message.role === 'assistant';
-                        const showStreamingStatus = isLastAssistant && isLoading;
-
-                        const content = getMessageContent(message);
-                        const notes9Parsed =
-                          message.role === 'assistant'
-                            ? parseNotes9AssistantStoredContent(content)
-                            : null;
-                        const assistantDisplayMarkdown =
-                          message.role === 'assistant' && notes9Parsed
-                            ? notes9Parsed.bodyMarkdown
-                            : content;
-
+                        const isStreaming = isLastAssistant && isLoading;
                         return (
-                          <ChatMessage
+                          <CatalystChatItem
                             key={message.id}
-                            role={message.role as 'user' | 'assistant'}
-                            content={assistantDisplayMarkdown}
+                            message={message}
                             attachments={messageAttachments.get(message.id)}
-                            sources={[...(notes9Parsed?.resources ?? []), ...getMessageSources(message)] as any[]}
-                            thinking={getMessageThinking(message)}
-                            toolCards={getMessageToolCards(message)}
-                            userAvatar={userProfile?.avatar_url}
-                            userName={userProfile?.full_name || undefined}
+                            userProfile={userProfile}
                             isLast={isLastAssistant}
+                            isStreaming={isStreaming}
                             onRegenerate={handleRegenerate}
                             isRegenerating={isRegenerating}
-                            isStreaming={showStreamingStatus}
-                            citationsManifest={notes9Parsed?.citationsManifest ?? null}
                           />
                         );
                       })

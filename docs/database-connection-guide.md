@@ -1,90 +1,73 @@
-# Database Connection Guide
-
-This document explains how to connect to the Supabase PostgreSQL database for running SQL scripts, testing, and managing the LIMS application.
-
+---
+title: Database Connection Guide
+created: 2026-06-24
+updated: 2026-06-24
+status: current
 ---
 
-## 📋 Table of Contents
+# Database Connection Guide
 
-1. [Connection Methods](#connection-methods)
-2. [Connection Details](#connection-details)
-3. [Using psql (Command Line)](#using-psql-command-line)
-4. [Common Database Operations](#common-database-operations)
-5. [Running Migration Scripts](#running-migration-scripts)
-6. [Troubleshooting](#troubleshooting)
+This guide explains how to connect to the Notes9 Supabase PostgreSQL database for running SQL scripts, migrations, and diagnostics.
+
+> **Note:** The connection details below use placeholder values. Never commit real passwords or keys to version control. Store them in `.env.local` and consult a team member or your Supabase project dashboard for live credentials.
 
 ---
 
 ## Connection Methods
 
-There are three ways to connect to the database:
-
-1. **Supabase Dashboard (Recommended for beginners)**
-2. **psql Command Line (Recommended for developers)**
-3. **pgAdmin or other GUI tools**
+| Method | Best For |
+|--------|----------|
+| **Supabase Dashboard SQL Editor** | Quick queries, one-off operations, beginners |
+| **`psql` (command line)** | Running migrations, scripted operations, CI |
+| **pgAdmin / TablePlus** | Visual exploration, complex query authoring |
 
 ---
 
 ## Connection Details
 
-### Direct Connection (Recommended)
+### Direct Connection (use for migrations and scripts)
 
 ```
-Host:     db.rutcjpugsrfoobsrufnn.supabase.co
+Host:     db.<project-ref>.supabase.co
 Port:     5432
 Database: postgres
 User:     postgres
-Password: [Your Supabase Password]
+Password: [Your Supabase DB password]
 ```
 
-### Pooler Connection (For high-concurrency apps)
+### Pooler Connection (use for application connections)
 
 ```
-Host:     aws-0-ap-south-1.pooler.supabase.com
+Host:     aws-0-<region>.pooler.supabase.com
 Port:     6543
 Database: postgres
-User:     postgres.rutcjpugsrfoobsrufnn
-Password: [Your Supabase Password]
+User:     postgres.<project-ref>
+Password: [Your Supabase DB password]
 ```
 
-> **Note:** Use the **Direct Connection** for running scripts and migrations. Use the **Pooler** for application connections.
+**Rule of thumb:** Use Direct for scripts/migrations. Use Pooler for the running app. The app itself connects via the Supabase JS client (anon key / service role key), not psql.
 
 ---
 
-## Using psql (Command Line)
-
-### Prerequisites
-
-Install PostgreSQL client:
+## Prerequisites
 
 ```bash
 # macOS
 brew install postgresql
 
-# Ubuntu/Debian
+# Ubuntu / Debian
 sudo apt-get install postgresql-client
 
-# Windows
-# Download from https://www.postgresql.org/download/windows/
+# Windows: download from https://www.postgresql.org/download/windows/
 ```
 
-### Basic Connection
+---
+
+## Basic psql Connection
 
 ```bash
-PGPASSWORD='YourPassword' psql \
-  -h db.rutcjpugsrfoobsrufnn.supabase.co \
-  -p 5432 \
-  -U postgres \
-  -d postgres
-```
-
-### Connection from Project Root
-
-```bash
-cd /Users/nithin/Developer/Apps/fills/notes9-prototype
-
-PGPASSWORD='Pournami@123' psql \
-  -h db.rutcjpugsrfoobsrufnn.supabase.co \
+PGPASSWORD='<your-db-password>' psql \
+  -h db.<project-ref>.supabase.co \
   -p 5432 \
   -U postgres \
   -d postgres
@@ -92,427 +75,144 @@ PGPASSWORD='Pournami@123' psql \
 
 ---
 
-## Common Database Operations
+## Common Operations
 
-### 1. Run a Single SQL Query
+### Run a single query
 
 ```bash
-PGPASSWORD='YourPassword' psql \
-  -h db.rutcjpugsrfoobsrufnn.supabase.co \
-  -p 5432 \
-  -U postgres \
-  -d postgres \
-  -c "SELECT * FROM projects LIMIT 5;"
+PGPASSWORD='<password>' psql \
+  -h db.<project-ref>.supabase.co -p 5432 -U postgres -d postgres \
+  -c "SELECT table_name FROM information_schema.tables WHERE table_schema = 'public' ORDER BY 1;"
 ```
 
-### 2. Run a SQL File
+### Run a SQL file
 
 ```bash
-PGPASSWORD='YourPassword' psql \
-  -h db.rutcjpugsrfoobsrufnn.supabase.co \
-  -p 5432 \
-  -U postgres \
-  -d postgres \
-  -f scripts/001_create_tables.sql
+PGPASSWORD='<password>' psql \
+  -h db.<project-ref>.supabase.co -p 5432 -U postgres -d postgres \
+  -f scripts/000_full_script.sql
 ```
 
-### 3. Run Inline SQL (Multi-line)
+### Run a heredoc (inline multi-line SQL)
 
 ```bash
-PGPASSWORD='YourPassword' psql \
-  -h db.rutcjpugsrfoobsrufnn.supabase.co \
-  -p 5432 \
-  -U postgres \
-  -d postgres << 'EOF'
+PGPASSWORD='<password>' psql \
+  -h db.<project-ref>.supabase.co -p 5432 -U postgres -d postgres << 'EOF'
 
--- Your SQL commands here
-SELECT table_name 
-FROM information_schema.tables 
-WHERE table_schema = 'public';
+SELECT * FROM projects LIMIT 5;
 
 EOF
 ```
 
-### 4. Interactive Mode
-
-```bash
-PGPASSWORD='YourPassword' psql \
-  -h db.rutcjpugsrfoobsrufnn.supabase.co \
-  -p 5432 \
-  -U postgres \
-  -d postgres
-```
-
-Once connected, you can run SQL commands interactively:
-
-```sql
--- List all tables
-\dt
-
--- Describe a table
-\d projects
-
--- Run queries
-SELECT * FROM projects;
-
--- Exit
-\q
-```
-
 ---
 
-## Running Migration Scripts
+## Running Migrations
 
-### Order of Execution
+Migrations live in `scripts/`. The baseline schema is `scripts/000_full_script.sql`. Incremental migrations are numbered `001_...`, `002_...`, etc.
 
-Run scripts in numerical order:
-
-```bash
-cd /Users/nithin/Developer/Apps/fills/notes9-prototype
-
-# 1. Create tables
-PGPASSWORD='Pournami@123' psql \
-  -h db.rutcjpugsrfoobsrufnn.supabase.co \
-  -p 5432 \
-  -U postgres \
-  -d postgres \
-  -f scripts/001_create_tables.sql
-
-# 2. Enable RLS
-PGPASSWORD='Pournami@123' psql \
-  -h db.rutcjpugsrfoobsrufnn.supabase.co \
-  -p 5432 \
-  -U postgres \
-  -d postgres \
-  -f scripts/002_enable_rls.sql
-
-# 3. Seed data (optional)
-PGPASSWORD='Pournami@123' psql \
-  -h db.rutcjpugsrfoobsrufnn.supabase.co \
-  -p 5432 \
-  -U postgres \
-  -d postgres \
-  -f scripts/003_seed_data.sql
-
-# Continue with other scripts...
-```
-
-### Run All Scripts at Once
+**Always apply in order:**
 
 ```bash
-cd /Users/nithin/Developer/Apps/fills/notes9-prototype
-
 for script in scripts/*.sql; do
-  echo "Running $script..."
-  PGPASSWORD='Pournami@123' psql \
-    -h db.rutcjpugsrfoobsrufnn.supabase.co \
-    -p 5432 \
-    -U postgres \
-    -d postgres \
+  echo "Running $script ..."
+  PGPASSWORD='<password>' psql \
+    -h db.<project-ref>.supabase.co -p 5432 -U postgres -d postgres \
     -f "$script"
-  echo "✓ Completed $script"
-  echo ""
+  echo "Done: $script"
 done
 ```
 
+> **Before writing any new migration:** read `scripts/000_full_script.sql` and all existing numbered migrations to understand the current schema. Never infer column names, FK names, or policy names from memory.
+
 ---
 
-## Useful psql Commands
-
-Once connected to the database:
+## Useful psql Commands (interactive mode)
 
 ```sql
--- List all databases
-\l
+\dt           -- list all tables
+\dt+          -- list with sizes
+\d table_name -- describe table (columns, indexes)
+\d+ table_name -- also shows RLS policies
+\dn           -- list schemas
+\df           -- list functions
+\dv           -- list views
 
--- List all tables in current database
-\dt
-
--- List all tables with details
-\dt+
-
--- Describe a specific table
-\d table_name
-
--- List all schemas
-\dn
-
--- List all functions
-\df
-
--- List all views
-\dv
-
--- List all RLS policies
-\d+ table_name
-
--- Show current user
 SELECT current_user;
-
--- Show current database
 SELECT current_database();
 
--- Show all RLS policies for a table
-SELECT * FROM pg_policies WHERE tablename = 'projects';
+-- Check RLS policies on a specific table
+SELECT policyname, cmd, qual, with_check
+FROM pg_policies WHERE tablename = 'projects';
 
--- Check table size
-SELECT 
-    schemaname as schema,
-    tablename as table,
-    pg_size_pretty(pg_total_relation_size(schemaname||'.'||tablename)) as size
-FROM pg_tables
-WHERE schemaname = 'public'
+-- Check table sizes
+SELECT schemaname, tablename,
+  pg_size_pretty(pg_total_relation_size(schemaname||'.'||tablename)) AS size
+FROM pg_tables WHERE schemaname = 'public'
 ORDER BY pg_total_relation_size(schemaname||'.'||tablename) DESC;
 
--- Exit psql
-\q
+\q            -- exit
 ```
 
 ---
 
-## Testing Database Permissions
+## Testing RLS Policies
 
-### Test RLS Policies
+To simulate a specific user without leaving the postgres superuser:
 
-```bash
-PGPASSWORD='Pournami@123' psql \
-  -h db.rutcjpugsrfoobsrufnn.supabase.co \
-  -p 5432 \
-  -U postgres \
-  -d postgres << 'EOF'
-
--- Check all RLS policies
-SELECT 
-    schemaname,
-    tablename,
-    policyname,
-    permissive,
-    cmd,
-    qual,
-    with_check
-FROM pg_policies 
-WHERE schemaname = 'public'
-ORDER BY tablename, policyname;
-
-EOF
-```
-
-### Test User Permissions
-
-```bash
-PGPASSWORD='Pournami@123' psql \
-  -h db.rutcjpugsrfoobsrufnn.supabase.co \
-  -p 5432 \
-  -U postgres \
-  -d postgres << 'EOF'
-
--- Test as authenticated user
+```sql
+-- Simulate an authenticated user
 SET ROLE authenticated;
-SET request.jwt.claim.sub TO 'user-uuid-here';
+SET request.jwt.claims TO '{"sub": "your-user-uuid", "role": "authenticated"}';
 
--- Try operations
-SELECT * FROM projects;
+SELECT * FROM projects;   -- should only return rows the user is allowed to see
 
--- Reset
-RESET ROLE;
-
-EOF
-```
-
----
-
-## Example: Common Tasks
-
-### 1. Add New RLS Policy
-
-```bash
-cd /Users/nithin/Developer/Apps/fills/notes9-prototype
-
-PGPASSWORD='Pournami@123' psql \
-  -h db.rutcjpugsrfoobsrufnn.supabase.co \
-  -p 5432 \
-  -U postgres \
-  -d postgres << 'EOF'
-
--- Add new policy
-CREATE POLICY "policy_name"
-  ON table_name
-  FOR SELECT
-  USING (condition);
-
-EOF
-```
-
-### 2. Update Existing Table
-
-```bash
-PGPASSWORD='Pournami@123' psql \
-  -h db.rutcjpugsrfoobsrufnn.supabase.co \
-  -p 5432 \
-  -U postgres \
-  -d postgres << 'EOF'
-
--- Add column
-ALTER TABLE projects ADD COLUMN new_field TEXT;
-
--- Update values
-UPDATE projects SET new_field = 'default_value';
-
-EOF
-```
-
-### 3. Backup Database
-
-```bash
-# Backup entire database
-PGPASSWORD='Pournami@123' pg_dump \
-  -h db.rutcjpugsrfoobsrufnn.supabase.co \
-  -p 5432 \
-  -U postgres \
-  -d postgres \
-  -F c \
-  -f backup_$(date +%Y%m%d_%H%M%S).dump
-
-# Backup specific table
-PGPASSWORD='Pournami@123' pg_dump \
-  -h db.rutcjpugsrfoobsrufnn.supabase.co \
-  -p 5432 \
-  -U postgres \
-  -d postgres \
-  -t projects \
-  > projects_backup.sql
+RESET ROLE;               -- return to postgres superuser
 ```
 
 ---
 
 ## Troubleshooting
 
-### Connection Issues
+| Problem | Likely Cause | Fix |
+|---------|-------------|-----|
+| `connection refused` | Wrong host or port | Re-check host from Supabase Dashboard → Settings → Database |
+| `FATAL: password authentication failed` | Wrong password | Reset in Dashboard or check `.env.local` |
+| `Tenant or user not found` (pooler) | Wrong user format | Use `postgres.<project-ref>` for pooler user |
+| `new row violates row-level security policy` | RLS check fails | Check UPDATE policy has `USING` + `WITH CHECK`; confirm user is org member |
 
-**Problem:** "connection refused" or "could not connect"
+### Check slow queries
 
-```bash
-# Test connectivity
-ping db.rutcjpugsrfoobsrufnn.supabase.co
-
-# Test port
-nc -zv db.rutcjpugsrfoobsrufnn.supabase.co 5432
-```
-
-**Solution:**
-- Check your internet connection
-- Verify the host and port are correct
-- Ensure your IP is whitelisted in Supabase (Project Settings → Database → Connection Pooling)
-
----
-
-**Problem:** "FATAL: password authentication failed"
-
-**Solution:**
-- Verify password is correct
-- Check if you're using the right user (`postgres` for direct connection)
-- Reset password in Supabase Dashboard if needed
-
----
-
-**Problem:** "Tenant or user not found" (when using pooler)
-
-**Solution:**
-- Use the direct connection instead
-- Ensure you're using the correct format: `postgres.rutcjpugsrfoobsrufnn`
-
----
-
-### RLS Policy Issues
-
-**Problem:** "new row violates row-level security policy"
-
-```bash
-# Check policies
-PGPASSWORD='Pournami@123' psql \
-  -h db.rutcjpugsrfoobsrufnn.supabase.co \
-  -p 5432 \
-  -U postgres \
-  -d postgres \
-  -c "SELECT * FROM pg_policies WHERE tablename = 'your_table';"
-```
-
-**Solution:**
-- Verify UPDATE policies have both `USING` and `WITH CHECK` clauses
-- Check if user has proper permissions
-- Ensure user is member of required project/organization
-
----
-
-### Performance Issues
-
-```bash
-# Check slow queries
-PGPASSWORD='Pournami@123' psql \
-  -h db.rutcjpugsrfoobsrufnn.supabase.co \
-  -p 5432 \
-  -U postgres \
-  -d postgres << 'EOF'
-
--- Enable query logging
-SELECT * FROM pg_stat_statements
+```sql
+SELECT query, mean_exec_time, calls
+FROM pg_stat_statements
 ORDER BY mean_exec_time DESC
 LIMIT 10;
-
-EOF
 ```
+
+---
+
+## Environment Variables (app)
+
+These go in `.env.local` for the Next.js app. **Do not commit real values.**
+
+```bash
+NEXT_PUBLIC_SUPABASE_URL=https://<project-ref>.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=<anon-key>
+SUPABASE_SERVICE_ROLE_KEY=<service-role-key>
+SUPABASE_JWT_SECRET=<jwt-secret>
+```
+
+The DB password is only needed for direct psql/migration work, not for the running app.
 
 ---
 
 ## Security Best Practices
 
-1. **Never commit passwords to git**
-   - Use environment variables
-   - Add `.env` to `.gitignore`
-
-2. **Use connection pooling in production**
-   - Use Supabase pooler for app connections
-   - Use direct connection for migrations only
-
-3. **Rotate passwords regularly**
-   - Update in Supabase Dashboard
-   - Update in your `.env.local` file
-
-4. **Limit database access**
-   - Use RLS policies for all tables
-   - Grant minimum required permissions
-   - Use service role key only when necessary
-
----
-
-## Quick Reference
-
-### Environment Variables
-
-Add to `.env.local`:
-
-```bash
-# Supabase Configuration
-NEXT_PUBLIC_SUPABASE_URL=https://rutcjpugsrfoobsrufnn.supabase.co
-NEXT_PUBLIC_SUPABASE_ANON_KEY=your_anon_key_here
-SUPABASE_SERVICE_ROLE_KEY=your_service_role_key_here
-
-# Database Connection (for scripts only, not for app)
-DB_HOST=db.rutcjpugsrfoobsrufnn.supabase.co
-DB_PORT=5432
-DB_USER=postgres
-DB_PASSWORD=Pournami@123
-DB_NAME=postgres
-```
-
-### Connection String Format
-
-```
-postgresql://[USER]:[PASSWORD]@[HOST]:[PORT]/[DATABASE]
-
-# Example:
-postgresql://postgres:Pournami@123@db.rutcjpugsrfoobsrufnn.supabase.co:5432/postgres
-```
+1. Never commit passwords or service role keys to git.
+2. Use Direct Connection for migrations only; use the Pooler (or the JS client) for application connections.
+3. Enable RLS on every table — see `docs/row-level-security-policies.md` and `docs/rls-quick-reference.md`.
+4. Use `SUPABASE_SERVICE_ROLE_KEY` only in server-side code (never in client bundles).
+5. Rotate passwords periodically via Supabase Dashboard.
 
 ---
 
@@ -522,10 +222,4 @@ postgresql://postgres:Pournami@123@db.rutcjpugsrfoobsrufnn.supabase.co:5432/post
 - [PostgreSQL Documentation](https://www.postgresql.org/docs/)
 - [psql Command Reference](https://www.postgresql.org/docs/current/app-psql.html)
 - [Supabase RLS Guide](https://supabase.com/docs/guides/auth/row-level-security)
-
----
-
-**Last Updated:** 2025-01-21  
-**Database:** Supabase PostgreSQL  
-**Project:** LIMS (Laboratory Inventory Management System)
-
+- Notes9 RLS reference: `docs/row-level-security-policies.md` and `docs/rls-quick-reference.md`

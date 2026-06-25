@@ -66,6 +66,7 @@ litreview-ai-assistant_V01
 # and are NOT referenced by any application code in this repo.
 ruvector.db
 ruvector.db-journal
+scripts/ruvector.db
 agentdb.rvf
 agentdb.rvf.lock
 .gstack/

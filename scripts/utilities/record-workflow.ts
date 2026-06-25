@@ -31,8 +31,8 @@ import {
   transitionBetweenScenes,
   zoomIn,
   zoomOut,
-} from "../lib/capture-recording"
-import { addCaptureInitScripts } from "../lib/capture-sanitize"
+} from "@/lib/capture-recording"
+import { addCaptureInitScripts } from "@/lib/capture-sanitize"
 
 dotenv.config({ path: path.join(process.cwd(), ".env") })
 
