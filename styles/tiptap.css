@@ -604,6 +604,30 @@
 .n9-page .ProseMirror {
   min-height: inherit;
   color: #1a1a1a;
+  /* keep everything inside the margin box the rulers define */
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+.n9-page .ProseMirror img,
+.n9-page .ProseMirror table,
+.n9-page .ProseMirror pre,
+.n9-page .ProseMirror .resizable-image-host {
+  max-width: 100% !important;
+}
+.n9-page .ProseMirror pre {
+  white-space: pre-wrap;
+}
+/* In Page view, header/footer sit outside the content column — they bleed into
+   the left/right margins so they read as page furniture, not body content. */
+.n9-page [data-type="docHeader"],
+.n9-page [data-type="docFooter"],
+.n9-page .n9-page-sep-header,
+.n9-page .n9-page-sep-footer {
+  margin-left: calc(-1 * var(--n9-ml, 0px));
+  margin-right: calc(-1 * var(--n9-mr, 0px));
+  padding-left: calc(var(--n9-ml, 0px) + 0.6rem);
+  padding-right: calc(var(--n9-mr, 0px) + 0.6rem);
+  border-radius: 0;
 }
 [data-page-view] { scroll-padding-top: 2.5rem; }
 
@@ -639,10 +663,17 @@
   opacity: 0.85;
 }
 .n9-page-sep-gap {
-  /* the dark space between two sheets */
-  background: rgba(120, 130, 150, 0.2);
-  border-radius: 2px;
-  box-shadow: inset 0 6px 8px -8px rgba(0, 0, 0, 0.35), inset 0 -6px 8px -8px rgba(0, 0, 0, 0.35);
+  /* clean page-break line — no grey band */
+  position: relative;
+  background: transparent;
+}
+.n9-page-sep-gap::before {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 0;
+  right: 0;
+  border-top: 1px dashed rgba(120, 130, 150, 0.55);
 }
 .n9-page-sep-header {
   border-bottom: 1px solid rgba(148, 163, 184, 0.5);

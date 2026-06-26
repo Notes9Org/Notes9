@@ -112,9 +112,21 @@ export function buildPrintDocumentHtml(options: {
   }
   const marginCss = mmToCss(margins)
   const safeTitle = escapeHtml((options.title || "Document").trim() || "Document")
-  const inner = options.includeTitleHeading
-    ? `<h1 class="print-document-title">${safeTitle}</h1>${options.bodyHtml}`
-    : options.bodyHtml
+  // Pull document header/footer out of the flow so they can repeat on every page.
+  const { header, footer, body } = splitHeaderFooter(options.bodyHtml)
+  const titled = options.includeTitleHeading
+    ? `<h1 class="print-document-title">${safeTitle}</h1>${body}`
+    : body
+  // A thead/tfoot table repeats the header/footer on every printed page in all
+  // major browsers — the most reliable "running header/footer" technique.
+  const inner =
+    header || footer
+      ? `<table class="print-paged"><thead><tr><td>${
+          header ? `<div class="print-running-header">${header}</div>` : ""
+        }</td></tr></thead><tbody><tr><td>${titled}</td></tr></tbody>${
+          footer ? `<tfoot><tr><td><div class="print-running-footer">${footer}</div></td></tr></tfoot>` : ""
+        }</table>`
+      : titled
 
   const googleFonts = buildExportGoogleFontsLink(options.bodyHtml)
 
@@ -220,6 +232,13 @@ export function buildPrintDocumentHtml(options: {
     .n9-doc-header { border-bottom: 1px solid #d1d5db; padding: 6pt 4pt 8pt; margin-bottom: 12pt; }
     .n9-doc-footer { border-top: 1px solid #d1d5db; padding: 8pt 4pt 6pt; margin-top: 12pt; }
     .n9-page-break { height: 0; border: 0; page-break-after: always; break-after: page; }
+    /* Running header/footer: thead/tfoot repeat on every printed page */
+    table.print-paged { width: 100%; border-collapse: collapse; border: 0; margin: 0; }
+    table.print-paged > thead { display: table-header-group; }
+    table.print-paged > tfoot { display: table-footer-group; }
+    table.print-paged > thead td, table.print-paged > tbody td, table.print-paged > tfoot td { border: 0; padding: 0; vertical-align: top; }
+    .print-running-header { border-bottom: 1px solid #d1d5db; padding-bottom: 6pt; margin-bottom: 10pt; color: #4b5563; font-size: 0.92em; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    .print-running-footer { border-top: 1px solid #d1d5db; padding-top: 6pt; margin-top: 10pt; color: #4b5563; font-size: 0.92em; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
     .table-col-handle, .table-row-handle, .table-diag-handle { display: none !important; }
     .simple-shape-node { margin: 8pt 0; }
     .comments-section { margin-top: 32pt; border-top: 1pt solid #eee; padding-top: 16pt; }
@@ -240,6 +259,19 @@ export function buildPrintDocumentHtml(options: {
   ${options.commentsBlockHtml ?? ""}
 </body>
 </html>`
+}
+
+/** Remove the document header/footer from the body and return their inner HTML. */
+export function splitHeaderFooter(html: string): { header: string; footer: string; body: string } {
+  if (typeof DOMParser === "undefined") return { header: "", footer: "", body: html }
+  const doc = new DOMParser().parseFromString(html, "text/html")
+  const h = doc.querySelector('[data-type="docHeader"]')
+  const f = doc.querySelector('[data-type="docFooter"]')
+  const header = h ? h.innerHTML : ""
+  const footer = f ? f.innerHTML : ""
+  h?.remove()
+  f?.remove()
+  return { header, footer, body: doc.body.innerHTML }
 }
 
 function escapeHtml(s: string): string {

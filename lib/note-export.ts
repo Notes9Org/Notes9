@@ -10,6 +10,7 @@ import {
   buildPrintDocumentHtml,
   processCommentsForExport,
   prepareHtmlForExport,
+  splitHeaderFooter,
   writePrintIframeDocument,
 } from "@/lib/print-export"
 
@@ -69,8 +70,18 @@ export async function exportNoteAsMarkdown(html: string, title: string, toasts =
 
 export function exportNoteAsHtml(html: string, title: string) {
   const safeTitle = title || "note"
-  const bodyHtml = prepareHtmlForExport(html)
-  const googleFonts = buildExportGoogleFontsLink(bodyHtml)
+  const prepared = prepareHtmlForExport(html)
+  const { header, footer, body } = splitHeaderFooter(prepared)
+  // thead/tfoot repeat the header/footer on every page when the file is printed.
+  const bodyHtml =
+    header || footer
+      ? `<table class="print-paged"><thead><tr><td>${
+          header ? `<div class="doc-running-header">${header}</div>` : ""
+        }</td></tr></thead><tbody><tr><td>${body}</td></tr></tbody>${
+          footer ? `<tfoot><tr><td><div class="doc-running-footer">${footer}</div></td></tr></tfoot>` : ""
+        }</table>`
+      : body
+  const googleFonts = buildExportGoogleFontsLink(prepared)
   const fullHTML = `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -93,6 +104,12 @@ export function exportNoteAsHtml(html: string, title: string) {
     .n9-doc-header { border-bottom: 1px solid #d1d5db; padding: 6px 4px 8px; margin-bottom: 14px; color: #4b5563; font-size: 0.9em; }
     .n9-doc-footer { border-top: 1px solid #d1d5db; padding: 8px 4px 6px; margin-top: 14px; color: #4b5563; font-size: 0.9em; }
     .n9-page-break { height: 0; border: 0; page-break-after: always; break-after: page; }
+    table.print-paged { width: 100%; border-collapse: collapse; border: 0; }
+    table.print-paged > thead { display: table-header-group; }
+    table.print-paged > tfoot { display: table-footer-group; }
+    table.print-paged td { border: 0; padding: 0; vertical-align: top; }
+    .doc-running-header { border-bottom: 1px solid #d1d5db; padding-bottom: 6px; margin-bottom: 12px; color: #4b5563; font-size: 0.92em; }
+    .doc-running-footer { border-top: 1px solid #d1d5db; padding-top: 6px; margin-top: 12px; color: #4b5563; font-size: 0.92em; }
   </style>
 </head>
 <body>

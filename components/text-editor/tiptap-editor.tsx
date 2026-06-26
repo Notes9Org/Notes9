@@ -81,6 +81,8 @@ import {
   Rows,
   MoveVertical,
   SeparatorHorizontal,
+  ScrollText,
+  Ruler,
   Maximize2,
   Minimize2,
   Maximize,
@@ -2032,12 +2034,26 @@ export function TiptapEditor({
   const [pageSetup, setPageSetup] = useState<{
     orientation: "portrait" | "landscape"
     pageView: boolean
+    rulers: boolean
     margins: { top: number; right: number; bottom: number; left: number }
-  }>({
+  }>(() => ({
     orientation: "portrait",
-    pageView: false,
+    // Page view is the default writing surface; embedded / read-only editors opt out.
+    pageView: !panelEmbed && !hideToolbar,
+    rulers: true,
     margins: { top: 96, right: 96, bottom: 96, left: 96 },
-  })
+  }))
+  // Live height of the page sheet so the vertical ruler can repeat its scale per page.
+  const pageSheetRef = useRef<HTMLDivElement | null>(null)
+  const [pageSheetHeight, setPageSheetHeight] = useState(0)
+  useEffect(() => {
+    const el = pageSheetRef.current
+    if (!el || !pageSetup.pageView) return
+    const ro = new ResizeObserver(() => setPageSheetHeight(el.scrollHeight))
+    ro.observe(el)
+    setPageSheetHeight(el.scrollHeight)
+    return () => ro.disconnect()
+  }, [pageSetup.pageView, pageSetup.orientation])
   // Page geometry in CSS px at 96dpi (US Letter): portrait 8.5×11in, landscape 11×8.5in.
   const pageWidthPx = pageSetup.orientation === "landscape" ? 1056 : 816
   const pageMinHeightPx = pageSetup.orientation === "landscape" ? 816 : 1056
@@ -2046,7 +2062,8 @@ export function TiptapEditor({
   paginationParamsRef.current = {
     enabled: pageSetup.pageView,
     pageContentHeightPx: Math.max(0, pageMinHeightPx - pageSetup.margins.top - pageSetup.margins.bottom),
-    gapPx: pageSetup.margins.top + pageSetup.margins.bottom + 28,
+    // Just enough room for a clean page-break line between pages (no grey band).
+    gapPx: 28,
   }
   useEffect(() => {
     if (typeof document === "undefined") return
@@ -5202,10 +5219,18 @@ export function TiptapEditor({
             </TooltipTrigger>
             <TooltipContent>Page setup (print / PDF)</TooltipContent>
           </Tooltip>
-          <DropdownMenuContent {...dockPopperOpts} className="z-[200] w-52">
-            <DropdownMenuItem onClick={() => setPageSetup((p) => ({ ...p, pageView: !p.pageView }))}>
+          <DropdownMenuContent {...dockPopperOpts} className="z-[200] w-56">
+            <DropdownMenuItem onClick={() => setPageSetup((p) => ({ ...p, pageView: true }))}>
               <FileText className="mr-2 h-4 w-4" />
               Page view {pageSetup.pageView ? "✓" : ""}
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => setPageSetup((p) => ({ ...p, pageView: false }))}>
+              <ScrollText className="mr-2 h-4 w-4" />
+              Infinite scroll {!pageSetup.pageView ? "✓" : ""}
+            </DropdownMenuItem>
+            <DropdownMenuItem disabled={!pageSetup.pageView} onClick={() => setPageSetup((p) => ({ ...p, rulers: !p.rulers }))}>
+              <Ruler className="mr-2 h-4 w-4" />
+              Rulers {pageSetup.rulers ? "✓" : ""}
             </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuLabel className="text-xs text-muted-foreground">Orientation</DropdownMenuLabel>
@@ -5455,7 +5480,7 @@ export function TiptapEditor({
             }
             ref={(node) => setEditorContainer(node)}
           >
-            {pageSetup.pageView && (
+            {pageSetup.pageView && pageSetup.rulers && (
               <div className="sticky top-0 z-20 mb-2 flex justify-center gap-1.5 bg-muted/40 pt-1 pb-1.5">
                 {/* corner spacer aligns the horizontal ruler with the page (past the vertical ruler) */}
                 <div className="w-6 shrink-0" aria-hidden />
@@ -5478,10 +5503,11 @@ export function TiptapEditor({
               </div>
             )}
             <div className={cn(pageSetup.pageView && "flex justify-center gap-1.5")}>
-              {pageSetup.pageView && (
+              {pageSetup.pageView && pageSetup.rulers && (
                 <EditorRuler
                   orientation="vertical"
-                  lengthPx={pageMinHeightPx}
+                  lengthPx={Math.max(pageMinHeightPx, pageSheetHeight)}
+                  repeatEveryPx={pageMinHeightPx}
                   marginStartPx={pageSetup.margins.top}
                   marginEndPx={pageSetup.margins.bottom}
                   onChange={({ start, end }) =>
@@ -5498,17 +5524,23 @@ export function TiptapEditor({
                 />
               )}
               <div
+                ref={pageSheetRef}
                 className={cn(pageSetup.pageView && "n9-page")}
                 style={
                   pageSetup.pageView
-                    ? {
+                    ? ({
                         width: pageWidthPx,
                         minHeight: pageMinHeightPx,
                         paddingTop: pageSetup.margins.top,
                         paddingRight: pageSetup.margins.right,
                         paddingBottom: pageSetup.margins.bottom,
                         paddingLeft: pageSetup.margins.left,
-                      }
+                        // expose margins so header/footer can bleed into them
+                        "--n9-ml": `${pageSetup.margins.left}px`,
+                        "--n9-mr": `${pageSetup.margins.right}px`,
+                        "--n9-mt": `${pageSetup.margins.top}px`,
+                        "--n9-mb": `${pageSetup.margins.bottom}px`,
+                      } as CSSProperties)
                     : undefined
                 }
               >

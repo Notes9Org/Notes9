@@ -3,7 +3,7 @@
 import {
   Document, Paragraph, TextRun, Table, TableRow, TableCell,
   WidthType, BorderStyle, HeadingLevel, Packer, ShadingType,
-  VerticalAlign, AlignmentType, convertInchesToTwip, PageBreak,
+  VerticalAlign, AlignmentType, convertInchesToTwip, PageBreak, Header, Footer,
   CommentRangeStart, CommentRangeEnd, CommentReference, ICommentOptions
 } from 'docx'
 import { saveAs } from 'file-saver'
@@ -62,11 +62,29 @@ function rgbToHex(color: string): string | undefined {
 // Parse HTML content and convert to DOCX elements
 export async function exportHtmlToDocx(html: string, title: string) {
   const preparedHtml = prepareHtmlForExport(html)
-  const children: any[] = []
   const comments: ICommentOptions[] = []
 
-  const elements = parseHtmlToDocElements(preparedHtml, comments)
-  children.push(...elements)
+  // Extract the document header/footer so Word repeats them on every page via
+  // real section headers/footers (rather than once in the body flow).
+  let bodyHtml = preparedHtml
+  let headerChildren: any[] = []
+  let footerChildren: any[] = []
+  if (typeof DOMParser !== "undefined") {
+    const parsed = new DOMParser().parseFromString(preparedHtml, "text/html")
+    const h = parsed.querySelector('[data-type="docHeader"]')
+    const f = parsed.querySelector('[data-type="docFooter"]')
+    if (h) {
+      headerChildren = parseHtmlToDocElements(h.innerHTML, []).flat()
+      h.remove()
+    }
+    if (f) {
+      footerChildren = parseHtmlToDocElements(f.innerHTML, []).flat()
+      f.remove()
+    }
+    bodyHtml = parsed.body.innerHTML
+  }
+
+  const children: any[] = parseHtmlToDocElements(bodyHtml, comments)
 
   const doc = new Document({
     comments: {
@@ -93,6 +111,8 @@ export async function exportHtmlToDocx(html: string, title: string) {
           },
         },
       },
+      ...(headerChildren.length ? { headers: { default: new Header({ children: headerChildren }) } } : {}),
+      ...(footerChildren.length ? { footers: { default: new Footer({ children: footerChildren }) } } : {}),
       children,
     }],
   })

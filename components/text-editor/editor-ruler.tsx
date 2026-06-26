@@ -17,12 +17,18 @@ export type EditorRulerProps = {
   marginEndPx: number
   /** Called live while dragging. Keys map to the active orientation (left/right or top/bottom). */
   onChange: (next: { start?: number; end?: number }) => void
+  /**
+   * When set (vertical ruler), the scale + margin zones repeat every `repeatEveryPx`
+   * down the ruler so each page shows its own measurements.
+   */
+  repeatEveryPx?: number
   className?: string
 }
 
 /**
  * Word-style ruler (horizontal or vertical). Shows inch ticks and two draggable
- * margin markers; the shaded zones at each end represent the current margins.
+ * margin markers; the shaded zones at each end represent the current margins. A
+ * vertical ruler can repeat its scale once per page.
  */
 export function EditorRuler({
   orientation = "horizontal",
@@ -30,6 +36,7 @@ export function EditorRuler({
   marginStartPx,
   marginEndPx,
   onChange,
+  repeatEveryPx,
   className,
 }: EditorRulerProps) {
   const isH = orientation === "horizontal"
@@ -54,28 +61,102 @@ export function EditorRuler({
       if (!drag) return
       const cur = isH ? e.clientX : e.clientY
       const delta = cur - drag.startPos
-      // End margin grows as the handle moves toward the start, so invert for it.
       const raw = drag.side === "start" ? drag.startMargin + delta : drag.startMargin - delta
+      const span = isH ? lengthPx : repeatEveryPx ?? lengthPx
       const otherMargin = drag.side === "start" ? marginEndPx : marginStartPx
-      const maxMargin = lengthPx - otherMargin - DPI * 1.2
+      const maxMargin = span - otherMargin - DPI * 1.2
       const clamped = Math.max(DPI * 0.25, Math.min(maxMargin, raw))
       onChange(drag.side === "start" ? { start: Math.round(clamped) } : { end: Math.round(clamped) })
     },
-    [isH, lengthPx, marginStartPx, marginEndPx, onChange],
+    [isH, lengthPx, repeatEveryPx, marginStartPx, marginEndPx, onChange],
   )
 
   const endDrag = useCallback(() => {
     dragRef.current = null
   }, [])
 
-  const inches = Math.ceil(lengthPx / DPI)
-  const ticks: number[] = []
-  for (let i = 0; i <= inches; i++) ticks.push(i)
+  // For a repeating vertical ruler, each page renders its own 0..N scale.
+  const pageLen = isH ? lengthPx : repeatEveryPx ?? lengthPx
+  const pageCount = isH ? 1 : Math.max(1, Math.ceil(lengthPx / pageLen))
+  const inchesPerPage = Math.ceil(pageLen / DPI)
 
-  const handleClass =
-    "absolute z-10 h-3 w-3 cursor-ew-resize rounded-sm border border-border bg-primary shadow-sm"
-  const handleClassV =
-    "absolute z-10 h-3 w-3 cursor-ns-resize rounded-sm border border-border bg-primary shadow-sm"
+  const handleBase =
+    "absolute z-10 h-3 w-3 rounded-sm border border-border bg-primary shadow-sm -translate-x-1/2 -translate-y-1/2"
+
+  const renderPage = (pageIndex: number) => {
+    const base = pageIndex * pageLen // offset of this page along the ruler
+    const ticks: React.ReactNode[] = []
+    for (let i = 0; i <= inchesPerPage; i++) {
+      const at = base + i * DPI
+      if (at > lengthPx) break
+      ticks.push(
+        isH ? (
+          <div key={`t-${pageIndex}-${i}`} className="absolute top-0 bottom-0" style={{ left: at }}>
+            <div className="absolute top-0 h-2 w-px bg-border" />
+            {i > 0 && i < inchesPerPage ? (
+              <span className="absolute top-2.5 -translate-x-1/2 text-[9px] tabular-nums">{i}</span>
+            ) : null}
+          </div>
+        ) : (
+          <div key={`t-${pageIndex}-${i}`} className="absolute left-0 right-0" style={{ top: at }}>
+            <div className="absolute left-0 w-2 h-px bg-border" />
+            {i > 0 && i < inchesPerPage ? (
+              <span className="absolute left-2.5 -translate-y-1/2 text-[9px] tabular-nums">{i}</span>
+            ) : null}
+          </div>
+        ),
+      )
+    }
+    return (
+      <div key={`page-${pageIndex}`}>
+        {/* page boundary line (vertical ruler only, after the first page) */}
+        {!isH && pageIndex > 0 ? (
+          <div className="absolute left-0 right-0 border-t border-dashed border-border" style={{ top: base }} />
+        ) : null}
+        {/* margin shading for this page */}
+        <div
+          className="absolute bg-muted/70"
+          style={
+            isH
+              ? { insetBlock: 0, left: base, width: marginStartPx }
+              : { insetInline: 0, top: base, height: marginStartPx }
+          }
+          aria-hidden
+        />
+        <div
+          className="absolute bg-muted/70"
+          style={
+            isH
+              ? { insetBlock: 0, left: base + pageLen - marginEndPx, width: marginEndPx }
+              : { insetInline: 0, top: base + pageLen - marginEndPx, height: marginEndPx }
+          }
+          aria-hidden
+        />
+        {ticks}
+        {/* draggable handles only on the first page (they set the margins for all pages) */}
+        {pageIndex === 0 ? (
+          <>
+            <button
+              type="button"
+              aria-label={isH ? "Left margin" : "Top margin"}
+              title={isH ? "Drag to set left margin" : "Drag to set top margin"}
+              onPointerDown={onPointerDown("start")}
+              className={cn(handleBase, isH ? "top-1/2 cursor-ew-resize" : "left-1/2 cursor-ns-resize")}
+              style={isH ? { left: marginStartPx } : { top: marginStartPx }}
+            />
+            <button
+              type="button"
+              aria-label={isH ? "Right margin" : "Bottom margin"}
+              title={isH ? "Drag to set right margin" : "Drag to set bottom margin"}
+              onPointerDown={onPointerDown("end")}
+              className={cn(handleBase, isH ? "top-1/2 cursor-ew-resize" : "left-1/2 cursor-ns-resize")}
+              style={isH ? { left: pageLen - marginEndPx } : { top: pageLen - marginEndPx }}
+            />
+          </>
+        ) : null}
+      </div>
+    )
+  }
 
   return (
     <div
@@ -92,63 +173,7 @@ export function EditorRuler({
         )}
         style={isH ? { width: lengthPx } : { height: lengthPx }}
       >
-        {/* Margin shading */}
-        <div
-          className="absolute bg-muted/70"
-          style={
-            isH
-              ? { insetBlock: 0, left: 0, width: marginStartPx }
-              : { insetInline: 0, top: 0, height: marginStartPx }
-          }
-          aria-hidden
-        />
-        <div
-          className="absolute bg-muted/70"
-          style={
-            isH
-              ? { insetBlock: 0, right: 0, width: marginEndPx }
-              : { insetInline: 0, bottom: 0, height: marginEndPx }
-          }
-          aria-hidden
-        />
-        {/* Inch ticks + labels */}
-        {ticks.map((i) =>
-          isH ? (
-            <div key={i} className="absolute top-0 bottom-0" style={{ left: i * DPI }}>
-              <div className="absolute top-0 h-2 w-px bg-border" />
-              {i > 0 && i < inches ? (
-                <span className="absolute top-2.5 -translate-x-1/2 text-[9px] tabular-nums">{i}</span>
-              ) : null}
-              {i < inches ? <div className="absolute top-0 h-1 w-px bg-border/60" style={{ left: DPI / 2 }} /> : null}
-            </div>
-          ) : (
-            <div key={i} className="absolute left-0 right-0" style={{ top: i * DPI }}>
-              <div className="absolute left-0 w-2 h-px bg-border" />
-              {i > 0 && i < inches ? (
-                <span className="absolute left-2.5 -translate-y-1/2 text-[9px] tabular-nums">{i}</span>
-              ) : null}
-              {i < inches ? <div className="absolute left-0 w-1 h-px bg-border/60" style={{ top: DPI / 2 }} /> : null}
-            </div>
-          ),
-        )}
-        {/* Start margin handle */}
-        <button
-          type="button"
-          aria-label={isH ? "Left margin" : "Top margin"}
-          title={isH ? "Drag to set left margin" : "Drag to set top margin"}
-          onPointerDown={onPointerDown("start")}
-          className={cn(isH ? handleClass : handleClassV, isH ? "top-1/2 -translate-x-1/2 -translate-y-1/2" : "left-1/2 -translate-x-1/2 -translate-y-1/2")}
-          style={isH ? { left: marginStartPx } : { top: marginStartPx }}
-        />
-        {/* End margin handle */}
-        <button
-          type="button"
-          aria-label={isH ? "Right margin" : "Bottom margin"}
-          title={isH ? "Drag to set right margin" : "Drag to set bottom margin"}
-          onPointerDown={onPointerDown("end")}
-          className={cn(isH ? handleClass : handleClassV, isH ? "top-1/2 -translate-x-1/2 -translate-y-1/2" : "left-1/2 -translate-x-1/2 -translate-y-1/2")}
-          style={isH ? { left: lengthPx - marginEndPx } : { top: lengthPx - marginEndPx }}
-        />
+        {Array.from({ length: pageCount }, (_, p) => renderPage(p))}
       </div>
     </div>
   )
