@@ -91,7 +91,7 @@ export function PaperList({
 
   function PaperGridCard({ paper }: { paper: PaperListItem }) {
     const card = (
-      <Card className="flex h-full min-w-0 flex-col overflow-hidden transition-colors hover:border-primary">
+      <Card className="flex h-full min-w-0 flex-col overflow-hidden transition-all duration-200 hover:border-primary hover:shadow-md motion-safe:hover:-translate-y-0.5 animate-n9-turn-in">
         <CardHeader className="min-w-0 pb-3">
           <div className="flex min-w-0 items-start gap-3">
             <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10">

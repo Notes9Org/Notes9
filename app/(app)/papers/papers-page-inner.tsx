@@ -1,8 +1,9 @@
 "use client"
 
-import { useCallback, useEffect, useState, useMemo } from "react"
+import { useEffect, useState, useMemo } from "react"
 import { useSearchParams, useRouter } from "next/navigation"
 import Link from "next/link"
+import { useQuery } from "@tanstack/react-query"
 import { createClient } from "@/lib/supabase/client"
 import { useAuthUser } from "@/components/auth/auth-provider"
 import { Button } from "@/components/ui/button"
@@ -17,65 +18,64 @@ interface PapersPageInnerProps {
   projects?: { id: string; name: string }[]
 }
 
+// List view only needs these columns — avoid pulling heavy body/content fields.
+const PAPER_LIST_COLUMNS = "id, title, status, updated_at, created_at, project_id"
+
+async function fetchPapersList(userId: string): Promise<PaperListItem[]> {
+  const supabase = createClient()
+  const fullSelect = `
+    ${PAPER_LIST_COLUMNS},
+    project:projects(id, name)
+  `
+
+  const primary = await supabase
+    .from("papers")
+    .select(fullSelect)
+    .eq("created_by", userId)
+    .order("updated_at", { ascending: false })
+
+  // Supabase types the with-embed and without-embed selects as different row
+  // shapes, so collect the rows as `unknown` and cast once at the boundary.
+  let rows: unknown = primary.data
+  let error = primary.error
+
+  if (error) {
+    console.warn("[papers] list query with joins failed, retrying without embeds:", error.message)
+    const retry = await supabase
+      .from("papers")
+      .select(PAPER_LIST_COLUMNS)
+      .eq("created_by", userId)
+      .order("updated_at", { ascending: false })
+    rows = retry.data
+    error = retry.error
+  }
+
+  if (error) throw new Error(error.message)
+
+  return (rows as PaperListItem[]) || []
+}
+
 export function PapersPageInner({ projects = [] }: PapersPageInnerProps = {}) {
   const user = useAuthUser();
   const searchParams = useSearchParams()
   const router = useRouter()
-  const [papers, setPapers] = useState<PaperListItem[]>([])
-  const [loading, setLoading] = useState(true)
-  const [fetchError, setFetchError] = useState<string | null>(null)
   const [viewMode, setViewMode] = useState<"grid" | "table">("table")
   const { projectId, projectName } = useProjectScope()
   const [projectFilter, setProjectFilter] = useState(projectId || FILTER_ALL)
 
-  const fetchPapers = useCallback(async () => {
-    const supabase = createClient()
-    if (!user) {
-      setPapers([])
-      setFetchError(null)
-      setLoading(false)
-      return
-    }
-
-    const fullSelect = `
-      *,
-      project:projects(id, name)
-    `
-
-    let { data, error } = await supabase
-      .from("papers")
-      .select(fullSelect)
-      .eq("created_by", user.id)
-      .order("updated_at", { ascending: false })
-
-    if (error) {
-      console.warn("[papers] list query with joins failed, retrying without embeds:", error.message)
-      const retry = await supabase
-        .from("papers")
-        .select("*")
-        .eq("created_by", user.id)
-        .order("updated_at", { ascending: false })
-      data = retry.data
-      error = retry.error
-    }
-
-    if (error) {
-      setFetchError(error.message)
-      setPapers([])
-      setLoading(false)
-      return
-    }
-
-    const list = (data as PaperListItem[]) || []
-
-    setFetchError(null)
-    setPapers(list)
-    setLoading(false)
-  }, [])
-
-  useEffect(() => {
-    void fetchPapers()
-  }, [fetchPapers])
+  // Cached, de-duplicated list fetch — shared across navigations so returning to
+  // this page (or arriving from a paper detail view) does not refetch.
+  const {
+    data: papers = [],
+    isLoading: loading,
+    error,
+    refetch,
+  } = useQuery({
+    queryKey: ["papers", "list", user?.id],
+    queryFn: () => fetchPapersList(user!.id),
+    enabled: Boolean(user),
+  })
+  const fetchError = error ? (error as Error).message : null
 
   useEffect(() => {
     if (projectId) {
@@ -166,7 +166,9 @@ export function PapersPageInner({ projects = [] }: PapersPageInnerProps = {}) {
             viewMode={viewMode}
             setViewMode={setViewMode}
             onSelectPaper={(p) => router.push(`/papers/${p.id}`)}
-            onDeleted={fetchPapers}
+            onDeleted={() => {
+              void refetch()
+            }}
             isFiltered={projectFilter !== FILTER_ALL}
           />
         </>
