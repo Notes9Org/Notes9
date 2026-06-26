@@ -8,8 +8,14 @@ export type PaginationParams = {
   enabled: boolean
   /** Usable content height per page in px (page height − top/bottom margins). */
   pageContentHeightPx: number
-  /** Visual gap drawn between consecutive pages (≈ bottom + top margins + sheet edge). */
+  /** Backdrop gap drawn between two sheets. */
   gapPx: number
+  /** Top margin px — header zone of the next page. */
+  marginTopPx: number
+  /** Bottom margin px — footer zone of the finishing page. */
+  marginBottomPx: number
+  /** Callback when pagination computes new page breaks, providing DOM targets for portals. */
+  onPortalsChange?: (portals: Array<{el: HTMLElement, page: number, type: 'header' | 'footer'}>) => void
 }
 
 export type PaginationOptions = {
@@ -75,14 +81,14 @@ export const Pagination = Extension.create<PaginationOptions>({
               return
             }
             const H = params.pageContentHeightPx
-            const headerEl = view.dom.querySelector(".n9-doc-header") as HTMLElement | null
-            const footerEl = view.dom.querySelector(".n9-doc-footer") as HTMLElement | null
-            const headerHtml = headerEl?.innerHTML ?? ""
-            const footerHtml = footerEl?.innerHTML ?? ""
+            const headerHtml = ""
+            const footerHtml = ""
 
             const breaks: { pos: number; fill: number }[] = []
             let used = 0
             view.state.doc.forEach((node, offset) => {
+              // Header/footer live in the page margins, not the content flow.
+              if (node.type.name === "docHeader" || node.type.name === "docFooter") return
               const dom = view.nodeDOM(offset) as HTMLElement | null
               if (!dom || dom.nodeType !== 1 || typeof dom.getBoundingClientRect !== "function") {
                 return
@@ -99,23 +105,37 @@ export const Pagination = Extension.create<PaginationOptions>({
               }
             })
 
-            const sig = `${H}|${params.gapPx}|${headerHtml.length}|${footerHtml.length}|` +
+            const sig = `${H}|${params.gapPx}|${breaks.length}|` +
               breaks.map((b) => `${b.pos}:${b.fill}`).join(",")
             if (sig === lastSig) return
             lastSig = sig
 
-            const decos = breaks.map((b) =>
-              Decoration.widget(b.pos, () => buildSeparator(b.fill, params.gapPx, headerHtml, footerHtml), {
+            const newPortals: Array<{el: HTMLElement, page: number, type: 'header' | 'footer'}> = []
+
+            const decos = breaks.map((b, i) => {
+              const { wrap, headerTarget, footerTarget } = buildSeparator(b.fill, params)
+              const pageNumber = i + 2 // Page 1 is the main document, break 0 starts page 2
+              
+              if (headerTarget) newPortals.push({ el: headerTarget, page: pageNumber, type: 'header' })
+              if (footerTarget) newPortals.push({ el: footerTarget, page: pageNumber - 1, type: 'footer' })
+              
+              return Decoration.widget(b.pos, () => wrap, {
                 side: -1,
-                key: `n9-pb-${b.pos}-${b.fill}-${headerHtml.length}-${footerHtml.length}`,
+                key: `n9-pb-${b.pos}-${b.fill}`,
                 ignoreSelection: true,
-              }),
-            )
+              })
+            })
+
             view.dispatch(
               view.state.tr
                 .setMeta(paginationKey, DecorationSet.create(view.state.doc, decos))
                 .setMeta("addToHistory", false),
             )
+
+            // Notify React of the new portal targets
+            if (params.onPortalsChange) {
+              params.onPortalsChange(newPortals)
+            }
           }
 
           const schedule = (v?: EditorView) => {
@@ -141,39 +161,53 @@ export const Pagination = Extension.create<PaginationOptions>({
   },
 })
 
-function buildSeparator(fillPx: number, gapPx: number, headerHtml: string, footerHtml: string): HTMLElement {
+function buildSeparator(
+  fillPx: number,
+  params: PaginationParams,
+): { wrap: HTMLElement; headerTarget: HTMLElement; footerTarget: HTMLElement } {
   const wrap = document.createElement("div")
   wrap.className = "n9-page-sep"
-  wrap.setAttribute("contenteditable", "false")
+  // Allow React events to propagate or be handled without ProseMirror stealing them
+  // Remove contenteditable=false to avoid Prosemirror selecting it
+  
+  // 1) Fill the rest of the finishing page's content area.
+  const fill = document.createElement("div")
+  fill.style.height = `${fillPx}px`
+  wrap.appendChild(fill)
 
-  // Footer pinned to the bottom of the page just before the break.
-  if (footerHtml) {
-    const footer = document.createElement("div")
-    footer.className = "n9-page-sep-footer n9-doc-footer"
-    footer.style.marginTop = `${Math.max(0, fillPx - 28)}px`
-    footer.innerHTML = footerHtml
-    wrap.appendChild(footer)
-  } else {
-    const spacer = document.createElement("div")
-    spacer.style.height = `${fillPx}px`
-    wrap.appendChild(spacer)
-  }
+  // 2) Bottom-margin zone of the finishing page — holds the footer.
+  const footerZone = document.createElement("div")
+  footerZone.className = "n9-page-sep-marginzone n9-page-sep-footerzone relative w-full"
+  footerZone.style.height = `${params.marginBottomPx}px`
+  
+  const footerTarget = document.createElement("div")
+  footerTarget.className = "absolute inset-0"
+  footerTarget.addEventListener("mousedown", e => e.stopPropagation())
+  footerTarget.addEventListener("keydown", e => e.stopPropagation())
+  footerZone.appendChild(footerTarget)
+  
+  wrap.appendChild(footerZone)
 
-  // Inter-page gap (the dark edge between two sheets).
+  // 3) Backdrop gap between the two sheets (shows each page's end).
   const gap = document.createElement("div")
   gap.className = "n9-page-sep-gap"
-  gap.style.height = `${gapPx}px`
+  gap.style.height = `${params.gapPx}px`
   wrap.appendChild(gap)
 
-  // Header repeated at the top of the next page.
-  if (headerHtml) {
-    const header = document.createElement("div")
-    header.className = "n9-page-sep-header n9-doc-header"
-    header.innerHTML = headerHtml
-    wrap.appendChild(header)
-  }
+  // 4) Top-margin zone of the next page — holds the repeated header.
+  const headerZone = document.createElement("div")
+  headerZone.className = "n9-page-sep-marginzone n9-page-sep-headerzone relative w-full"
+  headerZone.style.height = `${params.marginTopPx}px`
+  
+  const headerTarget = document.createElement("div")
+  headerTarget.className = "absolute inset-0"
+  headerTarget.addEventListener("mousedown", e => e.stopPropagation())
+  headerTarget.addEventListener("keydown", e => e.stopPropagation())
+  headerZone.appendChild(headerTarget)
+  
+  wrap.appendChild(headerZone)
 
-  return wrap
+  return { wrap, headerTarget, footerTarget }
 }
 
 export default Pagination

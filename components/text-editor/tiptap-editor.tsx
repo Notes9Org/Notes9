@@ -166,8 +166,8 @@ import { EditorRuler } from "./editor-ruler"
 import { LineHeight } from "./extensions/line-height"
 import { PageBreak } from "./extensions/page-break"
 import { Columns as ColumnsExtension } from "./extensions/columns"
-import { DocHeader, DocFooter, HeaderFooter } from "./extensions/header-footer"
 import { Pagination, type PaginationParams } from "./extensions/pagination"
+import { HeaderFooterInput } from "./HeaderFooterInput"
 import { SpreadsheetEmbed } from "./extensions/spreadsheet-embed"
 import { VoiceWaveform } from "./voice-waveform"
 // @ts-ignore - CSS import for KaTeX math rendering
@@ -2025,7 +2025,7 @@ export function TiptapEditor({
   useEffect(() => {
     if (typeof window === "undefined") return
     try {
-      window.localStorage.setItem(RIBBON_TAB_KEY, ribbonTab)
+window.localStorage.setItem(RIBBON_TAB_KEY, ribbonTab)
     } catch {
       /* ignore quota/availability errors */
     }
@@ -2043,6 +2043,15 @@ export function TiptapEditor({
     rulers: true,
     margins: { top: 96, right: 96, bottom: 96, left: 96 },
   }))
+
+  // Editable header/footer state
+  const [headerText, setHeaderText] = useState("Notes9 Document")
+  const [footerText, setFooterText] = useState("")
+  const [headerAlign, setHeaderAlign] = useState<"left"|"center"|"right">("left")
+  const [footerAlign, setFooterAlign] = useState<"left"|"center"|"right">("center")
+  const [showPageNumbers, setShowPageNumbers] = useState<"header"|"footer"|"none">("footer")
+  const [pageBreakPortals, setPageBreakPortals] = useState<Array<{el: HTMLElement, page: number, type: 'header' | 'footer'}>>([])
+
   // Live height of the page sheet so the vertical ruler can repeat its scale per page.
   const pageSheetRef = useRef<HTMLDivElement | null>(null)
   const [pageSheetHeight, setPageSheetHeight] = useState(0)
@@ -2058,12 +2067,14 @@ export function TiptapEditor({
   const pageWidthPx = pageSetup.orientation === "landscape" ? 1056 : 816
   const pageMinHeightPx = pageSetup.orientation === "landscape" ? 816 : 1056
   // Live params the pagination plugin reads each measure pass.
-  const paginationParamsRef = useRef<PaginationParams>({ enabled: false, pageContentHeightPx: 0, gapPx: 0 })
+  const paginationParamsRef = useRef<PaginationParams>({ enabled: false, pageContentHeightPx: 0, gapPx: 0, marginTopPx: 0, marginBottomPx: 0 })
   paginationParamsRef.current = {
-    enabled: pageSetup.pageView,
+    enabled: !!(pageSetup.pageView && pageSheetRef.current && pageSheetHeight > 100),
     pageContentHeightPx: Math.max(0, pageMinHeightPx - pageSetup.margins.top - pageSetup.margins.bottom),
-    // Just enough room for a clean page-break line between pages (no grey band).
-    gapPx: 28,
+    gapPx: 48,
+    marginTopPx: pageSetup.margins.top,
+    marginBottomPx: pageSetup.margins.bottom,
+    onPortalsChange: setPageBreakPortals
   }
   useEffect(() => {
     if (typeof document === "undefined") return
@@ -2319,9 +2330,6 @@ export function TiptapEditor({
       LineHeight,
       PageBreak,
       ColumnsExtension,
-      DocHeader,
-      DocFooter,
-      HeaderFooter,
       Pagination.configure({ getParams: () => paginationParamsRef.current }),
       SpreadsheetEmbed,
       Alignment,
@@ -4991,54 +4999,70 @@ export function TiptapEditor({
         </>
       )}
 
-      {showAITools && (
-        <>
-          <Separator orientation="vertical" className="mx-px h-5 shrink-0" />
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button variant="ghost" size="sm" data-tour="editor-cite" className="h-8 gap-1 rounded-lg px-2 shrink-0" onClick={aiCite} disabled={isCiteProcessing}>
-                {isCiteProcessing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Quote className="h-4 w-4" />}
-                <span className="text-xs hidden sm:inline">Cite</span>
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>Cite with AI</TooltipContent>
-          </Tooltip>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <select
-                value={citationStyleChosen ? selectedCitationStyle : ""}
-                onChange={(e) => {
-                  const value = e.target.value
-                  if (!value) return
-                  applyCitationStyleChange(value)
-                }}
-                className="h-8 px-2 rounded-lg border border-border bg-background text-xs cursor-pointer shrink-0 max-w-[120px]"
-                title="Citation style"
-              >
-                {!citationStyleChosen && (
-                  <option value="" disabled>
-                    Citation style…
-                  </option>
-                )}
-                {CITATION_STYLE_OPTIONS.map(opt => (
-                  <option key={opt.value} value={opt.value}>{opt.label}</option>
-                ))}
-              </select>
-            </TooltipTrigger>
-            <TooltipContent>Citation style — affects inline citations &amp; bibliography</TooltipContent>
-          </Tooltip>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button variant="ghost" size="sm" data-tour="editor-bibliography" className="h-8 gap-1 rounded-lg px-2 shrink-0" onClick={handleGenerateBibliography} disabled={isCiteProcessing}>
-                <BookOpen className="h-4 w-4" />
-                <span className="text-xs hidden sm:inline">Bibliography</span>
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>Generate bibliography</TooltipContent>
-          </Tooltip>
-        </>
-      )}
       </span>
+
+      {/* ── Home run: AI & citations menu (always available on the Home tab) ── */}
+      {showAITools && (
+        <span className={rg("home")}>
+          <Separator orientation="vertical" className="mx-px h-5 shrink-0" />
+          <DropdownMenu modal={false}>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    data-tour="editor-cite"
+                    className="h-8 gap-1 rounded-lg px-2 shrink-0"
+                    disabled={isCiteProcessing}
+                  >
+                    {isCiteProcessing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
+                    <span className="text-xs hidden sm:inline">AI</span>
+                    <ChevronDown className="h-3.5 w-3.5 opacity-70" />
+                  </Button>
+                </DropdownMenuTrigger>
+              </TooltipTrigger>
+              <TooltipContent>AI &amp; citations</TooltipContent>
+            </Tooltip>
+            <DropdownMenuContent {...dockPopperOpts} className="z-[200] w-60">
+              <DropdownMenuLabel className="text-xs text-muted-foreground">Citations</DropdownMenuLabel>
+              <DropdownMenuItem data-tour="editor-cite" onClick={aiCite} disabled={isCiteProcessing}>
+                <Quote className="mr-2 h-4 w-4" />
+                Cite with AI
+              </DropdownMenuItem>
+              <DropdownMenuItem data-tour="editor-bibliography" onClick={handleGenerateBibliography} disabled={isCiteProcessing}>
+                <BookOpen className="mr-2 h-4 w-4" />
+                Generate bibliography
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuLabel className="text-xs text-muted-foreground">Citation style</DropdownMenuLabel>
+              <div className="px-2 py-1" onPointerDown={(e) => e.stopPropagation()}>
+                <select
+                  value={citationStyleChosen ? selectedCitationStyle : ""}
+                  onChange={(e) => {
+                    const value = e.target.value
+                    if (!value) return
+                    applyCitationStyleChange(value)
+                  }}
+                  className="h-8 w-full px-2 rounded-lg border border-border bg-background text-xs cursor-pointer"
+                  title="Citation style"
+                >
+                  {!citationStyleChosen && (
+                    <option value="" disabled>
+                      Citation style…
+                    </option>
+                  )}
+                  {CITATION_STYLE_OPTIONS.map((opt) => (
+                    <option key={opt.value} value={opt.value}>
+                      {opt.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </span>
+      )}
 
       {/* ── Table run: contextual table tools (only while the cursor is in a table) ── */}
       <span className={rg("table")}>
@@ -5197,11 +5221,15 @@ export function TiptapEditor({
             <TooltipContent>Header &amp; footer</TooltipContent>
           </Tooltip>
           <DropdownMenuContent {...dockPopperOpts} className="z-[200] w-48">
-            <DropdownMenuItem onClick={() => (editor.chain().focus() as any).toggleDocHeader().run()}>
-              Toggle header
+            <DropdownMenuItem onClick={() => setShowPageNumbers(prev => prev === "none" ? "footer" : "none")}>
+              Toggle page numbers
             </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => (editor.chain().focus() as any).toggleDocFooter().run()}>
-              Toggle footer
+            <DropdownMenuSeparator />
+            <DropdownMenuItem onClick={() => setHeaderAlign(prev => prev === "left" ? "center" : prev === "center" ? "right" : "left")}>
+              Header align: {headerAlign}
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => setFooterAlign(prev => prev === "left" ? "center" : prev === "center" ? "right" : "left")}>
+              Footer align: {footerAlign}
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
@@ -5406,7 +5434,7 @@ export function TiptapEditor({
                 </div>
               </div>
             )}
-            {/* Row 2: ribbon tabs + the active tab's tools (one stretchable row, no name eating the space) */}
+            {/* Row 2: ribbon tabs + the active tab's tools (tabs on the left, tools to the side) */}
             <div className="flex min-w-0 items-center gap-2">
               {renderRibbonTabs()}
               <Separator orientation="vertical" className="h-5 shrink-0" />
@@ -5470,8 +5498,10 @@ export function TiptapEditor({
             data-page-orientation={pageSetup.orientation}
             {...(pageSetup.pageView ? { "data-page-view": "" } : {})}
             className={cn(
-              "overflow-y-auto overflow-x-auto h-full min-h-0 relative w-full max-w-full",
-              pageSetup.pageView ? "bg-muted/40 px-0 pt-2 pb-8" : "px-2 pb-2 pr-20",
+              "overflow-y-auto overflow-x-auto h-full min-h-0 relative w-full max-w-full transition-[padding] duration-200",
+              pageSetup.pageView ? "n9-page-backdrop px-0 pt-2 pb-8" : "px-2 pb-2 pr-20",
+              // shift the centred page left so the comments sidebar doesn't cover it
+              commentsSidebarOpen && "pr-[312px]",
             )}
             style={
               panelEmbed || fillParentHeight || editorRegionFullscreen
@@ -5481,7 +5511,7 @@ export function TiptapEditor({
             ref={(node) => setEditorContainer(node)}
           >
             {pageSetup.pageView && pageSetup.rulers && (
-              <div className="sticky top-0 z-20 mb-2 flex justify-center gap-1.5 bg-muted/40 pt-1 pb-1.5">
+              <div className="sticky top-0 z-20 mb-2 flex justify-center gap-1.5 n9-page-backdrop pt-1 pb-1.5">
                 {/* corner spacer aligns the horizontal ruler with the page (past the vertical ruler) */}
                 <div className="w-6 shrink-0" aria-hidden />
                 <EditorRuler
@@ -5544,6 +5574,36 @@ export function TiptapEditor({
                     : undefined
                 }
               >
+                {pageSetup.pageView && (
+                  <>
+                    <div className="absolute top-0 left-0 right-0" style={{ height: pageSetup.margins.top }}>
+                      <HeaderFooterInput 
+                        type="header" value={headerText} onChange={setHeaderText} 
+                        align={headerAlign} page={1} showPageNumbers={showPageNumbers} 
+                      />
+                    </div>
+                    <div className="absolute bottom-0 left-0 right-0" style={{ height: pageSetup.margins.bottom }}>
+                      <HeaderFooterInput 
+                        type="footer" value={footerText} onChange={setFooterText} 
+                        align={footerAlign} page={Math.max(1, ...pageBreakPortals.map(p => p.page))} showPageNumbers={showPageNumbers} 
+                      />
+                    </div>
+                    
+                    {pageBreakPortals.map(p => createPortal(
+                      <HeaderFooterInput 
+                        key={`${p.page}-${p.type}`}
+                        type={p.type} 
+                        value={p.type === 'header' ? headerText : footerText} 
+                        onChange={p.type === 'header' ? setHeaderText : setFooterText} 
+                        align={p.type === 'header' ? headerAlign : footerAlign} 
+                        page={p.page} 
+                        showPageNumbers={showPageNumbers} 
+                      />,
+                      p.el
+                    ))}
+                  </>
+                )}
+
                 <EditorContextMenu
                   editor={editor}
                   actions={{
