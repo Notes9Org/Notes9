@@ -49,6 +49,7 @@
     "@radix-ui/react-tooltip": "1.1.6",
     "@supabase/ssr": "latest",
     "@supabase/supabase-js": "latest",
+    "@tanstack/react-query": "^5.101.1",
     "@teselagen/bio-parsers": "^0.4.38",
     "@tiptap/core": "^3.17.1",
     "@tiptap/extension-collaboration": "^3.16.0",

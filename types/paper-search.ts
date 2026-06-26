@@ -24,6 +24,10 @@ export interface SearchPaper {
   articlePageUrl?: string;
   /** Citation count when known (primarily from OpenAlex). Used for "Most cited" sort. */
   citedByCount?: number;
+  /** Original web link the paper was discovered from (set by /literature/ai-search). */
+  sourceUrl?: string;
+  /** Per-paper, query-relevant AI summary (set by /literature/ai-search). */
+  aiSummary?: string;
   /**
    * Catalyst PDF-content verification confidence in [0,1]. Populated only when
    * the PDF was verified via `/literature/pdf/verify` at staging time. Absent on

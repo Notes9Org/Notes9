@@ -161,6 +161,10 @@ interface SearchTabProps {
    * to `query` when not provided.
    */
   aiQuery?: string
+  /** Lift the AI-search papers to the host (staging detection, count). */
+  onResults?: (papers: SearchPaper[]) => void
+  /** Report AI-search loading so the host's search-bar spinner stays in sync. */
+  onLoadingChange?: (loading: boolean) => void
 }
 
 export function SearchTab({
@@ -183,6 +187,8 @@ export function SearchTab({
   filters: filtersProp,
   onFiltersChange,
   aiQuery,
+  onResults,
+  onLoadingChange,
 }: SearchTabProps) {
   // The AI runs on the submitted query (falls back to the live query).
   const effectiveAiQuery = aiQuery ?? query
@@ -225,6 +231,8 @@ export function SearchTab({
           onOpenStaged={onOpenStaged}
           isPaperStaged={isPaperStaged}
           isPaperStaging={isPaperStaging}
+          onResults={onResults}
+          onLoadingChange={onLoadingChange}
         />
       )}
 

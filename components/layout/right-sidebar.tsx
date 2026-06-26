@@ -3,6 +3,7 @@
 import Image from 'next/image';
 import {
   memo,
+  Fragment,
   useState,
   useRef,
   useEffect,
@@ -840,7 +841,7 @@ export function RightSidebar({
   const coPilotRef = useRef<CoPilotContext | null>(null);
   coPilotRef.current = coPilot;
   // The literature search's AI summary (streamed in from the literature page),
-  // pinned at the top of the chat with its references.
+  // rendered in chronological order within the chat (see litAnchorIndex below).
   const literature = useCatalystLiterature();
   const [mentionOpen, setMentionOpen] = useState(false);
   const [mentionFilter, setMentionFilter] = useState('');
@@ -879,7 +880,6 @@ export function RightSidebar({
   const [isExpanded, setIsExpanded] = useState(isPageVariant);
   const [expandedHistoryOpen, setExpandedHistoryOpen] = useState(true);
   const initialSessionLoadedRef = useRef<string | null>(null);
-  const [showAllPastChats, setShowAllPastChats] = useState(false);
   /** When set, show main Catalyst chat instead of the paper Writing panel (paper context stays registered). */
   const [paperUiSuppressed, setPaperUiSuppressed] = useState(false);
   const previousPathnameRef = useRef(pathname);
@@ -1108,6 +1108,20 @@ export function RightSidebar({
     transport,
     experimental_throttle: 100,
   });
+
+  // Chronological anchor for the literature AI-summary panel: the number of chat
+  // messages that already existed when the *current* search started. The panel
+  // renders after those messages (so it sits below older answers) and before any
+  // later follow-ups (which append after it) — instead of being pinned at the very
+  // top above stale turns. Re-anchored only when the search query changes (not on
+  // every streamed token), read via a ref to avoid a stale-closure capture.
+  const messagesLenRef = useRef(0);
+  messagesLenRef.current = messages.length;
+  const [litAnchorIndex, setLitAnchorIndex] = useState<number | null>(null);
+  const literatureQuery = literature?.query;
+  useEffect(() => {
+    if (literatureQuery) setLitAnchorIndex(messagesLenRef.current);
+  }, [literatureQuery]);
 
   const {
     sessions,
@@ -1693,9 +1707,6 @@ export function RightSidebar({
     }
   }, [paperAI?.isActive]);
 
-  const MAX_PAST_CHATS = 5;
-  const pastChatsToShow = showAllPastChats ? sessions : sessions.slice(0, MAX_PAST_CHATS);
-  const hasMorePastChats = sessions.length > MAX_PAST_CHATS;
 
   useEffect(() => {
     currentSessionRef.current = currentSessionId;
@@ -3852,29 +3863,38 @@ export function RightSidebar({
                     aria-label="Chat messages"
                   >
                     <div className="flex flex-col gap-6 p-4 pt-5 pb-4 max-w-3xl mx-auto w-full min-w-0">
-                      {literature && <LiteratureSummaryPanel lit={literature} />}
                       {messages.map((message, index) => {
                         const isLast = index === messages.length - 1;
                         const isLastAssistant = isLast && message.role === 'assistant';
+                        // Insert the literature summary at its chronological anchor
+                        // (before the message that follows the search), so it reads
+                        // newest-after-older rather than pinned above stale turns.
+                        const showLitHere = literature && litAnchorIndex === index;
                         return (
-                          <SidebarChatMessageItem
-                            key={message.id}
-                            message={message as UIMessage}
-                            rawContent={sidebarGetMessageContent(message as UIMessage)}
-                            messageAttachments={messageAttachments.get(message.id)}
-                            isLast={isLast}
-                            isLastUserAwaitingReply={isLoading && message.role === 'user' && isLast}
-                            regenerateDisabled={isLoading && isLastAssistant}
-                            isEditing={editingMessageId === message.id}
-                            agentMode={agentMode}
-                            isLiteratureRoute={isLiteratureRoute}
-                            currentSessionId={currentSessionId}
-                            onSetEditingMessageId={setEditingMessageId}
-                            onSaveEdit={handleEditMessage}
-                            onRegenerate={isLastAssistant ? handleRegenerate : undefined}
-                          />
+                          <Fragment key={message.id}>
+                            {showLitHere && <LiteratureSummaryPanel lit={literature} />}
+                            <SidebarChatMessageItem
+                              message={message as UIMessage}
+                              rawContent={sidebarGetMessageContent(message as UIMessage)}
+                              messageAttachments={messageAttachments.get(message.id)}
+                              isLast={isLast}
+                              isLastUserAwaitingReply={isLoading && message.role === 'user' && isLast}
+                              regenerateDisabled={isLoading && isLastAssistant}
+                              isEditing={editingMessageId === message.id}
+                              agentMode={agentMode}
+                              isLiteratureRoute={isLiteratureRoute}
+                              currentSessionId={currentSessionId}
+                              onSetEditingMessageId={setEditingMessageId}
+                              onSaveEdit={handleEditMessage}
+                              onRegenerate={isLastAssistant ? handleRegenerate : undefined}
+                            />
+                          </Fragment>
                         );
                       })}
+                      {/* Anchor at/after the end (newest action, or empty chat) → render below all messages. */}
+                      {literature && (litAnchorIndex == null || litAnchorIndex >= messages.length) && (
+                        <LiteratureSummaryPanel lit={literature} />
+                      )}
                       {agentMode === 'literature' &&
                         literatureAgentStream.isStreaming &&
                         messages.at(-1)?.role === 'user' && (

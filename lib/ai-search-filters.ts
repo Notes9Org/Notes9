@@ -16,6 +16,7 @@ export interface AiResultFilters {
   yearTo: number | null
   minCitations: number | null
   types: PaperType[]
+  journals: string[]
   openAccessOnly: boolean
 }
 
@@ -25,6 +26,7 @@ export const DEFAULT_AI_FILTERS: AiResultFilters = {
   yearTo: null,
   minCitations: null,
   types: [],
+  journals: [],
   openAccessOnly: false,
 }
 
@@ -63,8 +65,29 @@ export function countActiveFilters(f: AiResultFilters): number {
   if (f.yearTo != null) n++
   if (f.minCitations != null) n++
   if (f.types.length > 0) n++
+  if (f.journals.length > 0) n++
   if (f.openAccessOnly) n++
   return n
+}
+
+/** Distinct journals in the result set, most frequent first — drives the
+ *  Journal/Source filter options (grounded in the actual results, not hardcoded). */
+export function journalOptions(results: AiSearchResult[]): string[] {
+  const counts = new Map<string, number>()
+  for (const r of results) {
+    const j = r.paper?.journal?.trim()
+    if (!j || j.toLowerCase() === "unknown journal") continue
+    counts.set(j, (counts.get(j) ?? 0) + 1)
+  }
+  return [...counts.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).map(([j]) => j)
+}
+
+/** Min/max publication year present in the result set (null when none have a
+ *  year) — used to ground the year-range inputs in the real data. */
+export function yearBounds(results: AiSearchResult[]): { min: number; max: number } | null {
+  const years = results.map((r) => r.paper?.year).filter((y): y is number => typeof y === "number" && y > 0)
+  if (years.length === 0) return null
+  return { min: Math.min(...years), max: Math.max(...years) }
 }
 
 /**
@@ -81,8 +104,14 @@ export function applyAiFilters(results: AiSearchResult[], f: AiResultFilters): A
     if (f.yearTo != null && year != null && year > f.yearTo) return false
     const cites = typeof p?.citedByCount === "number" ? p.citedByCount : null
     if (f.minCitations != null && cites != null && cites < f.minCitations) return false
-    if (f.openAccessOnly && !(p?.isOpenAccess || p?.pdfUrl)) return false
+    // OA-only matches the card badge: *true* open access, not merely "a PDF link
+    // exists" (full-text availability ≠ open access).
+    if (f.openAccessOnly && !p?.isOpenAccess) return false
     if (f.types.length > 0 && !f.types.includes(inferPaperType(r))) return false
+    if (f.journals.length > 0) {
+      const j = p?.journal?.trim()
+      if (!j || !f.journals.includes(j)) return false
+    }
     return true
   })
 

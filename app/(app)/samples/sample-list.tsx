@@ -188,7 +188,7 @@ export function SampleList({ samples, viewMode: controlledView, setViewMode: set
             return (
               <Card
                 key={item.id}
-                className="hover:border-primary transition-colors flex flex-col min-w-0 overflow-hidden"
+                className="hover:border-primary hover:shadow-md transition-all duration-200 motion-safe:hover:-translate-y-0.5 animate-n9-turn-in flex flex-col min-w-0 overflow-hidden"
               >
                 <CardHeader className="pb-3 min-w-0">
                   <div className="flex items-start justify-between gap-2 min-w-0">

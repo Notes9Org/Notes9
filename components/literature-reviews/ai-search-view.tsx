@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect } from 'react'
+import { useEffect, useRef } from 'react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Telescope, Loader2, AlertCircle } from 'lucide-react'
 import { useAiLiteratureSearch } from '@/hooks/use-ai-literature-search'
@@ -9,14 +9,13 @@ import { AiSearchFilters } from './ai-search-filters'
 import { openCatalystPanel } from '@/lib/catalyst-launch'
 import { primeCatalystCoPilot } from '@/lib/catalyst-copilot'
 import { setCatalystLiterature, type LiteratureRef } from '@/lib/catalyst-literature'
-import { applyAiFilters, DEFAULT_AI_FILTERS, type AiResultFilters } from '@/lib/ai-search-filters'
+import { applyAiFilters, DEFAULT_AI_FILTERS, journalOptions, yearBounds, type AiResultFilters } from '@/lib/ai-search-filters'
 import { decodeHtmlEntities } from '@/lib/literature-abstract-display'
 import type { SearchPaper } from '@/types/paper-search'
 import type { AiSearchResult } from '@/types/ai-search'
 
 /** Searches we've already auto-opened Catalyst for — module-level so a tab switch
  *  / remount doesn't re-open the sidebar for the same query. */
-const openedSearchQueries = new Set<string>()
 
 /** Best external link for a result (matched metadata first, then the cited URL). */
 function refHref(r: AiSearchResult): string | null {
@@ -57,13 +56,14 @@ function CardSkeleton({ delay = 0 }: { delay?: number }) {
 export function AiSearchView({
   query,
   projectId,
-  papers,
   filters = DEFAULT_AI_FILTERS,
   onFiltersChange,
   onStagePaper,
   onOpenStaged,
   isPaperStaged,
   isPaperStaging,
+  onResults,
+  onLoadingChange,
 }: {
   query: string
   projectId?: string | null
@@ -76,24 +76,42 @@ export function AiSearchView({
   onOpenStaged?: (paper: SearchPaper) => void
   isPaperStaged?: (id: string) => boolean
   isPaperStaging?: (id: string) => boolean
+  /** Lift the structured papers to the host (staging detection, count). */
+  onResults?: (papers: SearchPaper[]) => void
+  /** Report search loading to the host so the search bar spinner stays in sync. */
+  onLoadingChange?: (loading: boolean) => void
 }) {
-  // The cited AI summary is produced here (/api/chat) but DISPLAYED in the
-  // Catalyst sidebar; this page shows the papers (cards).
-  const { run, summary, results, isStreaming, papersLoading, error } = useAiLiteratureSearch({
-    papers,
-    query,
-  })
+  // The dedicated catalyst orchestrator (/api/literature/ai-search) returns the
+  // papers AND streams the overall + per-paper summaries. The overall summary is
+  // DISPLAYED in the Catalyst sidebar; this page shows the papers (cards).
+  const { run, summary, results, papers: resultPapers, isStreaming, papersLoading, error } =
+    useAiLiteratureSearch({ query })
 
   useEffect(() => {
     if (query.trim()) void run(query)
   }, [query, run])
 
+  // Lift papers (for the host's staging detection + count) and loading state.
+  useEffect(() => {
+    onResults?.(resultPapers)
+  }, [resultPapers, onResults])
+  useEffect(() => {
+    onLoadingChange?.(isStreaming || papersLoading)
+  }, [isStreaming, papersLoading, onLoadingChange])
+
   const loading = isStreaming || papersLoading
   const showSkeletons = loading && results.length === 0
   const displayed = applyAiFilters(results, filters)
+  // Filter options grounded in the actual result set (not hardcoded).
+  const journalChoices = journalOptions(results)
+  const yearHint = yearBounds(results)
   // True until the search settles: summary still streaming, DB match running, or
   // any shown card's abstract still resolving.
   const processing = loading || displayed.some((r) => r.abstractPending)
+
+  // Tracks the previous streaming state so we auto-open the sidebar exactly once
+  // per search run (on false→true), and re-open on every fresh search.
+  const wasStreamingRef = useRef(false)
 
   // Prime the Catalyst co-pilot with the papers (title + abstract + meta), so
   // follow-up questions in the sidebar can be answered about any paper.
@@ -121,11 +139,14 @@ export function AiSearchView({
   useEffect(() => {
     const q = query.trim()
     if (!q) return
-    // Open the sidebar as soon as the search begins (once per query).
-    if (isStreaming && !openedSearchQueries.has(q)) {
-      openedSearchQueries.add(q)
+    // Auto-open the sidebar once per SEARCH RUN (on the false→true streaming
+    // transition), not once-per-query-string-forever. This way re-running the
+    // same query after the user closed the panel re-opens it. (Previously a
+    // module-level Set meant a repeated query never re-opened the sidebar.)
+    if (isStreaming && !wasStreamingRef.current) {
       openCatalystPanel({ scope: 'literature' })
     }
+    wasStreamingRef.current = isStreaming
     // Build the references (cited papers) shown under the summary.
     const citedLabels = new Set<string>()
     for (const m of summary.matchAll(/\[(\d+(?:\s*,\s*\d+)*)\]/g)) {
@@ -162,6 +183,8 @@ export function AiSearchView({
                 value={filters}
                 onChange={onFiltersChange}
                 triggerClassName="h-8 gap-1 px-2 text-xs"
+                journals={journalChoices}
+                yearHint={yearHint}
               />
             )}
             {processing ? (

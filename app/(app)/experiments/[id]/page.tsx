@@ -29,16 +29,24 @@ export default async function ExperimentDetailPage({
   const user = await requireUser()
   const supabase = await createClient()
   // Fetch experiment data with linked protocols
-  const { data: experimentData, error: experimentError } = await supabase
-    .from("experiments")
-    .select(`
-      *,
-      project:projects(id, name),
-      assigned_to_user:profiles!experiments_assigned_to_fkey(id, first_name, last_name),
-      created_by_user:profiles!experiments_created_by_fkey(id, first_name, last_name)
-    `)
-    .eq("id", id)
-    .single()
+  // Fetch the experiment and the viewer's organization in parallel — both depend
+  // only on the authenticated user, and the org id is needed to scope the project
+  // and assignee dropdowns below.
+  const [experimentRes, viewerProfileRes] = await Promise.all([
+    supabase
+      .from("experiments")
+      .select(`
+        *,
+        project:projects(id, name),
+        assigned_to_user:profiles!experiments_assigned_to_fkey(id, first_name, last_name),
+        created_by_user:profiles!experiments_created_by_fkey(id, first_name, last_name)
+      `)
+      .eq("id", id)
+      .single(),
+    supabase.from("profiles").select("organization_id").eq("id", user.id).single(),
+  ])
+  const { data: experimentData, error: experimentError } = experimentRes
+  const organizationId = viewerProfileRes.data?.organization_id ?? null
 
   if (experimentError || !experimentData) {
     notFound()
@@ -70,21 +78,34 @@ export default async function ExperimentDetailPage({
       .order("added_at", { ascending: false }),
     supabase
       .from("samples")
-      .select("*, sample_files(id, file_kind)")
+      // Samples tab only renders these columns (see ExperimentSample); avoid
+      // pulling every column (incl. any large molecular fields) for the list.
+      .select("id, sample_code, sample_type, status, storage_location, created_at, experiment_id, sample_files(id, file_kind)")
       .eq("experiment_id", id)
       .order("created_at", { ascending: false }),
     supabase
       .from("sample_experiments")
       .select(`
         sample:samples(
-          *,
+          id, sample_code, sample_type, status, storage_location, created_at,
           sample_files(id, file_kind)
         )
       `)
       .eq("experiment_id", id)
       .order("linked_at", { ascending: false }),
-    supabase.from("projects").select("id, name").order("name"),
-    supabase.from("profiles").select("id, first_name, last_name").order("first_name"),
+    // Scope the project + assignee dropdowns to the viewer's organization rather
+    // than fetching every project/profile in the database. When the viewer has no
+    // organization, fall back to the unscoped lists (preserves prior behavior).
+    organizationId
+      ? supabase.from("projects").select("id, name").eq("organization_id", organizationId).order("name")
+      : supabase.from("projects").select("id, name").order("name"),
+    organizationId
+      ? supabase
+          .from("profiles")
+          .select("id, first_name, last_name")
+          .eq("organization_id", organizationId)
+          .order("first_name")
+      : supabase.from("profiles").select("id, first_name, last_name").order("first_name"),
   ])
 
   const linkedProtocols = linkedProtocolsRes.data

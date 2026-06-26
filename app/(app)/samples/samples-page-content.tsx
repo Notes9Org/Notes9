@@ -14,7 +14,7 @@ import {
 } from "@/components/ui/resource-list-filters"
 import { ViewModeToggle } from "@/components/ui/view-mode-toggle"
 
-interface Sample {
+export interface Sample {
   id: string
   sample_code: string
   sample_type: string
