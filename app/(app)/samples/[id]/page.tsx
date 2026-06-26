@@ -191,19 +191,9 @@ export default async function SampleDetailPage({
     qcRecords = []
   }
 
-  // Fetch all projects/experiments/lab notes for edit dialog context picker.
-  const [{ data: allProjects }, { data: allExperiments }, { data: allLabNotes }] = await Promise.all([
-    supabase.from("projects").select("id, name").order("name"),
-    supabase
-      .from("experiments")
-      .select("id, name, project_id, project:projects(id, name)")
-      .order("created_at", { ascending: false }),
-    supabase
-      .from("lab_notes")
-      .select("id, title, experiment_id, project_id")
-      .order("created_at", { ascending: false })
-      .limit(200),
-  ])
+  // Edit-dialog context-picker options (all projects/experiments/lab notes) are
+  // now loaded lazily inside EditSampleDialog when the dialog opens, instead of
+  // on every detail page render — this was the bulk of the page's render latency.
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -309,18 +299,6 @@ export default async function SampleDetailPage({
         </div>
         <SampleActions
           sample={sample}
-          allProjects={(allProjects ?? []).map((p: any) => ({ id: p.id, label: p.name }))}
-          allExperiments={(allExperiments ?? []).map((e: any) => ({
-            id: e.id,
-            label: e.name,
-            detail: e.project?.name ?? null,
-            project_id: e.project_id,
-          }))}
-          allLabNotes={(allLabNotes ?? []).map((n: any) => ({
-            id: n.id,
-            label: n.title,
-            detail: n.experiment_id ? "Experiment note" : n.project_id ? "Project note" : "Lab note",
-          }))}
           linkedProjectIds={linkedProjectsList.map((p) => p.id).filter(Boolean) as string[]}
           linkedExperimentIds={linkedExperiments.map((e: any) => e.id).filter(Boolean) as string[]}
           linkedLabNoteIds={linkedNotes.map((n: any) => n.id).filter(Boolean) as string[]}
