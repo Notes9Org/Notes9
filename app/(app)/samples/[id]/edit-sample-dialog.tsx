@@ -1,6 +1,7 @@
 "use client"
 
 import { useMemo, useState } from "react"
+import { useQuery } from "@tanstack/react-query"
 import { useRouter } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
 import { useAuthUser } from "@/components/auth/auth-provider"
@@ -71,6 +72,45 @@ type EditSampleDialogProps = {
   linkedLabNoteIds?: string[]
 }
 
+// Link-picker options (all projects/experiments/lab notes) used only inside the
+// edit dialog. Fetched lazily when the dialog opens instead of on every sample
+// detail page render — this was the bulk of the detail page's server latency.
+type SampleLinkOptions = {
+  projects: SampleLinkOption[]
+  experiments: SampleLinkOption[]
+  labNotes: SampleLinkOption[]
+}
+
+async function fetchSampleLinkOptions(): Promise<SampleLinkOptions> {
+  const supabase = createClient()
+  const [projectsRes, experimentsRes, labNotesRes] = await Promise.all([
+    supabase.from("projects").select("id, name").order("name"),
+    supabase
+      .from("experiments")
+      .select("id, name, project_id, project:projects(id, name)")
+      .order("created_at", { ascending: false }),
+    supabase
+      .from("lab_notes")
+      .select("id, title, experiment_id, project_id")
+      .order("created_at", { ascending: false })
+      .limit(200),
+  ])
+  return {
+    projects: (projectsRes.data ?? []).map((p) => ({ id: p.id, label: p.name })),
+    experiments: (experimentsRes.data ?? []).map((e: any) => ({
+      id: e.id,
+      label: e.name,
+      detail: e.project?.name ?? null,
+      project_id: e.project_id,
+    })),
+    labNotes: (labNotesRes.data ?? []).map((n) => ({
+      id: n.id,
+      label: n.title,
+      detail: n.experiment_id ? "Experiment note" : n.project_id ? "Project note" : "Lab note",
+    })),
+  }
+}
+
 export function EditSampleDialog({
   sample,
   allProjects = [],
@@ -85,15 +125,28 @@ export function EditSampleDialog({
   const { toast } = useToast()
   const [open, setOpen] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
+
+  // Lazily load link-picker options only while the dialog is open — this is the
+  // data that previously made the sample detail page render slowly. Falls back to
+  // props if a caller still supplies them (the detail page no longer does).
+  const { data: lazyLinkOptions } = useQuery({
+    queryKey: ["sample-link-options"],
+    queryFn: fetchSampleLinkOptions,
+    enabled: open,
+  })
+  const projectOptions = allProjects.length > 0 ? allProjects : lazyLinkOptions?.projects ?? []
+  const experimentOptions =
+    allExperiments.length > 0 ? allExperiments : lazyLinkOptions?.experiments ?? []
+  const labNoteOptions = allLabNotes.length > 0 ? allLabNotes : lazyLinkOptions?.labNotes ?? []
   const [projectIds, setProjectIds] = useState<string[]>(linkedProjectIds)
   const [experimentIds, setExperimentIds] = useState<string[]>(linkedExperimentIds)
   const [labNoteIds, setLabNoteIds] = useState<string[]>(linkedLabNoteIds)
   const [jsonError, setJsonError] = useState<string | null>(null)
 
   const filteredExperiments = useMemo(() => {
-    if (projectIds.length === 0) return allExperiments
-    return allExperiments.filter((e) => !e.project_id || projectIds.includes(e.project_id))
-  }, [allExperiments, projectIds])
+    if (projectIds.length === 0) return experimentOptions
+    return experimentOptions.filter((e) => !e.project_id || projectIds.includes(e.project_id))
+  }, [experimentOptions, projectIds])
   
   const [formData, setFormData] = useState({
     sample_type: sample.sample_type,
@@ -433,7 +486,9 @@ export function EditSampleDialog({
             ) : null}
           </div>
 
-          {(allProjects.length > 0 || allExperiments.length > 0 || allLabNotes.length > 0) && (
+          {/* Always rendered while the dialog is open; options load lazily and the
+              pickers show their emptyLabel until they arrive (no hide→show flash). */}
+          {(
             <div className="space-y-3 rounded-md border bg-muted/20 p-3">
               <div>
                 <h3 className="text-sm font-semibold text-foreground">Linked context</h3>
@@ -444,7 +499,7 @@ export function EditSampleDialog({
               <div className="grid gap-3 lg:grid-cols-3">
                 <SampleContextPicker
                   label="Projects"
-                  options={allProjects}
+                  options={projectOptions}
                   selectedIds={projectIds}
                   onChange={setProjectIds}
                   emptyLabel="No projects available"
@@ -458,7 +513,7 @@ export function EditSampleDialog({
                 />
                 <SampleContextPicker
                   label="Lab Notes"
-                  options={allLabNotes}
+                  options={labNoteOptions}
                   selectedIds={labNoteIds}
                   onChange={setLabNoteIds}
                   emptyLabel="No lab notes available"

@@ -246,7 +246,7 @@ export function ExperimentList({
                 )
                 e.dataTransfer.effectAllowed = "copy"
               }}
-              className="hover:border-primary transition-colors flex flex-col min-w-0 overflow-hidden"
+              className="hover:border-primary hover:shadow-md transition-all duration-200 motion-safe:hover:-translate-y-0.5 animate-n9-turn-in flex flex-col min-w-0 overflow-hidden"
             >
               <CardHeader className="pb-3 min-w-0">
                 <div className="flex items-start gap-3 min-w-0">

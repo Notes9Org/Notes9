@@ -41,19 +41,29 @@ export default async function ProtocolsPage({
   const sp = searchParams ? await searchParams : {}
   const projectParam = resolveInitialProjectIdParam(sp.project, orgProjectIds)
 
+  // Kick off the protocol context-enrichment query now: it depends only on the
+  // protocols list (already resolved above), so it can run concurrently with the
+  // project-context resolution below instead of waiting in a serial chain.
+  // Kept as a separate query (not folded into the main list select) so that on
+  // DBs without migration 030 the list still loads and only enrichment degrades.
+  const enrichmentPromise =
+    protocols && protocols.length > 0
+      ? supabase
+          .from("protocols")
+          .select("id, project:projects(id, name), experiment:experiments(id, name)")
+          .in("id", protocols.map((p) => p.id))
+      : Promise.resolve({ data: null as unknown })
+
   let projectContext: ProtocolsProjectContext | null = null
   if (projectParam) {
-    const { data: proj } = await supabase
-      .from("projects")
-      .select("id, name")
-      .eq("id", projectParam)
-      .single()
+    // `proj` and `exps` both depend only on projectParam — fan out in parallel.
+    const [projRes, expsRes] = await Promise.all([
+      supabase.from("projects").select("id, name").eq("id", projectParam).single(),
+      supabase.from("experiments").select("id").eq("project_id", projectParam),
+    ])
+    const proj = projRes.data
     if (proj) {
-      const { data: exps } = await supabase
-        .from("experiments")
-        .select("id")
-        .eq("project_id", projectParam)
-      const expIds = (exps ?? []).map((e) => e.id)
+      const expIds = (expsRes.data ?? []).map((e) => e.id)
       const workspaceProtocols = await loadProjectWorkspaceProtocols(supabase, proj.id, expIds)
       const protocolIds = workspaceProtocols.map((p) => p.id)
       projectContext = { id: proj.id, name: proj.name, protocolIds }
@@ -66,10 +76,9 @@ export default async function ProtocolsPage({
   let enrichedProtocols: Protocol[] = (protocols ?? []) as Protocol[]
   if (protocols && protocols.length > 0) {
     try {
-      const { data: ctx } = await supabase
-        .from("protocols")
-        .select("id, project:projects(id, name), experiment:experiments(id, name)")
-        .in("id", protocols.map((p) => p.id))
+      // Resolve the enrichment query started earlier (ran concurrently with the
+      // project-context resolution above).
+      const { data: ctx } = await enrichmentPromise
       if (ctx) {
         // Supabase types the embedded relations as arrays; the original query
         // returns at most one row per relation, so we read them as single

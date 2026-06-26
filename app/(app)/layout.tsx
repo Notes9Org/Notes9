@@ -8,6 +8,7 @@ import { CURRENT_TERMS_VERSION } from "@/lib/constants"
 import { AuthEventTracker } from "@/components/auth-event-tracker"
 import { AuthProvider } from "@/components/auth/auth-provider"
 import { FeatureTimerProvider } from "@/components/telemetry/feature-timer-provider"
+import { ReactQueryProvider } from "@/components/providers/react-query-provider"
 
 export default async function AppGroupLayout({
   children,
@@ -38,12 +39,14 @@ export default async function AppGroupLayout({
 
   return (
     <AuthProvider initialUser={user}>
-      {mustAcceptTerms && <TermsAcceptanceModal />}
-      <Suspense>
-        <AuthEventTracker />
-      </Suspense>
-      <FeatureTimerProvider />
-      <AppLayout>{children}</AppLayout>
+      <ReactQueryProvider>
+        {mustAcceptTerms && <TermsAcceptanceModal />}
+        <Suspense>
+          <AuthEventTracker />
+        </Suspense>
+        <FeatureTimerProvider />
+        <AppLayout>{children}</AppLayout>
+      </ReactQueryProvider>
     </AuthProvider>
   )
 }
