@@ -212,6 +212,14 @@ export function buildPrintDocumentHtml(options: {
     tr:nth-child(even) { background: #fafafa; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
     img { max-width: 100%; height: auto; margin: 6pt 0; }
     hr { border: none; border-top: 2px solid #e5e7eb; margin: 14pt 0; }
+    /* New layout features (reinforces inline styles from the editor) */
+    [data-type="resizable-image"] img { display: inline-block; }
+    .n9-columns { column-gap: 2rem; }
+    .n9-columns > * { break-inside: avoid; }
+    .n9-doc-header, .n9-doc-footer { color: #4b5563; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    .n9-doc-header { border-bottom: 1px solid #d1d5db; padding: 6pt 4pt 8pt; margin-bottom: 12pt; }
+    .n9-doc-footer { border-top: 1px solid #d1d5db; padding: 8pt 4pt 6pt; margin-top: 12pt; }
+    .n9-page-break { height: 0; border: 0; page-break-after: always; break-after: page; }
     .table-col-handle, .table-row-handle, .table-diag-handle { display: none !important; }
     .simple-shape-node { margin: 8pt 0; }
     .comments-section { margin-top: 32pt; border-top: 1pt solid #eee; padding-top: 16pt; }

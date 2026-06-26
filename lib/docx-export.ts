@@ -3,7 +3,7 @@
 import {
   Document, Paragraph, TextRun, Table, TableRow, TableCell,
   WidthType, BorderStyle, HeadingLevel, Packer, ShadingType,
-  VerticalAlign, AlignmentType, convertInchesToTwip,
+  VerticalAlign, AlignmentType, convertInchesToTwip, PageBreak,
   CommentRangeStart, CommentRangeEnd, CommentReference, ICommentOptions
 } from 'docx'
 import { saveAs } from 'file-saver'
@@ -185,11 +185,28 @@ function parseNode(node: Node, comments: ICommentOptions[]): any | null {
           border: { bottom: { style: BorderStyle.SINGLE, size: 6, color: 'CCCCCC' } },
           spacing: { before: 240, after: 240 },
         })
-      case 'div':
-        if (el.getAttribute('data-type') === 'simple-shape') {
+      case 'div': {
+        const dataType = el.getAttribute('data-type')
+        if (dataType === 'simple-shape') {
           return new Paragraph({
             children: [new TextRun({ text: '[Shape]', size: 22, italics: true, color: '888888' })],
             spacing: { before: 120, after: 120 },
+          })
+        }
+        // Hard page break → real Word page break.
+        if (dataType === 'page-break') {
+          return new Paragraph({ children: [new PageBreak()] })
+        }
+        // Document header / footer bands → bordered, muted paragraph.
+        if (dataType === 'docHeader' || dataType === 'docFooter') {
+          const runs = parseInlineContent(el, comments)
+          const isHeader = dataType === 'docHeader'
+          return new Paragraph({
+            children: runs.length > 0 ? runs : [textRunFromStyle('', DEFAULT_EXPORT_INLINE_STYLE)],
+            border: isHeader
+              ? { bottom: { style: BorderStyle.SINGLE, size: 4, color: 'D1D5DB' } }
+              : { top: { style: BorderStyle.SINGLE, size: 4, color: 'D1D5DB' } },
+            spacing: isHeader ? { after: 240 } : { before: 240 },
           })
         }
         // Parse children recursively
@@ -205,6 +222,7 @@ function parseNode(node: Node, comments: ICommentOptions[]): any | null {
           }
         }
         return divChildren.length > 0 ? divChildren : null
+      }
       default:
         // For unknown elements, try to parse inline content
         const runs = parseInlineContent(el, comments)

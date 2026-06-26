@@ -460,7 +460,7 @@ export function PaperWorkspace({ paperId, backLink, leftControls, onPaperMutated
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button variant="outline" size="icon" title="Import" aria-label="Import" data-tour="paper-import">
-                <Upload className="h-4 w-4" />
+                <Download className="h-4 w-4" />
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-64">
@@ -495,7 +495,7 @@ export function PaperWorkspace({ paperId, backLink, leftControls, onPaperMutated
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button variant="outline" size="icon" title="Export" aria-label="Export" data-tour="paper-export">
-                <Download className="h-4 w-4" />
+                <Upload className="h-4 w-4" />
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="max-h-96 w-64 overflow-y-auto">

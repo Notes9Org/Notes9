@@ -23,7 +23,7 @@ import {
   FlaskConical,
   FolderOpen,
   ArrowLeft,
-  Download,
+  Upload,
 } from "lucide-react"
 import { TiptapEditor } from "@/components/text-editor/tiptap-editor"
 import { NoteExportMenu, NotePrintButton } from "@/components/note-export-menu"
@@ -255,7 +255,7 @@ export function ReportDetailView({ report, leftControls, sidebar }: ReportDetail
                 aria-label="Export"
                 className="text-muted-foreground hover:text-foreground"
               >
-                <Download className="h-4 w-4" />
+                <Upload className="h-4 w-4" />
               </Button>
             }
           />

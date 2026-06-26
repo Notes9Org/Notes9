@@ -28,7 +28,7 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet"
-import { ChevronLeft, Download, FileStack, GitCompare, List, Plus } from "lucide-react"
+import { ChevronLeft, Upload, FileStack, GitCompare, List, Plus } from "lucide-react"
 import { ProtocolChangeApprovalBar } from "./protocol-change-approval"
 import { ProtocolSiblingsList } from "./protocol-siblings-list"
 // ProtocolAiSidechat + ProtocolLiteraturePanel are no longer mounted in edit mode.
@@ -496,7 +496,7 @@ export function ProtocolDesignMode({
             className="shrink-0 text-muted-foreground hover:text-foreground"
             aria-label="Export protocol"
           >
-            <Download className="h-4 w-4" />
+            <Upload className="h-4 w-4" />
           </Button>
         }
       />
@@ -799,7 +799,7 @@ export function ProtocolDesignMode({
                         className="text-muted-foreground hover:text-foreground"
                         aria-label="Export protocol"
                       >
-                        <Download className="h-4 w-4" />
+                        <Upload className="h-4 w-4" />
                       </Button>
                     }
                   />

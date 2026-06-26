@@ -33,7 +33,7 @@ import { TiptapEditor } from "@/components/text-editor/tiptap-editor"
 import { Card, CardContent } from "@/components/ui/card"
 import { NoteExportMenu, NotePrintButton } from "@/components/note-export-menu"
 import { NoteImportButton } from "@/components/note-import-button"
-import { Download, FlaskConical, FolderOpen, History, Plus, Save } from "lucide-react"
+import { Upload, FlaskConical, FolderOpen, History, Plus, Save } from "lucide-react"
 import { ProtocolDesignMode } from "@/components/protocols/protocol-design-mode"
 import {
   DOCUMENT_HIGHLIGHT_EVENT,
@@ -514,7 +514,7 @@ export function ProtocolEditor({
                         className="h-9 w-9 touch-manipulation sm:h-8 sm:w-8"
                         aria-label="Export protocol"
                       >
-                        <Download className="h-4 w-4" />
+                        <Upload className="h-4 w-4" />
                       </Button>
                     }
                   />

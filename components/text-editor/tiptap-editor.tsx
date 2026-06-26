@@ -73,10 +73,14 @@ import {
   IndentDecrease,
   IndentIncrease,
   ChevronDown,
+  ArrowUp,
+  ArrowDown,
   Trash2,
   X,
   Columns,
   Rows,
+  MoveVertical,
+  SeparatorHorizontal,
   Maximize2,
   Minimize2,
   Maximize,
@@ -153,10 +157,20 @@ import { ChemicalFormula, formatChemicalFormula } from "./extensions/chemical-fo
 import { ChemistryHighlight } from "./extensions/chemistry-highlight"
 import { RagHighlight } from "./extensions/rag-highlight"
 import { SimpleShape } from "./extensions/simple-shape"
+import { BlockDragHandle } from "./extensions/block-drag-handle"
+import { moveTopLevelBlock } from "./editor-block-utils"
+import { EditorContextMenu } from "./editor-context-menu"
+import { EditorRuler } from "./editor-ruler"
+import { LineHeight } from "./extensions/line-height"
+import { PageBreak } from "./extensions/page-break"
+import { Columns as ColumnsExtension } from "./extensions/columns"
+import { DocHeader, DocFooter, HeaderFooter } from "./extensions/header-footer"
+import { Pagination, type PaginationParams } from "./extensions/pagination"
 import { SpreadsheetEmbed } from "./extensions/spreadsheet-embed"
 import { VoiceWaveform } from "./voice-waveform"
 // @ts-ignore - CSS import for KaTeX math rendering
 import "katex/dist/katex.min.css"
+import katex from "katex"
 // `xlsx` (~1 MB) is only needed when the user imports a spreadsheet file.
 // `isSpreadsheetFile` and `encodeSpreadsheetWorkbook` are inlined here so the
 // gating checks in drag/paste handlers don't pull in the heavy xlsx module.
@@ -273,6 +287,8 @@ interface TiptapEditorProps {
   fullscreenWorkspaceRef?: RefObject<HTMLElement | null>
   /** Fires when editor region fullscreen is toggled (Esc or button). */
   onEditorFullscreenChange?: (open: boolean) => void
+  /** Populated with a toggle for the comments sidebar so external toolbars can open it. */
+  commentsToggleRef?: RefObject<(() => void) | null>
   /**
    * When set, the fullscreen document title (shown only if fullscreen covers the page title — no fullscreenWorkspaceRef)
    * is editable with the same click-to-edit / blur-commit pattern as protocol design.
@@ -1030,6 +1046,16 @@ const TableControlsOverlay = ({
 
               <DropdownMenuSeparator />
 
+              <DropdownMenuLabel className="text-2xs uppercase text-muted-foreground font-semibold px-2 py-1">Position</DropdownMenuLabel>
+              <DropdownMenuItem onClick={() => moveTopLevelBlock(editor, -1)} className="text-xs gap-2">
+                <ArrowUp className="h-3.5 w-3.5 opacity-70" /> Move Table Up
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => moveTopLevelBlock(editor, 1)} className="text-xs gap-2">
+                <ArrowDown className="h-3.5 w-3.5 opacity-70" /> Move Table Down
+              </DropdownMenuItem>
+
+              <DropdownMenuSeparator />
+
               <DropdownMenuLabel className="text-2xs uppercase text-muted-foreground font-semibold px-2 py-1">Cells & Headers</DropdownMenuLabel>
               <DropdownMenuItem onClick={() => editor.chain().focus().mergeCells().run()} className="text-xs gap-2">
                 <Maximize2 className="h-3.5 w-3.5 opacity-70" /> Merge Cells
@@ -1432,6 +1458,8 @@ declare module '@tiptap/core' {
     // ./extensions/resizable-image; signatures mirror that file exactly.
     resizableImage: {
       setImageAlign: (align: "left" | "center" | "right") => ReturnType;
+      setImageFloat: (float: "none" | "left" | "right") => ReturnType;
+      setImageWidth: (width: number) => ReturnType;
       setImageComment: (attrs: {
         author: string;
         content: string;
@@ -1579,6 +1607,10 @@ export const Comment = Mark.create<CommentOptions>({
 
 /** At most one of these toolbar dropdowns open at a time (mutually exclusive). */
 type ToolbarClusterId = "text" | "insert" | "lists" | "align" | "table" | "sigma" | "ai"
+
+/** Word-style ribbon tabs. "table" is contextual (shown only inside a table). */
+type RibbonTab = "home" | "insert" | "layout" | "table"
+const RIBBON_TAB_KEY = "notes9-editor-ribbon-tab"
 
 type ToolbarShortcutTarget =
   | "text-trigger"
@@ -1751,6 +1783,7 @@ export function TiptapEditor({
   onOpenScientificCalculator,
   fullscreenWorkspaceRef,
   onEditorFullscreenChange,
+  commentsToggleRef,
   onDocumentTitleChange,
   onDocumentTitleCommit,
   fullscreenMainStartInsetPx = 0,
@@ -1981,12 +2014,65 @@ export function TiptapEditor({
   const [isAIProcessing, setIsAIProcessing] = useState(false)
   const [isCiteProcessing, setIsCiteProcessing] = useState(false)
   const [toolbarClusterMenu, setToolbarClusterMenu] = useState<ToolbarClusterId | null>(null)
+  // Word-style tabbed ribbon: which group of tools is currently shown.
+  const [ribbonTab, setRibbonTab] = useState<RibbonTab>(() => {
+    if (typeof window === "undefined") return "home"
+    const saved = window.localStorage.getItem(RIBBON_TAB_KEY)
+    return saved === "insert" || saved === "layout" || saved === "table" ? saved : "home"
+  })
+  useEffect(() => {
+    if (typeof window === "undefined") return
+    try {
+      window.localStorage.setItem(RIBBON_TAB_KEY, ribbonTab)
+    } catch {
+      /* ignore quota/availability errors */
+    }
+  }, [ribbonTab])
+  // Page setup for print / PDF export (orientation + margins).
+  const [pageSetup, setPageSetup] = useState<{
+    orientation: "portrait" | "landscape"
+    pageView: boolean
+    margins: { top: number; right: number; bottom: number; left: number }
+  }>({
+    orientation: "portrait",
+    pageView: false,
+    margins: { top: 96, right: 96, bottom: 96, left: 96 },
+  })
+  // Page geometry in CSS px at 96dpi (US Letter): portrait 8.5×11in, landscape 11×8.5in.
+  const pageWidthPx = pageSetup.orientation === "landscape" ? 1056 : 816
+  const pageMinHeightPx = pageSetup.orientation === "landscape" ? 816 : 1056
+  // Live params the pagination plugin reads each measure pass.
+  const paginationParamsRef = useRef<PaginationParams>({ enabled: false, pageContentHeightPx: 0, gapPx: 0 })
+  paginationParamsRef.current = {
+    enabled: pageSetup.pageView,
+    pageContentHeightPx: Math.max(0, pageMinHeightPx - pageSetup.margins.top - pageSetup.margins.bottom),
+    gapPx: pageSetup.margins.top + pageSetup.margins.bottom + 28,
+  }
+  useEffect(() => {
+    if (typeof document === "undefined") return
+    const id = "n9-page-setup-style"
+    let el = document.getElementById(id) as HTMLStyleElement | null
+    if (!el) {
+      el = document.createElement("style")
+      el.id = id
+      document.head.appendChild(el)
+    }
+    const m = pageSetup.margins
+    const inch = (px: number) => `${(px / 96).toFixed(2)}in`
+    el.textContent = `@media print { @page { size: ${pageSetup.orientation === "landscape" ? "landscape" : "portrait"}; margin: ${inch(m.top)} ${inch(m.right)} ${inch(m.bottom)} ${inch(m.left)}; } }`
+  }, [pageSetup])
   const [textMenuFontSizeInput, setTextMenuFontSizeInput] = useState("16")
   const [textMenuBaseColor, setTextMenuBaseColor] = useState("#1e88e5")
   const [linkDialogOpen, setLinkDialogOpen] = useState(false)
   const [linkUrlInput, setLinkUrlInput] = useState("")
   const [linkTextInput, setLinkTextInput] = useState("")
   const [mathEdit, setMathEdit] = useState<{ pos: number; latex: string; block: boolean } | null>(null)
+  const [chemDialogOpen, setChemDialogOpen] = useState(false)
+  const [chemInput, setChemInput] = useState("")
+  const [cameraDialogOpen, setCameraDialogOpen] = useState(false)
+  const [cameraError, setCameraError] = useState<string | null>(null)
+  const cameraVideoRef = useRef<HTMLVideoElement>(null)
+  const cameraStreamRef = useRef<MediaStream | null>(null)
   const [imageInsertDialogOpen, setImageInsertDialogOpen] = useState(false)
   const [imageUrlInput, setImageUrlInput] = useState("")
   const [imageAltInput, setImageAltInput] = useState("")
@@ -2033,12 +2119,27 @@ export function TiptapEditor({
   const [isCommenting, setIsCommenting] = useState(false)
   const [commentText, setCommentText] = useState("")
   const [commentsSidebarOpen, setCommentsSidebarOpen] = useState(false)
+  // Expose a comments-sidebar toggle so an external toolbar (e.g. the lab-notes
+  // "Review" menu) can open/close it.
+  useEffect(() => {
+    if (!commentsToggleRef) return
+    commentsToggleRef.current = () => setCommentsSidebarOpen((open) => !open)
+    return () => {
+      if (commentsToggleRef) commentsToggleRef.current = null
+    }
+  }, [commentsToggleRef])
   /* State merge: keeping activeCommentData from origin */
   const [activeCommentData, setActiveCommentData] = useState<{ author: string; content: string; createdAt: number; id: string; rect: DOMRect } | null>(null)
   const [, setToolbarSyncTick] = useState(0)
   const lastFinalIndexRef = useRef<number>(0)
   const lastInterimTextRef = useRef<string>("")
   const editorRef = useRef<ReturnType<typeof useEditor> | null>(null)
+  // Re-run pagination when page setup changes (margins/orientation/page-view toggle)
+  // even without a doc edit — the plugin recomputes on any transaction.
+  useEffect(() => {
+    const ed = editorRef.current
+    if (ed) ed.view.dispatch(ed.state.tr.setMeta("n9-paginate-refresh", true))
+  }, [pageSetup, pageMinHeightPx])
   /** Skip one cross-window event after we broadcast from the toolbar (avoid duplicate reformat loop). */
   const skipNextPaperCitationEventRef = useRef(false)
 
@@ -2197,6 +2298,14 @@ export function TiptapEditor({
       ChemistryHighlight,
       RagHighlight,
       SimpleShape,
+      BlockDragHandle,
+      LineHeight,
+      PageBreak,
+      ColumnsExtension,
+      DocHeader,
+      DocFooter,
+      HeaderFooter,
+      Pagination.configure({ getParams: () => paginationParamsRef.current }),
       SpreadsheetEmbed,
       Alignment,
       EntityMention.configure({
@@ -3761,11 +3870,21 @@ export function TiptapEditor({
     if (!mathEdit || !editorRef.current) return
     const ed = editorRef.current
     const { pos, latex, block } = mathEdit
-    const chain = ed.chain().focus().setNodeSelection(pos)
-    if (block) {
-      chain.updateBlockMath({ latex }).focus().run()
+    const safeLatex = sanitizeLatexInput(latex)
+    if (pos < 0) {
+      // New equation: insert at the current selection.
+      if (block) {
+        ed.chain().focus().insertBlockMath({ latex: safeLatex }).run()
+      } else {
+        ed.chain().focus().insertInlineMath({ latex: safeLatex }).run()
+      }
     } else {
-      chain.updateInlineMath({ latex }).focus().run()
+      const chain = ed.chain().focus().setNodeSelection(pos)
+      if (block) {
+        chain.updateBlockMath({ latex: safeLatex }).focus().run()
+      } else {
+        chain.updateInlineMath({ latex: safeLatex }).focus().run()
+      }
     }
     setMathEdit(null)
   }, [mathEdit])
@@ -3787,15 +3906,16 @@ export function TiptapEditor({
     // rather than a direct link to the image file — preloading lets us give
     // clear feedback instead of silently inserting a broken image.
     const alt = imageAltInput.trim()
+    // Insert immediately so the action always "works" — gating on a preload probe
+    // silently dropped valid cross-origin images (CORS images never fire onload
+    // on a bare probe in some browsers). We still warn, but never block.
+    editor.chain().focus().setImage({ src, alt }).run()
+    setImageInsertDialogOpen(false)
+    setImageUrlInput("")
+    setImageAltInput("")
     const probe = new window.Image()
-    probe.onload = () => {
-      editor.chain().focus().setImage({ src, alt }).run()
-      setImageInsertDialogOpen(false)
-      setImageUrlInput("")
-      setImageAltInput("")
-    }
     probe.onerror = () => {
-      toast.error("That URL didn't load as an image. Use a direct link to the image file (ending in .png, .jpg, .gif, …).")
+      toast.error("That image couldn't be loaded — check it's a direct link to an image file (.png, .jpg, .gif, …).")
     }
     probe.src = src
   }, [editor, imageAltInput, imageUrlInput])
@@ -3820,9 +3940,61 @@ export function TiptapEditor({
     imageUploadInputRef.current?.click()
   }, [])
 
-  const openCameraCapturePicker = useCallback(() => {
-    cameraCaptureInputRef.current?.click()
+  const stopCamera = useCallback(() => {
+    cameraStreamRef.current?.getTracks().forEach((t) => t.stop())
+    cameraStreamRef.current = null
   }, [])
+
+  const openCameraCapturePicker = useCallback(() => {
+    // Prefer a live camera preview via getUserMedia; fall back to the OS file
+    // picker with capture hint (e.g. desktops without a usable getUserMedia).
+    const md = typeof navigator !== "undefined" ? navigator.mediaDevices : undefined
+    if (!md || typeof md.getUserMedia !== "function") {
+      cameraCaptureInputRef.current?.click()
+      return
+    }
+    setImageInsertDialogOpen(false)
+    setCameraError(null)
+    setCameraDialogOpen(true)
+    md
+      .getUserMedia({ video: { facingMode: "environment" }, audio: false })
+      .then((stream) => {
+        cameraStreamRef.current = stream
+        const video = cameraVideoRef.current
+        if (video) {
+          video.srcObject = stream
+          void video.play().catch(() => {})
+        }
+      })
+      .catch((err) => {
+        setCameraError(
+          err?.name === "NotAllowedError"
+            ? "Camera permission was denied. Allow camera access, or use Upload instead."
+            : "No camera is available on this device. Use Upload or Image URL instead.",
+        )
+      })
+  }, [])
+
+  const capturePhotoFromCamera = useCallback(() => {
+    const video = cameraVideoRef.current
+    if (!video || !video.videoWidth) return
+    const canvas = document.createElement("canvas")
+    canvas.width = video.videoWidth
+    canvas.height = video.videoHeight
+    const ctx = canvas.getContext("2d")
+    if (!ctx) return
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height)
+    const src = canvas.toDataURL("image/png")
+    editor?.chain().focus().setImage({ src, alt: "Photo" }).run()
+    stopCamera()
+    setCameraDialogOpen(false)
+  }, [editor, stopCamera])
+
+  // Always release the camera when the dialog closes (cancel, escape, capture).
+  useEffect(() => {
+    if (!cameraDialogOpen) stopCamera()
+    return () => stopCamera()
+  }, [cameraDialogOpen, stopCamera])
 
   const handleImageUploadChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files?.length) {
@@ -4017,6 +4189,39 @@ export function TiptapEditor({
     "top"
 
   const inTable = editor.isActive("table")
+  // Word-style ribbon tabs. "table" is contextual — only present inside a table.
+  const ribbonTabs: { id: RibbonTab; label: string }[] = [
+    { id: "home", label: "Home" },
+    { id: "insert", label: "Insert" },
+    { id: "layout", label: "Layout" },
+    ...(inTable ? [{ id: "table" as const, label: "Table" }] : []),
+  ]
+  const effectiveRibbonTab: RibbonTab = ribbonTabs.some((t) => t.id === ribbonTab) ? ribbonTab : "home"
+  const renderRibbonTabs = () => (
+    <div
+      role="tablist"
+      aria-label="Editor tools"
+      className="flex shrink-0 items-center gap-0.5 rounded-lg bg-muted/50 p-0.5"
+    >
+      {ribbonTabs.map((t) => (
+        <button
+          key={t.id}
+          type="button"
+          role="tab"
+          aria-selected={effectiveRibbonTab === t.id}
+          onClick={() => setRibbonTab(t.id)}
+          className={cn(
+            "h-7 rounded-md px-2.5 text-xs font-medium transition-colors",
+            effectiveRibbonTab === t.id
+              ? "bg-background text-foreground shadow-sm"
+              : "text-muted-foreground hover:text-foreground",
+          )}
+        >
+          {t.label}
+        </button>
+      ))}
+    </div>
+  )
   const currentParagraphStyle = editor.isActive("heading", { level: 1 })
     ? "Heading 1"
     : editor.isActive("heading", { level: 2 })
@@ -4063,9 +4268,15 @@ export function TiptapEditor({
       side: "bottom" as const,
       align: "end" as const,
     }
+    // Ribbon grouping: render a cluster only when its tab is active. `contents`
+    // keeps the buttons as direct flex items of the rail (identical layout);
+    // `hidden` removes the whole run when its tab isn't selected.
+    const rg = (...tabs: RibbonTab[]) => (tabs.includes(effectiveRibbonTab) ? "contents" : "hidden")
     return (
     <TooltipProvider delayDuration={300}>
       <div className="flex min-w-0 flex-nowrap items-center gap-x-0.5 [&>*]:shrink-0">
+      {/* ── Home run: undo/redo · text & font · bold/italic/underline ── */}
+      <span className={rg("home")}>
       {/* Undo/Redo */}
       <Tooltip>
         <TooltipTrigger asChild>
@@ -4354,7 +4565,10 @@ export function TiptapEditor({
         </TooltipTrigger>
         <TooltipContent>{`Underline ${shortcutText.underline}`}</TooltipContent>
       </Tooltip>
+      </span>
 
+      {/* ── Insert run: insert menu ── */}
+      <span className={rg("insert")}>
       <DropdownMenu modal={false} open={toolbarClusterMenu === "insert"} onOpenChange={handleToolbarClusterChange("insert")}>
         <Tooltip>
           <TooltipTrigger asChild>
@@ -4407,7 +4621,10 @@ export function TiptapEditor({
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
+      </span>
 
+      {/* ── Home run: lists & indent ── */}
+      <span className={rg("home")}>
       <DropdownMenu modal={false} open={toolbarClusterMenu === "lists"} onOpenChange={handleToolbarClusterChange("lists")}>
         <Tooltip>
           <TooltipTrigger asChild>
@@ -4465,7 +4682,10 @@ export function TiptapEditor({
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
+      </span>
 
+      {/* ── Insert run: image · spreadsheet · dictation ── */}
+      <span className={rg("insert")}>
       <Tooltip>
         <TooltipTrigger asChild>
           <Button
@@ -4494,7 +4714,7 @@ export function TiptapEditor({
         <TooltipContent>Insert spreadsheet</TooltipContent>
       </Tooltip>
 
-      <div className="inline-flex items-center gap-1">
+      <div className="inline-flex shrink-0 items-center gap-1">
         <Tooltip>
           <TooltipTrigger asChild>
             <Button
@@ -4510,7 +4730,10 @@ export function TiptapEditor({
         </Tooltip>
         {isListening && <VoiceWaveform getWaveformData={getWaveformData} />}
       </div>
+      </span>
 
+      {/* ── Home run: alignment ── */}
+      <span className={rg("home")}>
       <DropdownMenu modal={false} open={toolbarClusterMenu === "align"} onOpenChange={handleToolbarClusterChange("align")}>
         <Tooltip>
           <TooltipTrigger asChild>
@@ -4585,7 +4808,10 @@ export function TiptapEditor({
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
+      </span>
 
+      {/* ── Insert run: table · equations & chemistry · calculator · citations ── */}
+      <span className={rg("insert")}>
       <Separator orientation="vertical" className="mx-px h-5 shrink-0" />
 
       <DropdownMenu
@@ -4665,7 +4891,9 @@ export function TiptapEditor({
               const { from, to } = editor.state.selection
               const selectedText = editor.state.doc.textBetween(from, to, " ")
               if (!selectedText.trim()) {
-                toast.info("Select the text to format first (e.g. H2O, CO2), then choose Chemical formula.")
+                // No selection — let the user type a formula (e.g. H2O, CO2, Ca(OH)2).
+                setChemInput("")
+                setChemDialogOpen(true)
                 return
               }
               const formatted = formatChemicalFormula(selectedText)
@@ -4680,9 +4908,10 @@ export function TiptapEditor({
               <DropdownMenuItem
                 onClick={() => {
                   const { from, to } = editor.state.selection
-                  const selectedText = from !== to ? editor.state.doc.textBetween(from, to, " ") : "x^2"
+                  const selectedText = from !== to ? editor.state.doc.textBetween(from, to, " ") : ""
                   if (from !== to) editor.chain().focus().deleteRange({ from, to }).run()
-                  editor.chain().focus().insertInlineMath({ latex: sanitizeLatexInput(selectedText) }).run()
+                  // Open the equation editor (live preview) instead of inserting blindly.
+                  setMathEdit({ pos: -1, latex: selectedText, block: false })
                 }}
               >
                 <Sigma className="mr-2 h-4 w-4" />
@@ -4691,10 +4920,9 @@ export function TiptapEditor({
               <DropdownMenuItem
                 onClick={() => {
                   const { from, to } = editor.state.selection
-                  const selectedText =
-                    from !== to ? editor.state.doc.textBetween(from, to, " ") : "\\sum_{i=1}^{n} x_i"
+                  const selectedText = from !== to ? editor.state.doc.textBetween(from, to, " ") : ""
                   if (from !== to) editor.chain().focus().deleteRange({ from, to }).run()
-                  editor.chain().focus().insertBlockMath({ latex: sanitizeLatexInput(selectedText) }).run()
+                  setMathEdit({ pos: -1, latex: selectedText, block: true })
                 }}
               >
                 <Sigma className="mr-2 h-4 w-4" />
@@ -4793,6 +5021,226 @@ export function TiptapEditor({
           </Tooltip>
         </>
       )}
+      </span>
+
+      {/* ── Table run: contextual table tools (only while the cursor is in a table) ── */}
+      <span className={rg("table")}>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button variant="ghost" size="sm" onClick={() => editor.chain().focus().addRowAfter().run()} className="h-8 gap-1 rounded-lg px-2 shrink-0">
+              <Rows className="h-4 w-4" />
+              <span className="text-xs hidden sm:inline">Row</span>
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>Add row below</TooltipContent>
+        </Tooltip>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button variant="ghost" size="sm" onClick={() => editor.chain().focus().addColumnAfter().run()} className="h-8 gap-1 rounded-lg px-2 shrink-0">
+              <Columns className="h-4 w-4" />
+              <span className="text-xs hidden sm:inline">Column</span>
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>Add column right</TooltipContent>
+        </Tooltip>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button variant="ghost" size="sm" onClick={() => editor.chain().focus().toggleHeaderRow().run()} className="h-8 w-8 rounded-lg p-0 shrink-0">
+              <TableIcon className="h-4 w-4" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>Toggle header row</TooltipContent>
+        </Tooltip>
+        <Separator orientation="vertical" className="mx-px h-5 shrink-0" />
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button variant="ghost" size="sm" onClick={() => moveTopLevelBlock(editor, -1)} className="h-8 w-8 rounded-lg p-0 shrink-0">
+              <ArrowUp className="h-4 w-4" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>Move table up</TooltipContent>
+        </Tooltip>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button variant="ghost" size="sm" onClick={() => moveTopLevelBlock(editor, 1)} className="h-8 w-8 rounded-lg p-0 shrink-0">
+              <ArrowDown className="h-4 w-4" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>Move table down</TooltipContent>
+        </Tooltip>
+        <Separator orientation="vertical" className="mx-px h-5 shrink-0" />
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button variant="ghost" size="sm" onClick={() => editor.chain().focus().deleteRow().run()} className="h-8 w-8 rounded-lg p-0 shrink-0 text-muted-foreground hover:text-destructive">
+              <Trash2 className="h-4 w-4" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>Delete row</TooltipContent>
+        </Tooltip>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button variant="ghost" size="sm" onClick={removeTable} className="h-8 gap-1 rounded-lg px-2 shrink-0 text-muted-foreground hover:text-destructive">
+              <Trash2 className="h-4 w-4" />
+              <span className="text-xs hidden sm:inline">Table</span>
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>Delete table</TooltipContent>
+        </Tooltip>
+      </span>
+
+      {/* ── Layout run: line spacing · columns · page break ── */}
+      <span className={rg("layout")}>
+        <DropdownMenu modal={false}>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" size="sm" className="h-8 gap-1 rounded-lg px-2 shrink-0">
+                  <MoveVertical className="h-4 w-4" />
+                  <span className="text-xs hidden sm:inline">Spacing</span>
+                  <ChevronDown className="h-3.5 w-3.5 opacity-70" />
+                </Button>
+              </DropdownMenuTrigger>
+            </TooltipTrigger>
+            <TooltipContent>Line spacing</TooltipContent>
+          </Tooltip>
+          <DropdownMenuContent {...dockPopperOpts} className="z-[200] w-44">
+            <DropdownMenuLabel className="text-xs text-muted-foreground">Line spacing</DropdownMenuLabel>
+            {["1", "1.15", "1.5", "2", "2.5"].map((v) => (
+              <DropdownMenuItem key={v} onClick={() => (editor.chain().focus() as any).setLineHeight(v).run()}>
+                {v === "1" ? "Single" : v === "1.5" ? "1.5 lines" : v === "2" ? "Double" : `${v}×`}
+              </DropdownMenuItem>
+            ))}
+            <DropdownMenuSeparator />
+            <DropdownMenuItem onClick={() => (editor.chain().focus() as any).unsetLineHeight().run()}>
+              Reset spacing
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+
+        <DropdownMenu modal={false}>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" size="sm" className="h-8 gap-1 rounded-lg px-2 shrink-0">
+                  <Columns className="h-4 w-4" />
+                  <span className="text-xs hidden sm:inline">Columns</span>
+                  <ChevronDown className="h-3.5 w-3.5 opacity-70" />
+                </Button>
+              </DropdownMenuTrigger>
+            </TooltipTrigger>
+            <TooltipContent>Text columns</TooltipContent>
+          </Tooltip>
+          <DropdownMenuContent {...dockPopperOpts} className="z-[200] w-44">
+            <DropdownMenuLabel className="text-xs text-muted-foreground">Columns</DropdownMenuLabel>
+            <DropdownMenuItem onClick={() => (editor.chain().focus() as any).unsetColumns().run()}>One (single)</DropdownMenuItem>
+            <DropdownMenuItem
+              onClick={() => {
+                const e = editor as any
+                if (editor.isActive("columns")) e.chain().focus().setColumnCount(2).run()
+                else e.chain().focus().setColumns(2).run()
+              }}
+            >
+              Two columns
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              onClick={() => {
+                const e = editor as any
+                if (editor.isActive("columns")) e.chain().focus().setColumnCount(3).run()
+                else e.chain().focus().setColumns(3).run()
+              }}
+            >
+              Three columns
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button variant="ghost" size="sm" onClick={() => (editor.chain().focus() as any).setPageBreak().run()} className="h-8 gap-1 rounded-lg px-2 shrink-0">
+              <SeparatorHorizontal className="h-4 w-4" />
+              <span className="text-xs hidden sm:inline">Page break</span>
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>Insert page break</TooltipContent>
+        </Tooltip>
+
+        <Separator orientation="vertical" className="mx-px h-5 shrink-0" />
+
+        <DropdownMenu modal={false}>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" size="sm" className="h-8 gap-1 rounded-lg px-2 shrink-0">
+                  <FileText className="h-4 w-4" />
+                  <span className="text-xs hidden sm:inline">Header / Footer</span>
+                  <ChevronDown className="h-3.5 w-3.5 opacity-70" />
+                </Button>
+              </DropdownMenuTrigger>
+            </TooltipTrigger>
+            <TooltipContent>Header &amp; footer</TooltipContent>
+          </Tooltip>
+          <DropdownMenuContent {...dockPopperOpts} className="z-[200] w-48">
+            <DropdownMenuItem onClick={() => (editor.chain().focus() as any).toggleDocHeader().run()}>
+              Toggle header
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => (editor.chain().focus() as any).toggleDocFooter().run()}>
+              Toggle footer
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+
+        <DropdownMenu modal={false}>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" size="sm" className="h-8 gap-1 rounded-lg px-2 shrink-0">
+                  <FileText className="h-4 w-4" />
+                  <span className="text-xs hidden sm:inline">Page</span>
+                  <ChevronDown className="h-3.5 w-3.5 opacity-70" />
+                </Button>
+              </DropdownMenuTrigger>
+            </TooltipTrigger>
+            <TooltipContent>Page setup (print / PDF)</TooltipContent>
+          </Tooltip>
+          <DropdownMenuContent {...dockPopperOpts} className="z-[200] w-52">
+            <DropdownMenuItem onClick={() => setPageSetup((p) => ({ ...p, pageView: !p.pageView }))}>
+              <FileText className="mr-2 h-4 w-4" />
+              Page view {pageSetup.pageView ? "✓" : ""}
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuLabel className="text-xs text-muted-foreground">Orientation</DropdownMenuLabel>
+            <DropdownMenuItem onClick={() => setPageSetup((p) => ({ ...p, orientation: "portrait" }))}>
+              Portrait {pageSetup.orientation === "portrait" ? "✓" : ""}
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => setPageSetup((p) => ({ ...p, orientation: "landscape" }))}>
+              Landscape {pageSetup.orientation === "landscape" ? "✓" : ""}
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuLabel className="text-xs text-muted-foreground">Margins</DropdownMenuLabel>
+            {(
+              [
+                { key: "narrow", px: 48 },
+                { key: "normal", px: 96 },
+                { key: "wide", px: 144 },
+              ] as const
+            ).map((m) => (
+              <DropdownMenuItem
+                key={m.key}
+                onClick={() =>
+                  setPageSetup((p) => ({ ...p, margins: { top: m.px, right: m.px, bottom: m.px, left: m.px } }))
+                }
+              >
+                <span className="capitalize">{m.key}</span>{" "}
+                {pageSetup.margins.left === m.px && pageSetup.margins.right === m.px ? "✓" : ""}
+              </DropdownMenuItem>
+            ))}
+            <DropdownMenuSeparator />
+            <p className="px-2 py-1 text-2xs text-muted-foreground">
+              Tip: in Page view, drag the ruler markers to fine-tune margins.
+            </p>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </span>
       </div>
     </TooltipProvider>
     )
@@ -4902,45 +5350,18 @@ export function TiptapEditor({
             data-tour="editor-toolbar"
             className={cn(
               "shrink-0 border-b border-border/70 bg-background/95 backdrop-blur-sm",
-              toolbarMergedLayout
-                ? cn(
-                    /* minmax(0,1fr) let column 1 shrink to 0 — lab notes / protocol title vanished beside fullscreen + actions */
-                    "max-sm:grid max-sm:[grid-template-columns:minmax(9rem,1fr)_auto] max-sm:items-center max-sm:gap-x-1 max-sm:gap-y-1.5 max-sm:px-1.5 max-sm:py-1.5",
-                    "sm:flex sm:flex-nowrap sm:items-center sm:gap-1 sm:px-2 sm:pl-3",
-                    panelEmbed ? "sm:h-11 sm:min-h-11 sm:py-0" : "sm:py-2",
-                  )
-                : cn(
-                    "flex items-center gap-1 px-2 py-2 sm:pl-3",
-                    panelEmbed && "h-11 min-h-11 py-0 px-2",
-                  ),
+              "flex flex-col gap-1.5 px-2 py-1.5 sm:pl-3",
+              panelEmbed && "gap-1 py-1.5",
             )}
           >
-            {toolbarMergedLayout ? (
-              <>
-                <div className="flex min-w-0 items-center gap-0.5 sm:gap-1 max-sm:col-start-1 max-sm:row-start-1 max-sm:overflow-hidden">
+            {/* Row 1 (merged surfaces only): document title + actions on their own full-width line */}
+            {toolbarMergedLayout && (
+              <div className="flex min-w-0 items-center gap-2">
+                <div className="flex min-w-0 flex-1 items-center gap-0.5 sm:gap-1">
                   {leadingToolbarSlot}
                   {showFullscreenDocTitleInToolbar && renderFullscreenDocumentTitle("toolbar")}
-                  {(leadingToolbarSlot || showFullscreenDocTitleInToolbar) && (
-                    <span
-                      className="shrink-0 select-none px-1 text-center text-sm text-muted-foreground/70 sm:px-2"
-                      aria-hidden
-                    >
-                      |
-                    </span>
-                  )}
                 </div>
-                <div
-                  ref={toolbarRailRef}
-                  className={cn(
-                    "flex min-h-0 min-w-0 items-center overflow-x-auto [scrollbar-width:thin] touch-pan-x",
-                    "max-sm:col-span-2 max-sm:row-start-2 max-sm:min-h-9 max-sm:w-full max-sm:border-t max-sm:border-border/40 max-sm:pt-1.5",
-                    "sm:flex-1 sm:col-auto sm:row-auto sm:border-t-0 sm:pt-0",
-                    panelEmbed && "sm:h-full",
-                  )}
-                >
-                  {renderToolbarDockChildren()}
-                </div>
-                <div className="flex min-w-0 shrink-0 items-center gap-0.5 sm:gap-1 max-sm:col-start-2 max-sm:row-start-1 max-sm:justify-self-end">
+                <div className="flex shrink-0 items-center gap-0.5 sm:gap-1">
                   <Button
                     type="button"
                     variant="ghost"
@@ -4950,30 +5371,30 @@ export function TiptapEditor({
                     aria-label={editorRegionFullscreen ? "Exit fullscreen" : "Fullscreen editor"}
                     title={editorRegionFullscreen ? "Exit fullscreen (Esc)" : "Fullscreen editor"}
                   >
-                    {editorRegionFullscreen ? (
-                      <Minimize className="h-4 w-4" />
-                    ) : (
-                      <Maximize className="h-4 w-4" />
-                    )}
+                    {editorRegionFullscreen ? <Minimize className="h-4 w-4" /> : <Maximize className="h-4 w-4" />}
                   </Button>
                   {trailingToolbarSlot ? (
-                    <div className="flex min-w-0 max-w-[min(100%,48vw)] items-center justify-end gap-0.5 overflow-x-auto [scrollbar-width:thin] sm:max-w-none sm:gap-1 sm:overflow-visible">
+                    <div className="flex min-w-0 items-center justify-end gap-0.5 sm:gap-1">
                       {trailingToolbarSlot}
                     </div>
                   ) : null}
                 </div>
-              </>
-            ) : (
-              <>
-                <div
-                  ref={toolbarRailRef}
-                  className={cn(
-                    "flex min-h-0 min-w-0 flex-1 items-center overflow-x-auto [scrollbar-width:thin] touch-pan-x",
-                    panelEmbed && "h-full",
-                  )}
-                >
-                  {renderToolbarDockChildren()}
-                </div>
+              </div>
+            )}
+            {/* Row 2: ribbon tabs + the active tab's tools (one stretchable row, no name eating the space) */}
+            <div className="flex min-w-0 items-center gap-2">
+              {renderRibbonTabs()}
+              <Separator orientation="vertical" className="h-5 shrink-0" />
+              <div
+                ref={toolbarRailRef}
+                className={cn(
+                  "flex min-h-0 min-w-0 flex-1 items-center overflow-x-auto [scrollbar-width:thin] touch-pan-x",
+                  panelEmbed && "sm:h-full",
+                )}
+              >
+                {renderToolbarDockChildren()}
+              </div>
+              {!toolbarMergedLayout && (
                 <Button
                   type="button"
                   variant="ghost"
@@ -4983,14 +5404,10 @@ export function TiptapEditor({
                   aria-label={editorRegionFullscreen ? "Exit fullscreen" : "Fullscreen editor"}
                   title={editorRegionFullscreen ? "Exit fullscreen (Esc)" : "Fullscreen editor"}
                 >
-                  {editorRegionFullscreen ? (
-                    <Minimize className="h-4 w-4" />
-                  ) : (
-                    <Maximize className="h-4 w-4" />
-                  )}
+                  {editorRegionFullscreen ? <Minimize className="h-4 w-4" /> : <Maximize className="h-4 w-4" />}
                 </Button>
-              </>
-            )}
+              )}
+            </div>
           </div>
         )}
         {hideToolbar && (
@@ -5025,7 +5442,12 @@ export function TiptapEditor({
           {/* Editor Content - add right padding to prevent text from going under TOC */}
           <div
             data-tour="editor-content"
-            className="overflow-y-auto overflow-x-auto px-2 pb-2 pr-20 h-full min-h-0 relative w-full max-w-full"
+            data-page-orientation={pageSetup.orientation}
+            {...(pageSetup.pageView ? { "data-page-view": "" } : {})}
+            className={cn(
+              "overflow-y-auto overflow-x-auto h-full min-h-0 relative w-full max-w-full",
+              pageSetup.pageView ? "bg-muted/40 px-0 pt-2 pb-8" : "px-2 pb-2 pr-20",
+            )}
             style={
               panelEmbed || fillParentHeight || editorRegionFullscreen
                 ? { minHeight: 0, maxHeight: "100%" }
@@ -5033,7 +5455,76 @@ export function TiptapEditor({
             }
             ref={(node) => setEditorContainer(node)}
           >
-            <EditorContent editor={editor} />
+            {pageSetup.pageView && (
+              <div className="sticky top-0 z-20 mb-2 flex justify-center gap-1.5 bg-muted/40 pt-1 pb-1.5">
+                {/* corner spacer aligns the horizontal ruler with the page (past the vertical ruler) */}
+                <div className="w-6 shrink-0" aria-hidden />
+                <EditorRuler
+                  orientation="horizontal"
+                  lengthPx={pageWidthPx}
+                  marginStartPx={pageSetup.margins.left}
+                  marginEndPx={pageSetup.margins.right}
+                  onChange={({ start, end }) =>
+                    setPageSetup((p) => ({
+                      ...p,
+                      margins: {
+                        ...p.margins,
+                        ...(start != null ? { left: start } : null),
+                        ...(end != null ? { right: end } : null),
+                      },
+                    }))
+                  }
+                />
+              </div>
+            )}
+            <div className={cn(pageSetup.pageView && "flex justify-center gap-1.5")}>
+              {pageSetup.pageView && (
+                <EditorRuler
+                  orientation="vertical"
+                  lengthPx={pageMinHeightPx}
+                  marginStartPx={pageSetup.margins.top}
+                  marginEndPx={pageSetup.margins.bottom}
+                  onChange={({ start, end }) =>
+                    setPageSetup((p) => ({
+                      ...p,
+                      margins: {
+                        ...p.margins,
+                        ...(start != null ? { top: start } : null),
+                        ...(end != null ? { bottom: end } : null),
+                      },
+                    }))
+                  }
+                  className="shrink-0 self-start"
+                />
+              )}
+              <div
+                className={cn(pageSetup.pageView && "n9-page")}
+                style={
+                  pageSetup.pageView
+                    ? {
+                        width: pageWidthPx,
+                        minHeight: pageMinHeightPx,
+                        paddingTop: pageSetup.margins.top,
+                        paddingRight: pageSetup.margins.right,
+                        paddingBottom: pageSetup.margins.bottom,
+                        paddingLeft: pageSetup.margins.left,
+                      }
+                    : undefined
+                }
+              >
+                <EditorContextMenu
+                  editor={editor}
+                  actions={{
+                    insertLink: openLinkDialog,
+                    insertImage: openImageDialog,
+                    insertTable: () => growTable(tableRows || 3, tableCols || 3),
+                    insertEquation: enableMath ? () => setMathEdit({ pos: -1, latex: "", block: false }) : undefined,
+                  }}
+                >
+                  <EditorContent editor={editor} />
+                </EditorContextMenu>
+              </div>
+            </div>
             {activeTable && mounted && createPortal(
               <TableControlsOverlay
                 table={activeTable}
@@ -5400,9 +5891,9 @@ export function TiptapEditor({
           >
             <DialogContent>
               <DialogHeader>
-                <DialogTitle>Edit equation (LaTeX)</DialogTitle>
+                <DialogTitle>{mathEdit && mathEdit.pos < 0 ? "Insert equation" : "Edit equation"}</DialogTitle>
                 <DialogDescription>
-                  Edit the raw LaTeX for this equation. Changes apply when you click Apply.
+                  Type LaTeX and see a live preview. Example: <code className="font-mono">EE\% = \frac{"{"}Total-Free{"}"}{"{"}Total{"}"} \times 100</code>
                 </DialogDescription>
               </DialogHeader>
               <Textarea
@@ -5410,21 +5901,145 @@ export function TiptapEditor({
                 onChange={(e) =>
                   setMathEdit((m) => (m ? { ...m, latex: e.target.value } : null))
                 }
-                className="min-h-[140px] font-mono text-sm"
-                placeholder="Enter LaTeX (KaTeX)…"
+                onKeyDown={(e) => {
+                  if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
+                    e.preventDefault()
+                    applyMathEdit()
+                  }
+                }}
+                className="min-h-[120px] font-mono text-sm"
+                placeholder="Enter LaTeX (KaTeX)…  e.g.  EE\% = \frac{Total-Free}{Total} \times 100"
                 autoFocus
               />
+              {(() => {
+                const raw = (mathEdit?.latex ?? "").trim()
+                if (!raw) {
+                  return (
+                    <div className="rounded-lg border border-dashed border-border bg-muted/30 px-3 py-4 text-center text-xs text-muted-foreground">
+                      Preview appears here as you type.
+                    </div>
+                  )
+                }
+                let html = ""
+                let error = ""
+                try {
+                  html = katex.renderToString(sanitizeLatexInput(raw), {
+                    throwOnError: true,
+                    displayMode: !!mathEdit?.block,
+                  })
+                } catch (err) {
+                  error = err instanceof Error ? err.message : "Invalid LaTeX"
+                }
+                return error ? (
+                  <div className="rounded-lg border border-destructive/40 bg-destructive/5 px-3 py-2 text-xs text-destructive">
+                    {error}
+                  </div>
+                ) : (
+                  <div className="flex min-h-[56px] items-center justify-center overflow-x-auto rounded-lg border border-border bg-background px-3 py-3">
+                    <span dangerouslySetInnerHTML={{ __html: html }} />
+                  </div>
+                )
+              })()}
               <DialogFooter className="gap-2">
                 <Button type="button" variant="outline" onClick={() => setMathEdit(null)}>
                   Cancel
                 </Button>
                 <Button type="button" onClick={applyMathEdit}>
-                  Apply
+                  {mathEdit && mathEdit.pos < 0 ? "Insert" : "Apply"}
                 </Button>
               </DialogFooter>
             </DialogContent>
           </Dialog>
         )}
+
+        <Dialog open={chemDialogOpen} onOpenChange={setChemDialogOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Chemical formula</DialogTitle>
+              <DialogDescription>
+                Type a formula and it's converted to proper subscripts/superscripts (e.g. H2O → H₂O, Ca^2+ → Ca²⁺).
+              </DialogDescription>
+            </DialogHeader>
+            <Input
+              value={chemInput}
+              onChange={(e) => setChemInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && chemInput.trim()) {
+                  e.preventDefault()
+                  editor.chain().focus().insertContent(formatChemicalFormula(chemInput)).run()
+                  setChemDialogOpen(false)
+                }
+              }}
+              placeholder="e.g. H2O, CO2, Ca(OH)2, SO4^2-"
+              autoFocus
+            />
+            {chemInput.trim() ? (
+              <div className="flex min-h-[44px] items-center justify-center rounded-lg border border-border bg-background px-3 py-2 text-lg">
+                {formatChemicalFormula(chemInput)}
+              </div>
+            ) : null}
+            <DialogFooter className="gap-2">
+              <Button type="button" variant="outline" onClick={() => setChemDialogOpen(false)}>
+                Cancel
+              </Button>
+              <Button
+                type="button"
+                disabled={!chemInput.trim()}
+                onClick={() => {
+                  editor.chain().focus().insertContent(formatChemicalFormula(chemInput)).run()
+                  setChemDialogOpen(false)
+                }}
+              >
+                Insert
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        <Dialog
+          open={cameraDialogOpen}
+          onOpenChange={(open) => {
+            if (!open) {
+              stopCamera()
+              setCameraDialogOpen(false)
+            }
+          }}
+        >
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Take a photo</DialogTitle>
+              <DialogDescription>Position your subject and capture a still to insert into the note.</DialogDescription>
+            </DialogHeader>
+            {cameraError ? (
+              <div className="rounded-lg border border-destructive/40 bg-destructive/5 px-3 py-6 text-center text-sm text-destructive">
+                {cameraError}
+              </div>
+            ) : (
+              <div className="overflow-hidden rounded-lg border border-border bg-black">
+                {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
+                <video ref={cameraVideoRef} className="aspect-video w-full object-cover" playsInline muted />
+              </div>
+            )}
+            <DialogFooter className="gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => {
+                  stopCamera()
+                  setCameraDialogOpen(false)
+                }}
+              >
+                Cancel
+              </Button>
+              {!cameraError && (
+                <Button type="button" onClick={capturePhotoFromCamera}>
+                  <Camera className="mr-2 h-4 w-4" />
+                  Capture
+                </Button>
+              )}
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
 
         <Dialog open={imageInsertDialogOpen} onOpenChange={setImageInsertDialogOpen}>
           <DialogContent>

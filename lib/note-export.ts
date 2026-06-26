@@ -87,6 +87,12 @@ export function exportNoteAsHtml(html: string, title: string) {
     table { border-collapse: collapse; width: 100% !important; table-layout: auto !important; margin: 20px 0; }
     th, td { border: 1px solid #ddd; padding: 8px; text-align: left; width: auto !important; min-width: 0 !important; }
     th { background: #f4f4f4; }
+    [data-type="resizable-image"] img { display: inline-block; max-width: 100%; height: auto; }
+    .n9-columns { column-gap: 2rem; }
+    .n9-columns > * { break-inside: avoid; }
+    .n9-doc-header { border-bottom: 1px solid #d1d5db; padding: 6px 4px 8px; margin-bottom: 14px; color: #4b5563; font-size: 0.9em; }
+    .n9-doc-footer { border-top: 1px solid #d1d5db; padding: 8px 4px 6px; margin-top: 14px; color: #4b5563; font-size: 0.9em; }
+    .n9-page-break { height: 0; border: 0; page-break-after: always; break-after: page; }
   </style>
 </head>
 <body>
