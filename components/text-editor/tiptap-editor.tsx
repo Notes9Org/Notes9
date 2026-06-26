@@ -5016,13 +5016,13 @@ window.localStorage.setItem(RIBBON_TAB_KEY, ribbonTab)
                     className="h-8 gap-1 rounded-lg px-2 shrink-0"
                     disabled={isCiteProcessing}
                   >
-                    {isCiteProcessing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
-                    <span className="text-xs hidden sm:inline">AI</span>
+                    {isCiteProcessing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Quote className="h-4 w-4" />}
+                    <span className="text-xs hidden sm:inline">Citations</span>
                     <ChevronDown className="h-3.5 w-3.5 opacity-70" />
                   </Button>
                 </DropdownMenuTrigger>
               </TooltipTrigger>
-              <TooltipContent>AI &amp; citations</TooltipContent>
+              <TooltipContent>Citations</TooltipContent>
             </Tooltip>
             <DropdownMenuContent {...dockPopperOpts} className="z-[200] w-60">
               <DropdownMenuLabel className="text-xs text-muted-foreground">Citations</DropdownMenuLabel>
