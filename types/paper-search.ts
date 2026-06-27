@@ -28,6 +28,12 @@ export interface SearchPaper {
   sourceUrl?: string;
   /** Per-paper, query-relevant AI summary (set by /literature/ai-search). */
   aiSummary?: string;
+  /** Reranker relevance score [0-100] (set by /literature/ai-search rerank). */
+  relevanceScore?: number;
+  /** Reranker tier: "primary" = directly relevant, "related" = related work. */
+  relevanceTier?: "primary" | "related";
+  /** Reranker one-line reason (≤8 words). */
+  relevanceWhy?: string;
   /**
    * Catalyst PDF-content verification confidence in [0,1]. Populated only when
    * the PDF was verified via `/literature/pdf/verify` at staging time. Absent on
