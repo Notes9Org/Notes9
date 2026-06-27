@@ -60,8 +60,26 @@ export const Columns = Node.create({
           commands.updateAttributes(this.name, { count }),
       unsetColumns:
         () =>
-        ({ commands }) =>
-          commands.lift(this.name),
+        ({ tr, dispatch, state }) => {
+          const { $from } = state.selection
+          let depth = 0
+          for (let d = $from.depth; d > 0; d--) {
+            if ($from.node(d).type.name === this.name) {
+              depth = d
+              break
+            }
+          }
+          if (depth === 0) return false
+
+          if (dispatch) {
+            const pos = $from.before(depth)
+            const node = tr.doc.nodeAt(pos)
+            if (node) {
+              tr.replaceWith(pos, pos + node.nodeSize, node.content)
+            }
+          }
+          return true
+        },
     }
   },
 })

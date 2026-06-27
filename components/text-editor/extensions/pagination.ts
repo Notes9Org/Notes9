@@ -84,8 +84,9 @@ export const Pagination = Extension.create<PaginationOptions>({
             const headerHtml = ""
             const footerHtml = ""
 
-            const breaks: { pos: number; fill: number }[] = []
+            const breaks: { pos: number; fill: number; nextMt: number }[] = []
             let used = 0
+            let lastMb = 0
             view.state.doc.forEach((node, offset) => {
               // Header/footer live in the page margins, not the content flow.
               if (node.type.name === "docHeader" || node.type.name === "docFooter") return
@@ -96,24 +97,28 @@ export const Pagination = Extension.create<PaginationOptions>({
               const cs = window.getComputedStyle(dom)
               const mt = parseFloat(cs.marginTop) || 0
               const mb = parseFloat(cs.marginBottom) || 0
-              const h = dom.getBoundingClientRect().height + mt + mb
+              
+              const marginOverlap = Math.min(lastMb, mt)
+              const h = dom.getBoundingClientRect().height + mt + mb - marginOverlap
+
               if (used > 0 && used + h > H) {
-                breaks.push({ pos: offset, fill: Math.max(0, Math.round(H - used)) })
-                used = h // next page begins with this block
+                breaks.push({ pos: offset, fill: Math.max(0, Math.round(H - used)), nextMt: mt })
+                used = h // next page begins with this block, so no overlap to subtract from it
               } else {
                 used += h
               }
+              lastMb = mb
             })
 
             const sig = `${H}|${params.gapPx}|${breaks.length}|` +
-              breaks.map((b) => `${b.pos}:${b.fill}`).join(",")
+              breaks.map((b) => `${b.pos}:${b.fill}:${b.nextMt}`).join(",")
             if (sig === lastSig) return
             lastSig = sig
 
             const newPortals: Array<{el: HTMLElement, page: number, type: 'header' | 'footer'}> = []
 
             const decos = breaks.map((b, i) => {
-              const { wrap, headerTarget, footerTarget } = buildSeparator(b.fill, params)
+              const { wrap, headerTarget, footerTarget } = buildSeparator(b, params)
               const pageNumber = i + 2 // Page 1 is the main document, break 0 starts page 2
               
               if (headerTarget) newPortals.push({ el: headerTarget, page: pageNumber, type: 'header' })
@@ -148,10 +153,29 @@ export const Pagination = Extension.create<PaginationOptions>({
           const onResize = () => schedule()
           window.addEventListener("resize", onResize)
 
+          // Recompute when the editor's own DOM changes size. This is what makes
+          // pagination appear on first paint: the content renders asynchronously
+          // (immediatelyRender: false), so the editor grows AFTER the plugin's
+          // initial pass — the observer catches that growth and re-runs compute().
+          // The signature check in compute() stops the decorate→resize→decorate
+          // feedback loop once breaks are stable.
+          let ro: ResizeObserver | null = null
+          if (typeof ResizeObserver !== "undefined") {
+            ro = new ResizeObserver(() => schedule())
+            ro.observe(view.dom)
+          }
+          // A couple of deferred passes cover late layout (web fonts, images)
+          // that can land between the observer's first fire and final metrics.
+          const t1 = setTimeout(schedule, 60)
+          const t2 = setTimeout(schedule, 250)
+
           return {
             update: () => schedule(),
             destroy() {
               window.removeEventListener("resize", onResize)
+              ro?.disconnect()
+              clearTimeout(t1)
+              clearTimeout(t2)
               if (raf) cancelAnimationFrame(raf)
             },
           }
@@ -162,17 +186,15 @@ export const Pagination = Extension.create<PaginationOptions>({
 })
 
 function buildSeparator(
-  fillPx: number,
+  b: { fill: number; nextMt: number },
   params: PaginationParams,
 ): { wrap: HTMLElement; headerTarget: HTMLElement; footerTarget: HTMLElement } {
   const wrap = document.createElement("div")
   wrap.className = "n9-page-sep"
-  // Allow React events to propagate or be handled without ProseMirror stealing them
-  // Remove contenteditable=false to avoid Prosemirror selecting it
   
   // 1) Fill the rest of the finishing page's content area.
   const fill = document.createElement("div")
-  fill.style.height = `${fillPx}px`
+  fill.style.height = `${b.fill}px`
   wrap.appendChild(fill)
 
   // 2) Bottom-margin zone of the finishing page — holds the footer.
@@ -198,6 +220,10 @@ function buildSeparator(
   const headerZone = document.createElement("div")
   headerZone.className = "n9-page-sep-marginzone n9-page-sep-headerzone relative w-full"
   headerZone.style.height = `${params.marginTopPx}px`
+  // Absorb the next block's margin-top so the text perfectly aligns with the ruler!
+  if (b.nextMt > 0) {
+    headerZone.style.marginBottom = `-${b.nextMt}px`
+  }
   
   const headerTarget = document.createElement("div")
   headerTarget.className = "absolute inset-0"

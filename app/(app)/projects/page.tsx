@@ -29,10 +29,16 @@ export default async function ProjectsPage() {
     no_of_experiments: project.no_of_experiments?.[0]?.count || 0,
   }))
 
+  // Display name is always the first name set in Settings (profiles.first_name),
+  // never derived from the login email.
+  const { data: myProfile } = await supabase
+    .from("profiles")
+    .select("first_name")
+    .eq("id", user.id)
+    .single()
   const greetingName =
-    (user.user_metadata?.first_name as string | undefined) ||
-    (user.user_metadata?.full_name as string | undefined)?.split(" ")[0] ||
-    user.email?.split("@")[0] ||
+    (myProfile?.first_name as string | undefined)?.trim() ||
+    (user.user_metadata?.first_name as string | undefined)?.trim() ||
     "Researcher"
 
   return (

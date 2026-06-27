@@ -104,17 +104,28 @@ export function PaperWorkspace({ paperId, backLink, leftControls, onPaperMutated
   const contentRef = useRef("")
   const paperAI = usePaperAI()
 
-  // Fetch current user info for collaboration
+  // Fetch current user info for collaboration. The display name is always the
+  // first name set in Settings (profiles.first_name), never the login email.
   useEffect(() => {
     const fetchUser = async () => {
       const supabase = createClient()
       if (user) {
         setUserId(user.id)
-        setUserName(user.user_metadata?.full_name || user.email || "Anonymous")
+        const { data: prof } = await supabase
+          .from("profiles")
+          .select("first_name, last_name")
+          .eq("id", user.id)
+          .single()
+        const fullName = [prof?.first_name, prof?.last_name].filter(Boolean).join(" ").trim()
+        setUserName(
+          fullName ||
+            (user.user_metadata?.first_name as string | undefined)?.trim() ||
+            "Anonymous",
+        )
       }
     }
     void fetchUser()
-  }, [])
+  }, [user])
 
   // Collaboration hook
   const { provider, ydoc, status: collaborationStatus, collaborators } = useCollaboration({

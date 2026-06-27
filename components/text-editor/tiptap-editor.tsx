@@ -168,6 +168,7 @@ import { PageBreak } from "./extensions/page-break"
 import { Columns as ColumnsExtension } from "./extensions/columns"
 import { Pagination, type PaginationParams } from "./extensions/pagination"
 import { HeaderFooterInput } from "./HeaderFooterInput"
+import { type PageLayout, extractLayoutMarker, appendLayoutMarker } from "@/lib/page-layout"
 import { SpreadsheetEmbed } from "./extensions/spreadsheet-embed"
 import { VoiceWaveform } from "./voice-waveform"
 // @ts-ignore - CSS import for KaTeX math rendering
@@ -2045,12 +2046,46 @@ window.localStorage.setItem(RIBBON_TAB_KEY, ribbonTab)
   }))
 
   // Editable header/footer state
-  const [headerText, setHeaderText] = useState("Notes9 Document")
+  const [headerText, setHeaderText] = useState("")
   const [footerText, setFooterText] = useState("")
   const [headerAlign, setHeaderAlign] = useState<"left"|"center"|"right">("left")
   const [footerAlign, setFooterAlign] = useState<"left"|"center"|"right">("center")
   const [showPageNumbers, setShowPageNumbers] = useState<"header"|"footer"|"none">("footer")
   const [pageBreakPortals, setPageBreakPortals] = useState<Array<{el: HTMLElement, page: number, type: 'header' | 'footer'}>>([])
+
+  // Live snapshot of the page layout, kept in a ref so the editor's onUpdate
+  // closure (created once) always reads the current header/footer/margins.
+  const layoutRef = useRef<PageLayout>({
+    orientation: "portrait", pageView: true, rulers: true,
+    margins: { top: 96, right: 96, bottom: 96, left: 96 },
+    header: { text: "", align: "left" }, footer: { text: "", align: "center" },
+    pageNumbers: "footer",
+  })
+  layoutRef.current = {
+    orientation: pageSetup.orientation,
+    pageView: pageSetup.pageView,
+    rulers: pageSetup.rulers,
+    margins: { ...pageSetup.margins },
+    header: { text: headerText, align: headerAlign },
+    footer: { text: footerText, align: footerAlign },
+    pageNumbers: showPageNumbers,
+  }
+  // Apply a persisted layout (loaded from cloud, embedded in the content) to state.
+  const applyLayoutToState = useCallback((l: PageLayout) => {
+    setPageSetup((p) => ({
+      ...p,
+      orientation: l.orientation,
+      // Don't force Page view on in embedded/read-only shells that opt out of it.
+      pageView: !panelEmbed && !hideToolbar ? l.pageView : p.pageView,
+      rulers: l.rulers,
+      margins: { ...l.margins },
+    }))
+    setHeaderText(l.header.text)
+    setFooterText(l.footer.text)
+    setHeaderAlign(l.header.align)
+    setFooterAlign(l.footer.align)
+    setShowPageNumbers(l.pageNumbers)
+  }, [panelEmbed, hideToolbar])
 
   // Live height of the page sheet so the vertical ruler can repeat its scale per page.
   const pageSheetRef = useRef<HTMLDivElement | null>(null)
@@ -2066,12 +2101,34 @@ window.localStorage.setItem(RIBBON_TAB_KEY, ribbonTab)
   // Page geometry in CSS px at 96dpi (US Letter): portrait 8.5×11in, landscape 11×8.5in.
   const pageWidthPx = pageSetup.orientation === "landscape" ? 1056 : 816
   const pageMinHeightPx = pageSetup.orientation === "landscape" ? 816 : 1056
+  // Gap drawn between sheets in Page view. Shared by the pagination separators
+  // and the vertical ruler so the ruler's per-page scale stays aligned.
+  const PAGE_GAP_PX = 16
+  // The vertical ruler always spans whole pages so the last page renders its full
+  // height even when only partly filled. Page count is the MAX of two independent
+  // signals so the ruler never lags behind the real pages regardless of which
+  // updates first on a given render:
+  //   • breaks  — portal page numbers run up to (breaks + 1); authoritative but a
+  //     React-state hop behind the pagination pass.
+  //   • height  — measured sheet height ÷ page pitch (floor formula, exact, no
+  //     phantom trailing page); reflects what's actually rendered right now.
+  const pagePitchPx = pageMinHeightPx + PAGE_GAP_PX
+  const pagesFromBreaks = Math.max(1, ...pageBreakPortals.map((p) => p.page))
+  const pagesFromHeight =
+    pageSheetHeight > pageMinHeightPx ? Math.floor((pageSheetHeight - 1) / pagePitchPx) + 1 : 1
+  const pageCount = Math.max(1, pagesFromBreaks, pagesFromHeight)
+  const verticalRulerLengthPx = pageCount * pageMinHeightPx + (pageCount - 1) * PAGE_GAP_PX
   // Live params the pagination plugin reads each measure pass.
   const paginationParamsRef = useRef<PaginationParams>({ enabled: false, pageContentHeightPx: 0, gapPx: 0, marginTopPx: 0, marginBottomPx: 0 })
   paginationParamsRef.current = {
-    enabled: !!(pageSetup.pageView && pageSheetRef.current && pageSheetHeight > 100),
+    // Gate only on Page view — NOT on a React-measured height. The plugin measures
+    // the DOM itself and bails safely when nodes aren't laid out yet, and its own
+    // ResizeObserver re-triggers it once the (async) editor content renders. Gating
+    // on `pageSheetHeight > 100` raced the content render, so on first paint
+    // pagination stayed off until a manual view toggle.
+    enabled: !!pageSetup.pageView,
     pageContentHeightPx: Math.max(0, pageMinHeightPx - pageSetup.margins.top - pageSetup.margins.bottom),
-    gapPx: 48,
+    gapPx: PAGE_GAP_PX,
     marginTopPx: pageSetup.margins.top,
     marginBottomPx: pageSetup.margins.bottom,
     onPortalsChange: setPageBreakPortals
@@ -2364,10 +2421,18 @@ window.localStorage.setItem(RIBBON_TAB_KEY, ribbonTab)
         }),
       ] : []),
     ],
-    ...(!(collaborationEnabled && ydoc && provider) ? { content } : {}),
+    // Strip the embedded layout marker before it reaches the document; the layout
+    // is applied to state separately (init effect below).
+    ...(!(collaborationEnabled && ydoc && provider)
+      ? { content: extractLayoutMarker(content ?? "").html }
+      : {}),
     editable,
     onUpdate: ({ editor }) => {
-      onChange?.(editor.getHTML())
+      // Re-attach the current layout marker so header/footer/margins persist with
+      // the document content through the host's existing save.
+      const out = appendLayoutMarker(editor.getHTML(), layoutRef.current)
+      lastEmittedHtmlRef.current = out
+      onChange?.(out)
       setToolbarSyncTick((current) => current + 1)
     },
     onSelectionUpdate: ({ editor }) => {
@@ -2823,13 +2888,72 @@ window.localStorage.setItem(RIBBON_TAB_KEY, ribbonTab)
   // editor's own onUpdate -> parent setState round trip. `lastEmittedHtmlRef`
   // captures whatever we just emitted upward so we can compare against it.
   const lastEmittedHtmlRef = useRef<string>(content ?? "")
+  // JSON of the layout we've already accounted for (loaded or persisted), so the
+  // layout-change effect below never re-saves an unchanged layout.
+  const lastPersistedLayoutRef = useRef<string>(JSON.stringify(layoutRef.current))
   useEffect(() => {
     if (!editor) return
     if (content === lastEmittedHtmlRef.current) return
-    if (content === editor.getHTML()) return
-    editor.commands.setContent(content)
-    lastEmittedHtmlRef.current = content
-  }, [content, editor])
+    // Split the embedded layout out of the incoming HTML and apply each part.
+    const { layout, html: cleanHtml } = extractLayoutMarker(content ?? "")
+    if (cleanHtml !== editor.getHTML()) {
+      editor.commands.setContent(cleanHtml)
+    }
+    if (layout) {
+      applyLayoutToState(layout)
+      lastPersistedLayoutRef.current = JSON.stringify(layout)
+    }
+    lastEmittedHtmlRef.current = content ?? ""
+  }, [content, editor, applyLayoutToState])
+
+  // Apply the layout embedded in the INITIAL content once the editor is ready
+  // (the sync effect above skips the first render because content === lastEmitted).
+  const initLayoutDoneRef = useRef(false)
+  useEffect(() => {
+    if (!editor || initLayoutDoneRef.current) return
+    initLayoutDoneRef.current = true
+    const { layout } = extractLayoutMarker(content ?? "")
+    if (layout) {
+      applyLayoutToState(layout)
+      lastPersistedLayoutRef.current = JSON.stringify(layout)
+    }
+  }, [editor, content, applyLayoutToState])
+
+  // Persist layout-only changes (header/footer text + alignment, margins,
+  // orientation, page numbers, view toggles) — these don't change the document, so
+  // onUpdate never fires for them. Emitting the content+marker lets the host's
+  // existing save write the new layout to the cloud. Guarded so it only fires on a
+  // real layout change (never on mount or when applying a just-loaded layout).
+  useEffect(() => {
+    if (!editor) return
+    const currentJson = JSON.stringify(layoutRef.current)
+    if (currentJson === lastPersistedLayoutRef.current) return
+    lastPersistedLayoutRef.current = currentJson
+    const out = appendLayoutMarker(editor.getHTML(), layoutRef.current)
+    lastEmittedHtmlRef.current = out
+    onChange?.(out)
+  }, [editor, onChange, pageSetup, headerText, footerText, headerAlign, footerAlign, showPageNumbers])
+
+  // Nudge the pagination plugin to recompute when the page geometry changes. The
+  // plugin reads `paginationParamsRef` but only recomputes on editor view updates
+  // / window resize — so when `enabled` flips true after the sheet is first
+  // measured (pageSheetHeight 0 → real), or margins/orientation/page-view change,
+  // nothing re-triggers it. This was why page breaks + the per-page vertical ruler
+  // only appeared after toggling the view. Dispatching a no-op transaction (no doc
+  // steps → does NOT fire onUpdate/onChange) forces the plugin's view.update().
+  useEffect(() => {
+    if (!editor || editor.isDestroyed) return
+    editor.view.dispatch(editor.state.tr.setMeta("addToHistory", false))
+  }, [
+    editor,
+    pageSetup.pageView,
+    pageSetup.orientation,
+    pageSetup.margins.top,
+    pageSetup.margins.bottom,
+    pageSetup.margins.left,
+    pageSetup.margins.right,
+    pageSheetHeight,
+  ])
 
   // AI writing helpers (improve/continue/shorter/longer/simplify/grammar/structure)
   // previously routed through Google Gemini and were removed when the product
@@ -3175,20 +3299,37 @@ window.localStorage.setItem(RIBBON_TAB_KEY, ribbonTab)
     setToolbarClusterMenu(null)
   }, [editor])
 
+  // Build a PageLayout snapshot from the editor's live Page-view state so exports
+  // (PDF / Print / HTML / DOCX) reproduce margins, orientation, and header/footer.
+  const getCurrentPageLayout = useCallback((): import("@/lib/page-layout").PageLayout => ({
+    orientation: pageSetup.orientation,
+    pageView: pageSetup.pageView,
+    rulers: pageSetup.rulers,
+    margins: { ...pageSetup.margins },
+    header: { text: headerText, align: headerAlign },
+    footer: { text: footerText, align: footerAlign },
+    pageNumbers: showPageNumbers,
+  }), [pageSetup, headerText, footerText, headerAlign, footerAlign, showPageNumbers])
+
   // Download functions
   const downloadAsMarkdown = useCallback(async () => {
     if (!editor) return
+    const layout = getCurrentPageLayout()
+    const { injectHeaderFooterForExport } = await import("@/lib/page-layout")
     // Convert the editor HTML to Markdown (headings, bold/italic, lists, tables,
     // links, code) instead of dumping plain text — keeps the export faithful to
     // what's in the editor.
     const { exportNoteAsMarkdown } = await import("@/lib/note-export")
-    await exportNoteAsMarkdown(editor.getHTML(), title)
-  }, [editor, title])
+    const html = injectHeaderFooterForExport(editor.getHTML(), layout)
+    await exportNoteAsMarkdown(html, title)
+  }, [editor, title, getCurrentPageLayout])
 
   const downloadAsHTML = useCallback(async () => {
     if (!editor) return
     const { prepareHtmlForExport } = await import("@/lib/print-export")
-    const html = prepareHtmlForExport(editor.getHTML())
+    const { injectHeaderFooterForExport } = await import("@/lib/page-layout")
+    const layout = getCurrentPageLayout()
+    const html = injectHeaderFooterForExport(prepareHtmlForExport(editor.getHTML()), layout)
     const fullHTML = `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -3204,6 +3345,8 @@ window.localStorage.setItem(RIBBON_TAB_KEY, ribbonTab)
       line-height: 1.6;
     }
     [style*="font-family"], [style*="font-size"], [style*="color"] { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    [data-type="docHeader"] { color: #4b5563; font-size: 0.9em; padding-bottom: 8px; margin-bottom: 16px; border-bottom: 1px solid #e5e7eb; }
+    [data-type="docFooter"] { color: #4b5563; font-size: 0.9em; padding-top: 8px; margin-top: 16px; border-top: 1px solid #e5e7eb; }
     h1, h2, h3 { margin-top: 1.5em; }
     code, kbd { font-family: Consolas, "Courier New", monospace; background: #f3f4f6; color: #111827; padding: 2px 6px; border-radius: 3px; }
     pre { font-family: Consolas, "Courier New", monospace; background: #f3f4f6; color: #111827; padding: 15px; border-radius: 5px; overflow-x: auto; white-space: pre-wrap; }
@@ -3229,11 +3372,15 @@ window.localStorage.setItem(RIBBON_TAB_KEY, ribbonTab)
     a.click()
     document.body.removeChild(a)
     URL.revokeObjectURL(url)
-  }, [editor, title])
+  }, [editor, title, getCurrentPageLayout])
 
   const downloadAsText = useCallback(() => {
     if (!editor) return
-    const text = editor.getText()
+    let text = editor.getText()
+    const layout = getCurrentPageLayout()
+    if (layout.header.text) text = `${layout.header.text}\n\n${text}`
+    if (layout.footer.text) text = `${text}\n\n${layout.footer.text}`
+    
     const blob = new Blob([text], { type: "text/plain" })
     const url = URL.createObjectURL(blob)
     const a = document.createElement("a")
@@ -3243,7 +3390,7 @@ window.localStorage.setItem(RIBBON_TAB_KEY, ribbonTab)
     a.click()
     document.body.removeChild(a)
     URL.revokeObjectURL(url)
-  }, [editor, title])
+  }, [editor, title, getCurrentPageLayout])
 
   const downloadAsJSON = useCallback(() => {
     if (!editor) return
@@ -3259,202 +3406,110 @@ window.localStorage.setItem(RIBBON_TAB_KEY, ribbonTab)
     URL.revokeObjectURL(url)
   }, [editor, title])
 
+  // Fallback PDF print (no live page numbers) — used if Paged.js fails to load/run.
+  const printPdfFallback = useCallback(async () => {
+    if (!editor) return
+    const { prepareHtmlForExport, buildPrintDocumentHtml } = await import("@/lib/print-export")
+    const { injectHeaderFooterForExport, marginsPxToMm } = await import("@/lib/page-layout")
+    const layout = getCurrentPageLayout()
+    const body = injectHeaderFooterForExport(prepareHtmlForExport(editor.getHTML()), layout)
+    const html = buildPrintDocumentHtml({
+      title,
+      bodyHtml: body,
+      marginsMm: marginsPxToMm(layout.margins),
+      orientation: layout.orientation,
+    })
+    const iframe = document.createElement("iframe")
+    iframe.style.cssText = `position: absolute; left: -9999px; width: 0; height: 0; border: none;`
+    document.body.appendChild(iframe)
+    await new Promise(resolve => setTimeout(resolve, 100))
+    const iframeDoc = iframe.contentDocument || iframe.contentWindow?.document
+    if (!iframeDoc) throw new Error("Could not access iframe document")
+    iframeDoc.open()
+    iframeDoc.write(html)
+    iframeDoc.close()
+    await new Promise(resolve => setTimeout(resolve, 250))
+    iframeDoc.title = title
+    iframe.contentWindow?.print()
+    setTimeout(() => {
+      if (document.body.contains(iframe)) document.body.removeChild(iframe)
+    }, 1000)
+  }, [editor, title, getCurrentPageLayout])
+
+  // PDF export via Paged.js: lays the document into real pages and renders the
+  // header/footer + "Page X of Y" into the page-margin boxes (no browser date/URL
+  // chrome). Falls back to a plain print if Paged.js can't load/run.
   const downloadAsPDF = useCallback(async () => {
     if (!editor) return
-    try {
-      const { prepareHtmlForExport } = await import("@/lib/print-export")
-      const exportHtml = prepareHtmlForExport(editor.getHTML())
-      // Create an iframe for complete style isolation
-      const iframe = document.createElement("iframe")
-      iframe.style.cssText = `
-        position: absolute;
-        left: -9999px;
-        width: 800px;
-        height: 1px;
-        border: none;
-      `
-      document.body.appendChild(iframe)
-
-      // Wait for iframe to be ready
-      await new Promise(resolve => setTimeout(resolve, 100))
-
-      const iframeDoc = iframe.contentDocument || iframe.contentWindow?.document
-      if (!iframeDoc) {
-        throw new Error("Could not access iframe document")
-      }
-
-      // Write isolated HTML with comprehensive Tiptap-like styles
-      iframeDoc.open()
-      iframeDoc.write(`
-        <!DOCTYPE html>
-        <html>
-        <head>
-          <style>
-            /* Reset */
-            * { margin: 0; padding: 0; box-sizing: border-box; }
-            
-            /* Base */
-            body {
-              font-family: Calibri, 'Segoe UI', sans-serif;
-              font-size: 12pt;
-              line-height: 1.55;
-              padding: 48px;
-              background: #fff;
-              color: #1a1a1a;
-              max-width: 800px;
-            }
-            
-            /* Typography */
-            h1 { font-size: 2em; font-weight: 700; margin: 1.2em 0 0.6em; line-height: 1.3; }
-            h2 { font-size: 1.6em; font-weight: 600; margin: 1.1em 0 0.5em; line-height: 1.35; }
-            h3 { font-size: 1.3em; font-weight: 600; margin: 1em 0 0.4em; line-height: 1.4; }
-            h4 { font-size: 1.1em; font-weight: 600; margin: 0.9em 0 0.4em; }
-            h5, h6 { font-size: 1em; font-weight: 600; margin: 0.8em 0 0.3em; }
-            
-            p { margin: 0.8em 0; }
-            
-            /* Text formatting */
-            strong, b { font-weight: 700; }
-            em, i { font-style: italic; }
-            u { text-decoration: underline; }
-            s, strike { text-decoration: line-through; }
-            sub { vertical-align: sub; font-size: 0.8em; }
-            sup { vertical-align: super; font-size: 0.8em; }
-            mark { background: #fff3a3; padding: 0 2px; }
-            
-            /* Links */
-            a { color: #2563eb; text-decoration: underline; }
-            
-            /* Lists */
-            ul, ol { margin: 0.8em 0; padding-left: 1.8em; }
-            li { margin: 0.3em 0; }
-            li > ul, li > ol { margin: 0.2em 0; }
-            ul { list-style-type: disc; }
-            ol { list-style-type: decimal; }
-            ul ul { list-style-type: circle; }
-            ul ul ul { list-style-type: square; }
-            
-            /* Task lists */
-            ul[data-type="taskList"] { list-style: none; padding-left: 0; }
-            ul[data-type="taskList"] li { display: flex; align-items: flex-start; gap: 8px; }
-            ul[data-type="taskList"] input[type="checkbox"] { margin-top: 4px; }
-            
-            /* Blockquotes */
-            blockquote {
-              border-left: 4px solid #d1d5db;
-              padding-left: 16px;
-              margin: 1em 0;
-              color: #4b5563;
-              font-style: italic;
-            }
-            
-            /* Code */
-            code {
-              font-family: Consolas, 'SF Mono', 'Monaco', 'Menlo', monospace;
-              font-size: 0.9em;
-              background: #f3f4f6 !important;
-              padding: 2px 6px;
-              border-radius: 4px;
-              color: #111827 !important;
-            }
-            pre {
-              font-family: Consolas, 'SF Mono', 'Monaco', 'Menlo', monospace;
-              font-size: 0.9em;
-              background: #f3f4f6 !important;
-              color: #111827 !important;
-              padding: 16px;
-              border-radius: 8px;
-              margin: 1em 0;
-              overflow-x: auto;
-              white-space: pre-wrap;
-              word-break: break-word;
-            }
-            pre code, code, kbd {
-              font-family: Consolas, 'SF Mono', 'Monaco', 'Menlo', monospace;
-              background: #f3f4f6 !important;
-              color: #111827 !important;
-            }
-            pre code { padding: 0; }
-            
-            /* Tables - High contrast for PDF */
-            table {
-              border-collapse: collapse;
-              width: 100% !important;
-              table-layout: auto !important;
-              margin: 1em 0;
-              font-size: 0.95em;
-              border: 1px solid #000;
-            }
-            th, td {
-              border: 1px solid #000;
-              padding: 10px 14px;
-              text-align: left;
-              vertical-align: top;
-              width: auto !important;
-              min-width: 0 !important;
-              max-width: none !important;
-            }
-            th {
-              background: #f3f4f6;
-              font-weight: 700;
-            }
-            tr:nth-child(even) { background: #fafafa; }
-            
-            /* Images */
-            img { max-width: 100%; height: auto; border-radius: 4px; margin: 0.5em 0; }
-            
-            /* Horizontal rule */
-            hr { border: none; border-top: 2px solid #e5e7eb; margin: 1.5em 0; }
-            
-            /* Highlight colors */
-            [data-color="red"] { color: #dc2626; }
-            [data-color="orange"] { color: #ea580c; }
-            [data-color="yellow"] { color: #ca8a04; }
-            [data-color="green"] { color: #16a34a; }
-            [data-color="blue"] { color: #2563eb; }
-            [data-color="purple"] { color: #9333ea; }
-            [data-color="pink"] { color: #db2777; }
-            
-            /* Math formulas */
-            .math-inline, .math-block { font-family: 'Times New Roman', serif; }
-            
-            /* Hide resize handles */
-            .table-col-handle, .table-row-handle, .table-diag-handle { display: none !important; }
-          </style>
-        </head>
-        <body>${exportHtml}</body>
-        </html>
-      `)
-      iframeDoc.close()
-
-      // Wait for content to render
-      await new Promise(resolve => setTimeout(resolve, 200))
-
-      // Use browser's print functionality
-      const printWindow = iframe.contentWindow
-      if (printWindow) {
-        iframeDoc.title = title
-        printWindow.print()
-      }
-
-      // Clean up after a delay
-      setTimeout(() => {
-        if (document.body.contains(iframe)) {
-          document.body.removeChild(iframe)
-        }
-      }, 1000)
-    } catch (error) {
-      console.error("PDF export error:", error)
-      alert("Failed to export PDF.")
+    let container: HTMLDivElement | null = null
+    let printStyle: HTMLStyleElement | null = null
+    let cssUrl: string | null = null
+    const cleanup = () => {
+      if (container && container.parentNode) container.parentNode.removeChild(container)
+      if (printStyle && printStyle.parentNode) printStyle.parentNode.removeChild(printStyle)
+      if (cssUrl) { URL.revokeObjectURL(cssUrl); cssUrl = null }
+      container = null
+      printStyle = null
     }
-  }, [editor, title])
+    try {
+      const { prepareHtmlForExport, buildPagedExportAssets } = await import("@/lib/print-export")
+      const { marginsPxToMm } = await import("@/lib/page-layout")
+      const { Previewer } = await import("pagedjs")
+      const layout = getCurrentPageLayout()
+      const { contentHtml, css } = buildPagedExportAssets({
+        bodyHtml: prepareHtmlForExport(editor.getHTML()),
+        marginsMm: marginsPxToMm(layout.margins),
+        orientation: layout.orientation,
+        header: layout.header,
+        footer: layout.footer,
+        pageNumbers: layout.pageNumbers,
+      })
+      container = document.createElement("div")
+      container.id = "n9-paged-print"
+      // Off-screen but laid out, so Paged.js can measure while staying invisible.
+      container.style.cssText = "position:absolute; left:-10000px; top:0; width:0; overflow:hidden;"
+      document.body.appendChild(container)
+      cssUrl = URL.createObjectURL(new Blob([css], { type: "text/css" }))
+      const previewer = new Previewer()
+      await previewer.preview(contentHtml, [cssUrl], container)
+      // Isolate the rendered pages for printing: hidden on screen; the only thing
+      // shown when printing (everything else in the app is hidden).
+      printStyle = document.createElement("style")
+      printStyle.textContent = `
+        @media screen { #n9-paged-print { display: none !important; } }
+        @media print {
+          body > *:not(#n9-paged-print) { display: none !important; }
+          #n9-paged-print { position: static !important; left: auto !important; width: auto !important; overflow: visible !important; }
+          html, body { background: #fff !important; }
+        }
+      `
+      document.head.appendChild(printStyle)
+      await new Promise(resolve => setTimeout(resolve, 150))
+      window.addEventListener("afterprint", cleanup, { once: true })
+      window.print()
+      // Fallback cleanup in case afterprint never fires.
+      setTimeout(cleanup, 60000)
+    } catch (error) {
+      console.error("PDF export (Paged.js) failed, falling back to plain print:", error)
+      cleanup()
+      try {
+        await printPdfFallback()
+      } catch (e2) {
+        console.error("PDF fallback failed:", e2)
+        alert("Failed to export PDF.")
+      }
+    }
+  }, [editor, getCurrentPageLayout, printPdfFallback])
 
   const downloadAsDOCX = useCallback(async () => {
     if (!editor) return
     setIsAIProcessing(true)
 
     try {
-      const html = editor.getHTML()
+      // Inject the header/footer as docHeader/docFooter elements so the DOCX
+      // exporter turns them into real Word headers/footers.
+      const { injectHeaderFooterForExport } = await import("@/lib/page-layout")
+      const html = injectHeaderFooterForExport(editor.getHTML(), getCurrentPageLayout())
 
       // Dynamically import the DOCX export function (proper .docx format!)
       const { exportHtmlToDocx } = await import('@/lib/docx-export')
@@ -3468,7 +3523,7 @@ window.localStorage.setItem(RIBBON_TAB_KEY, ribbonTab)
       setIsAIProcessing(false)
       alert("Failed to export DOCX. Please try again.")
     }
-  }, [editor, title])
+  }, [editor, title, getCurrentPageLayout])
 
   const startSpeechToText = useCallback(() => {
     lastFinalIndexRef.current = 0
@@ -4626,20 +4681,6 @@ window.localStorage.setItem(RIBBON_TAB_KEY, ribbonTab)
             Double arrow
           </DropdownMenuItem>
           <DropdownMenuSeparator />
-          <DropdownMenuItem
-            onMouseDown={(e) => e.preventDefault()}
-            onClick={() => {
-              if (!editor.state.selection.empty) {
-                setIsCommenting(true)
-                editor.chain().focus().run()
-              } else {
-                setCommentsSidebarOpen(!commentsSidebarOpen)
-              }
-            }}
-          >
-            <MessageSquare className="mr-2 h-4 w-4" />
-            Comments
-          </DropdownMenuItem>
           <DropdownMenuItem onClick={handleFilePicker}>
             <FileInput className="mr-2 h-4 w-4" />
             Import file…
@@ -5220,17 +5261,34 @@ window.localStorage.setItem(RIBBON_TAB_KEY, ribbonTab)
             </TooltipTrigger>
             <TooltipContent>Header &amp; footer</TooltipContent>
           </Tooltip>
-          <DropdownMenuContent {...dockPopperOpts} className="z-[200] w-48">
+          <DropdownMenuContent {...dockPopperOpts} className="z-[200] w-52">
             <DropdownMenuItem onClick={() => setShowPageNumbers(prev => prev === "none" ? "footer" : "none")}>
-              Toggle page numbers
+              {showPageNumbers === "none" ? "Show page numbers" : "Hide page numbers"}
             </DropdownMenuItem>
             <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={() => setHeaderAlign(prev => prev === "left" ? "center" : prev === "center" ? "right" : "left")}>
-              Header align: {headerAlign}
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => setFooterAlign(prev => prev === "left" ? "center" : prev === "center" ? "right" : "left")}>
-              Footer align: {footerAlign}
-            </DropdownMenuItem>
+            <DropdownMenuLabel className="text-2xs uppercase text-muted-foreground font-semibold">
+              Header alignment <span className="normal-case text-foreground/70">· now {headerAlign}</span>
+            </DropdownMenuLabel>
+            {(["left", "center", "right"] as const)
+              .filter((a) => a !== headerAlign)
+              .map((a) => (
+                <DropdownMenuItem key={`h-${a}`} onClick={() => setHeaderAlign(a)} className="capitalize">
+                  {a === "left" ? <AlignLeft className="mr-2 h-4 w-4" /> : a === "center" ? <AlignCenter className="mr-2 h-4 w-4" /> : <AlignRight className="mr-2 h-4 w-4" />}
+                  {a}
+                </DropdownMenuItem>
+              ))}
+            <DropdownMenuSeparator />
+            <DropdownMenuLabel className="text-2xs uppercase text-muted-foreground font-semibold">
+              Footer alignment <span className="normal-case text-foreground/70">· now {footerAlign}</span>
+            </DropdownMenuLabel>
+            {(["left", "center", "right"] as const)
+              .filter((a) => a !== footerAlign)
+              .map((a) => (
+                <DropdownMenuItem key={`f-${a}`} onClick={() => setFooterAlign(a)} className="capitalize">
+                  {a === "left" ? <AlignLeft className="mr-2 h-4 w-4" /> : a === "center" ? <AlignCenter className="mr-2 h-4 w-4" /> : <AlignRight className="mr-2 h-4 w-4" />}
+                  {a}
+                </DropdownMenuItem>
+              ))}
           </DropdownMenuContent>
         </DropdownMenu>
 
@@ -5489,7 +5547,7 @@ window.localStorage.setItem(RIBBON_TAB_KEY, ribbonTab)
           style={
             panelEmbed || fillParentHeight || editorRegionFullscreen
               ? { minHeight: 0, maxHeight: "100%" }
-              : { minHeight, maxHeight: "calc(100dvh - 300px)" }
+              : { minHeight, maxHeight: "calc(100dvh - 132px)" }
           }
         >
           {/* Editor Content - add right padding to prevent text from going under TOC */}
@@ -5498,8 +5556,10 @@ window.localStorage.setItem(RIBBON_TAB_KEY, ribbonTab)
             data-page-orientation={pageSetup.orientation}
             {...(pageSetup.pageView ? { "data-page-view": "" } : {})}
             className={cn(
-              "overflow-y-auto overflow-x-auto h-full min-h-0 relative w-full max-w-full transition-[padding] duration-200",
-              pageSetup.pageView ? "n9-page-backdrop px-0 pt-2 pb-8" : "px-2 pb-2 pr-20",
+              "overflow-y-auto h-full min-h-0 relative w-full max-w-full transition-[padding] duration-200",
+              // Page view: clip horizontal overflow so the full-bleed page gap can
+              // span the whole width without showing a horizontal scrollbar.
+              pageSetup.pageView ? "n9-page-backdrop px-0 pt-0 pb-8 [overflow-x:clip]" : "overflow-x-auto px-2 pb-2 pr-20",
               // shift the centred page left so the comments sidebar doesn't cover it
               commentsSidebarOpen && "pr-[312px]",
             )}
@@ -5511,8 +5571,8 @@ window.localStorage.setItem(RIBBON_TAB_KEY, ribbonTab)
             ref={(node) => setEditorContainer(node)}
           >
             {pageSetup.pageView && pageSetup.rulers && (
-              <div className="sticky top-0 z-20 mb-2 flex justify-center gap-1.5 n9-page-backdrop pt-1 pb-1.5">
-                {/* corner spacer aligns the horizontal ruler with the page (past the vertical ruler) */}
+              <div className="sticky top-0 z-30 mb-2 flex justify-center gap-1.5 n9-page-backdrop pt-0 pb-1.5 shadow-[0_4px_6px_-4px_rgba(0,0,0,0.18)]">
+                {/* corner spacer keeps the horizontal ruler aligned with the page, past the vertical ruler */}
                 <div className="w-6 shrink-0" aria-hidden />
                 <EditorRuler
                   orientation="horizontal"
@@ -5536,8 +5596,9 @@ window.localStorage.setItem(RIBBON_TAB_KEY, ribbonTab)
               {pageSetup.pageView && pageSetup.rulers && (
                 <EditorRuler
                   orientation="vertical"
-                  lengthPx={Math.max(pageMinHeightPx, pageSheetHeight)}
+                  lengthPx={verticalRulerLengthPx}
                   repeatEveryPx={pageMinHeightPx}
+                  repeatGapPx={PAGE_GAP_PX}
                   marginStartPx={pageSetup.margins.top}
                   marginEndPx={pageSetup.margins.bottom}
                   onChange={({ start, end }) =>
@@ -5550,7 +5611,7 @@ window.localStorage.setItem(RIBBON_TAB_KEY, ribbonTab)
                       },
                     }))
                   }
-                  className="shrink-0 self-start"
+                  className="shrink-0 self-start mt-[16px]"
                 />
               )}
               <div
@@ -5570,6 +5631,7 @@ window.localStorage.setItem(RIBBON_TAB_KEY, ribbonTab)
                         "--n9-mr": `${pageSetup.margins.right}px`,
                         "--n9-mt": `${pageSetup.margins.top}px`,
                         "--n9-mb": `${pageSetup.margins.bottom}px`,
+                        "--n9-page-width": `${pageWidthPx}px`,
                       } as CSSProperties)
                     : undefined
                 }

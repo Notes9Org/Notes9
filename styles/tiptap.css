@@ -563,8 +563,11 @@
   --primary: 220 90% 56%;
   color: #1a1a1a;
   background-color: #ffffff;
-  border-radius: 2px;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.14), 0 8px 24px rgba(0, 0, 0, 0.10);
+  border-radius: 4px;
+  box-shadow:
+    0 0 0 1px rgba(15, 23, 42, 0.04),
+    0 1px 2px rgba(15, 23, 42, 0.06),
+    0 12px 30px -8px rgba(15, 23, 42, 0.14);
   color-scheme: light;
 }
 .n9-page .ProseMirror {
@@ -648,6 +651,12 @@
   position: relative;
   display: flex;
   align-items: center;
+  /* Bleed the header/footer zone out to the full page width */
+  width: auto;
+  margin-left: calc(-1 * var(--n9-ml, 0px) - 35px);
+  margin-right: calc(-1 * var(--n9-mr, 0px) - 35px);
+  /* Sit above the flat backdrop gap so the page-edge shadows below are visible. */
+  z-index: 1;
 }
 .n9-page-sep-footerzone .n9-doc-footer {
   width: auto;
@@ -666,19 +675,20 @@
 /* The page-view backdrop (area behind the sheets). A shared var keeps the
    page-break gap exactly the same colour as the surrounding backdrop. */
 .n9-page-backdrop {
-  --n9-backdrop: #ebe7e0;
+  --n9-backdrop: #eceef1;
   background-color: var(--n9-backdrop);
 }
 :is(.dark) .n9-page-backdrop {
-  --n9-backdrop: #e4e0d9;
+  --n9-backdrop: #1b1e23;
 }
 /* Backdrop gap between two sheets — same colour as behind, with soft page edges. */
 .n9-page-sep-gap {
   position: relative;
-  background: var(--n9-backdrop, #ebe7e0);
-  margin-left: calc(-1 * var(--n9-ml, 0px));
-  margin-right: calc(-1 * var(--n9-mr, 0px));
-  box-shadow: inset 0 11px 9px -9px rgba(0, 0, 0, 0.18), inset 0 -11px 9px -9px rgba(0, 0, 0, 0.18);
+  background: var(--n9-backdrop, #eceef1);
+  width: auto;
+  margin-left: calc(-1 * var(--n9-ml, 0px) - 35px);
+  margin-right: calc(-1 * var(--n9-mr, 0px) - 35px);
+  box-shadow: inset 0 5px 5px -5px rgba(0, 0, 0, 0.08), inset 0 -5px 5px -5px rgba(0, 0, 0, 0.08);
   z-index: 10;
 }
 /* Tables must read on the white page — black, crisp borders (the themed

@@ -22,6 +22,13 @@ export type EditorRulerProps = {
    * down the ruler so each page shows its own measurements.
    */
   repeatEveryPx?: number
+  /**
+   * Vertical ruler only: blank space between repeated pages, matching the
+   * page-separator gap drawn between sheets. The scale/margins occupy
+   * `repeatEveryPx`; pages are spaced `repeatEveryPx + repeatGapPx` apart so the
+   * ruler stays aligned with each page after the first.
+   */
+  repeatGapPx?: number
   className?: string
 }
 
@@ -37,6 +44,7 @@ export function EditorRuler({
   marginEndPx,
   onChange,
   repeatEveryPx,
+  repeatGapPx,
   className,
 }: EditorRulerProps) {
   const isH = orientation === "horizontal"
@@ -77,18 +85,25 @@ export function EditorRuler({
 
   // For a repeating vertical ruler, each page renders its own 0..N scale.
   const pageLen = isH ? lengthPx : repeatEveryPx ?? lengthPx
-  const pageCount = isH ? 1 : Math.max(1, Math.ceil(lengthPx / pageLen))
+  // Gap between pages (mirrors the page-separator gap drawn between sheets) so
+  // page blocks line up with the real pages, which are pushed down by each gap.
+  const pageGap = isH ? 0 : repeatGapPx ?? 0
+  const pagePitch = pageLen + pageGap
+  const pageCount = isH ? 1 : Math.max(1, Math.ceil(lengthPx / pagePitch))
   const inchesPerPage = Math.ceil(pageLen / DPI)
 
   const handleBase =
     "absolute z-10 h-3 w-3 rounded-sm border border-border bg-primary shadow-sm -translate-x-1/2 -translate-y-1/2"
 
+  // Each page is its OWN bar (background + border), positioned at `base`. The gap
+  // between bars is left transparent so it lines up exactly with the page-gap
+  // drawn between the sheets. Tick/margin/handle positions are relative to the bar.
   const renderPage = (pageIndex: number) => {
-    const base = pageIndex * pageLen // offset of this page along the ruler
+    const base = pageIndex * pagePitch // offset of this page's bar along the ruler
     const ticks: React.ReactNode[] = []
     for (let i = 0; i <= inchesPerPage; i++) {
-      const at = base + i * DPI
-      if (at > lengthPx) break
+      const at = i * DPI // relative to this page's bar
+      if (at > pageLen) break
       ticks.push(
         isH ? (
           <div key={`t-${pageIndex}-${i}`} className="absolute top-0 bottom-0" style={{ left: at }}>
@@ -108,33 +123,35 @@ export function EditorRuler({
       )
     }
     return (
-      <div key={`page-${pageIndex}`}>
-        {/* page boundary line (vertical ruler only, after the first page) */}
-        {!isH && pageIndex > 0 ? (
-          <div className="absolute left-0 right-0 border-t border-dashed border-border" style={{ top: base }} />
-        ) : null}
-        {/* margin shading for this page */}
+      <div
+        key={`page-${pageIndex}`}
+        className="absolute overflow-hidden rounded-sm border border-border/70 bg-card text-muted-foreground"
+        style={
+          isH
+            ? { left: base, top: 0, bottom: 0, width: pageLen }
+            : { top: base, left: 0, right: 0, height: pageLen }
+        }
+      >
+        {/* margin shading for this page (relative to the bar) */}
         <div
           className="absolute bg-muted/70"
-          style={
-            isH
-              ? { insetBlock: 0, left: base, width: marginStartPx }
-              : { insetInline: 0, top: base, height: marginStartPx }
-          }
+          style={isH ? { insetBlock: 0, left: 0, width: marginStartPx } : { insetInline: 0, top: 0, height: marginStartPx }}
           aria-hidden
         />
         <div
           className="absolute bg-muted/70"
           style={
             isH
-              ? { insetBlock: 0, left: base + pageLen - marginEndPx, width: marginEndPx }
-              : { insetInline: 0, top: base + pageLen - marginEndPx, height: marginEndPx }
+              ? { insetBlock: 0, left: pageLen - marginEndPx, width: marginEndPx }
+              : { insetInline: 0, top: pageLen - marginEndPx, height: marginEndPx }
           }
           aria-hidden
         />
         {ticks}
-        {/* draggable handles only on the first page (they set the margins for all pages) */}
-        {pageIndex === 0 ? (
+        {/* Draggable margin handles. The horizontal ruler has a single page; the
+            vertical ruler repeats handles on every page so margins can be dragged
+            from any page (they all set the same shared top/bottom margins). */}
+        {isH && pageIndex > 0 ? null : (
           <>
             <button
               type="button"
@@ -153,7 +170,7 @@ export function EditorRuler({
               style={isH ? { left: pageLen - marginEndPx } : { top: pageLen - marginEndPx }}
             />
           </>
-        ) : null}
+        )}
       </div>
     )
   }
@@ -166,11 +183,9 @@ export function EditorRuler({
       onPointerUp={endDrag}
       onPointerCancel={endDrag}
     >
+      {/* Transparent track; each page bar paints itself, leaving real gaps between. */}
       <div
-        className={cn(
-          "relative rounded-sm border border-border/70 bg-card text-muted-foreground",
-          isH ? "h-6" : "w-6",
-        )}
+        className={cn("relative", isH ? "h-6" : "w-6")}
         style={isH ? { width: lengthPx } : { height: lengthPx }}
       >
         {Array.from({ length: pageCount }, (_, p) => renderPage(p))}

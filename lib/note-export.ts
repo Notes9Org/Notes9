@@ -68,9 +68,12 @@ export async function exportNoteAsMarkdown(html: string, title: string, toasts =
   }
 }
 
-export function exportNoteAsHtml(html: string, title: string) {
+export async function exportNoteAsHtml(html: string, title: string) {
   const safeTitle = title || "note"
-  const prepared = prepareHtmlForExport(html)
+  const { extractLayoutMarker, injectHeaderFooterForExport } = await import("@/lib/page-layout")
+  const { layout } = extractLayoutMarker(html)
+  let prepared = prepareHtmlForExport(html)
+  if (layout) prepared = injectHeaderFooterForExport(prepared, layout)
   const { header, footer, body } = splitHeaderFooter(prepared)
   // thead/tfoot repeat the header/footer on every page when the file is printed.
   const bodyHtml =
@@ -164,6 +167,11 @@ export async function exportNoteAsPdfFromHtml(
     const iframeDoc = iframe.contentDocument || iframe.contentWindow?.document
     if (!iframeDoc) throw new Error("Could not access iframe document")
 
+    // Recover the page layout (margins, orientation, header/footer) embedded in
+    // the saved content so the workspace export menu reflects it too.
+    const { extractLayoutMarker, injectHeaderFooterForExport, marginsPxToMm } = await import("@/lib/page-layout")
+    const { layout } = extractLayoutMarker(html)
+
     let bodyHtml = html
     let commentsHtml = ""
     if (options?.includeComments) {
@@ -173,6 +181,7 @@ export async function exportNoteAsPdfFromHtml(
     } else {
       bodyHtml = prepareHtmlForExport(html)
     }
+    if (layout) bodyHtml = injectHeaderFooterForExport(bodyHtml, layout)
 
     const docTitle = (title || "").trim() || "Document"
     const fullHtml = buildPrintDocumentHtml({
@@ -180,7 +189,8 @@ export async function exportNoteAsPdfFromHtml(
       bodyHtml,
       includeTitleHeading: true,
       commentsBlockHtml: commentsHtml,
-      marginsMm: options?.marginsMm,
+      marginsMm: layout ? marginsPxToMm(layout.margins) : options?.marginsMm,
+      orientation: layout?.orientation,
     })
 
     writePrintIframeDocument(iframeDoc, fullHtml, docTitle)
@@ -205,8 +215,12 @@ export async function exportNoteAsPdfFromHtml(
 export async function exportNoteAsDocx(html: string, title: string, toasts = defaultToasts) {
   try {
     toasts.success("Generating DOCX", { description: "Please wait…" })
+    const { extractLayoutMarker, injectHeaderFooterForExport, stripLayoutMarker } = await import("@/lib/page-layout")
     const { exportHtmlToDocx } = await import("@/lib/docx-export")
-    await exportHtmlToDocx(html, title || "Document")
+    const { layout } = extractLayoutMarker(html)
+    let body = stripLayoutMarker(html)
+    if (layout) body = injectHeaderFooterForExport(body, layout)
+    await exportHtmlToDocx(body, title || "Document")
     toasts.success("DOCX exported", { description: "File downloaded." })
   } catch (e: unknown) {
     console.error(e)
