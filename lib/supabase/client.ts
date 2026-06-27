@@ -1,16 +1,28 @@
 import { createBrowserClient } from "@supabase/ssr"
 
+// Always delegate to the real browser fetch. Binding avoids Turbopack/bundler
+// edge cases where an unqualified `fetch` inside the custom wrapper might not
+// resolve to the global implementation.
+const nativeFetch: typeof fetch = globalThis.fetch.bind(globalThis)
+
 // Detect the auth token-REFRESH request whose response means the refresh token
 // is revoked/missing. When that happens the SDK (`@supabase/auth-js` fetch.ts)
 // throws "Invalid Refresh Token: Refresh Token Not Found", and because the dead
-// token is still in localStorage it recurs on every refresh tick / getSession().
+// token is still persisted it recurs on every refresh tick / getSession().
 function isRefreshTokenRequest(url: string): boolean {
   return url.includes("/auth/v1/token") && url.includes("grant_type=refresh_token")
+}
+
+function requestUrl(input: RequestInfo | URL): string {
+  if (typeof input === "string") return input
+  if (input instanceof URL) return input.toString()
+  return input.url
 }
 
 function clearStaleAuthStorage() {
   if (typeof window === "undefined") return
   try {
+    // Legacy plain supabase-js clients store sessions in localStorage.
     for (const key of Object.keys(window.localStorage)) {
       if (key.startsWith("sb-") && key.includes("-auth-token")) {
         window.localStorage.removeItem(key)
@@ -18,6 +30,21 @@ function clearStaleAuthStorage() {
     }
   } catch {
     // localStorage can throw in private-mode / restricted contexts — ignore.
+  }
+
+  try {
+    // @supabase/ssr createBrowserClient persists sessions in document.cookie
+    // (including chunked sb-*-auth-token.N entries). If we only clear
+    // localStorage the dead refresh token keeps autoRefreshToken retrying and
+    // the console fills with network-level "Failed to fetch" TypeErrors.
+    for (const cookie of document.cookie.split(";")) {
+      const name = cookie.split("=")[0]?.trim()
+      if (name && name.startsWith("sb-") && name.includes("-auth-token")) {
+        document.cookie = `${name}=; Max-Age=0; path=/; SameSite=Lax`
+      }
+    }
+  } catch {
+    // document.cookie can throw in restricted contexts — ignore.
   }
 }
 
@@ -41,14 +68,20 @@ export function createClient() {
       // original response is always returned untouched — the SDK still clears its
       // in-memory session and emits SIGNED_OUT as usual.
       fetch: async (input: RequestInfo | URL, init?: RequestInit) => {
-        const res = await fetch(input as RequestInfo, init)
+        const url = requestUrl(input)
+        let res: Response
         try {
-          const url =
-            typeof input === "string"
-              ? input
-              : input instanceof URL
-                ? input.toString()
-                : (input as Request).url
+          res = await nativeFetch(input as RequestInfo, init)
+        } catch (err) {
+          // A dead session cookie can leave autoRefreshToken hammering the
+          // refresh endpoint; when the browser blocks or drops those requests
+          // we still self-heal so the loop stops.
+          if (isRefreshTokenRequest(url)) {
+            clearStaleAuthStorage()
+          }
+          throw err
+        }
+        try {
           if (res.status === 400 && isRefreshTokenRequest(url)) {
             const body = await res.clone().json().catch(() => null as unknown)
             const blob = JSON.stringify(body ?? "")

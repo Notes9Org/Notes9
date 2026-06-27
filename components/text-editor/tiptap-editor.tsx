@@ -5495,7 +5495,7 @@ export function TiptapEditor({
               <DialogTitle>Select Citations</DialogTitle>
               <DialogDescription>
                 {citationSource === "repository"
-                  ? "Matches from your saved repository. Click a source to select it, or search the web for more."
+                  ? "Matches from your library. Click a source to select it, or search the web for more."
                   : "Results from the web. Click a source to select/deselect it."}
               </DialogDescription>
             </DialogHeader>

@@ -152,6 +152,7 @@ export function AiSearchFilters({
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
+                <SelectItem value="openAccess">Open access first</SelectItem>
                 <SelectItem value="relevance">Most relevant</SelectItem>
                 <SelectItem value="cited">Most cited</SelectItem>
                 <SelectItem value="recent">Newest first</SelectItem>

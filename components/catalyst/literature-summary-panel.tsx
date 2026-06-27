@@ -46,6 +46,12 @@ export function LiteratureSummaryPanel({ lit }: { lit: CatalystLiterature }) {
           content={lit.summary}
           showCursor={lit.streaming}
           className="w-full min-w-0 text-[13.5px] leading-relaxed"
+          onCitationClick={(label) => {
+            window.dispatchEvent(
+              new CustomEvent('literature:scroll-to-citation', { detail: { citeLabel: label } })
+            )
+            return true
+          }}
         />
       ) : (
         <div className="space-y-2.5" aria-label="Composing summary">

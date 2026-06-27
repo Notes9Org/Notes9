@@ -153,6 +153,7 @@ export function AiPaperCard({
   query = '',
   summaryLoading = false,
   relevanceSummary,
+  initialSaved = false,
   onSaved,
   onStage,
   onOpenStaged,
@@ -170,6 +171,8 @@ export function AiPaperCard({
   /** The AI's own sentences (from the overall summary) about why this paper
    *  answers the user's query — shown in the per-paper "AI summary" tab. */
   relevanceSummary?: string
+  /** If true, initialise the card in the "already saved" state (survives remounts). */
+  initialSaved?: boolean
   onSaved?: () => void
   /** Same stage action the database card uses — stages + opens a reader tab. */
   onStage?: (paper: SearchPaper) => void | Promise<void>
@@ -178,7 +181,7 @@ export function AiPaperCard({
   isStaging?: boolean
 }) {
   const [saving, setSaving] = useState(false)
-  const [saved, setSaved] = useState(false)
+  const [saved, setSaved] = useState(initialSaved)
   const [showAbstract, setShowAbstract] = useState(false)
   const [tab, setTab] = useState<'ai' | 'abstract'>('ai')
   const abstractRaw = result.paper?.abstract?.trim() || result.abstract?.trim() || ''
@@ -266,7 +269,7 @@ export function AiPaperCard({
       const res = await savePaperToRepository(paper, { projectId: projectId ?? undefined })
       if (res.success) {
         setSaved(true)
-        toast.success('Saved to repository' + ('warning' in res && res.warning ? ` (${res.warning})` : ''))
+        toast.success('Saved to library' + ('warning' in res && res.warning ? ` (${res.warning})` : ''))
         onSaved?.()
       } else {
         toast.error(res.error || 'Could not save paper')

@@ -784,7 +784,7 @@ export function LiteratureTabs({
           if (result.success) {
           const pdfAttached = Boolean(result.data?.pdf_storage_path) && !result.warning
           toast.success(
-            pdfAttached ? "Paper and PDF saved to repository" : "Paper saved to repository"
+            pdfAttached ? "Paper and PDF saved to library" : "Paper saved to library"
           )
           if (result.warning) {
             toast.message(result.warning)
@@ -823,7 +823,7 @@ export function LiteratureTabs({
       if (result.success) {
         const pdfAttached = Boolean(result.data?.pdf_storage_path) && !result.warning
         toast.success(
-          pdfAttached ? "Paper and PDF saved to repository" : "Paper saved to repository"
+          pdfAttached ? "Paper and PDF saved to library" : "Paper saved to library"
         )
         if (result.warning) {
           toast.message(result.warning)

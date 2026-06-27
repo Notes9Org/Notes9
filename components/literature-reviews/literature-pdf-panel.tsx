@@ -1,7 +1,8 @@
 "use client"
 
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react"
-import { ChevronDown, Download, FileText, Loader2, PanelRightOpen } from "lucide-react"
+import { Bot, ChevronDown, Download, FileText, Loader2, PanelRightOpen } from "lucide-react"
+import { attachToCatalyst, openCatalystPanel } from '@/lib/catalyst-launch'
 
 import { LiteraturePdfAnnotationSidebar } from "@/components/literature-reviews/literature-pdf-annotation-sidebar"
 import {
@@ -235,14 +236,40 @@ export function LiteraturePdfPanel({
             "lg:grid-cols-[minmax(0,1fr)_minmax(17.5rem,22rem)] lg:items-start"
         )}
       >
-        <div className="min-h-0 min-w-0">
+        <div className="relative min-h-0 min-w-0">
           <LiteraturePdfViewer
             ref={viewerRef}
             pdfUrl={pdfUrl}
             externalOpenUrl={openInNewTabFallbackUrl ?? undefined}
             annotations={annotations}
             onCreateAnnotation={createAnnotation}
+            onAskCatalyst={(selectedText) => {
+              openCatalystPanel({
+                scope: 'literature',
+                query: `"${selectedText}"\n\n`,
+                autoSend: false,
+              })
+            }}
           />
+          {/* Floating "Read with Catalyst" button */}
+          <Button
+            size="sm"
+            variant="secondary"
+            className="absolute bottom-4 right-4 z-20 gap-1.5 rounded-full shadow-md"
+            onClick={() => {
+              openCatalystPanel({ scope: 'literature' })
+              if (pdfUrl) {
+                attachToCatalyst([{
+                  url: pdfUrl,
+                  name: pdfFileName ?? 'paper.pdf',
+                  contentType: 'application/pdf',
+                }])
+              }
+            }}
+          >
+            <Bot className="size-3.5" />
+            Read with Catalyst
+          </Button>
         </div>
 
         <CollapsibleContent
