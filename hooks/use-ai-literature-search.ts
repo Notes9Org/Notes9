@@ -81,6 +81,7 @@ export function useAiLiteratureSearch({
   const [papers, setPapers] = useState<SearchPaper[]>([])
   const [summary, setSummary] = useState('')
   const [isStreaming, setIsStreaming] = useState(false)
+  const [phase, setPhase] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [activeQuery, setActiveQuery] = useState<string | null>(query?.trim() || null)
 
@@ -123,6 +124,7 @@ export function useAiLiteratureSearch({
 
       setPapers([])
       setSummary('')
+      setPhase('searching')
       setIsStreaming(true)
 
       let receivedPapers: SearchPaper[] = []
@@ -132,7 +134,7 @@ export function useAiLiteratureSearch({
         const res = await fetch('/api/literature/ai-search', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ query: q, limit: 10 }),
+          body: JSON.stringify({ query: q, limit: 18 }),
           signal: controller.signal,
         })
         if (!res.ok || !res.body) {
@@ -153,7 +155,10 @@ export function useAiLiteratureSearch({
             const parsed = parseSseBlock(block)
             if (!parsed) continue
             const [event, data] = parsed
-            if (event === 'papers') {
+            if (event === 'status') {
+              const p = (data as { phase?: string }).phase
+              if (p) setPhase(p)
+            } else if (event === 'papers') {
               const payload = data as SsePapersEvent
               receivedPapers = Array.isArray(payload.papers) ? payload.papers : []
               setPapers(receivedPapers)
@@ -189,6 +194,7 @@ export function useAiLiteratureSearch({
       } finally {
         if (abortRef.current === controller) abortRef.current = null
         setIsStreaming(false)
+        setPhase(null)
       }
     },
     [applyPaperSummary],
@@ -217,6 +223,8 @@ export function useAiLiteratureSearch({
     papers: inSync ? papers : [],
     isStreaming: isStreaming || (!!requested && !inSync),
     papersLoading: isStreaming && papers.length === 0,
+    /** Current pipeline phase while streaming (e.g. "searching"), else null. */
+    phase: inSync ? phase : null,
     error: inSync ? error : null,
     activeQuery,
     stop,

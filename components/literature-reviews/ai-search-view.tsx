@@ -218,23 +218,49 @@ export function AiSearchView({
         </>
       )}
 
-      {displayed.map((r, i) => (
-        <div
-          key={`${r.citeLabel}-${r.paper?.id ?? r.sourceUrl ?? r.aiTitle ?? ''}`}
-          className="rounded-xl duration-500 animate-in fade-in slide-in-from-bottom-3 fill-mode-both"
-          style={{ animationDelay: `${Math.min(i, 8) * 60}ms` }}
-        >
-          <AiPaperCard
-            result={r}
-            projectId={projectId}
-            query={query}
-            onStage={onStagePaper}
-            onOpenStaged={onOpenStaged}
-            isStaged={r.paper ? (isPaperStaged?.(r.paper.id) ?? false) : false}
-            isStaging={r.paper ? (isPaperStaging?.(r.paper.id) ?? false) : false}
-          />
-        </div>
-      ))}
+      {(() => {
+        const renderCard = (r: (typeof displayed)[number], i: number) => (
+          <div
+            key={`${r.citeLabel}-${r.paper?.id ?? r.sourceUrl ?? r.aiTitle ?? ''}`}
+            className="rounded-xl duration-500 animate-in fade-in slide-in-from-bottom-3 fill-mode-both"
+            style={{ animationDelay: `${Math.min(i, 8) * 60}ms` }}
+          >
+            <AiPaperCard
+              result={r}
+              projectId={projectId}
+              query={query}
+              onStage={onStagePaper}
+              onOpenStaged={onOpenStaged}
+              isStaged={r.paper ? (isPaperStaged?.(r.paper.id) ?? false) : false}
+              isStaging={r.paper ? (isPaperStaging?.(r.paper.id) ?? false) : false}
+            />
+          </div>
+        )
+
+        // Group by reranker tier when present ("related" is explicit; everything else
+        // is treated as directly relevant). Falls back to a flat list when untiered.
+        const hasTiers = displayed.some((r) => r.paper?.relevanceTier)
+        if (!hasTiers) return displayed.map(renderCard)
+
+        const related = displayed.filter((r) => r.paper?.relevanceTier === 'related')
+        const primary = displayed.filter((r) => r.paper?.relevanceTier !== 'related')
+        const header = (label: string) => (
+          <p
+            key={`hdr-${label}`}
+            className="px-1 pb-1 pt-3 text-xs font-medium uppercase tracking-wide text-muted-foreground first:pt-0"
+          >
+            {label}
+          </p>
+        )
+        return (
+          <>
+            {primary.length > 0 && header('Directly relevant')}
+            {primary.map(renderCard)}
+            {related.length > 0 && header('Related work')}
+            {related.map((r, i) => renderCard(r, primary.length + i))}
+          </>
+        )
+      })()}
 
       {!loading && results.length > 0 && displayed.length === 0 && (
         <p className="py-8 text-center text-sm text-muted-foreground">

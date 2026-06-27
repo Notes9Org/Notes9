@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useMemo, useState, type ReactNode } from 'react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
@@ -122,6 +122,31 @@ function bestSnippetForQuery(text: string, query: string): string {
   return /[.!?]$/.test(joined) ? joined : `${joined}.`
 }
 
+/**
+ * Google-Scholar-style highlighting: wrap the query's terms in <mark>. Pure string/regex
+ * — NO LLM. Case-insensitive, word-boundary, stopwords removed. Returns React nodes; the
+ * input must already be plain text (highlight LAST, after tag-stripping).
+ */
+function highlightTerms(text: string, query: string): ReactNode {
+  if (!text || !query) return text
+  const terms = Array.from(
+    new Set((query.toLowerCase().match(/[a-z0-9]{3,}/g) ?? []).filter((t) => !STOPWORDS.has(t))),
+  ).sort((a, b) => b.length - a.length) // longest-first so multi-char terms win
+  if (terms.length === 0) return text
+  const esc = terms.map((t) => t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
+  const re = new RegExp(`\\b(${esc.join('|')})\\b`, 'gi')
+  const parts = text.split(re)
+  return parts.map((part, i) =>
+    terms.includes(part.toLowerCase()) ? (
+      <strong key={i} className="text-[1.06em] font-semibold text-foreground">
+        {part}
+      </strong>
+    ) : (
+      part
+    ),
+  )
+}
+
 export function AiPaperCard({
   result,
   projectId,
@@ -167,8 +192,13 @@ export function AiPaperCard({
   // The exact passage relevant to the query: prefer a backend-cited quote; else
   // extract the most query-relevant sentence(s) from this paper's own abstract —
   // so every card shows a real, paper-specific snippet (never a shared blurb).
-  const backendSnippet = result.snippet?.trim() || ''
-  const queryExcerpt = useMemo(() => bestSnippetForQuery(abstractRaw, query), [abstractRaw, query])
+  // Strip JATS/HTML tags so the snippet reads as clean prose (abstracts carry
+  // <i>…</i>, <h4>Methods</h4>, <sub>, etc.). Derive the excerpt from the PLAIN
+  // abstract and clean the backend snippet too — never render raw tags.
+  const backendSnippet = result.snippet?.trim()
+    ? formatLiteratureAbstractPlain(result.snippet.trim())
+    : ''
+  const queryExcerpt = useMemo(() => bestSnippetForQuery(abstractPlain, query), [abstractPlain, query])
   const exactPassage = backendSnippet || queryExcerpt
   // Where the passage came from: the abstract, the open-access full text, or the
   // cited source — so the user knows what grounds it.
@@ -310,10 +340,10 @@ export function AiPaperCard({
               rel="noopener noreferrer"
               className="underline-offset-2 hover:underline decoration-primary/40"
             >
-              {title}
+              {highlightTerms(title, query)}
             </a>
           ) : (
-            title
+            highlightTerms(title, query)
           )}
         </h3>
         {authors && <p className="mb-3 text-sm text-muted-foreground">{authors}</p>}
@@ -361,7 +391,7 @@ export function AiPaperCard({
                   Most relevant to your query
                 </p>
                 <blockquote className="rounded-r-lg rounded-l-md border-l-2 border-primary/45 bg-primary/[0.04] px-3 py-2 text-sm italic leading-relaxed text-foreground/85">
-                  “{exactPassage}”
+                  “{highlightTerms(exactPassage, query)}”
                   {passageSource && (
                     <span className="mt-1.5 block text-2xs font-medium not-italic text-muted-foreground">
                       ↳ {passageSource}
