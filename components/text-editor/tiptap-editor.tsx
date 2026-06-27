@@ -2051,6 +2051,7 @@ window.localStorage.setItem(RIBBON_TAB_KEY, ribbonTab)
   const [headerAlign, setHeaderAlign] = useState<"left"|"center"|"right">("left")
   const [footerAlign, setFooterAlign] = useState<"left"|"center"|"right">("center")
   const [showPageNumbers, setShowPageNumbers] = useState<"header"|"footer"|"none">("footer")
+  const [pageNumberAlign, setPageNumberAlign] = useState<"left"|"center"|"right">("right")
   const [pageBreakPortals, setPageBreakPortals] = useState<Array<{el: HTMLElement, page: number, type: 'header' | 'footer'}>>([])
 
   // Live snapshot of the page layout, kept in a ref so the editor's onUpdate
@@ -2059,7 +2060,7 @@ window.localStorage.setItem(RIBBON_TAB_KEY, ribbonTab)
     orientation: "portrait", pageView: true, rulers: true,
     margins: { top: 96, right: 96, bottom: 96, left: 96 },
     header: { text: "", align: "left" }, footer: { text: "", align: "center" },
-    pageNumbers: "footer",
+    pageNumbers: "footer", pageNumberAlign: "right",
   })
   layoutRef.current = {
     orientation: pageSetup.orientation,
@@ -2069,6 +2070,7 @@ window.localStorage.setItem(RIBBON_TAB_KEY, ribbonTab)
     header: { text: headerText, align: headerAlign },
     footer: { text: footerText, align: footerAlign },
     pageNumbers: showPageNumbers,
+    pageNumberAlign,
   }
   // Apply a persisted layout (loaded from cloud, embedded in the content) to state.
   const applyLayoutToState = useCallback((l: PageLayout) => {
@@ -2085,6 +2087,7 @@ window.localStorage.setItem(RIBBON_TAB_KEY, ribbonTab)
     setHeaderAlign(l.header.align)
     setFooterAlign(l.footer.align)
     setShowPageNumbers(l.pageNumbers)
+    setPageNumberAlign(l.pageNumberAlign)
   }, [panelEmbed, hideToolbar])
 
   // Live height of the page sheet so the vertical ruler can repeat its scale per page.
@@ -2932,7 +2935,7 @@ window.localStorage.setItem(RIBBON_TAB_KEY, ribbonTab)
     const out = appendLayoutMarker(editor.getHTML(), layoutRef.current)
     lastEmittedHtmlRef.current = out
     onChange?.(out)
-  }, [editor, onChange, pageSetup, headerText, footerText, headerAlign, footerAlign, showPageNumbers])
+  }, [editor, onChange, pageSetup, headerText, footerText, headerAlign, footerAlign, showPageNumbers, pageNumberAlign])
 
   // Nudge the pagination plugin to recompute when the page geometry changes. The
   // plugin reads `paginationParamsRef` but only recomputes on editor view updates
@@ -3309,7 +3312,8 @@ window.localStorage.setItem(RIBBON_TAB_KEY, ribbonTab)
     header: { text: headerText, align: headerAlign },
     footer: { text: footerText, align: footerAlign },
     pageNumbers: showPageNumbers,
-  }), [pageSetup, headerText, footerText, headerAlign, footerAlign, showPageNumbers])
+    pageNumberAlign,
+  }), [pageSetup, headerText, footerText, headerAlign, footerAlign, showPageNumbers, pageNumberAlign])
 
   // Download functions
   const downloadAsMarkdown = useCallback(async () => {
@@ -3463,6 +3467,7 @@ window.localStorage.setItem(RIBBON_TAB_KEY, ribbonTab)
         header: layout.header,
         footer: layout.footer,
         pageNumbers: layout.pageNumbers,
+        pageNumberAlign: layout.pageNumberAlign,
       })
       container = document.createElement("div")
       container.id = "n9-paged-print"
@@ -3515,7 +3520,7 @@ window.localStorage.setItem(RIBBON_TAB_KEY, ribbonTab)
       const { exportHtmlToDocx } = await import('@/lib/docx-export')
 
       // Export to DOCX (works on Mac, Windows, Linux!)
-      await exportHtmlToDocx(html, title || 'Document')
+      await exportHtmlToDocx(html, title || 'Document', getCurrentPageLayout())
 
       setIsAIProcessing(false)
     } catch (error) {
@@ -5289,6 +5294,27 @@ window.localStorage.setItem(RIBBON_TAB_KEY, ribbonTab)
                   {a}
                 </DropdownMenuItem>
               ))}
+            {showPageNumbers !== "none" && (
+              <>
+                <DropdownMenuSeparator />
+                <DropdownMenuLabel className="text-2xs uppercase text-muted-foreground font-semibold">
+                  Page # alignment <span className="normal-case text-foreground/70">· now {pageNumberAlign}</span>
+                </DropdownMenuLabel>
+                {(["left", "center", "right"] as const)
+                  .filter((a) => a !== pageNumberAlign)
+                  .map((a) => {
+                    // Warn when the chosen position collides with the footer text
+                    const zoneAlign = showPageNumbers === "footer" ? footerAlign : headerAlign
+                    const collides = a === zoneAlign
+                    return (
+                      <DropdownMenuItem key={`pn-${a}`} onClick={() => setPageNumberAlign(a)} className="capitalize">
+                        {a === "left" ? <AlignLeft className="mr-2 h-4 w-4" /> : a === "center" ? <AlignCenter className="mr-2 h-4 w-4" /> : <AlignRight className="mr-2 h-4 w-4" />}
+                        {a}{collides ? " (auto-adjusted)" : ""}
+                      </DropdownMenuItem>
+                    )
+                  })}
+              </>
+            )}
           </DropdownMenuContent>
         </DropdownMenu>
 
@@ -5641,13 +5667,15 @@ window.localStorage.setItem(RIBBON_TAB_KEY, ribbonTab)
                     <div className="absolute top-0 left-0 right-0" style={{ height: pageSetup.margins.top }}>
                       <HeaderFooterInput 
                         type="header" value={headerText} onChange={setHeaderText} 
-                        align={headerAlign} page={1} showPageNumbers={showPageNumbers} 
+                        align={headerAlign} page={1} showPageNumbers={showPageNumbers}
+                        pageNumberAlign={pageNumberAlign}
                       />
                     </div>
                     <div className="absolute bottom-0 left-0 right-0" style={{ height: pageSetup.margins.bottom }}>
                       <HeaderFooterInput 
                         type="footer" value={footerText} onChange={setFooterText} 
-                        align={footerAlign} page={Math.max(1, ...pageBreakPortals.map(p => p.page))} showPageNumbers={showPageNumbers} 
+                        align={footerAlign} page={Math.max(1, ...pageBreakPortals.map(p => p.page))} showPageNumbers={showPageNumbers}
+                        pageNumberAlign={pageNumberAlign}
                       />
                     </div>
                     
@@ -5659,7 +5687,8 @@ window.localStorage.setItem(RIBBON_TAB_KEY, ribbonTab)
                         onChange={p.type === 'header' ? setHeaderText : setFooterText} 
                         align={p.type === 'header' ? headerAlign : footerAlign} 
                         page={p.page} 
-                        showPageNumbers={showPageNumbers} 
+                        showPageNumbers={showPageNumbers}
+                        pageNumberAlign={pageNumberAlign}
                       />,
                       p.el
                     ))}

@@ -169,7 +169,7 @@ export async function exportNoteAsPdfFromHtml(
 
     // Recover the page layout (margins, orientation, header/footer) embedded in
     // the saved content so the workspace export menu reflects it too.
-    const { extractLayoutMarker, injectHeaderFooterForExport, marginsPxToMm } = await import("@/lib/page-layout")
+    const { extractLayoutMarker, marginsPxToMm } = await import("@/lib/page-layout")
     const { layout } = extractLayoutMarker(html)
 
     let bodyHtml = html
@@ -181,28 +181,80 @@ export async function exportNoteAsPdfFromHtml(
     } else {
       bodyHtml = prepareHtmlForExport(html)
     }
-    if (layout) bodyHtml = injectHeaderFooterForExport(bodyHtml, layout)
 
     const docTitle = (title || "").trim() || "Document"
-    const fullHtml = buildPrintDocumentHtml({
-      title: docTitle,
-      bodyHtml,
-      includeTitleHeading: true,
-      commentsBlockHtml: commentsHtml,
-      marginsMm: layout ? marginsPxToMm(layout.margins) : options?.marginsMm,
-      orientation: layout?.orientation,
-    })
 
-    writePrintIframeDocument(iframeDoc, fullHtml, docTitle)
+    try {
+      const { buildPagedExportAssets } = await import("@/lib/print-export")
+      const { Previewer } = await import("pagedjs")
 
-    await new Promise((r) => setTimeout(r, 150))
-    iframe.contentWindow?.focus()
-    iframe.contentWindow?.print()
+      const { contentHtml, css } = buildPagedExportAssets({
+        bodyHtml,
+        commentsBlockHtml: commentsHtml,
+        marginsMm: layout ? marginsPxToMm(layout.margins) : options?.marginsMm,
+        orientation: layout?.orientation,
+        header: layout?.header,
+        footer: layout?.footer,
+        pageNumbers: layout?.pageNumbers,
+        pageNumberAlign: layout?.pageNumberAlign,
+      })
 
-    toasts.success("Print dialog opened", { description: "Save as PDF from your browser." })
-    setTimeout(() => {
-      if (iframe && document.body.contains(iframe)) document.body.removeChild(iframe)
-    }, 2000)
+      const container = document.createElement("div")
+      container.id = "n9-paged-print"
+      container.style.cssText = "position:absolute; left:-10000px; top:0; width:0; overflow:hidden;"
+      document.body.appendChild(container)
+      const cssUrl = URL.createObjectURL(new Blob([css], { type: "text/css" }))
+      
+      const previewer = new Previewer()
+      await previewer.preview(contentHtml, [cssUrl], container)
+
+      const printStyle = document.createElement("style")
+      printStyle.textContent = `
+        @media screen { #n9-paged-print { display: none !important; } }
+        @media print {
+          body > *:not(#n9-paged-print) { display: none !important; }
+          #n9-paged-print { position: static !important; left: auto !important; width: auto !important; overflow: visible !important; }
+          html, body { background: #fff !important; }
+        }
+      `
+      document.head.appendChild(printStyle)
+
+      await new Promise((r) => setTimeout(r, 150))
+      
+      const cleanup = () => {
+        if (container.parentNode) container.parentNode.removeChild(container)
+        if (printStyle.parentNode) printStyle.parentNode.removeChild(printStyle)
+        URL.revokeObjectURL(cssUrl)
+      }
+      
+      window.addEventListener("afterprint", cleanup, { once: true })
+      window.print()
+      setTimeout(cleanup, 60000)
+      
+      toasts.success("Print dialog opened", { description: "Save as PDF from your browser." })
+    } catch (err) {
+      console.warn("Paged.js failed in background export, falling back to basic print", err)
+      // Fallback
+      const { injectHeaderFooterForExport } = await import("@/lib/page-layout")
+      let fallbackBody = bodyHtml
+      if (layout) fallbackBody = injectHeaderFooterForExport(fallbackBody, layout)
+      const fullHtml = buildPrintDocumentHtml({
+        title: docTitle,
+        bodyHtml: fallbackBody,
+        includeTitleHeading: true,
+        commentsBlockHtml: commentsHtml,
+        marginsMm: layout ? marginsPxToMm(layout.margins) : options?.marginsMm,
+        orientation: layout?.orientation,
+      })
+      writePrintIframeDocument(iframeDoc, fullHtml, docTitle)
+      await new Promise((r) => setTimeout(r, 150))
+      iframe.contentWindow?.focus()
+      iframe.contentWindow?.print()
+      toasts.success("Print dialog opened", { description: "Save as PDF from your browser." })
+      setTimeout(() => {
+        if (iframe && document.body.contains(iframe)) document.body.removeChild(iframe)
+      }, 2000)
+    }
   } catch (e: unknown) {
     console.error(e)
     if (iframe && document.body.contains(iframe)) document.body.removeChild(iframe)
@@ -220,7 +272,7 @@ export async function exportNoteAsDocx(html: string, title: string, toasts = def
     const { layout } = extractLayoutMarker(html)
     let body = stripLayoutMarker(html)
     if (layout) body = injectHeaderFooterForExport(body, layout)
-    await exportHtmlToDocx(body, title || "Document")
+    await exportHtmlToDocx(body, title || "Document", layout)
     toasts.success("DOCX exported", { description: "File downloaded." })
   } catch (e: unknown) {
     console.error(e)

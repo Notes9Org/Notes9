@@ -206,39 +206,60 @@ export function buildPagedExportAssets(options: {
   header?: { text: string; align: "left" | "center" | "right" }
   footer?: { text: string; align: "left" | "center" | "right" }
   pageNumbers?: "header" | "footer" | "none"
+  pageNumberAlign?: "left" | "center" | "right"
   commentsBlockHtml?: string
 }): { contentHtml: string; css: string } {
   const margins: PrintMarginsMm = { ...DEFAULT_MARGINS_MM, ...options.marginsMm }
   const pageSize = options.orientation === "landscape" ? "landscape" : "portrait"
   const header = options.header ?? { text: "", align: "left" }
   const footer = options.footer ?? { text: "", align: "center" }
+  const numZone = options.pageNumbers ?? "none" // "header" | "footer" | "none"
+  const numAlign = options.pageNumberAlign ?? "right"
 
-  // Compose a margin-box `content` value: optional text, optional "N / M" counter.
-  const boxContent = (text: string, withNumber: boolean): string => {
-    const t = text.trim()
-    const parts: string[] = []
-    if (t) parts.push(`"${cssStringEscape(t)}"`)
-    if (withNumber) {
-      if (t) parts.push(`"  •  "`)
-      parts.push(`counter(page) " / " counter(pages)`)
-    }
-    return parts.join(" ")
-  }
-  const edgeBox = (align: "left" | "center" | "right", edge: "top" | "bottom", content: string): string => {
+  // Build @page margin-box CSS rules. Each alignment slot (left/center/right) on
+  // each edge (top/bottom) is an independent @page margin box. Text and page
+  // numbers can sit in different slots on the same edge.
+  const makeBox = (edge: "top" | "bottom", align: "left" | "center" | "right", content: string): string => {
     if (!content) return ""
-    const where = align === "center" ? "center" : align === "right" ? "right" : "left"
-    return `@${edge}-${where} { content: ${content}; font-family: ${EXPORT_DEFAULT_FONT_STACK}; font-size: 9pt; color: #6b7280; }`
+    return `@${edge}-${align} { content: ${content}; font-family: ${EXPORT_DEFAULT_FONT_STACK}; font-size: 9pt; color: #6b7280; }`
   }
 
-  const headerBox = edgeBox(header.align, "top", boxContent(header.text, options.pageNumbers === "header"))
-  const footerBox = edgeBox(footer.align, "bottom", boxContent(footer.text, options.pageNumbers === "footer"))
+  const boxes: string[] = []
+
+  // Header text
+  if (header.text.trim()) {
+    boxes.push(makeBox("top", header.align, `"${cssStringEscape(header.text.trim())}"`))
+  }
+  // Footer text
+  if (footer.text.trim()) {
+    boxes.push(makeBox("bottom", footer.align, `"${cssStringEscape(footer.text.trim())}"`))
+  }
+
+  // Page numbers — placed in their own slot. If the slot collides with text,
+  // append the counter to the text box instead of creating a duplicate.
+  if (numZone !== "none") {
+    const numEdge = numZone === "header" ? "top" : "bottom"
+    const textSpec = numZone === "header" ? header : footer
+    const textAlign = textSpec.align
+    const hasText = textSpec.text.trim().length > 0
+
+    if (numAlign === textAlign && hasText) {
+      // Collision: merge page number into the same box as the text.
+      // Replace the text-only box with a combined one.
+      const combinedContent = `"${cssStringEscape(textSpec.text.trim())}  •  " counter(page) " / " counter(pages)`
+      const idx = boxes.findIndex(b => b.startsWith(`@${numEdge}-${textAlign}`))
+      if (idx >= 0) boxes[idx] = makeBox(numEdge, textAlign, combinedContent)
+    } else {
+      // No collision: place page counter in its own slot.
+      boxes.push(makeBox(numEdge, numAlign, `counter(page) " / " counter(pages)`))
+    }
+  }
 
   const css = `
     @page {
       size: ${pageSize};
       margin: ${margins.top}mm ${margins.right}mm ${margins.bottom}mm ${margins.left}mm;
-      ${headerBox}
-      ${footerBox}
+      ${boxes.join("\n      ")}
     }
     html, body { margin: 0; padding: 0; background: #fff; }
     body {

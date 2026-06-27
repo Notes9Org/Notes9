@@ -37,6 +37,8 @@ export type PageLayout = {
   footer: HeaderFooterSpec
   /** Where the auto page number is rendered (or "none"). */
   pageNumbers: PageNumberPlacement
+  /** Alignment of the page number within its zone (header or footer). */
+  pageNumberAlign: TextAlign
 }
 
 /** Default US-Letter, 1-inch margins, Page view on. */
@@ -48,6 +50,7 @@ export const DEFAULT_PAGE_LAYOUT: PageLayout = {
   header: { text: "", align: "left" },
   footer: { text: "", align: "center" },
   pageNumbers: "footer",
+  pageNumberAlign: "right",
 }
 
 const DPI = 96
@@ -125,6 +128,7 @@ export function normalizePageLayout(raw: unknown): PageLayout {
       obj.pageNumbers === "header" || obj.pageNumbers === "footer" || obj.pageNumbers === "none"
         ? obj.pageNumbers
         : d.pageNumbers,
+    pageNumberAlign: asAlign(obj.pageNumberAlign, d.pageNumberAlign),
   }
 }
 

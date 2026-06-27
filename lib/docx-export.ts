@@ -1,66 +1,18 @@
 "use client"
 
+import type { PageLayout } from '@/lib/page-layout'
 import {
   Document, Paragraph, TextRun, Table, TableRow, TableCell,
   WidthType, BorderStyle, HeadingLevel, Packer, ShadingType,
   VerticalAlign, AlignmentType, convertInchesToTwip, PageBreak, Header, Footer,
-  CommentRangeStart, CommentRangeEnd, CommentReference, ICommentOptions
+  CommentRangeStart, CommentRangeEnd, CommentReference, ICommentOptions,
+  TabStopType, TabStopPosition, PageNumber
 } from 'docx'
-import { saveAs } from 'file-saver'
-import {
-  extractCodePlainText,
-  EXPORT_CODE_FONT,
-  EXPORT_CODE_SHADING_FILL,
-  EXPORT_CODE_TEXT_COLOR,
-} from '@/lib/export-code-blocks'
-import {
-  countTableColumns,
-  DOCX_TABLE_CONTENT_WIDTH_INCHES,
-} from '@/lib/export-table-normalize'
-import {
-  DEFAULT_EXPORT_INLINE_STYLE,
-  EXPORT_DEFAULT_FONT_FAMILY,
-  type ExportInlineStyle,
-  mergeExportInlineStyles,
-  parseBlockParagraphSpacing,
-  stylesFromElement,
-} from '@/lib/export-formatting'
-import { prepareHtmlForExport } from '@/lib/print-export'
 
-// A paragraph-level run can be a plain TextRun or one of the comment-range
-// markers, all of which are valid `Paragraph` children in docx v9.
-type ParagraphRun = TextRun | CommentRangeStart | CommentRangeEnd
-
-// Convert a CSS color (rgb()/rgba() or #hex) to a 6-digit hex string without
-// the leading '#', as docx shading/color options expect. Returns undefined
-// for values that can't be parsed so callers fall back to no color.
-function rgbToHex(color: string): string | undefined {
-  const trimmed = color.trim()
-  if (!trimmed) return undefined
-  const hexMatch = trimmed.match(/^#?([0-9a-fA-F]{6})$/)
-  if (hexMatch) return hexMatch[1].toUpperCase()
-  const shortHex = trimmed.match(/^#?([0-9a-fA-F]{3})$/)
-  if (shortHex) {
-    return shortHex[1]
-      .split('')
-      .map((c) => c + c)
-      .join('')
-      .toUpperCase()
-  }
-  const rgbMatch = trimmed.match(/rgba?\(\s*(\d{1,3})\s*,\s*(\d{1,3})\s*,\s*(\d{1,3})/i)
-  if (rgbMatch) {
-    const toHex = (n: number) => Math.max(0, Math.min(255, n)).toString(16).padStart(2, '0')
-    return (
-      toHex(Number(rgbMatch[1])) +
-      toHex(Number(rgbMatch[2])) +
-      toHex(Number(rgbMatch[3]))
-    ).toUpperCase()
-  }
-  return undefined
-}
+// (Skipping unchanging parts...)
 
 // Parse HTML content and convert to DOCX elements
-export async function exportHtmlToDocx(html: string, title: string) {
+export async function exportHtmlToDocx(html: string, title: string, layout?: PageLayout | null) {
   const preparedHtml = prepareHtmlForExport(html)
   const comments: ICommentOptions[] = []
 
@@ -69,22 +21,94 @@ export async function exportHtmlToDocx(html: string, title: string) {
   let bodyHtml = preparedHtml
   let headerChildren: any[] = []
   let footerChildren: any[] = []
+
   if (typeof DOMParser !== "undefined") {
     const parsed = new DOMParser().parseFromString(preparedHtml, "text/html")
     const h = parsed.querySelector('[data-type="docHeader"]')
     const f = parsed.querySelector('[data-type="docFooter"]')
-    if (h) {
-      headerChildren = parseHtmlToDocElements(h.innerHTML, []).flat()
-      h.remove()
-    }
-    if (f) {
-      footerChildren = parseHtmlToDocElements(f.innerHTML, []).flat()
-      f.remove()
+    
+    if (layout) {
+      // If layout is provided, we ignore the injected HTML header/footers and build them directly.
+      if (h) h.remove()
+      if (f) f.remove()
+    } else {
+      // Fallback: parse from HTML if no layout object was provided.
+      if (h) {
+        headerChildren = parseHtmlToDocElements(h.innerHTML, []).flat()
+        h.remove()
+      }
+      if (f) {
+        footerChildren = parseHtmlToDocElements(f.innerHTML, []).flat()
+        f.remove()
+      }
     }
     bodyHtml = parsed.body.innerHTML
   }
 
+  // Helper to build header/footer using the layout object
+  const buildHFFromLayout = (type: 'header' | 'footer') => {
+    if (!layout) return null
+    const spec = type === 'header' ? layout.header : layout.footer
+    const hasPageNumber = layout.pageNumbers === type
+    const text = spec.text.trim()
+    
+    if (!text && !hasPageNumber) return null
+
+    // Collision case: same alignment, merge them with a bullet separator
+    if (hasPageNumber && spec.align === layout.pageNumberAlign && text) {
+      return new Paragraph({
+        alignment: spec.align === 'center' ? AlignmentType.CENTER : spec.align === 'right' ? AlignmentType.RIGHT : AlignmentType.LEFT,
+        children: [
+          new TextRun({ text: `${text}  •  `, color: '6B7280', size: 18 }),
+          new TextRun({ children: [PageNumber.CURRENT, " / ", PageNumber.TOTAL_PAGES], color: '6B7280', size: 18 })
+        ]
+      })
+    }
+
+    // No collision: use tab stops to align text and page numbers independently
+    const tabStops = [
+      { type: TabStopType.CENTER, position: convertInchesToTwip(3.25) },
+      { type: TabStopType.RIGHT, position: convertInchesToTwip(6.5) }
+    ]
+
+    const textRun = text ? new TextRun({ text, color: '6B7280', size: 18 }) : null
+    const pageRun = hasPageNumber ? new TextRun({ children: [PageNumber.CURRENT, " / ", PageNumber.TOTAL_PAGES], color: '6B7280', size: 18 }) : null
+
+    const tabsForAlign = (align: string) => align === 'center' ? 1 : align === 'right' ? 2 : 0
+
+    const items = []
+    if (textRun && pageRun) {
+      const textTabs = tabsForAlign(spec.align)
+      const pageTabs = tabsForAlign(layout.pageNumberAlign)
+
+      if (textTabs < pageTabs) {
+        for(let i=0; i<textTabs; i++) items.push(new TextRun("\t"))
+        items.push(textRun)
+        for(let i=0; i<(pageTabs - textTabs); i++) items.push(new TextRun("\t"))
+        items.push(pageRun)
+      } else {
+        for(let i=0; i<pageTabs; i++) items.push(new TextRun("\t"))
+        items.push(pageRun)
+        for(let i=0; i<(textTabs - pageTabs); i++) items.push(new TextRun("\t"))
+        items.push(textRun)
+      }
+    } else if (textRun) {
+      const tabs = tabsForAlign(spec.align)
+      for(let i=0; i<tabs; i++) items.push(new TextRun("\t"))
+      items.push(textRun)
+    } else if (pageRun) {
+      const tabs = tabsForAlign(layout.pageNumberAlign)
+      for(let i=0; i<tabs; i++) items.push(new TextRun("\t"))
+      items.push(pageRun)
+    }
+
+    return new Paragraph({ tabStops, children: items })
+  }
+
   const children: any[] = parseHtmlToDocElements(bodyHtml, comments)
+
+  const docHeaderP = layout ? buildHFFromLayout('header') : (headerChildren.length ? new Paragraph({ children: headerChildren }) : null)
+  const docFooterP = layout ? buildHFFromLayout('footer') : (footerChildren.length ? new Paragraph({ children: footerChildren }) : null)
 
   const doc = new Document({
     comments: {
@@ -111,8 +135,8 @@ export async function exportHtmlToDocx(html: string, title: string) {
           },
         },
       },
-      ...(headerChildren.length ? { headers: { default: new Header({ children: headerChildren }) } } : {}),
-      ...(footerChildren.length ? { footers: { default: new Footer({ children: footerChildren }) } } : {}),
+      ...(docHeaderP ? { headers: { default: new Header({ children: [docHeaderP] }) } } : {}),
+      ...(docFooterP ? { footers: { default: new Footer({ children: [docFooterP] }) } } : {}),
       children,
     }],
   })
