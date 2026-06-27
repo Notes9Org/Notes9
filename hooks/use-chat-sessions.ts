@@ -54,6 +54,10 @@ export interface ChatSession {
   protocol_id: string | null;
   created_at: string;
   updated_at: string;
+  /** 'chat' (default) | 'literature' | other future kinds. */
+  kind?: string | null;
+  /** Arbitrary session-level metadata (e.g. { literature: LiteratureSessionContext }). */
+  metadata?: Record<string, unknown> | null;
 }
 
 export interface ChatMessage {
@@ -132,7 +136,10 @@ export function useChatSessions(protocolId?: string) {
     }
   }, [supabase, protocolId]);
 
-  const createSession = useCallback(async (title?: string): Promise<string | null> => {
+  const createSession = useCallback(async (
+    title?: string,
+    opts?: { kind?: string; metadata?: Record<string, unknown> },
+  ): Promise<string | null> => {
     try {
       if (!user) return null;
 
@@ -148,6 +155,8 @@ export function useChatSessions(protocolId?: string) {
           user_id: user.id,
           title: title || null,
         };
+        if (opts?.kind) base.kind = opts.kind;
+        if (opts?.metadata) base.metadata = opts.metadata;
         if (protocolId) {
           base.protocol_id = protocolId;
         } else if (!catalystOmitProtocolIdRef.current) {
@@ -222,6 +231,26 @@ export function useChatSessions(protocolId?: string) {
       console.error('Error updating session title:', formatSupabaseErr(error));
     }
   }, [supabase, protocolId]);
+
+  /** Persist arbitrary metadata on an existing session (e.g. literature context
+   *  after it has been created). Fail-silent: callers can continue on error. */
+  const updateSessionMetadata = useCallback(async (
+    sessionId: string,
+    metadata: Record<string, unknown>,
+  ): Promise<void> => {
+    try {
+      const { error } = await supabase
+        .from('chat_sessions')
+        .update({ metadata })
+        .eq('id', sessionId);
+      if (error) throw error;
+      setSessions((prev) =>
+        prev.map((s) => (s.id === sessionId ? { ...s, metadata } : s))
+      );
+    } catch (error) {
+      console.error('Error updating session metadata:', formatSupabaseErr(error));
+    }
+  }, [supabase]);
 
   const deleteSession = useCallback(async (sessionId: string) => {
     try {
@@ -387,6 +416,7 @@ export function useChatSessions(protocolId?: string) {
     loadSessions,
     createSession,
     updateSessionTitle,
+    updateSessionMetadata,
     deleteSession,
     clearSessionMessages,
     loadMessages,

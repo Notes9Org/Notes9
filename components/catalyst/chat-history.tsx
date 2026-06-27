@@ -2,7 +2,7 @@
 
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Plus, MessageSquare, Trash2 } from 'lucide-react';
+import { Plus, MessageSquare, Trash2, BookOpen } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { ChatSession } from '@/hooks/use-chat-sessions';
 import { formatDistanceToNow } from 'date-fns';
@@ -88,7 +88,11 @@ export function ChatHistory({
                       isCurrent ? 'text-primary' : 'text-foreground',
                     )}
                   >
-                    <MessageSquare className="size-4 shrink-0" aria-hidden />
+                    {session.kind === 'literature' ? (
+                      <BookOpen className="size-4 shrink-0 text-[var(--n9-accent,currentColor)]" aria-hidden />
+                    ) : (
+                      <MessageSquare className="size-4 shrink-0" aria-hidden />
+                    )}
                     <div className="flex-1 min-w-0">
                       <p className="truncate font-medium">{sessionTitle}</p>
                       <p className="text-xs text-muted-foreground">

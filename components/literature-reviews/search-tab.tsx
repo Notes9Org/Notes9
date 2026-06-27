@@ -35,7 +35,7 @@ const SEARCH_FEATURES: { Icon: LucideIcon; title: string; desc: string }[] = [
   },
   {
     Icon: Database,
-    title: 'Save to your repository',
+    title: 'Save to your library',
     desc: 'Add papers to your library, organized by project and experiment.',
   },
   {

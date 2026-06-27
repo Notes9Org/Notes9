@@ -8,7 +8,7 @@ export type PaperType =
   | "book-chapter"
   | "other"
 
-export type AiSortMode = "relevance" | "cited" | "recent"
+export type AiSortMode = "relevance" | "cited" | "recent" | "openAccess"
 
 export interface AiResultFilters {
   sort: AiSortMode
@@ -21,7 +21,7 @@ export interface AiResultFilters {
 }
 
 export const DEFAULT_AI_FILTERS: AiResultFilters = {
-  sort: "relevance",
+  sort: "openAccess",
   yearFrom: null,
   yearTo: null,
   minCitations: null,
@@ -60,7 +60,7 @@ export function inferPaperType(r: AiSearchResult): PaperType {
 
 export function countActiveFilters(f: AiResultFilters): number {
   let n = 0
-  if (f.sort !== "relevance") n++
+  if (f.sort !== "openAccess") n++
   if (f.yearFrom != null) n++
   if (f.yearTo != null) n++
   if (f.minCitations != null) n++
@@ -120,6 +120,13 @@ export function applyAiFilters(results: AiSearchResult[], f: AiResultFilters): A
     sorted.sort((a, b) => (b.paper?.citedByCount ?? -1) - (a.paper?.citedByCount ?? -1))
   } else if (f.sort === "recent") {
     sorted.sort((a, b) => (b.paper?.year ?? 0) - (a.paper?.year ?? 0))
+  } else if (f.sort === "openAccess") {
+    // Open-access papers first, then preserve AI relevance order within each group
+    sorted.sort((a, b) => {
+      const aOA = a.paper?.isOpenAccess ? 1 : 0
+      const bOA = b.paper?.isOpenAccess ? 1 : 0
+      return bOA - aOA
+    })
   }
   // "relevance" keeps the AI's citation order.
   return sorted

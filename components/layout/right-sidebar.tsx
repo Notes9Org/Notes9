@@ -63,6 +63,8 @@ import {
   parseNotes9AssistantStoredContent,
   notes9PlainTextForApiHistory,
 } from '@/lib/notes9-chat-format';
+import type { DonePayload } from '@/lib/agent-stream-types';
+import { ChatMessage } from '@/components/catalyst/chat-message';
 import { formatLiteratureAssistantMarkdown } from '@/lib/literature-agent-chat-format';
 import { previewFromLiteratureSseTokenBuffer } from '@/lib/literature-stream-preview';
 import {
@@ -134,8 +136,7 @@ import {
   CATALYST_COPILOT_EVENT,
   type CoPilotContext,
 } from '@/lib/catalyst-copilot';
-import { useCatalystLiterature, setCatalystLiterature } from '@/lib/catalyst-literature';
-import { LiteratureSummaryPanel } from '@/components/catalyst/literature-summary-panel';
+import { useCatalystLiterature, setCatalystLiterature, type CatalystLiterature } from '@/lib/catalyst-literature';
 import { useLiteratureMentionCandidates } from '@/contexts/literature-mention-context';
 import { useLiteratureAgentStream } from '@/hooks/use-literature-agent-stream';
 import type { LiteratureAgentDonePayload } from '@/lib/literature-agent-types';
@@ -495,6 +496,58 @@ function sidebarGetMessageContent(message: UIMessage): string {
 // all settled history messages skip re-render because their props are stable.
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// LiteratureSummaryInline — replaces LiteratureSummaryPanel as the render path
+// for the live literature search AI summary.  Renders with the same ChatMessage
+// component used in the chat so the summary gets [N] chips and the "All
+// citations" panel (C4).  "Continue in Catalyst" button opens the persisted
+// session so follow-up questions are grounded by the literature context (C3/C7).
+// ---------------------------------------------------------------------------
+interface LiteratureSummaryInlineProps {
+  lit: CatalystLiterature;
+  sessionId: string | null | undefined;
+  onContinue: (sessionId: string) => void;
+}
+
+function LiteratureSummaryInline({ lit, sessionId, onContinue }: LiteratureSummaryInlineProps) {
+  return (
+    <section className="w-full min-w-0 space-y-3">
+      {/* Header: accent dot + "AI summary" label + streaming pulse */}
+      <div className="min-w-0 space-y-1.5">
+        <div className="flex items-center gap-2">
+          <span className="relative flex size-2 shrink-0" aria-hidden>
+            {lit.streaming && (
+              <span className="absolute inline-flex size-full animate-ping rounded-full bg-[var(--n9-accent)] opacity-60" />
+            )}
+            <span className="relative inline-flex size-2 rounded-full bg-[var(--n9-accent)]" />
+          </span>
+          <span className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--n9-accent)]">
+            AI summary
+          </span>
+          {lit.streaming && (
+            <span className="text-[11px] font-medium text-muted-foreground animate-pulse">
+              composing…
+            </span>
+          )}
+        </div>
+        {lit.query && (
+          <h3 className="text-[15px] font-semibold leading-snug tracking-[-0.01em] text-foreground [overflow-wrap:anywhere]">
+            {lit.query}
+          </h3>
+        )}
+      </div>
+      {/* Content: unified ChatMessage so [N] chips and citations panel work */}
+      <ChatMessage
+        role="assistant"
+        content={lit.summary}
+        citationsManifest={lit.manifest ?? null}
+        sources={(lit.resources ?? []) as unknown as Array<Record<string, unknown>>}
+        isStreaming={lit.streaming}
+      />
+    </section>
+  );
+}
+
 interface SidebarChatMessageItemProps {
   message: UIMessage;
   /** Pre-extracted plain-text content — stable string for settled messages. */
@@ -843,6 +896,9 @@ export function RightSidebar({
   // The literature search's AI summary (streamed in from the literature page),
   // rendered in chronological order within the chat (see litAnchorIndex below).
   const literature = useCatalystLiterature();
+  // ID of the persisted chat session for the current literature search.  Set by
+  // the persistence useEffect (C3) so the "Continue in Catalyst" button can open it.
+  const [literatureSessionId, setLiteratureSessionId] = useState<string | null>(null);
   const [mentionOpen, setMentionOpen] = useState(false);
   const [mentionFilter, setMentionFilter] = useState('');
   /** Todo-style @ menu: row highlight (-1 = none). */
@@ -1152,9 +1208,10 @@ export function RightSidebar({
 
   // A literature-search summary arrives via the in-memory bridge and is shown in
   // a pinned panel — it was never persisted, so these chats never appeared in
-  // history. Once a summary finishes streaming, save it as a real session (query
-  // + summary). createSession adopts it as the current session, so follow-up
-  // questions continue the same thread.
+  // history. Once a summary finishes streaming, save it as a real session in the
+  // UNIFIED Notes9 format (query + formatted assistant markdown with grounding +
+  // manifest).  The session kind is 'literature' and carries the compact paper
+  // context in metadata.literature so follow-up turns are grounded server-side.
   const persistedLiteratureSigRef = useRef<Set<string>>(new Set());
   useEffect(() => {
     if (!literature || literature.streaming) return;
@@ -1167,19 +1224,27 @@ export function RightSidebar({
 
     let cancelled = false;
     void (async () => {
-      const sessionId = await createSession(query.slice(0, 50) || 'Literature search');
-      if (!sessionId || cancelled) return;
-      const refsMd = literature.references?.length
-        ? '\n\n**References**\n' +
-          literature.references
-            .map((r) => `${r.n}. ${r.title}${r.meta ? ` — ${r.meta}` : ''}`)
-            .join('\n')
-        : '';
-      await saveMessage(sessionId, 'user', query);
-      await saveMessage(sessionId, 'assistant', summary + refsMd, {
-        source: 'literature_summary',
+      // Format as a unified Catalyst assistant turn so reloaded sessions render
+      // with [N] chips and the "All citations" panel (parseNotes9AssistantStoredContent).
+      const donePayload: DonePayload = {
+        role: 'assistant',
+        content: literature.summary,
+        resources: literature.resources ?? [],
+        tool_used: 'literature',
+      };
+      const formatted = formatNotes9AssistantMarkdown(donePayload, literature.manifest ?? null);
+      const sessionId = await createSession(query.slice(0, 80), {
+        kind: 'literature',
+        metadata: literature.context ? { literature: literature.context } : {},
       });
-      if (!cancelled) loadSessions();
+      if (!sessionId || cancelled) return;
+      await saveMessage(sessionId, 'user', query);
+      await saveMessage(sessionId, 'assistant', formatted);
+      if (!cancelled) {
+        setLiteratureSessionId(sessionId);
+        setCatalystLiterature({ ...literature, sessionId });
+        loadSessions();
+      }
     })();
     return () => {
       cancelled = true;
@@ -1327,8 +1392,17 @@ export function RightSidebar({
       setMentionQuery('');
       setMentionSelectIndex(0);
       requestAnimationFrame(() => {
-        const plain = inputRef.current?.innerText ?? '';
-        setInput(plain);
+        const div = inputRef.current;
+        if (div) {
+          // Build plain text from non-chip child nodes only so that mention chip
+          // titles (which live inside [data-caty-tag] elements) don't pollute
+          // the message state. Chips carry their context via selectedMentions.
+          const textOnly = Array.from(div.childNodes)
+            .filter(n => !((n as Element).getAttribute?.('data-caty-tag')))
+            .map(n => n.textContent ?? '')
+            .join('');
+          setInput(textOnly);
+        }
         inputRef.current?.focus();
         resizeInput();
       });
@@ -3872,7 +3946,13 @@ export function RightSidebar({
                         const showLitHere = literature && litAnchorIndex === index;
                         return (
                           <Fragment key={message.id}>
-                            {showLitHere && <LiteratureSummaryPanel lit={literature} />}
+                            {showLitHere && literature && (
+                              <LiteratureSummaryInline
+                                lit={literature}
+                                sessionId={literature.sessionId ?? literatureSessionId}
+                                onContinue={loadSession}
+                              />
+                            )}
                             <SidebarChatMessageItem
                               message={message as UIMessage}
                               rawContent={sidebarGetMessageContent(message as UIMessage)}
@@ -3893,7 +3973,11 @@ export function RightSidebar({
                       })}
                       {/* Anchor at/after the end (newest action, or empty chat) → render below all messages. */}
                       {literature && (litAnchorIndex == null || litAnchorIndex >= messages.length) && (
-                        <LiteratureSummaryPanel lit={literature} />
+                        <LiteratureSummaryInline
+                          lit={literature}
+                          sessionId={literature.sessionId ?? literatureSessionId}
+                          onContinue={loadSession}
+                        />
                       )}
                       {agentMode === 'literature' &&
                         literatureAgentStream.isStreaming &&
