@@ -773,40 +773,40 @@ export function LiteratureTabs({
   }
 
   const handleSaveFromStaging = async (paper: SearchPaper, literatureId: string) => {
-    if (lockedProjectId) {
-      setSavingStagingLiteratureId(literatureId)
-      try {
-        const result = await savePaperToRepository(paper, {
-          projectId: lockedProjectId,
-          experimentId: null,
-          literatureId,
-        })
-          if (result.success) {
-          const pdfAttached = Boolean(result.data?.pdf_storage_path) && !result.warning
-          toast.success(
-            pdfAttached ? "Paper and PDF saved to library" : "Paper saved to library"
-          )
-          if (result.warning) {
-            toast.message(result.warning)
-          }
-          if (activeInnerTab === literatureId) setActiveInnerTab("search")
-          router.refresh()
-        } else {
-          toast.error(
-            "error" in result && typeof result.error === "string"
-              ? result.error
-              : "Failed to save paper"
-          )
+    // Save directly from the reading view. A project is optional (the action
+    // accepts a null project), so we never detour through the picker dialog —
+    // clicking "Save to library" while reading must always perform a visible
+    // save. The paper inherits the locked project when there is one.
+    setSavingStagingLiteratureId(literatureId)
+    try {
+      const result = await savePaperToRepository(paper, {
+        projectId: lockedProjectId ?? null,
+        experimentId: null,
+        literatureId,
+      })
+      if (result.success) {
+        const pdfAttached = Boolean(result.data?.pdf_storage_path) && !result.warning
+        toast.success(
+          pdfAttached ? "Paper and PDF saved to library" : "Paper saved to library"
+        )
+        if (result.warning) {
+          toast.message(result.warning)
         }
-      } catch (error) {
-        toast.error("Failed to save paper")
-        console.error("Save error:", error)
-      } finally {
-        setSavingStagingLiteratureId(null)
+        if (activeInnerTab === literatureId) setActiveInnerTab("search")
+        router.refresh()
+      } else {
+        toast.error(
+          "error" in result && typeof result.error === "string"
+            ? result.error
+            : "Failed to save paper"
+        )
       }
-      return
+    } catch (error) {
+      toast.error("Failed to save paper")
+      console.error("Save error:", error)
+    } finally {
+      setSavingStagingLiteratureId(null)
     }
-    openSaveDialog(paper, literatureId)
   }
 
   const handleSavePaper = async () => {

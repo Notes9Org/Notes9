@@ -261,6 +261,21 @@ function serializeComposerToUserMarkdown(el: HTMLDivElement | null): string {
     .trim();
 }
 
+/**
+ * Plain text the user actually typed into the Catalyst composer, EXCLUDING
+ * mention-chip text. Chips are non-editable spans carrying data-caty-tag-id/
+ * -kind/-title; their titles must never leak into the submitted message (the
+ * tags travel via selectedMentions / requestTags instead). Using innerText here
+ * would re-introduce the dragged paper title into the chat input.
+ */
+function getCatalystComposerPlainText(el: HTMLDivElement | null): string {
+  if (!el) return '';
+  return Array.from(el.childNodes)
+    .filter((n) => !(n.nodeType === Node.ELEMENT_NODE && (n as Element).hasAttribute('data-caty-tag-id')))
+    .map((n) => n.textContent ?? '')
+    .join('');
+}
+
 type UserComposerSegment =
   | { type: 'text'; text: string }
   | { type: 'mention'; kind: CatalystMentionKind; id: string; title: string };
@@ -869,7 +884,9 @@ export function RightSidebar({
   const [agentMode] = useState<CatalystAgentMode>('notes9');
   const { start: startMic, stop: stopMic, isListening: micListening, getWaveformData } = useAwsTranscribe({
     onFinal: (text) => {
-      const cur = inputRef.current?.innerText ?? '';
+      // Read chip-aware text so mention-chip titles aren't pulled into the
+      // transcribed message (chips travel via selectedMentions instead).
+      const cur = getCatalystComposerPlainText(inputRef.current);
       const next = (cur ? `${cur} ${text}` : text).trimStart();
       setInput(next);
       // Sync the contentEditable DOM so handleSubmit reads the correct text
@@ -1394,14 +1411,10 @@ export function RightSidebar({
       requestAnimationFrame(() => {
         const div = inputRef.current;
         if (div) {
-          // Build plain text from non-chip child nodes only so that mention chip
-          // titles (which live inside [data-caty-tag] elements) don't pollute
-          // the message state. Chips carry their context via selectedMentions.
-          const textOnly = Array.from(div.childNodes)
-            .filter(n => !((n as Element).getAttribute?.('data-caty-tag')))
-            .map(n => n.textContent ?? '')
-            .join('');
-          setInput(textOnly);
+          // Sync state from the composer EXCLUDING chip titles, so the dragged
+          // paper's title never pollutes the chat input. Chips carry their
+          // context via selectedMentions.
+          setInput(getCatalystComposerPlainText(div));
         }
         inputRef.current?.focus();
         resizeInput();
@@ -1992,7 +2005,7 @@ export function RightSidebar({
     const text =
       agentMode === 'literature' && isLiteratureRoute
         ? literaturePlain
-        : (inputRef.current?.innerText?.trim() || input).trim();
+        : (getCatalystComposerPlainText(inputRef.current).trim() || input).trim();
     const mentionsBefore =
       agentMode === 'literature' && isLiteratureRoute && litEl
         ? getMentionsFromLiteratureEditable(litEl)
