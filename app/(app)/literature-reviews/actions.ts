@@ -368,3 +368,9 @@ export async function savePaperToRepository(
     return { success: false, error: message }
   }
 }
+
+export async function savePaperToLibrary(
+  ...args: Parameters<typeof savePaperToRepository>
+) {
+  return savePaperToRepository(...args)
+}

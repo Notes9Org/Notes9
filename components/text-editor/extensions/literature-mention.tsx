@@ -111,7 +111,7 @@ const LiteratureMentionList = forwardRef<MentionListRef, MentionListProps>(
                     ))
                 ) : (
                     <div className="px-3 py-2 text-sm text-muted-foreground">
-                        No literature linked. Add papers to the repository first.
+                        No literature linked. Add papers to your library first.
                     </div>
                 )}
             </div>

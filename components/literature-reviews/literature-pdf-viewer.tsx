@@ -10,7 +10,7 @@ import {
   useState,
   type MutableRefObject,
 } from "react"
-import { Copy, ExternalLink, Highlighter, Loader2, StickyNote, ZoomIn, ZoomOut } from "lucide-react"
+import { Bot, Copy, ExternalLink, Highlighter, Loader2, StickyNote, ZoomIn, ZoomOut } from "lucide-react"
 // Static so the text/annotation-layer styles are reliably injected. This CSS is
 // tiny; the heavy pdfjs JS is still dynamically imported in load()/render().
 import "pdfjs-dist/web/pdf_viewer.css"
@@ -85,6 +85,7 @@ interface LiteraturePdfViewerProps {
     rects?: Array<{ top: number; left: number; width: number; height: number }> | null
     anchor?: Record<string, unknown> | null
   }) => Promise<void>
+  onAskCatalyst?: (selectedText: string) => void
 }
 
 type PdfSelectionState = {
@@ -118,6 +119,7 @@ function LiteraturePdfPageBlock({
   onCopySelection,
   onHighlightSelection,
   onNoteSelection,
+  onAskCatalyst,
   focusedAnnotationId,
   linkService,
 }: {
@@ -133,6 +135,7 @@ function LiteraturePdfPageBlock({
   onCopySelection: () => void
   onHighlightSelection: () => void
   onNoteSelection: () => void
+  onAskCatalyst?: (selectedText: string) => void
   focusedAnnotationId: string | null
   linkService: LiteraturePdfLinkService
 }) {
@@ -402,6 +405,23 @@ function LiteraturePdfPageBlock({
             <Button variant="ghost" size="icon" className="h-8 w-8" onClick={onNoteSelection} title="Note">
               <StickyNote className="h-4 w-4" />
             </Button>
+            {onAskCatalyst && (
+              <>
+                <div className="mx-0.5 h-4 w-px bg-border" />
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 gap-1 rounded-full px-2 text-[11px] font-medium text-primary hover:bg-primary/10"
+                  onClick={() => {
+                    if (selectionState?.text) onAskCatalyst(selectionState.text)
+                  }}
+                  title="Ask Catalyst"
+                >
+                  <Bot className="h-3 w-3" />
+                  Ask Catalyst
+                </Button>
+              </>
+            )}
           </div>
         )}
       </div>
@@ -440,7 +460,7 @@ function highlightCenterYWithinPage(
 }
 
 export const LiteraturePdfViewer = forwardRef<LiteraturePdfViewerHandle, LiteraturePdfViewerProps>(
-  function LiteraturePdfViewer({ pdfUrl, externalOpenUrl, annotations, onCreateAnnotation }, ref) {
+  function LiteraturePdfViewer({ pdfUrl, externalOpenUrl, annotations, onCreateAnnotation, onAskCatalyst }, ref) {
   const { toast } = useToast()
   const viewportFrameRef = useRef<HTMLDivElement | null>(null)
   const loadMoreSentinelRef = useRef<HTMLDivElement | null>(null)
@@ -1015,6 +1035,7 @@ export const LiteraturePdfViewer = forwardRef<LiteraturePdfViewerHandle, Literat
               onCopySelection={copySelection}
               onHighlightSelection={() => createSelectionAnnotation("highlight")}
               onNoteSelection={() => createSelectionAnnotation("note")}
+              onAskCatalyst={onAskCatalyst}
               focusedAnnotationId={focusedAnnotationId}
               linkService={linkService}
             />

@@ -17,12 +17,6 @@ export default async function LiteratureReviewDetailPage({
 }) {
   const { id } = await params
   const resolvedSearch = searchParams ? await searchParams : {}
-  const initialTab =
-    resolvedSearch.tab === "pdf" ||
-    resolvedSearch.tab === "citation" ||
-    resolvedSearch.tab === "linked"
-      ? resolvedSearch.tab
-      : "overview"
   const user = await requireUser()
   const supabase = await createClient()
   // Fetch literature review details
@@ -44,6 +38,18 @@ export default async function LiteratureReviewDetailPage({
   if (error || !literature) {
     notFound()
   }
+
+  // Default to the PDF tab when the paper has a PDF, unless the URL explicitly
+  // requests a different tab.
+  const hasPdf = Boolean((literature as { pdf_storage_path?: string | null }).pdf_storage_path)
+  const initialTab =
+    resolvedSearch.tab === "pdf" ||
+    resolvedSearch.tab === "citation" ||
+    resolvedSearch.tab === "linked"
+      ? resolvedSearch.tab
+      : hasPdf
+        ? "pdf"
+        : "overview"
 
   const { data: profile } = await supabase
     .from("profiles")

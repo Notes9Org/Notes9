@@ -223,8 +223,8 @@ export function PaperSearchCard({ paper, onStage, onOpenStaged, onSave, onSaveTo
                   size="icon"
                   onClick={() => onSave(paper)}
                   disabled={isSaving}
-                  title="Save to repository"
-                  aria-label="Save to repository"
+                  title="Save to library"
+                  aria-label="Save to library"
                 >
                   {isSaving ? (
                     <Loader2 size={14} className="animate-spin" />
@@ -282,8 +282,8 @@ export function PaperSearchCard({ paper, onStage, onOpenStaged, onSave, onSaveTo
                     size="icon"
                     onClick={() => onSaveToRepository(paper)}
                     disabled={isSaving}
-                    title="Save to repository"
-                    aria-label="Save to repository"
+                    title="Save to library"
+                    aria-label="Save to library"
                   >
                     <Database size={14} />
                   </Button>

@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react"
 import { ChevronDown, Download, FileText, Loader2, PanelRightOpen } from "lucide-react"
+import { openCatalystPanel } from '@/lib/catalyst-launch'
 
 import { LiteraturePdfAnnotationSidebar } from "@/components/literature-reviews/literature-pdf-annotation-sidebar"
 import {
@@ -184,6 +185,24 @@ export function LiteraturePdfPanel({
     }
   }, [annotations, pdfFileName, pdfUrl, toast])
 
+  const openPaperInCatalyst = useCallback((selectedText?: string) => {
+    const trimmedSelection = selectedText?.trim()
+    openCatalystPanel({
+      scope: 'literature',
+      query: trimmedSelection
+        ? `"${trimmedSelection}"\n\nAsk Catalyst about this selection in the attached paper.`
+        : 'Ask Catalyst about this paper.',
+      attachments: pdfUrl
+        ? [{
+            url: pdfUrl,
+            name: pdfFileName ?? 'paper.pdf',
+            contentType: 'application/pdf',
+          }]
+        : undefined,
+      autoSend: false,
+    })
+  }, [pdfFileName, pdfUrl])
+
   return (
     <Collapsible open={annotationsOpen} onOpenChange={setAnnotationsOpen}>
       <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
@@ -235,13 +254,14 @@ export function LiteraturePdfPanel({
             "lg:grid-cols-[minmax(0,1fr)_minmax(17.5rem,22rem)] lg:items-start"
         )}
       >
-        <div className="min-h-0 min-w-0">
+        <div className="relative min-h-0 min-w-0">
           <LiteraturePdfViewer
             ref={viewerRef}
             pdfUrl={pdfUrl}
             externalOpenUrl={openInNewTabFallbackUrl ?? undefined}
             annotations={annotations}
             onCreateAnnotation={createAnnotation}
+            onAskCatalyst={openPaperInCatalyst}
           />
         </div>
 

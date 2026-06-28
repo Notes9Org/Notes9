@@ -103,13 +103,6 @@ export function PerplexitySearchCard({
         {/* Actions */}
         {!hideActions && (
           <div className="flex items-center gap-3 pt-3 border-t">
-            <Button variant="outline" size="sm" asChild>
-              <a href={paper.source_url} target="_blank" rel="noopener noreferrer">
-                <ExternalLink size={14} className="mr-2" />
-                View Source
-              </a>
-            </Button>
-            
             <div className="flex-1"></div>
             
             {/* Staging mode actions */}
@@ -138,7 +131,7 @@ export function PerplexitySearchCard({
                   ) : (
                     <>
                       <Database size={14} className="mr-2" />
-                      Save to Repository
+                      Save to library
                     </>
                   )}
                 </Button>

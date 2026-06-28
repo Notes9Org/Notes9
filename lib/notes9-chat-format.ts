@@ -30,6 +30,7 @@ const TOOL_USED_LABEL: Record<string, string> = {
   biomni: 'From Cat-Bio synthesis',
   cat_bio: 'From Cat-Bio synthesis',
   web: 'From the web',
+  literature: 'From the literature',
   clarification: 'Awaiting your reply',
   none: '',
 };

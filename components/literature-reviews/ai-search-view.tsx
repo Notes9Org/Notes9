@@ -7,8 +7,8 @@ import { useAiLiteratureSearch } from '@/hooks/use-ai-literature-search'
 import { AiPaperCard } from './ai-paper-card'
 import { AiSearchFilters } from './ai-search-filters'
 import { openCatalystPanel } from '@/lib/catalyst-launch'
-import { primeCatalystCoPilot } from '@/lib/catalyst-copilot'
 import { setCatalystLiterature, type LiteratureRef } from '@/lib/catalyst-literature'
+import { papersToGrounding, buildLiteratureSessionContext } from '@/lib/literature-citations'
 import { applyAiFilters, DEFAULT_AI_FILTERS, journalOptions, yearBounds, type AiResultFilters } from '@/lib/ai-search-filters'
 import { decodeHtmlEntities } from '@/lib/literature-abstract-display'
 import type { SearchPaper } from '@/types/paper-search'
@@ -27,6 +27,10 @@ function refHref(r: AiSearchResult): string | null {
   if (p?.pmid) return `https://pubmed.ncbi.nlm.nih.gov/${p.pmid}/`
   if (r.sourceUrl && /^https?:\/\//i.test(r.sourceUrl)) return r.sourceUrl
   return null
+}
+
+function openAccessFirst(results: AiSearchResult[]): AiSearchResult[] {
+  return [...results].sort((a, b) => Number(!!b.paper?.isOpenAccess) - Number(!!a.paper?.isOpenAccess))
 }
 
 function refMeta(r: AiSearchResult): string {
@@ -87,6 +91,9 @@ export function AiSearchView({
   const { run, summary, results, papers: resultPapers, isStreaming, papersLoading, error } =
     useAiLiteratureSearch({ query })
 
+  // Track saved paper keys across re-renders so cards don't revert on remount.
+  const savedKeysRef = useRef(new Set<string>())
+
   useEffect(() => {
     if (query.trim()) void run(query)
   }, [query, run])
@@ -99,9 +106,22 @@ export function AiSearchView({
     onLoadingChange?.(isStreaming || papersLoading)
   }, [isStreaming, papersLoading, onLoadingChange])
 
+  // Listen for citation-chip clicks from the Catalyst summary panel and scroll
+  // the matching paper card into view.
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const label = (e as CustomEvent<{ citeLabel: string }>).detail?.citeLabel
+      if (!label) return
+      const card = document.querySelector(`[data-cite-label="${label}"]`)
+      card?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    }
+    window.addEventListener('literature:scroll-to-citation', handler)
+    return () => window.removeEventListener('literature:scroll-to-citation', handler)
+  }, [])
+
   const loading = isStreaming || papersLoading
   const showSkeletons = loading && results.length === 0
-  const displayed = applyAiFilters(results, filters)
+  const displayed = openAccessFirst(applyAiFilters(results, filters))
   // Filter options grounded in the actual result set (not hardcoded).
   const journalChoices = journalOptions(results)
   const yearHint = yearBounds(results)
@@ -112,25 +132,6 @@ export function AiSearchView({
   // Tracks the previous streaming state so we auto-open the sidebar exactly once
   // per search run (on false→true), and re-open on every fresh search.
   const wasStreamingRef = useRef(false)
-
-  // Prime the Catalyst co-pilot with the papers (title + abstract + meta), so
-  // follow-up questions in the sidebar can be answered about any paper.
-  useEffect(() => {
-    if (isStreaming || results.length === 0 || !query.trim()) return
-    const ctx = results.slice(0, 8).map((r) => ({
-      n: r.citeLabel,
-      title: decodeHtmlEntities(r.paper?.title || r.aiTitle || 'Untitled'),
-      authors: r.paper?.authors?.length
-        ? r.paper.authors.map(decodeHtmlEntities).join(', ')
-        : undefined,
-      journal: r.paper?.journal ? decodeHtmlEntities(r.paper.journal) : undefined,
-      year: r.paper?.year ?? null,
-      abstract: (r.paper?.abstract || r.abstract || '').trim() || undefined,
-      url: refHref(r),
-      openAccess: !!(r.paper?.isOpenAccess || r.paper?.pdfUrl),
-    }))
-    primeCatalystCoPilot({ query, papers: ctx, summary })
-  }, [query, results, summary, isStreaming])
 
   // Stream the AI summary (and its references) into the Catalyst sidebar, and
   // auto-open the sidebar the moment a search starts — so the summary shows up
@@ -163,7 +164,12 @@ export function AiSearchView({
         meta: refMeta(r),
         href: refHref(r),
       }))
-    setCatalystLiterature({ query: q, summary, streaming: isStreaming, references })
+    // Build the unified grounding structures so the sidebar renders [N] chips and
+    // the "All citations" panel identically to agent answers.  Only computed when
+    // results are available; re-computation on each tick is cheap (deterministic).
+    const { resources, manifest } = results.length ? papersToGrounding(results) : { resources: [], manifest: { manifest: {} } }
+    const context = results.length ? buildLiteratureSessionContext(q, results) : null
+    setCatalystLiterature({ query: q, summary, streaming: isStreaming, references, resources, manifest, context })
   }, [query, summary, isStreaming, results])
 
   return (
@@ -222,6 +228,7 @@ export function AiSearchView({
         const renderCard = (r: (typeof displayed)[number], i: number) => (
           <div
             key={`${r.citeLabel}-${r.paper?.id ?? r.sourceUrl ?? r.aiTitle ?? ''}`}
+            data-cite-label={r.citeLabel}
             className="rounded-xl duration-500 animate-in fade-in slide-in-from-bottom-3 fill-mode-both"
             style={{ animationDelay: `${Math.min(i, 8) * 60}ms` }}
           >
@@ -229,6 +236,8 @@ export function AiSearchView({
               result={r}
               projectId={projectId}
               query={query}
+              initialSaved={savedKeysRef.current.has(r.citeLabel)}
+              onSaved={() => savedKeysRef.current.add(r.citeLabel)}
               onStage={onStagePaper}
               onOpenStaged={onOpenStaged}
               isStaged={r.paper ? (isPaperStaged?.(r.paper.id) ?? false) : false}

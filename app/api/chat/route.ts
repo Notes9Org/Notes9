@@ -14,6 +14,7 @@ import { splitSseBuffer, parseSseDataJson } from '@/lib/sse-event-blocks';
 import { createClient } from '@/lib/supabase/server';
 import { getCurrentUser } from '@/lib/auth/current-user';
 import { enforceLimits, checkBodyBytes, checkHistory, checkQueryChars } from '@/lib/limits/guards';
+import { literatureContextToSystemMessage, type LiteratureSessionContext } from '@/lib/literature-citations';
 
 export const maxDuration = 300;
 
@@ -139,6 +140,32 @@ export async function POST(req: Request) {
     role: msg.role as 'user' | 'assistant',
     content: getPlainTextFromMessage(msg),
   }));
+
+  // C7: For literature sessions, prepend a system message so follow-up turns are
+  // grounded in the papers that were surfaced.  Fail-open — any error is ignored.
+  // Cast to wider type only for the unshift; downstream build functions still
+  // receive the narrowed type and pass the array through to the JSON body as-is.
+  try {
+    const { data: sessionRow } = await supabase
+      .from('chat_sessions')
+      .select('kind, metadata')
+      .eq('id', sessionId)
+      .single();
+    if (
+      sessionRow?.kind === 'literature' &&
+      sessionRow?.metadata &&
+      typeof sessionRow.metadata === 'object' &&
+      'literature' in (sessionRow.metadata as Record<string, unknown>)
+    ) {
+      const litCtx = (sessionRow.metadata as Record<string, unknown>).literature as LiteratureSessionContext;
+      const systemContent = literatureContextToSystemMessage(litCtx);
+      if (systemContent) {
+        (history as Array<{ role: string; content: string }>).unshift({ role: 'system', content: systemContent });
+      }
+    }
+  } catch {
+    // Fail open: missing metadata must never block the chat.
+  }
 
   const stream = createUIMessageStream({
     originalMessages: messages,

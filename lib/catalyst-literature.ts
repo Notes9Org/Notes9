@@ -9,6 +9,9 @@
  */
 
 import { useEffect, useState } from 'react'
+import type { GroundingResource } from '@/lib/agent-stream-types'
+import type { CitationsManifest } from '@/hooks/use-agent-stream'
+import type { LiteratureSessionContext } from '@/lib/literature-citations'
 
 export interface LiteratureRef {
   n: string
@@ -26,6 +29,16 @@ export interface CatalystLiterature {
   streaming: boolean
   /** Cited papers, shown under the summary. */
   references: LiteratureRef[]
+  /** ID of the persisted chat session for this literature search (set once the
+   *  session has been saved so the "Continue in Catalyst" button can open it). */
+  sessionId?: string | null
+  /** Grounding resources in the unified citation contract (GroundingResource[]). */
+  resources?: GroundingResource[]
+  /** Citations manifest driving inline [N] chips in the rendered summary. */
+  manifest?: CitationsManifest | null
+  /** Compact literature context stored in the session's metadata.literature and
+   *  injected as a system message for follow-up turns. */
+  context?: LiteratureSessionContext | null
 }
 
 export const CATALYST_LITERATURE_EVENT = 'notes9:catalyst-literature'

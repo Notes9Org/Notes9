@@ -531,15 +531,6 @@ function CitationHoverCard({
       <div className="mt-1.5 flex items-center justify-between gap-2 text-2xs text-muted-foreground/80">
         <span className="min-w-0 truncate">{provenanceLabel(chip)}</span>
         <span className="flex shrink-0 items-center gap-2.5">
-          {(chip.citedText || chip.excerpt) && onViewSource && (
-            <button
-              type="button"
-              onClick={onViewSource}
-              className="rounded-sm font-medium text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-            >
-              View source
-            </button>
-          )}
           {pageHref &&
             (isWebSource ? (
               <a
@@ -774,13 +765,16 @@ export function MarkdownRenderer({
       if (!chipEl || chipEl.tagName === 'A') return;
       e.preventDefault();
       const chip = readChipData(chipEl);
+      // Honor the host override (literature summary scrolls to the result card)
+      // so keyboard activation matches a mouse click.
+      if (onCitationClick && onCitationClick(chip.label) !== false) return;
       if (chip.citedText || chip.excerpt) {
         openViewer(chip);
       } else {
         openChip(chip);
       }
     },
-    [openChip, openViewer]
+    [openChip, openViewer, onCitationClick]
   );
 
   // Clear the preview when the content changes (e.g. live streaming updates).
@@ -838,7 +832,10 @@ export function MarkdownRenderer({
           containerRect={containerRef.current.getBoundingClientRect()}
           onMouseEnter={cancelHoverClose}
           onMouseLeave={scheduleHoverClose}
-          onViewSource={() => openViewer(hover.chip)}
+          // In the literature summary (host owns citation clicks → onCitationClick
+          // set) the in-app span viewer is not useful, so the "View source" button
+          // is suppressed; clicking the chip scrolls the left results panel instead.
+          onViewSource={onCitationClick ? undefined : () => openViewer(hover.chip)}
           onOpenPage={() => openChip(hover.chip)}
         />
       )}
