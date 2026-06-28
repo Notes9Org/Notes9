@@ -6,6 +6,7 @@ import {
   parseStoredArtifacts,
   type PersistedArtifact,
 } from '@/lib/agent-artifacts';
+import { renumberCitations, applyRemapToLabel } from '@/lib/citation-renumber';
 
 /** Chat message rows use DB UUIDs once persisted. */
 export function isPersistedChatMessageId(id: string): boolean {
@@ -101,12 +102,43 @@ export function formatNotes9AssistantMarkdown(
   citationsManifest?: CitationsManifest | null,
   artifacts?: AgentArtifact[] | null,
 ): string {
-  const refs =
+  let refs =
     donePayload.resources?.length
       ? donePayload.resources
       : donePayload.citations ?? [];
 
   let body = stripTrailingPlainTextReferencesFromModel(donePayload.content ?? donePayload.answer ?? '');
+  let manifestRecord: Record<string, unknown> | null =
+    citationsManifest?.manifest && Object.keys(citationsManifest.manifest).length > 0
+      ? citationsManifest.manifest
+      : null;
+
+  // Renumber inline [N] citations by order of first appearance so the prose, the
+  // "All citations" list, and the manifest share one contiguous numbering (raw
+  // agent cite labels are sparse/arrival-ordered). Mechanical + deterministic;
+  // fail-open so a malformed payload never breaks the turn.
+  try {
+    const known = new Set<string>();
+    for (const r of refs) if (r.cite_label) known.add(String(r.cite_label).split('.')[0]);
+    if (manifestRecord) for (const k of Object.keys(manifestRecord)) known.add(k.split('.')[0]);
+    if (known.size > 0) {
+      const { markdown, remap } = renumberCitations(body, known);
+      if (remap.size > 0) {
+        body = markdown;
+        refs = refs
+          .map((r) => (r.cite_label ? { ...r, cite_label: applyRemapToLabel(String(r.cite_label), remap) } : r))
+          .sort((a, b) => Number(a.cite_label ?? 0) - Number(b.cite_label ?? 0));
+        if (manifestRecord) {
+          const next: Record<string, unknown> = {};
+          for (const [k, v] of Object.entries(manifestRecord)) next[applyRemapToLabel(k, remap)] = v;
+          manifestRecord = next;
+        }
+      }
+    }
+  } catch {
+    // Leave body/refs/manifest untouched on any error — never break the turn.
+  }
+
   let out = body + formatNotes9Footer(donePayload);
 
   if (refs.length > 0) {
@@ -116,8 +148,8 @@ export function formatNotes9AssistantMarkdown(
 
   // Persist the manifest separately so restored sessions resolve the inline
   // `[N]` / `[3.2]` chips by cite_label exactly as the live stream did.
-  if (citationsManifest?.manifest && Object.keys(citationsManifest.manifest).length > 0) {
-    const manifestPayload = utf8ToBase64(JSON.stringify(citationsManifest.manifest));
+  if (manifestRecord && Object.keys(manifestRecord).length > 0) {
+    const manifestPayload = utf8ToBase64(JSON.stringify(manifestRecord));
     out += NOTES9_MANIFEST_MARKER + manifestPayload;
   }
 
