@@ -160,6 +160,7 @@ import { ChemistryHighlight } from "./extensions/chemistry-highlight"
 import { RagHighlight } from "./extensions/rag-highlight"
 import { openCatalystPanel } from "@/lib/catalyst-launch"
 import { useCatalystPanelState } from "@/contexts/catalyst-panel-state"
+import { useSidebar } from "@/components/ui/sidebar"
 import { SimpleShape } from "./extensions/simple-shape"
 import { BlockDragHandle } from "./extensions/block-drag-handle"
 import { moveTopLevelBlock } from "./editor-block-utils"
@@ -1853,15 +1854,15 @@ export function TiptapEditor({
       return
     }
 
-    // SidebarInset's right edge is where the right sidebar begins. The fullscreen
-    // shell spans from the viewport left edge (covering left sidebar) to that
-    // boundary, and from the top (covering the header bar) to the bottom.
+    // SidebarInset's right edge is where the right sidebar begins, and its left edge
+    // is where the left sidebar ends. The fullscreen shell spans exactly this inset
+    // area, covering the header bar but leaving both sidebars visible (or space for them).
     const insetRect = sidebarInset.getBoundingClientRect()
     setEditorFullscreenStyle({
       position: "fixed",
       top: "0px",
-      left: "0px",
-      width: `${Math.round(insetRect.right)}px`,
+      left: `${Math.round(insetRect.left)}px`,
+      width: `${Math.round(insetRect.width)}px`,
       height: "100vh",
       zIndex: 130,
       margin: 0,
@@ -1906,6 +1907,19 @@ export function TiptapEditor({
     window.addEventListener("keydown", onKey)
     return () => window.removeEventListener("keydown", onKey)
   }, [editorRegionFullscreen])
+
+  let sidebarContext: ReturnType<typeof useSidebar> | null = null
+  try {
+    sidebarContext = useSidebar()
+  } catch (e) {
+    // Ignore error if not inside a SidebarProvider
+  }
+
+  useEffect(() => {
+    if (editorRegionFullscreen && sidebarContext?.state === "expanded") {
+      sidebarContext.setOpen(false)
+    }
+  }, [editorRegionFullscreen, sidebarContext])
 
   useEffect(() => {
     onEditorFullscreenChange?.(editorRegionFullscreen)
@@ -5522,28 +5536,17 @@ window.localStorage.setItem(RIBBON_TAB_KEY, ribbonTab)
                   {showFullscreenDocTitleInToolbar && renderFullscreenDocumentTitle("toolbar")}
                 </div>
                 <div className="flex shrink-0 items-center gap-0.5 sm:gap-1">
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    className="h-8 w-8 shrink-0 touch-manipulation text-muted-foreground hover:text-foreground"
-                    onClick={() => setEditorRegionFullscreen((v) => !v)}
-                    aria-label={editorRegionFullscreen ? "Exit fullscreen" : "Fullscreen editor"}
-                    title={editorRegionFullscreen ? "Exit fullscreen (Esc)" : "Fullscreen editor"}
-                  >
-                    {editorRegionFullscreen ? <Minimize className="h-4 w-4" /> : <Maximize className="h-4 w-4" />}
-                  </Button>
-                  {editorRegionFullscreen && (
+                  {!editorRegionFullscreen && (
                     <Button
                       type="button"
-                      variant={catalystState?.isOpen ? "secondary" : "ghost"}
+                      variant="ghost"
                       size="icon"
                       className="h-8 w-8 shrink-0 touch-manipulation text-muted-foreground hover:text-foreground"
-                      onClick={() => openCatalystPanel()}
-                      aria-label="Ask Catalyst"
-                      title="Ask Catalyst"
+                      onClick={() => setEditorRegionFullscreen(true)}
+                      aria-label="Fullscreen editor"
+                      title="Fullscreen editor"
                     >
-                      <MessageSquare className="h-4 w-4" />
+                      <Maximize className="h-4 w-4" />
                     </Button>
                   )}
                   {trailingToolbarSlot ? (
@@ -5567,32 +5570,19 @@ window.localStorage.setItem(RIBBON_TAB_KEY, ribbonTab)
               >
                 {renderToolbarDockChildren()}
               </div>
-              {!toolbarMergedLayout && (
-                <div className="flex items-center shrink-0">
+              {!toolbarMergedLayout && !editorRegionFullscreen && (
+                <div className="ml-auto flex items-center shrink-0">
                   <Button
                     type="button"
                     variant="ghost"
                     size="icon"
-                    className="h-8 w-8 shrink-0 touch-manipulation text-muted-foreground hover:text-foreground"
-                    onClick={() => setEditorRegionFullscreen((v) => !v)}
-                    aria-label={editorRegionFullscreen ? "Exit fullscreen" : "Fullscreen editor"}
-                    title={editorRegionFullscreen ? "Exit fullscreen (Esc)" : "Fullscreen editor"}
+                    className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                    onClick={() => setEditorRegionFullscreen(true)}
+                    aria-label="Fullscreen editor"
+                    title="Fullscreen editor"
                   >
-                    {editorRegionFullscreen ? <Minimize className="h-4 w-4" /> : <Maximize className="h-4 w-4" />}
+                    <Maximize className="h-4 w-4" />
                   </Button>
-                  {editorRegionFullscreen && (
-                    <Button
-                      type="button"
-                      variant={catalystState?.isOpen ? "secondary" : "ghost"}
-                      size="icon"
-                      className="h-8 w-8 shrink-0 touch-manipulation text-muted-foreground hover:text-foreground ml-1"
-                      onClick={() => openCatalystPanel()}
-                      aria-label="Ask Catalyst"
-                      title="Ask Catalyst"
-                    >
-                      <MessageSquare className="h-4 w-4" />
-                    </Button>
-                  )}
                 </div>
               )}
             </div>
@@ -5601,37 +5591,56 @@ window.localStorage.setItem(RIBBON_TAB_KEY, ribbonTab)
         {hideToolbar && (
           <>
             {showFullscreenDocTitleInToolbar && renderFullscreenDocumentTitle("floated")}
-            <div className="absolute z-20 flex items-center gap-2 max-sm:right-[max(0.5rem,env(safe-area-inset-right,0px))] max-sm:top-[max(0.5rem,env(safe-area-inset-top,0px))] sm:right-2 sm:top-2">
-              <Button
-                type="button"
-                variant="secondary"
-                size="icon"
-                className="h-8 w-8 border border-border/70 bg-background/95 text-muted-foreground shadow-sm backdrop-blur-sm hover:text-foreground"
-                onClick={() => setEditorRegionFullscreen((v) => !v)}
-                aria-label={editorRegionFullscreen ? "Exit fullscreen" : "Fullscreen editor"}
-                title={editorRegionFullscreen ? "Exit fullscreen (Esc)" : "Fullscreen editor"}
-              >
-                {editorRegionFullscreen ? (
-                  <Minimize className="h-4 w-4" />
-                ) : (
-                  <Maximize className="h-4 w-4" />
-                )}
-              </Button>
-              {editorRegionFullscreen && (
+            {!editorRegionFullscreen && (
+              <div className="absolute z-20 flex items-center gap-2 max-sm:right-[max(0.5rem,env(safe-area-inset-right,0px))] max-sm:top-[max(0.5rem,env(safe-area-inset-top,0px))] sm:right-2 sm:top-2">
                 <Button
                   type="button"
-                  variant={catalystState?.isOpen ? "secondary" : "ghost"}
+                  variant="secondary"
                   size="icon"
                   className="h-8 w-8 border border-border/70 bg-background/95 text-muted-foreground shadow-sm backdrop-blur-sm hover:text-foreground"
-                  onClick={() => openCatalystPanel()}
-                  aria-label="Ask Catalyst"
-                  title="Ask Catalyst"
+                  onClick={() => setEditorRegionFullscreen(true)}
+                  aria-label="Fullscreen editor"
+                  title="Fullscreen editor"
                 >
-                  <MessageSquare className="h-4 w-4" />
+                  <Maximize className="h-4 w-4" />
                 </Button>
-              )}
-            </div>
+              </div>
+            )}
           </>
+        )}
+
+        {/* Global fullscreen controls aligned exactly with the Site Header (h-14, px-4) */}
+        {editorRegionFullscreen && (
+          <div className="absolute z-[140] flex items-center max-sm:gap-1 max-sm:right-3 max-sm:top-[8px] sm:gap-2 sm:right-4 sm:top-[10px]">
+            <Button
+              type="button"
+              variant={catalystState?.isOpen ? "secondary" : "ghost"}
+              size="icon"
+              className={cn(
+                "h-8 w-8 sm:h-9 sm:w-9 text-muted-foreground hover:text-foreground",
+                hideToolbar && "border border-border/70 bg-background/95 shadow-sm backdrop-blur-sm"
+              )}
+              onClick={() => openCatalystPanel()}
+              aria-label="Ask Catalyst"
+              title="Ask Catalyst"
+            >
+              <MessageSquare className="h-4 w-4" />
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className={cn(
+                "h-8 w-8 sm:h-9 sm:w-9 text-muted-foreground hover:text-foreground",
+                hideToolbar && "border border-border/70 bg-background/95 shadow-sm backdrop-blur-sm"
+              )}
+              onClick={() => setEditorRegionFullscreen(false)}
+              aria-label="Exit fullscreen"
+              title="Exit fullscreen (Esc)"
+            >
+              <Minimize className="h-4 w-4" />
+            </Button>
+          </div>
         )}
         <div
           ref={setEditorPopoverBoundaryEl}
