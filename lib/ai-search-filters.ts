@@ -21,7 +21,10 @@ export interface AiResultFilters {
 }
 
 export const DEFAULT_AI_FILTERS: AiResultFilters = {
-  sort: "openAccess",
+  // Relevance is the default: the AI returns results in relevance order and that
+  // ordering must never be demoted. "Open access first" is an explicit opt-in
+  // (it intentionally reorders OA papers ahead of more-relevant non-OA ones).
+  sort: "relevance",
   yearFrom: null,
   yearTo: null,
   minCitations: null,
@@ -60,7 +63,7 @@ export function inferPaperType(r: AiSearchResult): PaperType {
 
 export function countActiveFilters(f: AiResultFilters): number {
   let n = 0
-  if (f.sort !== "openAccess") n++
+  if (f.sort !== "relevance") n++
   if (f.yearFrom != null) n++
   if (f.yearTo != null) n++
   if (f.minCitations != null) n++
