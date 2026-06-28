@@ -3091,8 +3091,8 @@ export function RightSidebar({
   // --- Render Components ---
 
   const catalystHeroComposerShell = cn(
-    'rounded-2xl border border-border/70 bg-card',
-    'shadow-[0_1px_2px_rgba(44,36,24,0.04),0_8px_28px_-8px_rgba(44,36,24,0.12)]',
+    'rounded-2xl border border-white/70 bg-white/75 backdrop-blur-xl supports-[backdrop-filter]:bg-white/60',
+    'shadow-[0_1px_2px_rgba(44,36,24,0.05),0_16px_44px_-18px_rgba(44,36,24,0.22)]',
     'transition-[border-color,box-shadow] duration-200',
     'focus-within:border-[color:color-mix(in_srgb,var(--n9-accent)_35%,var(--border))]',
     'focus-within:shadow-[0_1px_2px_rgba(44,36,24,0.05),0_12px_32px_-8px_rgba(44,36,24,0.14),0_0_0_3px_color-mix(in_srgb,var(--n9-accent)_12%,transparent)]',
@@ -3121,7 +3121,7 @@ export function RightSidebar({
                 contentEditable
                 suppressContentEditableWarning
                 data-placeholder={`Ask about papers… Use @ to link papers (max ${MAX_LITERATURE_TAGS}), or drop rows here`}
-                className="outline-none empty:before:pointer-events-none empty:before:content-[attr(data-placeholder)] empty:before:text-muted-foreground min-h-[68px] w-full px-3 py-2.5 text-sm max-h-[300px] overflow-y-auto scrollbar-hide"
+                className="outline-none empty:before:pointer-events-none empty:before:content-[attr(data-placeholder)] empty:before:text-muted-foreground/70 min-h-[68px] w-full px-3 py-2.5 text-[13px] leading-5 text-foreground max-h-[300px] overflow-y-auto scrollbar-hide selection:bg-[color:color-mix(in_srgb,var(--n9-accent)_18%,transparent)] selection:text-foreground"
                 onBeforeInput={(e) => {
                   const ie = e.nativeEvent as InputEvent;
                   if (!ie.inputType?.startsWith('insert')) return;
