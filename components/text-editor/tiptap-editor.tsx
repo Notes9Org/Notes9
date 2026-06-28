@@ -5522,6 +5522,19 @@ window.localStorage.setItem(RIBBON_TAB_KEY, ribbonTab)
                   {showFullscreenDocTitleInToolbar && renderFullscreenDocumentTitle("toolbar")}
                 </div>
                 <div className="flex shrink-0 items-center gap-0.5 sm:gap-1">
+                  {editorRegionFullscreen && (
+                    <Button
+                      type="button"
+                      variant={catalystState?.isOpen ? "secondary" : "ghost"}
+                      size="icon"
+                      className="h-8 w-8 shrink-0 touch-manipulation text-muted-foreground hover:text-foreground"
+                      onClick={() => openCatalystPanel()}
+                      aria-label="Ask Catalyst"
+                      title="Ask Catalyst"
+                    >
+                      <MessageSquare className="h-4 w-4" />
+                    </Button>
+                  )}
                   <Button
                     type="button"
                     variant="ghost"
