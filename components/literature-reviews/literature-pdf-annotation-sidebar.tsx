@@ -44,7 +44,7 @@ export function LiteraturePdfAnnotationSidebar({
   return (
     <div
       className={cn(
-        "flex min-h-0 flex-col gap-4 rounded-lg border bg-background p-4 shadow-sm",
+        "glass-panel flex min-h-0 flex-col gap-4 rounded-lg p-4 shadow-sm",
         className
       )}
     >

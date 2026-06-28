@@ -11,6 +11,7 @@ import {
   type MutableRefObject,
 } from "react"
 import { Bot, Copy, ExternalLink, Highlighter, Loader2, StickyNote, ZoomIn, ZoomOut } from "lucide-react"
+import { motion, useReducedMotion } from "@/components/literature-reviews/motion"
 // Static so the text/annotation-layer styles are reliably injected. This CSS is
 // tiny; the heavy pdfjs JS is still dynamically imported in load()/render().
 import "pdfjs-dist/web/pdf_viewer.css"
@@ -139,6 +140,7 @@ function LiteraturePdfPageBlock({
   focusedAnnotationId: string | null
   linkService: LiteraturePdfLinkService
 }) {
+  const reduceMotion = useReducedMotion()
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
   const textLayerRef = useRef<HTMLDivElement | null>(null)
   const annotationLayerRef = useRef<HTMLDivElement | null>(null)
@@ -387,14 +389,17 @@ function LiteraturePdfPageBlock({
           />
         ))}
         {selectionState?.pageNumber === pageNumber && (
-          <div
-            className="absolute z-20 flex items-center gap-1 rounded-full border bg-background/95 p-1 shadow-lg"
+          <motion.div
+            className="glass-panel absolute z-20 flex items-center gap-1 rounded-full p-1 shadow-lg"
             style={{
               left: selectionState.toolbarX,
               top: Math.max(8, selectionState.toolbarY),
-              transform: "translateX(-50%)",
+              x: "-50%",
               maxWidth: "calc(100vw - 2rem)",
             }}
+            initial={reduceMotion ? { opacity: 0 } : { opacity: 0, scale: 0.85 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ duration: 0.15, ease: "easeOut" }}
           >
             <Button variant="ghost" size="icon" className="h-8 w-8" onClick={onCopySelection} title="Copy">
               <Copy className="h-4 w-4" />
@@ -422,7 +427,7 @@ function LiteraturePdfPageBlock({
                 </Button>
               </>
             )}
-          </div>
+          </motion.div>
         )}
       </div>
     </div>

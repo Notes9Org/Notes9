@@ -354,7 +354,7 @@ ER  - `;
 
       {/* Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
-        <TabsList>
+        <TabsList className="glass-panel">
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="pdf">PDF</TabsTrigger>
           <TabsTrigger value="citation">Citation</TabsTrigger>

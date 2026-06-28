@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Telescope, Loader2, AlertCircle } from 'lucide-react'
 import { useAiLiteratureSearch } from '@/hooks/use-ai-literature-search'
@@ -9,6 +9,7 @@ import { AiSearchFilters } from './ai-search-filters'
 import { openCatalystPanel } from '@/lib/catalyst-launch'
 import { setCatalystLiterature, type LiteratureRef } from '@/lib/catalyst-literature'
 import { papersToGrounding, buildLiteratureSessionContext } from '@/lib/literature-citations'
+import { renumberCitations } from '@/lib/citation-renumber'
 import { applyAiFilters, DEFAULT_AI_FILTERS, journalOptions, yearBounds, type AiResultFilters } from '@/lib/ai-search-filters'
 import { decodeHtmlEntities } from '@/lib/literature-abstract-display'
 import type { SearchPaper } from '@/types/paper-search'
@@ -28,6 +29,9 @@ function refHref(r: AiSearchResult): string | null {
   if (r.sourceUrl && /^https?:\/\//i.test(r.sourceUrl)) return r.sourceUrl
   return null
 }
+
+/** How many result cards to reveal per "Load more" click (and on first render). */
+const PAGE_SIZE = 10
 
 function openAccessFirst(results: AiSearchResult[]): AiSearchResult[] {
   return [...results].sort((a, b) => Number(!!b.paper?.isOpenAccess) - Number(!!a.paper?.isOpenAccess))
@@ -88,14 +92,29 @@ export function AiSearchView({
   // The dedicated catalyst orchestrator (/api/literature/ai-search) returns the
   // papers AND streams the overall + per-paper summaries. The overall summary is
   // DISPLAYED in the Catalyst sidebar; this page shows the papers (cards).
-  const { run, summary, results, papers: resultPapers, isStreaming, papersLoading, error } =
-    useAiLiteratureSearch({ query })
+  const {
+    run,
+    summary,
+    results,
+    papers: resultPapers,
+    isStreaming,
+    papersLoading,
+    error,
+    loadMore,
+    isLoadingMore,
+    hasMore,
+  } = useAiLiteratureSearch({ query })
 
   // Track saved paper keys across re-renders so cards don't revert on remount.
   const savedKeysRef = useRef(new Set<string>())
 
+  // Pagination: show an initial page, "Load more" reveals the rest of the buffer
+  // and then fetches a fresh continuation page (excluding everything seen).
+  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE)
+
   useEffect(() => {
     if (query.trim()) void run(query)
+    setVisibleCount(PAGE_SIZE)
   }, [query, run])
 
   // Lift papers (for the host's staging detection + count) and loading state.
@@ -122,6 +141,19 @@ export function AiSearchView({
   const loading = isStreaming || papersLoading
   const showSkeletons = loading && results.length === 0
   const displayed = openAccessFirst(applyAiFilters(results, filters))
+  const visible = displayed.slice(0, visibleCount)
+  // "Load more": first reveal already-buffered results, then fetch a fresh
+  // continuation page (the hook excludes everything shown, so no repeats).
+  const canRevealBuffer = visibleCount < displayed.length
+  const showLoadMore = canRevealBuffer || hasMore
+  const onLoadMore = () => {
+    if (canRevealBuffer) {
+      setVisibleCount((c) => c + PAGE_SIZE)
+    } else if (hasMore) {
+      setVisibleCount((c) => c + PAGE_SIZE)
+      void loadMore()
+    }
+  }
   // Filter options grounded in the actual result set (not hardcoded).
   const journalChoices = journalOptions(results)
   const yearHint = yearBounds(results)
@@ -148,28 +180,34 @@ export function AiSearchView({
       openCatalystPanel({ scope: 'literature' })
     }
     wasStreamingRef.current = isStreaming
-    // Build the references (cited papers) shown under the summary.
-    const citedLabels = new Set<string>()
-    for (const m of summary.matchAll(/\[(\d+(?:\s*,\s*\d+)*)\]/g)) {
-      for (const n of m[1].split(',')) citedLabels.add(n.trim())
-    }
-    const references: LiteratureRef[] = (
-      citedLabels.size ? results.filter((r) => citedLabels.has(r.citeLabel)) : results
-    )
-      .slice()
+    // Renumber citations by order of first appearance so the prose [N], the
+    // references list, and the grounding manifest share one contiguous numbering
+    // (the agent's raw arrival ids are sparse). Deterministic + prefix-stable, so
+    // it's safe to re-run on every streaming tick.
+    const knownLabels = new Set(results.map((r) => r.citeLabel))
+    const { markdown: renumberedSummary, remap } = renumberCitations(summary, knownLabels)
+    const hasCitations = remap.size > 0
+
+    // Cited papers in new-number order. Before any citation has streamed we show
+    // all results (arrival order) so sources are visible while the summary builds.
+    const renumberedResults = results
+      .filter((r) => remap.has(r.citeLabel))
+      .map((r) => ({ ...r, citeLabel: remap.get(r.citeLabel)! }))
       .sort((a, b) => Number(a.citeLabel) - Number(b.citeLabel))
-      .map((r) => ({
-        n: r.citeLabel,
-        title: decodeHtmlEntities(r.paper?.title || r.aiTitle || 'Untitled'),
-        meta: refMeta(r),
-        href: refHref(r),
-      }))
+    const groundingInput = hasCitations ? renumberedResults : results
+
+    const references: LiteratureRef[] = groundingInput.map((r) => ({
+      n: r.citeLabel,
+      title: decodeHtmlEntities(r.paper?.title || r.aiTitle || 'Untitled'),
+      meta: refMeta(r),
+      href: refHref(r),
+    }))
     // Build the unified grounding structures so the sidebar renders [N] chips and
     // the "All citations" panel identically to agent answers.  Only computed when
     // results are available; re-computation on each tick is cheap (deterministic).
-    const { resources, manifest } = results.length ? papersToGrounding(results) : { resources: [], manifest: { manifest: {} } }
+    const { resources, manifest } = groundingInput.length ? papersToGrounding(groundingInput) : { resources: [], manifest: { manifest: {} } }
     const context = results.length ? buildLiteratureSessionContext(q, results) : null
-    setCatalystLiterature({ query: q, summary, streaming: isStreaming, references, resources, manifest, context })
+    setCatalystLiterature({ query: q, summary: renumberedSummary, streaming: isStreaming, references, resources, manifest, context })
   }, [query, summary, isStreaming, results])
 
   return (
@@ -248,11 +286,11 @@ export function AiSearchView({
 
         // Group by reranker tier when present ("related" is explicit; everything else
         // is treated as directly relevant). Falls back to a flat list when untiered.
-        const hasTiers = displayed.some((r) => r.paper?.relevanceTier)
-        if (!hasTiers) return displayed.map(renderCard)
+        const hasTiers = visible.some((r) => r.paper?.relevanceTier)
+        if (!hasTiers) return visible.map(renderCard)
 
-        const related = displayed.filter((r) => r.paper?.relevanceTier === 'related')
-        const primary = displayed.filter((r) => r.paper?.relevanceTier !== 'related')
+        const related = visible.filter((r) => r.paper?.relevanceTier === 'related')
+        const primary = visible.filter((r) => r.paper?.relevanceTier !== 'related')
         const header = (label: string) => (
           <p
             key={`hdr-${label}`}
@@ -270,6 +308,26 @@ export function AiSearchView({
           </>
         )
       })()}
+
+      {!loading && displayed.length > 0 && showLoadMore && (
+        <div className="flex justify-center pt-1">
+          <button
+            type="button"
+            onClick={onLoadMore}
+            disabled={isLoadingMore}
+            className="glass-panel inline-flex items-center gap-2 rounded-full px-5 py-2 text-sm font-medium text-foreground shadow-sm transition hover:-translate-y-0.5 hover:border-primary/30 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {isLoadingMore ? (
+              <>
+                <Loader2 className="size-4 animate-spin" aria-hidden />
+                Loading more…
+              </>
+            ) : (
+              'Load more'
+            )}
+          </button>
+        </div>
+      )}
 
       {!loading && results.length > 0 && displayed.length === 0 && (
         <p className="py-8 text-center text-sm text-muted-foreground">

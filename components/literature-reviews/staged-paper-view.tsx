@@ -9,6 +9,7 @@ import { LiteraturePdfPanel } from "./literature-pdf-panel"
 import { UploadLiteraturePdfDialog } from "./upload-literature-pdf-dialog"
 import { decodeHtmlEntities } from "@/lib/literature-abstract-display"
 import { openCatalystPanel } from "@/lib/catalyst-launch"
+import { MotionReveal } from "@/components/literature-reviews/motion"
 
 export type StagingLiteratureRow = Record<string, unknown>
 
@@ -128,7 +129,7 @@ export function StagedPaperView({
   }
 
   return (
-    <div className="space-y-6">
+    <MotionReveal className="space-y-6">
       <div className="flex flex-col gap-4">
         <div className="flex items-start justify-between">
           <div className="space-y-1">
@@ -299,6 +300,6 @@ export function StagedPaperView({
       </Card>
       )}
       </div>
-    </div>
+    </MotionReveal>
   )
 }

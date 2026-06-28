@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { MotionTabPanel } from "@/components/literature-reviews/motion"
 import {
   Search as SearchIcon,
   Database,
@@ -955,7 +956,7 @@ export function LiteratureTabs({
 
   return (
     <div className="w-full space-y-4">
-      <div className="inline-flex rounded-2xl border border-border/60 bg-muted/30 p-1 shadow-sm backdrop-blur-sm">
+      <div className="glass-panel inline-flex rounded-2xl p-1 shadow-sm">
         <button
           type="button"
           onClick={() => setTopSection("search")}
@@ -992,6 +993,7 @@ export function LiteratureTabs({
         </button>
       </div>
 
+      <MotionTabPanel motionKey={topSection}>
       {topSection === "search" ? (
         <div className="space-y-6">
           {/* Filters live next to the results (see AiSearchView) so they're
@@ -1103,6 +1105,7 @@ export function LiteratureTabs({
           />
         </div>
       )}
+      </MotionTabPanel>
 
       <AlertDialog
         open={Boolean(pendingCloseId)}
@@ -1110,7 +1113,7 @@ export function LiteratureTabs({
           if (!open) setPendingCloseId(null)
         }}
       >
-        <AlertDialogContent>
+        <AlertDialogContent className="glass-panel">
           <AlertDialogHeader>
             <AlertDialogTitle>Close staged paper tab?</AlertDialogTitle>
             <AlertDialogDescription>
@@ -1151,7 +1154,7 @@ export function LiteratureTabs({
           if (!open) setRemoveTargetId(null)
         }}
       >
-        <AlertDialogContent>
+        <AlertDialogContent className="glass-panel">
           <AlertDialogHeader>
             <AlertDialogTitle>Remove from staging?</AlertDialogTitle>
             <AlertDialogDescription>
@@ -1191,7 +1194,7 @@ export function LiteratureTabs({
           }
         }}
       >
-        <DialogContent>
+        <DialogContent className="glass-panel" overlayClassName="glass-overlay">
           <DialogHeader>
             <DialogTitle>Link paper to your research</DialogTitle>
             <DialogDescription>
