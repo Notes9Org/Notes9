@@ -73,7 +73,7 @@ export function DeleteLiteratureReviewDialog({
           Delete
         </Button>
       </AlertDialogTrigger>
-      <AlertDialogContent>
+      <AlertDialogContent className="glass-panel">
         <AlertDialogHeader>
           <AlertDialogTitle>Are you sure?</AlertDialogTitle>
           <AlertDialogDescription className="space-y-2">

@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { SearchPaper } from '@/types/paper-search'
 import type { AiSearchMatchKind, AiSearchResult } from '@/types/ai-search'
 
@@ -84,9 +84,19 @@ export function useAiLiteratureSearch({
   const [phase, setPhase] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [activeQuery, setActiveQuery] = useState<string | null>(query?.trim() || null)
+  // "Load more" pagination state. `hasMore` is set from the backend's
+  // pipeline.has_more on each page; `isLoadingMore` guards a continuation fetch.
+  const [isLoadingMore, setIsLoadingMore] = useState(false)
+  const [hasMore, setHasMore] = useState(false)
 
   const lastRunQueryRef = useRef<string | null>(null)
   const abortRef = useRef<AbortController | null>(null)
+  // Mirror of `papers` for use inside loadMore without stale-closure capture
+  // (we need the current set to compute exclude_ids before fetching).
+  const papersRef = useRef<SearchPaper[]>([])
+  useEffect(() => {
+    papersRef.current = papers
+  }, [papers])
 
   const stop = useCallback(() => {
     abortRef.current?.abort()
@@ -126,6 +136,7 @@ export function useAiLiteratureSearch({
       setSummary('')
       setPhase('searching')
       setIsStreaming(true)
+      setHasMore(false)
 
       let receivedPapers: SearchPaper[] = []
       let overall = ''
@@ -162,6 +173,9 @@ export function useAiLiteratureSearch({
               const payload = data as SsePapersEvent
               receivedPapers = Array.isArray(payload.papers) ? payload.papers : []
               setPapers(receivedPapers)
+              const pipeline = (payload as { pipeline?: { has_more?: boolean; partial?: boolean } }).pipeline
+              // Ignore the fast "partial" paint — only the final page sets has_more.
+              if (pipeline && !pipeline.partial) setHasMore(Boolean(pipeline.has_more))
             } else if (event === 'paper_summary') {
               const { id, text } = data as { id: string; text: string }
               if (id && text) {
@@ -200,6 +214,83 @@ export function useAiLiteratureSearch({
     [applyPaperSummary],
   )
 
+  /**
+   * Fetch the NEXT page of results — a continuation of the current query that
+   * excludes everything already shown (no repeats) and appends fresh papers
+   * (their citeLabel numbering continues from the current length). The overall
+   * synthesis is page-1 only, so this never touches `summary`.
+   */
+  const loadMore = useCallback(async () => {
+    const q = lastRunQueryRef.current
+    const current = papersRef.current
+    if (!q || current.length === 0 || isLoadingMore) return
+
+    const keyOf = (p: SearchPaper) => p.id || p.doi || p.pmid || p.title || ''
+    const excludeIds = current.map(keyOf).filter(Boolean)
+
+    // Share the abort controller so stop() also cancels an in-flight load-more.
+    abortRef.current?.abort()
+    const controller = new AbortController()
+    abortRef.current = controller
+    setIsLoadingMore(true)
+
+    try {
+      const res = await fetch('/api/literature/ai-search', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ query: q, limit: 18, exclude_ids: excludeIds }),
+        signal: controller.signal,
+      })
+      if (!res.ok || !res.body) {
+        throw new Error(`Load more failed (${res.status})`)
+      }
+
+      const reader = res.body.getReader()
+      const decoder = new TextDecoder()
+      let buffer = ''
+      let appended = 0
+
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+        buffer += decoder.decode(value, { stream: true })
+        const blocks = buffer.split('\n\n')
+        buffer = blocks.pop() ?? ''
+        for (const block of blocks) {
+          const parsed = parseSseBlock(block)
+          if (!parsed) continue
+          const [event, data] = parsed
+          if (event === 'papers') {
+            const payload = data as SsePapersEvent
+            const incoming = Array.isArray(payload.papers) ? payload.papers : []
+            setPapers((prev) => {
+              const seen = new Set(prev.map(keyOf))
+              const fresh = incoming.filter((p) => !seen.has(keyOf(p)))
+              appended += fresh.length
+              return fresh.length ? [...prev, ...fresh] : prev
+            })
+            const pipeline = (payload as { pipeline?: { has_more?: boolean; partial?: boolean } }).pipeline
+            if (pipeline && !pipeline.partial) setHasMore(Boolean(pipeline.has_more))
+          } else if (event === 'paper_summary') {
+            const { id, text } = data as { id: string; text: string }
+            if (id && text) applyPaperSummary(id, text)
+          }
+          // overall_summary is page-1 only and not emitted on continuation; ignore.
+        }
+      }
+
+      // A page that produced nothing new means the well is dry.
+      if (appended === 0) setHasMore(false)
+    } catch (e) {
+      if ((e as Error)?.name !== 'AbortError') {
+        setError(e instanceof Error ? e.message : 'Could not load more results.')
+      }
+    } finally {
+      if (abortRef.current === controller) abortRef.current = null
+      setIsLoadingMore(false)
+    }
+  }, [applyPaperSummary, isLoadingMore])
+
   const results = useMemo<AiSearchResult[]>(() => {
     return papers.map((p, i) => {
       const r = toResult(p, i)
@@ -228,5 +319,11 @@ export function useAiLiteratureSearch({
     error: inSync ? error : null,
     activeQuery,
     stop,
+    /** Fetch the next page of results, excluding everything already shown. */
+    loadMore,
+    /** True while a continuation page is being fetched. */
+    isLoadingMore,
+    /** Whether the backend signalled more results may exist. */
+    hasMore: inSync ? hasMore : false,
   }
 }

@@ -137,6 +137,7 @@ import {
   type CoPilotContext,
 } from '@/lib/catalyst-copilot';
 import { useCatalystLiterature, setCatalystLiterature, type CatalystLiterature } from '@/lib/catalyst-literature';
+import { MotionReveal } from '@/components/literature-reviews/motion';
 import { useLiteratureMentionCandidates } from '@/contexts/literature-mention-context';
 import { useLiteratureAgentStream } from '@/hooks/use-literature-agent-stream';
 import type { LiteratureAgentDonePayload } from '@/lib/literature-agent-types';
@@ -526,7 +527,7 @@ interface LiteratureSummaryInlineProps {
 
 function LiteratureSummaryInline({ lit, sessionId, onContinue }: LiteratureSummaryInlineProps) {
   return (
-    <section className="w-full min-w-0 space-y-3">
+    <MotionReveal className="glass-panel w-full min-w-0 space-y-3 rounded-xl p-3">
       {/* Header: accent dot + "AI summary" label + streaming pulse */}
       <div className="min-w-0 space-y-1.5">
         <div className="flex items-center gap-2">
@@ -559,7 +560,7 @@ function LiteratureSummaryInline({ lit, sessionId, onContinue }: LiteratureSumma
         sources={(lit.resources ?? []) as unknown as Array<Record<string, unknown>>}
         isStreaming={lit.streaming}
       />
-    </section>
+    </MotionReveal>
   );
 }
 

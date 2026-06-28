@@ -63,6 +63,11 @@
   --n9-accent-light: #fcf2eb;
   --n9-accent-glow: rgba(150, 80, 52, 0.14);
   --n9-header-bg: rgba(242, 232, 220, 0.96);
+  /* Translucent "glass" surfaces (literature panels, dialogs, popovers).
+     Token-driven so the frosted look is themeable in one place. */
+  --glass-bg: rgba(255, 253, 250, 0.72);
+  --glass-border: rgba(150, 80, 52, 0.14);
+  --glass-blur: 14px;
 }
 
 .dark {
@@ -114,6 +119,10 @@
   --n9-accent-light: rgba(212, 132, 90, 0.1);
   --n9-accent-glow: rgba(212, 132, 90, 0.22);
   --n9-header-bg: rgba(40, 33, 26, 0.94);
+  /* Translucent "glass" surfaces — dark theme variant. */
+  --glass-bg: rgba(34, 29, 24, 0.66);
+  --glass-border: rgba(245, 240, 232, 0.12);
+  --glass-blur: 14px;
 }
 
 @theme inline {
@@ -1486,5 +1495,34 @@ body > [data-radix-popper-content-wrapper] {
     left: 0;
     width: 100%;
     opacity: 0.4;
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/* Glass / translucent surfaces (literature panels, dialogs, popovers) */
+/* Token-driven (see --glass-* in :root / .dark) so the frosted look   */
+/* is themeable in one place and degrades gracefully.                  */
+/* ------------------------------------------------------------------ */
+.glass-panel {
+  background-color: var(--glass-bg);
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(140%);
+  backdrop-filter: blur(var(--glass-blur)) saturate(140%);
+  border: 1px solid var(--glass-border);
+}
+
+.glass-overlay {
+  background-color: rgba(0, 0, 0, 0.3);
+  -webkit-backdrop-filter: blur(3px);
+  backdrop-filter: blur(3px);
+}
+
+/* Browsers without backdrop-filter fall back to the solid card colour
+   so panels never render as low-contrast wash. */
+@supports not ((-webkit-backdrop-filter: blur(1px)) or (backdrop-filter: blur(1px))) {
+  .glass-panel {
+    background-color: var(--card);
+  }
+  .glass-overlay {
+    background-color: rgba(0, 0, 0, 0.5);
   }
 }
