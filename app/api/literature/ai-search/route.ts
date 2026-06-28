@@ -76,6 +76,12 @@ export async function POST(request: NextRequest) {
       : typeof body.recentYears === 'number'
         ? body.recentYears
         : undefined
+  // Dedupe keys of papers the client has already shown — a non-empty list marks a
+  // "load more" continuation page. Bounded so the forwarded payload stays sane.
+  const rawExclude = body.exclude_ids ?? body.excludeIds
+  const excludeIds = Array.isArray(rawExclude)
+    ? rawExclude.filter((x): x is string => typeof x === 'string').slice(0, 500)
+    : []
 
   const accessToken = (await supabase.auth.getSession()).data.session?.access_token
   if (!accessToken) {
@@ -98,19 +104,35 @@ export async function POST(request: NextRequest) {
             openAccessOnly,
             ...(recentYears !== undefined ? { recentYears } : {}),
           })
-          const papers = legacy.papers.slice(0, limit)
+          // "Load more" continuation: drop already-shown papers (mirrors the
+          // frontend dedupeKey: id || doi || pmid || title) before slicing.
+          const seen = new Set(excludeIds)
+          const pool = excludeIds.length
+            ? legacy.papers.filter(
+                (p) => !seen.has(p.id || p.doi || p.pmid || p.title || ''),
+              )
+            : legacy.papers
+          const papers = pool.slice(0, limit)
           controller.enqueue(
             enc.encode(
               sse('papers', {
                 query,
                 papers,
                 totalCount: papers.length,
-                pipeline: { db_fallback: true, fallback: 'legacy-in-process' },
+                pipeline: {
+                  db_fallback: true,
+                  fallback: 'legacy-in-process',
+                  has_more: papers.length >= limit,
+                  page: excludeIds.length ? 2 : 1,
+                },
               })
             )
           )
-          // No AI summaries in the legacy path — close cleanly.
-          controller.enqueue(enc.encode(sse('overall_summary', { text: '' })))
+          // No AI summaries in the legacy path — close cleanly. Skip the empty
+          // overall_summary on a continuation page so it can't clear page 1.
+          if (!excludeIds.length) {
+            controller.enqueue(enc.encode(sse('overall_summary', { text: '' })))
+          }
           controller.enqueue(enc.encode(sse('done', { totalCount: papers.length })))
         } catch (err) {
           controller.enqueue(
@@ -143,6 +165,7 @@ export async function POST(request: NextRequest) {
         sort,
         open_access_only: openAccessOnly,
         ...(recentYears !== undefined ? { recent_years: recentYears } : {}),
+        ...(excludeIds.length ? { exclude_ids: excludeIds } : {}),
       }),
     })
 

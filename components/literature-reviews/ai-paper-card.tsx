@@ -311,7 +311,7 @@ export function AiPaperCard({
   }
 
   return (
-    <Card className="group/card overflow-hidden rounded-2xl border-border/60 bg-card/70 shadow-sm backdrop-blur-sm transition-all duration-300 hover:-translate-y-1 hover:border-primary/30 hover:shadow-[0_16px_40px_-20px_var(--n9-accent-glow)]">
+    <Card className="glass-panel group/card overflow-hidden rounded-2xl shadow-sm transition-all duration-300 hover:-translate-y-1 hover:border-primary/30 hover:shadow-[0_16px_40px_-20px_var(--n9-accent-glow)]">
       <CardContent className="p-4 sm:p-5">
         <div className="mb-2 flex flex-wrap items-center gap-2">
           <Badge className="gap-1 rounded-full border-primary/20 bg-primary/10 font-mono text-xs tabular-nums text-primary">

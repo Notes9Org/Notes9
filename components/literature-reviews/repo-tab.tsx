@@ -647,7 +647,7 @@ export function RepoTab({
         </div>
 
       {/* Literature Table */}
-      <Card>
+      <Card className="glass-panel">
         <CardHeader>
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>

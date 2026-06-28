@@ -434,8 +434,10 @@ export function UploadLiteraturePdfDialog({
           {triggerLabel}
         </Button>
       </DialogTrigger>
-      <DialogContent className={cn(
-        "overflow-hidden flex flex-col p-0 border-none shadow-2xl bg-background/95 backdrop-blur-xl transition-all duration-300 max-h-[85vh]",
+      <DialogContent
+        overlayClassName="glass-overlay"
+        className={cn(
+        "glass-panel overflow-hidden flex flex-col p-0 shadow-2xl transition-all duration-300 max-h-[85vh]",
         analysis ? "sm:max-w-xl" : "sm:max-w-md"
       )}>
         <DialogHeader className="p-4 pb-0">

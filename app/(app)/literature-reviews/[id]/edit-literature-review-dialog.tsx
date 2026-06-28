@@ -182,7 +182,7 @@ export function EditLiteratureReviewDialog({
           Edit
         </Button>
       </DialogTrigger>
-      <DialogContent dialogSize="lg" className="max-h-[90vh] overflow-y-auto">
+      <DialogContent dialogSize="lg" className="glass-panel max-h-[90vh] overflow-y-auto" overlayClassName="glass-overlay">
         <DialogHeader>
           <DialogTitle>Edit Literature Reference</DialogTitle>
           <DialogDescription>

@@ -119,7 +119,7 @@ export function AiSearchFilters({
         align="start"
         sideOffset={8}
         collisionPadding={12}
-        className="w-[20rem] max-w-[calc(100vw-1.5rem)] max-h-[min(70vh,32rem)] overflow-y-auto rounded-xl p-0 shadow-lg"
+        className="glass-panel w-[20rem] max-w-[calc(100vw-1.5rem)] max-h-[min(70vh,32rem)] overflow-y-auto rounded-xl p-0 shadow-lg"
       >
         {/* Header */}
         <div className="flex items-center justify-between border-b px-4 py-3">

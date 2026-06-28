@@ -7,6 +7,7 @@ import { markdownToHtml } from '@/lib/markdown-to-html';
 import { sanitizeHtml } from '@/lib/sanitize-html';
 import { parseCitationMeta, correctAcademicType } from '@/lib/citation-meta';
 import { resolveTitleFromId, isPlaceholderTitle } from '@/lib/citation-title';
+import { CITATION_GROUP_RE } from '@/lib/citation-renumber';
 import { useSourceNavigation } from '@/hooks/use-source-navigation';
 import { Calendar, User } from 'lucide-react';
 import { useRouter } from 'next/navigation';
@@ -292,7 +293,14 @@ function postProcessHtml(html: string, manifest?: CitationsManifest | null): str
   for (let i = 0; i < segments.length; i++) {
     // Even indices are text between tags; odd indices are the tags themselves.
     if (i % 2 !== 0) continue;
-    segments[i] = segments[i].replace(CITATION_BRACKET_RE, (_full, nStr: string) => {
+    segments[i] = segments[i].replace(CITATION_GROUP_RE, (_full, inner: string) =>
+      // A marker may be a single label `[5]` or a group `[4, 5, 6]`; render one
+      // chip per label so grouped citations are clickable, not plain text.
+      inner
+        .split(',')
+        .map((tok) => tok.trim())
+        .filter(Boolean)
+        .map((nStr: string) => {
       // Remap cross-provider duplicates to their canonical label so the SAME
       // paper always renders as the same number (a PubMed [5] that is the same
       // article as PMC [2] shows as [2]). Sub-citations ("3.2") are untouched.
@@ -398,7 +406,9 @@ function postProcessHtml(html: string, manifest?: CitationsManifest | null): str
         + (tip ? `title="${escapeHtmlAttr(tip)}"` : '')
         + `>${n}</sup>`
       );
-    });
+        })
+        .join(''),
+    );
   }
   processed = segments.join('');
   return processed;

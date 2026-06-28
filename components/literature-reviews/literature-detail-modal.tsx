@@ -121,7 +121,7 @@ export function LiteratureDetailModal({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent dialogSize="xl" className="max-h-[90vh] overflow-y-auto pt-12">
+      <DialogContent dialogSize="xl" className="glass-panel max-h-[90vh] overflow-y-auto pt-12" overlayClassName="glass-overlay">
         <DialogHeader className="sr-only">
           <DialogTitle>{literature?.title || "Literature details"}</DialogTitle>
         </DialogHeader>
