@@ -5451,7 +5451,7 @@ window.localStorage.setItem(RIBBON_TAB_KEY, ribbonTab)
     const inner = !fullscreenTitleEditable ? (
       <span
         className={cn(
-          "truncate text-base font-semibold leading-none text-foreground",
+          "text-base font-semibold leading-tight text-foreground break-words whitespace-normal",
           variant === "floated" && "block",
         )}
         title={fullscreenTitleDisplay}
