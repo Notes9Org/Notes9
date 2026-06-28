@@ -104,17 +104,28 @@ export function PaperWorkspace({ paperId, backLink, leftControls, onPaperMutated
   const contentRef = useRef("")
   const paperAI = usePaperAI()
 
-  // Fetch current user info for collaboration
+  // Fetch current user info for collaboration. The display name is always the
+  // first name set in Settings (profiles.first_name), never the login email.
   useEffect(() => {
     const fetchUser = async () => {
       const supabase = createClient()
       if (user) {
         setUserId(user.id)
-        setUserName(user.user_metadata?.full_name || user.email || "Anonymous")
+        const { data: prof } = await supabase
+          .from("profiles")
+          .select("first_name, last_name")
+          .eq("id", user.id)
+          .single()
+        const fullName = [prof?.first_name, prof?.last_name].filter(Boolean).join(" ").trim()
+        setUserName(
+          fullName ||
+            (user.user_metadata?.first_name as string | undefined)?.trim() ||
+            "Anonymous",
+        )
       }
     }
     void fetchUser()
-  }, [])
+  }, [user])
 
   // Collaboration hook
   const { provider, ydoc, status: collaborationStatus, collaborators } = useCollaboration({
@@ -460,7 +471,7 @@ export function PaperWorkspace({ paperId, backLink, leftControls, onPaperMutated
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button variant="outline" size="icon" title="Import" aria-label="Import" data-tour="paper-import">
-                <Upload className="h-4 w-4" />
+                <Download className="h-4 w-4" />
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-64">
@@ -495,7 +506,7 @@ export function PaperWorkspace({ paperId, backLink, leftControls, onPaperMutated
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button variant="outline" size="icon" title="Export" aria-label="Export" data-tour="paper-export">
-                <Download className="h-4 w-4" />
+                <Upload className="h-4 w-4" />
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="max-h-96 w-64 overflow-y-auto">

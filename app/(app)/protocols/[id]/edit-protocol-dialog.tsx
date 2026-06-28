@@ -31,7 +31,7 @@ import { useToast } from "@/hooks/use-toast"
 import { TiptapEditor } from "@/components/text-editor/tiptap-editor"
 import { NoteExportMenu, NotePrintButton } from "@/components/note-export-menu"
 import { NoteImportButton } from "@/components/note-import-button"
-import { Download } from "lucide-react"
+import { Upload } from "lucide-react"
 
 const PROTOCOL_CATEGORIES = [
   "Sample Preparation",
@@ -223,7 +223,7 @@ export function EditProtocolDialog({ protocol }: EditProtocolDialogProps) {
                   htmlContent={formData.content || ""}
                   trigger={
                     <Button type="button" variant="ghost" size="icon-sm" className="shrink-0 text-muted-foreground hover:text-foreground" aria-label="Export">
-                      <Download className="h-4 w-4" />
+                      <Upload className="h-4 w-4" />
                     </Button>
                   }
                 />

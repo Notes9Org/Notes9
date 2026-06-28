@@ -1,0 +1,590 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Notes9 — Literature (concept mockup)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Spectral:ital,wght@0,400;0,500;0,600;1,400&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --paper:#F6F2E9;        /* app background, warm cream */
+    --surface:#FFFDF8;      /* card surface */
+    --surface-2:#FCF8EF;    /* nested surface */
+    --ink:#2C2A27;          /* charcoal text */
+    --ink-2:#6B655C;        /* muted text */
+    --ink-3:#A7A096;        /* faint text */
+    --line:#E7E0D2;         /* hairlines */
+    --terra:#C0603C;        /* terracotta, primary accent */
+    --terra-deep:#A04E2F;
+    --terra-soft:#F3E2D6;   /* soft terracotta wash */
+    --highlight:#F7DEB0;    /* in-PDF highlight (warm amber) */
+    --highlight-edge:#E9B765;
+    --ai:#5E7A6B;           /* sage, signals AI-generated content */
+    --ai-soft:#E7EEE7;
+    --radius:14px;
+    --radius-sm:9px;
+    --shadow:0 1px 2px rgba(44,42,39,.05), 0 8px 24px rgba(44,42,39,.06);
+    --shadow-lift:0 2px 6px rgba(44,42,39,.08), 0 18px 44px rgba(44,42,39,.12);
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%}
+  body{
+    background:var(--paper);
+    color:var(--ink);
+    font-family:Inter,system-ui,-apple-system,sans-serif;
+    font-size:14px;
+    line-height:1.5;
+    -webkit-font-smoothing:antialiased;
+  }
+  .app{display:grid;grid-template-columns:228px 1fr;height:100vh;overflow:hidden}
+
+  /* ---------- left nav ---------- */
+  .nav{
+    border-right:1px solid var(--line);
+    padding:18px 14px;
+    display:flex;flex-direction:column;gap:6px;
+    background:linear-gradient(180deg,#F8F4EC,#F4EFE4);
+  }
+  .brand{display:flex;align-items:center;gap:9px;padding:4px 8px 16px}
+  .brand .mark{
+    width:26px;height:26px;border-radius:8px;
+    background:var(--terra);color:#fff;display:grid;place-items:center;
+    font-family:Spectral,serif;font-weight:600;font-size:15px;
+    box-shadow:inset 0 -2px 0 rgba(0,0,0,.12);
+  }
+  .brand b{font-weight:600;font-size:15px;letter-spacing:-.2px}
+  .brand b span{color:var(--terra)}
+  .nav-label{font-size:11px;text-transform:uppercase;letter-spacing:.09em;color:var(--ink-3);padding:12px 8px 4px}
+  .nav-item{
+    display:flex;align-items:center;gap:10px;
+    padding:8px 9px;border-radius:9px;color:var(--ink-2);
+    cursor:default;font-weight:500;font-size:13.5px;
+  }
+  .nav-item svg{width:16px;height:16px;flex:none;opacity:.8}
+  .nav-item.active{background:var(--terra-soft);color:var(--terra-deep)}
+  .nav-item.active svg{opacity:1}
+  .proj{
+    margin-top:auto;border-top:1px solid var(--line);padding-top:14px;
+    font-size:12px;color:var(--ink-2);
+  }
+  .proj .k{color:var(--ink-3);font-size:10.5px;text-transform:uppercase;letter-spacing:.08em}
+  .proj .v{color:var(--ink);font-weight:600;font-family:Spectral,serif;font-size:13.5px;margin-top:2px;line-height:1.3}
+
+  /* ---------- main column ---------- */
+  .main{position:relative;overflow:hidden;display:flex;flex-direction:column}
+  .topbar{
+    display:flex;align-items:center;justify-content:space-between;
+    padding:16px 28px;border-bottom:1px solid var(--line);
+    background:var(--paper);
+  }
+  .topbar h1{margin:0;font-family:Spectral,serif;font-weight:600;font-size:22px;letter-spacing:-.3px}
+  .topbar h1 .sub{display:block;font-family:Inter;font-weight:400;font-size:12px;color:var(--ink-2);letter-spacing:0;margin-top:2px}
+  .avatar{width:30px;height:30px;border-radius:50%;background:var(--ai);color:#fff;display:grid;place-items:center;font-size:12px;font-weight:600}
+
+  .scroll{flex:1;overflow-y:auto;padding:24px 28px 60px}
+  .stage{max-width:880px;margin:0 auto}
+
+  /* ---------- AI search bar ---------- */
+  .searchwrap{position:relative;margin-bottom:8px}
+  .search{
+    display:flex;align-items:center;gap:12px;
+    background:var(--surface);border:1.5px solid var(--line);
+    border-radius:16px;padding:14px 16px;box-shadow:var(--shadow);
+    transition:border-color .15s, box-shadow .15s;
+  }
+  .search:focus-within{border-color:var(--terra);box-shadow:0 0 0 4px var(--terra-soft)}
+  .search .spark{width:20px;height:20px;color:var(--terra);flex:none}
+  .search input{
+    flex:1;border:0;background:transparent;outline:none;
+    font-family:Inter;font-size:15.5px;color:var(--ink);
+  }
+  .search input::placeholder{color:var(--ink-3)}
+  .search .go{
+    border:0;background:var(--terra);color:#fff;font-weight:600;font-size:13px;
+    padding:9px 16px;border-radius:10px;cursor:pointer;font-family:Inter;
+    box-shadow:inset 0 -2px 0 rgba(0,0,0,.12);
+  }
+  .search .go:hover{background:var(--terra-deep)}
+  .hint{font-size:12px;color:var(--ink-3);padding:6px 6px 0;display:flex;gap:8px;align-items:center}
+  .hint b{color:var(--ink-2);font-weight:600}
+  .chips{display:flex;gap:8px;flex-wrap:wrap;margin:14px 0 22px}
+  .chip{font-size:12px;color:var(--ink-2);background:var(--surface-2);border:1px solid var(--line);padding:6px 11px;border-radius:999px;cursor:default}
+
+  /* ---------- AI answer summary (top of results) ---------- */
+  .answer{
+    background:var(--ai-soft);border:1px solid #D6E0D6;border-radius:var(--radius);
+    padding:16px 18px;margin-bottom:22px;
+  }
+  .answer .tag{display:inline-flex;align-items:center;gap:6px;font-size:11px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--ai);margin-bottom:8px}
+  .answer .tag svg{width:13px;height:13px}
+  .answer p{margin:0;font-size:14px;color:var(--ink);line-height:1.6}
+  .answer p + p{margin-top:8px}
+
+  /* ---------- results meta ---------- */
+  .results-meta{display:flex;align-items:baseline;justify-content:space-between;margin-bottom:12px}
+  .results-meta .count{font-size:13px;color:var(--ink-2)}
+  .results-meta .count b{color:var(--ink)}
+  .sort{font-size:12.5px;color:var(--ink-2)}
+  .sort b{color:var(--terra-deep);font-weight:600}
+
+  /* ---------- paper card ---------- */
+  .card{
+    background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);
+    box-shadow:var(--shadow);margin-bottom:16px;overflow:hidden;
+  }
+  .card-head{padding:16px 18px 12px}
+  .card-top{display:flex;justify-content:space-between;gap:16px;align-items:flex-start}
+  .ptitle{font-family:Spectral,serif;font-size:17.5px;font-weight:600;line-height:1.3;letter-spacing:-.2px;margin:0 0 5px;color:var(--ink)}
+  .pmeta{font-size:12.5px;color:var(--ink-2);display:flex;flex-wrap:wrap;gap:6px 10px;align-items:center}
+  .pmeta .dot{color:var(--ink-3)}
+  .pmeta .relevance{display:inline-flex;align-items:center;gap:5px;color:var(--terra-deep);font-weight:600}
+  .pmeta .relevance .bar{width:42px;height:5px;border-radius:3px;background:var(--terra-soft);overflow:hidden}
+  .pmeta .relevance .bar i{display:block;height:100%;background:var(--terra)}
+  .actions{display:flex;gap:6px;flex:none}
+  .iconbtn{
+    width:34px;height:34px;border-radius:9px;border:1px solid var(--line);
+    background:var(--surface-2);display:grid;place-items:center;cursor:pointer;color:var(--ink-2);
+    transition:all .12s;
+  }
+  .iconbtn svg{width:16px;height:16px}
+  .iconbtn:hover{color:var(--terra-deep);border-color:var(--terra);background:var(--terra-soft)}
+  .iconbtn.saved{color:var(--terra);border-color:var(--terra);background:var(--terra-soft)}
+
+  /* tabs */
+  .tabs{display:flex;gap:2px;padding:0 18px;border-bottom:1px solid var(--line)}
+  .tab{
+    appearance:none;border:0;background:transparent;cursor:pointer;
+    font-family:Inter;font-size:13px;font-weight:600;color:var(--ink-3);
+    padding:10px 14px;border-bottom:2px solid transparent;margin-bottom:-1px;
+    display:inline-flex;align-items:center;gap:7px;
+  }
+  .tab .ico{width:14px;height:14px}
+  .tab:hover{color:var(--ink-2)}
+  .tab.active{color:var(--ink)}
+  .tab.active.abstract{border-bottom-color:var(--ink)}
+  .tab.active.catalyst{border-bottom-color:var(--ai);color:var(--ai)}
+  .tab .pill{font-size:9.5px;font-weight:700;letter-spacing:.03em;background:var(--ai-soft);color:var(--ai);padding:2px 6px;border-radius:999px;text-transform:uppercase}
+
+  .panel{padding:16px 18px 18px;display:none}
+  .panel.show{display:block}
+  .panel.abstract p{margin:0;font-size:13.5px;color:var(--ink-2);line-height:1.65}
+
+  /* AI catalyst panel */
+  .cat-answer{font-size:13.5px;color:var(--ink);line-height:1.7;margin:0 0 14px}
+  .cat-answer sup{font-weight:700}
+  .snip-label{font-size:11px;text-transform:uppercase;letter-spacing:.07em;color:var(--ink-3);font-weight:700;margin:0 0 9px;display:flex;align-items:center;gap:7px}
+  .snip-label svg{width:13px;height:13px;color:var(--terra)}
+  .snippet{
+    position:relative;border-left:3px solid var(--highlight-edge);
+    background:var(--surface-2);border-radius:0 10px 10px 0;
+    padding:11px 13px 11px 14px;margin-bottom:10px;cursor:pointer;
+    transition:background .12s, box-shadow .12s;
+  }
+  .snippet:hover{background:#FBF3E3;box-shadow:var(--shadow)}
+  .snippet .q{font-family:Spectral,serif;font-style:italic;font-size:13.5px;color:var(--ink);line-height:1.6}
+  .snippet .q mark{background:var(--highlight);color:var(--ink);padding:0 2px;border-radius:3px}
+  .snippet .loc{margin-top:7px;display:flex;align-items:center;justify-content:space-between;font-size:11.5px;color:var(--ink-3)}
+  .snippet .loc .where{display:flex;align-items:center;gap:6px}
+  .snippet .open-pdf{display:inline-flex;align-items:center;gap:5px;color:var(--terra-deep);font-weight:600}
+  .snippet .open-pdf svg{width:13px;height:13px}
+  .cite-chip{
+    display:inline-flex;align-items:center;justify-content:center;
+    min-width:18px;height:18px;padding:0 5px;border-radius:5px;
+    background:var(--terra-soft);color:var(--terra-deep);font-size:10.5px;font-weight:700;
+    cursor:pointer;vertical-align:super;line-height:1;margin:0 1px;border:1px solid #EAD3C5;
+  }
+  .cite-chip:hover{background:var(--terra);color:#fff}
+
+  /* ---------- PDF side panel ---------- */
+  .pdf-scrim{position:absolute;inset:0;background:rgba(44,42,39,.28);opacity:0;pointer-events:none;transition:opacity .25s;z-index:20}
+  .pdf-scrim.show{opacity:1;pointer-events:auto}
+  .pdf{
+    position:absolute;top:0;right:0;height:100%;width:min(560px,52%);
+    background:var(--paper);border-left:1px solid var(--line);
+    transform:translateX(100%);transition:transform .28s cubic-bezier(.4,0,.2,1);
+    z-index:30;display:flex;flex-direction:column;box-shadow:var(--shadow-lift);
+  }
+  .pdf.show{transform:translateX(0)}
+  .pdf-bar{display:flex;align-items:center;justify-content:space-between;padding:13px 18px;border-bottom:1px solid var(--line);background:var(--surface)}
+  .pdf-bar .t{font-size:12.5px;color:var(--ink-2);display:flex;align-items:center;gap:8px;min-width:0}
+  .pdf-bar .t b{color:var(--ink);font-weight:600;font-family:Spectral,serif;font-size:13.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:300px}
+  .pdf-bar .x{width:30px;height:30px;border-radius:8px;border:1px solid var(--line);background:var(--surface-2);display:grid;place-items:center;cursor:pointer;color:var(--ink-2)}
+  .pdf-bar .x:hover{color:var(--terra-deep);border-color:var(--terra)}
+  .pdf-scroll{flex:1;overflow-y:auto;padding:22px;background:#EFEAE0}
+  .page{
+    background:#fff;border:1px solid var(--line);border-radius:6px;
+    padding:30px 32px;box-shadow:0 6px 20px rgba(44,42,39,.10);margin:0 auto 16px;max-width:460px;
+  }
+  .page h4{font-family:Spectral,serif;font-size:15px;margin:0 0 4px;color:var(--ink)}
+  .page .auth{font-size:10.5px;color:var(--ink-3);margin-bottom:16px}
+  .page p{font-size:11.5px;line-height:1.85;color:#444038;margin:0 0 12px;text-align:justify}
+  .page p.heading{font-weight:700;color:var(--ink);text-align:left;font-size:12px;margin-top:18px}
+  .page mark{background:var(--highlight);padding:1px 2px;border-radius:3px;box-shadow:0 0 0 0 var(--highlight-edge)}
+  .page mark.flash{animation:flash 1.4s ease}
+  @keyframes flash{0%{background:#F8C56B;box-shadow:0 0 0 6px rgba(233,183,101,.45)}100%{background:var(--highlight);box-shadow:none}}
+  .pdf-empty{flex:1;display:grid;place-items:center;color:var(--ink-3);text-align:center;padding:40px}
+
+  /* note banner */
+  .demo-note{max-width:880px;margin:0 auto 18px;font-size:12px;color:var(--ink-2);background:var(--terra-soft);border:1px dashed #E0BBA9;border-radius:10px;padding:9px 13px;display:flex;gap:9px;align-items:center}
+  .demo-note svg{width:15px;height:15px;color:var(--terra-deep);flex:none}
+
+  @media (max-width:760px){
+    .app{grid-template-columns:1fr}
+    .nav{display:none}
+    .pdf{width:100%}
+    .scroll{padding:18px 16px 60px}
+  }
+</style>
+</head>
+<body>
+<div class="app">
+  <!-- ============ NAV ============ -->
+  <aside class="nav">
+    <div class="brand"><div class="mark">N</div><b>Notes<span>9</span></b></div>
+    <div class="nav-label">Workspace</div>
+    <div class="nav-item active">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5V5a2 2 0 0 1 2-2h12a1 1 0 0 1 1 1v15"/><path d="M6 17h13M4 19.5A2.5 2.5 0 0 0 6.5 22H19"/></svg>
+      Literature
+    </div>
+    <div class="nav-item">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
+      Lab notebook
+    </div>
+    <div class="nav-item">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3v18h18"/><path d="M7 14l4-4 3 3 5-6"/></svg>
+      Data &amp; analysis
+    </div>
+    <div class="nav-item">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 2v6l-4 8a2 2 0 0 0 2 3h8a2 2 0 0 0 2-3l-4-8V2"/><path d="M8 2h8"/></svg>
+      Experiments
+    </div>
+    <div class="nav-item">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M9 13h6M9 17h4"/></svg>
+      Reports
+    </div>
+    <div class="proj">
+      <div class="k">Active project</div>
+      <div class="v">Sleep loss &amp; hippocampal memory</div>
+    </div>
+  </aside>
+
+  <!-- ============ MAIN ============ -->
+  <main class="main">
+    <header class="topbar">
+      <h1>Literature<span class="sub">Ask in plain language — answers stay grounded in the papers</span></h1>
+      <div class="avatar">RK</div>
+    </header>
+
+    <div class="scroll">
+      <div class="demo-note">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>
+        Concept mockup for engineering review. Papers, snippets and PDF pages are illustrative placeholders. Click a <b>citation chip</b> or a <b>snippet</b> to see the grounded-PDF interaction.
+      </div>
+
+      <div class="stage">
+        <!-- search -->
+        <div class="searchwrap">
+          <div class="search">
+            <svg class="spark" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m12 3 1.9 4.6L18.5 9l-4.6 1.4L12 15l-1.9-4.6L5.5 9l4.6-1.4L12 3Z"/><path d="M19 14l.7 1.8L21.5 16.5 19.7 17.2 19 19l-.7-1.8L16.5 16.5 18.3 15.8 19 14Z"/></svg>
+            <input value="Does sleep deprivation impair memory consolidation in the hippocampus?" aria-label="Ask the literature" />
+            <button class="go">Search</button>
+          </div>
+        </div>
+        <div class="hint">
+          <b>Tip</b> Ask a question, not just keywords — Notes9 reads inside each paper and shows you exactly where the answer lives.
+        </div>
+        <div class="chips">
+          <span class="chip">Within my saved library</span>
+          <span class="chip">2019–2025</span>
+          <span class="chip">Open access only</span>
+          <span class="chip">+ Add filter</span>
+        </div>
+
+        <!-- AI synthesized answer across papers -->
+        <div class="answer">
+          <span class="tag"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m12 3 1.9 4.6L18.5 9l-4.6 1.4L12 15l-1.9-4.6L5.5 9l4.6-1.4L12 3Z"/></svg>Answer across 3 papers</span>
+          <p>Across the retrieved studies, sleep deprivation consistently impairs hippocampus-dependent memory, and the strongest mechanistic link is disrupted synaptic plasticity. Studies report reduced long-term potentiation after even short periods of total sleep loss<sup>·1</sup>, with effects concentrated in the consolidation window rather than at encoding<sup>·2</sup>.</p>
+          <p>One study qualifies the picture: the deficit appears partly reversible with recovery sleep, suggesting a functional rather than purely structural disruption<sup>·3</sup>. Open the snippets under each paper to read the exact passages.</p>
+        </div>
+
+        <div class="results-meta">
+          <div class="count"><b>3</b> highly relevant papers · <span style="color:var(--ink-3)">28 more matched</span></div>
+          <div class="sort">Sorted by <b>relevance to your question</b></div>
+        </div>
+
+        <!-- ======= CARD 1 ======= -->
+        <article class="card" data-paper="p1">
+          <div class="card-head">
+            <div class="card-top">
+              <div>
+                <h3 class="ptitle">Acute sleep deprivation reduces long-term potentiation in the rodent hippocampus</h3>
+                <div class="pmeta">
+                  <span>Mendez, R. &amp; Olufemi, K.</span><span class="dot">·</span>
+                  <span>Journal of Neurophysiology</span><span class="dot">·</span>
+                  <span>2021</span><span class="dot">·</span>
+                  <span>cited 214</span><span class="dot">·</span>
+                  <span class="relevance">94% match <span class="bar"><i style="width:94%"></i></span></span>
+                </div>
+              </div>
+              <div class="actions">
+                <button class="iconbtn" title="Save to library" onclick="toggleSave(this)" aria-label="Save">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg>
+                </button>
+                <button class="iconbtn" title="Open PDF side-by-side" onclick="openPdf('p1',null)" aria-label="Open PDF">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg>
+                </button>
+                <button class="iconbtn" title="Open source" aria-label="Open source">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><path d="M15 3h6v6M10 14 21 3"/></svg>
+                </button>
+              </div>
+            </div>
+          </div>
+          <div class="tabs">
+            <button class="tab catalyst active" onclick="switchTab(this,'p1','catalyst')">
+              <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m12 3 1.9 4.6L18.5 9l-4.6 1.4L12 15l-1.9-4.6L5.5 9l4.6-1.4L12 3Z"/></svg>
+              AI Catalyst <span class="pill">grounded</span>
+            </button>
+            <button class="tab abstract" onclick="switchTab(this,'p1','abstract')">
+              <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16M4 12h16M4 18h10"/></svg>Abstract
+            </button>
+          </div>
+          <div class="panel abstract" data-panel="p1-abstract">
+            <p>Sleep is widely implicated in synaptic plasticity, yet the acute electrophysiological cost of sleep loss remains debated. Here we recorded field potentials in area CA1 of hippocampal slices from rats subjected to 5 hours of total sleep deprivation. Deprived animals showed a 38% reduction in the magnitude of long-term potentiation relative to rested controls, with no change in baseline synaptic transmission. The deficit emerged specifically during the post-learning window and was attenuated following 3 hours of recovery sleep. These findings support a model in which sleep loss selectively undermines the plasticity processes that stabilize newly formed memories.</p>
+          </div>
+          <div class="panel catalyst show" data-panel="p1-catalyst">
+            <p class="cat-answer">Directly relevant. This study gives mechanistic, electrophysiological evidence that even short sleep loss weakens the plasticity underlying consolidation. LTP magnitude dropped ~38% after just 5 hours of deprivation<span class="cite-chip" onclick="openPdf('p1','h1')">1</span>, while baseline transmission was unchanged — pointing to a consolidation deficit rather than a general impairment<span class="cite-chip" onclick="openPdf('p1','h2')">2</span>.</p>
+            <div class="snip-label"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M7 8h10M7 12h6M7 16h8"/><rect x="3" y="3" width="18" height="18" rx="2"/></svg>Exact passages from the paper</div>
+            <div class="snippet" onclick="openPdf('p1','h1')">
+              <div class="q">“Deprived animals showed a <mark>38% reduction in the magnitude of long-term potentiation</mark> relative to rested controls, with no change in baseline synaptic transmission.”</div>
+              <div class="loc"><span class="where">Results · p.4, ¶2</span><span class="open-pdf"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg>Show in PDF</span></div>
+            </div>
+            <div class="snippet" onclick="openPdf('p1','h2')">
+              <div class="q">“The deficit emerged specifically <mark>during the post-learning window</mark> and was attenuated following 3 hours of recovery sleep.”</div>
+              <div class="loc"><span class="where">Results · p.5, ¶1</span><span class="open-pdf"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg>Show in PDF</span></div>
+            </div>
+          </div>
+        </article>
+
+        <!-- ======= CARD 2 ======= -->
+        <article class="card" data-paper="p2">
+          <div class="card-head">
+            <div class="card-top">
+              <div>
+                <h3 class="ptitle">Timing of memory impairment after total sleep deprivation: encoding versus consolidation</h3>
+                <div class="pmeta">
+                  <span>Haas, L. et al.</span><span class="dot">·</span>
+                  <span>Learning &amp; Memory</span><span class="dot">·</span>
+                  <span>2023</span><span class="dot">·</span>
+                  <span>cited 87</span><span class="dot">·</span>
+                  <span class="relevance">89% match <span class="bar"><i style="width:89%"></i></span></span>
+                </div>
+              </div>
+              <div class="actions">
+                <button class="iconbtn" title="Save to library" onclick="toggleSave(this)" aria-label="Save">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg>
+                </button>
+                <button class="iconbtn" title="Open PDF side-by-side" onclick="openPdf('p2',null)" aria-label="Open PDF">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg>
+                </button>
+                <button class="iconbtn" title="Open source" aria-label="Open source">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><path d="M15 3h6v6M10 14 21 3"/></svg>
+                </button>
+              </div>
+            </div>
+          </div>
+          <div class="tabs">
+            <button class="tab catalyst active" onclick="switchTab(this,'p2','catalyst')">
+              <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m12 3 1.9 4.6L18.5 9l-4.6 1.4L12 15l-1.9-4.6L5.5 9l4.6-1.4L12 3Z"/></svg>
+              AI Catalyst <span class="pill">grounded</span>
+            </button>
+            <button class="tab abstract" onclick="switchTab(this,'p2','abstract')">
+              <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16M4 12h16M4 18h10"/></svg>Abstract
+            </button>
+          </div>
+          <div class="panel abstract" data-panel="p2-abstract">
+            <p>We asked whether sleep deprivation disrupts the encoding of new information or its later consolidation. Human participants (n=64) learned a spatial association task either before or after a night of total sleep deprivation. Recall was impaired only when deprivation followed learning, indicating that the consolidation phase is selectively vulnerable. Functional imaging revealed reduced hippocampal–neocortical coupling during post-learning rest in deprived participants. We conclude that the memory cost of sleep loss is dominated by failures of offline consolidation.</p>
+          </div>
+          <div class="panel catalyst show" data-panel="p2-catalyst">
+            <p class="cat-answer">Strongly supports a <b>consolidation-specific</b> deficit in humans. Recall fell only when sleep loss came <em>after</em> learning<span class="cite-chip" onclick="openPdf('p2','h1')">1</span>, and imaging showed weakened hippocampal–neocortical coupling during post-learning rest<span class="cite-chip" onclick="openPdf('p2','h2')">2</span> — a human complement to the rodent LTP finding above.</p>
+            <div class="snip-label"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M7 8h10M7 12h6M7 16h8"/><rect x="3" y="3" width="18" height="18" rx="2"/></svg>Exact passages from the paper</div>
+            <div class="snippet" onclick="openPdf('p2','h1')">
+              <div class="q">“Recall was impaired <mark>only when deprivation followed learning</mark>, indicating that the consolidation phase is selectively vulnerable.”</div>
+              <div class="loc"><span class="where">Abstract · p.1</span><span class="open-pdf"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg>Show in PDF</span></div>
+            </div>
+            <div class="snippet" onclick="openPdf('p2','h2')">
+              <div class="q">“Functional imaging revealed <mark>reduced hippocampal–neocortical coupling</mark> during post-learning rest in deprived participants.”</div>
+              <div class="loc"><span class="where">Results · p.6, ¶3</span><span class="open-pdf"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg>Show in PDF</span></div>
+            </div>
+          </div>
+        </article>
+
+        <!-- ======= CARD 3 ======= -->
+        <article class="card" data-paper="p3">
+          <div class="card-head">
+            <div class="card-top">
+              <div>
+                <h3 class="ptitle">Recovery sleep partially restores consolidation deficits: a meta-analysis</h3>
+                <div class="pmeta">
+                  <span>Province, A. &amp; Tan, W.</span><span class="dot">·</span>
+                  <span>Sleep Medicine Reviews</span><span class="dot">·</span>
+                  <span>2024</span><span class="dot">·</span>
+                  <span>cited 41</span><span class="dot">·</span>
+                  <span class="relevance">85% match <span class="bar"><i style="width:85%"></i></span></span>
+                </div>
+              </div>
+              <div class="actions">
+                <button class="iconbtn" title="Save to library" onclick="toggleSave(this)" aria-label="Save">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg>
+                </button>
+                <button class="iconbtn" title="Open PDF side-by-side" onclick="openPdf('p3',null)" aria-label="Open PDF">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg>
+                </button>
+                <button class="iconbtn" title="Open source" aria-label="Open source">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><path d="M15 3h6v6M10 14 21 3"/></svg>
+                </button>
+              </div>
+            </div>
+          </div>
+          <div class="tabs">
+            <button class="tab catalyst active" onclick="switchTab(this,'p3','catalyst')">
+              <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m12 3 1.9 4.6L18.5 9l-4.6 1.4L12 15l-1.9-4.6L5.5 9l4.6-1.4L12 3Z"/></svg>
+              AI Catalyst <span class="pill">grounded</span>
+            </button>
+            <button class="tab abstract" onclick="switchTab(this,'p3','abstract')">
+              <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16M4 12h16M4 18h10"/></svg>Abstract
+            </button>
+          </div>
+          <div class="panel abstract" data-panel="p3-abstract">
+            <p>This meta-analysis pooled 22 studies (1,140 participants) examining whether recovery sleep reverses memory deficits induced by prior sleep loss. Recovery sleep restored an estimated 60% of the consolidation deficit on average, with larger restoration in declarative than procedural tasks. Restoration was incomplete across every included study, and no design eliminated the deficit entirely. The authors caution that "catching up" mitigates but does not abolish the cost of lost sleep.</p>
+          </div>
+          <div class="panel catalyst show" data-panel="p3-catalyst">
+            <p class="cat-answer">Adds an important <b>nuance</b>: the deficit is partly reversible, which argues the disruption is functional rather than permanent. Pooled across 22 studies, recovery sleep restored ~60% of the consolidation deficit<span class="cite-chip" onclick="openPdf('p3','h1')">1</span> — but never all of it<span class="cite-chip" onclick="openPdf('p3','h2')">2</span>. Useful as the counter-point in your review's discussion.</p>
+            <div class="snip-label"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M7 8h10M7 12h6M7 16h8"/><rect x="3" y="3" width="18" height="18" rx="2"/></svg>Exact passages from the paper</div>
+            <div class="snippet" onclick="openPdf('p3','h1')">
+              <div class="q">“Recovery sleep <mark>restored an estimated 60% of the consolidation deficit</mark> on average, with larger restoration in declarative than procedural tasks.”</div>
+              <div class="loc"><span class="where">Results · p.8</span><span class="open-pdf"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg>Show in PDF</span></div>
+            </div>
+            <div class="snippet" onclick="openPdf('p3','h2')">
+              <div class="q">“Restoration was <mark>incomplete across every included study</mark>, and no design eliminated the deficit entirely.”</div>
+              <div class="loc"><span class="where">Discussion · p.11, ¶2</span><span class="open-pdf"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg>Show in PDF</span></div>
+            </div>
+          </div>
+        </article>
+
+      </div><!-- /stage -->
+    </div><!-- /scroll -->
+
+    <!-- ===== PDF side panel ===== -->
+    <div class="pdf-scrim" id="scrim" onclick="closePdf()"></div>
+    <aside class="pdf" id="pdf">
+      <div class="pdf-bar">
+        <div class="t">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg>
+          <b id="pdf-title">Paper</b>
+        </div>
+        <div class="x" onclick="closePdf()" aria-label="Close PDF">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18M6 6l12 12"/></svg>
+        </div>
+      </div>
+      <div class="pdf-scroll" id="pdf-scroll"><!-- page injected here --></div>
+    </aside>
+  </main>
+</div>
+
+<script>
+  // ---- tab switching ----
+  function switchTab(btn, pid, which){
+    const card = btn.closest('.card');
+    card.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+    btn.classList.add('active');
+    card.querySelectorAll('.panel').forEach(p=>p.classList.remove('show'));
+    card.querySelector('[data-panel="'+pid+'-'+which+'"]').classList.add('show');
+  }
+  // ---- save toggle ----
+  function toggleSave(btn){
+    btn.classList.toggle('saved');
+    const p = btn.querySelector('path');
+    if(btn.classList.contains('saved')){ p.setAttribute('fill','currentColor'); }
+    else { p.setAttribute('fill','none'); }
+  }
+
+  // ---- faux PDF content per paper, with highlightable passages ----
+  const PAPERS = {
+    p1:{
+      title:"Acute sleep deprivation reduces LTP …",
+      author:"Mendez & Olufemi · J. Neurophysiology · 2021",
+      body:[
+        ["h","Results"],
+        ["p","Field potentials were recorded in area CA1 of acute hippocampal slices. Baseline synaptic transmission did not differ between groups across the full range of stimulus intensities tested, ruling out a gross change in basal excitability."],
+        ["mark","h1","Deprived animals showed a 38% reduction in the magnitude of long-term potentiation relative to rested controls, with no change in baseline synaptic transmission."],
+        ["p","Paired-pulse facilitation was preserved, suggesting the locus of the effect is postsynaptic rather than a change in release probability."],
+        ["h","Temporal specificity"],
+        ["mark","h2","The deficit emerged specifically during the post-learning window and was attenuated following 3 hours of recovery sleep."],
+        ["p","Taken together, these data support a model in which sleep loss selectively undermines the plasticity processes that stabilize newly formed memories rather than impairing encoding per se."]
+      ]
+    },
+    p2:{
+      title:"Timing of memory impairment …",
+      author:"Haas et al. · Learning & Memory · 2023",
+      body:[
+        ["h","Abstract"],
+        ["mark","h1","Recall was impaired only when deprivation followed learning, indicating that the consolidation phase is selectively vulnerable."],
+        ["p","Sixty-four participants learned a spatial association task either before or after a night of total sleep deprivation, with recall tested 48 hours later under rested conditions."],
+        ["h","Imaging results"],
+        ["p","Whole-brain analysis focused on hippocampal connectivity during the post-learning rest period."],
+        ["mark","h2","Functional imaging revealed reduced hippocampal–neocortical coupling during post-learning rest in deprived participants."],
+        ["p","The magnitude of coupling reduction correlated with the size of each participant's later recall deficit (r = .52), linking the neural and behavioural effects."]
+      ]
+    },
+    p3:{
+      title:"Recovery sleep partially restores …",
+      author:"Province & Tan · Sleep Medicine Reviews · 2024",
+      body:[
+        ["h","Results"],
+        ["p","Twenty-two studies (1,140 participants) met inclusion criteria. Effect sizes were pooled using a random-effects model."],
+        ["mark","h1","Recovery sleep restored an estimated 60% of the consolidation deficit on average, with larger restoration in declarative than procedural tasks."],
+        ["h","Discussion"],
+        ["mark","h2","Restoration was incomplete across every included study, and no design eliminated the deficit entirely."],
+        ["p","We therefore caution that 'catching up' on sleep mitigates but does not abolish the cost of lost sleep for memory."]
+      ]
+    }
+  };
+
+  function buildPage(pid){
+    const data = PAPERS[pid];
+    let html = '<div class="page"><h4>'+data.title+'</h4><div class="auth">'+data.author+'</div>';
+    data.body.forEach(seg=>{
+      if(seg[0]==="h"){ html += '<p class="heading">'+seg[1]+'</p>'; }
+      else if(seg[0]==="p"){ html += '<p>'+seg[1]+'</p>'; }
+      else if(seg[0]==="mark"){ html += '<p><mark id="mk-'+pid+'-'+seg[1]+'">'+seg[2]+'</mark></p>'; }
+    });
+    html += '</div>';
+    return html;
+  }
+
+  function openPdf(pid, highlightId){
+    document.getElementById('pdf-title').textContent = PAPERS[pid].title;
+    document.getElementById('pdf-scroll').innerHTML = buildPage(pid);
+    document.getElementById('pdf').classList.add('show');
+    document.getElementById('scrim').classList.add('show');
+    if(highlightId){
+      // wait for slide-in, then scroll to + flash the matching passage
+      setTimeout(()=>{
+        const mk = document.getElementById('mk-'+pid+'-'+highlightId);
+        if(mk){
+          mk.scrollIntoView({behavior:'smooth', block:'center'});
+          mk.classList.remove('flash'); void mk.offsetWidth; mk.classList.add('flash');
+        }
+      }, 320);
+    }
+  }
+  function closePdf(){
+    document.getElementById('pdf').classList.remove('show');
+    document.getElementById('scrim').classList.remove('show');
+  }
+  document.addEventListener('keydown',e=>{ if(e.key==='Escape') closePdf(); });
+</script>
+</body>
+</html>

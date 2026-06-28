@@ -1,0 +1,789 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Notes9 — Literature Search v2 Mockup</title>
+<style>
+  :root {
+    --bg: #F6F2EA;
+    --surface: #FFFFFF;
+    --surface-2: #FBF8F2;
+    --border: #E5DDD0;
+    --text: #1A1A1A;
+    --text-muted: #6B5D4F;
+    --primary: #6B3F2A;
+    --primary-soft: #8C5A40;
+    --accent: #D7B98A;
+    --accent-soft: #F1E4C8;
+    --success: #2E7D4F;
+    --warn: #C58A2A;
+    --danger: #B0463A;
+    --highlight: #FFF2A8;
+    --highlight-active: #FFD96A;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, "Segoe UI", Calibri, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    font-size: 14px;
+    line-height: 1.5;
+  }
+  /* Top toggle bar (mockup nav between Views) */
+  .mockup-toolbar {
+    background: #1A1A1A;
+    color: #fff;
+    padding: 10px 20px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    font-size: 12px;
+  }
+  .mockup-toolbar strong { font-size: 13px; }
+  .mockup-toolbar .pill {
+    background: #333;
+    padding: 6px 12px;
+    border-radius: 20px;
+    cursor: pointer;
+    user-select: none;
+  }
+  .mockup-toolbar .pill.active { background: var(--accent); color: #1A1A1A; }
+  /* Main shell — Notes9 layout */
+  .shell { display: flex; min-height: calc(100vh - 40px); }
+  .sidebar {
+    width: 250px;
+    background: var(--surface-2);
+    border-right: 1px solid var(--border);
+    padding: 18px 14px;
+    flex-shrink: 0;
+  }
+  .sidebar .logo {
+    font-weight: 700;
+    font-size: 22px;
+    letter-spacing: -0.5px;
+    color: var(--primary);
+    margin-bottom: 4px;
+  }
+  .sidebar .logo .o { color: var(--accent); }
+  .sidebar .sublogo { font-size: 10px; color: var(--text-muted); letter-spacing: 1px; margin-bottom: 22px; }
+  .sidebar .search-mini {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 6px; padding: 8px 12px; color: var(--text-muted); font-size: 13px;
+    margin-bottom: 12px;
+  }
+  .sidebar .create-new {
+    background: #E8F0DC; color: #3A4F1F; padding: 9px 12px; border-radius: 6px;
+    font-weight: 500; margin-bottom: 16px; cursor: pointer; font-size: 13px;
+  }
+  .sidebar .nav-item {
+    padding: 8px 10px; border-radius: 6px; cursor: pointer;
+    color: var(--text); display: flex; align-items: center; gap: 9px;
+    font-size: 13px; margin-bottom: 2px;
+  }
+  .sidebar .nav-item:hover { background: var(--accent-soft); }
+  .sidebar .nav-item.active { background: var(--accent-soft); color: var(--primary); font-weight: 600; }
+  .sidebar .nav-item.indented { padding-left: 28px; font-size: 12px; color: var(--text-muted); }
+  .sidebar .nav-section { margin-bottom: 10px; }
+  .main { flex: 1; padding: 0; overflow: hidden; }
+  .topbar {
+    padding: 14px 24px; border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: space-between;
+    background: var(--surface-2);
+  }
+  .breadcrumb { font-size: 13px; color: var(--text-muted); }
+  .breadcrumb b { color: var(--text); }
+  .topbar-actions { display: flex; gap: 8px; }
+  .btn {
+    border: 1px solid var(--border); background: var(--surface);
+    color: var(--text); padding: 7px 14px; border-radius: 6px;
+    font-size: 13px; cursor: pointer; font-weight: 500;
+    display: inline-flex; align-items: center; gap: 6px;
+  }
+  .btn:hover { background: var(--accent-soft); }
+  .btn.primary { background: var(--primary); color: #fff; border-color: var(--primary); }
+  .btn.primary:hover { background: var(--primary-soft); }
+  .btn.ghost { background: transparent; border: none; color: var(--primary); }
+
+  /* --- VIEW 1: Search results page --- */
+  .view1 { padding: 24px 36px; }
+  .v1-header { margin-bottom: 22px; }
+  .v1-header h1 { margin: 0 0 4px 0; font-size: 24px; }
+  .v1-header p { margin: 0; color: var(--text-muted); }
+
+  .search-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 18px 20px;
+    margin-bottom: 18px;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.02);
+  }
+  .search-row { display: flex; align-items: center; gap: 12px; }
+  .search-icon { font-size: 18px; color: var(--primary); }
+  .search-input {
+    flex: 1; border: none; outline: none; font-size: 15px; background: transparent;
+    padding: 6px 0; font-family: inherit;
+  }
+  .search-input::placeholder { color: var(--text-muted); }
+  .search-actions { display: flex; gap: 8px; }
+  .badge {
+    background: var(--accent-soft); color: var(--primary);
+    border-radius: 4px; padding: 3px 8px; font-size: 11px; font-weight: 600;
+    letter-spacing: 0.4px;
+  }
+  .ai-toggle {
+    background: linear-gradient(135deg, #f1e4c8, #d7b98a);
+    color: var(--primary); padding: 5px 10px; border-radius: 14px;
+    font-size: 12px; font-weight: 600; display: inline-flex; align-items: center; gap: 6px;
+  }
+  .filter-row {
+    display: flex; gap: 8px; margin-top: 14px; flex-wrap: wrap;
+  }
+  .chip {
+    background: var(--surface-2); border: 1px solid var(--border);
+    color: var(--text); padding: 5px 12px; border-radius: 14px; font-size: 12px;
+    cursor: pointer;
+  }
+  .chip:hover { background: var(--accent-soft); }
+  .chip.suggestion {
+    background: #fff; border: 1px dashed var(--accent); color: var(--primary);
+    font-style: italic;
+  }
+
+  /* Across-papers synthesis banner */
+  .synthesis-banner {
+    background: linear-gradient(135deg, #FBF8F2 0%, #F1E4C8 100%);
+    border: 1px solid var(--accent);
+    border-radius: 12px;
+    padding: 18px 22px;
+    margin-bottom: 20px;
+  }
+  .synthesis-banner h3 {
+    margin: 0 0 10px 0; font-size: 14px; text-transform: uppercase;
+    letter-spacing: 0.8px; color: var(--primary);
+    display: flex; align-items: center; gap: 8px;
+  }
+  .synthesis-banner h3::before {
+    content: "✦"; color: var(--accent); font-size: 16px;
+  }
+  .synthesis-banner p { margin: 0 0 8px 0; line-height: 1.6; }
+  .cite {
+    background: var(--accent-soft); color: var(--primary);
+    padding: 1px 6px; border-radius: 8px; font-size: 11px;
+    cursor: pointer; vertical-align: super; margin: 0 1px;
+    text-decoration: none; font-weight: 600;
+  }
+  .cite:hover { background: var(--accent); color: #fff; }
+
+  /* Result card */
+  .result-meta {
+    color: var(--text-muted); font-size: 12px; margin-bottom: 14px;
+  }
+  .result-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    margin-bottom: 14px;
+    overflow: hidden;
+  }
+  .result-head {
+    padding: 16px 20px 12px;
+    border-bottom: 1px solid var(--border);
+  }
+  .result-title {
+    margin: 0 0 6px 0; font-size: 16px; font-weight: 600;
+    color: var(--primary); cursor: pointer;
+  }
+  .result-title:hover { text-decoration: underline; }
+  .result-meta-row {
+    display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+    font-size: 12px; color: var(--text-muted);
+  }
+  .result-meta-row .pdf-flag {
+    background: #E8F0DC; color: #3A4F1F; padding: 2px 7px;
+    border-radius: 3px; font-size: 11px; font-weight: 600;
+  }
+  .relevance-bar {
+    display: inline-flex; align-items: center; gap: 4px;
+    font-weight: 600; color: var(--success);
+  }
+  .relevance-bar .dot { width: 6px; height: 6px; background: var(--success); border-radius: 50%; }
+  .result-actions {
+    display: flex; gap: 6px; margin-left: auto;
+  }
+  .btn-sm {
+    padding: 4px 10px; font-size: 12px; border-radius: 4px;
+    background: transparent; border: 1px solid var(--border); cursor: pointer;
+    color: var(--text);
+  }
+  .btn-sm:hover { background: var(--accent-soft); }
+  .btn-sm.primary { background: var(--primary); color: #fff; border-color: var(--primary); }
+
+  .tabs {
+    display: flex; border-bottom: 1px solid var(--border);
+    background: var(--surface-2);
+  }
+  .tab {
+    padding: 10px 18px; cursor: pointer; font-size: 13px;
+    border-bottom: 2px solid transparent; color: var(--text-muted);
+    font-weight: 500;
+  }
+  .tab.active {
+    border-bottom-color: var(--primary); color: var(--primary); background: var(--surface);
+    font-weight: 600;
+  }
+  .tab .sparkle { color: var(--accent); margin-right: 4px; }
+  .tab-body { padding: 16px 20px; }
+
+  .catalyst-answer-block {
+    margin-bottom: 14px;
+  }
+  .catalyst-answer-block h4 {
+    margin: 0 0 6px 0; font-size: 11px; text-transform: uppercase;
+    letter-spacing: 0.6px; color: var(--text-muted); font-weight: 600;
+  }
+  .catalyst-answer-block p { margin: 0; line-height: 1.55; }
+  .snippet {
+    background: var(--surface-2);
+    border-left: 3px solid var(--accent);
+    padding: 10px 14px;
+    margin-bottom: 8px;
+    font-size: 13px;
+    line-height: 1.55;
+    font-style: italic;
+    color: #2a2a2a;
+    position: relative;
+  }
+  .snippet .loc {
+    display: block; margin-top: 6px;
+    font-style: normal; font-size: 11px; color: var(--text-muted);
+    font-weight: 500;
+  }
+  .snippet .loc::before { content: "↳ "; color: var(--accent); }
+  .confidence-row {
+    display: flex; align-items: center; gap: 12px; margin-top: 10px;
+    font-size: 12px; color: var(--text-muted);
+  }
+  .conf-pill {
+    background: #E8F4EC; color: var(--success);
+    padding: 3px 8px; border-radius: 4px; font-weight: 600; font-size: 11px;
+  }
+  .conf-pill.med { background: #FFF3D9; color: var(--warn); }
+  .conf-pill.low { background: #FBE5E0; color: var(--danger); }
+  .open-reader {
+    margin-top: 12px; display: flex; justify-content: flex-end;
+  }
+
+  /* --- VIEW 2: Side-by-side reader --- */
+  .view2 { display: none; height: calc(100vh - 40px - 60px); }
+  .view2.active { display: flex; }
+  .view1.hidden { display: none; }
+
+  .reader-left {
+    flex: 1.4; background: #E8E2D6; padding: 16px;
+    overflow-y: auto;
+    border-right: 1px solid var(--border);
+  }
+  .pdf-page {
+    background: #fff;
+    width: 100%;
+    max-width: 720px;
+    margin: 0 auto 20px;
+    padding: 50px 60px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+    font-family: Georgia, serif;
+    font-size: 12px;
+    line-height: 1.7;
+    color: #1A1A1A;
+  }
+  .pdf-page .pg-num { text-align: center; font-size: 10px; color: #888; margin-bottom: 18px; }
+  .pdf-page h1 { font-size: 18px; margin: 0 0 10px 0; }
+  .pdf-page .authors { font-size: 11px; color: #555; margin-bottom: 14px; }
+  .pdf-page h2 { font-size: 14px; margin: 18px 0 8px 0; font-weight: bold; }
+  .pdf-page p { margin: 0 0 10px 0; text-align: justify; }
+  .hl {
+    background: var(--highlight);
+    border-radius: 2px;
+    padding: 1px 1px;
+    transition: background 0.2s;
+  }
+  .hl.active {
+    background: var(--highlight-active);
+    box-shadow: 0 0 0 2px var(--warn);
+  }
+
+  .reader-right {
+    flex: 1; background: var(--surface);
+    display: flex; flex-direction: column;
+  }
+  .reader-header {
+    padding: 12px 18px; border-bottom: 1px solid var(--border);
+    display: flex; justify-content: space-between; align-items: center;
+  }
+  .reader-header .reader-title {
+    font-size: 13px; font-weight: 600;
+  }
+  .reader-header .reader-title small {
+    display: block; font-weight: 400; color: var(--text-muted); font-size: 11px;
+  }
+  .chat-area {
+    flex: 1; overflow-y: auto; padding: 16px;
+  }
+  .chat-msg {
+    margin-bottom: 16px;
+  }
+  .chat-msg .who {
+    font-size: 11px; color: var(--text-muted); margin-bottom: 4px;
+    text-transform: uppercase; letter-spacing: 0.5px; font-weight: 600;
+  }
+  .chat-msg .who .sparkle { color: var(--accent); }
+  .chat-msg .bubble {
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 12px 14px;
+    line-height: 1.55;
+    font-size: 13px;
+  }
+  .chat-msg.user .bubble {
+    background: var(--accent-soft);
+    border-color: var(--accent);
+  }
+  .citation-list {
+    margin-top: 10px; padding-top: 8px; border-top: 1px dashed var(--border);
+    font-size: 11px; color: var(--text-muted);
+  }
+  .citation-list strong { color: var(--text); font-weight: 600; }
+  .chat-input {
+    border-top: 1px solid var(--border); padding: 14px 16px;
+    background: var(--surface-2);
+  }
+  .chat-input .field {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 10px; padding: 10px 12px;
+    color: var(--text-muted);
+    display: flex; justify-content: space-between; align-items: center;
+  }
+  .suggested-prompts {
+    display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px;
+  }
+  .suggested-prompts .sp {
+    font-size: 11px; padding: 4px 9px; background: var(--surface);
+    border: 1px solid var(--border); border-radius: 12px;
+    color: var(--text-muted); cursor: pointer;
+  }
+  .suggested-prompts .sp:hover { border-color: var(--accent); color: var(--primary); }
+
+  /* Spec call-outs sprinkled in mockup */
+  .spec-callout {
+    position: absolute;
+    background: #1A1A1A;
+    color: #fff;
+    padding: 6px 10px;
+    border-radius: 4px;
+    font-size: 11px;
+    line-height: 1.4;
+    max-width: 220px;
+    pointer-events: none;
+  }
+  .spec-callout::before { content: "SPEC › "; color: var(--accent); font-weight: 700; }
+  .footer-note {
+    background: #1A1A1A; color: #fff; padding: 14px 24px; font-size: 12px;
+    text-align: center;
+  }
+  .footer-note span { color: var(--accent); }
+</style>
+</head>
+<body>
+
+<div class="mockup-toolbar">
+  <strong>NOTES9 — LITERATURE v2 MOCKUP</strong>
+  <span style="opacity: 0.5;">|</span>
+  <span>Toggle view:</span>
+  <div class="pill active" onclick="showView(1)">View 1 — AI Search Results</div>
+  <div class="pill" onclick="showView(2)">View 2 — Side-by-side Reader</div>
+  <span style="margin-left: auto; opacity: 0.5;">Click any [n] citation in View 1 or 2 to see grounded-quote behavior</span>
+</div>
+
+<div class="shell">
+  <!-- Sidebar (matches existing Notes9 layout) -->
+  <aside class="sidebar">
+    <div class="logo">N<span class="o">o</span>tes9</div>
+    <div class="sublogo">RESEARCH LAB</div>
+    <div class="search-mini">🔍 Search…</div>
+    <div class="create-new">+ Create new…</div>
+    <div class="nav-section">
+      <div class="nav-item">🏠 Dashboard</div>
+      <div class="nav-item">📁 Projects / Beta-Carotene Pro…</div>
+      <div class="nav-item indented">🧪 Experiments / Building 32…</div>
+      <div class="nav-item indented">📝 Lab notes</div>
+      <div class="nav-item indented">🧫 Protocols</div>
+      <div class="nav-item indented">🧬 Samples</div>
+      <div class="nav-item indented">📊 Data</div>
+      <div class="nav-item indented">📑 Reports</div>
+      <div class="nav-item indented">✍️ Writing</div>
+    </div>
+    <div class="nav-section">
+      <div class="nav-item active">📖 Literature</div>
+      <div class="nav-item">✨ Catalyst</div>
+      <div class="nav-item">🕸 Research map</div>
+    </div>
+  </aside>
+
+  <!-- Main -->
+  <main class="main">
+    <div class="topbar">
+      <div class="breadcrumb">
+        <span>● Beta-Carotene Production</span> ›
+        <b>📖 Literature</b>
+      </div>
+      <div class="topbar-actions">
+        <button class="btn">⬆ Upload PDF</button>
+        <button class="btn primary">+ Add Reference</button>
+      </div>
+    </div>
+
+    <!-- ============ VIEW 1 ============ -->
+    <div class="view1" id="view1">
+
+      <div class="v1-header">
+        <h1>Literature search</h1>
+        <p>Find papers and get grounded answers — Catalyst cites the exact sentences it pulls from.</p>
+      </div>
+
+      <!-- AI search card -->
+      <div class="search-card">
+        <div class="search-row">
+          <div class="search-icon">✨</div>
+          <input class="search-input" value="How does growth-phase regulation affect carotenoid yield in S. cerevisiae?"/>
+          <div class="ai-toggle">✦ Catalyst mode</div>
+          <button class="btn primary">Search</button>
+        </div>
+        <div class="filter-row">
+          <div class="chip">Project: Beta-Carotene Production ✕</div>
+          <div class="chip">All time ▾</div>
+          <div class="chip">Has full text</div>
+          <div class="chip">Peer-reviewed only</div>
+          <div class="chip suggestion">Try: "Compare GAL1 vs TEF1 promoter strength"</div>
+          <div class="chip suggestion">Try: "Stress conditions that boost yield"</div>
+        </div>
+      </div>
+
+      <div class="result-meta">Showing top <b>5 of 12 papers</b> · Sorted by Catalyst relevance · <a href="#" style="color: var(--primary);">View all references</a></div>
+
+      <!-- Across-papers synthesis -->
+      <div class="synthesis-banner">
+        <h3>Catalyst answer across these 12 papers</h3>
+        <p>Growth-phase regulation has a substantial effect on carotenoid titer in <i>S. cerevisiae</i>, with most studies showing that <b>shifting biosynthesis to the stationary phase</b> through promoter swaps or two-stage fermentations increases β-carotene yield by 2–8×. The strongest gains come from coupling stationary-phase promoters (e.g., HXT1, ADH2, GAL1 with carbon-source switching) to the crtYB/crtE/crtI cassette<a class="cite" href="#" data-paper="1">1</a><a class="cite" href="#" data-paper="2">2</a>, while constitutive expression during exponential growth tends to redirect acetyl-CoA flux away from ergosterol intermediates<a class="cite" href="#" data-paper="3">3</a>.</p>
+        <p>Three of these studies also report that <b>nitrogen limitation</b> applied during late exponential phase enhances accumulation, likely by extending the production window<a class="cite" href="#" data-paper="2">2</a><a class="cite" href="#" data-paper="4">4</a>. Effects are host-strain dependent — BY4742 derivatives respond more strongly than CEN.PK2-1C under matched conditions<a class="cite" href="#" data-paper="3">3</a>.</p>
+        <div style="font-size: 11px; color: var(--text-muted); margin-top: 8px;">Confidence: <span class="conf-pill">High</span> · 11 of 12 papers contribute supporting evidence · 1 paper raises a contrasting result <a class="cite" href="#" data-paper="5">5</a></div>
+      </div>
+
+      <!-- Paper 1 -->
+      <div class="result-card">
+        <div class="result-head">
+          <h2 class="result-title">Engineering a growth-phase-dependent biosynthetic pathway for carotenoid production in Saccharomyces cerevisiae</h2>
+          <div class="result-meta-row">
+            <span>Su B, Song D, Yang F, Zhu H</span>
+            <span>·</span>
+            <span>J. Industrial Microbiology &amp; Biotechnology</span>
+            <span>·</span>
+            <span>2020</span>
+            <span class="pdf-flag">PDF</span>
+            <span>·</span>
+            <span class="relevance-bar"><span class="dot"></span>Highly relevant</span>
+            <div class="result-actions">
+              <button class="btn-sm">⭐ Save</button>
+              <button class="btn-sm" onclick="showView(2)">📖 Open</button>
+              <button class="btn-sm primary" onclick="showView(2)">✦ Read with Catalyst</button>
+            </div>
+          </div>
+        </div>
+        <div class="tabs">
+          <div class="tab" onclick="switchTab(this, 'p1-abstract')">Abstract</div>
+          <div class="tab active" onclick="switchTab(this, 'p1-catalyst')"><span class="sparkle">✦</span>Catalyst Summary</div>
+          <div class="tab" onclick="switchTab(this, 'p1-related')">Related in this project</div>
+        </div>
+        <div class="tab-body" id="p1-abstract" style="display:none;">
+          <p>To achieve high-titer carotenoid production in <i>S. cerevisiae</i>, we constructed a growth-phase-dependent biosynthetic module using the HXT1 promoter for crtYB/crtE and the GAL1 promoter for crtI. Engineered strains shifted carotenoid biosynthesis to late exponential and stationary phases, achieving 6.5-fold higher β-carotene titer compared to constitutive expression controls. We further optimized the production by two-stage fermentation with nitrogen limitation in the second stage…</p>
+        </div>
+        <div class="tab-body" id="p1-catalyst">
+          <div class="catalyst-answer-block">
+            <h4>Catalyst — Relevance to your query</h4>
+            <p>This paper directly engineers a growth-phase-dependent carotenoid pathway in S. cerevisiae and reports a <b>6.5× titer improvement</b> when biosynthesis is shifted to stationary phase via HXT1 + GAL1 promoter staging <a class="cite" href="#" data-paper="1" data-snippet="1">[¶3, p.4]</a>. Adding nitrogen-limited two-stage fermentation pushed yield to <b>14.2 mg/g DCW</b> <a class="cite" href="#" data-paper="1" data-snippet="2">[Fig. 4, p.7]</a>.</p>
+          </div>
+          <div class="catalyst-answer-block">
+            <h4>Direct quotes from this paper</h4>
+            <div class="snippet">
+              "Strains expressing crtYB and crtE under the late-log HXT1 promoter produced 6.5-fold higher β-carotene titer (4.8 mg/g DCW) than the constitutive TDH3 controls (0.74 mg/g DCW) when sampled at 48 h."
+              <span class="loc">Su et al. 2020 · Results, paragraph 3 · page 4</span>
+            </div>
+            <div class="snippet">
+              "Two-stage fermentation with nitrogen limitation applied at 36 h further increased accumulation to 14.2 ± 1.1 mg/g DCW, suggesting that extending the production window is more effective than raising peak flux."
+              <span class="loc">Su et al. 2020 · Figure 4 caption · page 7</span>
+            </div>
+            <div class="snippet">
+              "We did not observe a significant additional benefit from coupling HXT1 to crtI; the rate-limiting step in our hands remained the crtE-encoded geranylgeranyl pyrophosphate synthase."
+              <span class="loc">Su et al. 2020 · Discussion · page 9</span>
+            </div>
+          </div>
+          <div class="confidence-row">
+            <span>Catalyst confidence:</span>
+            <span class="conf-pill">High</span>
+            <span>3 supporting passages found · 0 contradictions</span>
+          </div>
+          <div class="open-reader">
+            <button class="btn primary" onclick="showView(2)">✦ Open with side-by-side Catalyst →</button>
+          </div>
+        </div>
+        <div class="tab-body" id="p1-related" style="display:none;">
+          <p style="color: var(--text-muted); font-size: 13px;">Catalyst sees 3 papers in this project that cite, are cited by, or share findings with this one:</p>
+          <ul style="font-size: 13px;">
+            <li>Verwaal R. et al. 2007 — <i>Applied &amp; Environmental Microbiology</i> (cited by this paper)</li>
+            <li>Lin JY et al. 2024 — <i>Microbial Cell Factories</i> (shares strain CEN.PK2-1C)</li>
+            <li>Internal lab note — <b>HPLC Quantification</b> (Final Results experiment, 2026-05-19) — used same standard curve</li>
+          </ul>
+        </div>
+      </div>
+
+      <!-- Paper 2 -->
+      <div class="result-card">
+        <div class="result-head">
+          <h2 class="result-title">High-level production of beta-carotene in Saccharomyces cerevisiae by successive transformation with carotenogenic genes from Xanthophyllomyces dendrorhous</h2>
+          <div class="result-meta-row">
+            <span>Verwaal R, Wang J, Meijnen JP, Visser H, Sandmann G, van den Berg JA, van Ooyen AJJ</span>
+            <span>·</span>
+            <span>Applied &amp; Environmental Microbiology</span>
+            <span>·</span>
+            <span>2007</span>
+            <span class="pdf-flag">PDF</span>
+            <span>·</span>
+            <span class="relevance-bar"><span class="dot"></span>Relevant</span>
+            <div class="result-actions">
+              <button class="btn-sm">⭐ Save</button>
+              <button class="btn-sm" onclick="showView(2)">📖 Open</button>
+              <button class="btn-sm primary" onclick="showView(2)">✦ Read with Catalyst</button>
+            </div>
+          </div>
+        </div>
+        <div class="tabs">
+          <div class="tab" onclick="switchTab(this, 'p2-abstract')">Abstract</div>
+          <div class="tab active" onclick="switchTab(this, 'p2-catalyst')"><span class="sparkle">✦</span>Catalyst Summary</div>
+          <div class="tab" onclick="switchTab(this, 'p2-related')">Related in this project</div>
+        </div>
+        <div class="tab-body" id="p2-catalyst">
+          <div class="catalyst-answer-block">
+            <h4>Catalyst — Relevance to your query</h4>
+            <p>Foundational paper. Establishes that S. cerevisiae can produce <b>5.9 mg/g DCW</b> β-carotene by introducing crtYB, crtI, and crtE from <i>X. dendrorhous</i>, but uses constitutive promoters — so growth-phase regulation is not addressed directly. Useful as the reference baseline against which growth-phase studies (Paper 1) report fold-improvement <a class="cite" href="#" data-paper="2" data-snippet="1">[Results, p.4196]</a>.</p>
+          </div>
+          <div class="catalyst-answer-block">
+            <h4>Direct quotes from this paper</h4>
+            <div class="snippet">
+              "Successive transformation of S. cerevisiae with the carotenogenic gene cassette resulted in a β-carotene titer of 5.9 mg per g of dry cell weight, with all genes expressed from constitutive TDH3 and PGK1 promoters."
+              <span class="loc">Verwaal et al. 2007 · Results · page 4196</span>
+            </div>
+            <div class="snippet">
+              "Carotenoid accumulation continued through late exponential and stationary phases, but the rate of accumulation per cell decreased markedly after diauxic shift, suggesting that flux availability is growth-phase dependent."
+              <span class="loc">Verwaal et al. 2007 · Discussion · page 4199</span>
+            </div>
+          </div>
+          <div class="confidence-row">
+            <span>Catalyst confidence:</span>
+            <span class="conf-pill med">Medium</span>
+            <span>Topic is adjacent — paper doesn't directly engineer growth-phase regulation but provides the baseline.</span>
+          </div>
+        </div>
+        <div class="tab-body" id="p2-abstract" style="display:none;">
+          <p>The whole carotenogenic pathway from <i>Xanthophyllomyces dendrorhous</i> was introduced into <i>Saccharomyces cerevisiae</i>…</p>
+        </div>
+        <div class="tab-body" id="p2-related" style="display:none;">
+          <p style="font-size: 13px;">Cited by 8 papers in this project. Used as baseline in Lab Note "BC-TEST-001 Final Results."</p>
+        </div>
+      </div>
+
+      <!-- Paper 3 (collapsed-style preview) -->
+      <div class="result-card">
+        <div class="result-head">
+          <h2 class="result-title">Combined metabolic engineering and lipid droplets degradation to increase vitamin A production in oleaginous yeast</h2>
+          <div class="result-meta-row">
+            <span>Lin JY, Bu YB, Lan YB, Duan CQ, Yan GL</span>
+            <span>·</span>
+            <span>Microbial Cell Factories</span>
+            <span>·</span>
+            <span>2024</span>
+            <span class="pdf-flag">PDF</span>
+            <span>·</span>
+            <span class="relevance-bar" style="color: var(--warn);"><span class="dot" style="background: var(--warn);"></span>Adjacent</span>
+            <div class="result-actions">
+              <button class="btn-sm">⭐ Save</button>
+              <button class="btn-sm" onclick="showView(2)">📖 Open</button>
+              <button class="btn-sm primary" onclick="showView(2)">✦ Read with Catalyst</button>
+            </div>
+          </div>
+        </div>
+        <div class="tabs">
+          <div class="tab" onclick="switchTab(this, 'p3-abstract')">Abstract</div>
+          <div class="tab active" onclick="switchTab(this, 'p3-catalyst')"><span class="sparkle">✦</span>Catalyst Summary</div>
+        </div>
+        <div class="tab-body" id="p3-catalyst">
+          <div class="catalyst-answer-block">
+            <h4>Catalyst — Relevance to your query</h4>
+            <p>Different host (oleaginous yeast, <i>Y. lipolytica</i>) but same growth-phase logic — production is shifted to stationary phase using POX2 promoter, with lipid-droplet degradation triggered late <a class="cite" href="#" data-paper="3" data-snippet="1">[Methods, p.5]</a>. Worth reading for the lipid-droplet flux-routing trick if applicable to <i>S. cerevisiae</i>.</p>
+          </div>
+          <div class="confidence-row">
+            <span>Catalyst confidence:</span>
+            <span class="conf-pill med">Medium</span>
+            <span>Different host organism — extrapolation needed.</span>
+          </div>
+        </div>
+        <div class="tab-body" id="p3-abstract" style="display:none;">
+          <p>To boost vitamin A precursor (β-carotene) production in oleaginous yeast…</p>
+        </div>
+      </div>
+
+      <div style="text-align: center; margin-top: 20px;">
+        <button class="btn">Show 7 more papers ▾</button>
+      </div>
+
+    </div>
+
+    <!-- ============ VIEW 2 ============ -->
+    <div class="view2" id="view2">
+      <!-- PDF panel -->
+      <div class="reader-left" id="pdfLeft">
+        <div class="pdf-page" id="pdfPage">
+          <div class="pg-num">— 4 —</div>
+          <h1>Engineering a growth-phase-dependent biosynthetic pathway for carotenoid production in Saccharomyces cerevisiae</h1>
+          <div class="authors">Su B, Song D, Yang F, Zhu H · J. Ind. Microbiol. Biotechnol. (2020)</div>
+          <h2>Results</h2>
+          <p>To investigate whether decoupling carotenoid biosynthesis from primary growth would improve titer, we constructed two strain panels differing only in the promoters driving crtYB and crtE. The constitutive panel used TDH3 promoters and the growth-phase panel used the late-log–induced HXT1 promoter.</p>
+          <p id="snip1-p1">After 48 h of aerobic shake-flask fermentation in YPD medium, <span class="hl" id="hl-1">strains expressing crtYB and crtE under the late-log HXT1 promoter produced 6.5-fold higher β-carotene titer (4.8 mg/g DCW) than the constitutive TDH3 controls (0.74 mg/g DCW) when sampled at 48 h.</span> The growth-phase strains reached their carotenoid peak in late-exponential to early-stationary phase (24–32 h), whereas the constitutive strains plateaued earlier and showed no further accumulation after the diauxic shift.</p>
+          <p>The fold-improvement was reproducible across three independent biological replicates and was robust to two different background hosts (BY4742 and CEN.PK2-1C), though absolute titers differed between hosts (Table 1).</p>
+          <h2>Two-stage fermentation</h2>
+          <p>We next asked whether further productivity gains were available from manipulating culture conditions. Two-stage fermentation, in which cells are grown to mid-log in glucose-rich medium and then shifted to nitrogen-limited medium with a non-fermentable carbon source, has been shown to extend the production window in other secondary-metabolite systems.</p>
+          <div class="pg-num">— 7 —</div>
+          <h2>Figure 4: Two-stage fermentation results</h2>
+          <p id="snip1-p2"><span class="hl" id="hl-2">Two-stage fermentation with nitrogen limitation applied at 36 h further increased accumulation to 14.2 ± 1.1 mg/g DCW, suggesting that extending the production window is more effective than raising peak flux.</span> The improvement was consistent across both BY4742 (14.2 mg/g) and CEN.PK2-1C (11.7 mg/g) backgrounds, though BY4742 retained an absolute advantage.</p>
+          <h2>Discussion</h2>
+          <div class="pg-num">— 9 —</div>
+          <p id="snip1-p3"><span class="hl" id="hl-3">We did not observe a significant additional benefit from coupling HXT1 to crtI; the rate-limiting step in our hands remained the crtE-encoded geranylgeranyl pyrophosphate synthase.</span> This suggests that future engineering should prioritize upstream MEP/MVA flux rather than further promoter swaps on the downstream carotenoid cassette.</p>
+        </div>
+      </div>
+
+      <!-- Chat panel -->
+      <div class="reader-right">
+        <div class="reader-header">
+          <div class="reader-title">
+            Su B et al. 2020
+            <small>Growth-phase-dependent carotenoid biosynthesis · J. Ind. Microbiol.</small>
+          </div>
+          <div>
+            <button class="btn-sm">⭐ Saved</button>
+            <button class="btn-sm primary">Add note to project</button>
+          </div>
+        </div>
+
+        <div class="chat-area">
+
+          <div class="chat-msg user">
+            <div class="who">You</div>
+            <div class="bubble">How does this paper handle growth-phase regulation, and what titer did they hit?</div>
+          </div>
+
+          <div class="chat-msg">
+            <div class="who"><span class="sparkle">✦</span> Catalyst</div>
+            <div class="bubble">
+              They use the late-log-induced <b>HXT1 promoter</b> on crtYB and crtE (with GAL1 on crtI), which shifts biosynthesis into late exponential and early stationary phase. This produced a <b>6.5× titer improvement</b> over the constitutive TDH3 baseline — <b>4.8 mg/g DCW vs 0.74 mg/g DCW</b> at 48 h <a class="cite" href="#" onclick="highlightSnippet(1)">[¶3, p.4]</a>.
+              <br/><br/>
+              Adding two-stage fermentation with nitrogen limitation at 36 h pushed the titer further to <b>14.2 ± 1.1 mg/g DCW</b> <a class="cite" href="#" onclick="highlightSnippet(2)">[Fig. 4, p.7]</a>.
+              <br/><br/>
+              Worth noting: they tried coupling HXT1 to crtI as well but saw no additional benefit — they argue the rate-limiting step is GGPP synthase (crtE), not the downstream cassette <a class="cite" href="#" onclick="highlightSnippet(3)">[Discussion, p.9]</a>.
+              <div class="citation-list">
+                <strong>Cited passages in this paper:</strong> [1] p.4, results · [2] p.7, Fig. 4 caption · [3] p.9, Discussion · Click any to highlight on the left panel.
+              </div>
+            </div>
+          </div>
+
+          <div class="chat-msg user">
+            <div class="who">You</div>
+            <div class="bubble">Does the same effect hold for CEN.PK2-1C, which we're using?</div>
+          </div>
+
+          <div class="chat-msg">
+            <div class="who"><span class="sparkle">✦</span> Catalyst</div>
+            <div class="bubble">
+              Yes — both effects (growth-phase regulation and two-stage fermentation) reproduce in CEN.PK2-1C, but with <b>lower absolute titers</b> than BY4742. From the paper:
+              <br/>
+              <ul style="margin: 8px 0; padding-left: 20px;">
+                <li>Growth-phase fold-improvement: reproducible across both hosts.</li>
+                <li>Two-stage absolute titers: BY4742 = 14.2 mg/g · CEN.PK2-1C = 11.7 mg/g <a class="cite" href="#" onclick="highlightSnippet(2)">[Fig. 4, p.7]</a></li>
+              </ul>
+              This matches what we saw in <a href="#" style="color: var(--primary); font-weight: 600;">Lab Note BC-TEST-001 Final Results</a> from our own Round 1 — BY4742 outperformed CEN.PK2-1C by ~30%.
+              <div class="citation-list">
+                <strong>Cross-reference:</strong> 1 in-project lab note matches this finding (BC-TEST-001).
+              </div>
+            </div>
+          </div>
+
+        </div>
+
+        <div class="chat-input">
+          <div class="field">
+            <span>Ask Catalyst about this paper… Type @ to reference another paper or note.</span>
+            <span style="color: var(--primary);">↗</span>
+          </div>
+          <div class="suggested-prompts">
+            <span class="sp">Summarize methods</span>
+            <span class="sp">Compare to Verwaal 2007</span>
+            <span class="sp">Reproduce in our protocol</span>
+            <span class="sp">Open original PDF</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </main>
+</div>
+
+<div class="footer-note">
+  <span>NOTES9 LITERATURE v2</span> · Engineering mockup · Citation [n] click → highlights matching <code>span.hl</code> in PDF left panel and scrolls it into view ·
+  Real implementation: each <code>span.hl</code> is a coordinate-anchored overlay over the rendered PDF page, scoped per paper.
+</div>
+
+<script>
+  function showView(n) {
+    document.getElementById('view1').classList.toggle('hidden', n !== 1);
+    document.getElementById('view2').classList.toggle('active', n === 2);
+    document.querySelectorAll('.mockup-toolbar .pill').forEach((p, i) => {
+      p.classList.toggle('active', i === n - 1);
+    });
+  }
+  function switchTab(el, contentId) {
+    const tabs = el.parentElement.querySelectorAll('.tab');
+    tabs.forEach(t => t.classList.remove('active'));
+    el.classList.add('active');
+    const card = el.closest('.result-card');
+    card.querySelectorAll('.tab-body').forEach(b => b.style.display = 'none');
+    document.getElementById(contentId).style.display = 'block';
+  }
+  function highlightSnippet(n) {
+    document.querySelectorAll('.hl').forEach(h => h.classList.remove('active'));
+    const target = document.getElementById('hl-' + n);
+    if (target) {
+      target.classList.add('active');
+      target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+  }
+  // Click handler for View 1 citation chips: switch to View 2 and highlight
+  document.querySelectorAll('.cite[data-snippet]').forEach(c => {
+    c.addEventListener('click', (e) => {
+      e.preventDefault();
+      showView(2);
+      setTimeout(() => highlightSnippet(parseInt(c.dataset.snippet)), 200);
+    });
+  });
+</script>
+
+</body>
+</html>
