@@ -1824,38 +1824,45 @@ export function TiptapEditor({
 
   const syncEditorFullscreenBounds = useCallback(() => {
     if (!editorRegionFullscreen) return
-    const mainEl = getSidebarInsetMain()
-    if (!mainEl) {
-      // Respect notches / home indicator when we cannot anchor to SidebarInset main.
-      const pad = "max(env(safe-area-inset-top, 0px), 0.75rem)"
+
+    // Find the SidebarInset container — it holds the header + main area and stops
+    // before the right sidebar. We stretch the fullscreen shell from (0, 0) to
+    // the right edge of SidebarInset so it covers the top bar AND the left
+    // sidebar but leaves any open right sidebar untouched.
+    const root = fullscreenWorkspaceRef?.current ?? editorShellRef.current
+    const sidebarInset = root?.closest('[data-slot="sidebar-inset"]') as HTMLElement | null
+
+    if (!sidebarInset) {
+      // Embedded / mobile fallback: cover the whole viewport with safe-area padding.
+      const pad = "max(env(safe-area-inset-top, 0px), 0px)"
       setEditorFullscreenStyle({
         position: "fixed",
         top: pad,
-        right: "max(env(safe-area-inset-right, 0px), 0.75rem)",
-        bottom: "max(env(safe-area-inset-bottom, 0px), 0.75rem)",
-        left: "max(env(safe-area-inset-left, 0px), 0.75rem)",
-        zIndex: 110,
+        right: "max(env(safe-area-inset-right, 0px), 0px)",
+        bottom: "max(env(safe-area-inset-bottom, 0px), 0px)",
+        left: "max(env(safe-area-inset-left, 0px), 0px)",
+        zIndex: 130,
         margin: 0,
         width: "auto",
         height: "auto",
       })
       return
     }
-    const rect = mainEl.getBoundingClientRect()
-    const startInset = Math.max(0, fullscreenMainStartInsetPx ?? 0)
-    const width = Math.max(160, Math.round(rect.width - startInset))
-    // Use bottom − top so the shell matches the visible main column edge-to-edge (avoids 1px gaps).
-    const height = Math.max(200, Math.round(rect.bottom - rect.top))
+
+    // SidebarInset's right edge is where the right sidebar begins. The fullscreen
+    // shell spans from the viewport left edge (covering left sidebar) to that
+    // boundary, and from the top (covering the header bar) to the bottom.
+    const insetRect = sidebarInset.getBoundingClientRect()
     setEditorFullscreenStyle({
       position: "fixed",
-      top: `${Math.round(rect.top)}px`,
-      left: `${Math.round(rect.left + startInset)}px`,
-      width: `${width}px`,
-      height: `${height}px`,
-      zIndex: 110,
+      top: "0px",
+      left: "0px",
+      width: `${Math.round(insetRect.right)}px`,
+      height: "100vh",
+      zIndex: 130,
       margin: 0,
     })
-  }, [editorRegionFullscreen, getSidebarInsetMain, fullscreenMainStartInsetPx])
+  }, [editorRegionFullscreen, fullscreenWorkspaceRef])
 
   useEffect(() => {
     setMounted(true)
@@ -1869,11 +1876,23 @@ export function TiptapEditor({
     syncEditorFullscreenBounds()
     window.addEventListener("resize", syncEditorFullscreenBounds)
     window.addEventListener("scroll", syncEditorFullscreenBounds, true)
+
+    // Watch the SidebarInset for size changes (e.g. right sidebar opening/closing)
+    // so the fullscreen shell resizes without needing a viewport resize event.
+    const root = fullscreenWorkspaceRef?.current ?? editorShellRef.current
+    const sidebarInset = root?.closest('[data-slot="sidebar-inset"]') as HTMLElement | null
+    let ro: ResizeObserver | null = null
+    if (sidebarInset) {
+      ro = new ResizeObserver(syncEditorFullscreenBounds)
+      ro.observe(sidebarInset)
+    }
+
     return () => {
       window.removeEventListener("resize", syncEditorFullscreenBounds)
       window.removeEventListener("scroll", syncEditorFullscreenBounds, true)
+      ro?.disconnect()
     }
-  }, [editorRegionFullscreen, syncEditorFullscreenBounds])
+  }, [editorRegionFullscreen, syncEditorFullscreenBounds, fullscreenWorkspaceRef])
 
   useEffect(() => {
     if (!editorRegionFullscreen) return
@@ -5475,7 +5494,7 @@ window.localStorage.setItem(RIBBON_TAB_KEY, ribbonTab)
         className={cn(
           "border border-border rounded-lg bg-background flex min-h-0 flex-col h-full w-full max-w-full overflow-hidden",
           hideToolbar && "relative",
-          editorRegionFullscreen && !fullscreenWorkspaceRef && "rounded-xl border-border bg-background shadow-lg",
+          editorRegionFullscreen && !fullscreenWorkspaceRef && "rounded-none border-0 bg-background shadow-none",
           panelEmbed && !editorRegionFullscreen && "rounded-t-none border-t-0",
           className,
         )}
