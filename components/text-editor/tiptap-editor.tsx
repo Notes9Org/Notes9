@@ -5440,8 +5440,8 @@ window.localStorage.setItem(RIBBON_TAB_KEY, ribbonTab)
   const renderFullscreenDocumentTitle = (variant: "toolbar" | "floated") => {
     const wrapClass =
       variant === "toolbar"
-        ? "min-w-0 max-w-[min(10rem,52vw)] shrink sm:max-w-[min(18rem,36vw)]"
-        : "pointer-events-auto absolute left-2 top-2 z-20 max-w-[calc(100%-6rem)] min-w-0 rounded-md border border-border/60 bg-background/95 px-2 py-0.5 shadow-sm backdrop-blur-sm"
+        ? "min-w-0 max-w-[calc(100vw-12rem)] shrink flex-1"
+        : "pointer-events-auto absolute left-2 top-2 z-20 max-w-[calc(100vw-12rem)] min-w-0 rounded-md border border-border/60 bg-background/95 px-2 py-0.5 shadow-sm backdrop-blur-sm"
 
     const endTitleEdit = () => {
       setFullscreenDocTitleEditing(false)
