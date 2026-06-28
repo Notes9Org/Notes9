@@ -126,7 +126,7 @@ function PaperTabContent({ id, onRefresh, initialTab }: { id: string; onRefresh:
       literature={literature}
       showBreadcrumb={false}
       showActions={true}
-      initialTab={initialTab}
+      initialTab={initialTab ?? "pdf"}
       onRefresh={() => {
         fetchLiterature();
         onRefresh();

@@ -4,10 +4,11 @@ import { useEffect, useRef } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { SearchPaper } from "@/types/paper-search"
-import { BookOpen, BookmarkPlus, ExternalLink, FileText, Loader2, Trash2 } from "lucide-react"
+import { BookOpen, BookmarkCheck, BookmarkPlus, Bot, ExternalLink, FileText, Loader2 } from "lucide-react"
 import { LiteraturePdfPanel } from "./literature-pdf-panel"
 import { UploadLiteraturePdfDialog } from "./upload-literature-pdf-dialog"
 import { decodeHtmlEntities } from "@/lib/literature-abstract-display"
+import { openCatalystPanel } from "@/lib/catalyst-launch"
 
 export type StagingLiteratureRow = Record<string, unknown>
 
@@ -85,15 +86,14 @@ interface StagedPaperViewProps {
   lit: StagingListItem
   onSavePaper: (paper: SearchPaper, literatureId: string) => void | Promise<void>
   savingLiteratureId?: string | null
-  onRemove: () => void
 }
 
 export function StagedPaperView({
   lit,
   onSavePaper,
   savingLiteratureId = null,
-  onRemove,
 }: StagedPaperViewProps) {
+  const isSavedToLibrary = !["stage", "staged", "staging"].includes(String(lit.status ?? "").toLowerCase())
   const isClosedSource =
     !lit.pdf_storage_path &&
     (lit.pdf_import_status === "none" || lit.pdf_import_status === "failed")
@@ -112,6 +112,21 @@ export function StagedPaperView({
     return () => clearTimeout(t)
   }, [lit.id, lit.pdf_storage_path])
 
+  const readWithCatalyst = () => {
+    openCatalystPanel({
+      scope: "literature",
+      query: "Ask Catalyst about this paper.",
+      attachments: lit.pdf_storage_path
+        ? [{
+            url: `/api/literature/${lit.id}/viewer-pdf`,
+            name: lit.pdf_file_name || "paper.pdf",
+            contentType: "application/pdf",
+          }]
+        : undefined,
+      autoSend: false,
+    })
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col gap-4">
@@ -129,25 +144,28 @@ export function StagedPaperView({
               variant="default"
               size="sm"
               onClick={() => void onSavePaper(rowToSearchPaper(lit), lit.id)}
-              disabled={Boolean(savingLiteratureId)}
+              disabled={Boolean(savingLiteratureId) || isSavedToLibrary}
               title="Keep this paper in your library"
               className="gap-2 bg-primary hover:bg-[var(--n9-accent-hover)]"
             >
               {savingLiteratureId === lit.id ? (
                 <Loader2 className="h-4 w-4 animate-spin" />
+              ) : isSavedToLibrary ? (
+                <BookmarkCheck className="h-4 w-4" />
               ) : (
                 <BookmarkPlus className="h-4 w-4" />
               )}
-              Save to library
+              {isSavedToLibrary ? "Saved to library" : "Save to library"}
             </Button>
             <Button
-              variant="ghost"
+              variant="outline"
               size="sm"
-              className="text-muted-foreground hover:bg-rose-50 hover:text-rose-400 dark:hover:bg-rose-950/40 dark:hover:text-rose-300"
-              onClick={onRemove}
+              className="gap-2 border-border/70 bg-background/80 text-foreground shadow-sm hover:bg-muted hover:text-foreground"
+              onClick={readWithCatalyst}
+              title="Read with Catalyst"
             >
-              <Trash2 className="h-4 w-4 mr-2" />
-              Remove
+              <Bot className="h-4 w-4" />
+              Read with Catalyst
             </Button>
           </div>
         </div>

@@ -1,13 +1,13 @@
 'use client'
 
-import { useMemo, useState, type ReactNode } from 'react'
+import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { BookOpen, BookmarkCheck, BookmarkPlus, ExternalLink, FileText, Loader2, MessageCircle, Quote, ScrollText, Unlock } from 'lucide-react'
 import { decodeHtmlEntities, formatLiteratureAbstractPlain } from '@/lib/literature-abstract-display'
 import { cn } from '@/lib/utils'
-import { savePaperToRepository } from '@/app/(app)/literature-reviews/actions'
+import { savePaperToLibrary } from '@/app/(app)/literature-reviews/actions'
 import { openCatalystPanel, attachToCatalyst } from '@/lib/catalyst-launch'
 import { flyToCatalyst } from '@/lib/fly-to-catalyst'
 import { citationToSearchPaper } from '@/lib/ai-search-match'
@@ -184,6 +184,10 @@ export function AiPaperCard({
   const [saved, setSaved] = useState(initialSaved)
   const [showAbstract, setShowAbstract] = useState(false)
   const [tab, setTab] = useState<'ai' | 'abstract'>('ai')
+
+  useEffect(() => {
+    setSaved(initialSaved)
+  }, [initialSaved])
   const abstractRaw = result.paper?.abstract?.trim() || result.abstract?.trim() || ''
   const abstractPlain = abstractRaw ? formatLiteratureAbstractPlain(abstractRaw) : ''
   // Prefer the backend per-paper AI summary (/literature/ai-search); fall back to
@@ -266,7 +270,7 @@ export function AiPaperCard({
   const handleSave = async () => {
     setSaving(true)
     try {
-      const res = await savePaperToRepository(paper, { projectId: projectId ?? undefined })
+      const res = await savePaperToLibrary(paper, { projectId: projectId ?? undefined })
       if (res.success) {
         setSaved(true)
         toast.success('Saved to library' + ('warning' in res && res.warning ? ` (${res.warning})` : ''))

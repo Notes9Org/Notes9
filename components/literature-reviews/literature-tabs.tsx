@@ -223,7 +223,7 @@ export function LiteratureTabs({
   /**
    * Stable key so the tab-sync effect does not re-run on every parent refresh
    * that produces the same staged rows. We sort the ids and join them with the
-   * NUL character (" ") — a delimiter that cannot appear inside an id — so
+   * NUL character ("") — a delimiter that cannot appear inside an id — so
    * the key changes only when the *set* of staged ids changes, not when row
    * objects are re-created with identical ids. NUL (rather than e.g. ",") is an
    * unambiguous separator that two concatenated ids can never reproduce.
@@ -243,12 +243,28 @@ export function LiteratureTabs({
     return m
   }, [stagedItems])
 
-  /** All staged papers (+ pending) in the unified tab strip. */
+  /** Papers the user opened (+ pending before server refresh) in the tab strip. */
   const stripPaperIds = useMemo(() => {
-    const stagedIds = stagedItems.map((i) => i.id)
-    const pending = pendingOpenTabIds.filter((id) => !stagedIds.includes(id))
-    return [...stagedIds, ...pending]
-  }, [stagedItems, pendingOpenTabIds])
+    const knownIds = new Set([
+      ...stagedItems.map((i) => i.id),
+      ...repositoryReviews.map((r) => r.id),
+    ])
+    const seen = new Set<string>()
+    const result: string[] = []
+    for (const id of openedStagedIds) {
+      if ((knownIds.has(id) || pendingOpenTabIds.includes(id)) && !seen.has(id)) {
+        seen.add(id)
+        result.push(id)
+      }
+    }
+    for (const id of pendingOpenTabIds) {
+      if (!seen.has(id)) {
+        seen.add(id)
+        result.push(id)
+      }
+    }
+    return result
+  }, [stagedItems, pendingOpenTabIds, openedStagedIds, repositoryReviews])
 
   const showUnifiedTabStrip =
     hasSearched || stripPaperIds.length > 0 || pendingOpenTabIds.length > 0
@@ -317,7 +333,7 @@ export function LiteratureTabs({
       id: r.id,
       title: r.title,
       authors: r.authors,
-      catalog_placement: r.catalog_placement ?? "repository",
+      catalog_placement: r.catalog_placement ?? "library",
     }))
     return [...staged, ...repo].filter((c) => c.id)
   }, [stagedLiterature, repositoryReviews, lockedProjectId])
@@ -606,7 +622,7 @@ export function LiteratureTabs({
   )
 
   // Resolve a result paper to an existing literature row — staged first, then the
-  // repository — so "Read" opens the already-imported paper (PDF or overview)
+  // library — so "Read" opens the already-imported paper (PDF or overview)
   // instead of re-staging it.
   const resolveOpenableLiteratureId = useCallback(
     (paper: SearchPaper): string | null => {
@@ -665,7 +681,7 @@ export function LiteratureTabs({
     syncTabsForSearchSession()
   }
 
-  // Jump from the repository's search box straight into a fresh paper search.
+  // Jump from the library's search box straight into a fresh paper search.
   const handleSearchPapersFromRepo = (q: string) => {
     if (!q.trim()) return
     setTopSection("search")
@@ -684,7 +700,7 @@ export function LiteratureTabs({
   const isPaperStaged = (paperId: string) => {
     const paper = searchResults.find((p) => p.id === paperId)
     if (!paper) return false
-    // Already in the library (staging OR repository) → "Read" opens it directly.
+    // Already in the library (staging OR library) → "Read" opens it directly.
     return resolveOpenableLiteratureId(paper) !== null
   }
 
@@ -735,8 +751,9 @@ export function LiteratureTabs({
     setActiveInnerTab((current) => {
       if (current !== id) return current
       if (hasSearched) return "search"
-      const remaining = stagedItems.map((i) => i.id).filter((sid) => sid !== id)
-      return remaining[0] ?? "search"
+      const remainingOpened = openedStagedIdsRef.current.filter((sid) => sid !== id)
+      const remainingPending = pendingOpenTabIdsRef.current.filter((sid) => sid !== id)
+      return remainingOpened[0] ?? remainingPending[0] ?? "search"
     })
     setPendingCloseId(null)
   }
@@ -760,8 +777,9 @@ export function LiteratureTabs({
   }
 
   const handleCloseTabClick = (id: string, e: React.MouseEvent | React.KeyboardEvent) => {
+    e.preventDefault()
     e.stopPropagation()
-    setPendingCloseId(id)
+    closeTabOnly(id)
   }
 
   const openSaveDialog = (paper: SearchPaper, literatureId?: string) => {
@@ -900,6 +918,7 @@ export function LiteratureTabs({
                     tabIndex={0}
                     aria-label="Close tab"
                     title="Close tab"
+                    onPointerDown={(e) => e.stopPropagation()}
                     onClick={(e) => handleCloseTabClick(id, e)}
                     onKeyDown={(e) => {
                       if (e.key === "Enter" || e.key === " ") {
@@ -969,7 +988,7 @@ export function LiteratureTabs({
           )}
         >
           <Database className="h-4 w-4" />
-          My Repository
+          My Library
         </button>
       </div>
 
@@ -1035,7 +1054,6 @@ export function LiteratureTabs({
                           lit={lit}
                           onSavePaper={handleSaveFromStaging}
                           savingLiteratureId={savingStagingLiteratureId}
-                          onRemove={() => setRemoveTargetId(lit.id)}
                         />
                       ) : (
                         <div className="flex flex-col items-center justify-center gap-3 py-20 text-center">
@@ -1178,7 +1196,7 @@ export function LiteratureTabs({
             <DialogTitle>Link paper to your research</DialogTitle>
             <DialogDescription>
               Connect this paper to a project, and optionally to one of that project&apos;s
-              experiments, before saving it to your repository.
+              experiments, before saving it to your library.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">

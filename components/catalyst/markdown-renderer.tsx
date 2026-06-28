@@ -531,15 +531,6 @@ function CitationHoverCard({
       <div className="mt-1.5 flex items-center justify-between gap-2 text-2xs text-muted-foreground/80">
         <span className="min-w-0 truncate">{provenanceLabel(chip)}</span>
         <span className="flex shrink-0 items-center gap-2.5">
-          {(chip.citedText || chip.excerpt) && onViewSource && (
-            <button
-              type="button"
-              onClick={onViewSource}
-              className="rounded-sm font-medium text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-            >
-              View source
-            </button>
-          )}
           {pageHref &&
             (isWebSource ? (
               <a

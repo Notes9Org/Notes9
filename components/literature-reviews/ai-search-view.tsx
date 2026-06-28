@@ -29,6 +29,10 @@ function refHref(r: AiSearchResult): string | null {
   return null
 }
 
+function openAccessFirst(results: AiSearchResult[]): AiSearchResult[] {
+  return [...results].sort((a, b) => Number(!!b.paper?.isOpenAccess) - Number(!!a.paper?.isOpenAccess))
+}
+
 function refMeta(r: AiSearchResult): string {
   const authors = r.paper?.authors ?? []
   const lead = authors[0] ? `${decodeHtmlEntities(authors[0])}${authors.length > 1 ? ' et al.' : ''}` : ''
@@ -117,7 +121,7 @@ export function AiSearchView({
 
   const loading = isStreaming || papersLoading
   const showSkeletons = loading && results.length === 0
-  const displayed = applyAiFilters(results, filters)
+  const displayed = openAccessFirst(applyAiFilters(results, filters))
   // Filter options grounded in the actual result set (not hardcoded).
   const journalChoices = journalOptions(results)
   const yearHint = yearBounds(results)
