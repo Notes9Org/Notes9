@@ -73,6 +73,7 @@ export function papersToGrounding(results: AiSearchResult[] | null | undefined):
     if (!label || manifest[label]) continue
 
     const title = paperTitle(r)
+    const rank = Number.parseInt(label, 10)
     const url = paperUrl(r)
     const excerpt = paperExcerpt(r)
     const sourceId = r.dedupeKey || r.paper?.id || `lit_${label}`
@@ -92,9 +93,11 @@ export function papersToGrounding(results: AiSearchResult[] | null | undefined):
     const entry: CitationsManifestEntry = {
       ...(Number.isFinite(index) ? { index } : {}),
       cite_label: label,
+      ...(rank ? { result_rank: rank } : {}),
       source_type: LITERATURE_SOURCE_TYPE,
       source_id: sourceId,
-      source_name: title,
+        source_name: title,
+        ...(rank ? { result_rank: rank } : {}),
       ...(url ? { source_url: url } : {}),
       ...(excerpt ? { excerpt } : {}),
       match_kind: r.matchKind && r.matchKind !== 'none' ? 'exact' : 'semantic',

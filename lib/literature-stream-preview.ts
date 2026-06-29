@@ -55,7 +55,7 @@ export function previewFromLiteratureSseTokenBuffer(
     try {
       const parsed = JSON.parse(closedInner) as Record<string, unknown>;
       const normalized = normalizeLiteratureAgentResponse(parsed);
-      const md = formatLiteratureAssistantMarkdown(normalized, endpoint).trim();
+      const md = formatLiteratureAssistantMarkdown(normalized, endpoint, { renumberCitations: false }).trim();
       if (md) return { kind: 'markdown', markdown: md };
       return { kind: 'waiting_structured' };
     } catch {
@@ -71,7 +71,7 @@ export function previewFromLiteratureSseTokenBuffer(
     try {
       const parsed = JSON.parse(jsonCandidate) as Record<string, unknown>;
       const normalized = normalizeLiteratureAgentResponse(parsed);
-      const md = formatLiteratureAssistantMarkdown(normalized, endpoint).trim();
+      const md = formatLiteratureAssistantMarkdown(normalized, endpoint, { renumberCitations: false }).trim();
       if (md) return { kind: 'markdown', markdown: md };
       return { kind: 'waiting_structured' };
     } catch {

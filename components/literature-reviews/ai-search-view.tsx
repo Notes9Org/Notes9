@@ -271,7 +271,7 @@ export function AiSearchView({
             style={{ animationDelay: `${Math.min(i, 8) * 60}ms` }}
           >
             <AiPaperCard
-              result={r}
+              result={{ ...r, citeLabel: String(i + 1) }}
               projectId={projectId}
               query={query}
               initialSaved={savedKeysRef.current.has(r.citeLabel)}
@@ -302,7 +302,7 @@ export function AiSearchView({
         return (
           <>
             {primary.length > 0 && header('Directly relevant')}
-            {primary.map(renderCard)}
+            {primary.map((r, i) => renderCard(r, i))}
             {related.length > 0 && header('Related work')}
             {related.map((r, i) => renderCard(r, primary.length + i))}
           </>

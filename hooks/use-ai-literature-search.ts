@@ -23,6 +23,10 @@ type CachedAi = { summary: string; papers: SearchPaper[] }
  *  and aren't re-fetched until a different query runs. Module-level on purpose. */
 const aiSearchCache = new Map<string, CachedAi>()
 
+function cacheKeyForSearch(query: string): string {
+  return query
+}
+
 function matchKindFor(p: SearchPaper): AiSearchMatchKind {
   if (p.doi) return 'doi'
   if (p.pmid) return 'pmid'
@@ -91,6 +95,7 @@ export function useAiLiteratureSearch({
 
   const lastRunQueryRef = useRef<string | null>(null)
   const abortRef = useRef<AbortController | null>(null)
+  const activeRequestIdRef = useRef(0)
   // Mirror of `papers` for use inside loadMore without stale-closure capture
   // (we need the current set to compute exclude_ids before fetching).
   const papersRef = useRef<SearchPaper[]>([])
@@ -99,9 +104,11 @@ export function useAiLiteratureSearch({
   }, [papers])
 
   const stop = useCallback(() => {
+    activeRequestIdRef.current += 1
     abortRef.current?.abort()
     abortRef.current = null
     setIsStreaming(false)
+    setPhase(null)
   }, [])
 
   const applyPaperSummary = useCallback((id: string, text: string) => {
@@ -114,13 +121,18 @@ export function useAiLiteratureSearch({
     async (q0: string) => {
       const q = q0.trim()
       if (!q) return
-      if (q === lastRunQueryRef.current) return // already current — never re-run
-      lastRunQueryRef.current = q
+      const cacheKey = cacheKeyForSearch(q)
+      if (cacheKey === lastRunQueryRef.current) return // already current — never re-run
+      lastRunQueryRef.current = cacheKey
+      const requestId = activeRequestIdRef.current + 1
+      activeRequestIdRef.current = requestId
+      abortRef.current?.abort()
+      abortRef.current = null
       setActiveQuery(q)
       setError(null)
 
       // Restore a completed answer from cache — no network call.
-      const cached = aiSearchCache.get(q)
+      const cached = aiSearchCache.get(cacheKey)
       if (cached) {
         setPapers(cached.papers)
         setSummary(cached.summary)
@@ -128,7 +140,6 @@ export function useAiLiteratureSearch({
         return
       }
 
-      abortRef.current?.abort()
       const controller = new AbortController()
       abortRef.current = controller
 
@@ -155,38 +166,41 @@ export function useAiLiteratureSearch({
         const reader = res.body.getReader()
         const decoder = new TextDecoder()
         let buffer = ''
+        const isActiveRequest = () => activeRequestIdRef.current === requestId
 
         while (true) {
           const { done, value } = await reader.read()
           if (done) break
+          if (!isActiveRequest()) break
           buffer += decoder.decode(value, { stream: true })
           const blocks = buffer.split('\n\n')
           buffer = blocks.pop() ?? ''
           for (const block of blocks) {
+            if (!isActiveRequest()) break
             const parsed = parseSseBlock(block)
             if (!parsed) continue
             const [event, data] = parsed
             if (event === 'status') {
               const p = (data as { phase?: string }).phase
-              if (p) setPhase(p)
+              if (p && isActiveRequest()) setPhase(p)
             } else if (event === 'papers') {
               const payload = data as SsePapersEvent
               receivedPapers = Array.isArray(payload.papers) ? payload.papers : []
-              setPapers(receivedPapers)
+              if (isActiveRequest()) setPapers(receivedPapers)
               const pipeline = (payload as { pipeline?: { has_more?: boolean; partial?: boolean } }).pipeline
               // Ignore the fast "partial" paint — only the final page sets has_more.
-              if (pipeline && !pipeline.partial) setHasMore(Boolean(pipeline.has_more))
+              if (isActiveRequest() && pipeline && !pipeline.partial) setHasMore(Boolean(pipeline.has_more))
             } else if (event === 'paper_summary') {
               const { id, text } = data as { id: string; text: string }
               if (id && text) {
-                applyPaperSummary(id, text)
+                if (isActiveRequest()) applyPaperSummary(id, text)
                 receivedPapers = receivedPapers.map((p) =>
                   String(p.id) === String(id) ? { ...p, aiSummary: text } : p,
                 )
               }
             } else if (event === 'overall_summary') {
               overall = String((data as { text?: string }).text ?? '')
-              setSummary(overall)
+              if (isActiveRequest()) setSummary(overall)
             } else if (event === 'error') {
               setError(
                 String((data as { error?: string }).error ?? 'Literature search failed.'),
