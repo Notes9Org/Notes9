@@ -1,5 +1,10 @@
 import { escapeMarkdownLinkLabel } from '@/lib/chat-response-sources';
+import { renumberCitations } from '@/lib/citation-renumber';
 import type { LiteratureAgentDonePayload, PaperAnalyzerReference } from '@/lib/literature-agent-types';
+
+type FormatLiteratureAssistantMarkdownOptions = {
+  renumberCitations?: boolean;
+};
 
 function literatureReviewPath(id: string): string {
   return `/literature-reviews/${encodeURIComponent(id)}`;
@@ -35,7 +40,8 @@ function buildReferenceIndexMap(refs: PaperAnalyzerReference[]): Map<number, str
  */
 export function formatLiteratureAssistantMarkdown(
   payload: LiteratureAgentDonePayload,
-  _endpoint: 'compare' | 'biomni'
+  _endpoint: 'compare' | 'biomni',
+  options: FormatLiteratureAssistantMarkdownOptions = {}
 ): string {
   if (payload.needs_clarification) {
     const q = payload.clarify_question?.trim();
@@ -53,9 +59,29 @@ export function formatLiteratureAssistantMarkdown(
     }
   }
 
-  const refs = payload.structured?.references ?? [];
-  const indexMap = buildReferenceIndexMap(refs);
+  let refs = payload.structured?.references ?? [];
   let body = (payload.content || payload.answer || '').trim();
+
+  const knownLabels = new Set(
+    refs
+      .map((r) => (Number.isFinite(r.index) ? String(r.index) : null))
+      .filter((v): v is string => Boolean(v))
+  );
+
+  if ((options.renumberCitations ?? true) && knownLabels.size > 0) {
+    const { markdown, remap } = renumberCitations(body, knownLabels);
+    if (remap.size > 0) {
+      body = markdown;
+      refs = refs
+        .map((r) => {
+          const next = remap.get(String(r.index));
+          return next ? { ...r, index: Number(next) } : r;
+        })
+        .sort((a, b) => a.index - b.index);
+    }
+  }
+
+  const indexMap = buildReferenceIndexMap(refs);
 
   if (indexMap.size) {
     body = linkifyNumericCitations(body, indexMap);

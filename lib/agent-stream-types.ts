@@ -175,6 +175,12 @@ export interface GroundingResource {
   page_number?: number | null;
   content_surface?: string | null;
   source_url?: string | null;
+  /**
+   * Original rank of the paper in the literature search result list. Citation
+   * labels are answer-local; this keeps the search-result position available
+   * for UI context without overloading [N].
+   */
+  result_rank?: number | null;
   excerpt_source?: string | null;
   match_kind?: string | null;
   cite_label?: string | null;

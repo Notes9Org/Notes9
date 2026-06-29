@@ -269,6 +269,7 @@ export type AgentCitationPanelItem = {
   sourceTypeLabel: string;
   sourceId: string | null;
   sourceName: string | null;
+  resultRank?: number | null;
   chunkId?: string | null;
   pageNumber?: number | null;
   contentSurface?: 'abstract' | 'pdf' | null;
@@ -479,6 +480,7 @@ export function groundingResourceToPanelItem(
   const sourceUrl = typeof c.source_url === 'string' && c.source_url.trim()
     ? c.source_url.trim()
     : null;
+  const resultRank = Number.isFinite(c.result_rank) ? c.result_rank : null;
   // Correct backend mislabels (e.g. a paper tagged as a lab note) when the URL
   // is clearly an academic publisher/aggregator.
   const sourceType = correctAcademicType(normalizeAgentSourceType(c.source_type), sourceUrl);
@@ -536,6 +538,7 @@ export function groundingResourceToPanelItem(
     documentHref,
     highlightTarget,
     highlightHref,
+    resultRank,
     sourceUrl,
   };
 }
@@ -1059,7 +1062,10 @@ function SingleCitationPanel({
           resolvedItem.relevance >= 0 &&
           resolvedItem.relevance <= 1 && (
             <p className="text-micro text-muted-foreground">
-              {resolvedItem.sourceTypeLabel} · {Math.round(resolvedItem.relevance * 100)}% match
+              {resolvedItem.sourceTypeLabel}
+              {resolvedItem.resultRank ? ` · Result #${resolvedItem.resultRank}` : ''}
+              {' · '}
+              {Math.round(resolvedItem.relevance * 100)}% match
             </p>
           )
         )}
