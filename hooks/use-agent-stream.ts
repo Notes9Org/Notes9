@@ -13,6 +13,7 @@ import { splitSseBuffer, parseSseDataJson } from '@/lib/sse-event-blocks';
 import { recordRumEvent } from '@/lib/rum';
 import {
   extractSseTokenPiece,
+  maskCiteTokensForStream,
   mergeTokenBufferIntoAssistantRaw,
 } from '@/lib/sse-stream-assistant-merge';
 import {
@@ -20,20 +21,6 @@ import {
   coalesceAgentSourceId,
   normalizeAgentRelevance0to1,
 } from '@/lib/document-highlight';
-
-
-/** Hide raw Option C cite tokens during live stream; done payload replaces with [N]. */
-const CITE_TOKEN_STREAM_RE = /\[(?:[a-z]{3}_[0-9a-f]{4,8})(?:\s*,\s*[a-z]{3}_[0-9a-f]{4,8})*\]/gi;
-function maskCiteTokensForStream(text: string): string {
-  // Replace the token with a SPACE (not nothing): when the model emits a citation
-  // with no surrounding spaces (e.g. "studies[lab_a1b2]show"), dropping it outright
-  // glued the words together ("studiesshow"). The collapse + punctuation passes
-  // below then tidy any resulting double spaces / space-before-punctuation.
-  return text
-    .replace(CITE_TOKEN_STREAM_RE, ' ')
-    .replace(/\s+([.,!?;:])/g, '$1')
-    .replace(/[ \t]{2,}/g, ' ');
-}
 
 
 const PROXY_STREAM_URL = '/api/agent/stream';
