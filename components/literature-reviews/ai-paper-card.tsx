@@ -290,17 +290,17 @@ export function AiPaperCard({
     if (asking) return
     const target = e?.currentTarget ?? null
     const paper = result.paper
-    // Open the panel first (empty composer = landing pad). The query stays clean —
-    // no raw URL pasted into the chat (which renders as an ugly text link).
+    // Open the panel first (empty composer = landing pad). Inject NO text: the
+    // paper rides in as a tag (like a normal @-mention), so the composer is left
+    // exactly as the user left it — no `About the paper "…":` prefill to delete.
     openCatalystPanel({
       scope: 'literature',
       webSearch: false,
-      query: `About the paper "${title}": `,
       autoSend: false,
     })
     if (!paper) {
       // Web-only hit with no paper record — fall back to web search.
-      openCatalystPanel({ scope: 'literature', webSearch: true, query: `About the paper "${title}": `, autoSend: false })
+      openCatalystPanel({ scope: 'literature', webSearch: true, autoSend: false })
       return
     }
     // Resolve + fetch the open-access PDF server-side (Unpaywall / OA mirrors),
@@ -317,18 +317,29 @@ export function AiPaperCard({
       })
       const data = await res.json().catch(() => null)
       if (res.ok && data?.url && !data?.fallback) {
+        // Stable identity for dedupe: the signed `url` rotates on every fetch, so
+        // the composer dedupes on `paperKey` instead — pressing "Ask Catalyst" on
+        // the same paper twice becomes a no-op (matches the @-mention tag pattern).
+        const paperKey = paper.id || paper.doi || title
         const attachments = [
-          { url: data.url as string, name: (data.name as string) || `${title.slice(0, 100)}.pdf`, contentType: 'application/pdf' },
+          {
+            url: data.url as string,
+            name: (data.name as string) || `${title.slice(0, 100)}.pdf`,
+            contentType: 'application/pdf',
+            paperKey,
+            storagePath: (data.storagePath as string) || undefined,
+            chatAttachmentId: (data.chatAttachmentId as string) || undefined,
+          },
         ]
         flyToCatalyst(target, { onLand: () => attachToCatalyst(attachments) })
       } else {
         // No open-access full text reachable — let Catalyst answer from the
         // abstract + web search rather than dead-ending the user.
-        openCatalystPanel({ scope: 'literature', webSearch: true, query: `About the paper "${title}": `, autoSend: false })
+        openCatalystPanel({ scope: 'literature', webSearch: true, autoSend: false })
         toast.info('No open-access full text found. Catalyst will use the abstract and web search; upload the PDF for full-text analysis.')
       }
     } catch {
-      openCatalystPanel({ scope: 'literature', webSearch: true, query: `About the paper "${title}": `, autoSend: false })
+      openCatalystPanel({ scope: 'literature', webSearch: true, autoSend: false })
       toast.error('Couldn’t load the paper into Catalyst. Falling back to web search.')
     } finally {
       setAsking(false)

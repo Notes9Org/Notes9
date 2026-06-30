@@ -14,6 +14,13 @@ export type CatalystLaunchAttachment = {
   name: string
   contentType: string
   size?: number
+  /** Stable durable storage path (for re-signing on reload). */
+  storagePath?: string
+  /** Row id in `chat_attachments` (cross-turn re-read). */
+  chatAttachmentId?: string
+  /** Stable paper identity (id / DOI / title) for deduping "Ask Catalyst" tags;
+   *  the signed `url` rotates per fetch, so dedupe must key on this instead. */
+  paperKey?: string
 }
 
 export type CatalystLaunchDetail = {
