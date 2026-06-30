@@ -3,6 +3,26 @@
  * assistant body when `done`/`result` omitted text but tokens streamed.
  */
 
+/** Hide raw Option C cite tokens during live stream; done payload replaces with [N]. */
+export const CITE_TOKEN_STREAM_RE =
+  /\[(?:[a-z]{3}_[0-9a-f]{4,8})(?:\s*,\s*[a-z]{3}_[0-9a-f]{4,8})*\]/gi;
+
+/**
+ * Hide raw `[lab_969438]`-style cite tokens while text is streaming.
+ *
+ * Whitespace-preserving by design: this runs once per streamed delta, so it
+ * must NOT collapse or strip whitespace. Trimming/collapsing per delta removes
+ * the leading/trailing space of every token and glues words at delta
+ * boundaries ("read" + "all" -> "readall") and destroys the blank-line / `## `
+ * block structure markdown needs. We only remove complete inline tokens,
+ * replacing each with a single space so "studies[lab_a1b2]show" doesn't become
+ * "studiesshow". Any resulting double space is invisible in rendered HTML and
+ * absent from the clean final answer the `done` payload swaps in.
+ */
+export function maskCiteTokensForStream(text: string): string {
+  return text.replace(CITE_TOKEN_STREAM_RE, ' ');
+}
+
 export function extractSseTokenPiece(payload: Record<string, unknown> | null): string {
   if (!payload) return '';
   // Support every shape any backend has ever emitted for a streamed text
