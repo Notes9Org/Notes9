@@ -11,7 +11,6 @@ import { AgentToolCards } from '@/components/catalyst/agent-tool-cards';
 import { AgentArtifactList } from '@/components/catalyst/agent-artifact-card';
 import { AgentGraphList } from '@/components/catalyst/agent-graph-view';
 import { AgentReasoningPanel } from '@/components/catalyst/agent-reasoning-panel';
-import { AgentStopButton } from '@/components/catalyst/agent-stop-button';
 import type { ThinkingPayload, RagChunksPayload, DonePayload } from '@/lib/agent-stream-types';
 import type {
   CitationsManifest,
@@ -110,8 +109,6 @@ export function AgentStreamReply({
   compact = false,
   isThinkingStreaming = false,
   liveCitationCount = 0,
-  runId = null,
-  onStop,
   onRetry,
 }: AgentStreamReplyProps) {
   const displayAnswer =
@@ -195,21 +192,16 @@ export function AgentStreamReply({
         />
       )}
 
-      {/* ── Live source ticker + Stop control. Shown only while streaming and
-            before the final `done` lands; the citation panel below supersedes
-            it once the answer settles. The Stop button appears only when the
-            backend handed us a runId (HITL on) so cancellation is possible. ── */}
-      {isStreaming && !donePayload && (liveCitationCount > 0 || (runId && onStop)) && (
+      {/* ── Live source ticker. Shown only while streaming and before the final
+            `done` lands; the citation panel below supersedes it once the answer
+            settles. Cancellation lives on the composer Stop button (a single
+            Stop control), so no Stop button is rendered here. ── */}
+      {isStreaming && !donePayload && liveCitationCount > 0 && (
         <div className="flex items-center gap-2 px-1 text-xs text-muted-foreground">
-          {liveCitationCount > 0 && (
-            <span className="inline-flex items-center gap-1.5">
-              <span className="size-1.5 rounded-full bg-primary animate-pulse" aria-hidden />
-              Gathering sources… {liveCitationCount}
-            </span>
-          )}
-          {runId && onStop && (
-            <AgentStopButton onStop={onStop} className={liveCitationCount > 0 ? 'ml-auto' : ''} />
-          )}
+          <span className="inline-flex items-center gap-1.5">
+            <span className="size-1.5 rounded-full bg-primary animate-pulse" aria-hidden />
+            Gathering sources… {liveCitationCount}
+          </span>
         </div>
       )}
 

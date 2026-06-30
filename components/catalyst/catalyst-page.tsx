@@ -481,12 +481,21 @@ export function CatalystChat({ sessionId }: CatalystChatProps) {
         content: notes9PlainTextForApiHistory(getMessageContent(m), m.role),
       }));
 
+      // Preserve any file attachments from the original message so editing the
+      // text doesn't drop them. They live on the message's `parts` as type:'file'.
+      let editedFileAttachments: Array<{ url: string; name?: string; content_type?: string }> = [];
       setMessages((currentMessages) => {
         const index = currentMessages.findIndex((m) => m.id === messageId);
         if (index !== -1) {
+          const prevParts = currentMessages[index].parts ?? [];
+          const fileParts = prevParts.filter((p) => p.type === 'file');
+          editedFileAttachments = fileParts.map((p) => {
+            const fp = p as { url: string; filename?: string; mediaType?: string };
+            return { url: fp.url, name: fp.filename, content_type: fp.mediaType };
+          });
           const updatedMessage = {
             ...currentMessages[index],
-            parts: [{ type: 'text' as const, text: newContent }],
+            parts: [{ type: 'text' as const, text: newContent }, ...fileParts],
           };
           return [...currentMessages.slice(0, index), updatedMessage];
         }
@@ -517,7 +526,7 @@ export function CatalystChat({ sessionId }: CatalystChatProps) {
               {
                 ...curr[idx],
                 id: savedUser.id,
-                parts: [{ type: 'text' as const, text: newContent }],
+                parts: curr[idx].parts ?? [{ type: 'text' as const, text: newContent }],
               },
             ];
           });
@@ -525,7 +534,28 @@ export function CatalystChat({ sessionId }: CatalystChatProps) {
 
         setNotes9Loading(true);
         const { donePayload, error, artifacts: streamArtifacts, citationsManifest: streamManifest, graphs: streamGraphs } = await agentStream.runStream(
-          { query: newContent, session_id: sid, history, options: { web_search: webSearchEnabledRef.current ? 'on' : 'off' } },
+          {
+            query: newContent,
+            session_id: sid,
+            history,
+            // Re-send the original attachments so editing the text keeps the files.
+            ...(editedFileAttachments.length
+              ? {
+                  file_attachments: editedFileAttachments.slice(0, 5).map((p) => ({
+                    url: p.url,
+                    name: p.name ?? 'attachment',
+                    content_type: (p.content_type ?? 'application/pdf') as
+                      | 'image/jpeg'
+                      | 'image/png'
+                      | 'image/gif'
+                      | 'image/webp'
+                      | 'application/pdf',
+                    size: 0,
+                  })),
+                }
+              : {}),
+            options: { web_search: webSearchEnabledRef.current ? 'on' : 'off' },
+          },
           token
         );
         setNotes9Loading(false);

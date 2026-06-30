@@ -636,7 +636,7 @@ function promoteBoldHeadings(src: string): string {
   );
 }
 
-export function MarkdownRenderer({
+function MarkdownRendererImpl({
   content,
   className,
   showCursor = false,
@@ -872,3 +872,9 @@ export function MarkdownRenderer({
     </div>
   );
 }
+
+// Memoized so an unrelated streaming-state update (e.g. a token flush elsewhere)
+// does not re-parse/re-sanitize settled messages whose props are unchanged. The
+// live streaming message still re-renders because `content` changes each flush.
+export const MarkdownRenderer = React.memo(MarkdownRendererImpl);
+MarkdownRenderer.displayName = 'MarkdownRenderer';
