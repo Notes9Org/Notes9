@@ -18,6 +18,12 @@ export interface Attachment {
   storagePath?: string;
   /** Row id in `chat_attachments` (present when registered against a session). */
   chatAttachmentId?: string;
+  /**
+   * Stable paper identity (id / DOI / title) used to dedupe paper tags added via
+   * "Ask Catalyst". The signed `url` rotates on every ephemeral fetch, so it can't
+   * be used for dedupe; `paperKey` stays constant for the same paper.
+   */
+  paperKey?: string;
 }
 
 interface PreviewAttachmentProps {

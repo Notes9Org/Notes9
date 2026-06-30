@@ -3052,7 +3052,15 @@ export function RightSidebar({
           });
       }
       if (launch.attachments && launch.attachments.length > 0) {
-        setAttachments((prev) => [...prev, ...launch.attachments!]);
+        setAttachments((prev) => {
+          // Same stable-identity dedupe as the CATALYST_ATTACH_EVENT path, so an
+          // open-with-attachments launch can't stack duplicate paper chips either.
+          const keyOf = (a: { paperKey?: string; url?: string; name?: string }) =>
+            a.paperKey || a.url || a.name;
+          const seen = new Set(prev.map(keyOf));
+          const fresh = launch.attachments!.filter((a) => !seen.has(keyOf(a)));
+          return fresh.length ? [...prev, ...fresh] : prev;
+        });
       }
       if (launch.webSearch !== undefined) {
         setWebSearchEnabled(launch.webSearch);
@@ -3099,8 +3107,14 @@ export function RightSidebar({
       const incoming = detail?.attachments;
       if (!incoming || incoming.length === 0) return;
       setAttachments((prev) => {
-        const seen = new Set(prev.map((a) => a.url || a.name));
-        const fresh = incoming.filter((a) => !seen.has(a.url || a.name));
+        // Dedupe on the stable `paperKey` first: paper attachments from
+        // "Ask Catalyst" carry a fresh signed `url` on every press, so a
+        // url-keyed dedupe never matches and stacks duplicate chips. Fall back
+        // to url/name for ordinary uploads that have no paperKey.
+        const keyOf = (a: { paperKey?: string; url?: string; name?: string }) =>
+          a.paperKey || a.url || a.name;
+        const seen = new Set(prev.map(keyOf));
+        const fresh = incoming.filter((a) => !seen.has(keyOf(a)));
         return fresh.length ? [...prev, ...fresh] : prev;
       });
     };
