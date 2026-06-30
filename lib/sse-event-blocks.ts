@@ -9,7 +9,9 @@ export type SseEventBlock = {
 
 /** Split completed blocks from buffer; `rest` is incomplete trailing data. */
 export function splitSseBuffer(buffer: string): { blocks: SseEventBlock[]; rest: string } {
-  const segments = buffer.split('\n\n');
+  // Normalize CRLF / lone-CR framing to LF so streams behind proxies/load
+  // balancers that emit `\r\n\r\n` still split into blocks (was LF-only).
+  const segments = buffer.replace(/\r\n?/g, '\n').split('\n\n');
   const rest = segments.pop() ?? '';
   const blocks: SseEventBlock[] = [];
 

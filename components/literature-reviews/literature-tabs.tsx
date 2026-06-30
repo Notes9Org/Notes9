@@ -969,14 +969,6 @@ export function LiteratureTabs({
         >
           <SearchIcon className="h-4 w-4" />
           Search & read
-          {stagedItems.length > 0 && (
-            <span
-              className="ml-0.5 rounded-full bg-primary/12 px-1.5 py-0 text-xs font-semibold tabular-nums text-primary"
-              title={`${stagedItems.length} paper${stagedItems.length === 1 ? "" : "s"} in staging`}
-            >
-              {stagedItems.length}
-            </span>
-          )}
         </button>
         <button
           type="button"

@@ -57,7 +57,16 @@ function getPlainTextFromMessage(msg: {
       .join('\n');
     if (text) return normalizeContentToPlainText(text);
   }
-  return normalizeContentToPlainText(JSON.stringify(msg.content ?? ''));
+  // Content may be an array of blocks (AI SDK / Anthropic multi-modal). Keep ONLY
+  // text blocks — never JSON.stringify the payload, or a file/document/image block's
+  // base64 bytes leak into the prompt and the model echoes them back to the user.
+  if (Array.isArray(msg.content)) {
+    const text = (msg.content as Array<{ type?: string; text?: string }>)
+      .flatMap((p) => (p?.type === 'text' && typeof p.text === 'string' ? [p.text] : []))
+      .join('\n');
+    return text ? normalizeContentToPlainText(text) : '';
+  }
+  return '';
 }
 
 export async function POST(req: Request) {

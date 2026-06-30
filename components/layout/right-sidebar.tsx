@@ -2302,6 +2302,8 @@ export function RightSidebar({
         agentStream.reset();
       } else if (error) {
         toast.error(error);
+        // Clear the stale error/partial stream state so the next turn starts clean.
+        agentStream.reset();
       }
       return;
     }
@@ -2423,7 +2425,15 @@ export function RightSidebar({
           return;
         }
 
-        const savedUser = await saveMessage(sid, 'user', newContent);
+        // Recover the files attached to the original message so editing the text
+        // doesn't drop them (they live in the messageAttachments map, keyed by id).
+        const editAtts = messageAttachments.get(messageId) ?? [];
+        const savedUser = await saveMessage(
+          sid,
+          'user',
+          newContent,
+          editAtts.length > 0 ? { attachments: editAtts } : undefined,
+        );
         if (savedUser) {
           setSavedMessageIds((prev) => new Set(prev).add(savedUser.id));
           setMessages((curr) => {
@@ -2438,17 +2448,39 @@ export function RightSidebar({
               },
             ];
           });
+          // Re-key the recovered attachments onto the new saved message id so the
+          // attachment chips keep rendering after the edit.
+          if (editAtts.length > 0) {
+            setMessageAttachments((prev) => {
+              const next = new Map(prev);
+              next.delete(messageId);
+              next.set(savedUser.id, editAtts);
+              return next;
+            });
+          }
         }
 
         setNotes9Loading(true);
         const parsedEditTags = extractTagItemsFromMarkdown(newContent);
         const requestTags = mergeUniqueTags(selectedMentions, parsedEditTags);
+        // Re-send the original uploaded files (not just tags) so an edited request
+        // keeps its attachments — mirrors the fresh-send file_attachments shape.
+        const editFileAttachments = editAtts.slice(0, 5).map((a) => ({
+          url: a.url,
+          name: a.name,
+          content_type: a.contentType,
+          size: a.size ?? 0,
+        }));
         const { donePayload, error, artifacts: streamArtifacts, citationsManifest: streamManifest, graphs: streamGraphs } = await agentStream.runStream(
           {
             query: newContent,
             session_id: sid,
             history,
             attachments: tagsToAttachments(requestTags),
+            file_attachments:
+              editFileAttachments.length > 0
+                ? (editFileAttachments as unknown as AgentFileAttachment[])
+                : undefined,
             options: buildNotes9StreamOptions(requestTags),
           },
           token
@@ -2675,8 +2707,11 @@ export function RightSidebar({
   /** Stops Notes9 / literature agent or useChat streaming. */
   const handleStopRequest = useCallback(() => {
     if (notes9Loading) {
-      agentStream.abort();
-      agentStream.reset();
+      // Cancel the server run (not just the client read) so generation/billing
+      // actually stops. Do NOT reset here: the awaited runStream resolves with a
+      // synthetic done payload built from the partial, and the submit handler
+      // persists that as the assistant message instead of discarding it.
+      agentStream.cancel();
     } else if (literatureAgentStream.isStreaming) {
       literatureAgentStream.abort();
       literatureAgentStream.reset();
@@ -4109,6 +4144,10 @@ export function RightSidebar({
                                 error={agentStream.error}
                                 compact
                                 isThinkingStreaming={agentStream.isStreaming}
+                                onStop={handleStopRequest}
+                                onRetry={handleRegenerate}
+                                runId={agentStream.runId}
+                                liveCitationCount={agentStream.liveCitationCount}
                               />
                             )}
                           </div>

@@ -33,8 +33,10 @@ function refHref(r: AiSearchResult): string | null {
 /** How many result cards to reveal per "Load more" click (and on first render). */
 const PAGE_SIZE = 10
 
-function openAccessFirst(results: AiSearchResult[]): AiSearchResult[] {
-  return [...results].sort((a, b) => Number(!!b.paper?.isOpenAccess) - Number(!!a.paper?.isOpenAccess))
+// Stable per-paper identity for saved-state tracking — never list position.
+function savedKeyForResult(r: AiSearchResult): string {
+  const p = r.paper
+  return String(p?.id || p?.doi || p?.pmid || p?.title || r.citeLabel)
 }
 
 function refMeta(r: AiSearchResult): string {
@@ -100,22 +102,26 @@ export function AiSearchView({
     isStreaming,
     papersLoading,
     error,
-    loadMore,
-    isLoadingMore,
-    hasMore,
   } = useAiLiteratureSearch({ query })
 
-  // Track saved paper keys across re-renders so cards don't revert on remount.
+  // Track saved papers by identity (id|doi|pmid|title) across re-renders so cards
+  // don't revert on remount — never by list position, which leaks across queries.
   const savedKeysRef = useRef(new Set<string>())
 
-  // Pagination: show an initial page, "Load more" reveals the rest of the buffer
-  // and then fetches a fresh continuation page (excluding everything seen).
+  // Pagination: one deeply-ranked fetch; "Load more" reveals the rest of the
+  // buffer client-side (PAGE_SIZE at a time). No network page-2.
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE)
 
   useEffect(() => {
     if (query.trim()) void run(query)
     setVisibleCount(PAGE_SIZE)
+    savedKeysRef.current = new Set<string>()
   }, [query, run])
+
+  // Reset the visible window when filters change so the reveal math stays sane.
+  useEffect(() => {
+    setVisibleCount(PAGE_SIZE)
+  }, [filters])
 
   // Lift papers (for the host's staging detection + count) and loading state.
   useEffect(() => {
@@ -140,20 +146,14 @@ export function AiSearchView({
 
   const loading = isStreaming || papersLoading
   const showSkeletons = loading && results.length === 0
-  const displayed = openAccessFirst(applyAiFilters(results, filters))
+  // Relevance order comes from the backend reranker (best-first). Keep it; only
+  // re-sort when the user explicitly picks a sort mode (e.g. "Open access").
+  const displayed = applyAiFilters(results, filters)
   const visible = displayed.slice(0, visibleCount)
-  // "Load more": first reveal already-buffered results, then fetch a fresh
-  // continuation page (the hook excludes everything shown, so no repeats).
-  const canRevealBuffer = visibleCount < displayed.length
-  const showLoadMore = canRevealBuffer || hasMore
-  const onLoadMore = () => {
-    if (canRevealBuffer) {
-      setVisibleCount((c) => c + PAGE_SIZE)
-    } else if (hasMore) {
-      setVisibleCount((c) => c + PAGE_SIZE)
-      void loadMore()
-    }
-  }
+  // "Load more" is a pure client-side reveal of the already-fetched, deeply
+  // ranked set — no network page-2 (that path caused duplicates/latency).
+  const showLoadMore = visibleCount < displayed.length
+  const onLoadMore = () => setVisibleCount((c) => c + PAGE_SIZE)
   // Filter options grounded in the actual result set (not hardcoded).
   const journalChoices = journalOptions(results)
   const yearHint = yearBounds(results)
@@ -274,8 +274,15 @@ export function AiSearchView({
               result={{ ...r, citeLabel: String(i + 1) }}
               projectId={projectId}
               query={query}
-              initialSaved={savedKeysRef.current.has(r.citeLabel)}
-              onSaved={() => savedKeysRef.current.add(r.citeLabel)}
+              // Seed "saved" from the host's persisted library membership (source of
+              // truth, shared with the detail view) UNIONed with optimistic
+              // in-session saves — so an already-saved paper never shows "Save to
+              // library" on the card while the detail shows "Saved to library".
+              initialSaved={
+                (r.paper ? (isPaperStaged?.(r.paper.id) ?? false) : false) ||
+                savedKeysRef.current.has(savedKeyForResult(r))
+              }
+              onSaved={() => savedKeysRef.current.add(savedKeyForResult(r))}
               onStage={onStagePaper}
               onOpenStaged={onOpenStaged}
               isStaged={r.paper ? (isPaperStaged?.(r.paper.id) ?? false) : false}
@@ -314,17 +321,9 @@ export function AiSearchView({
           <button
             type="button"
             onClick={onLoadMore}
-            disabled={isLoadingMore}
-            className="glass-panel inline-flex items-center gap-2 rounded-full px-5 py-2 text-sm font-medium text-foreground shadow-sm transition hover:-translate-y-0.5 hover:border-primary/30 disabled:cursor-not-allowed disabled:opacity-60"
+            className="glass-panel inline-flex items-center gap-2 rounded-full px-5 py-2 text-sm font-medium text-foreground shadow-sm transition hover:-translate-y-0.5 hover:border-primary/30"
           >
-            {isLoadingMore ? (
-              <>
-                <Loader2 className="size-4 animate-spin" aria-hidden />
-                Loading more…
-              </>
-            ) : (
-              'Load more'
-            )}
+            Load more
           </button>
         </div>
       )}

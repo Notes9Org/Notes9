@@ -501,6 +501,31 @@ export function useAgentStream() {
       let streamError: string | null = null;
       let tokenBuffer = '';
 
+      // Token throttle: accumulate masked deltas and flush to React state on a
+      // ~80ms cadence instead of once per token. Per-token setState re-rendered
+      // the entire sidebar and re-parsed markdown on every token — the primary
+      // source of streaming jank. Flushed eagerly on text_reset / done / error
+      // and after the read loop so no streamed text is lost.
+      let pendingMasked = '';
+      let flushTimer: ReturnType<typeof setTimeout> | null = null;
+      const flushTokens = () => {
+        if (flushTimer) {
+          clearTimeout(flushTimer);
+          flushTimer = null;
+        }
+        if (!pendingMasked) return;
+        const chunk = pendingMasked;
+        pendingMasked = '';
+        setState((s) => ({ ...s, streamedAnswer: s.streamedAnswer + chunk }));
+      };
+      const scheduleFlush = () => {
+        if (flushTimer) return;
+        flushTimer = setTimeout(() => {
+          flushTimer = null;
+          flushTokens();
+        }, 80);
+      };
+
       try {
         const streamUrl = PROXY_STREAM_URL;
         const response = await fetch(streamUrl, {
@@ -684,22 +709,42 @@ export function useAgentStream() {
                   const serverLabel = typeof p.label === 'string' ? p.label : '';
 
                   const sourceNames = normalizeSourceNames(p.source_names);
+                  const citationsCount = typeof p.citations_count === 'number' ? p.citations_count : undefined;
+                  const latencyMs = typeof p.latency_ms === 'number' ? p.latency_ms : undefined;
+                  const previewSummary = typeof p.preview === 'string' ? p.preview : undefined;
 
-                  setState((s) => ({
-                    ...s,
-                    toolCards: s.toolCards.map((c) => {
-                      if (c.id !== toolId) return c;
-                      return {
-                        ...c,
-                        label: serverLabel || c.label,
-                        status: c.status === 'running' ? status : c.status,
-                        citations_count: typeof p.citations_count === 'number' ? p.citations_count : c.citations_count,
-                        latency_ms: typeof p.latency_ms === 'number' ? p.latency_ms : c.latency_ms,
-                        summary: typeof p.preview === 'string' ? p.preview : c.summary,
-                        source_names: sourceNames.length > 0 ? sourceNames : c.source_names,
+                  setState((s) => {
+                    // Self-heal: a tool_result whose tool_start never arrived (or was
+                    // dropped) would otherwise no-op and the card would never show.
+                    // Synthesize a settled card so the load still surfaces.
+                    if (!s.toolCards.some((c) => c.id === toolId)) {
+                      const card: ToolCard = {
+                        id: toolId,
+                        label: serverLabel || (TOOL_LABELS[toolId]?.label ?? toolId),
+                        status,
+                        citations_count: citationsCount,
+                        latency_ms: latencyMs,
+                        summary: previewSummary,
+                        source_names: sourceNames.length > 0 ? sourceNames : undefined,
                       };
-                    }),
-                  }));
+                      return { ...s, toolCards: [...s.toolCards, card] };
+                    }
+                    return {
+                      ...s,
+                      toolCards: s.toolCards.map((c) => {
+                        if (c.id !== toolId) return c;
+                        return {
+                          ...c,
+                          label: serverLabel || c.label,
+                          status: c.status === 'running' ? status : c.status,
+                          citations_count: citationsCount ?? c.citations_count,
+                          latency_ms: latencyMs ?? c.latency_ms,
+                          summary: previewSummary ?? c.summary,
+                          source_names: sourceNames.length > 0 ? sourceNames : c.source_names,
+                        };
+                      }),
+                    };
+                  });
                 }
                 break;
               }
@@ -917,9 +962,9 @@ export function useAgentStream() {
               case 'token': {
                 const t = extractSseTokenPiece(payload);
                 if (t) {
-                  const masked = maskCiteTokensForStream(t);
                   tokenBuffer += t;
-                  setState((s) => ({ ...s, streamedAnswer: s.streamedAnswer + masked }));
+                  pendingMasked += maskCiteTokensForStream(t);
+                  scheduleFlush();
                 }
                 break;
               }
@@ -929,6 +974,11 @@ export function useAgentStream() {
                 // streamed answer so the next turn's text starts on a
                 // clean slate — keeps the chat message free of "thinking"
                 // leaks while preserving live streaming during each turn.
+                if (flushTimer) {
+                  clearTimeout(flushTimer);
+                  flushTimer = null;
+                }
+                pendingMasked = '';
                 tokenBuffer = '';
                 setState((s) => ({ ...s, streamedAnswer: '' }));
                 break;
@@ -944,6 +994,7 @@ export function useAgentStream() {
                 break;
               }
               case 'done': {
+                flushTokens();
                 if (payload) {
                   const finished = normalizeNotes9AgentResponse(payload);
                   donePayload = finished;
@@ -959,6 +1010,7 @@ export function useAgentStream() {
                 break;
               }
               case 'error': {
+                flushTokens();
                 const msg =
                   payload && typeof (payload as { error?: string }).error === 'string'
                     ? (payload as { error: string }).error
@@ -1001,6 +1053,15 @@ export function useAgentStream() {
       } catch (err) {
         if ((err as Error).name === 'AbortError') {
           recordRumEvent('agent_stream_aborted', {});
+          // Stop should not discard what already streamed. Synthesize a done
+          // payload from the accumulated tokens so the caller's normal save path
+          // persists the partial answer as an assistant message.
+          const abortedRaw = mergeTokenBufferIntoAssistantRaw(null, tokenBuffer);
+          if (abortedRaw) {
+            const partial = normalizeNotes9AgentResponse(abortedRaw);
+            setState((s) => ({ ...s, streamedAnswer: partial.content, isStreaming: false }));
+            return { donePayload: partial, error: null, artifacts: collectedArtifacts, citationsManifest: collectedManifest, graphs: collectedGraphs };
+          }
           setState((s) => ({ ...s, isStreaming: false }));
           return { donePayload: null, error: null, artifacts: collectedArtifacts, citationsManifest: collectedManifest, graphs: collectedGraphs };
         }
@@ -1013,6 +1074,12 @@ export function useAgentStream() {
         }));
         return { donePayload: null, error: errMsg, artifacts: collectedArtifacts, citationsManifest: collectedManifest, graphs: collectedGraphs };
       } finally {
+        // Cancel any pending token flush so it can't fire after the run resolves
+        // (done/error/text_reset already flushed the buffer synchronously).
+        if (flushTimer) {
+          clearTimeout(flushTimer);
+          flushTimer = null;
+        }
         abortControllerRef.current = null;
       }
     },

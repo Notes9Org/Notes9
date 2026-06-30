@@ -181,6 +181,7 @@ export function AiPaperCard({
   isStaging?: boolean
 }) {
   const [saving, setSaving] = useState(false)
+  const [asking, setAsking] = useState(false)
   const [saved, setSaved] = useState(initialSaved)
   const [showAbstract, setShowAbstract] = useState(false)
   const [tab, setTab] = useState<'ai' | 'abstract'>('ai')
@@ -285,28 +286,52 @@ export function AiPaperCard({
     }
   }
 
-  const handleAsk = (e?: React.MouseEvent<HTMLElement>) => {
-    // Open-access PDF → load it into Catalyst so the AI can read the full paper.
-    const pdfUrl = result.paper?.pdfUrl
-    const hasPdf = !!(pdfUrl && /^https?:\/\//i.test(pdfUrl))
+  const handleAsk = async (e?: React.MouseEvent<HTMLElement>) => {
+    if (asking) return
+    const target = e?.currentTarget ?? null
+    const paper = result.paper
     // Open the panel first (empty composer = landing pad). The query stays clean —
     // no raw URL pasted into the chat (which renders as an ugly text link).
     openCatalystPanel({
       scope: 'literature',
-      webSearch: !hasPdf, // no full text to read → let the AI search the web
+      webSearch: false,
       query: `About the paper "${title}": `,
       autoSend: false,
     })
-    if (hasPdf) {
-      // Fly the paper in and reveal the PDF pill once it lands in the chat bar.
-      const attachments = [
-        { url: pdfUrl!, name: `${title.slice(0, 100)}.pdf`, contentType: 'application/pdf' },
-      ]
-      flyToCatalyst(e?.currentTarget ?? null, { onLand: () => attachToCatalyst(attachments) })
-    } else {
-      // No open-access PDF to attach — don't fly a paper that won't land as a
-      // pill. Prompt the user to bring the full text in themselves.
-      toast.info('No open-access PDF for this paper. Download it from the source, then upload it in Catalyst to analyze the full text.')
+    if (!paper) {
+      // Web-only hit with no paper record — fall back to web search.
+      openCatalystPanel({ scope: 'literature', webSearch: true, query: `About the paper "${title}": `, autoSend: false })
+      return
+    }
+    // Resolve + fetch the open-access PDF server-side (Unpaywall / OA mirrors),
+    // store it as a lightweight, 7-day chat_attachment, and attach the DURABLE
+    // signed URL. This avoids publisher 403s (we attach our own storage URL),
+    // covers papers without a direct pdfUrl, and falls back to the abstract when
+    // no full text is reachable — without staging the heavy literature_reviews row.
+    setAsking(true)
+    try {
+      const res = await fetch('/api/literature/ephemeral-attach', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ paper }),
+      })
+      const data = await res.json().catch(() => null)
+      if (res.ok && data?.url && !data?.fallback) {
+        const attachments = [
+          { url: data.url as string, name: (data.name as string) || `${title.slice(0, 100)}.pdf`, contentType: 'application/pdf' },
+        ]
+        flyToCatalyst(target, { onLand: () => attachToCatalyst(attachments) })
+      } else {
+        // No open-access full text reachable — let Catalyst answer from the
+        // abstract + web search rather than dead-ending the user.
+        openCatalystPanel({ scope: 'literature', webSearch: true, query: `About the paper "${title}": `, autoSend: false })
+        toast.info('No open-access full text found. Catalyst will use the abstract and web search; upload the PDF for full-text analysis.')
+      }
+    } catch {
+      openCatalystPanel({ scope: 'literature', webSearch: true, query: `About the paper "${title}": `, autoSend: false })
+      toast.error('Couldn’t load the paper into Catalyst. Falling back to web search.')
+    } finally {
+      setAsking(false)
     }
   }
 
