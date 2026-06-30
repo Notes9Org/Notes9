@@ -4,12 +4,13 @@ import { useEffect, useRef } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { SearchPaper } from "@/types/paper-search"
-import { BookOpen, BookmarkCheck, BookmarkPlus, Bot, ExternalLink, FileText, Loader2 } from "lucide-react"
+import { BookOpen, BookmarkCheck, BookmarkPlus, ExternalLink, FileText, Loader2, MessageCircle } from "lucide-react"
 import { LiteraturePdfPanel } from "./literature-pdf-panel"
 import { UploadLiteraturePdfDialog } from "./upload-literature-pdf-dialog"
 import { decodeHtmlEntities } from "@/lib/literature-abstract-display"
 import { openCatalystPanel } from "@/lib/catalyst-launch"
 import { MotionReveal } from "@/components/literature-reviews/motion"
+import { cn } from "@/lib/utils"
 
 export type StagingLiteratureRow = Record<string, unknown>
 
@@ -94,7 +95,9 @@ export function StagedPaperView({
   onSavePaper,
   savingLiteratureId = null,
 }: StagedPaperViewProps) {
+  // Persisted save state: anything past the "staging" statuses is in the library.
   const isSavedToLibrary = !["stage", "staged", "staging"].includes(String(lit.status ?? "").toLowerCase())
+  const isSaving = savingLiteratureId === lit.id
   const isClosedSource =
     !lit.pdf_storage_path &&
     (lit.pdf_import_status === "none" || lit.pdf_import_status === "failed")
@@ -113,16 +116,21 @@ export function StagedPaperView({
     return () => clearTimeout(t)
   }, [lit.id, lit.pdf_storage_path])
 
-  const readWithCatalyst = () => {
+  // Open Catalyst about this paper, attaching the PDF when one is available so
+  // the AI can read the full text.
+  const askCatalyst = () => {
+    const decodedTitle = lit.title ? decodeHtmlEntities(lit.title) : "this paper"
     openCatalystPanel({
       scope: "literature",
-      query: "Ask Catalyst about this paper.",
+      query: `About the paper "${decodedTitle}": `,
       attachments: lit.pdf_storage_path
-        ? [{
-            url: `/api/literature/${lit.id}/viewer-pdf`,
-            name: lit.pdf_file_name || "paper.pdf",
-            contentType: "application/pdf",
-          }]
+        ? [
+            {
+              url: `/api/literature/${lit.id}/viewer-pdf`,
+              name: lit.pdf_file_name || "paper.pdf",
+              contentType: "application/pdf",
+            },
+          ]
         : undefined,
       autoSend: false,
     })
@@ -131,42 +139,50 @@ export function StagedPaperView({
   return (
     <MotionReveal className="space-y-6">
       <div className="flex flex-col gap-4">
-        <div className="flex items-start justify-between">
-          <div className="space-y-1">
-            <h3 className="text-xl font-bold text-foreground">{lit.title ? decodeHtmlEntities(lit.title) : lit.title}</h3>
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0 space-y-1">
+            <div className="flex items-center gap-2">
+              <h3 className="text-xl font-bold text-foreground">{lit.title ? decodeHtmlEntities(lit.title) : lit.title}</h3>
+              {/* Saved-to-library status sits right beside the title (compact icon). */}
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => void onSavePaper(rowToSearchPaper(lit), lit.id)}
+                disabled={isSaving || isSavedToLibrary}
+                title={isSavedToLibrary ? "Saved to your library" : "Save this paper to your library"}
+                aria-label={isSavedToLibrary ? "Saved to library" : "Save to library"}
+                className={cn(
+                  "size-8 shrink-0 text-muted-foreground hover:text-foreground",
+                  isSavedToLibrary &&
+                    "text-emerald-600 hover:text-emerald-600 dark:text-emerald-400 dark:hover:text-emerald-400",
+                )}
+              >
+                {isSaving ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : isSavedToLibrary ? (
+                  <BookmarkCheck className="h-4 w-4" />
+                ) : (
+                  <BookmarkPlus className="h-4 w-4" />
+                )}
+              </Button>
+            </div>
             <p className="text-sm text-muted-foreground">
               {lit.authors ? decodeHtmlEntities(lit.authors) : "Unknown Author"} •{" "}
               {lit.journal ? decodeHtmlEntities(lit.journal) : "No journal"} (
               {lit.publication_year || "n.d."})
             </p>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex shrink-0 items-center gap-2">
+            {/* Compact Ask Catalyst — small ghost button so it doesn't crowd the header. */}
             <Button
-              variant="default"
+              variant="ghost"
               size="sm"
-              onClick={() => void onSavePaper(rowToSearchPaper(lit), lit.id)}
-              disabled={Boolean(savingLiteratureId) || isSavedToLibrary}
-              title="Keep this paper in your library"
-              className="gap-2 bg-primary hover:bg-[var(--n9-accent-hover)]"
+              onClick={askCatalyst}
+              title="Ask Catalyst AI about this paper"
+              className="gap-1.5 rounded-lg text-muted-foreground hover:text-foreground"
             >
-              {savingLiteratureId === lit.id ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : isSavedToLibrary ? (
-                <BookmarkCheck className="h-4 w-4" />
-              ) : (
-                <BookmarkPlus className="h-4 w-4" />
-              )}
-              {isSavedToLibrary ? "Saved to library" : "Save to library"}
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              className="gap-2 border-border/70 bg-background/80 text-foreground shadow-sm hover:bg-muted hover:text-foreground"
-              onClick={readWithCatalyst}
-              title="Read with Catalyst"
-            >
-              <Bot className="h-4 w-4" />
-              Read with Catalyst
+              <MessageCircle className="h-4 w-4" />
+              Ask Catalyst
             </Button>
           </div>
         </div>

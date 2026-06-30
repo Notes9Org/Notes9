@@ -198,7 +198,7 @@ export function AgentStreamReply({
             Stop control), so no Stop button is rendered here. ── */}
       {isStreaming && !donePayload && liveCitationCount > 0 && (
         <div className="flex items-center gap-2 px-1 text-xs text-muted-foreground">
-          <span className="inline-flex items-center gap-1.5">
+          <span className="inline-flex items-center gap-1.5 rounded-full border border-primary/20 bg-primary/[0.06] px-2 py-0.5 font-medium text-foreground/80">
             <span className="size-1.5 rounded-full bg-primary animate-pulse" aria-hidden />
             Gathering sources… {liveCitationCount}
           </span>
@@ -353,17 +353,17 @@ export function AgentStreamReply({
               {donePayload.confidence != null && (
                 <span
                   className={cn(
-                    'rounded-md px-2 py-0.5 font-medium',
+                    'rounded-full border px-2 py-0.5 font-medium',
                     donePayload.confidence < 0.5
-                      ? 'bg-amber-500/15 text-amber-700 dark:text-amber-400/90'
-                      : 'bg-muted/50'
+                      ? 'border-amber-500/30 bg-amber-500/15 text-amber-700 dark:text-amber-400/90'
+                      : 'border-border/60 bg-muted/50'
                   )}
                 >
                   Confidence: {(donePayload.confidence * 100).toFixed(0)}%
                 </span>
               )}
               {donePayload.tool_used && (
-                <span className="rounded-md bg-muted/50 px-2 py-0.5 font-medium">
+                <span className="rounded-full border border-border/60 bg-muted/50 px-2 py-0.5 font-medium">
                   {TOOL_LABELS[donePayload.tool_used] ?? donePayload.tool_used}
                 </span>
               )}
@@ -371,7 +371,7 @@ export function AgentStreamReply({
                   uncited answer is never silently presented as fully grounded. */}
               {(donePayload.citations_health === 'degraded' ||
                 donePayload.citations_health === 'failed') && (
-                <span className="rounded-md bg-amber-500/15 px-2 py-0.5 font-medium text-amber-700 dark:text-amber-400/90">
+                <span className="rounded-full border border-amber-500/30 bg-amber-500/15 px-2 py-0.5 font-medium text-amber-700 dark:text-amber-400/90">
                   {donePayload.citations_health === 'failed'
                     ? 'Citations unavailable'
                     : `Partial citations${

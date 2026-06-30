@@ -3511,36 +3511,6 @@ export function RightSidebar({
     return diffDays <= 9 ? `${diffDays}d` : '9d';
   };
 
-  const SessionItem = ({ session }: { session: ChatSession }) => (
-    <div className="group/item grid grid-cols-[1fr_28px] gap-1 w-full min-w-0 items-center rounded-lg">
-      <button
-        type="button"
-        onClick={() => loadSession(session.id)}
-        className={cn(
-          "min-w-0 flex items-center justify-between gap-2 px-3 py-2 text-left text-sm rounded-lg transition-colors overflow-hidden",
-          currentSessionId === session.id
-            ? "bg-accent text-accent-foreground"
-            : "hover:bg-muted/50 text-muted-foreground hover:text-foreground"
-        )}
-      >
-        <span className="text-2xs shrink-0 opacity-70 whitespace-nowrap opacity-0 transition-opacity group-hover/item:opacity-70 mr-2">
-          {formatSessionTime(session.updated_at)}
-        </span>
-        <span className="truncate min-w-0 flex-1">{session.title || 'New conversation'}</span>
-      </button>
-      <Button
-        type="button"
-        variant="ghost"
-        size="icon"
-        className="h-7 w-7 shrink-0 col-start-2 text-muted-foreground hover:text-destructive opacity-0 transition-opacity group-hover/item:opacity-100"
-        onClick={(e) => handleDeleteSession(e, session.id)}
-        aria-label="Delete chat"
-      >
-        <Trash2 className="size-3.5" />
-      </Button>
-    </div>
-  );
-
   const showLiteratureEmptyState = agentMode === 'literature' && isLiteratureRoute;
   const emptyStateSubheading = showLiteratureEmptyState ? 'For Literature' : null;
   const emptyStateDescription = showLiteratureEmptyState
@@ -3695,8 +3665,8 @@ export function RightSidebar({
                       </DropdownMenu>
 
                       <Button
-                        variant="secondary"
-                        className="h-8 sm:h-9 text-muted-foreground"
+                        variant="ghost"
+                        className="h-8 gap-1.5 rounded-full border border-[color:color-mix(in_srgb,var(--n9-accent)_28%,var(--border))] bg-[color:color-mix(in_srgb,var(--n9-accent)_8%,transparent)] px-3 font-medium text-[color:var(--n9-accent)] transition-colors hover:bg-[color:color-mix(in_srgb,var(--n9-accent)_14%,transparent)] hover:text-[color:var(--n9-accent)] sm:h-9"
                         onClick={handleNewChat}
                         aria-label="New chat"
                       >
@@ -3729,15 +3699,6 @@ export function RightSidebar({
                     }}
                   >
                     <Minimize className="size-4" />
-                  </Button>
-                  <Button
-                    variant="secondary"
-                    className="hidden h-8 text-muted-foreground sm:inline-flex sm:h-9"
-                    onClick={handleNewChat}
-                    aria-label="New chat"
-                  >
-                    <Plus className="size-4" />
-                    <span>New chat</span>
                   </Button>
                   <Button
                     type="button"
@@ -3827,37 +3788,48 @@ export function RightSidebar({
                   className="flex h-full min-h-0 flex-col gap-1 p-2"
                   style={{ width: historySidebar.width }}
                 >
-                  {/* Header row — close button + "Chats" label on the top-left,
+                  {/* Header row — hide-history toggle + section label on the left,
                       new chat on the right. */}
-                  <div className="flex h-8 shrink-0 items-center gap-1 rounded-md px-1 text-xs font-medium text-sidebar-foreground/70">
+                  <div className="flex h-9 shrink-0 items-center gap-1 px-1">
                     <Button
                       variant="ghost"
                       size="icon"
-                      className="h-7 w-7 shrink-0"
+                      className="h-7 w-7 shrink-0 text-sidebar-foreground/70 hover:text-sidebar-foreground"
                       onClick={() => setExpandedHistoryOpen(false)}
                       title="Hide chat history"
                       aria-label="Hide chat history"
                     >
                       <PanelLeft className="h-4 w-4" />
                     </Button>
-                    <span className="flex-1 truncate">Chats</span>
+                    <span className="flex-1 truncate text-xs font-semibold uppercase tracking-wider text-sidebar-foreground/55">
+                      Chats
+                    </span>
                     <Button
                       variant="ghost"
                       size="icon"
-                      className="h-7 w-7 shrink-0"
+                      className="h-7 w-7 shrink-0 text-sidebar-foreground/70 transition-colors hover:bg-[color:color-mix(in_srgb,var(--n9-accent)_12%,transparent)] hover:text-[color:var(--n9-accent)]"
                       onClick={handleNewChat}
+                      title="New chat"
                       aria-label="New chat"
                     >
                       <PenBox className="h-4 w-4" />
                     </Button>
                   </div>
-                  {/* List - same structure as lab notes */}
+                  {/* Conversation list — clean, title-first rows with a brand
+                      accent marking the active chat, a relative time that fades
+                      on hover, and a delete affordance revealed on hover/focus. */}
                   <ScrollArea className="min-h-0 flex-1 overflow-hidden">
                     {sessions.length === 0 ? (
-                    <div className="px-2 py-6 text-center text-sidebar-foreground/70 text-xs">No previous conversations.</div>
+                      <div className="px-3 py-8 text-center text-xs leading-relaxed text-sidebar-foreground/55">
+                        No conversations yet.
+                        <br />
+                        Start a new chat to see it here.
+                      </div>
                     ) : (
                       <ul className="flex min-w-0 flex-col gap-0.5 pr-1">
-                        {sessions.map((session) => (
+                        {sessions.map((session) => {
+                          const isActive = currentSessionId === session.id;
+                          return (
                           <li
                             key={session.id}
                             className="group/row relative"
@@ -3867,40 +3839,50 @@ export function RightSidebar({
                               tabIndex={0}
                               onClick={() => loadSession(session.id)}
                               onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); loadSession(session.id); } }}
+                              title={session.title || 'New conversation'}
                               className={cn(
-                                "grid min-h-9 min-w-0 grid-cols-[auto_1fr_auto] items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm outline-none transition-all duration-150 hover:bg-[color:color-mix(in_oklab,var(--background)_78%,var(--primary)_22%)] hover:text-sidebar-foreground active:scale-[0.985] active:bg-[color:color-mix(in_oklab,var(--background)_70%,var(--primary)_30%)] dark:hover:bg-sidebar-accent dark:hover:text-sidebar-accent-foreground dark:active:scale-[0.985] dark:active:bg-sidebar-accent/90",
-                                currentSessionId === session.id && "bg-sidebar-accent font-medium text-sidebar-accent-foreground"
+                                "relative flex min-h-9 min-w-0 items-center rounded-lg px-2.5 py-2 pr-9 text-left text-sm outline-none transition-colors duration-150 focus-visible:ring-2 focus-visible:ring-[color:color-mix(in_srgb,var(--n9-accent)_35%,transparent)]",
+                                isActive
+                                  ? "bg-sidebar-accent font-medium text-sidebar-accent-foreground"
+                                  : "text-sidebar-foreground/75 hover:bg-sidebar-accent/55 hover:text-sidebar-foreground"
                               )}
                             >
-                              <span className="flex size-8 shrink-0 items-center justify-center text-2xs text-sidebar-foreground/70 tabular-nums whitespace-nowrap" aria-hidden>
-                                {formatSessionTime(session.updated_at)}
+                              {isActive && (
+                                <span
+                                  className="absolute left-0 top-1/2 h-5 w-[3px] -translate-y-1/2 rounded-r-full bg-[color:var(--n9-accent)]"
+                                  aria-hidden
+                                />
+                              )}
+                              <span className="min-w-0 flex-1 truncate">
+                                {session.title || 'New conversation'}
                               </span>
                               <span
                                 className={cn(
-                                  "block truncate font-medium",
-                                  currentSessionId === session.id
-                                    ? "text-sidebar-accent-foreground"
-                                    : "text-inherit"
+                                  "ml-2 shrink-0 text-2xs tabular-nums text-sidebar-foreground/40 transition-opacity duration-150 group-hover/row:opacity-0",
+                                  isActive && "opacity-0"
                                 )}
-                                title={session.title || 'New conversation'}
+                                aria-hidden
                               >
-                                {session.title || 'New conversation'}
+                                {formatSessionTime(session.updated_at)}
                               </span>
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                className={cn(
-                                  "size-8 shrink-0 text-sidebar-foreground/70 transition-[opacity,transform,color] duration-200 ease-out hover:text-destructive",
-                                  currentSessionId === session.id ? "opacity-100" : "pointer-events-none translate-x-1 opacity-0 group-hover/row:pointer-events-auto group-hover/row:translate-x-0 group-hover/row:opacity-100"
-                                )}
-                                onClick={(e) => handleDeleteSession(e, session.id)}
-                                aria-label="Delete chat"
-                              >
-                                <Trash2 className="h-4 w-4" />
-                              </Button>
                             </div>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className={cn(
+                                "absolute right-1 top-1/2 size-7 -translate-y-1/2 rounded-md text-sidebar-foreground/60 transition-[opacity,color] duration-150 hover:bg-background/60 hover:text-destructive",
+                                isActive
+                                  ? "opacity-100"
+                                  : "pointer-events-none opacity-0 group-hover/row:pointer-events-auto group-hover/row:opacity-100 focus-visible:pointer-events-auto focus-visible:opacity-100"
+                              )}
+                              onClick={(e) => handleDeleteSession(e, session.id)}
+                              aria-label="Delete chat"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </Button>
                           </li>
-                        ))}
+                          );
+                        })}
                       </ul>
                     )}
                     <ScrollBar orientation="horizontal" />
@@ -3924,16 +3906,28 @@ export function RightSidebar({
                   history panel is collapsed (no rail), at the same vertical spot
                   as the "Chats" header so reopening feels anchored. */}
               {layoutExpanded && !expandedHistoryOpen && (
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="absolute left-2 top-2 z-20 h-7 w-7 rounded-md bg-background/80 text-foreground/70 shadow-sm backdrop-blur-sm hover:bg-accent hover:text-foreground"
-                  onClick={() => setExpandedHistoryOpen(true)}
-                  title="Show chat history"
-                  aria-label="Show chat history"
-                >
-                  <PanelLeft className="h-4 w-4" />
-                </Button>
+                <div className="absolute left-2 top-2 z-20 flex items-center gap-1">
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-7 w-7 rounded-md bg-background/80 text-foreground/70 shadow-sm backdrop-blur-sm hover:bg-accent hover:text-foreground"
+                    onClick={() => setExpandedHistoryOpen(true)}
+                    title="Show chat history"
+                    aria-label="Show chat history"
+                  >
+                    <PanelLeft className="h-4 w-4" />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-7 w-7 rounded-md bg-background/80 text-foreground/70 shadow-sm backdrop-blur-sm hover:bg-accent hover:text-foreground"
+                    onClick={handleNewChat}
+                    title="New chat"
+                    aria-label="New chat"
+                  >
+                    <PenBox className="h-4 w-4" />
+                  </Button>
+                </div>
               )}
               {messages.length === 0 && !literature ? (
                 isPageVariant ? (

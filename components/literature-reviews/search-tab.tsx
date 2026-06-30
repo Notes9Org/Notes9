@@ -1,8 +1,9 @@
 'use client'
 
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { PaperSearchSortMode, SearchPaper } from '@/types/paper-search'
 import { Input } from '@/components/ui/input'
+import { Button } from '@/components/ui/button'
 import {
   Search,
   Loader2,
@@ -12,6 +13,7 @@ import {
   ScrollText,
   MessageCircle,
   Highlighter,
+  Mic,
   NotebookPen,
   ArrowRight,
   type LucideIcon,
@@ -20,6 +22,9 @@ import { cn } from '@/lib/utils'
 import { AiSearchView } from './ai-search-view'
 import { AiSearchFilters } from './ai-search-filters'
 import { DEFAULT_AI_FILTERS, type AiResultFilters } from '@/lib/ai-search-filters'
+import { useAwsTranscribe } from '@/hooks/use-aws-transcribe'
+import { VoiceWaveform } from '@/components/text-editor/voice-waveform'
+import { toast } from 'sonner'
 
 /** What the AI literature search offers — shown on the empty (pre-search) state. */
 const SEARCH_FEATURES: { Icon: LucideIcon; title: string; desc: string }[] = [
@@ -80,6 +85,19 @@ export function LiteratureSearchForm({
     onSearch()
   }
 
+  // Voice dictation for the search query. A ref keeps the latest query so the
+  // async onFinal callback appends to current text rather than a stale closure.
+  const queryRef = useRef(query)
+  queryRef.current = query
+  const { start: startMic, stop: stopMic, isListening, getWaveformData } = useAwsTranscribe({
+    onFinal: (text) => {
+      const cur = queryRef.current ?? ''
+      setQuery((cur ? `${cur} ${text}` : text).trimStart())
+    },
+    onInterim: () => {},
+    onError: (err) => toast.error(err),
+  })
+
   return (
     <form onSubmit={handleSearch} className="mx-auto w-full max-w-3xl">
       <div
@@ -100,6 +118,29 @@ export function LiteratureSearchForm({
           enterKeyHint="search"
           aria-label="Literature search query"
         />
+        {/* Voice dictation — speak your research question instead of typing. */}
+        <div className="relative flex shrink-0 items-center">
+          {isListening && (
+            <div className="pointer-events-none absolute right-full pr-1">
+              <VoiceWaveform getWaveformData={getWaveformData} />
+            </div>
+          )}
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className={cn(
+              'size-9 rounded-xl text-muted-foreground hover:text-foreground',
+              isListening && 'text-red-500 hover:text-red-600',
+            )}
+            disabled={isSearching}
+            onClick={() => (isListening ? stopMic() : startMic())}
+            aria-label={isListening ? 'Stop dictation' : 'Start dictation'}
+            title={isListening ? 'Stop dictation' : 'Dictate your search'}
+          >
+            <Mic className="h-4 w-4" />
+          </Button>
+        </div>
         {showFilters && (
           <div className="shrink-0">
             <AiSearchFilters

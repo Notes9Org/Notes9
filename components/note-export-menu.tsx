@@ -261,9 +261,9 @@ export function NoteFileMenu({
               size="icon-sm"
               className="text-muted-foreground hover:text-foreground"
               disabled={disabled}
-              aria-label="File"
+              aria-label="Import, export & print"
             >
-              <FileText className="h-4 w-4" />
+              <FileDown className="h-4 w-4" />
             </Button>
           )}
         </DropdownMenuTrigger>

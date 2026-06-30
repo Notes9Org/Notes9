@@ -101,6 +101,7 @@ import { TextSelection } from "@tiptap/pm/state"
 import { Decoration, DecorationSet } from "@tiptap/pm/view"
 import { cn } from "@/lib/utils"
 import { useAwsTranscribe } from "@/hooks/use-aws-transcribe"
+import { useIsMobile } from "@/hooks/use-mobile"
 import {
   useCallback,
   useEffect,
@@ -2068,6 +2069,10 @@ window.localStorage.setItem(RIBBON_TAB_KEY, ribbonTab)
       /* ignore quota/availability errors */
     }
   }, [ribbonTab])
+  // Phones can't usefully render the fixed-width paginated "Page view" (the 816px
+  // sheet is wider than the viewport and gets horizontally clipped, so the user
+  // can't scroll to the rest of the page). Infinite scroll is the default there.
+  const isMobile = useIsMobile()
   // Page setup for print / PDF export (orientation + margins).
   const [pageSetup, setPageSetup] = useState<{
     orientation: "portrait" | "landscape"
@@ -2114,8 +2119,9 @@ window.localStorage.setItem(RIBBON_TAB_KEY, ribbonTab)
     setPageSetup((p) => ({
       ...p,
       orientation: l.orientation,
-      // Don't force Page view on in embedded/read-only shells that opt out of it.
-      pageView: !panelEmbed && !hideToolbar ? l.pageView : p.pageView,
+      // Don't force Page view on in embedded/read-only shells that opt out of it,
+      // and never restore it on phones where the sheet can't be scrolled.
+      pageView: !panelEmbed && !hideToolbar ? (isMobile ? false : l.pageView) : p.pageView,
       rulers: l.rulers,
       margins: { ...l.margins },
     }))
@@ -2125,7 +2131,14 @@ window.localStorage.setItem(RIBBON_TAB_KEY, ribbonTab)
     setFooterAlign(l.footer.align)
     setShowPageNumbers(l.pageNumbers)
     setPageNumberAlign(l.pageNumberAlign)
-  }, [panelEmbed, hideToolbar])
+  }, [panelEmbed, hideToolbar, isMobile])
+
+  // When the viewport is (or becomes) phone-sized, fall back to infinite scroll.
+  // Runs only on isMobile changes, so a user can still manually opt into Page
+  // view on a larger screen without it being yanked back.
+  useEffect(() => {
+    if (isMobile) setPageSetup((p) => (p.pageView ? { ...p, pageView: false } : p))
+  }, [isMobile])
 
   // Live height of the page sheet so the vertical ruler can repeat its scale per page.
   const pageSheetRef = useRef<HTMLDivElement | null>(null)
@@ -2207,12 +2220,20 @@ window.localStorage.setItem(RIBBON_TAB_KEY, ribbonTab)
   const [bibliographyModalOpen, setBibliographyModalOpen] = useState(false)
   const [foundPapers, setFoundPapers] = useState<Paper[]>([])
   const [selectedPapers, setSelectedPapers] = useState<Set<number>>(new Set())
-  const [citationInsertPosition, setCitationInsertPosition] = useState<number>(0)
+  // Cite-with-AI sidebar: which list is shown (AI/web matches vs the full saved
+  // library browser), plus the lazily-loaded repository papers for that browser.
+  const [citeView, setCiteView] = useState<"results" | "library">("results")
+  const [repositoryPapers, setRepositoryPapers] = useState<Paper[]>([])
+  const [repoLoading, setRepoLoading] = useState(false)
   // Where the currently-shown citation results came from, and the query that
-  // produced them (so the modal can offer a web search when the repository
+  // produced them (so the panel can offer a web search when the repository
   // had nothing useful).
   const [citationSource, setCitationSource] = useState<"repository" | "web" | null>(null)
   const [lastCiteQuery, setLastCiteQuery] = useState<string>("")
+  const displayedCitationPapers = useMemo(
+    () => (citeView === "library" ? repositoryPapers : foundPapers),
+    [citeView, repositoryPapers, foundPapers],
+  )
   // Whether the user has explicitly chosen a citation style. Until they have,
   // the bibliography stays empty and references are never auto-populated. A
   // previously-saved style (or a prior choice) counts as chosen.
@@ -3072,12 +3093,56 @@ window.localStorage.setItem(RIBBON_TAB_KEY, ribbonTab)
     const timeoutId = setTimeout(() => controller.abort(), 120000)
     try {
       const query = rawQuery.trim().slice(0, 1000)
-      const response = await fetch(`/api/search-papers?query=${encodeURIComponent(query)}`, {
+      // Use the web-capable literature endpoint (web search first, then
+      // PubMed/Europe PMC/OpenAlex). It streams SSE: `papers` arrives first,
+      // followed by AI summaries we don't need here — so we read until the
+      // `papers` event, then stop the stream early.
+      const response = await fetch(`/api/literature/ai-search`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ query, web_search: true, limit: 12 }),
         signal: controller.signal,
       })
-      if (!response.ok) throw new Error("Citation search failed")
-      const payload = (await response.json()) as { papers?: SearchPaper[] }
-      const papers = payload.papers ?? []
+      if (!response.ok || !response.body) throw new Error("Citation search failed")
+
+      const reader = response.body.getReader()
+      const decoder = new TextDecoder()
+      let buffer = ""
+      let papers: SearchPaper[] = []
+      streamLoop: while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+        buffer += decoder.decode(value, { stream: true })
+        // SSE events are separated by a blank line.
+        let sepIndex: number
+        while ((sepIndex = buffer.indexOf("\n\n")) !== -1) {
+          const rawEvent = buffer.slice(0, sepIndex)
+          buffer = buffer.slice(sepIndex + 2)
+          let eventName = "message"
+          const dataLines: string[] = []
+          for (const line of rawEvent.split("\n")) {
+            if (line.startsWith("event:")) eventName = line.slice(6).trim()
+            else if (line.startsWith("data:")) dataLines.push(line.slice(5).trim())
+          }
+          if (eventName === "papers") {
+            try {
+              const parsed = JSON.parse(dataLines.join("\n")) as { papers?: SearchPaper[] }
+              papers = parsed.papers ?? []
+            } catch {
+              /* ignore a malformed papers frame — treated as no results */
+            }
+            break streamLoop
+          }
+          if (eventName === "error") throw new Error("Citation search failed")
+          if (eventName === "done") break streamLoop
+        }
+      }
+      // We have the papers we need; cancel the rest of the stream (summaries).
+      try {
+        await reader.cancel()
+      } catch {
+        /* stream already closed */
+      }
 
       const seen = new Set<string>()
       const uniqueData: Paper[] = []
@@ -3122,8 +3187,8 @@ window.localStorage.setItem(RIBBON_TAB_KEY, ribbonTab)
     }
 
     const query = selectedText.trim().slice(0, 1000)
-    setCitationInsertPosition(to)
     setLastCiteQuery(query)
+    setCiteView("results")
 
     try {
       setIsCiteProcessing(true)
@@ -3188,6 +3253,9 @@ window.localStorage.setItem(RIBBON_TAB_KEY, ribbonTab)
   const handleCiteSelected = useCallback(() => {
     if (!editor || selectedPapers.size === 0) return
 
+    // Insert at the user's live cursor — the docked sidebar is non-modal, so the
+    // editor keeps its selection and the user can reposition between insertions.
+    const insertPos = editor.state.selection.to
     const html = editor.getHTML()
 
     // Determine insert position among existing citations by counting
@@ -3202,7 +3270,7 @@ window.localStorage.setItem(RIBBON_TAB_KEY, ribbonTab)
     // Build new citation entries from selected papers
     const sortedIndices = Array.from(selectedPapers).sort((a, b) => a - b)
     const newEntries: CitationEntry[] = sortedIndices.map((index) => {
-      const paper = foundPapers[index]
+      const paper = displayedCitationPapers[index]
       return {
         key: paper?.id?.toString() || `new-${Date.now()}-${index}`,
         metadata: {
@@ -3233,8 +3301,8 @@ window.localStorage.setItem(RIBBON_TAB_KEY, ribbonTab)
       citationText += `<a href="${meta.url}" data-paper-id="${meta.paperId}" data-paper-title="${meta.title.replace(/"/g, '&quot;')}" data-paper-authors="${authorsJson}" data-paper-year="${meta.year}" data-paper-journal="${(meta.journal || '').replace(/"/g, '&quot;')}" data-paper-doi="${meta.doi || ''}" target="_blank" rel="noopener noreferrer">${inlineLabel}</a>`
     })
 
-    // Insert at cursor position
-    editor.chain().focus().setTextSelection(citationInsertPosition).insertContent(citationText).run()
+    // Insert at the live cursor position
+    editor.chain().focus().setTextSelection(insertPos).insertContent(citationText).run()
 
     // Renumber all existing citations in the document to match store order
     setTimeout(() => {
@@ -3245,11 +3313,13 @@ window.localStorage.setItem(RIBBON_TAB_KEY, ribbonTab)
       }
     }, 100)
 
-    // Close modal and reset
-    setCitationModalOpen(false)
-    setFoundPapers([])
+    // Keep the sidebar open so the user can keep adding citations; just clear
+    // the current selection and confirm what was inserted.
     setSelectedPapers(new Set())
-  }, [editor, selectedPapers, foundPapers, citationInsertPosition, selectedCitationStyle, citationDispatch])
+    toast.success(
+      `Inserted ${newEntries.length} citation${newEntries.length === 1 ? "" : "s"} at cursor`,
+    )
+  }, [editor, selectedPapers, displayedCitationPapers, selectedCitationStyle, citationDispatch])
 
   const togglePaperSelection = useCallback((index: number) => {
     setSelectedPapers(prev => {
@@ -3262,6 +3332,109 @@ window.localStorage.setItem(RIBBON_TAB_KEY, ribbonTab)
       return newSet
     })
   }, [])
+
+  // Load the user's full saved-paper library for the sidebar's "My library" view.
+  const loadRepositoryPapers = useCallback(async () => {
+    setRepoLoading(true)
+    try {
+      const supabase = createClient()
+      const { data, error } = await supabase
+        .from("literature_reviews")
+        .select("id,title,authors,journal,publication_year,doi,pmid,url,abstract,catalog_placement")
+        .eq("catalog_placement", "repository")
+        .order("created_at", { ascending: false })
+        .limit(200)
+      if (error || !data) {
+        setRepositoryPapers([])
+        return
+      }
+      const mapped: Paper[] = data.map((row: any) => {
+        const bareDoi = row.doi ? String(row.doi).replace(/^https?:\/\/(dx\.)?doi\.org\//i, "").trim() : ""
+        const sourceUrl =
+          (row.url ? String(row.url) : "") ||
+          (bareDoi ? `https://doi.org/${bareDoi}` : "") ||
+          (row.pmid ? `https://pubmed.ncbi.nlm.nih.gov/${row.pmid}/` : "")
+        const authors =
+          typeof row.authors === "string" && row.authors.trim()
+            ? row.authors.split(/[;,]/).map((a: string) => a.trim()).filter(Boolean)
+            : []
+        const year =
+          typeof row.publication_year === "number"
+            ? row.publication_year
+            : row.publication_year
+              ? Number(row.publication_year) || null
+              : null
+        return {
+          id: String(row.id),
+          title: String(row.title ?? ""),
+          authors,
+          year,
+          journal: String(row.journal ?? ""),
+          source_url: sourceUrl,
+          doi: bareDoi,
+        }
+      })
+      setRepositoryPapers(mapped)
+    } catch {
+      setRepositoryPapers([])
+    } finally {
+      setRepoLoading(false)
+    }
+  }, [])
+
+  // Sidebar view switches — clear the (index-based) selection when the list changes.
+  const showCitationResults = useCallback(() => {
+    setCiteView("results")
+    setSelectedPapers(new Set())
+  }, [])
+  const showCitationLibrary = useCallback(() => {
+    setCiteView("library")
+    setSelectedPapers(new Set())
+    void loadRepositoryPapers()
+  }, [loadRepositoryPapers])
+
+  // One-click "insert bibliography at end" from the sidebar — same numbering and
+  // citation-format pipeline as the toolbar bibliography, without the preview modal.
+  // Build the store state locally so it applies immediately (the reducer dispatch
+  // below only keeps the store in sync for later edits).
+  const handleInsertBibliographyInline = useCallback(() => {
+    if (!editor) return
+    if (!citationStyleChosen) {
+      toast.info('Choose a citation style first', {
+        description: 'Pick a citation style (APA, MLA, …) from the toolbar to build your references.',
+        duration: 5000,
+      })
+      return
+    }
+    const html = editor.getHTML()
+    const parsed = parseCitationsFromHtml(html)
+    if (parsed.length === 0) {
+      toast.error('No citations to list yet', {
+        description: 'Insert some citations first, then add the bibliography.',
+        duration: 4000,
+      })
+      return
+    }
+    const entries: CitationEntry[] = parsed.map((c) => ({
+      key: c.paperId || `cite-${c.number}`,
+      metadata: {
+        citationNumber: c.number,
+        url: c.url,
+        title: c.title || '',
+        authors: c.authors || [],
+        year: c.year || 0,
+        journal: c.journal || '',
+        doi: c.doi || '',
+        paperId: c.paperId,
+      },
+    }))
+    citationDispatch({ type: 'SYNC_FROM_HTML', entries })
+    const updatedHtml = applyStoreToHtml(html, { ...citationState, entries })
+    if (updatedHtml !== html) {
+      editor.commands.setContent(updatedHtml)
+    }
+    toast.success('Bibliography added at the end')
+  }, [editor, citationStyleChosen, citationState, citationDispatch])
 
   const handleGenerateBibliography = useCallback(async () => {
     if (!editor) return
@@ -5113,8 +5286,17 @@ window.localStorage.setItem(RIBBON_TAB_KEY, ribbonTab)
                 <Quote className="mr-2 h-4 w-4" />
                 Cite with AI
               </DropdownMenuItem>
-              <DropdownMenuItem data-tour="editor-bibliography" onClick={handleGenerateBibliography} disabled={isCiteProcessing}>
+              <DropdownMenuItem
+                onClick={() => {
+                  setCitationModalOpen(true)
+                  showCitationLibrary()
+                }}
+              >
                 <BookOpen className="mr-2 h-4 w-4" />
+                Browse library &amp; cite
+              </DropdownMenuItem>
+              <DropdownMenuItem data-tour="editor-bibliography" onClick={handleGenerateBibliography} disabled={isCiteProcessing}>
+                <FileText className="mr-2 h-4 w-4" />
                 Generate bibliography
               </DropdownMenuItem>
               <DropdownMenuSeparator />
@@ -5668,6 +5850,8 @@ window.localStorage.setItem(RIBBON_TAB_KEY, ribbonTab)
               pageSetup.pageView ? "n9-page-backdrop px-0 pt-0 pb-8 [overflow-x:clip]" : "overflow-x-auto px-2 pb-2 pr-20",
               // shift the centred page left so the comments sidebar doesn't cover it
               commentsSidebarOpen && "pr-[312px]",
+              // shift the centred page left so the citation sidebar doesn't cover it
+              citationModalOpen && "pr-[376px]",
             )}
             style={
               panelEmbed || fillParentHeight || editorRegionFullscreen
@@ -5799,8 +5983,151 @@ window.localStorage.setItem(RIBBON_TAB_KEY, ribbonTab)
             )}
           </div>
           {/* TOC and Comment Sidebar positioned absolutely relative to the card */}
-          {editor && <TableOfContents editor={editor} className={cn(commentsSidebarOpen ? "right-[304px]" : "right-4")} />}
+          {editor && <TableOfContents editor={editor} className={cn(citationModalOpen ? "right-[372px]" : commentsSidebarOpen ? "right-[304px]" : "right-4")} />}
           {editor && <CommentSidebar editor={editor} open={commentsSidebarOpen} onClose={() => setCommentsSidebarOpen(false)} />}
+
+          {/* Cite-with-AI: docked, width-animated sidebar (replaces the old
+              blocking modal). Always mounted so it slides smoothly both ways;
+              the document reflows via the `pr-[376px]` shift above. */}
+          <div
+            className={cn(
+              "absolute right-0 top-0 z-50 flex h-full w-[360px] max-w-full flex-col border-l border-border bg-background shadow-xl transition-transform duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]",
+              citationModalOpen ? "translate-x-0" : "pointer-events-none translate-x-full",
+            )}
+            aria-hidden={!citationModalOpen}
+          >
+            <div className="flex items-center justify-between border-b border-border bg-muted/30 px-4 py-3">
+              <h3 className="flex items-center gap-2 text-sm font-semibold">
+                <Quote className="h-4 w-4" /> Add citations
+              </h3>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8"
+                onClick={() => setCitationModalOpen(false)}
+                aria-label="Close citations panel"
+              >
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
+
+            {/* View toggle: AI/web matches vs the full saved library */}
+            <div className="flex items-center gap-1 border-b border-border/60 p-2">
+              <Button
+                variant={citeView === "results" ? "secondary" : "ghost"}
+                size="sm"
+                className="h-8 flex-1 gap-1.5"
+                onClick={showCitationResults}
+              >
+                <Sparkles className="h-3.5 w-3.5" /> AI matches
+              </Button>
+              <Button
+                variant={citeView === "library" ? "secondary" : "ghost"}
+                size="sm"
+                className="h-8 flex-1 gap-1.5"
+                onClick={showCitationLibrary}
+              >
+                <BookOpen className="h-3.5 w-3.5" /> My library
+              </Button>
+            </div>
+
+            <div className="min-h-0 flex-1 space-y-2 overflow-y-auto p-3">
+              {repoLoading && citeView === "library" ? (
+                <div className="flex items-center justify-center gap-2 py-10 text-xs text-muted-foreground">
+                  <Loader2 className="h-4 w-4 animate-spin" /> Loading your library…
+                </div>
+              ) : displayedCitationPapers.length === 0 ? (
+                <div className="px-2 py-10 text-center text-xs leading-relaxed text-muted-foreground">
+                  {citeView === "library"
+                    ? "No saved papers in your library yet."
+                    : "No matches yet. Select text in the document and choose “Cite with AI”, or search the web."}
+                </div>
+              ) : (
+                displayedCitationPapers.map((paper, index) => {
+                  const year = paper.year && paper.year > 0 ? paper.year : null
+                  const isSelected = selectedPapers.has(index)
+                  return (
+                    <div
+                      key={paper.id}
+                      onClick={() => togglePaperSelection(index)}
+                      className={cn(
+                        "cursor-pointer rounded-lg border p-3 transition-all hover:shadow-sm",
+                        isSelected
+                          ? "border-primary bg-primary/5 shadow-sm"
+                          : "border-border hover:border-primary/50",
+                      )}
+                    >
+                      <div className="flex items-start gap-2.5">
+                        <div
+                          className={cn(
+                            "mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-full border-2 text-xs font-semibold transition-colors",
+                            isSelected
+                              ? "border-primary bg-primary text-primary-foreground"
+                              : "border-muted-foreground/30",
+                          )}
+                        >
+                          {isSelected && <Check className="h-3 w-3" aria-hidden="true" />}
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <h4 className="mb-1 line-clamp-2 text-sm font-medium leading-snug">{paper.title}</h4>
+                          <p className="text-xs text-muted-foreground">
+                            {paper.authors?.length
+                              ? `${paper.authors[0]}${paper.authors.length > 1 ? " et al." : ""}`
+                              : "Unknown author"}
+                            {year ? ` · ${year}` : ""}
+                            {paper.journal ? ` · ${paper.journal}` : ""}
+                          </p>
+                          {paper.source_url && (
+                            <a
+                              href={paper.source_url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              onClick={(e) => e.stopPropagation()}
+                              className="mt-1 inline-block text-xs text-primary hover:underline"
+                            >
+                              View source →
+                            </a>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  )
+                })
+              )}
+            </div>
+
+            <div className="space-y-2 border-t border-border bg-muted/20 p-3">
+              {citationSource === "repository" && citeView === "results" && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="w-full gap-1.5"
+                  onClick={runWebCitationSearch}
+                  disabled={isCiteProcessing}
+                >
+                  {isCiteProcessing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Globe className="h-4 w-4" />}
+                  Search the web for more
+                </Button>
+              )}
+              <Button
+                className="w-full gap-1.5"
+                onClick={handleCiteSelected}
+                disabled={selectedPapers.size === 0}
+              >
+                <Plus className="h-4 w-4" />
+                Insert {selectedPapers.size > 0 ? `${selectedPapers.size} ` : ""}citation
+                {selectedPapers.size === 1 ? "" : "s"} at cursor
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                className="w-full gap-1.5"
+                onClick={handleInsertBibliographyInline}
+              >
+                <BookOpen className="h-4 w-4" /> Insert bibliography at end
+              </Button>
+            </div>
+          </div>
 
           {editor && (
             <BubbleMenu
@@ -6366,98 +6693,8 @@ window.localStorage.setItem(RIBBON_TAB_KEY, ribbonTab)
           </DialogContent>
         </Dialog>
 
-        {/* Citation Selection Modal */}
-        <Dialog open={citationModalOpen} onOpenChange={setCitationModalOpen}>
-          <DialogContent dialogSize="md" className="max-h-[80vh] overflow-y-auto">
-            <DialogHeader>
-              <DialogTitle>Select Citations</DialogTitle>
-              <DialogDescription>
-                {citationSource === "repository"
-                  ? "Matches from your library. Click a source to select it, or search the web for more."
-                  : "Results from the web. Click a source to select/deselect it."}
-              </DialogDescription>
-            </DialogHeader>
-
-            <div className="space-y-3 py-2">
-              {foundPapers.map((paper, index) => {
-                const year = paper.year && paper.year > 0 ? paper.year : null
-                const isSelected = selectedPapers.has(index)
-
-                return (
-                  <div
-                    key={paper.id}
-                    onClick={() => togglePaperSelection(index)}
-                    className={cn(
-                      "p-4 border rounded-lg cursor-pointer transition-all hover:shadow-md",
-                      isSelected ? "border-primary bg-primary/5 shadow-sm" : "border-border hover:border-primary/50"
-                    )}
-                  >
-                    <div className="flex items-start gap-3">
-                      <div className={cn(
-                        "flex-shrink-0 w-6 h-6 rounded-full border-2 flex items-center justify-center text-xs font-semibold transition-colors",
-                        isSelected ? "border-primary bg-primary text-primary-foreground" : "border-muted-foreground/30"
-                      )}>
-                        {isSelected && <Check className="h-3.5 w-3.5" aria-hidden="true" />}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <h4 className="font-medium text-sm line-clamp-2 mb-1">
-                          {paper.title}
-                        </h4>
-                        {year && (
-                          <p className="text-xs text-muted-foreground mb-2">
-                            {year}
-                          </p>
-                        )}
-                        {paper.source_url && (
-                          <a
-                            href={paper.source_url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            onClick={(e) => e.stopPropagation()}
-                            className="text-xs text-primary hover:underline inline-block"
-                          >
-                            View source →
-                          </a>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                )
-              })}
-            </div>
-
-            <DialogFooter className="gap-2 sm:justify-between">
-              <Button
-                variant="outline"
-                onClick={() => {
-                  setCitationModalOpen(false)
-                  setSelectedPapers(new Set())
-                }}
-              >
-                Cancel
-              </Button>
-              <div className="flex gap-2">
-                {citationSource === "repository" && (
-                  <Button
-                    variant="ghost"
-                    onClick={runWebCitationSearch}
-                    disabled={isCiteProcessing}
-                    className="gap-1.5"
-                  >
-                    {isCiteProcessing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Globe className="h-4 w-4" />}
-                    Search the web
-                  </Button>
-                )}
-                <Button
-                  onClick={handleCiteSelected}
-                  disabled={selectedPapers.size === 0}
-                >
-                  Cite Selected ({selectedPapers.size})
-                </Button>
-              </div>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
+        {/* Citation selection now lives in the docked Cite-with-AI sidebar above
+            (rendered inside the editor's content region), not a blocking modal. */}
 
         {/* Bibliography Generation Modal */}
         <Dialog open={bibliographyModalOpen} onOpenChange={setBibliographyModalOpen}>
