@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Telescope, Loader2, AlertCircle, RotateCcw } from 'lucide-react'
 import { useAiLiteratureSearch } from '@/hooks/use-ai-literature-search'
+import { MarkdownRenderer } from '@/components/catalyst/markdown-renderer'
 import { AiPaperCard } from './ai-paper-card'
 import { AiSearchFilters } from './ai-search-filters'
 import { AnimatePresence, MotionResultCard } from './motion'
@@ -316,10 +317,31 @@ export function AiSearchView({
         </div>
       )}
 
-      {isStreaming && (
-        <div className="flex items-center gap-2 rounded-xl border border-primary/20 bg-primary/[0.04] px-3.5 py-2.5 text-sm text-muted-foreground duration-300 animate-in fade-in">
-          <Loader2 className="size-4 shrink-0 animate-spin text-primary" aria-hidden />
-          Composing the AI summary in the Catalyst sidebar — ask follow-up questions there anytime.
+      {/* Inline AI summary — the summary streams here in the pane (primary
+          surface) as well as into the Catalyst sidebar, so results are readable
+          even when the sidebar isn't open. */}
+      {(summary || isStreaming) && (
+        <div className="rounded-xl border border-primary/20 bg-primary/[0.04] px-3.5 py-3 duration-300 animate-in fade-in">
+          <div className="mb-1.5 flex items-center gap-1.5 text-xs font-medium text-primary">
+            {isStreaming ? (
+              <Loader2 className="size-3.5 shrink-0 animate-spin" aria-hidden />
+            ) : (
+              <Telescope className="size-3.5 shrink-0" aria-hidden />
+            )}
+            AI summary
+          </div>
+          {summary ? (
+            <MarkdownRenderer
+              content={summary}
+              citationsManifest={serverManifest ?? null}
+              showCursor={isStreaming}
+            />
+          ) : (
+            <p className="text-sm text-muted-foreground">Composing the AI summary…</p>
+          )}
+          <p className="mt-2 text-xs text-muted-foreground/80">
+            Continue the conversation in the Catalyst sidebar — ask follow-up questions anytime.
+          </p>
         </div>
       )}
 

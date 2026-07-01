@@ -175,7 +175,7 @@ export function ProtocolTemplatePicker({
       .eq("organization_id", organizationId)
       .eq("is_active", true)
       .order("name")
-      .then(({ data }) => {
+      .then(({ data }: { data: Record<string, unknown>[] | null }) => {
         const items: ProtocolTemplate[] = (data ?? []).map((row: Record<string, unknown>) => ({
           id: row.id as string,
           name: row.name as string,

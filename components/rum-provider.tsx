@@ -14,6 +14,7 @@ import {
   setRumClient,
 } from '@/lib/rum'
 import { createClient } from '@/lib/supabase/client'
+import type { AuthChangeEvent, Session } from '@supabase/supabase-js'
 
 // ---------------------------------------------------------------------------
 // RumProvider
@@ -65,7 +66,7 @@ export function RumProvider({ children }: { children: ReactNode }) {
     try {
       const supabase = createClient()
 
-      const { data } = supabase.auth.onAuthStateChange((_event, session) => {
+      const { data } = supabase.auth.onAuthStateChange((_event: AuthChangeEvent, session: Session | null) => {
         try {
           if (
             (_event === 'SIGNED_IN' || _event === 'TOKEN_REFRESHED') &&

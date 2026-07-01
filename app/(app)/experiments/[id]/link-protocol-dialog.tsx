@@ -69,7 +69,7 @@ export function LinkProtocolDialog({
 
       // Filter out already linked protocols
       const availableProtocols = data?.filter(
-        protocol => !linkedProtocolIds.includes(protocol.id)
+        (protocol: Protocol) => !linkedProtocolIds.includes(protocol.id)
       ) || []
 
       setProtocols(availableProtocols)

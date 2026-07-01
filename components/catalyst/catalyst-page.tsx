@@ -8,6 +8,7 @@ import { PanelLeftClose, PanelLeft } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useChatSessions } from '@/hooks/use-chat-sessions';
 import { createClient } from '@/lib/supabase/client';
+import type { AuthChangeEvent, Session } from '@supabase/supabase-js';
 import { useAuthUser } from "@/components/auth/auth-provider"
 import { deleteTrailingMessages } from '@/app/(app)/catalyst/actions';
 import { toast } from 'sonner';
@@ -57,10 +58,10 @@ export function CatalystChat({ sessionId }: CatalystChatProps) {
   const supabase = useMemo(() => createClient(), []);
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    supabase.auth.getSession().then(({ data: { session } }: { data: { session: Session | null } }) => {
       supabaseTokenRef.current = session?.access_token ?? null;
     });
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event: AuthChangeEvent, session: Session | null) => {
       supabaseTokenRef.current = session?.access_token ?? null;
     });
     return () => subscription.unsubscribe();

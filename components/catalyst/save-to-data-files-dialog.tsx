@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import { createClient } from '@/lib/supabase/client';
+import type { PostgrestError } from '@supabase/supabase-js';
 import { commitArtifact } from '@/lib/agent-artifacts';
 import type { AgentArtifact } from '@/hooks/use-agent-stream';
 import { Button } from '@/components/ui/button';
@@ -66,7 +67,7 @@ export function SaveToDataFilesDialog({
       .from('projects')
       .select('id, name')
       .order('updated_at', { ascending: false })
-      .then(({ data, error }) => {
+      .then(({ data, error }: { data: ProjectRow[] | null; error: PostgrestError | null }) => {
         if (cancelled) return;
         if (error) {
           toast.error('Could not load projects');
@@ -95,7 +96,7 @@ export function SaveToDataFilesDialog({
       .select('id, name')
       .eq('project_id', projectId)
       .order('updated_at', { ascending: false })
-      .then(({ data, error }) => {
+      .then(({ data, error }: { data: ExperimentRow[] | null; error: PostgrestError | null }) => {
         if (cancelled) return;
         if (error) {
           toast.error('Could not load experiments');

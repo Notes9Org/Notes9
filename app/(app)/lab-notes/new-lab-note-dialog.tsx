@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
+import type { PostgrestError } from "@supabase/supabase-js"
 import { useAuthUser } from "@/components/auth/auth-provider"
 import {
   Dialog,
@@ -87,7 +88,7 @@ export function NewLabNoteDialog({
             .from("project_members")
             .select("project_id")
             .eq("user_id", user.id)
-          const ids = (memberRows || []).map((r) => r.project_id).filter(Boolean)
+          const ids = (memberRows || []).map((r: { project_id: string }) => r.project_id).filter(Boolean)
           if (ids.length > 0) {
             const { data, error } = await supabase
               .from("projects")
@@ -125,7 +126,7 @@ export function NewLabNoteDialog({
       .select("id, name, project_id")
       .eq("project_id", selectedProjectId)
       .order("name")
-      .then(({ data, error }) => {
+      .then(({ data, error }: { data: Experiment[] | null; error: PostgrestError | null }) => {
         if (error) {
           console.error("Failed to load experiments for project", error)
         } else {
@@ -150,7 +151,7 @@ export function NewLabNoteDialog({
       .from("lab_notes")
       .select("title")
       .eq("experiment_id", experimentId)
-    const existing = (data || []).map((r) => (r as { title: string }).title)
+    const existing = (data || []).map((r: { title: string }) => r.title)
     if (!existing.includes("Untitled")) return "Untitled"
     let n = 2
     while (existing.includes(`Untitled (${n})`)) n++

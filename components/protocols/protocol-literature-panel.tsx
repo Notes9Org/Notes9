@@ -131,14 +131,14 @@ export function ProtocolLiteraturePanel({
       .select("organization_id")
       .eq("id", user.id)
       .single()
-      .then(({ data: profile }) => {
+      .then(({ data: profile }: { data: { organization_id: string | null } | null }) => {
         if (!profile?.organization_id) return
         supabase
           .from("projects")
           .select("id, name")
           .eq("organization_id", profile.organization_id)
           .order("name")
-          .then(({ data }) => setFilterProjects((data as ProjectItem[]) ?? []))
+          .then(({ data }: { data: ProjectItem[] | null }) => setFilterProjects((data as ProjectItem[]) ?? []))
       })
   }, [showFilters])
 
@@ -157,7 +157,7 @@ export function ProtocolLiteraturePanel({
       .select("id, name, project_id")
       .eq("project_id", internalProjectId)
       .order("name")
-      .then(({ data }) => {
+      .then(({ data }: { data: ExperimentItem[] | null }) => {
         setFilterExperiments((data as ExperimentItem[]) ?? [])
         setIsLoadingFilterExperiments(false)
       })
@@ -205,7 +205,7 @@ export function ProtocolLiteraturePanel({
     if (projectId) query = query.eq("project_id", projectId)
     if (experimentId) query = query.eq("experiment_id", experimentId)
 
-    query.then(({ data }) => {
+    query.then(({ data }: { data: LiteraturePaperItem[] | null }) => {
       setPapers((data as LiteraturePaperItem[] | null) ?? [])
       setIsLoading(false)
     })

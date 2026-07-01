@@ -110,7 +110,7 @@ export async function listWhiteboardNotes(opts: { projectId: string | null }): P
   }
   const { data, error } = await q
   if (error) throw error
-  return (data ?? []).map((r) => fromRow(r as Row))
+  return (data ?? []).map((r: Row) => fromRow(r))
 }
 
 export async function createWhiteboardNote(raw: unknown): Promise<WhiteboardNote> {

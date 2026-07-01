@@ -128,10 +128,20 @@ export async function POST(request: NextRequest) {
               })
             )
           )
-          // No AI summaries in the legacy path — close cleanly. Skip the empty
-          // overall_summary on a continuation page so it can't clear page 1.
+          // No AI summaries in the legacy path. Surface a visible notice instead
+          // of an empty overall_summary (which left the pane hanging on
+          // "Composing…" forever). The frontend maps `error` events to a banner
+          // while still rendering the DB papers above. Skip on a continuation
+          // page so it can't clear page 1.
           if (!excludeIds.length) {
-            controller.enqueue(enc.encode(sse('overall_summary', { text: '' })))
+            controller.enqueue(
+              enc.encode(
+                sse('error', {
+                  error:
+                    'AI summary is temporarily unavailable — showing database results only.',
+                }),
+              ),
+            )
           }
           controller.enqueue(enc.encode(sse('done', { totalCount: papers.length })))
         } catch (err) {

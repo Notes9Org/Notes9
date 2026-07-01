@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { PaperSearchSortMode, SearchPaper } from '@/types/paper-search'
 import { Input } from '@/components/ui/input'
 import {
@@ -137,6 +137,15 @@ export function LiteratureSearchForm({
   const showFilters = !!(filters && onFiltersChange)
   const [focused, setFocused] = useState(false)
 
+  // `setQuery` is a parent-owned setter that only accepts a string (no functional
+  // updater). Mirror the live query in a ref so the mic's onFinal callback — which
+  // the transcribe hook captures once at start() — appends each finalized segment
+  // to the current value instead of overwriting with a stale closure.
+  const queryRef = useRef(query)
+  useEffect(() => {
+    queryRef.current = query
+  }, [query])
+
   // Animate example prompts only when the bar is idle (empty + unfocused).
   const isEmptyIdle = !focused && !query && !isSearching
   const typedPlaceholder = useTypewriterPlaceholder(isEmptyIdle)
@@ -146,7 +155,12 @@ export function LiteratureSearchForm({
 
   const { start: startMic, stop: stopMic, isListening, getWaveformData } = useAwsTranscribe({
     onFinal: (text) => {
-      setQuery((query ? `${query} ${text}` : text).trimStart())
+      // Append each finalized segment to the current query. Update the ref
+      // inline too so back-to-back finals chain even before the parent re-renders.
+      const base = queryRef.current
+      const next = (base ? `${base} ${text}` : text).trimStart()
+      queryRef.current = next
+      setQuery(next)
     },
     onInterim: () => {},
     onError: (err) => toast.error(err),
@@ -177,6 +191,16 @@ export function LiteratureSearchForm({
           'focus-within:border-primary/45 focus-within:bg-card focus-within:shadow-[0_12px_40px_-16px_var(--n9-accent-glow)]',
         )}
       >
+        {/* Indeterminate progress: a segment that fills and sweeps left→right
+            along the bottom of the field while an AI search is streaming. */}
+        {isSearching && (
+          <span
+            aria-hidden
+            className="pointer-events-none absolute inset-x-4 bottom-[3px] h-[2px] overflow-hidden rounded-full"
+          >
+            <span className="n9-search-progress block h-full w-1/3 rounded-full bg-gradient-to-r from-transparent via-primary to-transparent" />
+          </span>
+        )}
         {/* Voice-to-text mic (same AWS Transcribe dictation as Catalyst chat).
             The mic anchors the left of the bar and never shifts; the waveform
             renders inline right after it while listening, so the stream stays
