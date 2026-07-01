@@ -1646,26 +1646,6 @@ body > [data-radix-popper-content-wrapper] {
   }
 }
 
-/* ── Live proofreading underlines (Grammarly-style) ──────────────────── */
-/* Red wavy underline: spelling. Orange wavy underline: grammar/structure. */
-.n9-spell-underline {
-  text-decoration-line: underline;
-  text-decoration-style: wavy;
-  text-decoration-color: #ef4444;
-  text-decoration-skip-ink: none;
-  text-underline-offset: 2px;
-  text-underline-position: under;
-}
-.n9-grammar-underline {
-  text-decoration-line: underline;
-  text-decoration-style: wavy;
-  text-decoration-color: #f59e0b;
-  text-decoration-skip-ink: none;
-  text-underline-offset: 2px;
-  text-underline-position: under;
-  cursor: help;
-}
-
 /* Indeterminate "search in progress" bar — a segment that fills and sweeps
    left→right across the bottom of the search field while an AI search streams. */
 @keyframes n9-search-progress {

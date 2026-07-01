@@ -170,7 +170,6 @@ import { SimpleShape } from "./extensions/simple-shape"
 import { BlockDragHandle } from "./extensions/block-drag-handle"
 import { moveTopLevelBlock } from "./editor-block-utils"
 import { EditorContextMenu } from "./editor-context-menu"
-import { ProofreadExtension } from "./proofread-extension"
 import { EditorRuler } from "./editor-ruler"
 import { LineHeight } from "./extensions/line-height"
 import { PageBreak } from "./extensions/page-break"
@@ -2398,7 +2397,6 @@ window.localStorage.setItem(RIBBON_TAB_KEY, ribbonTab)
   const editor = useEditor({
     immediatelyRender: false,
     extensions: [
-      ProofreadExtension,
       StarterKit.configure({
         heading: {
           levels: [1, 2, 3],
@@ -2559,7 +2557,7 @@ window.localStorage.setItem(RIBBON_TAB_KEY, ribbonTab)
     editorProps: {
       attributes: {
         class: "prose prose-sm sm:prose lg:prose-lg xl:prose-2xl focus:outline-none p-4",
-        spellcheck: "false",
+        spellcheck: "true",
         tabindex: "0",
       },
       handleDrop: (view, event, _slice, _moved) => {
