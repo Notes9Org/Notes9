@@ -556,23 +556,33 @@ export function ProtocolDesignMode({
             {/* Siblings list — desktop column. Collapses to width 0 when hidden. */}
             <aside
               className={cn(
-                "flex min-h-0 shrink-0 flex-col self-stretch overflow-hidden border-r border-border bg-muted/30 relative",
+                "flex min-h-0 shrink-0 flex-col self-stretch overflow-hidden bg-muted/30 relative",
                 !isMobile && siblingsPanelOpen
                   ? cn(
-                      "w-52 min-w-[13rem] bg-card",
+                      "border-r border-border bg-card",
                       tiptapRegionFullscreen ? "z-[120]" : "z-10",
                     )
-                  : "w-0 min-w-0 border-r-0 overflow-hidden",
+                  : "border-r-0",
               )}
+              /* Animate the rail width like lab notes — the fixed-width inner list
+                 stays mounted and is clipped by overflow-hidden, so it slides
+                 smoothly instead of snapping. */
+              style={{
+                width: !isMobile && siblingsPanelOpen ? "13rem" : 0,
+                minWidth: 0,
+                transition: "width 0.5s cubic-bezier(0.22, 1, 0.36, 1)",
+              }}
               aria-hidden={!siblingsPanelOpen || isMobile}
             >
-              {!isMobile && siblingsPanelOpen && (
-                <ProtocolSiblingsList
-                  currentProtocolId={protocol.id}
-                  organizationId={organizationId}
-                  projectId={protocol.project_id ?? null}
-                  experimentId={protocol.experiment_id ?? null}
-                />
+              {!isMobile && (
+                <div className="flex h-full min-h-0 w-52 min-w-[13rem] flex-col">
+                  <ProtocolSiblingsList
+                    currentProtocolId={protocol.id}
+                    organizationId={organizationId}
+                    projectId={protocol.project_id ?? null}
+                    experimentId={protocol.experiment_id ?? null}
+                  />
+                </div>
               )}
             </aside>
 
