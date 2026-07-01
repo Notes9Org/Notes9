@@ -553,27 +553,11 @@ function MarkdownRendererImpl({
       <div
         ref={containerRef}
         className={cn(
-          'html-content text-[17px] leading-[1.7] text-foreground overflow-x-hidden break-words',
-          '[&_p]:mb-6 first:[&_p]:mt-0 last:[&_p]:mb-0',
-          '[&_h1]:!text-3xl [&_h1]:!font-semibold [&_h1]:!leading-snug [&_h1]:!mt-10 [&_h1]:!mb-6 first:[&_h1]:!mt-0',
-          '[&_h2]:!text-2xl [&_h2]:!font-semibold [&_h2]:!leading-snug [&_h2]:!mt-10 [&_h2]:!mb-6 first:[&_h2]:!mt-0',
-          '[&_h3]:!text-xl [&_h3]:!font-semibold [&_h3]:!leading-snug [&_h3]:!mt-8 [&_h3]:!mb-4',
-          '[&_h4]:!text-lg [&_h4]:!font-medium [&_h4]:!text-muted-foreground [&_h4]:mt-8 [&_h4]:mb-4',
-          '[&_pre]:overflow-x-auto [&_pre]:max-w-full',
-          '[&_code]:break-words',
-          '[&_a]:break-words [&_a]:overflow-wrap-anywhere',
-          '[&_img]:max-w-full [&_img]:h-auto [&_img]:rounded-lg',
-          '[&_p]:break-words [&_p]:overflow-wrap-anywhere',
-          // Each line break gets a small gap below it so multi-line answers
-          // breathe instead of stacking flush.
-          '[&_br]:block [&_br]:content-[""] [&_br]:mb-[0.5em]',
-          // Lists, quotes, rules and tables — consistent, readable rhythm.
-          '[&_ul]:my-4 [&_ul]:list-disc [&_ul]:pl-6 [&_ol]:my-4 [&_ol]:list-decimal [&_ol]:pl-6',
-          '[&_li]:my-1.5 [&_li]:leading-[1.65] [&_li]:marker:text-muted-foreground/70',
-          '[&_li>ul]:my-1.5 [&_li>ol]:my-1.5',
-          '[&_blockquote]:my-5 [&_blockquote]:border-l-2 [&_blockquote]:border-primary/30 [&_blockquote]:pl-4 [&_blockquote]:text-muted-foreground',
-          '[&_hr]:my-8 [&_hr]:border-border/60',
-          '[&_thead_th]:px-3 [&_thead_th]:py-2 [&_thead_th]:text-left [&_tbody_td]:px-3 [&_tbody_td]:py-2',
+          // Pure Streamdown defaults for typography, spacing and tables — no
+          // custom [&_...] overrides and no `.html-content` !important rules.
+          // Keep only theme text color, wrapping safety in the narrow sidebar,
+          // the streaming cursor, and the caller's passthrough className.
+          'text-foreground min-w-0 overflow-x-hidden break-words',
           showCursor && 'notes9-md--streaming',
           className
         )}
