@@ -642,60 +642,63 @@ function CommentSidebar({ editor, open, onClose }: { editor: any; open: boolean;
   if (!open) return null
 
   return (
-    <div className="absolute right-0 top-0 h-full w-72 bg-background border-l border-border z-50 shadow-xl flex flex-col animate-in slide-in-from-right duration-300">
-      <div className="p-4 border-b border-border flex justify-between items-center bg-muted/30">
-        <h3 className="font-semibold text-sm flex items-center gap-2">
-          <MessageSquare className="h-4 w-4" /> Comments
-        </h3>
-        <Button variant="ghost" size="icon" className="h-8 w-8" onClick={onClose} aria-label="Close comments panel">
-          <X className="h-4 w-4" />
-        </Button>
-      </div>
-      <div className="flex-1 overflow-y-auto p-3 space-y-3">
-        {comments.length === 0 ? (
-          <div className="text-center py-10 text-muted-foreground text-xs italic">No comments yet</div>
-        ) : (
-          comments.map((comment) => (
-            <div
-              key={`${comment.id}-${comment.pos}`}
-              className="p-3 rounded-lg border border-border bg-card hover:border-primary/50 transition-colors cursor-pointer group"
-              onClick={() => {
-                if (comment.kind === "image") {
-                  editor.chain().focus().setNodeSelection(comment.pos).run()
-                } else {
-                  editor.commands.focus(comment.pos)
-                }
-                const dom = editor.view.nodeDOM(comment.pos)
-                if (dom) {
-                  const el = dom instanceof Element ? dom : dom.parentElement
-                  if (el) el.scrollIntoView({ behavior: "smooth", block: "center" })
-                }
-              }}
-            >
-              <div className="flex justify-between items-start mb-1">
-                <span className="text-2xs font-bold text-primary uppercase">{comment.author}</span>
-                <span className="text-3xs text-muted-foreground">
-                  {new Date(comment.createdAt).toLocaleString()}
-                </span>
+    <div className="absolute right-0 top-0 z-50 h-full w-72 max-w-full p-2 motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-right-4 motion-safe:duration-300">
+      {/* Floating glass card — matches the AI chat-history sidebar. */}
+      <div className="flex h-full min-h-0 flex-col overflow-hidden rounded-2xl border border-[color:var(--glass-border)] bg-sidebar/80 shadow-[0_10px_34px_-18px_rgba(20,14,8,0.4)] backdrop-blur-md dark:bg-sidebar/60 dark:shadow-[0_12px_38px_-16px_rgba(0,0,0,0.6)]">
+        <div className="flex h-11 shrink-0 items-center justify-between gap-2 border-b border-[color:var(--glass-border)] px-3">
+          <span className="flex items-center gap-1.5 text-[0.7rem] font-semibold uppercase tracking-wider text-sidebar-foreground/70">
+            <MessageSquare className="h-3.5 w-3.5" /> Comments
+          </span>
+          <Button variant="ghost" size="icon" className="h-7 w-7 text-sidebar-foreground/70 hover:text-sidebar-foreground" onClick={onClose} aria-label="Close comments panel">
+            <X className="h-4 w-4" />
+          </Button>
+        </div>
+        <div className="min-h-0 flex-1 space-y-1.5 overflow-y-auto overflow-x-hidden p-2">
+          {comments.length === 0 ? (
+            <div className="px-3 py-10 text-center text-xs text-sidebar-foreground/55">No comments yet</div>
+          ) : (
+            comments.map((comment) => (
+              <div
+                key={`${comment.id}-${comment.pos}`}
+                className="group cursor-pointer rounded-lg border border-border/50 bg-card/60 p-2.5 transition-colors hover:border-primary/40 hover:bg-sidebar-accent/40"
+                onClick={() => {
+                  if (comment.kind === "image") {
+                    editor.chain().focus().setNodeSelection(comment.pos).run()
+                  } else {
+                    editor.commands.focus(comment.pos)
+                  }
+                  const dom = editor.view.nodeDOM(comment.pos)
+                  if (dom) {
+                    const el = dom instanceof Element ? dom : dom.parentElement
+                    if (el) el.scrollIntoView({ behavior: "smooth", block: "center" })
+                  }
+                }}
+              >
+                <div className="mb-1 flex items-start justify-between gap-2">
+                  <span className="text-2xs font-bold uppercase text-[color:var(--n9-accent)]">{comment.author}</span>
+                  <span className="text-3xs text-muted-foreground">
+                    {new Date(comment.createdAt).toLocaleString()}
+                  </span>
+                </div>
+                <p className="mb-1.5 line-clamp-3 text-xs text-foreground">{comment.content}</p>
+                <div className="flex items-center justify-between opacity-0 transition-opacity group-hover:opacity-100">
+                  <span className="max-w-[140px] truncate text-2xs italic text-muted-foreground">"{comment.text}"</span>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-6 w-6 text-muted-foreground hover:text-destructive"
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      editor.commands.deleteComment(comment.id)
+                    }}
+                  >
+                    <Trash2 className="h-3 w-3" />
+                  </Button>
+                </div>
               </div>
-              <p className="text-xs text-foreground mb-2 line-clamp-3">{comment.content}</p>
-              <div className="flex justify-between items-center opacity-0 group-hover:opacity-100 transition-opacity">
-                <span className="text-2xs text-muted-foreground italic truncate max-w-[120px]">"{comment.text}"</span>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-6 w-6 text-destructive hover:bg-destructive/10"
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    editor.commands.deleteComment(comment.id)
-                  }}
-                >
-                  <Trash2 className="h-3 w-3" />
-                </Button>
-              </div>
-            </div>
-          ))
-        )}
+            ))
+          )}
+        </div>
       </div>
     </div>
   )
@@ -6074,7 +6077,7 @@ window.localStorage.setItem(RIBBON_TAB_KEY, ribbonTab)
               the document reflows by the live panel width (set above). */}
           <div
             className={cn(
-              "absolute right-0 top-0 z-50 flex h-full max-w-full flex-col border-l border-border bg-background shadow-xl",
+              "absolute bottom-2 right-2 top-2 z-50 flex max-w-full flex-col overflow-hidden rounded-2xl border border-[color:var(--glass-border)] bg-sidebar/80 shadow-[0_10px_34px_-18px_rgba(20,14,8,0.4)] backdrop-blur-md dark:bg-sidebar/60 dark:shadow-[0_12px_38px_-16px_rgba(0,0,0,0.6)]",
               !citationSidebar.isResizing && "transition-transform duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]",
               citationModalOpen ? "translate-x-0" : "pointer-events-none translate-x-full",
             )}
@@ -6091,7 +6094,7 @@ window.localStorage.setItem(RIBBON_TAB_KEY, ribbonTab)
 
             <TooltipProvider delayDuration={300}>
               {/* Header: source tabs · density toggle + close (all icon buttons) */}
-              <div className="flex items-center justify-between gap-1 border-b border-border bg-muted/30 py-1.5 pl-2.5 pr-1.5">
+              <div className="flex items-center justify-between gap-1 border-b border-[color:var(--glass-border)] py-1.5 pl-2.5 pr-1.5">
                 <div className="flex items-center gap-0.5">
                   <Tooltip>
                     <TooltipTrigger asChild>
