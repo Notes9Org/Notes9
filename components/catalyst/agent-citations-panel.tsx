@@ -2,6 +2,7 @@
 
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react';
 import Link from 'next/link';
+import { Streamdown } from 'streamdown';
 import { BookOpen, Calendar, ChevronDown, FolderOpen, Globe, MapPin, ScanSearch, User } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
@@ -690,7 +691,9 @@ function RetrievedTextBlock({
             {item.highlightHref && (
               <MapPin className="size-3.5 mt-0.5 shrink-0 text-primary/70 group-hover:text-primary transition-colors" aria-hidden />
             )}
-            <span className="italic">“{excerptPreview}”</span>
+            <span className="italic">
+              “<Streamdown parseIncompleteMarkdown={false} components={{ p: 'span' }}>{excerptPreview}</Streamdown>”
+            </span>
           </span>
         </SmartCitationLink>
       ) : (
@@ -701,7 +704,9 @@ function RetrievedTextBlock({
               {blockLabel}
             </p>
           </div>
-          <p className="text-xs leading-relaxed text-foreground/80 italic pl-3">“{excerptPreview}”</p>
+          <div className="text-xs leading-relaxed text-foreground/80 italic pl-3">
+            “<Streamdown parseIncompleteMarkdown={false} components={{ p: 'span' }}>{excerptPreview}</Streamdown>”
+          </div>
         </>
       )}
     </div>
@@ -924,11 +929,15 @@ function SubCitationRow({ item }: { item: AgentCitationPanelItem }) {
               {resolvedItem.highlightHref && (
                 <MapPin className="size-3 mt-0.5 shrink-0 text-primary/70" aria-hidden />
               )}
-              <span>“{excerptPreview}”</span>
+              <span>
+                “<Streamdown parseIncompleteMarkdown={false} components={{ p: 'span' }}>{excerptPreview}</Streamdown>”
+              </span>
             </span>
           </SmartCitationLink>
         ) : (
-          <p className="mt-0.5 text-xs leading-snug text-muted-foreground">“{excerptPreview}”</p>
+          <div className="mt-0.5 text-xs leading-snug text-muted-foreground">
+            “<Streamdown parseIncompleteMarkdown={false} components={{ p: 'span' }}>{excerptPreview}</Streamdown>”
+          </div>
         ))}
     </li>
   );

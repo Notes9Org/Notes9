@@ -10,6 +10,7 @@ import { AnimatePresence, MotionResultCard } from './motion'
 import { openCatalystPanel } from '@/lib/catalyst-launch'
 import { setCatalystLiterature, type LiteratureRef } from '@/lib/catalyst-literature'
 import { papersToGrounding, buildLiteratureSessionContext } from '@/lib/literature-citations'
+import type { GroundingResource } from '@/lib/agent-stream-types'
 import { renumberCitations } from '@/lib/citation-renumber'
 import { applyAiFilters, DEFAULT_AI_FILTERS, journalOptions, yearBounds, type AiResultFilters } from '@/lib/ai-search-filters'
 import { stripHtmlToText } from '@/lib/literature-abstract-display'
@@ -101,6 +102,7 @@ export function AiSearchView({
   const {
     run,
     summary,
+    manifest: serverManifest,
     results,
     papers: resultPapers,
     isStreaming,
@@ -204,6 +206,53 @@ export function AiSearchView({
       .filter((r) => remap.has(r.citeLabel))
       .map((r) => ({ ...r, citeLabel: remap.get(r.citeLabel)! }))
       .sort((a, b) => Number(a.citeLabel) - Number(b.citeLabel))
+    // Parity path: when the server emitted an authoritative citation manifest,
+    // the summary is ALREADY renumbered by first-appearance server-side, so we do
+    // NOT re-run the client renumber. Chips resolve against this manifest (the
+    // same contract as the main Catalyst agent). References/resources are derived
+    // from the manifest but enriched by joining each entry back to the rich client
+    // paper so the "All citations" panel keeps authors/journal/year.
+    if (serverManifest?.manifest && Object.keys(serverManifest.manifest).length > 0) {
+      const byId = new Map(
+        results.map((r) => [String(r.paper?.id ?? r.dedupeKey ?? ''), r]),
+      )
+      const ordered = Object.values(serverManifest.manifest)
+        .slice()
+        .sort(
+          (a, b) =>
+            Number(a.cite_label ?? a.index ?? 0) - Number(b.cite_label ?? b.index ?? 0),
+        )
+      const references: LiteratureRef[] = ordered.map((e) => {
+        const r = byId.get(String(e.source_id ?? ''))
+        return {
+          n: String(e.cite_label ?? e.index ?? ''),
+          title: stripHtmlToText(r?.paper?.title || r?.aiTitle || e.source_name || 'Untitled'),
+          meta: r ? refMeta(r) : '',
+          href: (r ? refHref(r) : null) ?? e.source_url ?? null,
+        }
+      })
+      const resources = ordered.map((e) => ({
+        source_type: e.source_type ?? 'literature',
+        source_id: String(e.source_id ?? ''),
+        display_label: String(e.cite_label ?? e.index ?? ''),
+        source_name: e.source_name ?? '',
+        ...(e.source_url ? { source_url: e.source_url } : {}),
+        ...(e.excerpt ? { excerpt: e.excerpt } : {}),
+        support_status: e.support_status ?? null,
+      })) as GroundingResource[]
+      const context = results.length ? buildLiteratureSessionContext(q, results) : null
+      setCatalystLiterature({
+        query: q,
+        summary,
+        streaming: isStreaming,
+        references,
+        resources,
+        manifest: serverManifest,
+        context,
+      })
+      return
+    }
+
     const groundingInput = hasCitations ? renumberedResults : results
 
     const references: LiteratureRef[] = groundingInput.map((r) => ({
@@ -218,7 +267,7 @@ export function AiSearchView({
     const { resources, manifest } = groundingInput.length ? papersToGrounding(groundingInput) : { resources: [], manifest: { manifest: {} } }
     const context = results.length ? buildLiteratureSessionContext(q, results) : null
     setCatalystLiterature({ query: q, summary: renumberedSummary, streaming: isStreaming, references, resources, manifest, context })
-  }, [query, summary, isStreaming, results])
+  }, [query, summary, serverManifest, isStreaming, results])
 
   return (
     <div className="space-y-4">

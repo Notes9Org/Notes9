@@ -2,6 +2,13 @@
 @import "tw-animate-css";
 @import "../styles/tiptap.css";
 
+/* Streamdown ships its own Tailwind utility classes pre-baked into its
+   compiled JSX (dist/*.js) - Tailwind v4 has no config file to add a
+   `content` glob to, so `@source` is how we tell the scanner to also
+   generate classes referenced there. Without this, Streamdown's table /
+   code-block / callout styling silently has no CSS behind it. */
+@source "../node_modules/streamdown/dist/*.js";
+
 @custom-variant dark (&:is(.dark *));
 
 :root {

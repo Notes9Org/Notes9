@@ -1,6 +1,7 @@
 'use client';
 
 import { useMemo } from 'react';
+import { Streamdown } from 'streamdown';
 import { ExternalLink } from 'lucide-react';
 import {
   Dialog,
@@ -111,12 +112,19 @@ function HighlightedBody({ span }: { span: ResolvedSpan }) {
     );
   }
   if (span.via === 'none' || span.end <= span.start) {
+    // No active highlight span — safe to render as markdown (e.g. an
+    // abstract with **bold**/lists reads better than escaped literal text).
     return (
-      <p className="whitespace-pre-wrap break-words [overflow-wrap:anywhere] text-sm leading-relaxed text-foreground">
-        {span.body}
-      </p>
+      <div className="whitespace-pre-wrap break-words [overflow-wrap:anywhere] text-sm leading-relaxed text-foreground [&_p]:mb-2 last:[&_p]:mb-0">
+        <Streamdown parseIncompleteMarkdown={false}>{span.body}</Streamdown>
+      </div>
     );
   }
+  // An exact highlight span is active — render as plain text, not markdown.
+  // Correctness of the highlight (the `before`/`hit`/`after` char-offset
+  // slice) beats markdown formatting here; running the body through a
+  // markdown parser would re-flow/strip characters and could shift or break
+  // the highlighted range.
   const before = span.body.slice(0, span.start);
   const hit = span.body.slice(span.start, span.end);
   const after = span.body.slice(span.end);
