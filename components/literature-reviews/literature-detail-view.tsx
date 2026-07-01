@@ -18,6 +18,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { MotionReveal } from "@/components/literature-reviews/motion";
 import {
   Select,
   SelectContent,
@@ -325,7 +326,7 @@ ER  - `;
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-start justify-between">
+      <MotionReveal className="flex items-start justify-between">
         <div className="flex items-start gap-4 flex-1">
           <div className="flex-1">
             <div className="flex items-center gap-2 mb-1">
@@ -350,7 +351,7 @@ ER  - `;
             onRefresh={onRefresh}
           />
         )}
-      </div>
+      </MotionReveal>
 
       {/* Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">

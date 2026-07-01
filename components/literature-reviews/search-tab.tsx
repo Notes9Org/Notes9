@@ -22,6 +22,7 @@ import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import { AiSearchView } from './ai-search-view'
 import { AiSearchFilters } from './ai-search-filters'
+import { MotionList, MotionItem } from './motion'
 import { DEFAULT_AI_FILTERS, type AiResultFilters } from '@/lib/ai-search-filters'
 import { useAwsTranscribe } from '@/hooks/use-aws-transcribe'
 import { VoiceWaveform } from '@/components/text-editor/voice-waveform'
@@ -152,7 +153,8 @@ export function LiteratureSearchForm({
   })
 
   const submit = () => {
-    if (isSearching || !query.trim()) return
+    if (!query.trim()) return
+    if (isSearching) onStop?.() // cancel the in-flight search before restarting
     onSearch()
   }
   const handleSearch = (e: React.FormEvent) => {
@@ -182,7 +184,6 @@ export function LiteratureSearchForm({
         <button
           type="button"
           onClick={() => (isListening ? stopMic() : startMic())}
-          disabled={isSearching}
           aria-label={isListening ? 'Stop dictation' : 'Dictate search query'}
           title={isListening ? 'Stop dictation' : 'Dictate search query'}
           className={cn(
@@ -208,7 +209,6 @@ export function LiteratureSearchForm({
           onKeyDown={handleKeyDown}
           onFocus={() => setFocused(true)}
           onBlur={() => setFocused(false)}
-          disabled={isSearching}
           enterKeyHint="search"
           aria-label="Literature search query"
         />
@@ -387,42 +387,41 @@ export function SearchTab({
           </p>
 
           {/* Feature highlights */}
-          <div className="mb-9 grid w-full grid-cols-1 gap-3 text-left sm:grid-cols-2">
-            {SEARCH_FEATURES.map((f, i) => (
-              <div
-                key={f.title}
-                style={{ animationDelay: `${i * 60}ms` }}
-                className="group flex items-start gap-3 rounded-2xl border border-border/60 bg-card/50 p-3.5 shadow-sm backdrop-blur-sm transition-all duration-300 fill-mode-both hover:-translate-y-0.5 hover:border-primary/30 hover:bg-card hover:shadow-[0_10px_28px_-16px_var(--n9-accent-glow)] animate-in fade-in slide-in-from-bottom-2"
-              >
-                <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary transition-colors group-hover:bg-primary group-hover:text-primary-foreground">
-                  <f.Icon className="size-[18px]" aria-hidden />
+          <MotionList className="mb-9 grid w-full grid-cols-1 gap-3 text-left sm:grid-cols-2">
+            {SEARCH_FEATURES.map((f) => (
+              <MotionItem key={f.title}>
+                <div className="group flex h-full items-start gap-3 rounded-2xl border border-border/60 bg-card/50 p-3.5 shadow-sm backdrop-blur-sm transition-all duration-300 hover:-translate-y-0.5 hover:border-primary/30 hover:bg-card hover:shadow-[0_10px_28px_-16px_var(--n9-accent-glow)]">
+                  <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary transition-colors group-hover:bg-primary group-hover:text-primary-foreground">
+                    <f.Icon className="size-[18px]" aria-hidden />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-sm font-semibold text-foreground">{f.title}</p>
+                    <p className="text-xs leading-snug text-muted-foreground">{f.desc}</p>
+                  </div>
                 </div>
-                <div className="min-w-0">
-                  <p className="text-sm font-semibold text-foreground">{f.title}</p>
-                  <p className="text-xs leading-snug text-muted-foreground">{f.desc}</p>
-                </div>
-              </div>
+              </MotionItem>
             ))}
-          </div>
+          </MotionList>
 
           {/* Example queries */}
           <div className="w-full">
             <p className="mb-3 text-xs font-medium uppercase tracking-wider text-muted-foreground">
               Try an example
             </p>
-            <div className="flex flex-wrap justify-center gap-2">
+            <MotionList className="flex flex-wrap justify-center gap-2">
               {exampleSearches.map((example) => (
-                <button
-                  key={example}
-                  type="button"
-                  onClick={() => setQuery(example)}
-                  className="group inline-flex items-center gap-1.5 rounded-full border border-border/70 bg-card/60 px-3.5 py-1.5 text-sm text-foreground/80 shadow-sm backdrop-blur-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-primary/40 hover:text-primary hover:shadow-[0_6px_16px_-8px_var(--n9-accent-glow)]"
-                >
-                  {example}
-                  <ArrowRight className="size-3.5 -translate-x-1 opacity-0 transition-all duration-200 group-hover:translate-x-0 group-hover:opacity-100" aria-hidden />
-                </button>
+                <MotionItem key={example}>
+                  <button
+                    type="button"
+                    onClick={() => setQuery(example)}
+                    className="group inline-flex items-center gap-1.5 rounded-full border border-border/70 bg-card/60 px-3.5 py-1.5 text-sm text-foreground/80 shadow-sm backdrop-blur-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-primary/40 hover:text-primary hover:shadow-[0_6px_16px_-8px_var(--n9-accent-glow)]"
+                  >
+                    {example}
+                    <ArrowRight className="size-3.5 -translate-x-1 opacity-0 transition-all duration-200 group-hover:translate-x-0 group-hover:opacity-100" aria-hidden />
+                  </button>
+                </MotionItem>
               ))}
-            </div>
+            </MotionList>
           </div>
         </div>
       )}

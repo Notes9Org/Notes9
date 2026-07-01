@@ -5,6 +5,7 @@ import { PageHeading } from "@/components/ui/page-heading"
 import { Plus } from 'lucide-react'
 import Link from 'next/link'
 import { LiteratureTabs } from '@/components/literature-reviews/literature-tabs'
+import { MotionReveal } from "@/components/literature-reviews/motion"
 import type { StagingLiteratureRow } from "@/components/literature-reviews/staged-paper-view"
 import { UploadLiteraturePdfDialog } from "@/components/literature-reviews/upload-literature-pdf-dialog"
 import type { LiteratureRecordSummary } from "@/types/literature-pdf"
@@ -91,7 +92,7 @@ export default async function LiteratureReviewsPage({
       )}
 
       {/* Header: stacked on mobile */}
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+      <MotionReveal className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <PageHeading>Literature Reviews</PageHeading>
           <p className="text-muted-foreground mt-1 text-sm">
@@ -118,7 +119,7 @@ export default async function LiteratureReviewsPage({
             </Link>
           </Button>
         </div>
-      </div>
+      </MotionReveal>
 
       {/* Tabs */}
       <LiteratureTabs

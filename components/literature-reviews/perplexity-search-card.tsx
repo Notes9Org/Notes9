@@ -4,8 +4,9 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { ExternalLink, Sparkles, Database, Plus, Check, X, Loader2 } from 'lucide-react';
-import { useState } from 'react';
+import { memo, useState } from 'react';
 import { decodeHtmlEntities } from '@/lib/literature-abstract-display';
+import { MotionHoverCard } from './motion';
 
 interface PerplexityPaper {
   rank: number;
@@ -25,14 +26,14 @@ interface PerplexitySearchCardProps {
   hideActions?: boolean;
 }
 
-export function PerplexitySearchCard({ 
-  paper, 
-  onStage, 
-  onSave, 
-  onRemove, 
-  isStaged = false, 
+function PerplexitySearchCardImpl({
+  paper,
+  onStage,
+  onSave,
+  onRemove,
+  isStaged = false,
   isSaving = false,
-  hideActions = false 
+  hideActions = false
 }: PerplexitySearchCardProps) {
   const [isExpanded, setIsExpanded] = useState(false);
 
@@ -55,6 +56,7 @@ export function PerplexitySearchCard({
   const domain = getDomain(paper.source_url);
 
   return (
+    <MotionHoverCard>
     <Card className="hover:shadow-md transition-shadow border-l-4 border-l-primary">
       <CardContent className="p-5">
         {/* Header with rank and source */}
@@ -163,5 +165,8 @@ export function PerplexitySearchCard({
         )}
       </CardContent>
     </Card>
+    </MotionHoverCard>
   );
 }
+
+export const PerplexitySearchCard = memo(PerplexitySearchCardImpl);

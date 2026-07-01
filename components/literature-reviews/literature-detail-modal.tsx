@@ -8,6 +8,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { LiteratureDetailView } from "./literature-detail-view";
+import { MotionReveal } from "./motion";
 import { Loader2 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 
@@ -138,13 +139,15 @@ export function LiteratureDetailModal({
         )}
 
         {literature && !loading && (
-          <LiteratureDetailView
-            literature={literature}
-            showBreadcrumb={false}
-            showActions={true}
-            onRefresh={fetchLiterature}
-            initialTab={initialTab}
-          />
+          <MotionReveal>
+            <LiteratureDetailView
+              literature={literature}
+              showBreadcrumb={false}
+              showActions={true}
+              onRefresh={fetchLiterature}
+              initialTab={initialTab}
+            />
+          </MotionReveal>
         )}
       </DialogContent>
     </Dialog>

@@ -147,7 +147,7 @@ export function StagedPaperView({
               onClick={() => void onSavePaper(rowToSearchPaper(lit), lit.id)}
               disabled={Boolean(savingLiteratureId) || isSavedToLibrary}
               title="Keep this paper in your library"
-              className="gap-2 bg-primary hover:bg-[var(--n9-accent-hover)]"
+              className="gap-2 bg-primary transition-[transform,color,background-color] duration-150 ease-out hover:bg-[var(--n9-accent-hover)] active:scale-[0.98] motion-reduce:transition-none motion-reduce:active:scale-100"
             >
               {savingLiteratureId === lit.id ? (
                 <Loader2 className="h-4 w-4 animate-spin" />
@@ -161,7 +161,7 @@ export function StagedPaperView({
             <Button
               variant="outline"
               size="sm"
-              className="gap-2 border-border/70 bg-background/80 text-foreground shadow-sm hover:bg-muted hover:text-foreground"
+              className="gap-2 border-border/70 bg-background/80 text-foreground shadow-sm transition-[transform,color,background-color,border-color] duration-150 ease-out hover:bg-muted hover:text-foreground active:scale-[0.98] motion-reduce:transition-none motion-reduce:active:scale-100"
               onClick={readWithCatalyst}
               title="Read with Catalyst"
             >
@@ -207,9 +207,10 @@ export function StagedPaperView({
                 pdf_storage_path: lit.pdf_storage_path,
                 pdf_file_name: lit.pdf_file_name,
               }}
-              triggerLabel="Replace"
-              triggerSize="sm"
-              triggerClassName="h-8 px-2.5 text-xs"
+              triggerLabel=""
+              triggerTitle="Replace PDF"
+              triggerSize="icon"
+              triggerClassName="h-8 w-8 sm:h-9 sm:w-9"
             />
           }
         />

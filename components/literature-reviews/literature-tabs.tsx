@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { MotionTabPanel } from "@/components/literature-reviews/motion"
+import { MotionTabPanel, motion, useReducedMotion } from "@/components/literature-reviews/motion"
 import {
   Search as SearchIcon,
   Database,
@@ -65,6 +65,29 @@ import { cn } from "@/lib/utils"
 
 const ACTIVE_TAB_KEY = "n9-litreview-active-tab"
 const OPENED_STAGED_IDS_KEY = "n9-litreview-opened-staged-ids"
+
+/** Snappy, no-bounce spring for shared-layout tab indicators. */
+const INDICATOR_SPRING = { type: "spring", stiffness: 500, damping: 40, mass: 0.7 } as const
+
+/**
+ * Shared-layout active-tab underline. Only the active trigger renders it; framer's
+ * `layoutId` glides the single underline between triggers on switch. Reduced-motion
+ * users get a static span (no layout animation). Decorative — pointer-events-none.
+ */
+function TabUnderline({ reduce }: { reduce: boolean | null }) {
+  if (reduce) {
+    return (
+      <span className="pointer-events-none absolute inset-x-0 bottom-0 h-0.5 rounded-full bg-[var(--n9-accent)]" />
+    )
+  }
+  return (
+    <motion.span
+      layoutId="lit-inner-tab-underline"
+      className="pointer-events-none absolute inset-x-0 bottom-0 h-0.5 rounded-full bg-[var(--n9-accent)]"
+      transition={INDICATOR_SPRING}
+    />
+  )
+}
 
 /** Project-scoping fields a staged row may carry (rows are loosely typed). */
 type StagingRowProjectScope = {
@@ -130,6 +153,7 @@ export function LiteratureTabs({
   initialTab = "search",
 }: LiteratureTabsProps) {
   const router = useRouter()
+  const reduce = useReducedMotion()
   const sessionKey = initialProjectId ?? "global"
   const savedSession = literatureSearchSessions.get(sessionKey) ?? null
 
@@ -551,7 +575,7 @@ export function LiteratureTabs({
     return () => window.removeEventListener("resize", checkScroll)
   }, [stripPaperIds, checkScroll])
 
-  const scrollTabs = (direction: "left" | "right") => {
+  const scrollTabs = useCallback((direction: "left" | "right") => {
     if (scrollTabsRef.current) {
       const scrollAmount = 250
       scrollTabsRef.current.scrollBy({
@@ -559,7 +583,7 @@ export function LiteratureTabs({
         behavior: "smooth",
       })
     }
-  }
+  }, [])
 
   useEffect(() => {
     if (resolvedActiveTab !== "search" && scrollTabsRef.current) {
@@ -884,7 +908,7 @@ export function LiteratureTabs({
             <Button
               variant="ghost"
               size="icon"
-              className="h-8 w-8 rounded-full shadow-lg bg-background border pointer-events-auto hover:bg-muted ml-0.5 transform translate-y-[1.5px]"
+              className="h-8 w-8 rounded-full shadow-lg bg-background border pointer-events-auto hover:bg-muted ml-0.5 transform translate-y-[1.5px] transition-transform active:scale-95"
               onClick={() => scrollTabs("left")}
             >
               <ChevronLeft className="h-4 w-4" />
@@ -903,10 +927,11 @@ export function LiteratureTabs({
               <TabsTrigger
                 value="search"
                 data-value="search"
-                className="data-[state=active]:bg-transparent data-[state=active]:border-b-2 data-[state=active]:border-[var(--n9-accent)] data-[state=active]:text-foreground rounded-none border-b-2 border-transparent px-4 py-2 bg-transparent text-muted-foreground transition-none shadow-none font-semibold shrink-0"
+                className="relative data-[state=active]:bg-transparent data-[state=active]:text-foreground rounded-none border-b-2 border-transparent px-4 py-2 bg-transparent text-muted-foreground transition-none shadow-none font-semibold shrink-0"
               >
                 <SearchIcon className="h-4 w-4 mr-2" />
                 Search results
+                {resolvedActiveTab === "search" && <TabUnderline reduce={reduce} />}
               </TabsTrigger>
             )}
             {stripPaperIds.map((id) => {
@@ -918,7 +943,7 @@ export function LiteratureTabs({
                   key={id}
                   value={id}
                   data-value={id}
-                  className="group relative data-[state=active]:bg-transparent data-[state=active]:border-b-2 data-[state=active]:border-[var(--n9-accent)] data-[state=active]:text-foreground rounded-none border-b-2 border-transparent px-4 py-2 bg-transparent text-muted-foreground transition-none shadow-none max-w-[220px] flex items-center gap-1 shrink-0"
+                  className="group relative data-[state=active]:bg-transparent data-[state=active]:text-foreground rounded-none border-b-2 border-transparent px-4 py-2 bg-transparent text-muted-foreground transition-none shadow-none max-w-[220px] flex items-center gap-1 shrink-0"
                 >
                   <span className="truncate text-sm font-semibold">{tabTitle}</span>
                   {/* role=button span, NOT a nested <button> (invalid inside the
@@ -936,10 +961,11 @@ export function LiteratureTabs({
                         handleCloseTabClick(id, e)
                       }
                     }}
-                    className="flex-shrink-0 cursor-pointer rounded-md p-1 text-muted-foreground/60 opacity-0 transition-all hover:bg-muted hover:text-rose-500 focus:opacity-100 group-hover:opacity-100"
+                    className="flex-shrink-0 cursor-pointer rounded-md p-1 text-muted-foreground/60 opacity-0 transition-all hover:bg-muted hover:text-rose-500 hover:scale-110 active:scale-90 focus:opacity-100 group-hover:opacity-100"
                   >
                     <X className="h-3 w-3" />
                   </span>
+                  {resolvedActiveTab === id && <TabUnderline reduce={reduce} />}
                 </TabsTrigger>
               )
             })}
@@ -952,7 +978,7 @@ export function LiteratureTabs({
             <Button
               variant="ghost"
               size="icon"
-              className="h-8 w-8 rounded-full shadow-lg bg-background border pointer-events-auto hover:bg-muted mr-0.5 transform translate-y-[1.5px]"
+              className="h-8 w-8 rounded-full shadow-lg bg-background border pointer-events-auto hover:bg-muted mr-0.5 transform translate-y-[1.5px] transition-transform active:scale-95"
               onClick={() => scrollTabs("right")}
             >
               <ChevronRight className="h-4 w-4" />
@@ -970,27 +996,51 @@ export function LiteratureTabs({
           type="button"
           onClick={() => setTopSection("search")}
           className={cn(
-            "inline-flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-medium transition-all duration-200",
+            "relative inline-flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-medium transition-colors duration-200",
             topSection === "search"
-              ? "bg-background text-foreground shadow-sm ring-1 ring-border/50"
+              ? "text-foreground"
               : "text-muted-foreground hover:text-foreground"
           )}
         >
-          <SearchIcon className="h-4 w-4" />
-          Search & read
+          {topSection === "search" &&
+            (reduce ? (
+              <span className="absolute inset-0 rounded-xl bg-background shadow-sm ring-1 ring-border/50" />
+            ) : (
+              <motion.span
+                layoutId="lit-topsection-pill"
+                className="absolute inset-0 rounded-xl bg-background shadow-sm ring-1 ring-border/50"
+                transition={INDICATOR_SPRING}
+              />
+            ))}
+          <span className="relative z-10 inline-flex items-center gap-2">
+            <SearchIcon className="h-4 w-4" />
+            Search & read
+          </span>
         </button>
         <button
           type="button"
           onClick={() => setTopSection("repo")}
           className={cn(
-            "inline-flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-medium transition-all duration-200",
+            "relative inline-flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-medium transition-colors duration-200",
             topSection === "repo"
-              ? "bg-background text-foreground shadow-sm ring-1 ring-border/50"
+              ? "text-foreground"
               : "text-muted-foreground hover:text-foreground"
           )}
         >
-          <Database className="h-4 w-4" />
-          My Library
+          {topSection === "repo" &&
+            (reduce ? (
+              <span className="absolute inset-0 rounded-xl bg-background shadow-sm ring-1 ring-border/50" />
+            ) : (
+              <motion.span
+                layoutId="lit-topsection-pill"
+                className="absolute inset-0 rounded-xl bg-background shadow-sm ring-1 ring-border/50"
+                transition={INDICATOR_SPRING}
+              />
+            ))}
+          <span className="relative z-10 inline-flex items-center gap-2">
+            <Database className="h-4 w-4" />
+            My Library
+          </span>
         </button>
       </div>
 
@@ -1004,7 +1054,10 @@ export function LiteratureTabs({
             setQuery={setQuery}
             isSearching={isSearching}
             onSearch={handleSearch}
-            onStop={() => searchStopRef.current?.()}
+            onStop={() => {
+              searchStopRef.current?.()
+              setIsSearching(false)
+            }}
           />
 
           {resolvedActiveTab !== "search" && (
@@ -1022,33 +1075,63 @@ export function LiteratureTabs({
               {unifiedTabStrip}
 
               <div className="mt-6">
+                {/* forceMount keeps the results + live stream mounted across tab
+                    switches, but Radix then renders it with hidden=false even when
+                    inactive — so a staged paper tab would stack its reader below
+                    the search list. Hide it ourselves when another tab is active. */}
                 {hasSearched && (
-                  <TabsContent value="search" className="m-0 border-none p-0" forceMount>
-                    <SearchTab
-                      query={query}
-                      setQuery={setQuery}
-                      searchResults={displayedResults}
-                      isSearching={isSearching}
-                      hasSearched={hasSearched}
-                      onSearch={handleSearch}
-                      resultsOnly
-                      onStagePaper={handleStagePaper}
-                      onOpenStaged={handleOpenStaged}
-                      isPaperStaged={isPaperStaged}
-                      isPaperStaging={(paperId) => stagingPaperId === paperId}
-                      sortMode={searchSort}
-                      onSortModeChange={handleSearchSortChange}
-                      openAccessOnly={openAccessOnlySearch}
-                      onOpenAccessOnlyChange={handleOpenAccessSearchChange}
-                      filters={aiFilters}
-                      onFiltersChange={setAiFilters}
-                      aiQuery={submittedQuery}
-                      onResults={setSearchResults}
-                      onLoadingChange={setIsSearching}
-                      registerStop={(fn) => {
-                        searchStopRef.current = fn
-                      }}
-                    />
+                  <TabsContent
+                    value="search"
+                    forceMount
+                    className={cn(
+                      'm-0 border-none p-0',
+                      resolvedActiveTab !== 'search' && 'hidden',
+                    )}
+                  >
+                    {/* The persistent SearchTab is NEVER remounted (no key,
+                        initial={false}) so the live SSE stream survives tab
+                        switches. When the panel becomes active the parent's
+                        `hidden` class is removed and this fades/lifts in; when
+                        inactive the parent stays display:none so both panels can
+                        never show at once (leak fix preserved). */}
+                    <motion.div
+                      initial={false}
+                      animate={
+                        reduce
+                          ? { opacity: resolvedActiveTab === 'search' ? 1 : 0 }
+                          : {
+                              opacity: resolvedActiveTab === 'search' ? 1 : 0,
+                              y: resolvedActiveTab === 'search' ? 0 : 6,
+                            }
+                      }
+                      transition={{ duration: reduce ? 0 : 0.2, ease: 'easeOut' }}
+                    >
+                      <SearchTab
+                        query={query}
+                        setQuery={setQuery}
+                        searchResults={displayedResults}
+                        isSearching={isSearching}
+                        hasSearched={hasSearched}
+                        onSearch={handleSearch}
+                        resultsOnly
+                        onStagePaper={handleStagePaper}
+                        onOpenStaged={handleOpenStaged}
+                        isPaperStaged={isPaperStaged}
+                        isPaperStaging={(paperId) => stagingPaperId === paperId}
+                        sortMode={searchSort}
+                        onSortModeChange={handleSearchSortChange}
+                        openAccessOnly={openAccessOnlySearch}
+                        onOpenAccessOnlyChange={handleOpenAccessSearchChange}
+                        filters={aiFilters}
+                        onFiltersChange={setAiFilters}
+                        aiQuery={submittedQuery}
+                        onResults={setSearchResults}
+                        onLoadingChange={setIsSearching}
+                        registerStop={(fn) => {
+                          searchStopRef.current = fn
+                        }}
+                      />
+                    </motion.div>
                   </TabsContent>
                 )}
 
@@ -1056,18 +1139,24 @@ export function LiteratureTabs({
                   const lit = stagedByIdMerged.get(id) ?? repoById.get(id)
                   return (
                     <TabsContent key={id} value={id} className="m-0 border-none p-0">
-                      {lit ? (
-                        <StagedPaperView
-                          lit={lit}
-                          onSavePaper={handleSaveFromStaging}
-                          savingLiteratureId={savingStagingLiteratureId}
-                        />
-                      ) : (
-                        <div className="flex flex-col items-center justify-center gap-3 py-20 text-center">
-                          <Loader2 className="h-8 w-8 animate-spin text-[var(--n9-accent)]" />
-                          <p className="text-sm text-muted-foreground">Loading staged paper…</p>
-                        </div>
-                      )}
+                      <motion.div
+                        initial={reduce ? false : { opacity: 0, y: 6 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ duration: reduce ? 0 : 0.22, ease: 'easeOut' }}
+                      >
+                        {lit ? (
+                          <StagedPaperView
+                            lit={lit}
+                            onSavePaper={handleSaveFromStaging}
+                            savingLiteratureId={savingStagingLiteratureId}
+                          />
+                        ) : (
+                          <div className="flex flex-col items-center justify-center gap-3 py-20 text-center">
+                            <Loader2 className="h-8 w-8 animate-spin text-[var(--n9-accent)]" />
+                            <p className="text-sm text-muted-foreground">Loading staged paper…</p>
+                          </div>
+                        )}
+                      </motion.div>
                     </TabsContent>
                   )
                 })}

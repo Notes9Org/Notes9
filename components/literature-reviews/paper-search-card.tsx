@@ -5,8 +5,9 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Download, ExternalLink, FileText, Lock, Unlock, ChevronDown, ChevronUp, Plus, Database, X, Loader2 } from 'lucide-react';
-import { useState } from 'react';
+import { memo, useState } from 'react';
 import { decodeHtmlEntities, formatLiteratureAbstractPlain } from '@/lib/literature-abstract-display';
+import { MotionHoverCard } from './motion';
 
 function stripDoiToBare(doi: string): string {
   return doi
@@ -49,7 +50,7 @@ interface PaperSearchCardProps {
   compact?: boolean;
 }
 
-export function PaperSearchCard({ paper, onStage, onOpenStaged, onSave, onSaveToRepository, onRemove, isStaged = false, isSaving = false, isStaging = false, hideActions = false, compact = false }: PaperSearchCardProps) {
+function PaperSearchCardImpl({ paper, onStage, onOpenStaged, onSave, onSaveToRepository, onRemove, isStaged = false, isSaving = false, isStaging = false, hideActions = false, compact = false }: PaperSearchCardProps) {
   const [isExpanded, setIsExpanded] = useState(false);
   const abstractPlain = formatLiteratureAbstractPlain(paper.abstract);
   // Upstream sources (PubMed/Europe PMC/OpenAlex) return author and journal
@@ -78,6 +79,7 @@ export function PaperSearchCard({ paper, onStage, onOpenStaged, onSave, onSaveTo
   const externalLink = resolvePaperExternalUrl(paper)
 
   return (
+    <MotionHoverCard>
     <Card className="hover:shadow-md transition-shadow">
       <CardContent className={compact ? "p-4" : "p-5"}>
         <div className="flex items-start justify-between gap-4 mb-3">
@@ -294,5 +296,8 @@ export function PaperSearchCard({ paper, onStage, onOpenStaged, onSave, onSaveTo
         )}
       </CardContent>
     </Card>
+    </MotionHoverCard>
   );
 }
+
+export const PaperSearchCard = memo(PaperSearchCardImpl);
