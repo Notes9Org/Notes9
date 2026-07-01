@@ -8,7 +8,7 @@ import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Sheet, SheetContent } from "@/components/ui/sheet"
 import { useMediaQuery } from "@/hooks/use-media-query"
-import { FileText, PanelLeftClose, PanelLeftOpen, Loader2, MoreVertical, Trash2 } from "lucide-react"
+import { FileText, ChevronLeft, List, Loader2, MoreVertical, Trash2 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { ReportDetailView } from "./report-detail-view"
 import type { ReportRow } from "../reports-page-client"
@@ -188,16 +188,18 @@ export function ReportDetailClient({
 
   const toggleButton = (
     <Button
+      type="button"
       variant="ghost"
-      size="icon"
+      size="icon-sm"
       className="shrink-0 text-muted-foreground hover:text-foreground"
       onClick={() => setSidebarOpen((prev) => !prev)}
-      title={sidebarOpen ? "Hide sidebar" : "Show sidebar"}
+      aria-label={sidebarOpen ? "Hide reports" : "Show reports"}
+      title={sidebarOpen ? "Hide reports list" : "Show reports list"}
     >
       {sidebarOpen ? (
-        <PanelLeftClose className="h-4 w-4" />
+        <ChevronLeft className="h-4 w-4" />
       ) : (
-        <PanelLeftOpen className="h-4 w-4" />
+        <List className="h-4 w-4" />
       )}
     </Button>
   )

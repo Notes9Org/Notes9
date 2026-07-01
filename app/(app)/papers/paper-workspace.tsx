@@ -441,7 +441,6 @@ export function PaperWorkspace({ paperId, backLink, leftControls, onPaperMutated
               </Link>
             </Button>
           ) : null}
-          {leftControls}
           <Input
             value={titleInput}
             onChange={(e) => setTitleInput(e.target.value)}
@@ -667,6 +666,7 @@ export function PaperWorkspace({ paperId, backLink, leftControls, onPaperMutated
             <PaperEditor
               key={`collab-${id}`}
               fullscreenWorkspaceRef={fullscreenWorkspaceRef}
+              leadingToolbarSlot={leftControls}
               content=""
               onChange={handleContentChange}
               minHeight="calc(100dvh - 180px)"
@@ -686,6 +686,7 @@ export function PaperWorkspace({ paperId, backLink, leftControls, onPaperMutated
             <PaperEditor
               key={`solo-${id}`}
               fullscreenWorkspaceRef={fullscreenWorkspaceRef}
+              leadingToolbarSlot={leftControls}
               content={content}
               onChange={handleContentChange}
               minHeight="calc(100dvh - 180px)"

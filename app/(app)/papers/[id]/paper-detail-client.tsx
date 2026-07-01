@@ -8,7 +8,7 @@ import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Sheet, SheetContent } from "@/components/ui/sheet"
 import { useMediaQuery } from "@/hooks/use-media-query"
-import { FileText, PanelLeftClose, PanelLeftOpen, Loader2, Plus, MoreVertical, Trash2, Pencil } from "lucide-react"
+import { FileText, ChevronLeft, List, Loader2, Plus, MoreVertical, Trash2, Pencil } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { PaperWorkspace } from "../paper-workspace"
 import {
@@ -209,13 +209,15 @@ export function PaperDetailClient({ activePaperId }: { activePaperId: string }) 
 
   const toggleButton = (
     <Button
+      type="button"
       variant="ghost"
-      size="icon"
+      size="icon-sm"
       className="shrink-0 text-muted-foreground hover:text-foreground"
       onClick={() => setSidebarOpen(prev => !prev)}
-      title={sidebarOpen ? "Hide sidebar" : "Show sidebar"}
+      aria-label={sidebarOpen ? "Hide papers" : "Show papers"}
+      title={sidebarOpen ? "Hide papers list" : "Show papers list"}
     >
-      {sidebarOpen ? <PanelLeftClose className="h-4 w-4" /> : <PanelLeftOpen className="h-4 w-4" />}
+      {sidebarOpen ? <ChevronLeft className="h-4 w-4" /> : <List className="h-4 w-4" />}
     </Button>
   )
 
