@@ -422,7 +422,7 @@ function AppLayoutBody({ children }: AppLayoutProps) {
               className={cn(
                 // Soft right-edge shadow lifts the sidebar above the content for
                 // a modern, layered separation.
-                "relative z-10 h-full min-h-0 shrink-0 overflow-hidden shadow-[6px_0_24px_-14px_rgba(20,14,8,0.30)] dark:shadow-[6px_0_28px_-12px_rgba(0,0,0,0.6)]",
+                "relative z-10 h-full min-h-0 shrink-0 overflow-hidden shadow-[6px_0_24px_-16px_rgba(20,14,8,0.28)] dark:shadow-[6px_0_28px_-14px_rgba(0,0,0,0.55)]",
                 "data-[resizing=true]:[&_[data-slot=sidebar-gap]]:!transition-none",
                 "data-[resizing=true]:[&_[data-slot=sidebar-container]]:!transition-none"
               )}
@@ -463,7 +463,7 @@ function AppLayoutBody({ children }: AppLayoutProps) {
               Skip to main content
             </a>
             {!isCatalystRoute && (
-            <header className="flex h-12 shrink-0 items-center justify-between border-b border-border/45 bg-[var(--n9-header-bg)] px-3 backdrop-blur-md sm:h-14 sm:px-4">
+            <header className="flex h-12 shrink-0 items-center justify-between border-b border-[color:var(--glass-border)] bg-[color:var(--n9-header-bg)]/70 px-3 backdrop-blur-xl saturate-[1.4] sm:h-14 sm:px-4">
               <div className="flex items-center gap-2 min-w-0 flex-1 truncate">
                 <MobileMenuButton />
                 <div className="min-w-0 flex-1 truncate">
@@ -516,6 +516,9 @@ function AppLayoutBody({ children }: AppLayoutProps) {
                   <Moon className="size-4" />
                 )}
               </Button>
+              {/* Divider: utility icons (report / help / theme) on the left,
+                  the AI actions grouped separately on the right. */}
+              <div className="mx-1 h-5 w-px shrink-0 self-center bg-border/50" aria-hidden />
               {headerAi?.active ? (
                   <Button
                     type="button"
@@ -533,9 +536,14 @@ function AppLayoutBody({ children }: AppLayoutProps) {
                 id="tour-ai-toggle"
                 data-tour={TOUR.aiToggle}
                 type="button"
-                variant={catalystVisible ? "secondary" : "ghost"}
+                variant="ghost"
                 size="icon"
-                className="size-8 sm:size-9"
+                className={cn(
+                  "size-8 shrink-0 text-primary ring-1 ring-inset ring-[color:var(--primary)]/25 transition-colors hover:text-primary sm:size-9",
+                  catalystVisible
+                    ? "bg-[color:var(--primary)]/20 hover:bg-[color:var(--primary)]/24"
+                    : "bg-[color:var(--primary)]/[0.08] hover:bg-[color:var(--primary)]/15",
+                )}
                 onClick={handleCatalystToggle}
                 aria-label={catalystVisible ? "Close Catalyst" : "Ask Catalyst"}
                 title={catalystVisible ? "Close Catalyst" : "Ask Catalyst"}
