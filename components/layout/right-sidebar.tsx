@@ -1226,6 +1226,8 @@ export function RightSidebar({
     folders,
     foldersAvailable,
     createFolder,
+    renameFolder,
+    deleteFolder,
     moveSessionToFolder,
   } = useChatSessions();
 
@@ -3666,6 +3668,26 @@ export function RightSidebar({
   const [selectedChatIds, setSelectedChatIds] = useState<Set<string>>(() => new Set());
   const [historyQuery, setHistoryQuery] = useState('');
   const [collapsedFolders, setCollapsedFolders] = useState<Set<string>>(() => new Set());
+  const [renamingFolderId, setRenamingFolderId] = useState<string | null>(null);
+  const [folderRenameDraft, setFolderRenameDraft] = useState('');
+  const beginFolderRename = (id: string, current: string) => {
+    setRenamingFolderId(id);
+    setFolderRenameDraft(current);
+  };
+  const commitFolderRename = useCallback(() => {
+    setRenamingFolderId((id) => {
+      if (id) {
+        const t = folderRenameDraft.trim();
+        if (t) void renameFolder(id, t);
+      }
+      return null;
+    });
+    setFolderRenameDraft('');
+  }, [folderRenameDraft, renameFolder]);
+  const cancelFolderRename = useCallback(() => {
+    setRenamingFolderId(null);
+    setFolderRenameDraft('');
+  }, []);
   const toggleChatSelected = (id: string) =>
     setSelectedChatIds((prev) => {
       const next = new Set(prev);
@@ -4149,33 +4171,29 @@ export function RightSidebar({
                           variant="ghost"
                           size="icon"
                           className="h-7 w-7 shrink-0"
-                          onClick={() => setSelectionMode(true)}
-                          title="Select chats"
-                          aria-label="Select chats"
-                        >
-                          <CheckSquare className="h-4 w-4" />
-                        </Button>
-                        {foldersAvailable && (
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-7 w-7 shrink-0"
-                            onClick={() => void handleNewFolder()}
-                            title="New folder"
-                            aria-label="New folder"
-                          >
-                            <FolderPlus className="h-4 w-4" />
-                          </Button>
-                        )}
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-7 w-7 shrink-0"
                           onClick={handleNewChat}
+                          title="New chat"
                           aria-label="New chat"
                         >
                           <PenBox className="h-4 w-4" />
                         </Button>
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0" title="More" aria-label="More options">
+                              <MoreHorizontal className="h-4 w-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end" sideOffset={4} className="w-44">
+                            <DropdownMenuItem onSelect={() => setSelectionMode(true)}>
+                              <CheckSquare className="mr-2 size-4" /> Select chats
+                            </DropdownMenuItem>
+                            {foldersAvailable && (
+                              <DropdownMenuItem onSelect={() => void handleNewFolder()}>
+                                <FolderPlus className="mr-2 size-4" /> New folder
+                              </DropdownMenuItem>
+                            )}
+                          </DropdownMenuContent>
+                        </DropdownMenu>
                       </>
                     )}
                   </div>
@@ -4209,18 +4227,71 @@ export function RightSidebar({
                         {historyGroups.folders.map((folder) => {
                           const items = historyGroups.byFolder.get(folder.id) ?? [];
                           const collapsed = collapsedFolders.has(folder.id);
+                          const isFolderRenaming = renamingFolderId === folder.id;
                           return (
                             <div key={folder.id} className="min-w-0">
-                              <button
-                                type="button"
-                                onClick={() => toggleFolderCollapsed(folder.id)}
-                                className="flex w-full min-w-0 items-center gap-1 rounded-md px-1.5 py-1 text-[0.68rem] font-semibold uppercase tracking-wider text-sidebar-foreground/55 transition-colors hover:text-sidebar-foreground"
-                              >
-                                <ChevronRight className={cn('size-3 shrink-0 transition-transform', !collapsed && 'rotate-90')} />
-                                <Folder className="size-3 shrink-0" />
-                                <span className="min-w-0 flex-1 truncate text-left">{folder.name}</span>
-                                <span className="shrink-0 tabular-nums opacity-70">{items.length}</span>
-                              </button>
+                              <div className="group/folder flex w-full min-w-0 items-center gap-1 rounded-md px-1.5 py-1 text-[0.68rem] font-semibold uppercase tracking-wider text-sidebar-foreground/55">
+                                <button
+                                  type="button"
+                                  onClick={() => toggleFolderCollapsed(folder.id)}
+                                  className="flex shrink-0 items-center gap-1 transition-colors hover:text-sidebar-foreground"
+                                  aria-label={collapsed ? 'Expand folder' : 'Collapse folder'}
+                                >
+                                  <ChevronRight className={cn('size-3 shrink-0 transition-transform', !collapsed && 'rotate-90')} />
+                                  <Folder className="size-3 shrink-0" />
+                                </button>
+                                {isFolderRenaming ? (
+                                  <input
+                                    autoFocus
+                                    value={folderRenameDraft}
+                                    onChange={(e) => setFolderRenameDraft(e.target.value)}
+                                    onClick={(e) => e.stopPropagation()}
+                                    onKeyDown={(e) => {
+                                      e.stopPropagation();
+                                      if (e.key === 'Enter') { e.preventDefault(); commitFolderRename(); }
+                                      else if (e.key === 'Escape') { e.preventDefault(); cancelFolderRename(); }
+                                    }}
+                                    onBlur={commitFolderRename}
+                                    className="min-w-0 flex-1 rounded border border-[color:color-mix(in_srgb,var(--n9-accent)_45%,var(--border))] bg-background px-1 py-0.5 text-[0.7rem] uppercase tracking-wider outline-none"
+                                  />
+                                ) : (
+                                  <>
+                                    <button
+                                      type="button"
+                                      onClick={() => toggleFolderCollapsed(folder.id)}
+                                      onDoubleClick={() => beginFolderRename(folder.id, folder.name)}
+                                      className="min-w-0 flex-1 truncate text-left transition-colors hover:text-sidebar-foreground"
+                                      title="Double-click to rename"
+                                    >
+                                      {folder.name}
+                                    </button>
+                                    <span className="shrink-0 tabular-nums opacity-70">{items.length}</span>
+                                    <DropdownMenu>
+                                      <DropdownMenuTrigger asChild>
+                                        <button
+                                          type="button"
+                                          aria-label="Folder options"
+                                          onClick={(e) => e.stopPropagation()}
+                                          className="shrink-0 rounded p-0.5 text-sidebar-foreground/50 opacity-0 transition-opacity hover:text-foreground group-hover/folder:opacity-100 data-[state=open]:opacity-100"
+                                        >
+                                          <MoreHorizontal className="size-3.5" />
+                                        </button>
+                                      </DropdownMenuTrigger>
+                                      <DropdownMenuContent align="end" sideOffset={4} className="w-40">
+                                        <DropdownMenuItem onSelect={() => beginFolderRename(folder.id, folder.name)}>
+                                          <Pencil className="mr-2 size-4" /> Rename
+                                        </DropdownMenuItem>
+                                        <DropdownMenuItem
+                                          className="text-destructive focus:text-destructive"
+                                          onSelect={() => void deleteFolder(folder.id)}
+                                        >
+                                          <Trash2 className="mr-2 size-4" /> Delete folder
+                                        </DropdownMenuItem>
+                                      </DropdownMenuContent>
+                                    </DropdownMenu>
+                                  </>
+                                )}
+                              </div>
                               {!collapsed && (
                                 <MotionList className="flex min-w-0 flex-col gap-0.5 pl-1.5" role="list">
                                   {items.length > 0 ? (
