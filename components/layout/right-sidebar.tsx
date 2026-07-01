@@ -93,6 +93,7 @@ import { ResizeHandle } from '@/components/ui/resize-handle';
 import { useSidebar } from '@/components/ui/sidebar';
 import { useTheme } from 'next-themes';
 import { requestPageHelp } from '@/components/tour/app-tour';
+import { ReportIssueDialog } from '@/components/layout/report-issue-dialog';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -3140,14 +3141,6 @@ export function RightSidebar({
 
   // --- Render Components ---
 
-  const catalystHeroComposerShell = cn(
-    'rounded-2xl border border-white/70 bg-white/75 backdrop-blur-xl supports-[backdrop-filter]:bg-white/60',
-    'shadow-[0_1px_2px_rgba(44,36,24,0.05),0_16px_44px_-18px_rgba(44,36,24,0.22)]',
-    'transition-[border-color,box-shadow] duration-200',
-    'focus-within:border-[color:color-mix(in_srgb,var(--n9-accent)_35%,var(--border))]',
-    'focus-within:shadow-[0_1px_2px_rgba(44,36,24,0.05),0_12px_32px_-8px_rgba(44,36,24,0.14),0_0_0_3px_color-mix(in_srgb,var(--n9-accent)_12%,transparent)]',
-  );
-
   const renderCursorInput = (opts?: { heroStyle?: boolean }) => {
     const heroStyle = opts?.heroStyle ?? false;
     const canSendLiterature =
@@ -3256,8 +3249,8 @@ export function RightSidebar({
     return (
     <>
     {coPilot && messages.length === 0 && (
-      <div className="mb-2 flex items-start gap-2 rounded-xl border border-primary/25 bg-primary/[0.05] px-3 py-2 text-xs">
-        <Telescope className="mt-0.5 size-3.5 shrink-0 text-primary" aria-hidden />
+      <div className="n9-glass n9-elev-1 mb-2 flex items-start gap-2 rounded-xl border-[color:color-mix(in_srgb,var(--n9-accent)_22%,var(--glass-border))] px-3 py-2 text-xs motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-top-1 motion-safe:duration-300">
+        <Telescope className="mt-0.5 size-3.5 shrink-0 text-[color:var(--n9-accent)]" aria-hidden />
         <div className="min-w-0 flex-1 leading-snug">
           <span className="font-medium text-foreground">Co-pilot is reading your search</span>
           <span className="text-muted-foreground">
@@ -3270,7 +3263,7 @@ export function RightSidebar({
           onClick={() => clearCatalystCoPilot()}
           title="Dismiss search context"
           aria-label="Dismiss search context"
-          className="-mr-1 -mt-0.5 shrink-0 rounded p-0.5 text-muted-foreground hover:text-foreground"
+          className="n9-press -mr-1 -mt-0.5 shrink-0 rounded-md p-0.5 text-muted-foreground hover:bg-muted/60 hover:text-foreground"
         >
           <X className="size-3.5" />
         </button>
@@ -3279,11 +3272,8 @@ export function RightSidebar({
     <div className="group/input relative flex flex-col w-full">
       <div
         className={cn(
-          'overflow-hidden transition-all',
-          heroStyle
-            ? catalystHeroComposerShell
-            : 'rounded-xl border bg-card/50 shadow-sm focus-within:border-ring focus-within:ring-1 focus-within:ring-ring/50',
-          isDraggingContext && 'border-primary bg-primary/5 ring-2 ring-primary',
+          'n9-composer overflow-hidden',
+          isDraggingContext && '!border-primary bg-primary/5 ring-2 ring-primary',
         )}
         id="tour-ai-chat"
       >
@@ -3334,7 +3324,7 @@ export function RightSidebar({
                 : 'Ask Catalyst anything. Use @ to tag notes, experiments, projects, protocols, and literature.'
             }
             className={cn(
-              'w-full resize-none bg-transparent focus-visible:outline-2 focus-visible:outline-ring/40 focus-visible:outline-offset-2 scrollbar-hide empty:before:pointer-events-none empty:before:text-muted-foreground/60 empty:before:content-[attr(data-placeholder)]',
+              'w-full resize-none bg-transparent caret-[color:var(--n9-accent)] focus-visible:outline-none scrollbar-hide empty:before:pointer-events-none empty:before:text-muted-foreground/55 empty:before:content-[attr(data-placeholder)]',
               heroStyle
                 ? 'min-h-[120px] px-5 py-4 text-[15px] leading-relaxed'
                 : 'min-h-[68px] px-4 py-2.5 text-sm',
@@ -3342,23 +3332,25 @@ export function RightSidebar({
           />
         </FileDropzone>
         {mentionOpenForInput && filteredGlobalMentions.length > 0 && (
-          <div className="mx-2 mb-1 max-h-52 overflow-y-auto rounded-md border border-border bg-popover p-1">
+          <div className="n9-glass n9-elev-2 mx-2 mb-1 max-h-52 overflow-y-auto rounded-xl p-1 motion-safe:animate-in motion-safe:fade-in motion-safe:zoom-in-95 motion-safe:duration-150">
             {filteredGlobalMentions.map((item, idx) => (
               <button
                 key={`${item.kind}:${item.id}`}
                 type="button"
                 className={cn(
-                  'flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-xs',
-                  idx === mentionSelectIndex ? 'bg-accent text-accent-foreground' : 'hover:bg-accent/50'
+                  'n9-press flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-xs',
+                  idx === mentionSelectIndex
+                    ? 'bg-[color:color-mix(in_srgb,var(--n9-accent)_14%,transparent)] text-foreground'
+                    : 'hover:bg-muted/60'
                 )}
                 onMouseDown={(e) => {
                   e.preventDefault();
                   appendMentionToInput(item);
                 }}
               >
-                <AtSign className="size-3.5 shrink-0" />
+                <AtSign className={cn('size-3.5 shrink-0', idx === mentionSelectIndex ? 'text-[color:var(--n9-accent)]' : 'text-muted-foreground')} />
                 <span className="truncate">{item.title}</span>
-                <span className="ml-auto shrink-0 text-2xs uppercase text-muted-foreground">
+                <span className="ml-auto shrink-0 rounded bg-muted/70 px-1.5 py-px text-2xs uppercase tracking-wide text-muted-foreground">
                   {item.kind.replace('_', ' ')}
                 </span>
               </button>
@@ -3375,9 +3367,9 @@ export function RightSidebar({
                     <span
                       id="tour-ai-web-search"
                       className={cn(
-                        'inline-flex h-6 shrink-0 cursor-default select-none items-center gap-1 rounded-full border px-2 transition-colors duration-150',
+                        'inline-flex h-6 shrink-0 cursor-default select-none items-center gap-1 rounded-full border px-2 transition-[background-color,border-color,color,box-shadow] duration-200',
                         webSearchEnabled
-                          ? 'border-[color:color-mix(in_srgb,var(--n9-accent)_30%,var(--border))] bg-[color:color-mix(in_srgb,var(--n9-accent)_8%,transparent)] text-foreground'
+                          ? 'border-[color:color-mix(in_srgb,var(--n9-accent)_34%,var(--border))] bg-[color:color-mix(in_srgb,var(--n9-accent)_10%,transparent)] text-foreground shadow-[0_1px_6px_-2px_var(--n9-accent-glow)]'
                           : 'border-border/40 bg-muted/20 text-muted-foreground'
                       )}
                     >
@@ -3420,10 +3412,10 @@ export function RightSidebar({
                       size="icon"
                       variant="ghost"
                       className={cn(
-                        "size-7 rounded-lg transition-colors duration-150",
+                        "n9-press size-7 rounded-lg",
                         micListening
-                          ? "text-red-500 hover:bg-red-500/10 hover:text-red-600"
-                          : "text-muted-foreground/70 hover:text-foreground"
+                          ? "bg-red-500/10 text-red-500 ring-2 ring-red-500/30 shadow-[0_0_0_3px_rgba(239,68,68,0.10)] hover:text-red-600"
+                          : "text-muted-foreground/70 hover:bg-muted/60 hover:text-foreground"
                       )}
                       onClick={() => micListening ? stopMic() : startMic()}
                       aria-label={micListening ? "Stop dictation" : "Start dictation"}
@@ -3446,7 +3438,7 @@ export function RightSidebar({
                     type="button"
                     size="icon"
                     variant="ghost"
-                    className="size-7 rounded-lg text-muted-foreground/70 transition-colors duration-150 hover:text-foreground"
+                    className="n9-press size-7 rounded-lg text-muted-foreground/70 hover:bg-muted/60 hover:text-foreground"
                     onClick={() => fileInputRef.current?.click()}
                     disabled={isLoading || isUploading}
                     aria-label="Attach file"
@@ -3465,7 +3457,7 @@ export function RightSidebar({
                 type="button"
                 size="icon"
                 variant="ghost"
-                className="size-7 rounded-lg text-muted-foreground/70 transition-colors duration-150 hover:text-foreground"
+                className="n9-press size-7 rounded-lg text-muted-foreground/70 hover:bg-muted/60 hover:text-foreground motion-safe:animate-in motion-safe:fade-in motion-safe:zoom-in-95 motion-safe:duration-150"
                 aria-label="Stop generating"
                 title="Stop generating"
                 onClick={handleStopRequest}
@@ -3478,9 +3470,9 @@ export function RightSidebar({
                 size="icon"
                 variant="ghost"
                 className={cn(
-                  "size-7 rounded-lg transition-all duration-150",
+                  "n9-press size-7 rounded-lg motion-safe:animate-in motion-safe:fade-in motion-safe:zoom-in-95 motion-safe:duration-150",
                   canSend
-                    ? "bg-[color:var(--n9-accent)] text-white hover:bg-[color:color-mix(in_srgb,var(--n9-accent)_85%,black)]"
+                    ? "n9-accent-surface n9-glow hover:brightness-105"
                     : "text-muted-foreground/40 hover:text-muted-foreground/60"
                 )}
                 onClick={(e) => void handleSubmit(e as React.FormEvent)}
@@ -3711,6 +3703,7 @@ export function RightSidebar({
                   >
                     <CircleHelp className="size-4" />
                   </Button>
+                  <ReportIssueDialog />
                   <Button
                     id="tour-theme-toggle"
                     variant="ghost"
@@ -3975,7 +3968,7 @@ export function RightSidebar({
                         {emptyStateDescription}
                       </p>
                     </div>
-                    <div className="flex-shrink-0 border-t border-border/40 bg-background/95 p-4 backdrop-blur-md">
+                    <div className="flex-shrink-0 border-t border-[color:var(--glass-border)] bg-background/80 p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.05)] backdrop-blur-xl">
                       <div className="mx-auto min-w-0 max-w-3xl">{renderCursorInput()}</div>
                     </div>
                   </div>
@@ -4185,16 +4178,16 @@ export function RightSidebar({
                     {chatShowJumpBottom ? (
                       <Button
                         type="button"
-                        variant="secondary"
+                        variant="ghost"
                         size="icon"
-                        className="absolute bottom-full left-1/2 z-30 mb-2 h-8 w-8 -translate-x-1/2 rounded-full border border-border/50 bg-background/95 shadow-md backdrop-blur-sm hover:bg-muted"
+                        className="n9-glass n9-elev-2 n9-press absolute bottom-full left-1/2 z-30 mb-2 h-8 w-8 -translate-x-1/2 rounded-full text-foreground/70 hover:text-foreground motion-safe:animate-in motion-safe:fade-in motion-safe:zoom-in-95 motion-safe:slide-in-from-bottom-1 motion-safe:duration-200"
                         onClick={scrollChatToBottom}
                         aria-label="Scroll to latest message"
                       >
                         <ChevronDown className="size-3.5" />
                       </Button>
                     ) : null}
-                    <div className="border-t border-border/40 bg-background/95 px-4 py-3 backdrop-blur-md">
+                    <div className="border-t border-[color:var(--glass-border)] bg-background/80 px-4 py-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.05)] backdrop-blur-xl">
                       <div className="max-w-3xl mx-auto min-w-0">
                         {renderCursorInput()}
                       </div>

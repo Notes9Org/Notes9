@@ -56,7 +56,7 @@ export function PreviewAttachment({
       <div className="relative group">
         <div
           className={cn(
-            'flex items-center gap-2 rounded-lg border bg-muted/50 py-1.5',
+            'n9-elev-1 flex items-center gap-2 rounded-lg border border-border/60 bg-muted/40 py-1.5 transition-[border-color,box-shadow] duration-200 hover:border-border',
             showThumb ? 'pl-1.5 pr-2' : 'px-2',
             isUploading && 'opacity-60'
           )}
@@ -88,7 +88,7 @@ export function PreviewAttachment({
               type="button"
               variant="ghost"
               size="icon"
-              className="size-4 opacity-0 group-hover:opacity-100 transition-opacity"
+              className="n9-press size-4 opacity-0 transition-opacity duration-150 hover:text-destructive group-hover:opacity-100"
               onClick={(e) => {
                 e.stopPropagation();
                 onRemove();
