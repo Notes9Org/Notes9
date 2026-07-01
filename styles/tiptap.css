@@ -477,3 +477,227 @@
 :is(.dark) .mention-literature {
   color: hsl(142 76% 55%);
 }
+
+/* Block drag handle — Notion/Word-style grip to move whole blocks (tables, images, paragraphs) */
+.n9-block-drag-handle {
+  position: fixed;
+  z-index: 60;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 22px;
+  padding: 0;
+  border-radius: 5px;
+  color: hsl(var(--muted-foreground, 0 0% 45%));
+  background: transparent;
+  cursor: grab;
+  opacity: 0.55;
+  transition: opacity 0.12s ease, background-color 0.12s ease, color 0.12s ease;
+  user-select: none;
+  -webkit-user-select: none;
+}
+.n9-block-drag-handle:hover {
+  opacity: 1;
+  background-color: hsl(var(--accent, 0 0% 90%));
+  color: hsl(var(--accent-foreground, 0 0% 10%));
+}
+.n9-block-drag-handle:active,
+.n9-block-drag-handle.is-dragging {
+  cursor: grabbing;
+  opacity: 1;
+}
+
+/* Page break — visible divider on screen, real page break in print/PDF */
+.ProseMirror .n9-page-break {
+  position: relative;
+  height: 0;
+  margin: 1.25rem 0;
+  border-top: 2px dashed hsl(var(--border, 0 0% 80%));
+  page-break-after: always;
+  break-after: page;
+  user-select: none;
+}
+.ProseMirror .n9-page-break::after {
+  content: "Page break";
+  position: absolute;
+  top: -0.7em;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 0 0.5rem;
+  font-size: 0.65rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: hsl(var(--muted-foreground, 0 0% 45%));
+  background: var(--background, #fff);
+}
+.ProseMirror .n9-page-break.ProseMirror-selectednode {
+  border-top-color: hsl(var(--primary, 220 90% 56%));
+}
+
+/* Text columns */
+.ProseMirror .n9-columns {
+  column-gap: 2rem;
+  margin: 0.75rem 0;
+}
+.ProseMirror .n9-columns > * {
+  break-inside: avoid;
+}
+@media print {
+  .ProseMirror .n9-page-break { border: 0; }
+  .ProseMirror .n9-page-break::after { display: none; }
+}
+
+
+/* ── Word-like Page View ──────────────────────────────────────────────
+   A white "paper" page floating on a tinted backdrop. Forces light-theme
+   document colours so text stays readable on the white page even in dark mode
+   (user-applied inline colours still win). Page-boundary guides are drawn via
+   an inline repeating gradient from the component. */
+.n9-page {
+  position: relative;
+  --foreground: #1a1a1a;
+  --muted-foreground: #6b7280;
+  --muted: 0 0% 96%;
+  --border: 0 0% 86%;
+  --primary: 220 90% 56%;
+  color: #1a1a1a;
+  background-color: #ffffff;
+  border-radius: 4px;
+  box-shadow:
+    0 0 0 1px rgba(15, 23, 42, 0.04),
+    0 1px 2px rgba(15, 23, 42, 0.06),
+    0 12px 30px -8px rgba(15, 23, 42, 0.14);
+  color-scheme: light;
+}
+.n9-page .ProseMirror {
+  min-height: inherit;
+  color: #1a1a1a;
+  /* keep everything inside the margin box the rulers define */
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+.n9-page .ProseMirror img,
+.n9-page .ProseMirror table,
+.n9-page .ProseMirror pre,
+.n9-page .ProseMirror .resizable-image-host {
+  max-width: 100% !important;
+}
+.n9-page .ProseMirror pre {
+  white-space: pre-wrap;
+}
+/* In Page view, header/footer are page furniture living in the page margins:
+   full page width, text aligned to the content column. */
+.n9-page .n9-doc-header,
+.n9-page .n9-doc-footer {
+  margin-left: calc(-1 * var(--n9-ml, 0px));
+  margin-right: calc(-1 * var(--n9-mr, 0px));
+  padding-left: calc(var(--n9-ml, 0px) + 0.6rem);
+  padding-right: calc(var(--n9-mr, 0px) + 0.6rem);
+  border-radius: 0;
+  background: transparent;
+}
+/* First page's header sits in the top margin, last page's footer in the bottom
+   margin — both pinned to the page (above/below the body + the vertical ruler). */
+.n9-page > .ProseMirror > [data-type="docHeader"]:first-child {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: var(--n9-mt, 96px);
+  margin: 0;
+  display: flex;
+  align-items: center;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.5);
+}
+.n9-page > .ProseMirror > [data-type="docFooter"]:last-child {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: var(--n9-mb, 96px);
+  margin: 0;
+  display: flex;
+  align-items: center;
+  border-top: 1px solid rgba(148, 163, 184, 0.5);
+}
+[data-page-view] { scroll-padding-top: 2.5rem; }
+
+/* ── Phase 2 polish: refined, document-like reading surface (additive only) ── */
+.ProseMirror ::selection {
+  background-color: hsl(var(--primary, 220 90% 56%) / 0.18);
+}
+/* Don't let the first block push the content down — tighter top rhythm */
+.ProseMirror > :first-child { margin-top: 0; }
+/* Smoother horizontal rule */
+.ProseMirror hr {
+  border: none;
+  border-top: 1px solid hsl(var(--border, 0 0% 85%));
+  margin: 1.5rem 0;
+}
+/* Slightly calmer list spacing */
+.ProseMirror ul,
+.ProseMirror ol { margin: 0.25rem 0 0.75rem; }
+.ProseMirror li > p { margin-bottom: 0.25rem; }
+/* Refined toolbar tab + button transitions (ribbon) */
+[data-tour="editor-toolbar"] button { transition: background-color 0.12s ease, color 0.12s ease, box-shadow 0.12s ease; }
+
+/* ── Pagination separators: footer-zone · page gap · header-zone ───────── */
+.n9-page-sep {
+  position: relative;
+  user-select: none;
+}
+.n9-page-sep-marginzone {
+  position: relative;
+  display: flex;
+  align-items: center;
+  /* Bleed the header/footer zone out to the full page width */
+  width: auto;
+  margin-left: calc(-1 * var(--n9-ml, 0px) - 35px);
+  margin-right: calc(-1 * var(--n9-mr, 0px) - 35px);
+  /* Sit above the flat backdrop gap so the page-edge shadows below are visible. */
+  z-index: 1;
+}
+.n9-page-sep-footerzone .n9-doc-footer {
+  width: auto;
+  align-self: flex-start;
+  border-top: 1px solid rgba(148, 163, 184, 0.5);
+}
+.n9-page-sep-headerzone .n9-doc-header {
+  width: auto;
+  align-self: flex-end;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.5);
+}
+.n9-page-sep-marginzone .n9-doc-header,
+.n9-page-sep-marginzone .n9-doc-footer {
+  flex: 1 1 auto;
+}
+/* The page-view backdrop (area behind the sheets). A shared var keeps the
+   page-break gap exactly the same colour as the surrounding backdrop. */
+.n9-page-backdrop {
+  --n9-backdrop: #eceef1;
+  background-color: var(--n9-backdrop);
+}
+:is(.dark) .n9-page-backdrop {
+  --n9-backdrop: #1b1e23;
+}
+/* Backdrop gap between two sheets — same colour as behind, with soft page edges. */
+.n9-page-sep-gap {
+  position: relative;
+  background: var(--n9-backdrop, #eceef1);
+  width: auto;
+  margin-left: calc(-1 * var(--n9-ml, 0px) - 35px);
+  margin-right: calc(-1 * var(--n9-mr, 0px) - 35px);
+  box-shadow: inset 0 5px 5px -5px rgba(0, 0, 0, 0.08), inset 0 -5px 5px -5px rgba(0, 0, 0, 0.08);
+  z-index: 10;
+}
+/* Tables must read on the white page — black, crisp borders (the themed
+   var(--border) resolves to an invalid value inside .n9-page). */
+.n9-page .ProseMirror table td,
+.n9-page .ProseMirror table th {
+  border: 1px solid #333 !important;
+}
+.n9-page .ProseMirror table th {
+  background-color: #f3f4f6 !important;
+  color: #111827;
+}

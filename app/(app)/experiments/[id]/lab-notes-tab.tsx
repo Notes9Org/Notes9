@@ -26,8 +26,7 @@ import {
 import { AffineBlock } from "@/components/text-editor/affine-block"
 import { TiptapEditor } from "@/components/text-editor/tiptap-editor"
 import type { Editor } from "@tiptap/react"
-import { NoteExportMenu, NotePrintButton } from "@/components/note-export-menu"
-import { NoteImportButton } from "@/components/note-import-button"
+import { NoteFileMenu } from "@/components/note-export-menu"
 import { useToast } from "@/hooks/use-toast"
 import { useAutoSave } from "@/hooks/use-auto-save"
 import { useContentDiffs } from "@/hooks/use-content-diffs"
@@ -36,7 +35,6 @@ import { LabNoteVersionsDialog } from "@/components/lab-notes/lab-note-versions-
 import {
   Plus,
   NotebookPen,
-  Download,
   FileCode,
   Globe,
   Loader2,
@@ -47,6 +45,9 @@ import {
   Pencil,
   X,
   GitCompare,
+  History,
+  MessageSquare,
+  FileText,
 } from "lucide-react"
 import {
   Table,
@@ -199,6 +200,58 @@ export function LabNotesTab({
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const titleInputRef = useRef<HTMLInputElement>(null);
   const noteEditorRef = useRef<Editor | null>(null);
+  const commentsToggleRef = useRef<(() => void) | null>(null);
+
+  // Two grouped toolbar menus: "Review" (version history + comments) and the
+  // "File" menu (print + import + export). Shared by the fullscreen and panel
+  // toolbars so both stay in sync.
+  const renderNoteActionMenus = () => (
+    <>
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            data-tour="version-history"
+            className="shrink-0 text-muted-foreground hover:text-foreground"
+            aria-label="Review (version history, comments)"
+            title="Review"
+          >
+            <History className="h-4 w-4" />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" className="min-w-[11rem]">
+          <DropdownMenuItem onClick={handleOpenVersions}>
+            <GitCompare className="mr-2 h-4 w-4" />
+            Version history
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={() => commentsToggleRef.current?.()}>
+            <MessageSquare className="mr-2 h-4 w-4" />
+            Comments
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+      <NoteFileMenu
+        title={resolvedExportTitle}
+        htmlContent={formData.content || ""}
+        getHtmlContent={() => formData.content || ""}
+        getTiptapJson={() => noteEditorRef.current?.getJSON() ?? null}
+        onImportHtml={(html) => noteEditorRef.current?.chain().focus().insertContent(html).run()}
+        includeCommentsInPdf
+        trigger={
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            className="shrink-0 text-muted-foreground hover:text-foreground"
+            aria-label="File (print, import, export)"
+            title="File"
+          >
+            <FileText className="h-4 w-4" />
+          </Button>
+        }
+      />
+    </>
+  );
   /**
    * Notes list column + editor column — Tiptap region fullscreen applies `position: fixed` to this shell so the
    * whole block tracks SidebarInset `main` (notes rail and editor move together, no inset math).
@@ -1370,47 +1423,7 @@ export function LabNotesTab({
           <Plus className="h-4 w-4" />
         )}
       </Button>
-      {!isCreating && selectedNote ? (
-        <>
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            data-tour="version-history"
-            className="shrink-0 text-muted-foreground hover:text-foreground"
-            onClick={handleOpenVersions}
-            aria-label="Version history"
-            title="Version history"
-          >
-            <GitCompare className="h-4 w-4" />
-          </Button>
-          <NotePrintButton
-            getHtmlContent={() => formData.content || ""}
-            title={resolvedExportTitle}
-            includeCommentsInPdf
-          />
-          <NoteImportButton
-            className="shrink-0 text-muted-foreground hover:text-foreground"
-            onImportHtml={(html) => noteEditorRef.current?.chain().focus().insertContent(html).run()}
-          />
-          <NoteExportMenu
-            title={resolvedExportTitle}
-            htmlContent={formData.content || ""}
-            getHtmlContent={() => formData.content || ""}
-            getTiptapJson={() => noteEditorRef.current?.getJSON() ?? null}
-            includeCommentsInPdf
-            trigger={
-              <Button
-                variant="ghost"
-                size="icon-sm"
-                className="shrink-0 text-muted-foreground hover:text-foreground"
-                aria-label="Export"
-              >
-                <Download className="h-4 w-4" />
-              </Button>
-            }
-          />
-        </>
-      ) : null}
+      {!isCreating && selectedNote ? renderNoteActionMenus() : null}
     </>
   ) : undefined;
 
@@ -1808,47 +1821,7 @@ export function LabNotesTab({
                         <Plus className="h-4 w-4" />
                       )}
                     </Button>
-                    {!isCreating && selectedNote && (
-                      <>
-                        <Button
-                          variant="ghost"
-                          size="icon-sm"
-                          data-tour="version-history"
-                          className="text-muted-foreground hover:text-foreground"
-                          onClick={handleOpenVersions}
-                          aria-label="Version history"
-                          title="Version history"
-                        >
-                          <GitCompare className="h-4 w-4" />
-                        </Button>
-                        <NotePrintButton
-                          getHtmlContent={() => formData.content || ""}
-                          title={resolvedExportTitle}
-                          includeCommentsInPdf
-                        />
-                        <NoteImportButton
-                          className="text-muted-foreground hover:text-foreground"
-                          onImportHtml={(html) => noteEditorRef.current?.chain().focus().insertContent(html).run()}
-                        />
-                        <NoteExportMenu
-                          title={resolvedExportTitle}
-                          htmlContent={formData.content || ""}
-                          getHtmlContent={() => formData.content || ""}
-                          getTiptapJson={() => noteEditorRef.current?.getJSON() ?? null}
-                          includeCommentsInPdf
-                          trigger={
-                            <Button
-                              variant="ghost"
-                              size="icon-sm"
-                              className="text-muted-foreground hover:text-foreground"
-                              aria-label="Export"
-                            >
-                              <Download className="h-4 w-4" />
-                            </Button>
-                          }
-                        />
-                      </>
-                    )}
+                    {!isCreating && selectedNote && renderNoteActionMenus()}
                   </div>
                 </div>
               </CardHeader>
@@ -1883,6 +1856,7 @@ export function LabNotesTab({
                         fillParentHeight
                         fullscreenWorkspaceRef={labNotesFullscreenShellRef}
                         onEditorFullscreenChange={setNoteEditorFullscreen}
+                        commentsToggleRef={commentsToggleRef}
                         leadingToolbarSlot={labNoteFullscreenToolbarLeading}
                         trailingToolbarSlot={labNoteFullscreenToolbarTrailing}
                         showAITools={true}

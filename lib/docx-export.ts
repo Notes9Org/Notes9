@@ -1,10 +1,12 @@
 "use client"
 
+import type { PageLayout } from '@/lib/page-layout'
 import {
   Document, Paragraph, TextRun, Table, TableRow, TableCell,
   WidthType, BorderStyle, HeadingLevel, Packer, ShadingType,
-  VerticalAlign, AlignmentType, convertInchesToTwip,
-  CommentRangeStart, CommentRangeEnd, CommentReference, ICommentOptions
+  VerticalAlign, AlignmentType, convertInchesToTwip, PageBreak, Header, Footer,
+  CommentRangeStart, CommentRangeEnd, CommentReference, ICommentOptions,
+  TabStopType, TabStopPosition, PageNumber
 } from 'docx'
 import { saveAs } from 'file-saver'
 import {
@@ -60,13 +62,103 @@ function rgbToHex(color: string): string | undefined {
 }
 
 // Parse HTML content and convert to DOCX elements
-export async function exportHtmlToDocx(html: string, title: string) {
+export async function exportHtmlToDocx(html: string, title: string, layout?: PageLayout | null) {
   const preparedHtml = prepareHtmlForExport(html)
-  const children: any[] = []
   const comments: ICommentOptions[] = []
 
-  const elements = parseHtmlToDocElements(preparedHtml, comments)
-  children.push(...elements)
+  // Extract the document header/footer so Word repeats them on every page via
+  // real section headers/footers (rather than once in the body flow).
+  let bodyHtml = preparedHtml
+  let headerChildren: any[] = []
+  let footerChildren: any[] = []
+
+  if (typeof DOMParser !== "undefined") {
+    const parsed = new DOMParser().parseFromString(preparedHtml, "text/html")
+    const h = parsed.querySelector('[data-type="docHeader"]')
+    const f = parsed.querySelector('[data-type="docFooter"]')
+    
+    if (layout) {
+      // If layout is provided, we ignore the injected HTML header/footers and build them directly.
+      if (h) h.remove()
+      if (f) f.remove()
+    } else {
+      // Fallback: parse from HTML if no layout object was provided.
+      if (h) {
+        headerChildren = parseHtmlToDocElements(h.innerHTML, []).flat()
+        h.remove()
+      }
+      if (f) {
+        footerChildren = parseHtmlToDocElements(f.innerHTML, []).flat()
+        f.remove()
+      }
+    }
+    bodyHtml = parsed.body.innerHTML
+  }
+
+  // Helper to build header/footer using the layout object
+  const buildHFFromLayout = (type: 'header' | 'footer') => {
+    if (!layout) return null
+    const spec = type === 'header' ? layout.header : layout.footer
+    const hasPageNumber = layout.pageNumbers === type
+    const text = spec.text.trim()
+    
+    if (!text && !hasPageNumber) return null
+
+    // Collision case: same alignment, merge them with a bullet separator
+    if (hasPageNumber && spec.align === layout.pageNumberAlign && text) {
+      return new Paragraph({
+        alignment: spec.align === 'center' ? AlignmentType.CENTER : spec.align === 'right' ? AlignmentType.RIGHT : AlignmentType.LEFT,
+        children: [
+          new TextRun({ text: `${text}  •  `, color: '6B7280', size: 18 }),
+          new TextRun({ children: [PageNumber.CURRENT, " / ", PageNumber.TOTAL_PAGES], color: '6B7280', size: 18 })
+        ]
+      })
+    }
+
+    // No collision: use tab stops to align text and page numbers independently
+    const tabStops = [
+      { type: TabStopType.CENTER, position: convertInchesToTwip(3.25) },
+      { type: TabStopType.RIGHT, position: convertInchesToTwip(6.5) }
+    ]
+
+    const textRun = text ? new TextRun({ text, color: '6B7280', size: 18 }) : null
+    const pageRun = hasPageNumber ? new TextRun({ children: [PageNumber.CURRENT, " / ", PageNumber.TOTAL_PAGES], color: '6B7280', size: 18 }) : null
+
+    const tabsForAlign = (align: string) => align === 'center' ? 1 : align === 'right' ? 2 : 0
+
+    const items = []
+    if (textRun && pageRun) {
+      const textTabs = tabsForAlign(spec.align)
+      const pageTabs = tabsForAlign(layout.pageNumberAlign)
+
+      if (textTabs < pageTabs) {
+        for(let i=0; i<textTabs; i++) items.push(new TextRun("\t"))
+        items.push(textRun)
+        for(let i=0; i<(pageTabs - textTabs); i++) items.push(new TextRun("\t"))
+        items.push(pageRun)
+      } else {
+        for(let i=0; i<pageTabs; i++) items.push(new TextRun("\t"))
+        items.push(pageRun)
+        for(let i=0; i<(textTabs - pageTabs); i++) items.push(new TextRun("\t"))
+        items.push(textRun)
+      }
+    } else if (textRun) {
+      const tabs = tabsForAlign(spec.align)
+      for(let i=0; i<tabs; i++) items.push(new TextRun("\t"))
+      items.push(textRun)
+    } else if (pageRun) {
+      const tabs = tabsForAlign(layout.pageNumberAlign)
+      for(let i=0; i<tabs; i++) items.push(new TextRun("\t"))
+      items.push(pageRun)
+    }
+
+    return new Paragraph({ tabStops, children: items })
+  }
+
+  const children: any[] = parseHtmlToDocElements(bodyHtml, comments)
+
+  const docHeaderP = layout ? buildHFFromLayout('header') : (headerChildren.length ? new Paragraph({ children: headerChildren }) : null)
+  const docFooterP = layout ? buildHFFromLayout('footer') : (footerChildren.length ? new Paragraph({ children: footerChildren }) : null)
 
   const doc = new Document({
     comments: {
@@ -93,6 +185,8 @@ export async function exportHtmlToDocx(html: string, title: string) {
           },
         },
       },
+      ...(docHeaderP ? { headers: { default: new Header({ children: [docHeaderP] }) } } : {}),
+      ...(docFooterP ? { footers: { default: new Footer({ children: [docFooterP] }) } } : {}),
       children,
     }],
   })
@@ -185,11 +279,28 @@ function parseNode(node: Node, comments: ICommentOptions[]): any | null {
           border: { bottom: { style: BorderStyle.SINGLE, size: 6, color: 'CCCCCC' } },
           spacing: { before: 240, after: 240 },
         })
-      case 'div':
-        if (el.getAttribute('data-type') === 'simple-shape') {
+      case 'div': {
+        const dataType = el.getAttribute('data-type')
+        if (dataType === 'simple-shape') {
           return new Paragraph({
             children: [new TextRun({ text: '[Shape]', size: 22, italics: true, color: '888888' })],
             spacing: { before: 120, after: 120 },
+          })
+        }
+        // Hard page break → real Word page break.
+        if (dataType === 'page-break') {
+          return new Paragraph({ children: [new PageBreak()] })
+        }
+        // Document header / footer bands → bordered, muted paragraph.
+        if (dataType === 'docHeader' || dataType === 'docFooter') {
+          const runs = parseInlineContent(el, comments)
+          const isHeader = dataType === 'docHeader'
+          return new Paragraph({
+            children: runs.length > 0 ? runs : [textRunFromStyle('', DEFAULT_EXPORT_INLINE_STYLE)],
+            border: isHeader
+              ? { bottom: { style: BorderStyle.SINGLE, size: 4, color: 'D1D5DB' } }
+              : { top: { style: BorderStyle.SINGLE, size: 4, color: 'D1D5DB' } },
+            spacing: isHeader ? { after: 240 } : { before: 240 },
           })
         }
         // Parse children recursively
@@ -205,6 +316,7 @@ function parseNode(node: Node, comments: ICommentOptions[]): any | null {
           }
         }
         return divChildren.length > 0 ? divChildren : null
+      }
       default:
         // For unknown elements, try to parse inline content
         const runs = parseInlineContent(el, comments)

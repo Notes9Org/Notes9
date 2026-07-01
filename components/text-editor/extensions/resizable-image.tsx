@@ -7,10 +7,19 @@ import {
   ReactNodeViewRenderer,
   type NodeViewProps,
 } from "@tiptap/react"
-import { MessageSquare } from "lucide-react"
+import {
+  MessageSquare,
+  AlignLeft,
+  AlignCenter,
+  AlignRight,
+  WrapText,
+  Trash2,
+} from "lucide-react"
 import { cn } from "@/lib/utils"
 
 export type ImageAlign = "left" | "center" | "right"
+/** "none" keeps the image as a centered/aligned block; left/right floats it so text wraps. */
+export type ImageFloat = "none" | "left" | "right"
 type ResizeCorner = "nw" | "ne" | "sw" | "se"
 
 export type ImageCommentAttrs = {
@@ -24,6 +33,8 @@ declare module "@tiptap/core" {
   interface Commands<ReturnType> {
     resizableImage: {
       setImageAlign: (align: ImageAlign) => ReturnType
+      setImageFloat: (float: ImageFloat) => ReturnType
+      setImageWidth: (width: number) => ReturnType
       setImageComment: (attrs: {
         author: string
         content: string
@@ -93,7 +104,20 @@ function ResizableImageView({ node, updateAttributes, selected, editor }: NodeVi
   const imgRef = useRef<HTMLImageElement>(null)
   const width = typeof node.attrs.width === "number" ? node.attrs.width : null
   const align = (node.attrs.align as ImageAlign) || "center"
+  const floatSide = (node.attrs.floatSide as ImageFloat) || "none"
+  const floated = floatSide === "left" || floatSide === "right"
   const hasComment = Boolean(node.attrs.commentId && node.attrs.commentContent)
+
+  const applyWidthFraction = useCallback(
+    (fraction: number) => {
+      const maxWidth = Math.max(120, editor.view.dom.clientWidth - 48)
+      updateAttributes({ width: Math.round(maxWidth * fraction) })
+    },
+    [editor.view.dom.clientWidth, updateAttributes],
+  )
+
+  const toolbarBtn =
+    "flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground data-[active=true]:bg-accent data-[active=true]:text-accent-foreground"
 
   const onResizeStart = useCallback(
     (corner: ResizeCorner) => (event: React.MouseEvent) => {
@@ -148,14 +172,66 @@ function ResizableImageView({ node, updateAttributes, selected, editor }: NodeVi
     <NodeViewWrapper
       as="div"
       className={cn(
-        "resizable-image my-4 flex w-full",
-        align === "left" && "justify-start",
-        align === "right" && "justify-end",
-        align === "center" && "justify-center",
+        "resizable-image",
+        floated ? "my-2" : "my-4 flex w-full",
+        !floated && align === "left" && "justify-start",
+        !floated && align === "right" && "justify-end",
+        !floated && align === "center" && "justify-center",
       )}
       data-align={align}
+      data-float={floatSide}
+      style={
+        floated
+          ? {
+              float: floatSide,
+              maxWidth: "60%",
+              marginRight: floatSide === "left" ? "1rem" : undefined,
+              marginLeft: floatSide === "right" ? "1rem" : undefined,
+            }
+          : undefined
+      }
     >
       <div className="relative inline-block max-w-full">
+        {selected && editor.isEditable ? (
+          <div
+            contentEditable={false}
+            className="absolute -top-11 left-1/2 z-20 flex -translate-x-1/2 items-center gap-0.5 rounded-lg border border-border bg-popover/95 p-1 shadow-md backdrop-blur-sm"
+          >
+            <button type="button" title="Align left" data-active={!floated && align === "left"} className={toolbarBtn}
+              onMouseDown={(e) => { e.preventDefault(); updateAttributes({ floatSide: "none", align: "left" }) }}>
+              <AlignLeft className="h-4 w-4" />
+            </button>
+            <button type="button" title="Align center" data-active={!floated && align === "center"} className={toolbarBtn}
+              onMouseDown={(e) => { e.preventDefault(); updateAttributes({ floatSide: "none", align: "center" }) }}>
+              <AlignCenter className="h-4 w-4" />
+            </button>
+            <button type="button" title="Align right" data-active={!floated && align === "right"} className={toolbarBtn}
+              onMouseDown={(e) => { e.preventDefault(); updateAttributes({ floatSide: "none", align: "right" }) }}>
+              <AlignRight className="h-4 w-4" />
+            </button>
+            <span className="mx-0.5 h-5 w-px bg-border" aria-hidden />
+            <button type="button" title="Wrap text left" data-active={floatSide === "left"} className={toolbarBtn}
+              onMouseDown={(e) => { e.preventDefault(); updateAttributes({ floatSide: "left" }) }}>
+              <WrapText className="h-4 w-4" />
+            </button>
+            <button type="button" title="Wrap text right" data-active={floatSide === "right"} className={toolbarBtn}
+              onMouseDown={(e) => { e.preventDefault(); updateAttributes({ floatSide: "right" }) }}>
+              <WrapText className="h-4 w-4 -scale-x-100" />
+            </button>
+            <span className="mx-0.5 h-5 w-px bg-border" aria-hidden />
+            <button type="button" title="Small (25%)" className={cn(toolbarBtn, "w-auto px-1.5 text-xs font-semibold")}
+              onMouseDown={(e) => { e.preventDefault(); applyWidthFraction(0.25) }}>S</button>
+            <button type="button" title="Medium (50%)" className={cn(toolbarBtn, "w-auto px-1.5 text-xs font-semibold")}
+              onMouseDown={(e) => { e.preventDefault(); applyWidthFraction(0.5) }}>M</button>
+            <button type="button" title="Large (100%)" className={cn(toolbarBtn, "w-auto px-1.5 text-xs font-semibold")}
+              onMouseDown={(e) => { e.preventDefault(); applyWidthFraction(1) }}>L</button>
+            <span className="mx-0.5 h-5 w-px bg-border" aria-hidden />
+            <button type="button" title="Delete image" className={cn(toolbarBtn, "hover:bg-destructive/10 hover:text-destructive")}
+              onMouseDown={(e) => { e.preventDefault(); editor.chain().focus().deleteSelection().run() }}>
+              <Trash2 className="h-4 w-4" />
+            </button>
+          </div>
+        ) : null}
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
           ref={imgRef}
@@ -254,6 +330,18 @@ export const ResizableImage = Image.extend({
           "data-align": attributes.align ?? "center",
         }),
       },
+      floatSide: {
+        default: "none" as ImageFloat,
+        parseHTML: (element) => {
+          const el = element as HTMLElement
+          const fromData = (el.getAttribute("data-float") ??
+            el.parentElement?.getAttribute("data-float")) as ImageFloat | null
+          return fromData === "left" || fromData === "right" ? fromData : "none"
+        },
+        renderHTML: (attributes) => ({
+          "data-float": (attributes.floatSide as ImageFloat) ?? "none",
+        }),
+      },
       commentId: commentAttrField("commentId", "data-comment-id"),
       commentAuthor: commentAttrField("commentAuthor", "data-comment-author"),
       commentContent: commentAttrField("commentContent", "data-comment-content"),
@@ -274,13 +362,28 @@ export const ResizableImage = Image.extend({
 
   renderHTML({ HTMLAttributes }) {
     const align = (HTMLAttributes["data-align"] as ImageAlign) || "center"
-    const { "data-align": _drop, ...imgAttrs } = HTMLAttributes
+    const floatSide = (HTMLAttributes["data-float"] as ImageFloat) || "none"
+    const { "data-align": _dropAlign, "data-float": _dropFloat, ...imgAttrs } = HTMLAttributes
+    // Inline styles so alignment/float survive export (PDF/HTML/Word) without
+    // the editor stylesheet. Float wins; otherwise centre/left/right via text-align.
+    const hostStyle =
+      floatSide === "left"
+        ? "float:left;max-width:60%;margin:0 1rem 0.5rem 0;"
+        : floatSide === "right"
+          ? "float:right;max-width:60%;margin:0 0 0.5rem 1rem;"
+          : align === "center"
+            ? "text-align:center;"
+            : align === "right"
+              ? "text-align:right;"
+              : "text-align:left;"
     return [
       "div",
       {
         "data-type": "resizable-image",
         "data-align": align,
+        "data-float": floatSide,
         class: `resizable-image-host resizable-image-host--${align}`,
+        style: hostStyle,
       },
       ["img", imgAttrs],
     ]
@@ -296,7 +399,15 @@ export const ResizableImage = Image.extend({
       setImageAlign:
         (align: ImageAlign) =>
         ({ commands }) =>
-          commands.updateAttributes(this.name, { align }),
+          commands.updateAttributes(this.name, { align, floatSide: "none" }),
+      setImageFloat:
+        (float: ImageFloat) =>
+        ({ commands }) =>
+          commands.updateAttributes(this.name, { floatSide: float }),
+      setImageWidth:
+        (imgWidth: number) =>
+        ({ commands }) =>
+          commands.updateAttributes(this.name, { width: Math.max(40, Math.round(imgWidth)) }),
       setImageComment:
         ({ author, content, id, createdAt }) =>
         ({ commands }) => {

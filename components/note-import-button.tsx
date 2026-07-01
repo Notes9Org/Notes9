@@ -2,7 +2,7 @@
 
 import { useRef, useState, type ComponentProps } from "react"
 import { toast } from "sonner"
-import { Upload, Loader2 } from "lucide-react"
+import { Download, Loader2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import { IMPORT_ACCEPT } from "@/lib/import-file-to-html"
@@ -77,7 +77,7 @@ export function NoteImportButton({
         title="Import a PDF, Word, Markdown, text, or HTML file"
         aria-label="Import document"
       >
-        {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
+        {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
       </Button>
     </>
   )

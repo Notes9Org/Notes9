@@ -31,7 +31,6 @@ import { Switch } from "@/components/ui/switch"
 import {
   ArrowLeft,
   ArrowRight,
-  Download,
   FileText,
   FolderOpen,
   FlaskConical,
@@ -773,7 +772,7 @@ function NewProtocolForm() {
                       htmlContent={formData.content}
                       trigger={
                         <Button type="button" variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-foreground">
-                          <Download className="h-3.5 w-3.5" />
+                          <Upload className="h-3.5 w-3.5" />
                         </Button>
                       }
                     />
@@ -1056,7 +1055,7 @@ function NewProtocolForm() {
                         className="shrink-0 text-muted-foreground hover:text-foreground"
                         aria-label="Export"
                       >
-                        <Download className="h-4 w-4" />
+                        <Upload className="h-4 w-4" />
                       </Button>
                     }
                   />
