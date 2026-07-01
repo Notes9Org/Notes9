@@ -49,6 +49,7 @@ import {
   FolderPlus,
   FolderInput,
   CheckSquare,
+  Search,
   Trash2,
   ChevronDown,
   X,
@@ -3663,6 +3664,7 @@ export function RightSidebar({
   // ── Multi-select + folders (full-screen chat history) ────────────────
   const [selectionMode, setSelectionMode] = useState(false);
   const [selectedChatIds, setSelectedChatIds] = useState<Set<string>>(() => new Set());
+  const [historyQuery, setHistoryQuery] = useState('');
   const [collapsedFolders, setCollapsedFolders] = useState<Set<string>>(() => new Set());
   const toggleChatSelected = (id: string) =>
     setSelectedChatIds((prev) => {
@@ -3726,10 +3728,14 @@ export function RightSidebar({
   // within the ungrouped list). Folders only appear once the 092 migration is
   // applied (`foldersAvailable`).
   const historyGroups = useMemo(() => {
+    const q = historyQuery.trim().toLowerCase();
+    const matches = q
+      ? orderedSessions.filter((s) => (s.title || 'New conversation').toLowerCase().includes(q))
+      : orderedSessions;
     const usable = foldersAvailable ? folders : [];
     const byFolder = new Map<string, ChatSession[]>();
     const ungrouped: ChatSession[] = [];
-    for (const s of orderedSessions) {
+    for (const s of matches) {
       const fid = s.folder_id ?? null;
       if (fid && usable.some((f) => f.id === fid)) {
         const arr = byFolder.get(fid) ?? [];
@@ -3739,8 +3745,10 @@ export function RightSidebar({
         ungrouped.push(s);
       }
     }
-    return { folders: usable, byFolder, ungrouped };
-  }, [orderedSessions, folders, foldersAvailable]);
+    // While searching, hide folders that have no matching chats.
+    const shownFolders = q ? usable.filter((f) => (byFolder.get(f.id)?.length ?? 0) > 0) : usable;
+    return { folders: shownFolders, byFolder, ungrouped, query: q };
+  }, [orderedSessions, folders, foldersAvailable, historyQuery]);
 
   // One history row — supports selection checkboxes, inline rename, pin glyph,
   // and the ⋯ actions menu.
@@ -4171,6 +4179,17 @@ export function RightSidebar({
                       </>
                     )}
                   </div>
+                  {/* Search chats */}
+                  <div className="relative shrink-0 px-0.5 pb-1">
+                    <Search className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-sidebar-foreground/45" />
+                    <input
+                      value={historyQuery}
+                      onChange={(e) => setHistoryQuery(e.target.value)}
+                      placeholder="Search chats…"
+                      aria-label="Search chats"
+                      className="h-8 w-full rounded-lg border border-[color:var(--glass-border)] bg-background/50 pl-8 pr-2 text-sm text-sidebar-foreground outline-none placeholder:text-sidebar-foreground/40 focus:border-[color:color-mix(in_srgb,var(--n9-accent)_45%,var(--border))]"
+                    />
+                  </div>
                   {/* List - same structure as lab notes */}
                   <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden">
                     {sessionsLoading && sessions.length === 0 ? (
@@ -4222,6 +4241,11 @@ export function RightSidebar({
                         <MotionList className="flex min-w-0 flex-col gap-0.5" role="list">
                           {historyGroups.ungrouped.map(renderAsideRow)}
                         </MotionList>
+                        {historyGroups.query && historyGroups.folders.length === 0 && historyGroups.ungrouped.length === 0 && (
+                          <div className="px-2 py-6 text-center text-xs text-sidebar-foreground/55">
+                            No chats match “{historyQuery.trim()}”.
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>

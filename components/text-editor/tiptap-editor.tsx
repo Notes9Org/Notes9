@@ -644,7 +644,7 @@ function CommentSidebar({ editor, open, onClose }: { editor: any; open: boolean;
   return (
     <div className="absolute right-0 top-0 z-50 h-full w-72 max-w-full p-2 motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-right-4 motion-safe:duration-300">
       {/* Floating glass card — matches the AI chat-history sidebar. */}
-      <div className="flex h-full min-h-0 flex-col overflow-hidden rounded-2xl border border-[color:var(--glass-border)] bg-sidebar/80 shadow-[0_10px_34px_-18px_rgba(20,14,8,0.4)] backdrop-blur-md dark:bg-sidebar/60 dark:shadow-[0_12px_38px_-16px_rgba(0,0,0,0.6)]">
+      <div className="flex h-full min-h-0 flex-col overflow-hidden rounded-2xl border border-[color:var(--glass-border)] bg-sidebar shadow-[0_10px_34px_-18px_rgba(20,14,8,0.4)] dark:shadow-[0_12px_38px_-16px_rgba(0,0,0,0.6)]">
         <div className="flex h-11 shrink-0 items-center justify-between gap-2 border-b border-[color:var(--glass-border)] px-3">
           <span className="flex items-center gap-1.5 text-[0.7rem] font-semibold uppercase tracking-wider text-sidebar-foreground/70">
             <MessageSquare className="h-3.5 w-3.5" /> Comments
@@ -6077,7 +6077,7 @@ window.localStorage.setItem(RIBBON_TAB_KEY, ribbonTab)
               the document reflows by the live panel width (set above). */}
           <div
             className={cn(
-              "absolute bottom-2 right-2 top-2 z-50 flex max-w-full flex-col overflow-hidden rounded-2xl border border-[color:var(--glass-border)] bg-sidebar/80 shadow-[0_10px_34px_-18px_rgba(20,14,8,0.4)] backdrop-blur-md dark:bg-sidebar/60 dark:shadow-[0_12px_38px_-16px_rgba(0,0,0,0.6)]",
+              "absolute bottom-2 right-2 top-2 z-50 flex max-w-full flex-col overflow-hidden rounded-2xl border border-[color:var(--glass-border)] bg-sidebar shadow-[0_10px_34px_-18px_rgba(20,14,8,0.4)] dark:shadow-[0_12px_38px_-16px_rgba(0,0,0,0.6)]",
               !citationSidebar.isResizing && "transition-transform duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]",
               citationModalOpen ? "translate-x-0" : "pointer-events-none translate-x-full",
             )}
