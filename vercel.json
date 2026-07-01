@@ -8,6 +8,10 @@
     {
       "path": "/api/cron/cleanup-agent-drafts",
       "schedule": "10 3 * * *"
+    },
+    {
+      "path": "/api/cron/cleanup-staged-literature",
+      "schedule": "20 3 * * *"
     }
   ]
 }

@@ -71,7 +71,7 @@ import {
   parseLiteratureAssistantStoredContent,
   serializeLiteratureAssistantStoredContent,
 } from '@/lib/literature-assistant-stored';
-import { useAgentStream, type AgentFileAttachment, type CitationsManifest, type CitationsManifestEntry, type AgentGraph } from '@/hooks/use-agent-stream';
+import { useAgentStream, type AgentFileAttachment, type AgentLiteratureSource, type CitationsManifest, type CitationsManifestEntry, type AgentGraph } from '@/hooks/use-agent-stream';
 import { useResolvedCitationTitles, type ResolvableCite } from '@/hooks/use-resolved-citation-titles';
 import { isPlaceholderTitle } from '@/lib/citation-title';
 import { AgentGraphList } from '@/components/catalyst/agent-graph-view';
@@ -138,7 +138,7 @@ import {
   type CoPilotContext,
 } from '@/lib/catalyst-copilot';
 import { useCatalystLiterature, setCatalystLiterature, type CatalystLiterature } from '@/lib/catalyst-literature';
-import { literatureContextToSystemMessage, type LiteratureSessionContext } from '@/lib/literature-citations';
+import { literatureContextToSystemMessage, literatureContextToSources, type LiteratureSessionContext } from '@/lib/literature-citations';
 import { MotionReveal, MotionList, MotionItem } from '@/components/literature-reviews/motion';
 import { useLiteratureMentionCandidates } from '@/contexts/literature-mention-context';
 import { useLiteratureAgentStream } from '@/hooks/use-literature-agent-stream';
@@ -950,6 +950,9 @@ export function RightSidebar({
   const [uploadQueue, setUploadQueue] = useState<string[]>([]);
   const [messageAttachments, setMessageAttachments] = useState<Map<string, Attachment[]>>(new Map());
   const pendingAttachmentsRef = useRef<Attachment[]>([]);
+  // Closed-access papers hit with "Ask Catalyst" ride here as citable literature_sources
+  // for the next send (they have no PDF to attach), then are cleared. See Step 7.
+  const pendingLiteratureSourcesRef = useRef<AgentLiteratureSource[]>([]);
   const [mounted, setMounted] = useState(false);
   const [isDraggingContext, setIsDraggingContext] = useState(false);
   const [contextLoading, setContextLoading] = useState(false);
@@ -2241,6 +2244,11 @@ export function RightSidebar({
       }));
 
       setNotes9Loading(true);
+      // Cap at 5 (backend MAX_FILE_ATTACHMENTS_PER_REQUEST). Tell the user when extras
+      // are dropped instead of silently truncating.
+      if ((attachments ?? []).length > 5) {
+        toast.info(`Catalyst uses up to 5 attachments per message — using the first 5 of ${attachments!.length}.`);
+      }
       const fileAttachments = (attachments ?? [])
         .slice(0, 5) // mirror backend MAX_FILE_ATTACHMENTS_PER_REQUEST
         .map((a) => ({
@@ -2271,6 +2279,15 @@ export function RightSidebar({
       const notes9ModelQuery = litPreamble
         ? `${litPreamble}\n\n## User question\n${text}`
         : text;
+      // Citable literature grounding: pass the session's papers (and any closed-access
+      // paper the user hit "Ask Catalyst" on) through the content-bearing
+      // literature_sources channel so the agent produces real inline [N] citations.
+      // The text preamble above stays as a fail-safe ground even if this is empty.
+      const litSources = [
+        ...(persistedLitCtx ? literatureContextToSources(persistedLitCtx) : []),
+        ...pendingLiteratureSourcesRef.current,
+      ];
+      pendingLiteratureSourcesRef.current = [];
       const { donePayload, error, artifacts: streamArtifacts, citationsManifest: streamManifest, graphs: streamGraphs } = await agentStream.runStream(
         {
           query: notes9ModelQuery,
@@ -2281,6 +2298,7 @@ export function RightSidebar({
             fileAttachments.length > 0
               ? (fileAttachments as unknown as AgentFileAttachment[])
               : undefined,
+          literature_sources: litSources.length > 0 ? litSources : undefined,
           options: buildNotes9StreamOptions(requestTags),
         },
         token
@@ -2326,12 +2344,9 @@ export function RightSidebar({
       return;
     }
 
-    const parts: Array<{ type: 'text'; text: string } | { type: 'file'; url: string; name: string; mediaType: string }> = [];
-    for (const attachment of currentAttachments) {
-      parts.push({ type: 'file', url: attachment.url, name: attachment.name, mediaType: attachment.contentType });
-    }
-    if (text.trim()) parts.push({ type: 'text', text });
-    await sendMessage({ parts });
+    // Live Catalyst always runs on the ReAct agent (the `agentMode === 'notes9'`
+    // branch above returns), so this general-chat send is unreachable. Removed to
+    // fully decouple the live path from the /api/chat transport.
     } finally {
       // Always release the in-flight guard so future submits can fire — even
       // if an early-return above bailed out, the try/finally ensures release.
@@ -2540,7 +2555,8 @@ export function RightSidebar({
         return;
       }
 
-      regenerate();
+      // Unreachable: live Catalyst regenerates via the ReAct agent above. The
+      // /api/chat regenerate path is removed to keep the live surface decoupled.
     },
     [
       messages,
@@ -2708,7 +2724,8 @@ export function RightSidebar({
       });
     }
 
-    regenerate();
+    // Unreachable: live Catalyst retries via the ReAct agent above. /api/chat
+    // regenerate removed to keep the live surface off the general-chat transport.
   }, [
     messages,
     regenerate,
@@ -3017,12 +3034,17 @@ export function RightSidebar({
   }, [isPageVariant, router]);
 
   const applyCatalystLaunch = useCallback(
-    (launch: { query?: string; projectId?: string; attachments?: Array<{ url: string; name: string; contentType: string; size?: number }>; webSearch?: boolean; autoSend?: boolean; sessionId?: string }) => {
+    (launch: { query?: string; projectId?: string; attachments?: Array<{ url: string; name: string; contentType: string; size?: number }>; literatureSources?: AgentLiteratureSource[]; webSearch?: boolean; autoSend?: boolean; sessionId?: string }) => {
       // Continue an existing conversation (e.g. minimizing the full page back
       // into the docked sidebar) before seeding any new query.
       if (launch.sessionId && launch.sessionId !== currentSessionRef.current) {
         // eslint-disable-next-line react-hooks/exhaustive-deps
         loadSession(launch.sessionId);
+      }
+      // Closed-access "Ask Catalyst": the paper has no PDF to attach, so carry its
+      // abstract as a citable literature_source for the next send (Step 7).
+      if (launch.literatureSources && launch.literatureSources.length > 0) {
+        pendingLiteratureSourcesRef.current = launch.literatureSources;
       }
       const q = launch.query?.trim();
       if (q) {
@@ -3104,6 +3126,7 @@ export function RightSidebar({
       query: pendingLaunch.query,
       projectId: pendingLaunch.projectId,
       attachments: pendingLaunch.attachments,
+      literatureSources: pendingLaunch.literatureSources,
       webSearch: pendingLaunch.webSearch,
       autoSend: pendingLaunch.autoSend,
       sessionId: pendingLaunch.sessionId,

@@ -159,6 +159,7 @@ function AiPaperCardImpl({
   onStage,
   onOpenStaged,
   isStaged = false,
+  membership = null,
   isStaging = false,
 }: {
   result: AiSearchResult
@@ -179,6 +180,7 @@ function AiPaperCardImpl({
   onStage?: (paper: SearchPaper) => void | Promise<void>
   onOpenStaged?: (paper: SearchPaper) => void
   isStaged?: boolean
+  membership?: 'saved' | 'staged' | null
   isStaging?: boolean
 }) {
   const [saving, setSaving] = useState(false)
@@ -247,7 +249,9 @@ function AiPaperCardImpl({
   // to upload), and open that tab. Falls back to the external source if no host
   // stage handler is wired.
   const handleRead = () => {
-    if (isStaged && onOpenStaged) {
+    // Already in the user's DB (staged read OR saved to library) → open its reader tab
+    // instead of re-staging. openPaperTab targets the existing row for either placement.
+    if ((isStaged || membership) && onOpenStaged) {
       onOpenStaged(paper)
       return
     }
@@ -334,10 +338,32 @@ function AiPaperCardImpl({
         ]
         flyToCatalyst(target, { onLand: () => attachToCatalyst(attachments) })
       } else {
-        // No open-access full text reachable — let Catalyst answer from the
-        // abstract + web search rather than dead-ending the user.
-        openCatalystPanel({ scope: 'literature', webSearch: true, autoSend: false })
-        toast.info('No open-access full text found. Catalyst will use the abstract and web search; upload the PDF for full-text analysis.')
+        // No open-access full text reachable — don't dead-end. Pass the ABSTRACT as a
+        // citable literature_source so Catalyst can read AND inline-cite it (not just
+        // web search). The user still gets a clear heads-up to upload the PDF for
+        // full-text depth.
+        const abstract = paper.abstract || (typeof data?.text === 'string' ? data.text : '')
+        openCatalystPanel({
+          scope: 'literature',
+          webSearch: true,
+          autoSend: false,
+          literatureSources: abstract
+            ? [{
+                title: paper.title,
+                abstract,
+                doi: paper.doi ?? undefined,
+                pmid: paper.pmid ?? undefined,
+                journal: paper.journal ?? undefined,
+                year: paper.year ?? undefined,
+                url: readUrl(result) ?? undefined,
+              }]
+            : undefined,
+        })
+        toast.info(
+          abstract
+            ? 'No open-access full text found — Catalyst will read and cite the abstract (upload the PDF for full-text analysis).'
+            : 'No open-access full text found. Catalyst will use web search; upload the PDF for full-text analysis.'
+        )
       }
     } catch {
       openCatalystPanel({ scope: 'literature', webSearch: true, autoSend: false })
@@ -565,13 +591,19 @@ function AiPaperCardImpl({
             onClick={handleRead}
             disabled={isStaging}
             title={
-              isStaged
-                ? 'Open this paper in your reader'
-                : 'Open to read the full paper — the PDF loads inline for open-access papers'
+              membership === 'saved'
+                ? 'Already in your library — open it in your reader'
+                : membership === 'staged' || isStaged
+                  ? 'Open this paper in your reader'
+                  : 'Open to read the full paper — the PDF loads inline for open-access papers'
             }
           >
             {isStaging ? <Loader2 className="size-3.5 animate-spin" /> : <BookOpen className="size-3.5" />}
-            {isStaged ? 'Open' : 'Read paper'}
+            {membership === 'saved'
+              ? 'Open in library'
+              : membership === 'staged' || isStaged
+                ? 'Open'
+                : 'Read paper'}
           </Button>
         </div>
       </CardContent>
@@ -599,6 +631,7 @@ function areEqual(prev: AiPaperCardProps, next: AiPaperCardProps): boolean {
     prev.relevanceSummary === next.relevanceSummary &&
     prev.initialSaved === next.initialSaved &&
     prev.isStaged === next.isStaged &&
+    prev.membership === next.membership &&
     prev.isStaging === next.isStaging &&
     a.citeLabel === b.citeLabel &&
     a.paper === b.paper &&

@@ -59,6 +59,18 @@ export type AgentFileAttachment = {
   size: number;
 };
 
+/** A transient paper passed inline for grounding + inline citation (no DB row). */
+export type AgentLiteratureSource = {
+  title: string;
+  abstract?: string;
+  doi?: string;
+  pmid?: string;
+  journal?: string;
+  year?: number;
+  url?: string;
+  authors?: string[];
+};
+
 /** Request shape for POST /notes9/stream (proxied via /api/agent/stream). */
 export interface AgentStreamParams {
   query: string;
@@ -72,6 +84,11 @@ export interface AgentStreamParams {
   /** User-uploaded files (images, PDFs). Forwarded to catalyst which
    * fetches + verifies + base64-encodes before passing to the LLM. */
   file_attachments?: AgentFileAttachment[];
+  /** Transient papers (title + abstract + ids) passed inline so the agent
+   * grounds + inline-cites them WITHOUT a persisted literature_review row —
+   * literature-session follow-up context, or a closed-access paper's abstract
+   * on "Ask Catalyst". Materialized into citable sources at preflight. */
+  literature_sources?: AgentLiteratureSource[];
   options?: {
     debug?: boolean;
     max_retries?: number;

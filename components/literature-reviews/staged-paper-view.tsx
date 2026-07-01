@@ -95,6 +95,14 @@ export function StagedPaperView({
   savingLiteratureId = null,
 }: StagedPaperViewProps) {
   const isSavedToLibrary = !["stage", "staged", "staging"].includes(String(lit.status ?? "").toLowerCase())
+  // Read-without-library TTL (migration 092): staged papers auto-expire after 7 days
+  // unless saved. Show a calm heads-up with the days remaining so the read never
+  // vanishes as a surprise.
+  const stagedExpiresAt = (lit as { staged_expires_at?: string | null }).staged_expires_at ?? null
+  const stagedDaysLeft =
+    !isSavedToLibrary && stagedExpiresAt
+      ? Math.max(0, Math.ceil((new Date(stagedExpiresAt).getTime() - Date.now()) / (24 * 60 * 60 * 1000)))
+      : null
   const isClosedSource =
     !lit.pdf_storage_path &&
     (lit.pdf_import_status === "none" || lit.pdf_import_status === "failed")
@@ -170,6 +178,18 @@ export function StagedPaperView({
             </Button>
           </div>
         </div>
+        {!isSavedToLibrary && stagedDaysLeft !== null ? (
+          <div className="mt-3 flex items-start gap-2 rounded-md border border-border/60 bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
+            <BookmarkPlus className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+            <span>
+              You&apos;re reading this without adding it to your library. It stays available for{" "}
+              <span className="font-medium text-foreground">
+                {stagedDaysLeft} {stagedDaysLeft === 1 ? "day" : "days"}
+              </span>
+              , then it&apos;s removed automatically. <span className="font-medium text-foreground">Save to library</span> to keep it.
+            </span>
+          </div>
+        ) : null}
       </div>
 
       <div ref={pdfCardRef} className="scroll-mt-4">

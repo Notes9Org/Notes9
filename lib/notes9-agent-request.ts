@@ -54,6 +54,19 @@ export type Notes9FileAttachment = {
   size: number;
 };
 
+/** A transient paper passed inline for grounding + inline citation (no DB row).
+ * Materialized into a citable source at preflight (agents/core/literature_preflight.py). */
+export type Notes9LiteratureSource = {
+  title: string;
+  abstract?: string;
+  doi?: string;
+  pmid?: string;
+  journal?: string;
+  year?: number;
+  url?: string;
+  authors?: string[];
+};
+
 export type Notes9AgentRequestInput = {
   query: string;
   session_id: string;
@@ -63,6 +76,9 @@ export type Notes9AgentRequestInput = {
   attachments?: Notes9AgentAttachment[];
   /** User-uploaded files (images, PDFs) the LLM should consume this turn. */
   file_attachments?: Notes9FileAttachment[];
+  /** Transient papers (title + abstract + ids) grounded + inline-cited without a
+   * literature_review row — follow-up context / closed-access "Ask Catalyst". */
+  literature_sources?: Notes9LiteratureSource[];
   options?: {
     debug?: boolean;
     max_retries?: number;
@@ -105,6 +121,9 @@ export function buildNotes9AgentRequestBody(params: Notes9AgentRequestInput): Re
   // the LLM provider.
   if (params.file_attachments && params.file_attachments.length > 0) {
     body.file_attachments = params.file_attachments;
+  }
+  if (params.literature_sources && params.literature_sources.length > 0) {
+    body.literature_sources = params.literature_sources;
   }
   return body;
 }

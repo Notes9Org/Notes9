@@ -182,3 +182,32 @@ export function literatureContextToSystemMessage(ctx: LiteratureSessionContext):
     lines.join('\n')
   )
 }
+
+/**
+ * Map a persisted literature session's papers into agent `literature_sources` — the
+ * content-bearing channel that the backend materializes into citable sources so
+ * follow-ups get real inline [N] citations (not just an ungrounded text preamble).
+ * Papers with no title are skipped. See agents/core/literature_preflight.py.
+ */
+export function literatureContextToSources(
+  ctx: LiteratureSessionContext | null | undefined,
+): Array<{
+  title: string
+  abstract?: string
+  doi?: string
+  pmid?: string
+  year?: number
+  url?: string
+}> {
+  if (!ctx?.papers?.length) return []
+  return ctx.papers
+    .filter((p) => p.title && p.title.trim())
+    .map((p) => ({
+      title: p.title,
+      abstract: p.abstract,
+      doi: p.doi,
+      pmid: p.pmid,
+      year: p.year,
+      url: p.url,
+    }))
+}

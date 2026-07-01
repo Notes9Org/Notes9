@@ -74,6 +74,7 @@ export function AiSearchView({
   onStagePaper,
   onOpenStaged,
   isPaperStaged,
+  getPaperMembership,
   isPaperStaging,
   onResults,
   onLoadingChange,
@@ -89,6 +90,7 @@ export function AiSearchView({
   onStagePaper?: (paper: SearchPaper) => void | Promise<void>
   onOpenStaged?: (paper: SearchPaper) => void
   isPaperStaged?: (id: string) => boolean
+  getPaperMembership?: (id: string) => 'saved' | 'staged' | null
   isPaperStaging?: (id: string) => boolean
   /** Lift the structured papers to the host (staging detection, count). */
   onResults?: (papers: SearchPaper[]) => void
@@ -377,6 +379,7 @@ export function AiSearchView({
               onStage={onStagePaper}
               onOpenStaged={onOpenStaged}
               isStaged={r.paper ? (isPaperStaged?.(r.paper.id) ?? false) : false}
+              membership={r.paper ? (getPaperMembership?.(r.paper.id) ?? null) : null}
               isStaging={r.paper ? (isPaperStaging?.(r.paper.id) ?? false) : false}
             />
           </MotionResultCard>

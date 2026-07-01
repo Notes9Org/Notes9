@@ -23,11 +23,26 @@ export type CatalystLaunchAttachment = {
   paperKey?: string
 }
 
+export type CatalystLaunchLiteratureSource = {
+  title: string
+  abstract?: string
+  doi?: string
+  pmid?: string
+  journal?: string
+  year?: number
+  url?: string
+  authors?: string[]
+}
+
 export type CatalystLaunchDetail = {
   query?: string
   scope?: CatalystSectionScope
   projectId?: string
   attachments?: CatalystLaunchAttachment[]
+  /** Transient papers (title + abstract + ids) to ground + inline-cite without a
+   *  file attachment — e.g. a CLOSED-access paper's abstract on "Ask Catalyst".
+   *  The sidebar forwards these as agent `literature_sources` on the next send. */
+  literatureSources?: CatalystLaunchLiteratureSource[]
   webSearch?: boolean
   /** When true, the sidebar submits the query immediately instead of only
    *  pre-filling its composer — i.e. the user already clicked Send. */
