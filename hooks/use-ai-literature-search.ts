@@ -92,12 +92,18 @@ export function useAiLiteratureSearch({
   const lastRunQueryRef = useRef<string | null>(null)
   const abortRef = useRef<AbortController | null>(null)
   const activeRequestIdRef = useRef(0)
+  const requestedRef = useRef('')
 
   const stop = useCallback(() => {
     activeRequestIdRef.current += 1
     abortRef.current?.abort()
     abortRef.current = null
     setIsStreaming(false)
+    // Force inSync (activeQuery === requested) so the derived `isStreaming`
+    // (which is `isStreaming || (!!requested && !inSync)`) can't stay true after
+    // an abort — otherwise onLoadingChange re-sets isSearching and the bar
+    // re-locks, making Stop look broken.
+    setActiveQuery(requestedRef.current)
     setPhase(null)
     // Clear the dedupe guard so the SAME query can run again after an abort.
     // Without this, an unmount-abort (incl. React StrictMode's mount-time
@@ -254,6 +260,8 @@ export function useAiLiteratureSearch({
 
   const requested = (query ?? '').trim()
   const inSync = !requested || activeQuery === requested
+  // Keep the latest requested query available to stop() (which has [] deps).
+  requestedRef.current = requested
 
   return {
     run,

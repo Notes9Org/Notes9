@@ -137,7 +137,8 @@ import {
   type CoPilotContext,
 } from '@/lib/catalyst-copilot';
 import { useCatalystLiterature, setCatalystLiterature, type CatalystLiterature } from '@/lib/catalyst-literature';
-import { MotionReveal } from '@/components/literature-reviews/motion';
+import { literatureContextToSystemMessage, type LiteratureSessionContext } from '@/lib/literature-citations';
+import { MotionReveal, MotionList, MotionItem } from '@/components/literature-reviews/motion';
 import { useLiteratureMentionCandidates } from '@/contexts/literature-mention-context';
 import { useLiteratureAgentStream } from '@/hooks/use-literature-agent-stream';
 import type { LiteratureAgentDonePayload } from '@/lib/literature-agent-types';
@@ -813,7 +814,7 @@ const SidebarChatMessageItem = memo(function SidebarChatMessageItem({
                   groundingResourceToPanelItem(c, i)
                 )}
                 triggerLabel="Sources"
-                className="mt-2 self-start"
+                className="mt-3 w-full"
               />
             )}
             {messageGraphs.length > 0 && (
@@ -1199,6 +1200,7 @@ export function RightSidebar({
 
   const {
     sessions,
+    loading: sessionsLoading,
     createSession,
     loadMessages,
     loadSessions,
@@ -2246,12 +2248,27 @@ export function RightSidebar({
           content_type: a.contentType,
           size: a.size ?? 0,
         }));
-      // Co-pilot: prepend the active literature search (papers + abstracts +
+      // Literature grounding: prepend the search context (papers + abstracts +
       // summary) to the MODEL query only — the user's visible message stays the
-      // clean question. Lets them ask about any paper without attaching one.
-      const coPilotPreamble = coPilotRef.current ? buildCoPilotPreamble(coPilotRef.current) : '';
-      const notes9ModelQuery = coPilotPreamble
-        ? `${coPilotPreamble}\n\n## User question\n${text}`
+      // clean question. Prefer the DURABLE context persisted on the session
+      // (metadata.literature) so a reopened/continued literature chat still
+      // grounds follow-ups; fall back to the volatile live co-pilot bridge for
+      // the window before the session is persisted. Fixes: follow-ups lost the
+      // summary because the co-pilot is cleared on session load and
+      // /api/agent/stream never read metadata.literature (endpoint mismatch —
+      // only the unused /api/chat path read it).
+      const activeLitSession = sessions.find((s) => s.id === sessionId);
+      const persistedLitCtx =
+        activeLitSession?.kind === 'literature'
+          ? ((activeLitSession.metadata as { literature?: LiteratureSessionContext } | null)?.literature ?? null)
+          : null;
+      const litPreamble = persistedLitCtx
+        ? literatureContextToSystemMessage(persistedLitCtx)
+        : coPilotRef.current
+          ? buildCoPilotPreamble(coPilotRef.current)
+          : '';
+      const notes9ModelQuery = litPreamble
+        ? `${litPreamble}\n\n## User question\n${text}`
         : text;
       const { donePayload, error, artifacts: streamArtifacts, citationsManifest: streamManifest, graphs: streamGraphs } = await agentStream.runStream(
         {
@@ -3366,7 +3383,7 @@ export function RightSidebar({
           </div>
         )}
 
-        <div className="mt-1 flex min-h-9 items-center justify-between gap-2 px-2 pb-2">
+        <div className="mt-1 flex min-h-9 items-center justify-between gap-2 px-4 pb-2">
           <div className="flex min-w-0 flex-1 flex-nowrap items-center gap-1.5 overflow-x-auto">
             {agentMode !== 'literature' && (
               <TooltipProvider delayDuration={300}>
@@ -3375,7 +3392,7 @@ export function RightSidebar({
                     <span
                       id="tour-ai-web-search"
                       className={cn(
-                        'inline-flex h-6 shrink-0 cursor-default select-none items-center gap-1 rounded-full border px-2 transition-colors duration-150',
+                        'inline-flex h-7 shrink-0 cursor-default select-none items-center gap-1 rounded-full border px-2 transition-colors duration-150',
                         webSearchEnabled
                           ? 'border-[color:color-mix(in_srgb,var(--n9-accent)_30%,var(--border))] bg-[color:color-mix(in_srgb,var(--n9-accent)_8%,transparent)] text-foreground'
                           : 'border-border/40 bg-muted/20 text-muted-foreground'
@@ -3564,13 +3581,17 @@ export function RightSidebar({
 
   return (
     <div className={cn(
-      "flex flex-col bg-background min-h-0 overflow-hidden transition-none",
+      "flex flex-col bg-background min-h-0 overflow-hidden",
       isPageVariant
         ? "h-full w-full min-w-0"
         : cn(
             "border-l border-border/45 shadow-[-2px_0_18px_-16px_rgba(44,36,24,0.22)] dark:shadow-[-2px_0_18px_-16px_rgba(0,0,0,0.45)]",
             isExpanded
-              ? "fixed top-0 right-0 bottom-0 left-[var(--sidebar-width,0px)] z-[120] w-auto h-full"
+              // In-place fullscreen overlay. animate-in (tailwindcss-animate,
+              // same lib used in app-layout) gives a smooth grow-into-fullscreen
+              // instead of an instant snap; the old jank was a route remount,
+              // now removed. Honors reduced-motion.
+              ? "fixed top-0 right-0 bottom-0 left-[var(--sidebar-width,0px)] z-[120] w-auto h-full animate-in fade-in zoom-in-95 duration-300 ease-out motion-reduce:animate-none"
               : "h-full w-full min-w-0"
           )
     )}>
@@ -3694,51 +3715,33 @@ export function RightSidebar({
                         </DropdownMenuContent>
                       </DropdownMenu>
 
-                      <Button
-                        variant="secondary"
-                        className="h-8 sm:h-9 text-muted-foreground"
-                        onClick={handleNewChat}
-                        aria-label="New chat"
-                      >
-                        <Plus className="size-4" />
-                        <span>New Chat</span>
-                      </Button>
+                      {/* Title kept here so the left cluster reads the same as the
+                          page header; the "New chat" action lives in the right
+                          cluster in BOTH modes so it never jumps between sides. */}
+                      <span className="truncate px-1 text-sm font-semibold text-foreground">Catalyst</span>
                     </div>
                   </ScrollArea>
                 </>
               )}
             </div>
 
+            {/* Unified action bar: ONE fixed order in both page and panel modes so
+                nothing reorders on minimize/maximize. New chat · Help · Theme ·
+                resize toggle (Minimize in page / Maximize in panel, same slot) ·
+                Close (panel only, LAST so it never shifts the shared buttons). */}
             <div className="flex items-center gap-1 pl-2 shrink-0">
-              {isPageVariant ? (
+              <Button
+                variant="secondary"
+                className="h-8 text-muted-foreground sm:h-9"
+                onClick={handleNewChat}
+                aria-label="New chat"
+                title="New chat"
+              >
+                <Plus className="size-4" />
+                <span className="hidden sm:inline">New chat</span>
+              </Button>
+              {isPageVariant && (
                 <>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    className="size-8 text-muted-foreground sm:size-9"
-                    title="Minimize to sidebar"
-                    aria-label="Minimize Catalyst to the sidebar"
-                    onClick={() => {
-                      // Dock the full page back into the side panel (NOT close it),
-                      // carrying the conversation, and return to the page it was
-                      // opened from.
-                      const sid = currentSessionRef.current;
-                      openCatalystPanel({ dock: true, ...(sid ? { sessionId: sid } : {}) });
-                      router.push(getCatalystOrigin() ?? '/');
-                    }}
-                  >
-                    <Minimize className="size-4" />
-                  </Button>
-                  <Button
-                    variant="secondary"
-                    className="hidden h-8 text-muted-foreground sm:inline-flex sm:h-9"
-                    onClick={handleNewChat}
-                    aria-label="New chat"
-                  >
-                    <Plus className="size-4" />
-                    <span>New chat</span>
-                  </Button>
                   <Button
                     type="button"
                     variant="ghost"
@@ -3761,6 +3764,7 @@ export function RightSidebar({
                         ? 'Switch to light mode'
                         : 'Switch to dark mode'
                     }
+                    title="Toggle theme"
                   >
                     {!themeMounted ? (
                       <Moon className="size-4" />
@@ -3771,30 +3775,70 @@ export function RightSidebar({
                     )}
                   </Button>
                 </>
+              )}
+              {/* Resize toggle — single fixed slot; only the glyph + handler change
+                  by mode, so it never appears to move. */}
+              {isPageVariant ? (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="size-8 text-muted-foreground sm:size-9"
+                  title="Minimize to sidebar"
+                  aria-label="Minimize Catalyst to the sidebar"
+                  onClick={() => {
+                    // Dock the full page back into the side panel (NOT close it),
+                    // carrying the conversation, and return to the page it was
+                    // opened from.
+                    const sid = currentSessionRef.current;
+                    openCatalystPanel({ dock: true, ...(sid ? { sessionId: sid } : {}) });
+                    router.push(getCatalystOrigin() ?? '/');
+                  }}
+                >
+                  <Minimize className="size-4" />
+                </Button>
+              ) : isExpanded ? (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="size-8 text-muted-foreground sm:size-9"
+                  title="Minimize"
+                  aria-label="Minimize Catalyst chat"
+                  onClick={() => setIsExpanded(false)}
+                >
+                  <Minimize className="size-4" />
+                </Button>
               ) : (
-                <>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="size-8 sm:size-9 text-muted-foreground"
-                    title="Open full page"
-                    aria-label="Open Catalyst full page"
-                    onClick={() => {
-                      // Maximize → open the dedicated /catalyst route, carrying the
-                      // active session so the conversation continues full-page.
-                      // Remember this page so minimizing returns here.
-                      setCatalystOrigin(pathname ?? '/');
-                      const sid = currentSessionRef.current;
-                      router.push(sid ? `/catalyst?session=${encodeURIComponent(sid)}` : '/catalyst');
-                      onClose?.();
-                    }}
-                  >
-                    <Maximize className="size-4" />
-                  </Button>
-                  <Button variant="ghost" size="icon" className="size-8 sm:size-9 text-muted-foreground" title="Close" aria-label="Close Catalyst" onClick={() => onClose?.()}>
-                    <X className="size-4" />
-                  </Button>
-                </>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="size-8 sm:size-9 text-muted-foreground"
+                  title="Expand to full screen"
+                  aria-label="Expand Catalyst chat to full screen"
+                  onClick={() => {
+                    // In-place expand: grow the SAME chat instance to a fullscreen
+                    // overlay (isExpanded) instead of router.push('/catalyst').
+                    // No route change → no remount/flash, and scroll, streaming,
+                    // and composer state are all preserved.
+                    setIsExpanded(true);
+                  }}
+                >
+                  <Maximize className="size-4" />
+                </Button>
+              )}
+              {!isPageVariant && (
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="size-8 sm:size-9 text-muted-foreground"
+                  title="Close"
+                  aria-label="Close Catalyst"
+                  onClick={() => onClose?.()}
+                >
+                  <X className="size-4" />
+                </Button>
               )}
             </div>
           </header>
@@ -3853,14 +3897,25 @@ export function RightSidebar({
                   </div>
                   {/* List - same structure as lab notes */}
                   <ScrollArea className="min-h-0 flex-1 overflow-hidden">
-                    {sessions.length === 0 ? (
+                    {sessionsLoading && sessions.length === 0 ? (
+                      <div className="flex flex-col gap-0.5 pr-1" aria-hidden aria-label="Loading conversations">
+                        {[...Array(5)].map((_, i) => (
+                          <div key={i} className="grid min-h-9 grid-cols-[auto_1fr_auto] items-center gap-2 rounded-md px-2 py-1.5">
+                            <div className="n9-skeleton-shimmer size-8 rounded" />
+                            <div className="n9-skeleton-shimmer h-3.5 w-full rounded" />
+                            <div className="size-8" />
+                          </div>
+                        ))}
+                      </div>
+                    ) : sessions.length === 0 ? (
                     <div className="px-2 py-6 text-center text-sidebar-foreground/70 text-xs">No previous conversations.</div>
                     ) : (
-                      <ul className="flex min-w-0 flex-col gap-0.5 pr-1">
+                      <MotionList className="flex min-w-0 flex-col gap-0.5 pr-1" role="list">
                         {sessions.map((session) => (
-                          <li
+                          <MotionItem
                             key={session.id}
                             className="group/row relative"
+                            role="listitem"
                           >
                             <div
                               role="button"
@@ -3899,9 +3954,9 @@ export function RightSidebar({
                                 <Trash2 className="h-4 w-4" />
                               </Button>
                             </div>
-                          </li>
+                          </MotionItem>
                         ))}
-                      </ul>
+                      </MotionList>
                     )}
                     <ScrollBar orientation="horizontal" />
                   </ScrollArea>
@@ -4010,11 +4065,14 @@ export function RightSidebar({
                         return (
                           <Fragment key={message.id}>
                             {showLitHere && literature && (
-                              <LiteratureSummaryInline
-                                lit={literature}
-                                sessionId={literature.sessionId ?? literatureSessionId}
-                                onContinue={loadSession}
-                              />
+                              <div className="flex w-full gap-4">
+                                <div className="size-6 shrink-0" aria-hidden />
+                                <LiteratureSummaryInline
+                                  lit={literature}
+                                  sessionId={literature.sessionId ?? literatureSessionId}
+                                  onContinue={loadSession}
+                                />
+                              </div>
                             )}
                             <SidebarChatMessageItem
                               message={message as UIMessage}
@@ -4036,11 +4094,14 @@ export function RightSidebar({
                       })}
                       {/* Anchor at/after the end (newest action, or empty chat) → render below all messages. */}
                       {literature && (litAnchorIndex == null || litAnchorIndex >= messages.length) && (
-                        <LiteratureSummaryInline
-                          lit={literature}
-                          sessionId={literature.sessionId ?? literatureSessionId}
-                          onContinue={loadSession}
-                        />
+                        <div className="flex w-full gap-4">
+                          <div className="size-6 shrink-0" aria-hidden />
+                          <LiteratureSummaryInline
+                            lit={literature}
+                            sessionId={literature.sessionId ?? literatureSessionId}
+                            onContinue={loadSession}
+                          />
+                        </div>
                       )}
                       {agentMode === 'literature' &&
                         literatureAgentStream.isStreaming &&
@@ -4107,7 +4168,7 @@ export function RightSidebar({
                       {literatureAwaitingClarify &&
                         messages.at(-1)?.role === 'user' &&
                         literatureAgentStream.clarify && (
-                        <div className="flex w-full justify-start pl-10 sm:pl-14">
+                        <div className="flex w-full justify-start pl-10">
                           <ClarifyCard
                             question={literatureAgentStream.clarify.question}
                             options={literatureAgentStream.clarify.options}
@@ -4124,8 +4185,8 @@ export function RightSidebar({
                           agentStream.donePayload != null) && (
                         <div className="flex gap-4 w-full justify-start">
                           <Notes9ChatLoader
-                            size={28}
-                            className="mt-1 -translate-y-[5px]"
+                            size={24}
+                            className="mt-1"
                             progress={toolCardsProgress(agentStream.toolCards)}
                             error={agentStream.error != null}
                           />
@@ -4134,7 +4195,7 @@ export function RightSidebar({
                               !agentStream.streamedAnswer &&
                               !agentStream.donePayload &&
                               !agentStream.error ? (
-                              <div className="px-1 py-2.5 text-sm">
+                              <div className="py-2.5 text-sm">
                                 <span
                                   className="inline-block w-[3px] h-[1em] bg-foreground/70 rounded-sm animate-cursor-blink translate-y-[2px]"
                                   aria-hidden
@@ -4173,8 +4234,8 @@ export function RightSidebar({
                         !literatureAwaitingClarify &&
                         messages.at(-1)?.role === 'user' && (
                         <div className="flex gap-4 w-full justify-start">
-                          <Notes9ChatLoader size={28} className="mt-1" />
-                          <div className="px-1 py-2.5 text-sm">
+                          <Notes9ChatLoader size={24} className="mt-1" />
+                          <div className="py-2.5 text-sm">
                             <span
                               className="inline-block w-[3px] h-[1em] bg-foreground/70 rounded-sm animate-cursor-blink translate-y-[2px]"
                               aria-hidden

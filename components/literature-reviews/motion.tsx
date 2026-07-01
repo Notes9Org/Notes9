@@ -22,6 +22,10 @@ import { cn } from "@/lib/utils"
 
 const SPRING = { type: "spring", stiffness: 320, damping: 30, mass: 0.8 } as const
 
+/** Expo-style ease-out curve — decisive, no overshoot/bounce. Shared by the
+ *  result-card entrance and the hover/press micro-interactions. */
+const EASE_OUT = [0.22, 1, 0.36, 1] as const
+
 /** Fade + lift + subtle scale-in. The workhorse for panels, cards and summaries. */
 export function MotionReveal({
   children,
@@ -140,6 +144,57 @@ export function MotionFloating({
       transition={reduce ? { duration: 0.15 } : SPRING}
       whileHover={reduce ? undefined : { scale: 1.04 }}
       whileTap={reduce ? undefined : { scale: 0.96 }}
+      {...props}
+    >
+      {children}
+    </motion.div>
+  )
+}
+
+/**
+ * A single result card in a streaming/filterable list. Entrance fades + lifts
+ * (transform + opacity only), exit fades + drops, and hover/press give a gentle
+ * lift + tactile squeeze. All GPU-friendly; collapses to a plain fade when the
+ * user prefers reduced motion. Pass `delay` for a staggered reveal.
+ */
+export function MotionResultCard({
+  children,
+  className,
+  delay = 0,
+  ...props
+}: { children: ReactNode; delay?: number } & HTMLMotionProps<"div">) {
+  const reduce = useReducedMotion()
+  return (
+    <motion.div
+      className={className}
+      initial={reduce ? { opacity: 0 } : { opacity: 0, y: 10 }}
+      animate={reduce ? { opacity: 1 } : { opacity: 1, y: 0 }}
+      exit={reduce ? { opacity: 0 } : { opacity: 0, y: -6, scale: 0.985 }}
+      transition={reduce ? { duration: 0.15 } : { duration: 0.4, ease: EASE_OUT, delay }}
+      whileHover={reduce ? undefined : { y: -2, transition: { duration: 0.18, ease: EASE_OUT } }}
+      whileTap={reduce ? undefined : { scale: 0.996, transition: { duration: 0.12, ease: EASE_OUT } }}
+      {...props}
+    >
+      {children}
+    </motion.div>
+  )
+}
+
+/**
+ * Hover-lift + press feedback for cards that manage their own mount animation
+ * (or none). No entrance/exit — safe to drop into any list. Transform-only.
+ */
+export function MotionHoverCard({
+  children,
+  className,
+  ...props
+}: { children: ReactNode } & HTMLMotionProps<"div">) {
+  const reduce = useReducedMotion()
+  return (
+    <motion.div
+      className={className}
+      whileHover={reduce ? undefined : { y: -2, transition: { duration: 0.18, ease: EASE_OUT } }}
+      whileTap={reduce ? undefined : { scale: 0.996, transition: { duration: 0.12, ease: EASE_OUT } }}
       {...props}
     >
       {children}

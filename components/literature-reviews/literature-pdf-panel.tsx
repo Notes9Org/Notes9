@@ -1,10 +1,11 @@
 "use client"
 
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react"
-import { ChevronDown, Download, FileText, Loader2, PanelRightOpen } from "lucide-react"
+import { Download, Loader2, PanelRightOpen } from "lucide-react"
 import { openCatalystPanel } from '@/lib/catalyst-launch'
 
 import { LiteraturePdfAnnotationSidebar } from "@/components/literature-reviews/literature-pdf-annotation-sidebar"
+import { motion, useReducedMotion } from "@/components/literature-reviews/motion"
 import {
   LiteraturePdfViewer,
   type LiteraturePdfViewerHandle,
@@ -38,6 +39,7 @@ export function LiteraturePdfPanel({
   headerActions,
 }: LiteraturePdfPanelProps) {
   const { toast } = useToast()
+  const reduceMotion = useReducedMotion()
   const [annotations, setAnnotations] = useState<LiteraturePdfAnnotation[]>([])
   const [loadingAnnotations, setLoadingAnnotations] = useState(true)
   const [annotationsOpen, setAnnotationsOpen] = useState(false)
@@ -205,51 +207,9 @@ export function LiteraturePdfPanel({
 
   return (
     <Collapsible open={annotationsOpen} onOpenChange={setAnnotationsOpen}>
-      <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
-        <div className="flex items-center gap-2 text-sm font-medium text-foreground">
-          <FileText className="h-4 w-4 shrink-0 text-muted-foreground" />
-          Reader
-        </div>
-        <div className="flex flex-wrap items-center gap-1.5">
-          {headerActions}
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            className="h-8 gap-1.5 px-2.5 text-xs"
-            disabled={exportingPdf}
-            onClick={handleExportAnnotatedPdf}
-            title="Download the PDF with colored highlights on the page plus a column listing highlights and notes"
-          >
-            {exportingPdf ? (
-              <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin" />
-            ) : (
-              <Download className="h-3.5 w-3.5 shrink-0" />
-            )}
-            Export
-          </Button>
-          <CollapsibleTrigger asChild>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="h-8 gap-1.5 px-2.5 text-xs"
-              aria-expanded={annotationsOpen}
-              title="Show highlights & notes"
-            >
-              <PanelRightOpen className="h-3.5 w-3.5 shrink-0" />
-              Highlights
-              <ChevronDown
-                className={cn("h-3.5 w-3.5 shrink-0 transition-transform duration-200", annotationsOpen && "rotate-180")}
-              />
-            </Button>
-          </CollapsibleTrigger>
-        </div>
-      </div>
-
       <div
         className={cn(
-          "mt-4 grid min-w-0 gap-6 overflow-visible",
+          "grid min-w-0 gap-6 overflow-visible",
           annotationsOpen &&
             "lg:grid-cols-[minmax(0,1fr)_minmax(17.5rem,22rem)] lg:items-start"
         )}
@@ -262,6 +222,40 @@ export function LiteraturePdfPanel({
             annotations={annotations}
             onCreateAnnotation={createAnnotation}
             onAskCatalyst={openPaperInCatalyst}
+            toolbarExtras={
+              <>
+                {headerActions}
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="icon"
+                  className="h-8 w-8 transition-[transform,color,background-color,border-color] duration-150 ease-out active:scale-95 motion-reduce:transition-none motion-reduce:active:scale-100 sm:h-9 sm:w-9"
+                  disabled={exportingPdf}
+                  onClick={handleExportAnnotatedPdf}
+                  aria-label="Export annotated PDF"
+                  title="Download the PDF with colored highlights on the page plus a column listing highlights and notes"
+                >
+                  {exportingPdf ? (
+                    <Loader2 className="h-4 w-4 shrink-0 animate-spin" />
+                  ) : (
+                    <Download className="h-4 w-4 shrink-0" />
+                  )}
+                </Button>
+                <CollapsibleTrigger asChild>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="icon"
+                    className="h-8 w-8 transition-[transform,color,background-color,border-color] duration-150 ease-out active:scale-95 motion-reduce:transition-none motion-reduce:active:scale-100 sm:h-9 sm:w-9"
+                    aria-expanded={annotationsOpen}
+                    aria-label="Highlights & notes"
+                    title="Show highlights & notes"
+                  >
+                    <PanelRightOpen className="h-4 w-4 shrink-0" />
+                  </Button>
+                </CollapsibleTrigger>
+              </>
+            }
           />
         </div>
 
@@ -274,13 +268,22 @@ export function LiteraturePdfPanel({
             "lg:data-[state=open]:sticky lg:data-[state=open]:top-4 lg:data-[state=open]:z-10 lg:data-[state=open]:self-start"
           )}
         >
-          <LiteraturePdfAnnotationSidebar
-            annotations={annotations}
-            loading={loadingAnnotations}
-            onDeleteAnnotation={deleteAnnotation}
-            onClose={() => setAnnotationsOpen(false)}
-            onNavigateToAnnotation={handleNavigateToAnnotation}
-          />
+          {/* GPU-only entrance (opacity + x); Radix Collapsible still owns
+              mount/unmount + height, so no layout-prop is animated and the
+              parent's lg:sticky is unaffected. */}
+          <motion.div
+            initial={reduceMotion ? { opacity: 0 } : { opacity: 0, x: 12 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ duration: reduceMotion ? 0.12 : 0.28, ease: [0.16, 1, 0.3, 1] }}
+          >
+            <LiteraturePdfAnnotationSidebar
+              annotations={annotations}
+              loading={loadingAnnotations}
+              onDeleteAnnotation={deleteAnnotation}
+              onClose={() => setAnnotationsOpen(false)}
+              onNavigateToAnnotation={handleNavigateToAnnotation}
+            />
+          </motion.div>
         </CollapsibleContent>
       </div>
     </Collapsible>

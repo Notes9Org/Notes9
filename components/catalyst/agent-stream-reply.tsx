@@ -203,7 +203,7 @@ export function AgentStreamReply({
             settles. Cancellation lives on the composer Stop button (a single
             Stop control), so no Stop button is rendered here. ── */}
       {isStreaming && !donePayload && liveCitationCount > 0 && (
-        <div className="flex items-center gap-2 px-1 text-xs text-muted-foreground">
+        <div className="flex items-center gap-2 text-xs text-muted-foreground">
           <span className="inline-flex items-center gap-1.5">
             <span className="size-1.5 rounded-full bg-primary animate-pulse" aria-hidden />
             Gathering sources… {liveCitationCount}
@@ -276,7 +276,7 @@ export function AgentStreamReply({
             return (
               <div
                 key={isThinkingStreaming ? `${step.node}-${step.status}-${step.message}` : i}
-                className="flex items-start gap-2 px-1 py-1"
+                className="flex items-start gap-2 py-1"
               >
                 <span
                   className={cn(
@@ -312,7 +312,7 @@ export function AgentStreamReply({
             their horizontal scroll only (long lines still need it). ── */}
       {(displayAnswer || (!donePayload && streamedAnswer === '')) && (
         <div className="space-y-2">
-          <div className="px-1 text-sm text-foreground min-w-0 max-w-full">
+          <div className="text-sm text-foreground min-w-0 max-w-full">
             {(() => {
               let effectiveManifest = citationsManifest;
               if (!effectiveManifest && rawGrounding.length > 0) {

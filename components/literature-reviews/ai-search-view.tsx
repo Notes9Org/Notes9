@@ -1,11 +1,12 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Telescope, Loader2, AlertCircle, RotateCcw } from 'lucide-react'
 import { useAiLiteratureSearch } from '@/hooks/use-ai-literature-search'
 import { AiPaperCard } from './ai-paper-card'
 import { AiSearchFilters } from './ai-search-filters'
+import { AnimatePresence, MotionResultCard } from './motion'
 import { openCatalystPanel } from '@/lib/catalyst-launch'
 import { setCatalystLiterature, type LiteratureRef } from '@/lib/catalyst-literature'
 import { papersToGrounding, buildLiteratureSessionContext } from '@/lib/literature-citations'
@@ -156,15 +157,16 @@ export function AiSearchView({
   const showSkeletons = loading && results.length === 0
   // Relevance order comes from the backend reranker (best-first). Keep it; only
   // re-sort when the user explicitly picks a sort mode (e.g. "Open access").
-  const displayed = applyAiFilters(results, filters)
-  const visible = displayed.slice(0, visibleCount)
+  // Memoized so streaming ticks that only change the summary don't re-filter.
+  const displayed = useMemo(() => applyAiFilters(results, filters), [results, filters])
+  const visible = useMemo(() => displayed.slice(0, visibleCount), [displayed, visibleCount])
   // "Load more" is a pure client-side reveal of the already-fetched, deeply
   // ranked set — no network page-2 (that path caused duplicates/latency).
   const showLoadMore = visibleCount < displayed.length
-  const onLoadMore = () => setVisibleCount((c) => c + PAGE_SIZE)
+  const onLoadMore = useCallback(() => setVisibleCount((c) => c + PAGE_SIZE), [])
   // Filter options grounded in the actual result set (not hardcoded).
-  const journalChoices = journalOptions(results)
-  const yearHint = yearBounds(results)
+  const journalChoices = useMemo(() => journalOptions(results), [results])
+  const yearHint = useMemo(() => yearBounds(results), [results])
   // True until the search settles: summary still streaming, DB match running, or
   // any shown card's abstract still resolving.
   const processing = loading || displayed.some((r) => r.abstractPending)
@@ -282,11 +284,11 @@ export function AiSearchView({
 
       {(() => {
         const renderCard = (r: (typeof displayed)[number], i: number) => (
-          <div
-            key={`${r.citeLabel}-${r.paper?.id ?? r.sourceUrl ?? r.aiTitle ?? ''}`}
+          <MotionResultCard
+            key={`${r.paper?.id ?? r.sourceUrl ?? r.aiTitle ?? r.citeLabel}`}
             data-cite-label={r.citeLabel}
-            className="rounded-xl duration-500 animate-in fade-in slide-in-from-bottom-3 fill-mode-both"
-            style={{ animationDelay: `${Math.min(i, 8) * 60}ms` }}
+            className="rounded-xl"
+            delay={Math.min(i, 8) * 0.05}
           >
             <AiPaperCard
               result={{ ...r, citeLabel: String(i + 1) }}
@@ -306,13 +308,15 @@ export function AiSearchView({
               isStaged={r.paper ? (isPaperStaged?.(r.paper.id) ?? false) : false}
               isStaging={r.paper ? (isPaperStaging?.(r.paper.id) ?? false) : false}
             />
-          </div>
+          </MotionResultCard>
         )
 
         // Group by reranker tier when present ("related" is explicit; everything else
         // is treated as directly relevant). Falls back to a flat list when untiered.
         const hasTiers = visible.some((r) => r.paper?.relevanceTier)
-        if (!hasTiers) return visible.map(renderCard)
+        if (!hasTiers) {
+          return <AnimatePresence initial={false}>{visible.map(renderCard)}</AnimatePresence>
+        }
 
         const related = visible.filter((r) => r.paper?.relevanceTier === 'related')
         const primary = visible.filter((r) => r.paper?.relevanceTier !== 'related')
@@ -325,12 +329,12 @@ export function AiSearchView({
           </p>
         )
         return (
-          <>
+          <AnimatePresence initial={false}>
             {primary.length > 0 && header('Directly relevant')}
             {primary.map((r, i) => renderCard(r, i))}
             {related.length > 0 && header('Related work')}
             {related.map((r, i) => renderCard(r, primary.length + i))}
-          </>
+          </AnimatePresence>
         )
       })()}
 
