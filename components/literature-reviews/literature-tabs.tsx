@@ -308,6 +308,20 @@ export function LiteratureTabs({
     return stripPaperIds[0] ?? "search"
   }, [activeInnerTab, hasSearched, stripPaperIds, pendingOpenTabIds])
 
+  // Track which reader tabs have actually been opened this session. Combined with
+  // forceMount below, a visited paper's PDF stays mounted so re-selecting its tab
+  // is instant (no re-download/re-parse). Restored-but-unvisited tabs stay cheap.
+  const [mountedTabIds, setMountedTabIds] = useState<Set<string>>(() => new Set())
+  useEffect(() => {
+    if (resolvedActiveTab === "search") return
+    setMountedTabIds((prev) => {
+      if (prev.has(resolvedActiveTab)) return prev
+      const next = new Set(prev)
+      next.add(resolvedActiveTab)
+      return next
+    })
+  }, [resolvedActiveTab])
+
   type StagedPdfPatch = Pick<
     StagingListItem,
     "pdf_import_status" | "pdf_storage_path" | "pdf_file_name"
@@ -480,7 +494,6 @@ export function LiteratureTabs({
     if (topSection !== "search" || pendingPdfImportIds.length === 0) return
 
     let cancelled = false
-    let didRefreshList = false
 
     const pollImportStatus = async () => {
       if (pollStoppedRef.current) return
@@ -520,10 +533,11 @@ export function LiteratureTabs({
               })
               delete importStartedAtRef.current[id]
             }
-            if (!didRefreshList) {
-              didRefreshList = true
-              void router.refresh()
-            }
+            // NOTE: no router.refresh() here. The optimistic patch applied
+            // above (setStagedPdfPatches) already transitions the reader from
+            // the importing spinner to the PDF panel without a full server-tree
+            // refetch. The earlier router.refresh() caused a second visible
+            // reload of the paper right as it finished importing.
           }
         } catch (err) {
           anyError = true
@@ -1137,26 +1151,41 @@ export function LiteratureTabs({
 
                 {stripPaperIds.map((id) => {
                   const lit = stagedByIdMerged.get(id) ?? repoById.get(id)
+                  const isActive = id === resolvedActiveTab
+                  // Keep-mounted: build the heavy reader (which downloads + parses
+                  // the full PDF and fetches annotations) only once the tab has
+                  // actually been visited, then keep it mounted via forceMount so
+                  // switching back is instant instead of a 5-6s remount + refetch.
+                  // Tabs restored from localStorage but never clicked this session
+                  // stay unmounted until first activated, so they cost nothing on load.
+                  const shouldRender = isActive || mountedTabIds.has(id)
                   return (
-                    <TabsContent key={id} value={id} className="m-0 border-none p-0">
-                      <motion.div
-                        initial={reduce ? false : { opacity: 0, y: 6 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        transition={{ duration: reduce ? 0 : 0.22, ease: 'easeOut' }}
-                      >
-                        {lit ? (
-                          <StagedPaperView
-                            lit={lit}
-                            onSavePaper={handleSaveFromStaging}
-                            savingLiteratureId={savingStagingLiteratureId}
-                          />
-                        ) : (
-                          <div className="flex flex-col items-center justify-center gap-3 py-20 text-center">
-                            <Loader2 className="h-8 w-8 animate-spin text-[var(--n9-accent)]" />
-                            <p className="text-sm text-muted-foreground">Loading staged paper…</p>
-                          </div>
-                        )}
-                      </motion.div>
+                    <TabsContent
+                      key={id}
+                      value={id}
+                      forceMount
+                      className={cn("m-0 border-none p-0", !isActive && "hidden")}
+                    >
+                      {shouldRender ? (
+                        <motion.div
+                          initial={reduce ? false : { opacity: 0, y: 6 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          transition={{ duration: reduce ? 0 : 0.22, ease: 'easeOut' }}
+                        >
+                          {lit ? (
+                            <StagedPaperView
+                              lit={lit}
+                              onSavePaper={handleSaveFromStaging}
+                              savingLiteratureId={savingStagingLiteratureId}
+                            />
+                          ) : (
+                            <div className="flex flex-col items-center justify-center gap-3 py-20 text-center">
+                              <Loader2 className="h-8 w-8 animate-spin text-[var(--n9-accent)]" />
+                              <p className="text-sm text-muted-foreground">Loading staged paper…</p>
+                            </div>
+                          )}
+                        </motion.div>
+                      ) : null}
                     </TabsContent>
                   )
                 })}
