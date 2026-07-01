@@ -8,9 +8,11 @@ import { BookOpen, BookmarkCheck, BookmarkPlus, ExternalLink, FileText, Loader2,
 import { LiteraturePdfPanel } from "./literature-pdf-panel"
 import { UploadLiteraturePdfDialog } from "./upload-literature-pdf-dialog"
 import { decodeHtmlEntities } from "@/lib/literature-abstract-display"
-import { openCatalystPanel } from "@/lib/catalyst-launch"
+import { openCatalystPanel, attachToCatalyst } from "@/lib/catalyst-launch"
+import { flyToCatalyst } from "@/lib/fly-to-catalyst"
 import { MotionReveal } from "@/components/literature-reviews/motion"
 import { cn } from "@/lib/utils"
+import { toast } from "sonner"
 
 export type StagingLiteratureRow = Record<string, unknown>
 
@@ -116,24 +118,29 @@ export function StagedPaperView({
     return () => clearTimeout(t)
   }, [lit.id, lit.pdf_storage_path])
 
-  // Open Catalyst about this paper, attaching the PDF when one is available so
-  // the AI can read the full text.
-  const askCatalyst = () => {
-    const decodedTitle = lit.title ? decodeHtmlEntities(lit.title) : "this paper"
-    openCatalystPanel({
-      scope: "literature",
-      query: `About the paper "${decodedTitle}": `,
-      attachments: lit.pdf_storage_path
-        ? [
-            {
-              url: `/api/literature/${lit.id}/viewer-pdf`,
-              name: lit.pdf_file_name || "paper.pdf",
-              contentType: "application/pdf",
-            },
-          ]
-        : undefined,
-      autoSend: false,
-    })
+  // Ask Catalyst — mirrors the search-result card: open the panel with no text
+  // prefill (the paper rides in as an attachment), fly the PDF into the composer,
+  // and fall back to web search when there's no stored full text.
+  const askCatalyst = (e?: React.MouseEvent<HTMLElement>) => {
+    const target = e?.currentTarget ?? null
+    const hasPdf = Boolean(lit.pdf_storage_path)
+    openCatalystPanel({ scope: "literature", webSearch: !hasPdf, autoSend: false })
+    if (hasPdf) {
+      const decodedTitle = lit.title ? decodeHtmlEntities(lit.title) : "paper"
+      const attachments = [
+        {
+          url: `/api/literature/${lit.id}/viewer-pdf`,
+          name: lit.pdf_file_name || `${decodedTitle.slice(0, 100)}.pdf`,
+          contentType: "application/pdf",
+          paperKey: lit.id,
+        },
+      ]
+      flyToCatalyst(target, { onLand: () => attachToCatalyst(attachments) })
+    } else {
+      toast.info(
+        "No open-access full text found. Catalyst will use the abstract and web search; upload the PDF for full-text analysis.",
+      )
+    }
   }
 
   return (
@@ -177,7 +184,7 @@ export function StagedPaperView({
             <Button
               variant="ghost"
               size="sm"
-              onClick={askCatalyst}
+              onClick={(e) => askCatalyst(e)}
               title="Ask Catalyst AI about this paper"
               className="gap-1.5 rounded-lg text-muted-foreground hover:text-foreground"
             >

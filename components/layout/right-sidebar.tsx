@@ -93,6 +93,7 @@ import { ResizeHandle } from '@/components/ui/resize-handle';
 import { useSidebar } from '@/components/ui/sidebar';
 import { useTheme } from 'next-themes';
 import { requestPageHelp } from '@/components/tour/app-tour';
+import { ReportIssueDialog } from '@/components/layout/report-issue-dialog';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -3755,6 +3756,7 @@ export function RightSidebar({
                   >
                     <CircleHelp className="size-4" />
                   </Button>
+                  <ReportIssueDialog />
                   <Button
                     id="tour-theme-toggle"
                     variant="ghost"
@@ -3871,7 +3873,7 @@ export function RightSidebar({
                     the panel collapses to 0. */}
                 <div
                   className="m-2 flex h-[calc(100%-1rem)] min-h-0 flex-col gap-1 rounded-2xl border border-[color:var(--glass-border)] bg-sidebar/80 p-2 shadow-[0_10px_34px_-18px_rgba(20,14,8,0.4)] backdrop-blur-md dark:bg-sidebar/60 dark:shadow-[0_12px_38px_-16px_rgba(0,0,0,0.6)]"
-                  style={{ width: historySidebar.width }}
+                  style={{ width: historySidebar.width - 16 }}
                 >
                   {/* Header row — close button + "Chats" label on the top-left,
                       new chat on the right. */}
