@@ -43,6 +43,12 @@ import {
   Pin,
   PinOff,
   Pencil,
+  Check,
+  ChevronRight,
+  Folder,
+  FolderPlus,
+  FolderInput,
+  CheckSquare,
   Trash2,
   ChevronDown,
   X,
@@ -101,6 +107,7 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
@@ -1215,6 +1222,10 @@ export function RightSidebar({
     updateSessionTitle,
     updateSessionMetadata,
     deleteSession,
+    folders,
+    foldersAvailable,
+    createFolder,
+    moveSessionToFolder,
   } = useChatSessions();
 
   const currentSessionRef = useRef<string | null>(null);
@@ -3649,6 +3660,152 @@ export function RightSidebar({
     />
   );
 
+  // ── Multi-select + folders (full-screen chat history) ────────────────
+  const [selectionMode, setSelectionMode] = useState(false);
+  const [selectedChatIds, setSelectedChatIds] = useState<Set<string>>(() => new Set());
+  const [collapsedFolders, setCollapsedFolders] = useState<Set<string>>(() => new Set());
+  const toggleChatSelected = (id: string) =>
+    setSelectedChatIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  const exitSelection = useCallback(() => {
+    setSelectionMode(false);
+    setSelectedChatIds(new Set());
+  }, []);
+  const toggleFolderCollapsed = (id: string) =>
+    setCollapsedFolders((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  const bulkDeleteSelected = useCallback(() => {
+    const ids = Array.from(selectedChatIds);
+    if (ids.length === 0) return;
+    if (currentSessionId && ids.includes(currentSessionId)) {
+      setMessages([]);
+      currentSessionRef.current = null;
+    }
+    ids.forEach((id) => void deleteSession(id));
+    toast.success(`Deleted ${ids.length} chat${ids.length > 1 ? 's' : ''}`);
+    exitSelection();
+  }, [selectedChatIds, currentSessionId, deleteSession, setMessages, exitSelection]);
+  const bulkMoveSelected = useCallback(
+    async (folderId: string | null) => {
+      const ids = Array.from(selectedChatIds);
+      if (ids.length === 0) return;
+      await Promise.all(ids.map((id) => moveSessionToFolder(id, folderId)));
+      toast.success(
+        folderId
+          ? `Moved ${ids.length} chat${ids.length > 1 ? 's' : ''} to folder`
+          : `Removed ${ids.length} chat${ids.length > 1 ? 's' : ''} from folder`,
+      );
+      exitSelection();
+    },
+    [selectedChatIds, moveSessionToFolder, exitSelection],
+  );
+  const handleNewFolder = useCallback(async (): Promise<string | null> => {
+    const name = typeof window !== 'undefined' ? window.prompt('New folder name')?.trim() : '';
+    if (!name) return null;
+    const folder = await createFolder(name);
+    if (!folder) {
+      toast.error('Could not create the folder.');
+      return null;
+    }
+    return folder.id;
+  }, [createFolder]);
+  const createFolderAndMoveSelected = useCallback(async () => {
+    const id = await handleNewFolder();
+    if (id) await bulkMoveSelected(id);
+  }, [handleNewFolder, bulkMoveSelected]);
+
+  // Group sessions into user folders + an ungrouped bucket (pinned float first
+  // within the ungrouped list). Folders only appear once the 092 migration is
+  // applied (`foldersAvailable`).
+  const historyGroups = useMemo(() => {
+    const usable = foldersAvailable ? folders : [];
+    const byFolder = new Map<string, ChatSession[]>();
+    const ungrouped: ChatSession[] = [];
+    for (const s of orderedSessions) {
+      const fid = s.folder_id ?? null;
+      if (fid && usable.some((f) => f.id === fid)) {
+        const arr = byFolder.get(fid) ?? [];
+        arr.push(s);
+        byFolder.set(fid, arr);
+      } else {
+        ungrouped.push(s);
+      }
+    }
+    return { folders: usable, byFolder, ungrouped };
+  }, [orderedSessions, folders, foldersAvailable]);
+
+  // One history row — supports selection checkboxes, inline rename, pin glyph,
+  // and the ⋯ actions menu.
+  const renderAsideRow = (session: ChatSession) => {
+    const isActive = currentSessionId === session.id;
+    const pinned = sessionIsPinned(session);
+    const isRenaming = renamingSessionId === session.id;
+    const isSelected = selectedChatIds.has(session.id);
+    return (
+      <MotionItem key={session.id} className="group/row relative" role="listitem">
+        <div
+          role="button"
+          tabIndex={0}
+          onClick={() => {
+            if (isRenaming) return;
+            if (selectionMode) toggleChatSelected(session.id);
+            else loadSession(session.id);
+          }}
+          onKeyDown={(e) => {
+            if (isRenaming) return;
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault();
+              if (selectionMode) toggleChatSelected(session.id);
+              else loadSession(session.id);
+            }
+          }}
+          className={cn(
+            'relative flex min-h-9 min-w-0 items-center gap-2 rounded-lg py-2 pl-3 text-left text-sm outline-none transition-all duration-150 hover:bg-[color:color-mix(in_oklab,var(--background)_78%,var(--primary)_22%)] hover:text-sidebar-foreground active:scale-[0.985] dark:hover:bg-sidebar-accent dark:hover:text-sidebar-accent-foreground',
+            selectionMode ? 'pr-3' : 'pr-9',
+            isActive && !selectionMode && "bg-sidebar-accent font-medium text-sidebar-accent-foreground before:absolute before:left-0.5 before:top-1/2 before:h-5 before:w-1 before:-translate-y-1/2 before:rounded-full before:bg-primary before:content-['']",
+            isSelected && 'bg-sidebar-accent/70',
+          )}
+        >
+          {selectionMode && (
+            <span
+              className={cn(
+                'flex size-4 shrink-0 items-center justify-center rounded-[4px] border transition-colors',
+                isSelected ? 'border-primary bg-primary text-primary-foreground' : 'border-border',
+              )}
+            >
+              {isSelected && <Check className="size-3" />}
+            </span>
+          )}
+          {isRenaming ? (
+            renderSessionRenameInput()
+          ) : (
+            <>
+              <span
+                className={cn(
+                  'block min-w-0 flex-1 truncate font-medium',
+                  isActive ? 'text-sidebar-accent-foreground' : 'text-inherit',
+                )}
+                title={session.title || 'New conversation'}
+              >
+                {session.title || 'New conversation'}
+              </span>
+              {pinned && <Pin className="size-3 shrink-0 fill-current text-[color:var(--n9-accent)]" aria-label="Pinned" />}
+            </>
+          )}
+        </div>
+        {!isRenaming && !selectionMode && renderSessionMenu(session)}
+      </MotionItem>
+    );
+  };
+
   const showLiteratureEmptyState = agentMode === 'literature' && isLiteratureRoute;
   const emptyStateSubheading = showLiteratureEmptyState ? 'For Literature' : null;
   const emptyStateDescription = showLiteratureEmptyState
@@ -3968,16 +4125,51 @@ export function RightSidebar({
                     >
                       <PanelLeft className="h-4 w-4" />
                     </Button>
-                    <span className="flex-1 truncate text-[0.7rem] font-semibold uppercase tracking-wider">Chats</span>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-7 w-7 shrink-0"
-                      onClick={handleNewChat}
-                      aria-label="New chat"
-                    >
-                      <PenBox className="h-4 w-4" />
-                    </Button>
+                    {selectionMode ? (
+                      <>
+                        <span className="flex-1 truncate text-[0.7rem] font-semibold">
+                          {selectedChatIds.size} selected
+                        </span>
+                        <Button variant="ghost" size="sm" className="h-7 shrink-0 px-2 text-xs" onClick={exitSelection}>
+                          Cancel
+                        </Button>
+                      </>
+                    ) : (
+                      <>
+                        <span className="flex-1 truncate text-[0.7rem] font-semibold uppercase tracking-wider">Chats</span>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7 shrink-0"
+                          onClick={() => setSelectionMode(true)}
+                          title="Select chats"
+                          aria-label="Select chats"
+                        >
+                          <CheckSquare className="h-4 w-4" />
+                        </Button>
+                        {foldersAvailable && (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-7 w-7 shrink-0"
+                            onClick={() => void handleNewFolder()}
+                            title="New folder"
+                            aria-label="New folder"
+                          >
+                            <FolderPlus className="h-4 w-4" />
+                          </Button>
+                        )}
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7 shrink-0"
+                          onClick={handleNewChat}
+                          aria-label="New chat"
+                        >
+                          <PenBox className="h-4 w-4" />
+                        </Button>
+                      </>
+                    )}
                   </div>
                   {/* List - same structure as lab notes */}
                   <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden">
@@ -3994,53 +4186,86 @@ export function RightSidebar({
                     ) : sessions.length === 0 ? (
                     <div className="px-2 py-6 text-center text-sidebar-foreground/70 text-xs">No previous conversations.</div>
                     ) : (
-                      <MotionList className="flex min-w-0 flex-col gap-0.5 pr-1" role="list">
-                        {orderedSessions.map((session) => {
-                          const isActive = currentSessionId === session.id;
-                          const pinned = sessionIsPinned(session);
-                          const isRenaming = renamingSessionId === session.id;
+                      <div className="flex min-w-0 flex-col gap-1 pr-1">
+                        {historyGroups.folders.map((folder) => {
+                          const items = historyGroups.byFolder.get(folder.id) ?? [];
+                          const collapsed = collapsedFolders.has(folder.id);
                           return (
-                          <MotionItem
-                            key={session.id}
-                            className="group/row relative"
-                            role="listitem"
-                          >
-                            <div
-                              role="button"
-                              tabIndex={0}
-                              onClick={() => { if (!isRenaming) loadSession(session.id); }}
-                              onKeyDown={(e) => { if (isRenaming) return; if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); loadSession(session.id); } }}
-                              className={cn(
-                                "relative flex min-h-9 min-w-0 items-center gap-2 rounded-lg py-2 pl-3 pr-9 text-left text-sm outline-none transition-all duration-150 hover:bg-[color:color-mix(in_oklab,var(--background)_78%,var(--primary)_22%)] hover:text-sidebar-foreground active:scale-[0.985] active:bg-[color:color-mix(in_oklab,var(--background)_70%,var(--primary)_30%)] dark:hover:bg-sidebar-accent dark:hover:text-sidebar-accent-foreground dark:active:scale-[0.985] dark:active:bg-sidebar-accent/90",
-                                isActive && "bg-sidebar-accent font-medium text-sidebar-accent-foreground before:absolute before:left-0.5 before:top-1/2 before:h-5 before:w-1 before:-translate-y-1/2 before:rounded-full before:bg-primary before:content-['']"
-                              )}
-                            >
-                              {isRenaming ? (
-                                renderSessionRenameInput()
-                              ) : (
-                                <>
-                                  <span
-                                    className={cn(
-                                      "block min-w-0 flex-1 truncate font-medium",
-                                      isActive ? "text-sidebar-accent-foreground" : "text-inherit"
-                                    )}
-                                    title={session.title || 'New conversation'}
-                                  >
-                                    {session.title || 'New conversation'}
-                                  </span>
-                                  {pinned && (
-                                    <Pin className="size-3 shrink-0 fill-current text-[color:var(--n9-accent)]" aria-label="Pinned" />
+                            <div key={folder.id} className="min-w-0">
+                              <button
+                                type="button"
+                                onClick={() => toggleFolderCollapsed(folder.id)}
+                                className="flex w-full min-w-0 items-center gap-1 rounded-md px-1.5 py-1 text-[0.68rem] font-semibold uppercase tracking-wider text-sidebar-foreground/55 transition-colors hover:text-sidebar-foreground"
+                              >
+                                <ChevronRight className={cn('size-3 shrink-0 transition-transform', !collapsed && 'rotate-90')} />
+                                <Folder className="size-3 shrink-0" />
+                                <span className="min-w-0 flex-1 truncate text-left">{folder.name}</span>
+                                <span className="shrink-0 tabular-nums opacity-70">{items.length}</span>
+                              </button>
+                              {!collapsed && (
+                                <MotionList className="flex min-w-0 flex-col gap-0.5 pl-1.5" role="list">
+                                  {items.length > 0 ? (
+                                    items.map(renderAsideRow)
+                                  ) : (
+                                    <div className="px-3 py-1.5 text-2xs text-sidebar-foreground/45">Empty — move chats here</div>
                                   )}
-                                </>
+                                </MotionList>
                               )}
                             </div>
-                            {!isRenaming && renderSessionMenu(session)}
-                          </MotionItem>
                           );
                         })}
-                      </MotionList>
+                        {historyGroups.folders.length > 0 && historyGroups.ungrouped.length > 0 && (
+                          <div className="px-1.5 pt-1 text-[0.68rem] font-semibold uppercase tracking-wider text-sidebar-foreground/45">
+                            Chats
+                          </div>
+                        )}
+                        <MotionList className="flex min-w-0 flex-col gap-0.5" role="list">
+                          {historyGroups.ungrouped.map(renderAsideRow)}
+                        </MotionList>
+                      </div>
                     )}
                   </div>
+                  {selectionMode && selectedChatIds.size > 0 && (
+                    <div className="mt-1 flex shrink-0 items-center gap-1 rounded-lg border border-[color:var(--glass-border)] bg-background/60 p-1 backdrop-blur-sm">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-8 flex-1 gap-1.5 text-destructive hover:bg-destructive/10 hover:text-destructive"
+                        onClick={bulkDeleteSelected}
+                      >
+                        <Trash2 className="size-4" /> Delete
+                      </Button>
+                      {foldersAvailable && (
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button variant="ghost" size="sm" className="h-8 flex-1 gap-1.5">
+                              <FolderInput className="size-4" /> Move
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end" sideOffset={6} className="w-52">
+                            <DropdownMenuLabel>Move to folder</DropdownMenuLabel>
+                            {folders.map((f) => (
+                              <DropdownMenuItem key={f.id} onSelect={() => void bulkMoveSelected(f.id)}>
+                                <Folder className="mr-2 size-4" />
+                                <span className="truncate">{f.name}</span>
+                              </DropdownMenuItem>
+                            ))}
+                            <DropdownMenuItem onSelect={() => void createFolderAndMoveSelected()}>
+                              <FolderPlus className="mr-2 size-4" /> New folder…
+                            </DropdownMenuItem>
+                            {folders.length > 0 && (
+                              <>
+                                <DropdownMenuSeparator />
+                                <DropdownMenuItem onSelect={() => void bulkMoveSelected(null)}>
+                                  Remove from folder
+                                </DropdownMenuItem>
+                              </>
+                            )}
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      )}
+                    </div>
+                  )}
                 </div>
               </aside>
               {expandedHistoryOpen && (
