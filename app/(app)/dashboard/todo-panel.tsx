@@ -396,7 +396,8 @@ function insertMentionIntoEditable(
 
 const PRIORITY_ORDER = { high: 3, medium: 2, low: 1 };
 const TASKS_PAGE_SIZE = 50;
-const SORT_OPTIONS = [
+export type TaskSortKey = "due_date" | "priority" | "created";
+export const SORT_OPTIONS = [
   { value: "due_date", label: "Due date" },
   { value: "priority", label: "Priority" },
   { value: "created", label: "Created" },
@@ -418,9 +419,13 @@ function getQueryAfterAt(text: string): { query: string; startIndex: number } {
 export function TodoPanel({
   initialTasks,
   variant = "card",
+  sort,
+  onSortChange,
 }: {
   initialTasks: DashboardTask[]
   variant?: "card" | "embedded"
+  sort?: TaskSortKey
+  onSortChange?: (v: TaskSortKey) => void
 }) {
   const user = useAuthUser();
   const supabase = useMemo(() => createClient(), []);
@@ -433,9 +438,9 @@ export function TodoPanel({
   const [dueDateStr, setDueDateStr] = useState("");
   const [dueTime, setDueTime] = useState("");
   const [priority, setPriority] = useState<"low" | "medium" | "high">("medium");
-  const [sortBy, setSortBy] = useState<"due_date" | "priority" | "created">(
-    "due_date",
-  );
+  const [internalSort, setInternalSort] = useState<TaskSortKey>("due_date");
+  const sortBy = sort ?? internalSort;
+  const setSortBy: (v: TaskSortKey) => void = onSortChange ?? setInternalSort;
   const [mentionOpen, setMentionOpen] = useState(false);
   const [selectedMentionIndex, setSelectedMentionIndex] = useState(-1);
   const [mentionQuery, setMentionQuery] = useState("");
@@ -781,16 +786,12 @@ export function TodoPanel({
     </Select>
   );
 
-  const panelBody = (
-    <>
-      {/* Add new todo */}
-        <div className="relative flex flex-wrap items-center gap-2">
-          <Checkbox
-            className="mt-0.5 invisible"
-          />
-          <Popover open={mentionOpen} onOpenChange={setMentionOpen}>
-            <PopoverAnchor asChild>
-              <div className="flex-1 min-w-[120px] rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2">
+  const addForm = (
+    <div className="flex flex-col gap-2">
+      {/* Task field */}
+      <Popover open={mentionOpen} onOpenChange={setMentionOpen}>
+        <PopoverAnchor asChild>
+          <div className="rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2">
                 <div
                   ref={editableRef}
                   contentEditable
@@ -937,25 +938,26 @@ export function TodoPanel({
             </PopoverContent>
           </Popover>
         
+      <div className="flex items-center gap-1.5">
           <Input
             type="date"
             value={dueDateStr}
             onChange={(e) => setDueDateStr(e.target.value)}
-            className="w-[140px] md:text-xs"
             aria-label="Task due date"
+            className="h-8 min-w-0 flex-1 px-2 text-xs"
           />
           <Input
             type="time"
             value={dueTime}
             onChange={(e) => setDueTime(e.target.value)}
-            className="w-[100px] md:text-xs"
             aria-label="Task due time"
+            className="h-8 w-[84px] shrink-0 px-2 text-xs"
           />
           <Select
             value={priority}
             onValueChange={(v) => setPriority(v as typeof priority)}
           >
-            <SelectTrigger className="w-[100px] md:text-xs" size="sm">
+            <SelectTrigger size="sm" className="w-[92px] shrink-0 text-xs">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -964,12 +966,20 @@ export function TodoPanel({
               <SelectItem value="high">High</SelectItem>
             </SelectContent>
           </Select>
-
-          <Button onClick={addTask} size="sm" aria-label="Add task">
-            Add task
+          <Button
+            onClick={addTask}
+            size="sm"
+            aria-label="Add task"
+            className="shrink-0 px-3"
+          >
+            Add
           </Button>
         </div>
+    </div>
+  );
 
+  const taskListBody = (
+    <>
         {/* Task list */}
         <motion.div layout className="space-y-3">
           {sortedIncomplete.map((task) => (
@@ -1112,10 +1122,10 @@ export function TodoPanel({
   if (variant === "embedded") {
     return (
       <>
-        <header className="flex shrink-0 items-center justify-end border-b border-border px-4 py-2.5">
-          {sortSelect}
-        </header>
-        <div className="space-y-4 px-4 py-3">{panelBody}</div>
+        <div className="shrink-0 px-4 pb-2 pt-3">{addForm}</div>
+        <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-4 pb-3">
+          {taskListBody}
+        </div>
         {alertDialog}
       </>
     );
@@ -1134,7 +1144,10 @@ export function TodoPanel({
           {sortSelect}
         </div>
       </CardHeader>
-      <CardContent className="space-y-4">{panelBody}</CardContent>
+      <CardContent className="space-y-4">
+        {addForm}
+        {taskListBody}
+      </CardContent>
       {alertDialog}
     </Card>
   );
@@ -1172,6 +1185,55 @@ function TaskRow({
   completed?: boolean;
 }) {
   const editEditableRef = useRef<HTMLDivElement>(null);
+  const editMentionListRef = useRef<HTMLDivElement>(null);
+  const [editMentionOpen, setEditMentionOpen] = useState(false);
+  const [editMentionQuery, setEditMentionQuery] = useState("");
+  const [editMentionStartIndex, setEditMentionStartIndex] = useState(-1);
+  const [editSelectedMentionIndex, setEditSelectedMentionIndex] = useState(-1);
+  const editMentionItems: MentionItem[] = [
+    ...experiments.map((e) => ({
+      type: "experiment" as const,
+      id: e.id,
+      name: e.name,
+    })),
+    ...projects.map((p) => ({
+      type: "project" as const,
+      id: p.id,
+      name: p.name,
+    })),
+  ];
+  const filteredEditMentionItems = editMentionQuery
+    ? editMentionItems.filter((m) =>
+        m.name.toLowerCase().includes(editMentionQuery.toLowerCase()),
+      )
+    : editMentionItems;
+  useEffect(() => {
+    setEditMentionOpen(
+      editMentionStartIndex >= 0 && filteredEditMentionItems.length > 0,
+    );
+  }, [editMentionStartIndex, editMentionQuery, filteredEditMentionItems.length]);
+  useEffect(() => {
+    if (editMentionOpen) setEditSelectedMentionIndex(-1);
+  }, [editMentionOpen, editMentionQuery]);
+  const syncEditMention = useCallback(() => {
+    const el = editEditableRef.current;
+    if (!el) return;
+    const textBefore = getTextBeforeCursor(el);
+    const { query, startIndex } = getQueryAfterAt(textBefore);
+    setEditMentionQuery(query);
+    setEditMentionStartIndex(startIndex);
+  }, []);
+  const applyEditMention = (item: MentionItem) => {
+    const el = editEditableRef.current;
+    if (!el) return;
+    const endIndex = getCursorOffset(el);
+    const start = editMentionStartIndex;
+    setEditMentionOpen(false);
+    setEditMentionStartIndex(-1);
+    setEditMentionQuery("");
+    insertMentionIntoEditable(el, item, start, endIndex);
+    el.focus();
+  };
   const [editTitle, setEditTitle] = useState("");
   const [editDueDateStr, setEditDueDateStr] = useState("");
   const [editTimeStr, setEditTimeStr] = useState("");
@@ -1198,12 +1260,7 @@ function TaskRow({
   }, [isEditing, task.id, task.title, task.due_at, task.priority]);
 
   useEffect(() => {
-    if (
-      !isEditing ||
-      !editEditableRef.current ||
-      !titleHasPlaceholders(task.title)
-    )
-      return;
+    if (!isEditing || !editEditableRef.current) return;
     const parts = parseTitleWithPlaceholders(task.title);
     const frag = buildEditFragment(parts, experiments, projects);
     editEditableRef.current.textContent = "";
@@ -1212,7 +1269,7 @@ function TaskRow({
   }, [isEditing, task.id, task.title, experiments, projects]);
 
   const getEditTitle = (): string => {
-    if (titleHasPlaceholders(task.title) && editEditableRef.current) {
+    if (editEditableRef.current) {
       const segments = getSegmentsFromEl(editEditableRef.current);
       return segmentsToTitleWithPlaceholders(segments).trim();
     }
@@ -1259,34 +1316,108 @@ function TaskRow({
                 className="mt-0.5 invisible"
               />
               <div className="relative flex flex-wrap items-center gap-2 grow">
-                {titleHasPlaceholders(task.title) ? (
-                  <div className="flex-1 min-w-[120px] rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2">
+                <Popover open={editMentionOpen} onOpenChange={setEditMentionOpen}>
+                  <PopoverAnchor asChild>
+                    <div className="flex-1 min-w-[120px] rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2">
+                      <div
+                        ref={editEditableRef}
+                        contentEditable
+                        suppressContentEditableWarning
+                        className="outline-none min-h-[1.5rem]"
+                        onInput={syncEditMention}
+                        onKeyDown={(e) => {
+                          if (
+                            editMentionOpen &&
+                            filteredEditMentionItems.length > 0
+                          ) {
+                            if (e.key === "ArrowDown") {
+                              e.preventDefault();
+                              setEditSelectedMentionIndex((i) =>
+                                Math.min(
+                                  i + 1,
+                                  filteredEditMentionItems.length - 1,
+                                ),
+                              );
+                              return;
+                            }
+                            if (e.key === "ArrowUp") {
+                              e.preventDefault();
+                              setEditSelectedMentionIndex((i) =>
+                                Math.max(i - 1, 0),
+                              );
+                              return;
+                            }
+                            if (e.key === "Enter") {
+                              e.preventDefault();
+                              const item =
+                                filteredEditMentionItems[
+                                  editSelectedMentionIndex >= 0
+                                    ? editSelectedMentionIndex
+                                    : 0
+                                ];
+                              if (item) applyEditMention(item);
+                              return;
+                            }
+                            if (e.key === "Escape") {
+                              e.preventDefault();
+                              setEditMentionOpen(false);
+                              return;
+                            }
+                          }
+                          if (e.key === "Enter") {
+                            e.preventDefault();
+                            handleSaveEdit();
+                          }
+                          if (e.key === "Escape") onCancelEdit();
+                        }}
+                      />
+                    </div>
+                  </PopoverAnchor>
+                  <PopoverContent
+                    align="start"
+                    onOpenAutoFocus={(e) => e.preventDefault()}
+                    className="w-64 p-1"
+                  >
                     <div
-                      ref={editEditableRef}
-                      contentEditable
-                      suppressContentEditableWarning
-                      className="outline-none min-h-[1.5rem]"
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter") {
-                          e.preventDefault();
-                          handleSaveEdit();
-                        }
-                        if (e.key === "Escape") onCancelEdit();
-                      }}
-                    />
-                  </div>
-                ) : (
-                  <Input
-                    value={editTitle}
-                    onChange={(e) => setEditTitle(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") handleSaveEdit();
-                      if (e.key === "Escape") onCancelEdit();
-                    }}
-                    className="h-8 text-sm flex-1 min-w-[120px]"
-                    autoFocus
-                  />
-                )}
+                      ref={editMentionListRef}
+                      className="max-h-[200px] overflow-y-auto"
+                    >
+                      {filteredEditMentionItems.slice(0, 10).map((item, index) => (
+                        <button
+                          type="button"
+                          key={`${item.type}-${item.id}`}
+                          role="option"
+                          aria-selected={
+                            editSelectedMentionIndex >= 0 &&
+                            index === editSelectedMentionIndex
+                          }
+                          className={cn(
+                            "flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-left text-sm",
+                            index === editSelectedMentionIndex
+                              ? "bg-accent"
+                              : "hover:bg-accent",
+                          )}
+                          onMouseDown={(e) => {
+                            e.preventDefault();
+                            applyEditMention(item);
+                          }}
+                        >
+                          {item.type === "experiment" ? (
+                            <FlaskConical className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                          ) : (
+                            <FolderOpen className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                          )}
+                          <span className="truncate">{item.name}</span>
+                        </button>
+                      ))}
+                      {filteredEditMentionItems.length === 0 && (
+                        <div className="px-2 py-1.5 text-sm text-muted-foreground">
+                          No matches
+                        </div>
+                      )}
+                    </div>
+                  </PopoverContent>
+                </Popover>
               </div>
               <div className="flex flex-row gap-2 items-center">
                 <Input

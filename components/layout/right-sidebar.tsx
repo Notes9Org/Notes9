@@ -3299,7 +3299,7 @@ export function RightSidebar({
           'overflow-hidden transition-all',
           heroStyle
             ? catalystHeroComposerShell
-            : 'rounded-xl border bg-card/50 shadow-sm focus-within:border-ring focus-within:ring-1 focus-within:ring-ring/50',
+            : 'rounded-2xl border border-border/35 bg-card/70 backdrop-blur-md shadow-[0_2px_8px_rgba(44,36,24,0.06),0_14px_38px_-16px_rgba(44,36,24,0.30)] dark:shadow-[0_2px_10px_rgba(0,0,0,0.35),0_18px_44px_-16px_rgba(0,0,0,0.65)] transition-shadow focus-within:border-ring/50 focus-within:ring-1 focus-within:ring-ring/40 focus-within:shadow-[0_2px_10px_rgba(44,36,24,0.08),0_18px_46px_-14px_rgba(44,36,24,0.34)]',
           isDraggingContext && 'border-primary bg-primary/5 ring-2 ring-primary',
         )}
         id="tour-ai-chat"
@@ -3385,6 +3385,27 @@ export function RightSidebar({
 
         <div className="mt-1 flex min-h-9 items-center justify-between gap-2 px-4 pb-2">
           <div className="flex min-w-0 flex-1 flex-nowrap items-center gap-1.5 overflow-x-auto">
+            {/* Attach — anchored bottom-left (Claude-style leading action) */}
+            <TooltipProvider delayDuration={400}>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    type="button"
+                    size="icon"
+                    variant="ghost"
+                    className="size-7 shrink-0 rounded-lg text-muted-foreground/70 transition-colors duration-150 hover:text-foreground"
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={isLoading || isUploading}
+                    aria-label="Attach file"
+                  >
+                    <Paperclip className="size-3.5" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="top" className="text-xs">
+                  Attach a file (image, PDF, DOCX, XLSX, CSV)
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
             {agentMode !== 'literature' && (
               <TooltipProvider delayDuration={300}>
                 <Tooltip>
@@ -3456,27 +3477,6 @@ export function RightSidebar({
               {micListening && <VoiceWaveform getWaveformData={getWaveformData} />}
             </div>
 
-            <TooltipProvider delayDuration={400}>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    type="button"
-                    size="icon"
-                    variant="ghost"
-                    className="size-7 rounded-lg text-muted-foreground/70 transition-colors duration-150 hover:text-foreground"
-                    onClick={() => fileInputRef.current?.click()}
-                    disabled={isLoading || isUploading}
-                    aria-label="Attach file"
-                  >
-                    <Paperclip className="size-3.5" />
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent side="top" className="text-xs">
-                  Attach a file (image, PDF, DOCX, XLSX, CSV)
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
-
             {isLoading ? (
               <Button
                 type="button"
@@ -3510,6 +3510,9 @@ export function RightSidebar({
         </div>
       </div>
     </div>
+    <p className="mt-1.5 text-center text-2xs text-muted-foreground/50 select-none">
+      Catalyst can make mistakes — verify important information and cited sources.
+    </p>
     </>
     );
   };
@@ -3587,10 +3590,9 @@ export function RightSidebar({
         : cn(
             "border-l border-border/45 shadow-[-2px_0_18px_-16px_rgba(44,36,24,0.22)] dark:shadow-[-2px_0_18px_-16px_rgba(0,0,0,0.45)]",
             isExpanded
-              // In-place fullscreen overlay. animate-in (tailwindcss-animate,
-              // same lib used in app-layout) gives a smooth grow-into-fullscreen
-              // instead of an instant snap; the old jank was a route remount,
-              // now removed. Honors reduced-motion.
+              // In-place fullscreen overlay, attached edge-to-edge from the app
+              // sidebar to the right edge (no detached/floating box). animate-in
+              // gives a smooth grow-in; honors reduced-motion.
               ? "fixed top-0 right-0 bottom-0 left-[var(--sidebar-width,0px)] z-[120] w-auto h-full animate-in fade-in zoom-in-95 duration-300 ease-out motion-reduce:animate-none"
               : "h-full w-full min-w-0"
           )
@@ -3623,7 +3625,7 @@ export function RightSidebar({
       ) : (
         <>
           {/* Header: page route uses app chrome; panel uses compact history controls */}
-            <header className="h-12 sm:h-14 flex items-center justify-between px-2 sm:px-4 border-b border-border/40 shrink-0 bg-[color:var(--n9-header-bg)]/80 backdrop-blur-md z-10 text-xs select-none">
+            <header className="h-12 sm:h-14 flex items-center justify-between px-2 sm:px-4 border-b border-[color:var(--glass-border)] shrink-0 bg-[color:var(--n9-header-bg)]/70 backdrop-blur-xl saturate-[1.4] z-10 text-xs select-none">
             <div className="flex items-center gap-1 overflow-hidden min-w-0">
               {isPageVariant && isMobile ? (
                 <Button
@@ -3852,9 +3854,9 @@ export function RightSidebar({
               <>
                 <aside
                   className={cn(
-                    'relative z-10 flex-shrink-0 flex flex-col overflow-hidden border-r border-border bg-sidebar min-h-0',
+                    'relative z-10 flex-shrink-0 flex flex-col overflow-hidden bg-transparent min-h-0',
                     expandedHistoryOpen &&
-                      'shadow-[6px_0_22px_-14px_rgba(20,14,8,0.28)] dark:shadow-[6px_0_26px_-12px_rgba(0,0,0,0.55)]',
+                      '',
                   )}
                   style={{
                     // Open → full width; collapsed → fully gone (width 0, no rail).
@@ -3868,7 +3870,7 @@ export function RightSidebar({
                 {/* Fixed-width inner content so it's clipped (not reflowed) while
                     the panel collapses to 0. */}
                 <div
-                  className="flex h-full min-h-0 flex-col gap-1 p-2"
+                  className="m-2 flex h-[calc(100%-1rem)] min-h-0 flex-col gap-1 rounded-2xl border border-[color:var(--glass-border)] bg-sidebar/80 p-2 shadow-[0_10px_34px_-18px_rgba(20,14,8,0.4)] backdrop-blur-md dark:bg-sidebar/60 dark:shadow-[0_12px_38px_-16px_rgba(0,0,0,0.6)]"
                   style={{ width: historySidebar.width }}
                 >
                   {/* Header row — close button + "Chats" label on the top-left,
@@ -3884,7 +3886,7 @@ export function RightSidebar({
                     >
                       <PanelLeft className="h-4 w-4" />
                     </Button>
-                    <span className="flex-1 truncate">Chats</span>
+                    <span className="flex-1 truncate text-[0.7rem] font-semibold uppercase tracking-wider">Chats</span>
                     <Button
                       variant="ghost"
                       size="icon"
@@ -3923,13 +3925,10 @@ export function RightSidebar({
                               onClick={() => loadSession(session.id)}
                               onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); loadSession(session.id); } }}
                               className={cn(
-                                "grid min-h-9 min-w-0 grid-cols-[auto_1fr_auto] items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm outline-none transition-all duration-150 hover:bg-[color:color-mix(in_oklab,var(--background)_78%,var(--primary)_22%)] hover:text-sidebar-foreground active:scale-[0.985] active:bg-[color:color-mix(in_oklab,var(--background)_70%,var(--primary)_30%)] dark:hover:bg-sidebar-accent dark:hover:text-sidebar-accent-foreground dark:active:scale-[0.985] dark:active:bg-sidebar-accent/90",
-                                currentSessionId === session.id && "bg-sidebar-accent font-medium text-sidebar-accent-foreground"
+                                "relative grid min-h-9 min-w-0 grid-cols-[1fr_auto] items-center gap-2 rounded-lg px-3 py-2 text-left text-sm outline-none transition-all duration-150 hover:bg-[color:color-mix(in_oklab,var(--background)_78%,var(--primary)_22%)] hover:text-sidebar-foreground active:scale-[0.985] active:bg-[color:color-mix(in_oklab,var(--background)_70%,var(--primary)_30%)] dark:hover:bg-sidebar-accent dark:hover:text-sidebar-accent-foreground dark:active:scale-[0.985] dark:active:bg-sidebar-accent/90",
+                                currentSessionId === session.id && "bg-sidebar-accent font-medium text-sidebar-accent-foreground before:absolute before:left-0.5 before:top-1/2 before:h-5 before:w-1 before:-translate-y-1/2 before:rounded-full before:bg-primary before:content-['']"
                               )}
                             >
-                              <span className="flex size-8 shrink-0 items-center justify-center text-2xs text-sidebar-foreground/70 tabular-nums whitespace-nowrap" aria-hidden>
-                                {formatSessionTime(session.updated_at)}
-                              </span>
                               <span
                                 className={cn(
                                   "block truncate font-medium",
@@ -4036,7 +4035,7 @@ export function RightSidebar({
                         {emptyStateDescription}
                       </p>
                     </div>
-                    <div className="flex-shrink-0 border-t border-border/40 bg-background/95 p-4 backdrop-blur-md">
+                    <div className="flex-shrink-0 bg-gradient-to-t from-background via-background/95 to-transparent px-4 pb-4 pt-6">
                       <div className="mx-auto min-w-0 max-w-3xl">{renderCursorInput()}</div>
                     </div>
                   </div>
@@ -4261,7 +4260,7 @@ export function RightSidebar({
                         <ChevronDown className="size-3.5" />
                       </Button>
                     ) : null}
-                    <div className="border-t border-border/40 bg-background/95 px-4 py-3 backdrop-blur-md">
+                    <div className="bg-gradient-to-t from-background via-background/95 to-transparent px-4 pb-4 pt-6">
                       <div className="max-w-3xl mx-auto min-w-0">
                         {renderCursorInput()}
                       </div>

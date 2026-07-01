@@ -18,7 +18,7 @@ export function ResizeHandle({
   return (
     <div
       className={cn(
-        "group relative w-px shrink-0 self-stretch cursor-col-resize bg-border/45 transition-colors hover:bg-border/80",
+        "group relative w-px shrink-0 self-stretch cursor-col-resize bg-transparent transition-colors hover:bg-border/70",
         isResizing && "bg-border",
         className
       )}

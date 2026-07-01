@@ -153,7 +153,7 @@ export default async function DashboardPage() {
     })),
   ]
     .sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime())
-    .slice(0, 5)
+    .slice(0, 15)
 
   const profile = profileRes.data
   const orgMembership = orgMembershipRes.data
@@ -289,16 +289,16 @@ export default async function DashboardPage() {
           />
         </div>
 
-        {/* Top Right: recently opened projects + in-progress experiments */}
-        <DashboardRecentWork activeExperiments={activeExperiments} />
-
-        {/* Bottom Left: Whiteboard */}
+        {/* Top Right: Whiteboard */}
         <div className="flex flex-col min-w-0 h-full">
           <DashboardWhiteboard initialNotes={whiteboardNotes} />
         </div>
 
+        {/* Bottom Left: recently opened projects + in-progress experiments */}
+        <DashboardRecentWork activeExperiments={activeExperiments} />
+
         {/* Bottom Right: Recently Edited */}
-        <Card data-tour="dash-recently-edited" className="flex flex-col min-w-0">
+        <Card data-tour="dash-recently-edited" className="flex flex-col min-w-0 h-full">
           <CardHeader>
             <CardTitle className="text-base">Recently edited</CardTitle>
           </CardHeader>
