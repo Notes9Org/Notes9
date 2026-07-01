@@ -1,8 +1,9 @@
 "use client"
 
-import { useCallback, useState, type ReactNode } from "react"
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react"
 import type { Editor } from "@tiptap/react"
-import { NodeSelection, TextSelection } from "@tiptap/pm/state"
+import { NodeSelection, TextSelection, type EditorState } from "@tiptap/pm/state"
+import { loadSpeller, ignoreWord, isWordIgnored, type Speller } from "@/lib/spellcheck"
 import {
   ContextMenu,
   ContextMenuTrigger,
@@ -32,8 +33,42 @@ import {
   WrapText,
   Quote,
   MessageSquarePlus,
+  SpellCheck,
+  Plus,
 } from "lucide-react"
 import { moveTopLevelBlock } from "./editor-block-utils"
+
+/**
+ * Best-effort word (+ its document range) under a click position, used to offer
+ * spelling corrections. Exact for plain prose; inline atoms may shift it, so it
+ * is treated as advisory only.
+ */
+function wordAtPos(
+  state: EditorState,
+  pos: number,
+): { word: string; from: number; to: number } | null {
+  try {
+    const $pos = state.doc.resolve(pos)
+    if (!$pos.parent.isTextblock) return null
+    const text = $pos.parent.textContent
+    if (!text) return null
+    const start = $pos.start()
+    let offset = pos - start
+    if (offset < 0) offset = 0
+    if (offset > text.length) offset = text.length
+    const isWord = (c: string | undefined) => !!c && /[A-Za-zÀ-ɏ'’]/.test(c)
+    let a = offset
+    let b = offset
+    while (a > 0 && isWord(text[a - 1])) a--
+    while (b < text.length && isWord(text[b])) b++
+    if (a >= b) return null
+    const word = text.slice(a, b).replace(/^['’]+|['’]+$/g, "")
+    if (word.length < 2 || /\d/.test(word)) return null
+    return { word, from: start + a, to: start + b }
+  } catch {
+    return null
+  }
+}
 
 export type EditorContextMenuActions = {
   insertLink?: () => void
@@ -62,6 +97,19 @@ export function EditorContextMenu({
   children: ReactNode
 }) {
   const [flags, setFlags] = useState({ inTable: false, onImage: false, hasSelection: false })
+  const [spell, setSpell] = useState<{ word: string; from: number; to: number; suggestions: string[] } | null>(null)
+  const spellerRef = useRef<Speller | null>(null)
+
+  // Warm the dictionary up front so right-click corrections are instant.
+  useEffect(() => {
+    let alive = true
+    void loadSpeller().then((s) => {
+      if (alive) spellerRef.current = s
+    })
+    return () => {
+      alive = false
+    }
+  }, [])
 
   const onContextMenu = useCallback(
     (event: React.MouseEvent) => {
@@ -89,6 +137,27 @@ export function EditorContextMenu({
         onImage: editor.isActive("image"),
         hasSelection: !editor.state.selection.empty,
       })
+
+      // Offer spelling corrections for the word under the cursor — only when
+      // nothing is selected (a selection means the user wants the actions menu).
+      if (coords && editor.state.selection.empty && !editor.isActive("image")) {
+        const hit = wordAtPos(editor.state, coords.pos)
+        if (hit) {
+          const apply = (sp: Speller | null) => {
+            if (!sp || isWordIgnored(hit.word) || sp.correct(hit.word)) {
+              setSpell(null)
+              return
+            }
+            setSpell({ ...hit, suggestions: sp.suggest(hit.word).slice(0, 7) })
+          }
+          if (spellerRef.current) apply(spellerRef.current)
+          else void loadSpeller().then(apply)
+        } else {
+          setSpell(null)
+        }
+      } else {
+        setSpell(null)
+      }
     },
     [editor],
   )
@@ -112,6 +181,30 @@ export function EditorContextMenu({
         <div onContextMenu={onContextMenu}>{children}</div>
       </ContextMenuTrigger>
       <ContextMenuContent className="w-56">
+        {spell && (
+          <>
+            <ContextMenuLabel className="text-2xs uppercase tracking-wide text-muted-foreground">Spelling</ContextMenuLabel>
+            {spell.suggestions.length > 0 ? (
+              spell.suggestions.map((s) => (
+                <ContextMenuItem
+                  key={s}
+                  onSelect={() => editor.chain().focus().insertContentAt({ from: spell.from, to: spell.to }, s).run()}
+                >
+                  <SpellCheck className="mr-2 h-4 w-4 text-muted-foreground" />
+                  <span className="font-medium">{s}</span>
+                </ContextMenuItem>
+              ))
+            ) : (
+              <ContextMenuItem disabled>
+                <SpellCheck className="mr-2 h-4 w-4" /> No suggestions
+              </ContextMenuItem>
+            )}
+            <ContextMenuItem onSelect={() => { ignoreWord(spell.word); setSpell(null) }}>
+              <Plus className="mr-2 h-4 w-4" /> Ignore “{spell.word}”
+            </ContextMenuItem>
+            <ContextMenuSeparator />
+          </>
+        )}
         <ContextMenuItem disabled={!flags.hasSelection} onSelect={cut}>
           <Scissors className="mr-2 h-4 w-4" /> Cut
           <ContextMenuShortcut>{mod}+X</ContextMenuShortcut>
