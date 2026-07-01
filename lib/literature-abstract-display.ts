@@ -40,6 +40,23 @@ export function decodeHtmlEntities(text: string): string {
 }
 
 /**
+ * Strip inline HTML/JATS markup from a short single-line field (title, journal,
+ * author list). Journal APIs (PubMed/EuropePMC/Crossref) embed `<i>`, `<sub>`,
+ * `<sup>`, `<b>` in titles; rendered as text they show as literal tags. This is
+ * a deterministic mechanical clean-up (regex, not an LLM): decode entities, drop
+ * tags, collapse whitespace. Decode runs BEFORE the strip so entity-encoded tags
+ * (`&lt;i&gt;`) are also removed.
+ */
+export function stripHtmlToText(raw: string | null | undefined): string {
+  const s = (raw ?? "").trim()
+  if (!s) return ""
+  return decodeHtmlEntities(s)
+    .replace(/<[^>]+>/g, "")
+    .replace(/\s+/g, " ")
+    .trim()
+}
+
+/**
  * Trim body text that leaks into an "abstract" from web scraping / full-text
  * extraction (title + authors + affiliations prepended, or the introduction and
  * later sections appended).
