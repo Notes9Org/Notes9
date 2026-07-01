@@ -58,7 +58,7 @@ function publicationYearFromBib(entry: BibEntry, title: string, journal: string)
   return y != null ? String(y) : ""
 }
 
-import type { ReactNode } from "react"
+import type { ReactNode, RefObject } from "react"
 
 export type PaperWorkspaceProps = {
   paperId: string
@@ -70,6 +70,9 @@ export type PaperWorkspaceProps = {
   onPaperMutated?: () => void
   /** Called when the paper title is saved so hub tabs / lists can update without a full refetch. */
   onPaperTitleUpdated?: (paperId: string, title: string) => void
+  /** Wrapping element (list + editor) that editor fullscreen should expand, so
+   *  the papers list stays visible in fullscreen. */
+  fullscreenWorkspaceRef?: RefObject<HTMLElement | null>
 }
 
 function statusVariant(status: string): "default" | "outline" | "success" {
@@ -85,7 +88,7 @@ function statusVariant(status: string): "default" | "outline" | "success" {
   }
 }
 
-export function PaperWorkspace({ paperId, backLink, leftControls, onPaperMutated, onPaperTitleUpdated }: PaperWorkspaceProps) {
+export function PaperWorkspace({ paperId, backLink, leftControls, onPaperMutated, onPaperTitleUpdated, fullscreenWorkspaceRef }: PaperWorkspaceProps) {
   const user = useAuthUser();
   const router = useRouter()
   const { projectId, projectName } = useProjectScope()
@@ -663,6 +666,7 @@ export function PaperWorkspace({ paperId, backLink, leftControls, onPaperMutated
           {collaborationReady ? (
             <PaperEditor
               key={`collab-${id}`}
+              fullscreenWorkspaceRef={fullscreenWorkspaceRef}
               content=""
               onChange={handleContentChange}
               minHeight="calc(100dvh - 180px)"
@@ -681,6 +685,7 @@ export function PaperWorkspace({ paperId, backLink, leftControls, onPaperMutated
           ) : (
             <PaperEditor
               key={`solo-${id}`}
+              fullscreenWorkspaceRef={fullscreenWorkspaceRef}
               content={content}
               onChange={handleContentChange}
               minHeight="calc(100dvh - 180px)"

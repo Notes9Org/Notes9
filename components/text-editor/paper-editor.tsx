@@ -1,5 +1,6 @@
 "use client"
 
+import type { RefObject } from "react"
 import { TiptapEditor } from "./tiptap-editor"
 import "@/styles/paper-numbering.css"
 import type { HocuspocusProvider } from "@hocuspocus/provider"
@@ -71,6 +72,8 @@ interface PaperEditorProps {
   userName?: string
   /** Color for the local user's cursor */
   userColor?: string
+  /** Wrapping element (list + editor) that editor fullscreen should expand. */
+  fullscreenWorkspaceRef?: RefObject<HTMLElement | null>
 }
 
 export function PaperEditor({
@@ -93,6 +96,7 @@ export function PaperEditor({
   collaborationEnabled,
   userName,
   userColor,
+  fullscreenWorkspaceRef,
 }: PaperEditorProps) {
   const initialContent = collaborationEnabled
     ? undefined
@@ -101,6 +105,7 @@ export function PaperEditor({
   return (
     <TiptapEditor
       content={initialContent}
+      fullscreenWorkspaceRef={fullscreenWorkspaceRef}
       onChange={onChange}
       className={className}
       editable={editable}

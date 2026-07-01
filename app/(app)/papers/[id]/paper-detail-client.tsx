@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useCallback } from "react"
+import { useState, useEffect, useCallback, useRef } from "react"
 import { useRouter } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
 import { useProjectScope } from "@/contexts/project-scope-context"
@@ -44,6 +44,9 @@ export function PaperDetailClient({ activePaperId }: { activePaperId: string }) 
   const [papers, setPapers] = useState<Paper[]>([])
   const [loading, setLoading] = useState(true)
   const [sidebarOpen, setSidebarOpen] = useState(true)
+  // Wraps the papers list + editor so editor fullscreen expands the whole
+  // workspace, keeping the list visible (same pattern as lab notes / reports).
+  const paperWorkspaceRef = useRef<HTMLDivElement>(null)
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null)
   const [isDeleting, setIsDeleting] = useState(false)
   
@@ -244,7 +247,7 @@ export function PaperDetailClient({ activePaperId }: { activePaperId: string }) 
       
       <div className="flex-1 min-w-0 min-h-0 flex flex-col">
         <Card className="flex h-full min-h-0 flex-col gap-0 py-0 border-0 shadow-none rounded-none sm:border sm:shadow-sm sm:rounded-xl">
-          <div className="flex h-full min-h-0 min-w-0 flex-1 flex-row items-stretch overflow-hidden">
+          <div ref={paperWorkspaceRef} className="flex h-full min-h-0 min-w-0 flex-1 flex-row items-stretch overflow-hidden bg-background">
             {/* Desktop Sidebar */}
             <aside
               className={cn(
@@ -270,6 +273,7 @@ export function PaperDetailClient({ activePaperId }: { activePaperId: string }) 
               <PaperWorkspace
                 key={activePaperId} // ensure it fully remounts/resets if paper changes
                 paperId={activePaperId}
+                fullscreenWorkspaceRef={paperWorkspaceRef}
                 backLink={{ href: projectId ? `/papers?project=${projectId}` : "/papers" }}
                 leftControls={toggleButton}
                 onPaperTitleUpdated={handleTitleUpdated}
