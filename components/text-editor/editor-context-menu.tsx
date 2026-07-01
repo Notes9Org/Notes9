@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState, type ReactNode } from "react"
 import type { Editor } from "@tiptap/react"
 import { NodeSelection, TextSelection, type EditorState } from "@tiptap/pm/state"
 import { loadSpeller, ignoreWord, isWordIgnored, type Speller } from "@/lib/spellcheck"
+import { checkGrammar, warmGrammar } from "@/lib/grammar"
 import {
   ContextMenu,
   ContextMenuTrigger,
@@ -35,6 +36,8 @@ import {
   MessageSquarePlus,
   SpellCheck,
   Plus,
+  Wand2,
+  PenLine,
 } from "lucide-react"
 import { moveTopLevelBlock } from "./editor-block-utils"
 
@@ -70,6 +73,27 @@ function wordAtPos(
   }
 }
 
+/**
+ * The textblock (paragraph) under a position + its document start offset, so
+ * grammar-issue character offsets can be mapped back to document positions.
+ */
+function paragraphAtPos(
+  state: EditorState,
+  pos: number,
+): { text: string; start: number } | null {
+  try {
+    const $pos = state.doc.resolve(pos)
+    if (!$pos.parent.isTextblock) return null
+    const text = $pos.parent.textContent
+    if (!text || !text.trim()) return null
+    return { text, start: $pos.start() }
+  } catch {
+    return null
+  }
+}
+
+type GrammarMenuIssue = { reason: string; from: number; to: number; expected: string[]; fixable: boolean }
+
 export type EditorContextMenuActions = {
   insertLink?: () => void
   insertImage?: () => void
@@ -98,14 +122,16 @@ export function EditorContextMenu({
 }) {
   const [flags, setFlags] = useState({ inTable: false, onImage: false, hasSelection: false })
   const [spell, setSpell] = useState<{ word: string; from: number; to: number; suggestions: string[] } | null>(null)
+  const [grammar, setGrammar] = useState<GrammarMenuIssue[] | null>(null)
   const spellerRef = useRef<Speller | null>(null)
 
-  // Warm the dictionary up front so right-click corrections are instant.
+  // Warm the dictionary + grammar engines up front so right-click checks are instant.
   useEffect(() => {
     let alive = true
     void loadSpeller().then((s) => {
       if (alive) spellerRef.current = s
     })
+    warmGrammar()
     return () => {
       alive = false
     }
@@ -138,8 +164,8 @@ export function EditorContextMenu({
         hasSelection: !editor.state.selection.empty,
       })
 
-      // Offer spelling corrections for the word under the cursor — only when
-      // nothing is selected (a selection means the user wants the actions menu).
+      // Spelling (word under cursor) + grammar (paragraph under cursor) — only
+      // when nothing is selected (a selection means the user wants the actions menu).
       if (coords && editor.state.selection.empty && !editor.isActive("image")) {
         const hit = wordAtPos(editor.state, coords.pos)
         if (hit) {
@@ -155,8 +181,28 @@ export function EditorContextMenu({
         } else {
           setSpell(null)
         }
+
+        const para = paragraphAtPos(editor.state, coords.pos)
+        if (para) {
+          void checkGrammar(para.text).then((found) => {
+            setGrammar(
+              found.length === 0
+                ? null
+                : found.slice(0, 6).map((g) => ({
+                    reason: g.reason,
+                    from: para.start + g.start,
+                    to: para.start + g.end,
+                    expected: g.expected,
+                    fixable: g.fixable,
+                  })),
+            )
+          })
+        } else {
+          setGrammar(null)
+        }
       } else {
         setSpell(null)
+        setGrammar(null)
       }
     },
     [editor],
@@ -202,6 +248,29 @@ export function EditorContextMenu({
             <ContextMenuItem onSelect={() => { ignoreWord(spell.word); setSpell(null) }}>
               <Plus className="mr-2 h-4 w-4" /> Ignore “{spell.word}”
             </ContextMenuItem>
+            <ContextMenuSeparator />
+          </>
+        )}
+        {grammar && grammar.length > 0 && (
+          <>
+            <ContextMenuLabel className="text-2xs uppercase tracking-wide text-muted-foreground">Grammar</ContextMenuLabel>
+            {grammar.map((g, i) =>
+              g.fixable ? (
+                <ContextMenuItem
+                  key={i}
+                  className="items-start gap-2"
+                  onSelect={() => editor.chain().focus().insertContentAt({ from: g.from, to: g.to }, g.expected[0]).run()}
+                >
+                  <Wand2 className="mt-0.5 h-4 w-4 shrink-0 text-amber-500" />
+                  <span className="min-w-0 whitespace-normal text-xs leading-snug">{g.reason}</span>
+                </ContextMenuItem>
+              ) : (
+                <ContextMenuItem key={i} disabled className="items-start gap-2">
+                  <PenLine className="mt-0.5 h-4 w-4 shrink-0" />
+                  <span className="min-w-0 whitespace-normal text-xs leading-snug">{g.reason}</span>
+                </ContextMenuItem>
+              ),
+            )}
             <ContextMenuSeparator />
           </>
         )}
