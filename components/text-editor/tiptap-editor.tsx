@@ -6343,14 +6343,15 @@ window.localStorage.setItem(RIBBON_TAB_KEY, ribbonTab)
               {!isCommenting ? (
                 <Button
                   size="sm"
-                  className="shadow-xl bg-background border hover:bg-accent text-foreground h-8 px-3 gap-2"
+                  variant="outline"
+                  className="h-8 gap-2 border border-border bg-popover px-3 text-popover-foreground shadow-xl hover:bg-accent hover:text-accent-foreground"
                   onClick={(e) => {
                     e.preventDefault();
                     e.stopPropagation();
                     setIsCommenting(true);
                   }}
                 >
-                  <MessageSquarePlus className="h-4 w-4" /> Add Comment
+                  <MessageSquarePlus className="h-4 w-4 shrink-0" /> Add Comment
                 </Button>
               ) : (
                 <div className="flex items-center gap-2 p-2 bg-background border border-border rounded-md shadow-lg min-w-[300px] pointer-events-auto">
